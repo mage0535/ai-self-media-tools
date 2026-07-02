@@ -3,7 +3,7 @@ import math
 import re
 import subprocess
 from pathlib import Path
-from .paths import trend_cache_dir
+from .paths import project_home, trend_cache_dir
 
 
 def normalize_topic(title):
@@ -60,7 +60,7 @@ class TrendCollector:
     def collect(self, refresh=False):
         data_dir = Path(self.config.get("legacy_data_dir", str(trend_cache_dir())))
         if refresh:
-            script = Path(self.config.get("legacy_script", str(trend_cache_dir().parent / "external" / "scripts" / "trend_collector.py")))
+            script = Path(self.config.get("legacy_script", str(project_home() / "external" / "scripts" / "trend_collector.py")))
             if not script.is_file():
                 raise FileNotFoundError(f"trend collector not found: {script}")
             proc = subprocess.run(["python3", str(script)], capture_output=True, text=True, timeout=120, check=False)

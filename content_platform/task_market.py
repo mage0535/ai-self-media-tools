@@ -91,7 +91,10 @@ class TaskMarketRunner:
         return {"env": env, "summary": summary, "tasks": tasks}
 
     def auto_run(self, env, page_size=20):
-        client = self._client(env)
+        try:
+            client = self._client(env)
+        except ValueError as exc:
+            return {"accepted": 0, "completed": 0, "manual": 0, "failed": 0, "reason": str(exc)}
         scan = self.scan(env, page_size)
         result = {"accepted": 0, "completed": 0, "manual": 0, "failed": 0}
         publishers = self.config.get("publishers", {}).get("platforms", {})

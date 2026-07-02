@@ -810,3 +810,22 @@ The repository now supports:
 - `project-audit` command: returned clean result on the current repo state.
 - `analyze-topic` command: returned niche report, viral score, and strategy payload successfully.
 - `content-readiness` command: returned structured content-tool inventory successfully.
+
+## 2026-07-02 Server Sync And Runtime Fix Wave
+
+### Real Deployment Findings
+
+During Hermes sync and runtime validation, two production issues were found:
+- `TrendCollector` default refresh path incorrectly resolved to `data/external/scripts/trend_collector.py`
+- `task-market-auto` failed hard when `AITOEARN_API_KEY` was not configured, causing the timer-backed service to enter failed state
+
+### Fixes Applied
+
+- corrected the default trend collector fallback path to `project_home()/external/scripts/trend_collector.py`
+- changed task-market auto execution to return a clean zero-result summary with a `reason` field when the required AiToEarn key is absent
+
+### Validation Evidence
+
+- local full test suite after these runtime fixes: `78/78` passed
+- local and GitHub were re-synced after the fixes
+- Hermes server mirror was resynced after the fixes

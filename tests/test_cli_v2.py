@@ -100,6 +100,13 @@ class CliV2Tests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertIn("scanned_files", result)
 
+    def test_task_market_auto_without_key_returns_clean_skip_result(self):
+        code, result = self.call("task-market-auto", "--env", "cn")
+        self.assertEqual(code, 0)
+        self.assertEqual(result["accepted"], 0)
+        self.assertEqual(result["failed"], 0)
+        self.assertIn("reason", result)
+
 
 if __name__ == "__main__":
     unittest.main()
