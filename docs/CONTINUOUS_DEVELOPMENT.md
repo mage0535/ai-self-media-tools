@@ -1151,13 +1151,24 @@ run_voice_pipeline(script_text, lang, genre, mode)
 | 多素材联合研究 | ✅ | 单 Notebook 内多来源综合提问 |
 | 管线集成 | ✅ | `deep_research=True` 自动调用 |
 | 工具探测 | ✅ | `ToolRegistry.probe()` 包含 open_notebook |
-| `/api/search/ask` 提问 | ⚠️ | 需 Open Notebook UI 中先配置 AI provider |
+| `/api/search/ask` 提问 | ❌ | OpenCode 无 strategy/answer 模型类型，需更换供应商 |
 | 错误降级 | ✅ | 非致命错误不阻断管线 |
+
+### 模型配置
+| 角色 | 模型 | 供应商 | 方式 |
+|:----|:----|:----:|:----:|
+| Chat | `deepseek-v4-flash` | OpenCode | REST API `/api/models/defaults` |
+| Transformation | `deepseek-v4-flash` | OpenCode | REST API |
+| Tools | `deepseek-v4-flash` | OpenCode | REST API |
+| Embedding | `intfloat/multilingual-e5-small` | **GBrain** (`:8766`) | 手动注册 + 设默认 |
+
+embedding 通过 gbrain 自带的本地 OpenAI 兼容服务提供（`/root/gbrain/embedding_server.py`），无需额外部署。
 
 ### 验证
 - 测试: **30/30 passed** (全量 `107 passed`, 1 pre-existing failure in test_adapters)
 - CLI: `health` / `digest` / `research` 三子命令
 - API 真实交互: Notebook 创建→Source 添加(multipart)→搜索→清理 已测通
+- Embedding: GBrain `multilingual-e5-small` 384维向量 ✅
 
 ### Open Notebook 服务
 ```
