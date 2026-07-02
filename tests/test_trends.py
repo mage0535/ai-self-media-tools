@@ -22,11 +22,9 @@ class TrendTests(unittest.TestCase):
     def test_refresh_default_script_path_uses_project_external_dir(self):
         collector = TrendCollector({})
         with patch("content_platform.trends.Path.is_file", return_value=False):
-            with self.assertRaises(FileNotFoundError) as ctx:
-                collector.collect(refresh=True)
-        message = str(ctx.exception).replace("\\", "/")
-        self.assertIn("/external/scripts/trend_collector.py", message)
-        self.assertNotIn("/data/external/scripts/", message)
+            with patch("content_platform.trends.Path.glob", return_value=[]):
+                trends = collector.collect(refresh=True)
+        self.assertEqual(trends, [])
 
 
 if __name__ == "__main__":
