@@ -1,0 +1,14 @@
+[Unit]
+Description=Hermes AiToEarn task-market automation
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+ExecStart=%h/.local/bin/content-platform task-market-auto --env cn --page-size 20
+WorkingDirectory=%h/.ai-self-media-tools
+Nice=10
+MemoryMax=768M
+CPUQuota=120%
+TimeoutStartSec=900
+OOMPolicy=stop
