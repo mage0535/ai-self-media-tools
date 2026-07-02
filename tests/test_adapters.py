@@ -35,7 +35,7 @@ class AdapterTests(unittest.TestCase):
     def test_media_bridge_rejects_unknown_kind_without_running_process(self):
         bridge = MediaBridge({}, self.root)
         with self.assertRaises(ValueError):
-            bridge.generate("audio", {"id": "j1", "topic": "Topic", "body": "Body"})
+            bridge.generate("podcast", {"id": "j1", "topic": "Topic", "body": "Body"})
 
     def test_media_bridge_can_run_ocr_transcription_and_analysis_providers(self):
         script = self.root / "tool.py"

@@ -12,7 +12,7 @@ def choose_content_strategy(topic, brief, viral_score, niche_report):
     visual = float(viral_score.get("dimensions", {}).get("visual_promise", 0.5))
     if any(platform in SHORT_VIDEO_PLATFORMS for platform in primary_platforms) and visual >= 0.75:
         content_form = "short_video"
-        asset_plan = ["script", "cover", "video"]
+        asset_plan = ["script", "cover", "audio", "video"]
     elif any(platform in NOTE_PLATFORMS for platform in primary_platforms):
         content_form = "social_note"
         asset_plan = ["cover", "content_images", "caption"]
