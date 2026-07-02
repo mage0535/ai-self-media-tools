@@ -20,3 +20,4 @@ social-auto-upload/
 external/social-auto-upload/
 qrcode.png
 cookies/
+*.egg-info/
