@@ -1,0 +1,19 @@
+[Unit]
+Description=Hermes content platform Prometheus endpoint
+After=network.target local-fs.target
+
+[Service]
+Type=simple
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=PYTHONPATH=%h/.ai-self-media-tools
+ExecStart=/usr/bin/python3 -m content_platform.metrics_server --db %h/.ai-self-media-tools/data/state.db --host 127.0.0.1 --port 9108
+WorkingDirectory=%h/.ai-self-media-tools
+Restart=on-failure
+RestartSec=5
+MemoryMax=96M
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
