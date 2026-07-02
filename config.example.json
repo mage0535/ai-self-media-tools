@@ -26,6 +26,12 @@
       "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
       "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/video_pipeline.py",
       "timeout": 600
+    },
+    "audio": {
+      "enabled": true,
+      "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
+      "mode": "auto",
+      "timeout": 300
     }
   },
   "ocr": {

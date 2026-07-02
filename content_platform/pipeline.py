@@ -67,7 +67,7 @@ class Pipeline:
                 blocked = self.store.release_claim(job_id, owner, "blocked", "risk_blocked", detail={"hits": risk["hits"]})
                 self.notifier.send("blocked", blocked)
                 return self._hydrate(blocked)
-            for kind in ("image", "video"):
+            for kind in ("image", "video", "audio"):
                 try:
                     artifact = self.media.generate(kind, self.store.get_job(job_id))
                     if artifact:

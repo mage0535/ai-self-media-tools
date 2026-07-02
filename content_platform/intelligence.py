@@ -143,6 +143,12 @@ def build_generation_context(topic, brief):
     content_form = strategy["content_form"]
     image_prompt = f"{topic} | niche={niche} | audience={audience} | form={content_form} | create a strong cover with high information density"
     video_prompt = f"{topic} | form={content_form} | start with a hook, explain three points, end with a CTA"
+    # 配音脚本生成指南（传给生成器）
+    narration_guide = (
+        f"生成中文配音脚本。跟踪赛道(niche={niche})和内容形式({content_form})自动适配风格。"
+        "单人播报模式：直接输出配音文本。"
+        "多人对话模式：使用[角色A]台词\\n[角色B]台词格式标记不同说话人。"
+    )
     return {
         "trend_stage": trend_stage,
         "trend_angle": trend_angle,
@@ -150,6 +156,7 @@ def build_generation_context(topic, brief):
         "style": style,
         "image_prompt": image_prompt,
         "video_prompt": video_prompt,
+        "narration_guide": narration_guide,
         "hashtags": brief.get("keywords", [])[:6],
         "source_catalog": source_catalog,
         "source_summary": source_summary,
@@ -175,6 +182,7 @@ def prompt_brief(topic, brief):
             "strategy": context["strategy"],
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
+            "narration_guide": context.get("narration_guide", ""),
         },
         ensure_ascii=False,
     )

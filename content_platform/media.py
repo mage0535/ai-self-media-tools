@@ -41,7 +41,7 @@ class MediaBridge:
         return ScriptAnalyzerProvider(cfg.get("script", ""), cfg.get("timeout", 180)).run(target)
 
     def generate(self, kind, job):
-        if kind not in {"image", "video"}:
+        if kind not in {"image", "video", "audio"}:
             raise ValueError(f"unsupported media kind: {kind}")
         cfg = self.config.get(kind, {})
         if not cfg.get("enabled", False):
@@ -50,11 +50,13 @@ class MediaBridge:
         if target_platforms and target_platforms.isdisjoint(job.get("platforms", [])):
             return None
         self.guard.check(kind)
+        output_dir = self.data_dir / "artifacts" / job["id"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if kind == "audio":
+            return self._generate_audio(job, output_dir, cfg)
         script = Path(cfg.get("script", ""))
         if not script.is_file():
             raise FileNotFoundError(f"{kind} script not found: {script}")
-        output_dir = self.data_dir / "artifacts" / job["id"]
-        output_dir.mkdir(parents=True, exist_ok=True)
         if kind == "image":
             output = output_dir / "cover.png"
             prompt = job.get("draft_meta", {}).get("image_prompt") or job["topic"]
@@ -78,3 +80,36 @@ class MediaBridge:
             raise RuntimeError(detail)
         checksum = hashlib.sha256(output.read_bytes()).hexdigest()
         return {"kind": kind, "path": str(output), "checksum": checksum}
+
+    def _generate_audio(self, job, output_dir, cfg):
+        """智能配音：调用 voice_engine 合成语音 + 字幕"""
+        import sys
+        _root = Path(__file__).resolve().parent.parent
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+        from scripts.voice_engine import VoiceEngine
+        narration = job.get("draft_meta", {}).get("narration_script")
+        if not narration:
+            narration = f"# {job['title']}\n\n{job['body']}"
+        genre = job.get("draft_meta", {}).get("genre", "auto")
+        mode = cfg.get("mode", "auto")
+        engine = VoiceEngine(output_dir)
+        result = engine.synthesize(narration, genre=genre, mode=mode)
+        audio_path = result.get("audio")
+        if not audio_path or not Path(audio_path).is_file():
+            raise RuntimeError("voice synthesis produced no audio file")
+        checksum = hashlib.sha256(Path(audio_path).read_bytes()).hexdigest()
+        subtitle_path = result.get("subtitle")
+        if subtitle_path and Path(subtitle_path).is_file():
+            srt_checksum = hashlib.sha256(Path(subtitle_path).read_bytes()).hexdigest()
+            return {
+                "kind": "audio", "path": audio_path, "checksum": checksum,
+                "subtitle": subtitle_path, "subtitle_checksum": srt_checksum,
+                "duration": result.get("duration", 0),
+                "genre": result.get("genre", "auto"),
+            }
+        return {
+            "kind": "audio", "path": audio_path, "checksum": checksum,
+            "duration": result.get("duration", 0),
+            "genre": result.get("genre", "auto"),
+        }

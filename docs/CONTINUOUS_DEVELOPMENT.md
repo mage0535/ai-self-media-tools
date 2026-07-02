@@ -1018,3 +1018,107 @@ New files for clean installation:
 - Data Collector requires `requests` package; falls back gracefully if unavailable
 - The pipeline modifications follow the existing pattern of `sys.path.insert(0, SCRIPTS)` for intra-module imports
 - All new modules include `__name__ == "__main__"` CLI entry points for independent testing
+
+## 2026-07-02 Intelligent Multilingual Voice Engine
+
+### Background
+
+The content pipeline previously produced silent video artifacts — no voice narration, no dubbing, no subtitles. The `MediaBridge` only handled `image` and `video` artifact kinds. Audio generation was explicitly rejected with `ValueError`.
+
+The voice engine fills this gap: any text script → natural-sounding speech + synchronized subtitles, fully integrated into the pipeline.
+
+### Files
+
+| File | Role |
+|------|------|
+| `scripts/voice_engine.py` | Core voice engine (643 lines) — language detection, genre mapping, TTS synthesis, de-AI post-processing, subtitle generation, CLI entry |
+| `scripts/__init__.py` | Package init (enables `from scripts.voice_engine import ...`) |
+| `content_platform/media.py` | `MediaBridge._generate_audio()` method — calls voice engine, returns audio artifact with checksums |
+| `content_platform/pipeline.py` | Added `"audio"` to the media generation loop (line 70) |
+| `content_platform/intelligence.py` | Added `narration_guide` to generation context — tells LLM how to write dubbing scripts |
+| `content_platform/strategy_router.py` | Added `"audio"` to asset plan for `short_video` content form |
+| `skills/content/content-voice-engine/SKILL.md` | Hermes skill registration |
+| `config.example.json` | Added `audio` media configuration section |
+
+### Capability Matrix
+
+| Feature | Support | Detail |
+|---------|---------|--------|
+| Single-speaker mode | yes | Auto-detect: plain text → single voice narration |
+| Multi-speaker dialogue | yes | `[Speaker A]` / `[Speaker B]` tags → alternating voices |
+| Genre auto-adaptation | yes | tech/pets/finance/emotion/science/default, each with per-language voice tuning |
+| Language auto-detection | yes | Character set analysis (CJK, Arabic, Thai, Cyrillic, Latin) |
+| Supported languages | 84+ | All edge-tts locales, with curated voice profiles for zh/en/ja/ko/es/fr/de/pt/ru/it/ar/hi/th/vi |
+| De-AI breathing | yes | Pink noise → bandpass filter → volume reduction at punctuation boundaries |
+| Random pauses | yes | 200-1000ms silence between sentences (per-language calibrated) |
+| Speed variation | yes | ±4-5% per sentence via FFmpeg atempo filter |
+| Filler words | yes | Per-language filler word library (um/like/嗯/ええと/eh/pues/äh/é/nu) |
+| EQ warmth | yes | +2-3dB at 200Hz per language profile |
+| Noise floor | yes | -48 to -52dB pink noise ambience |
+| Subtitle generation | yes | SRT format with word-level timestamps; CJK: phrase-level merging (3-8 chars); Latin: word-level (6 words) |
+| edge-tts primary | yes | Free, 84+ languages, 400+ voices, zero new model download |
+| Memory usage | ~200MB | edge-tts is network-bound API; only FFmpeg processes locally |
+
+### Integration Points
+
+**MediaBridge (`media.py:46-96`)**
+```python
+# Added "audio" to supported kinds and `_generate_audio()` method
+def generate(self, kind, job):
+    if kind not in {"image", "video", "audio"}:  # ← was {"image", "video"}
+
+def _generate_audio(self, job, output_dir, cfg):
+    from scripts.voice_engine import VoiceEngine
+    narration = job["draft_meta"]["narration_script"] or job["body"]
+    engine = VoiceEngine(output_dir)
+    result = engine.synthesize(narration, lang="auto", genre="auto")
+    return {"kind": "audio", "path": result["audio"], "subtitle": result["subtitle"], ...}
+```
+
+**Pipeline loop (`pipeline.py:70`)**
+```python
+for kind in ("image", "video", "audio"):  # ← was ("image", "video")
+    artifact = self.media.generate(kind, job)
+```
+
+**Intelligence context (`intelligence.py:145-155`)**
+```python
+narration_guide = (
+    "生成中文配音脚本。跟踪赛道和内容形式自动适配风格。"
+    "单人播报模式：直接输出配音文本。"
+    "多人对话模式：使用[角色A]台词\n[角色B]台词 格式。"
+)
+```
+
+### Voice Engine Architecture
+
+```
+run_voice_pipeline(script_text, lang, genre, mode)
+  │
+  ├─ detect_language()        → zh/en/ja/ko/...
+  ├─ detect_genre()           → tech/pets/finance/emotion/science/default
+  ├─ parse_script()           → [ScriptSegment(speaker, text), ...]
+  │
+  ├─ EdgeTTSProvider.synthesize_with_timing()
+  │   ├─ stream() once → collect audio + WordBoundary
+  │   └─ write audio file + return timing list
+  │
+  ├─ DeAIProcessor.apply()
+  │   ├─ Per-segment speed variation (atempo)
+  │   ├─ Inter-segment silence/breath insertion
+  │   ├─ Low-frequency EQ boost
+  │   └─ Pink noise ambience injection
+  │
+  └─ SubtitleGenerator.merge()
+      ├─ CJK: phrase merging (3-8 chars or punctuation boundaries)
+      └─ Latin: word merging (6 words per segment)
+```
+
+### Testing Evidence
+
+- Server import: `from scripts.voice_engine import detect_language, detect_genre, VoiceEngine` → OK
+- Language detection: en/zh/ja/ko all correct
+- Genre detection: tech/finance/pets all correct (cross-language)
+- TTS synthesis: English tech narration → 3.3s MP3 generated successfully
+- Full test suite: **78/78 passed**, no regressions
+- Project audit: 0 issues
