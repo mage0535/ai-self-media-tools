@@ -1,0 +1,54 @@
+{
+  "data_dir": "{{CONTENT_PLATFORM_HOME}}/data",
+  "generator": {
+    "provider": "hermes-cli",
+    "allow_fallback": true,
+    "env_file": "{{CONTENT_PLATFORM_HOME}}/secrets/provider.env",
+    "api_key_env": "OPENAI_API_KEY",
+    "model": "gpt-4.1-mini",
+    "hermes_command": "hermes",
+    "timeout": 180,
+    "style_guide_path": "{{CONTENT_PLATFORM_HOME}}/skills/content/content-copywriting-style/SKILL.md"
+  },
+  "risk": {
+    "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/safe_filter.py",
+    "timeout": 20
+  },
+  "media": {
+    "image": {
+      "enabled": true,
+      "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/image_gen.py",
+      "method": "pil",
+      "timeout": 120
+    },
+    "video": {
+      "enabled": true,
+      "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
+      "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/video_pipeline.py",
+      "timeout": 600
+    }
+  },
+  "delivery": {
+    "max_attempts": 2,
+    "backoff_seconds": 1,
+    "auto_stage_review_required": true
+  },
+  "review": {
+    "key_path": "{{CONTENT_PLATFORM_HOME}}/data/review.key",
+    "token_ttl_seconds": 86400
+  },
+  "trends": {
+    "legacy_data_dir": "{{CONTENT_PLATFORM_HOME}}/data/trend-cache",
+    "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/trend_collector.py"
+  },
+  "publishers": {
+    "default": {
+      "type": "file",
+      "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"
+    }
+  },
+  "notifications": {
+    "log_path": "{{CONTENT_PLATFORM_HOME}}/data/notifications.jsonl",
+    "network_enabled": false
+  }
+}
