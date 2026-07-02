@@ -5,9 +5,12 @@ A clean, publishable, agent-neutral toolkit for AI-assisted self-media operation
 It combines:
 - content intelligence and copywriting generation
 - trend collection and topic scoring
+- niche/account analysis and viral candidate routing
+- anti-generic rewrite and quality scoring
 - draft-first domestic distribution orchestration
 - AiToEarn task-market automation
 - optional browser-based publisher integrations
+- content-tool readiness, tool registry, and project purity audit
 
 ## Project Goals
 
@@ -31,8 +34,27 @@ It combines:
 python scripts/install.py
 python -m content_platform health
 python -m content_platform trends --limit 5
+python -m content_platform analyze-topic --topic "AI workflows" --brief "{\"platforms\":[\"douyin\"]}"
+python -m content_platform account-report --topic "AI workflows" --brief "{\"reference_posts\":[]}"
+python -m content_platform content-readiness
+python -m content_platform feedback-summary
+python -m content_platform project-audit
 python -m content_platform delivery-readiness
 ```
+
+## Current Content Intelligence Features
+
+- Normalized source ingestion from briefs, source URLs, and trend-cache references
+- Same-track niche analysis with account counts, style signatures, and platform distribution
+- Interpretable viral scoring with trend, utility, visual promise, platform fit, and historical feedback signals
+- Content-form routing for long article, social note, image carousel, and short video
+- Draft metadata enriched with strategy, media plan, rewrite notes, and quality scores
+- Tool registry for image/video scripts, OCR, transcription, and multimodal analysis adapters
+
+## Clean Publishable Rule
+
+The local repo, GitHub repo, and Hermes server mirror must stay aligned and publishable.
+Use `python -m content_platform project-audit` to run a local privacy/purity scan before syncing or publishing changes.
 
 ## Privacy Rule
 

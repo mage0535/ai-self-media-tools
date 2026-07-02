@@ -80,6 +80,26 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(result["tools"]["social_auto_upload"]["project_dir_exists"])
 
+    def test_content_readiness_command_returns_registry_summary(self):
+        fake_result = {"tools": {"content_tools": {"ffmpeg": {"available": True}}}}
+        with patch("content_platform.cli.inspect_delivery_readiness", return_value=fake_result):
+            code, result = self.call("content-readiness")
+        self.assertEqual(code, 0)
+        self.assertTrue(result["tools"]["content_tools"]["ffmpeg"]["available"])
+
+    def test_feedback_summary_command_returns_aggregated_metrics(self):
+        _, created = self.call("create", "--topic", "topic", "--platform", "wechat")
+        self.call("record-performance", created["id"], "--platform", "wechat", "--views", "100", "--likes", "12", "--comments", "3", "--shares", "2")
+        code, result = self.call("feedback-summary")
+        self.assertEqual(code, 0)
+        self.assertEqual(result["platforms"]["wechat"]["views"], 100)
+
+    def test_project_audit_command_reports_clean_repo(self):
+        code, result = self.call("project-audit")
+        self.assertEqual(code, 0)
+        self.assertTrue(result["ok"])
+        self.assertIn("scanned_files", result)
+
 
 if __name__ == "__main__":
     unittest.main()

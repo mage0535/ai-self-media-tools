@@ -5,9 +5,12 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .intelligence import build_generation_context
+from .niche_analysis import analyze_niche
 from .metrics import render_metrics
 from .paths import project_home
 from .pipeline import Pipeline
+from .project_audit import audit_project
 from .profiles import resolve_profile
 from .readiness import inspect_delivery_readiness
 from .store import Store
@@ -94,6 +97,15 @@ def parser():
     task_auto.add_argument("--env", choices=["cn", "intl"], default="cn")
     task_auto.add_argument("--page-size", type=int, default=20)
     sub.add_parser("delivery-readiness")
+    analyze = sub.add_parser("analyze-topic")
+    analyze.add_argument("--topic", required=True)
+    analyze.add_argument("--brief", default="{}", help="JSON object")
+    account_report = sub.add_parser("account-report")
+    account_report.add_argument("--topic", required=True)
+    account_report.add_argument("--brief", default="{}", help="JSON object")
+    sub.add_parser("content-readiness")
+    sub.add_parser("feedback-summary")
+    sub.add_parser("project-audit")
     sub.add_parser("health")
     demo = sub.add_parser("demo")
     demo.add_argument("--actor", default="demo-operator")
@@ -156,6 +168,24 @@ def execute(args):
         return TaskMarketRunner(args.db, config).auto_run(args.env, args.page_size)
     if args.command == "delivery-readiness":
         return inspect_delivery_readiness(config)
+    if args.command == "content-readiness":
+        result = inspect_delivery_readiness(config)
+        store.save_tool_inventory("content-tools", result.get("tools", {}).get("content_tools", {}))
+        return result
+    if args.command == "feedback-summary":
+        return store.feedback_summary()
+    if args.command == "project-audit":
+        return audit_project(Path.cwd())
+    if args.command == "analyze-topic":
+        brief = json.loads(args.brief)
+        if not isinstance(brief, dict):
+            raise ValueError("brief must be a JSON object")
+        return build_generation_context(args.topic, brief)
+    if args.command == "account-report":
+        brief = json.loads(args.brief)
+        if not isinstance(brief, dict):
+            raise ValueError("brief must be a JSON object")
+        return analyze_niche(args.topic, brief.get("reference_posts", []))
     if args.command in {"trends", "auto"}:
         items = TrendCollector(config.get("trends", {})).collect(args.refresh)
         profile = resolve_profile(config.get("profiles", {}), args.profile)

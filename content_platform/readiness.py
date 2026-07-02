@@ -1,5 +1,6 @@
 from pathlib import Path
 from .paths import browser_profile_roots, social_auto_upload_home
+from .tool_registry import ToolRegistry
 
 
 def _cookie_count(path):
@@ -47,4 +48,5 @@ def inspect_delivery_readiness(config):
         "google_chrome_exists": browser_profile_roots()["google_chrome"].exists(),
         "chrome_for_testing_exists": browser_profile_roots()["chrome_for_testing"].exists(),
     }
+    result["tools"]["content_tools"] = ToolRegistry(config).probe()
     return result

@@ -2,8 +2,13 @@ import json
 import re
 import urllib.request
 from html import unescape
-from .paths import trend_cache_dir
 from pathlib import Path
+
+from .niche_analysis import analyze_niche
+from .paths import trend_cache_dir
+from .sources import normalize_source_items, summarize_source_items
+from .strategy_router import choose_content_strategy
+from .viral_score import score_topic_candidate
 
 
 def _plain(text):
@@ -24,7 +29,16 @@ def collect_reference_posts(brief, limit=3):
     posts = []
     for row in brief.get("reference_posts", []):
         if isinstance(row, dict) and (row.get("title") or row.get("body")):
-            posts.append({"title": str(row.get("title", "")), "body": str(row.get("body", "")), "source": row.get("source", "reference")})
+            posts.append(
+                {
+                    "title": str(row.get("title", "")),
+                    "body": str(row.get("body", "")),
+                    "source": row.get("source", "reference"),
+                    "account_handle": str(row.get("account_handle", "")),
+                    "platform": str(row.get("platform", "")),
+                    "url": str(row.get("url", "")),
+                }
+            )
     if posts:
         return posts[:limit]
     keywords = [str(word).casefold() for word in brief.get("keywords", []) if str(word).strip()]
@@ -48,7 +62,16 @@ def collect_reference_posts(brief, limit=3):
                         continue
                     body = _plain(html)[:4000]
                     if title or body:
-                        posts.append({"title": title[:160], "body": body, "source": row.get("source", url)})
+                        posts.append(
+                            {
+                                "title": title[:160],
+                                "body": body,
+                                "source": row.get("source", url),
+                                "account_handle": str(row.get("account_handle", "")),
+                                "platform": str(row.get("platform", "")),
+                                "url": url,
+                            }
+                        )
                     if len(posts) >= limit:
                         return posts[:limit]
             except Exception:
@@ -64,7 +87,7 @@ def collect_reference_posts(brief, limit=3):
             title = _plain(title_match.group(1))
         body = _plain(html)[:4000]
         if title or body:
-            posts.append({"title": title[:160], "body": body, "source": url})
+            posts.append({"title": title[:160], "body": body, "source": url, "account_handle": "", "platform": "", "url": url})
     return posts[:limit]
 
 
@@ -78,23 +101,25 @@ def analyze_reference_posts(posts):
     for row in posts:
         body = str(row.get("body", ""))
         title = str(row.get("title", ""))
-        if re.search(r"(^|\n)\s*\d+[.、]", body):
+        if re.search(r"(^|\n)\s*\d+[.)]", body):
             formats.add("listicle")
         if "## " in body or re.search(r"(^|\n)\s*##\s+", body):
             formats.add("sectioned")
         if "?" in title or "？" in title:
             formats.add("question_hook")
-        if any(token in body for token in ["建议收藏", "评论区", "转发给", "关注我", "留言"]):
-            cta = next((token for token in ["评论区聊聊", "建议收藏", "转发给朋友", "关注我"] if token in body), cta or body[-12:])
+        for token in ("Save this", "Follow", "Comment", "收藏", "关注", "评论"):
+            if token.casefold() in body.casefold():
+                cta = token
+                break
         emoji_hits += len(re.findall(r"[\U0001F300-\U0001FAFF]", body))
-        first_sentence = re.split(r"[。！？!?]", body.strip(), maxsplit=1)[0].strip()
+        first_sentence = re.split(r"[。！？.!?]", body.strip(), maxsplit=1)[0].strip()
         if first_sentence:
             opening_patterns.append(first_sentence[:50])
         paragraph_lengths.extend(len(part.strip()) for part in re.split(r"\n\s*\n", body) if part.strip())
     return {
         "sample_count": len(posts),
         "formats": sorted(formats),
-        "cta": cta or "建议收藏备用",
+        "cta": cta or "Save this",
         "emoji_density": round(emoji_hits / max(1, len(posts)), 2),
         "opening_patterns": opening_patterns[:3],
         "paragraph_length_hint": int(sum(paragraph_lengths) / max(1, len(paragraph_lengths))) if paragraph_lengths else 80,
@@ -104,12 +129,20 @@ def analyze_reference_posts(posts):
 def build_generation_context(topic, brief):
     brief = brief or {}
     references = collect_reference_posts(brief)
+    source_catalog = normalize_source_items(topic, brief, references)
+    source_summary = summarize_source_items(source_catalog)
     style = analyze_reference_posts(references)
-    trend_stage = brief.get("trend_stage", "emerging")
+    niche_report = analyze_niche(topic, source_catalog or references)
+    viral_score = score_topic_candidate(topic, brief, references, niche_report)
+    strategy = choose_content_strategy(topic, brief, viral_score, niche_report)
+    trend_stage = brief.get("trend_stage", viral_score["trend_stage"])
     trend_angle = brief.get("trend_angle", "")
     reference_titles = [row.get("title", "") for row in references if row.get("title")]
-    image_prompt = f"{topic}，{brief.get('niche', '')}，{brief.get('audience', '')}，可视化重点，图文并茂，信息密度高，适合社交平台封面"
-    video_prompt = f"{topic}，先给强钩子，再拆 3 个关键点，末尾给行动建议，适合短视频脚本"
+    audience = str(brief.get("audience", "")).strip()
+    niche = str(brief.get("niche", "")).strip()
+    content_form = strategy["content_form"]
+    image_prompt = f"{topic} | niche={niche} | audience={audience} | form={content_form} | create a strong cover with high information density"
+    video_prompt = f"{topic} | form={content_form} | start with a hook, explain three points, end with a CTA"
     return {
         "trend_stage": trend_stage,
         "trend_angle": trend_angle,
@@ -118,6 +151,11 @@ def build_generation_context(topic, brief):
         "image_prompt": image_prompt,
         "video_prompt": video_prompt,
         "hashtags": brief.get("keywords", [])[:6],
+        "source_catalog": source_catalog,
+        "source_summary": source_summary,
+        "niche_report": niche_report,
+        "viral_score": viral_score,
+        "strategy": strategy,
     }
 
 
@@ -131,6 +169,10 @@ def prompt_brief(topic, brief):
             "trend_angle": context["trend_angle"],
             "reference_titles": context["reference_titles"],
             "style": context["style"],
+            "source_summary": context["source_summary"],
+            "niche_report": context["niche_report"],
+            "viral_score": context["viral_score"],
+            "strategy": context["strategy"],
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
         },

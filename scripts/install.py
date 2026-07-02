@@ -51,6 +51,23 @@ def render_config(home: Path):
             "timeout": 180,
             "style_guide_path": str(style_path(home)),
         },
+        "media": {
+            "image": {
+                "enabled": True,
+                "script": str(home / "external" / "scripts" / "image_gen.py"),
+                "method": "pil",
+                "timeout": 120,
+            },
+            "video": {
+                "enabled": True,
+                "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
+                "script": str(home / "external" / "scripts" / "video_pipeline.py"),
+                "timeout": 600,
+            },
+        },
+        "ocr": {"script": str(home / "external" / "scripts" / "ocr_pipeline.py"), "timeout": 120},
+        "transcription": {"script": str(home / "external" / "scripts" / "transcribe_pipeline.py"), "timeout": 300},
+        "analysis": {"script": str(home / "external" / "scripts" / "multimodal_analyze.py"), "timeout": 180},
         "publishers": {
             "default": {"type": "file", "outbox": str(home / "data" / "outbox")}
         },
@@ -70,6 +87,7 @@ def main():
     home.mkdir(parents=True, exist_ok=True)
     (home / "data").mkdir(exist_ok=True)
     (home / "secrets").mkdir(exist_ok=True)
+    (home / "external" / "scripts").mkdir(parents=True, exist_ok=True)
     report = {
         "python": sys.version.split()[0],
         "platform": platform.platform(),

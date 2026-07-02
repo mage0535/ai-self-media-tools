@@ -5,6 +5,8 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from .resource import ResourceGuard
+from .tool_adapters import ScriptAnalyzerProvider, ScriptOCRProvider, ScriptTranscriberProvider
+from .tool_registry import ToolRegistry
 
 
 class MediaBridge:
@@ -12,6 +14,31 @@ class MediaBridge:
         self.config = config or {}
         self.data_dir = Path(data_dir)
         self.guard = guard or ResourceGuard(self.data_dir, {})
+        self.registry = ToolRegistry({"media": self.config})
+
+    def inventory(self):
+        return self.registry.probe()
+
+    def _provider_cfg(self, section):
+        return self.config.get(section, {})
+
+    def ocr(self, target):
+        cfg = self._provider_cfg("ocr")
+        if not cfg.get("script"):
+            raise FileNotFoundError("ocr script not configured")
+        return ScriptOCRProvider(cfg.get("script", ""), cfg.get("timeout", 120)).run(target)
+
+    def transcribe(self, target):
+        cfg = self._provider_cfg("transcription")
+        if not cfg.get("script"):
+            raise FileNotFoundError("transcription script not configured")
+        return ScriptTranscriberProvider(cfg.get("script", ""), cfg.get("timeout", 300)).run(target)
+
+    def analyze(self, target):
+        cfg = self._provider_cfg("analysis")
+        if not cfg.get("script"):
+            raise FileNotFoundError("analysis script not configured")
+        return ScriptAnalyzerProvider(cfg.get("script", ""), cfg.get("timeout", 180)).run(target)
 
     def generate(self, kind, job):
         if kind not in {"image", "video"}:

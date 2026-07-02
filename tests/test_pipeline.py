@@ -74,6 +74,17 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(len(deliveries), 1)
         self.assertEqual(deliveries[0]["status"], "drafted")
 
+    def test_run_persists_intelligence_records(self):
+        job = self.pipeline.create(
+            "Automation visuals",
+            ["wechat"],
+            {"platforms": ["wechat", "douyin"], "reference_posts": [{"title": "Hook", "body": "1. A\n2. B\nSave this.", "account_handle": "ops_lab"}]},
+        )
+        self.pipeline.run(job["id"])
+        self.assertTrue(self.store.source_items(job["id"]))
+        self.assertTrue(self.store.account_snapshots(job["id"]))
+        self.assertTrue(self.store.idea_candidates(job["id"]))
+
 
 if __name__ == "__main__":
     unittest.main()

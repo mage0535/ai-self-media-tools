@@ -4,12 +4,14 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
+from .humanize import naturalize_copy
 from .intelligence import build_generation_context, prompt_brief
 from .paths import style_guide_path
 
 
 class DraftGenerator:
-    PROMPT_VERSION = "v3.0"
+    PROMPT_VERSION = "v4.0"
+
     def __init__(self, config=None):
         self.config = config or {}
 
@@ -48,24 +50,35 @@ class DraftGenerator:
         path = Path(self.config.get("style_guide_path", str(style_guide_path())))
         if not path.is_file():
             return ""
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        return text[:5000]
+        return path.read_text(encoding="utf-8", errors="ignore")[:5000]
 
     def _normalize(self, draft, context, provider):
-        body = str(draft.get("body", ""))
-        body = body.strip()
-        if context["style"]["cta"] and context["style"]["cta"] not in body:
-            body = body.rstrip() + f"\n\n{context['style']['cta']}"
+        body = str(draft.get("body", "")).strip()
+        cta = draft.get("cta") or context["style"]["cta"]
+        if cta and cta not in body:
+            body = body.rstrip() + f"\n\n{cta}"
+        rewrite = naturalize_copy(body, context)
+        body = rewrite["body"]
+        strategy = context["strategy"]
         draft_meta = {
             "trend_stage": context["trend_stage"],
             "trend_angle": context["trend_angle"],
             "reference_titles": context["reference_titles"],
             "style": context["style"],
+            "source_summary": context["source_summary"],
+            "source_catalog": context["source_catalog"],
+            "niche_report": context["niche_report"],
+            "viral_score": context["viral_score"],
+            "strategy": strategy,
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
             "hashtags": draft.get("hashtags") or context["hashtags"],
             "hook": draft.get("hook") or next(iter(context["style"]["opening_patterns"]), ""),
-            "cta": draft.get("cta") or context["style"]["cta"],
+            "cta": cta,
+            "content_form": strategy["content_form"],
+            "media_plan": strategy["asset_plan"],
+            "quality_scores": rewrite["quality_scores"],
+            "rewrite_notes": rewrite["rewrite_notes"],
         }
         return {
             "title": str(draft["title"]),
@@ -81,8 +94,8 @@ class DraftGenerator:
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
             "Write a factual, high-retention draft. First learn from same-track references, then generate. "
             "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting.\n"
-            f"默认文案规则:\n{self._style_guide()}\n\n"
-            f"热门趋势与参考样本:\n{prompt_brief(topic, brief)}"
+            f"Style guide:\n{self._style_guide()}\n\n"
+            f"Planning context:\n{prompt_brief(topic, brief)}"
         )
         proc = subprocess.run(
             [self.config.get("hermes_command", "hermes"), "-z", prompt, "--cli"],
@@ -102,29 +115,39 @@ class DraftGenerator:
         return self._normalize(draft, context, "hermes-cli")
 
     def _fallback(self, topic, brief, context):
-        audience = brief.get("audience", "目标读者")
-        tone = brief.get("tone", "清晰、克制")
-        title = f"{topic}：{ '现在最值得做的 3 件事' if context['trend_stage'] in {'hot', 'viral_candidate'} else '一份可执行指南'}"
-        hook = next(iter(context["style"]["opening_patterns"]), "先看结论：")
+        audience = brief.get("audience", "builders")
+        tone = brief.get("tone", "clear")
+        strategy = context["strategy"]
+        score = context["viral_score"]["total_score"]
+        title_suffix = "3 moves worth copying now" if context["trend_stage"] in {"hot", "viral_candidate"} else "execution guide"
+        title = f"{topic}: {title_suffix}"
+        hook = next(iter(context["style"]["opening_patterns"]), "Start with the conclusion.")
         body = (
             f"# {title}\n\n"
-            f"{hook} 面向{audience}，本文用{tone}的方式梳理 {topic}。\n\n"
-            "## 为什么值得关注\n\n先确认问题、输入与验收标准，再选择最小可行路径。\n\n"
-            "## 实施步骤\n\n1. 收集可靠信息并去重。\n2. 生成初稿并完成事实与风险检查。\n"
-            "3. 针对目标平台调整结构和长度。\n4. 人工审核后再进入草稿或发布流程。\n\n"
-            "## 检查清单\n\n- 信息来源可追溯\n- 结论没有夸大承诺\n- 格式适合目标平台\n- 发布状态有记录\n\n"
-            f"{context['style']['cta']}"
+            f"{hook} This draft targets {audience} with a {tone} tone.\n\n"
+            f"## Why this topic matters\n\n"
+            f"- Trend stage: {context['trend_stage']}\n"
+            f"- Viral score: {score}\n"
+            f"- Recommended form: {strategy['content_form']}\n\n"
+            "## Suggested structure\n\n"
+            "1. Lead with the payoff.\n"
+            "2. Break the workflow into three concrete steps.\n"
+            "3. Add one example and one caution.\n"
+            "4. End with a direct next action.\n\n"
+            "## Production notes\n\n"
+            f"- Use these platforms first: {', '.join(strategy['primary_platforms'])}\n"
+            f"- Asset plan: {', '.join(strategy['asset_plan'])}\n"
         )
-        return self._normalize({"title": title, "body": body}, context, "fallback")
+        return self._normalize({"title": title, "body": body, "hook": hook}, context, "fallback")
 
     def _remote(self, topic, brief, context, api_key):
         base = self.config.get("base_url") or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         model = self.config.get("model") or os.environ.get("CONTENT_PLATFORM_MODEL", "gpt-4.1-mini")
         prompt = (
             "Return JSON with title and body, plus optional hook, cta, hashtags. "
-            "Write a factual, visually scannable, engaging draft. Learn from the reference style signals and trend stage before generating. "
+            "Write a factual, visually scannable, engaging draft. Learn from the reference style signals and trend stage before generating.\n"
             f"Style guide:\n{self._style_guide()}\n\n"
-            f"Planning context: {prompt_brief(topic, brief)}"
+            f"Planning context:\n{prompt_brief(topic, brief)}"
         )
         payload = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.4}).encode()
         request = urllib.request.Request(

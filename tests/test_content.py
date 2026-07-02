@@ -1,8 +1,8 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 from content_platform.generator import DraftGenerator
 from content_platform.risk import RiskFilter, redact_secrets
@@ -24,7 +24,12 @@ class ContentTests(unittest.TestCase):
     def test_generator_has_deterministic_offline_fallback(self):
         with patch.dict(os.environ, {}, clear=True):
             draft = DraftGenerator({"allow_fallback": True}).generate(
-                "Local AI workflows", {"tone": "clear", "audience": "builders", "reference_posts": [{"title": "Hook", "body": "1. First\n2. Second\n建议收藏。"}]}
+                "Local AI workflows",
+                {
+                    "tone": "clear",
+                    "audience": "builders",
+                    "reference_posts": [{"title": "Hook", "body": "1. First\n2. Second\nSave this."}],
+                },
             )
         self.assertEqual(draft["provider"], "fallback")
         self.assertIn("Local AI workflows", draft["title"])
@@ -33,6 +38,10 @@ class ContentTests(unittest.TestCase):
         self.assertIn("image_prompt", draft["draft_meta"])
         self.assertIn("video_prompt", draft["draft_meta"])
         self.assertTrue(draft["draft_meta"]["style"]["sample_count"] >= 1)
+        self.assertIn("viral_score", draft["draft_meta"])
+        self.assertIn("content_form", draft["draft_meta"])
+        self.assertIn("quality_scores", draft["draft_meta"])
+        self.assertIn("rewrite_notes", draft["draft_meta"])
 
     def test_generator_reads_named_key_from_configured_env_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -51,7 +60,7 @@ class ContentTests(unittest.TestCase):
             draft = generator.generate("topic", {"audience": "builders"})
         self.assertEqual(draft["provider"], "hermes-cli")
         self.assertTrue(any("Return only JSON" in item for item in run.call_args.args[0]))
-        self.assertIn("热门趋势", run.call_args.args[0][2])
+        self.assertIn("same-track", run.call_args.args[0][2])
 
 
 if __name__ == "__main__":

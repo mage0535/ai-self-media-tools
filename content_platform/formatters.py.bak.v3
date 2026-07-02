@@ -1,0 +1,45 @@
+import html
+import re
+
+
+def _plain(text):
+    return re.sub(r"[#*_`>]+", "", str(text)).strip()
+
+
+def _hashtags(job):
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}|[\u4e00-\u9fff]{2,6}", job.get("topic", ""))
+    tags = list(dict.fromkeys(words + ["AI内容", "效率工具"]))[:6]
+    return ["#" + word.replace(" ", "") for word in tags]
+
+
+def _html_article(body):
+    sections = []
+    for block in str(body).split("\n\n"):
+        clean = block.strip()
+        if not clean:
+            continue
+        if clean.startswith("# "):
+            sections.append(f"<h1>{html.escape(clean[2:])}</h1>")
+        elif clean.startswith("## "):
+            sections.append(f"<h2>{html.escape(clean[3:])}</h2>")
+        else:
+            sections.append(f"<p>{html.escape(_plain(clean)).replace(chr(10), '<br>')}</p>")
+    return "".join(sections)
+
+
+def format_for_platform(job, platform):
+    platform = platform.lower()
+    title, body = job["title"].strip(), job["body"].strip()
+    base = {"platform": platform, "sources": job.get("brief", {}).get("sources", []), "profile": job.get("profile", "default")}
+    if platform in {"wechat", "weixin", "wechat_official"}:
+        return {**base, "kind": "article", "title": title[:64], "summary": _plain(body)[:120], "html": _html_article(body)}
+    if platform in {"xiaohongshu", "rednote"}:
+        return {**base, "kind": "note", "title": _plain(title)[:20], "text": _plain(body)[:950], "hashtags": _hashtags(job)}
+    if platform in {"douyin", "tiktok", "bilibili", "youtube", "kuaishou", "shipinhao"}:
+        return {**base, "kind": "video", "title": _plain(title)[:30], "caption": _plain(body)[:220], "script": _plain(body)[:1200], "hashtags": _hashtags(job)}
+    if platform in {"twitter", "x", "threads", "mastodon", "bluesky"}:
+        text = f"{_plain(title)}\n\n{_plain(body)}"
+        limit = 280 if platform in {"twitter", "x"} else 500
+        return {**base, "kind": "short", "text": text[:limit]}
+    return {**base, "kind": "article", "title": title, "markdown": body}
+
