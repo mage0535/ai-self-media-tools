@@ -829,3 +829,81 @@ During Hermes sync and runtime validation, two production issues were found:
 - local full test suite after these runtime fixes: `78/78` passed
 - local and GitHub were re-synced after the fixes
 - Hermes server mirror was resynced after the fixes
+
+## 2026-07-02 Three-End Consistency Audit And Publishing Fix Wave
+
+### Background
+
+Prior to this wave, the project was known to live in three locations:
+- local working directory (synced via OneDrive across machines)
+- GitHub repository `<github-owner>/<repository>`
+- Hermes production server (207.57.129.132, non-git mirror at `~/.ai-self-media-tools`)
+
+A formal end-to-end consistency audit was requested to ensure all three copies are aligned, privacy-clean, and publishable, and that the install bootstrap produces an identical config on any agent runtime.
+
+### Findings From Audit
+
+All core source files (31 `.py` files in `content_platform/`, all test files, all config templates, skill files, systemd timers) had matching MD5 hashes between local and the server — **61 of 64 tracked files were identical**.
+
+Four files had discrepancies:
+
+1. `docs/CONTINUOUS_DEVELOPMENT.md` — server copy was missing the "2026-07-02 Server Sync And Runtime Fix Wave" section (812 lines vs 831 lines locally).
+2. `systemd/hermes-content-platform.service` — server repo-copy had `--profile tech`, while the actual running systemd unit used `--profile default`. The authoritative template in the repo correctly used `default`.
+3. `tests/test_cli_v2.py` — content identical, but line endings differed (CRLF vs LF on Windows vs Linux).
+4. `tests/test_trends.py` — same line-ending mismatch.
+
+Additional runtime finding:
+- Server `config.json` had `style_guide_path` pointing to a Hermes-project internal path (an older deployment convention), not the generic install-bootstrap path under `CONTENT_PLATFORM_HOME`.
+
+### Fixes Applied
+
+#### 1. Line Ending Normalization
+
+Added `.gitattributes` at the project root to enforce LF line endings for all source file types:
+
+```
+* text=auto
+*.py text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+```
+
+Executed `git rm --cached -r . && git checkout HEAD -- .` to re-checkout every file with the new rules. After this, all project files use LF, regardless of platform.
+
+Committed as `ba7b02c` and pushed to `origin/main`.
+
+#### 2. Server File Sync
+
+Used `git show HEAD:<path>` piped through SSH to overwrite the four mismatched files on the Hermes server, ensuring LF line endings were preserved. After sync, all 64 tracked files have matching MD5 hashes across local and server.
+
+#### 3. Server Config Fix
+
+Updated the server's `config.json` style_guide_path from the old Hermes-project deployment path to the generic install-bootstrap path. The old path referenced a Hermes-internal project layout; the new path uses the standard install root convention:
+
+```
+OLD: <hermes-home>/projects/ai-self-media-tools/skills/content/content-copywriting-style/SKILL.md
+NEW: CONTENT_PLATFORM_HOME/skills/content/content-copywriting-style/SKILL.md
+```
+
+This is the path that `scripts/install.py` generates by default, making future re-installs consistent.
+
+### Validation Evidence
+
+- Full test suite: **78/78 passed** (unchanged from prior wave)
+- `project-audit` output: `ok: true, scanned_files: 77, issues: []`
+- Local ↔ server MD5: all 64 tracked source files match
+- GitHub: pushed commit `ba7b02c`, `origin/main` up to date
+- Server systemd unit verified: `ExecStart` uses `--profile default` (matches repo template)
+- No residual private paths, IPs, passwords, tokens, or cookies in any tracked file
+
+### Notes For Future Contributors
+
+- This codebase is synced via OneDrive. Never use absolute platform-specific paths (`D:\...` or `/Users/...`) in code, config templates, or documentation. Always prefer `project_home()` or environment-based defaults.
+- The GitHub repository is currently **private**. The code is publishable, but visibility must be toggled to public in GitHub Settings before external sharing.
+- The `.gitattributes` file ensures that Git always stores LF and checks out LF on all platforms. If a contributor reports "file modified but no diff", they should run `git add --renormalize .` to apply the attribute rules.
+- To run the full purity check before any sync or publish: `python -m content_platform project-audit`
+- To export a clean mirror bundle: `python scripts/release_bundle.py --target <export-dir>`
