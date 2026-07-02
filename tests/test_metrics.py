@@ -55,6 +55,16 @@ class MetricsTests(unittest.TestCase):
         self.assertIn('hermes_content_ayrshare_quota_remaining{account="bluesky-primary",platform="bluesky"', metrics)
         self.assertIn('} 19', metrics)
 
+    def test_feedback_summary_aggregates_platform_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            job = store.create_job("topic", ["wechat"])
+            store.record_performance(job["id"], "wechat", views=100, likes=9, comments=2, shares=1)
+            summary = store.feedback_summary()
+        self.assertEqual(summary["platforms"]["wechat"]["views"], 100)
+        self.assertEqual(summary["platforms"]["wechat"]["engagement"], 12)
+
 
 if __name__ == "__main__":
     unittest.main()

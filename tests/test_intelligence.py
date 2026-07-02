@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from content_platform.compliance import ComplianceChecker
-from content_platform.intelligence import analyze_reference_posts, collect_reference_posts
+from content_platform.intelligence import analyze_reference_posts, build_generation_context, collect_reference_posts
 from content_platform.trends import rank_trends
 
 
@@ -68,6 +68,20 @@ class IntelligenceTests(unittest.TestCase):
             "Efficiency improved by 73% in 2026.", {"sources": ["https://example.com/report"]}, ["wechat"]
         )
         self.assertNotIn("numeric_claim_without_source", [finding["code"] for finding in result["findings"]])
+
+    def test_generation_context_includes_niche_score_and_strategy(self):
+        context = build_generation_context(
+            "Automation visuals",
+            {
+                "trend_stage": "hot",
+                "platforms": ["douyin", "xiaohongshu"],
+                "reference_posts": [{"title": "Hook first", "body": "1. Step one\n2. Step two\nSave this.", "account_handle": "ops_lab", "platform": "xiaohongshu"}],
+            },
+        )
+        self.assertIn("niche_report", context)
+        self.assertIn("viral_score", context)
+        self.assertIn("strategy", context)
+        self.assertEqual(context["strategy"]["content_form"], "short_video")
 
 
 if __name__ == "__main__":

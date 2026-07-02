@@ -20,7 +20,12 @@ class Store:
         conn = sqlite3.connect(self.path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).casefold():
+                conn.close()
+                raise
         try:
             yield conn
             conn.commit()
@@ -98,6 +103,44 @@ class Store:
                     shares INTEGER NOT NULL DEFAULT 0,
                     recorded_at TEXT NOT NULL,
                     UNIQUE(job_id, platform)
+                );
+                CREATE TABLE IF NOT EXISTS source_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    source_type TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    account_handle TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS account_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    account_handle TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    sample_count INTEGER NOT NULL DEFAULT 0,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS idea_candidates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    topic TEXT NOT NULL,
+                    score REAL NOT NULL DEFAULT 0,
+                    content_form TEXT NOT NULL DEFAULT '',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS tool_inventory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    snapshot_name TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
                 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job_id, id);
@@ -281,6 +324,112 @@ class Store:
         if job_id:
             return self._rows("SELECT * FROM performance WHERE job_id=? ORDER BY platform", (job_id,))
         return self._rows("SELECT * FROM performance ORDER BY recorded_at DESC", ())
+
+    def feedback_summary(self):
+        summary = {"platforms": {}, "totals": {"views": 0, "likes": 0, "comments": 0, "shares": 0, "engagement": 0}}
+        for row in self.performance():
+            platform = row["platform"]
+            platform_entry = summary["platforms"].setdefault(platform, {"views": 0, "likes": 0, "comments": 0, "shares": 0, "engagement": 0})
+            for key in ("views", "likes", "comments", "shares"):
+                value = int(row.get(key, 0))
+                platform_entry[key] += value
+                summary["totals"][key] += value
+            engagement = platform_entry["likes"] + platform_entry["comments"] + platform_entry["shares"]
+            platform_entry["engagement"] = engagement
+        summary["totals"]["engagement"] = summary["totals"]["likes"] + summary["totals"]["comments"] + summary["totals"]["shares"]
+        return summary
+
+    def save_source_items(self, job_id, items):
+        with self.connect() as conn:
+            conn.execute("DELETE FROM source_items WHERE job_id=?", (job_id,))
+            for item in items or []:
+                conn.execute(
+                    """INSERT INTO source_items(job_id,source_type,platform,account_handle,display_name,title,body,url,source,created_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        job_id,
+                        str(item.get("source_type", "")),
+                        str(item.get("platform", "")),
+                        str(item.get("account_handle", "")),
+                        str(item.get("display_name", "")),
+                        str(item.get("title", "")),
+                        str(item.get("body", "")),
+                        str(item.get("url", "")),
+                        str(item.get("source", "")),
+                        utc_now(),
+                    ),
+                )
+
+    def source_items(self, job_id=None):
+        if job_id:
+            return self._rows("SELECT * FROM source_items WHERE job_id=? ORDER BY id", (job_id,))
+        return self._rows("SELECT * FROM source_items ORDER BY id", ())
+
+    def save_account_snapshots(self, job_id, accounts):
+        with self.connect() as conn:
+            conn.execute("DELETE FROM account_snapshots WHERE job_id=?", (job_id,))
+            for account in accounts or []:
+                conn.execute(
+                    """INSERT INTO account_snapshots(job_id,account_handle,platform,display_name,sample_count,payload_json,created_at)
+                    VALUES(?,?,?,?,?,?,?)""",
+                    (
+                        job_id,
+                        str(account.get("account_handle", "")),
+                        str(account.get("platform", "")),
+                        str(account.get("display_name", "")),
+                        int(account.get("sample_count", 0)),
+                        json.dumps(account, ensure_ascii=False),
+                        utc_now(),
+                    ),
+                )
+
+    def account_snapshots(self, job_id=None):
+        rows = self._rows("SELECT * FROM account_snapshots WHERE job_id=? ORDER BY id", (job_id,)) if job_id else self._rows("SELECT * FROM account_snapshots ORDER BY id", ())
+        for row in rows:
+            row["payload"] = json.loads(row.pop("payload_json"))
+        return rows
+
+    def save_idea_candidates(self, job_id, ideas):
+        with self.connect() as conn:
+            conn.execute("DELETE FROM idea_candidates WHERE job_id=?", (job_id,))
+            for idea in ideas or []:
+                conn.execute(
+                    """INSERT INTO idea_candidates(job_id,topic,score,content_form,payload_json,created_at)
+                    VALUES(?,?,?,?,?,?)""",
+                    (
+                        job_id,
+                        str(idea.get("topic", "")),
+                        float(idea.get("score", 0)),
+                        str(idea.get("content_form", "")),
+                        json.dumps(idea, ensure_ascii=False),
+                        utc_now(),
+                    ),
+                )
+
+    def idea_candidates(self, job_id=None):
+        rows = self._rows("SELECT * FROM idea_candidates WHERE job_id=? ORDER BY score DESC,id" , (job_id,)) if job_id else self._rows("SELECT * FROM idea_candidates ORDER BY score DESC,id", ())
+        for row in rows:
+            row["payload"] = json.loads(row.pop("payload_json"))
+        return rows
+
+    def save_tool_inventory(self, snapshot_name, payload):
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO tool_inventory(snapshot_name,payload_json,created_at) VALUES(?,?,?)",
+                (snapshot_name, json.dumps(payload, ensure_ascii=False), utc_now()),
+            )
+
+    def latest_tool_inventory(self, snapshot_name):
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM tool_inventory WHERE snapshot_name=? ORDER BY id DESC LIMIT 1",
+                (snapshot_name,),
+            ).fetchone()
+        if not row:
+            return {}
+        result = dict(row)
+        result["payload"] = json.loads(result.pop("payload_json"))
+        return result
 
     def used_topics(self):
         with self.connect() as conn:

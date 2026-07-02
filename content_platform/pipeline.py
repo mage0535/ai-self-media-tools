@@ -53,6 +53,7 @@ class Pipeline:
         try:
             job = self.store.get_job(job_id)
             draft = self.generator.generate(job["topic"], job["brief"])
+            self._persist_intelligence(job_id, draft.get("draft_meta", {}))
             text = draft["title"] + "\n" + draft["body"]
             risk = self.risk.evaluate(text)
             compliance = self.compliance.evaluate(text, job["brief"], job["platforms"])
@@ -141,6 +142,40 @@ class Pipeline:
 
     def status(self, job_id):
         return self._hydrate(self.store.get_job(job_id))
+
+    def _persist_intelligence(self, job_id, draft_meta):
+        source_catalog = list(draft_meta.get("source_catalog", []))
+        if source_catalog:
+            self.store.save_source_items(job_id, source_catalog)
+        niche_report = draft_meta.get("niche_report", {})
+        accounts = []
+        for handle in niche_report.get("top_accounts", []):
+            accounts.append(
+                {
+                    "account_handle": handle,
+                    "platform": next(iter(niche_report.get("platform_distribution", {}).keys()), ""),
+                    "display_name": handle,
+                    "sample_count": niche_report.get("sample_count", 0),
+                    "roles": niche_report.get("account_roles", {}).get(handle, ""),
+                }
+            )
+        if accounts:
+            self.store.save_account_snapshots(job_id, accounts)
+        strategy = draft_meta.get("strategy", {})
+        viral_score = draft_meta.get("viral_score", {})
+        if strategy or viral_score:
+            self.store.save_idea_candidates(
+                job_id,
+                [
+                    {
+                        "topic": strategy.get("topic", ""),
+                        "score": viral_score.get("total_score", 0),
+                        "content_form": strategy.get("content_form", ""),
+                        "platforms": strategy.get("primary_platforms", []),
+                        "reason": strategy.get("reason", {}),
+                    }
+                ],
+            )
 
     def stage_drafts(self, job_id):
         job = self._hydrate(self.store.get_job(job_id))

@@ -1,0 +1,183 @@
+import json
+import os
+import urllib.parse
+import urllib.request
+import uuid
+from pathlib import Path
+
+from .formatters import format_for_platform
+from .models import DeliveryResult
+
+
+def read_setting(name, env_file="", explicit=""):
+    if explicit:
+        return explicit
+    if os.environ.get(name):
+        return os.environ[name]
+    if env_file and Path(env_file).is_file():
+        for line in Path(env_file).read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.strip().partition("=")
+            if separator and key.strip() == name:
+                return value.strip().strip("'\"")
+    return ""
+
+
+class FileDraftPublisher:
+    def __init__(self, outbox):
+        self.outbox = Path(outbox)
+
+    def deliver(self, job, platform):
+        directory = self.outbox / platform
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{job['id']}.json"
+        payload = {
+            "job_id": job["id"],
+            "platform": platform,
+            "status": "drafted",
+            "title": job["title"],
+            "body": job["body"],
+            "artifacts": job.get("artifacts", []),
+            "platform_payload": format_for_platform(job, platform),
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return DeliveryResult(True, "drafted", str(path))
+
+
+class DevtoDraftPublisher:
+    def __init__(self, api_key_env="DEVTO_API_KEY", env_file="", api_key=""):
+        self.api_key_env = api_key_env
+        self.env_file = env_file
+        self.api_key = api_key
+
+    def deliver(self, job, platform):
+        key = read_setting(self.api_key_env, self.env_file, self.api_key)
+        if not key:
+            return DeliveryResult(False, "blocked", error=f"missing environment variable: {self.api_key_env}")
+        payload = {"article": {"title": job["title"][:128], "body_markdown": job["body"], "published": False}}
+        request = urllib.request.Request(
+            "https://dev.to/api/articles",
+            data=json.dumps(payload).encode(),
+            headers={
+                "api-key": key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "HermesContentPlatform/2.0",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                result = json.loads(response.read())
+            return DeliveryResult(True, "drafted", str(result.get("id", "")))
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc))
+
+
+class WechatDraftPublisher:
+    def __init__(self, app_id_env="WECHAT_APP_ID", app_secret_env="WECHAT_APP_SECRET", env_file="", app_id="", app_secret=""):
+        self.app_id_env = app_id_env
+        self.app_secret_env = app_secret_env
+        self.env_file = env_file
+        self.app_id = app_id
+        self.app_secret = app_secret
+
+    def deliver(self, job, platform):
+        app_id = read_setting(self.app_id_env, self.env_file, self.app_id)
+        secret = read_setting(self.app_secret_env, self.env_file, self.app_secret)
+        if not app_id or not secret:
+            return DeliveryResult(False, "blocked", error="missing WeChat app credentials")
+        try:
+            token_url = "https://api.weixin.qq.com/cgi-bin/token?" + urllib.parse.urlencode(
+                {"grant_type": "client_credential", "appid": app_id, "secret": secret}
+            )
+            with urllib.request.urlopen(urllib.request.Request(token_url), timeout=30) as response:
+                token_result = json.loads(response.read())
+            token = token_result.get("access_token", "")
+            if not token:
+                return DeliveryResult(False, "failed", error=f"WeChat token error code: {token_result.get('errcode', 'unknown')}")
+            image = next(
+                (Path(item["path"]) for item in job.get("artifacts", []) if item.get("kind") == "image" and Path(item["path"]).is_file()),
+                None,
+            )
+            if not image:
+                return DeliveryResult(False, "failed", error="WeChat draft requires an image artifact")
+            boundary = "----Hermes" + uuid.uuid4().hex
+            file_data = image.read_bytes()
+            upload_body = (
+                f"--{boundary}\r\nContent-Disposition: form-data; name=\"media\"; filename=\"{image.name}\"\r\n"
+                f"Content-Type: image/png\r\n\r\n"
+            ).encode() + file_data + f"\r\n--{boundary}--\r\n".encode()
+            upload = urllib.request.Request(
+                "https://api.weixin.qq.com/cgi-bin/material/add_material?" + urllib.parse.urlencode({"access_token": token, "type": "image"}),
+                data=upload_body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            )
+            with urllib.request.urlopen(upload, timeout=60) as response:
+                material_result = json.loads(response.read())
+            thumb_media_id = material_result.get("media_id", "")
+            if not thumb_media_id:
+                return DeliveryResult(False, "failed", error=f"WeChat material error code: {material_result.get('errcode', 'unknown')}")
+            formatted = job.get("platform_payload") or format_for_platform(job, platform)
+            article = {
+                "title": formatted.get("title", job["title"])[:64],
+                "content": formatted.get("html", job["body"]),
+                "digest": formatted.get("summary", "")[:54],
+                "author": "Hermes",
+                "need_open_comment": 1,
+                "only_fans_can_comment": 0,
+                "thumb_media_id": thumb_media_id,
+            }
+            request = urllib.request.Request(
+                "https://api.weixin.qq.com/cgi-bin/draft/add?" + urllib.parse.urlencode({"access_token": token}),
+                data=json.dumps({"articles": [article]}, ensure_ascii=False).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=30) as response:
+                result = json.loads(response.read())
+            if result.get("media_id"):
+                return DeliveryResult(True, "drafted", result["media_id"])
+            return DeliveryResult(False, "failed", error=f"WeChat draft error code: {result.get('errcode', 'unknown')}")
+        except Exception:
+            return DeliveryResult(False, "failed", error="WeChat draft request failed")
+
+
+class TelegraphPublisher:
+    def __init__(self, live_enabled=False, token_env="TELEGRAPH_TOKEN"):
+        self.live_enabled = live_enabled
+        self.token_env = token_env
+
+    def deliver(self, job, platform):
+        if not self.live_enabled:
+            return DeliveryResult(False, "blocked", error="live publishing is disabled")
+        token = os.environ.get(self.token_env, "")
+        if not token:
+            return DeliveryResult(False, "blocked", error=f"missing environment variable: {self.token_env}")
+        content = json.dumps([{"tag": "p", "children": [job["body"][:10000]]}], ensure_ascii=False)
+        data = urllib.parse.urlencode(
+            {"access_token": token, "title": job["title"][:256], "author_name": "Hermes", "content": content}
+        ).encode()
+        try:
+            with urllib.request.urlopen(urllib.request.Request("https://api.telegra.ph/createPage", data=data), timeout=30) as response:
+                result = json.loads(response.read())
+            if result.get("ok"):
+                return DeliveryResult(True, "published", result["result"].get("url", ""))
+            return DeliveryResult(False, "failed", error=str(result.get("error", "unknown error")))
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc))
+
+
+def build_publisher(platform, config, data_dir):
+    publishers = config.get("publishers", {})
+    cfg = publishers.get("platforms", {}).get(platform, publishers.get("default", {"type": "file"}))
+    kind = cfg.get("type", "file")
+    if kind == "file":
+        return FileDraftPublisher(cfg.get("outbox", str(Path(data_dir) / "outbox")))
+    if kind == "devto-draft":
+        return DevtoDraftPublisher(cfg.get("api_key_env", "DEVTO_API_KEY"), cfg.get("env_file", ""))
+    if kind == "wechat-draft":
+        return WechatDraftPublisher(
+            cfg.get("app_id_env", "WECHAT_APP_ID"), cfg.get("app_secret_env", "WECHAT_APP_SECRET"), cfg.get("env_file", "")
+        )
+    if kind == "telegraph":
+        enabled = os.environ.get("CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH", "") == "1" and cfg.get("live", False)
+        return TelegraphPublisher(enabled, cfg.get("token_env", "TELEGRAPH_TOKEN"))
+    raise ValueError(f"unknown publisher type for {platform}: {kind}")

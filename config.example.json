@@ -28,6 +28,18 @@
       "timeout": 600
     }
   },
+  "ocr": {
+    "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/ocr_pipeline.py",
+    "timeout": 120
+  },
+  "transcription": {
+    "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/transcribe_pipeline.py",
+    "timeout": 300
+  },
+  "analysis": {
+    "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/multimodal_analyze.py",
+    "timeout": 180
+  },
   "delivery": {
     "max_attempts": 2,
     "backoff_seconds": 1,

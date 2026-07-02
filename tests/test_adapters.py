@@ -37,6 +37,25 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bridge.generate("audio", {"id": "j1", "topic": "Topic", "body": "Body"})
 
+    def test_media_bridge_can_run_ocr_transcription_and_analysis_providers(self):
+        script = self.root / "tool.py"
+        script.write_text("# fixture", encoding="utf-8")
+        sample = self.root / "sample.png"
+        sample.write_bytes(b"fake")
+        bridge = MediaBridge(
+            {
+                "ocr": {"script": str(script)},
+                "transcription": {"script": str(script)},
+                "analysis": {"script": str(script)},
+            },
+            self.root,
+        )
+        completed = type("Result", (), {"returncode": 0, "stdout": '{"summary":"ok"}', "stderr": ""})()
+        with patch("content_platform.tool_adapters.subprocess.run", return_value=completed):
+            self.assertEqual(bridge.ocr(str(sample))["summary"], "ok")
+            self.assertEqual(bridge.transcribe(str(sample))["summary"], "ok")
+            self.assertEqual(bridge.analyze(str(sample))["summary"], "ok")
+
     def test_video_bridge_passes_approved_copy_and_discovers_generated_file(self):
         script = self.root / "video_pipeline.py"
         script.write_text("# fixture", encoding="utf-8")

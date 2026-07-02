@@ -30,6 +30,51 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(result["ok"])
 
+    def test_analyze_topic_returns_strategy_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "state.db")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(
+                    [
+                        "--db",
+                        db,
+                        "--config",
+                        "",
+                        "analyze-topic",
+                        "--topic",
+                        "Automation visuals",
+                        "--brief",
+                        '{"platforms":["douyin"],"reference_posts":[{"title":"Hook","body":"1. A\\n2. B\\nSave this.","account_handle":"ops_lab"}]}',
+                    ]
+                )
+            result = json.loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(result["strategy"]["content_form"], "short_video")
+
+    def test_account_report_summarizes_reference_accounts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "state.db")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(
+                    [
+                        "--db",
+                        db,
+                        "--config",
+                        "",
+                        "account-report",
+                        "--topic",
+                        "Automation visuals",
+                        "--brief",
+                        '{"reference_posts":[{"title":"Hook","body":"1. A 2. B Save this.","account_handle":"ops_lab","platform":"xiaohongshu"}]}',
+                    ]
+                )
+            result = json.loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(result["account_count"], 1)
+        self.assertIn("ops_lab", result["top_accounts"])
+
 
 if __name__ == "__main__":
     unittest.main()
