@@ -1,0 +1,11 @@
+[Unit]
+Description=Recover and clean Hermes content workflow state
+After=local-fs.target
+
+[Service]
+Type=oneshot
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+ExecStart=%h/.local/bin/content-platform maintenance --retention-days 14
+WorkingDirectory=%h/.ai-self-media-tools
+MemoryMax=256M
+
