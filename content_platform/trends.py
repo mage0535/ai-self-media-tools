@@ -61,11 +61,10 @@ class TrendCollector:
         data_dir = Path(self.config.get("legacy_data_dir", str(trend_cache_dir())))
         if refresh:
             script = Path(self.config.get("legacy_script", str(project_home() / "external" / "scripts" / "trend_collector.py")))
-            if not script.is_file():
-                raise FileNotFoundError(f"trend collector not found: {script}")
-            proc = subprocess.run(["python3", str(script)], capture_output=True, text=True, timeout=120, check=False)
-            if proc.returncode != 0:
-                raise RuntimeError((proc.stderr or proc.stdout)[-500:])
+            if script.is_file():
+                proc = subprocess.run(["python3", str(script)], capture_output=True, text=True, timeout=120, check=False)
+                if proc.returncode != 0:
+                    raise RuntimeError((proc.stderr or proc.stdout)[-500:])
         files = sorted(data_dir.glob("trending_*.json"), reverse=True)
         if not files:
             return []
