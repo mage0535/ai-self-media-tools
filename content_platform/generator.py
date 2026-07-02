@@ -79,6 +79,7 @@ class DraftGenerator:
             "media_plan": strategy["asset_plan"],
             "quality_scores": rewrite["quality_scores"],
             "rewrite_notes": rewrite["rewrite_notes"],
+            "open_notebook_research": context.get("open_notebook_research", {}),
         }
         return {
             "title": str(draft["title"]),

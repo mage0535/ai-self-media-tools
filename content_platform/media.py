@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import subprocess
 from contextlib import nullcontext
@@ -67,6 +68,12 @@ class MediaBridge:
             command = ["python3", str(script), script_body, job.get("title") or job["topic"]]
             env = os.environ.copy()
             env["VIDEO_OUTPUT_DIR"] = str(output_dir)
+            # 注入 Open Notebook 研究数据（如存在）
+            on_research = job.get("draft_meta", {}).get("open_notebook_research") or {}
+            if on_research:
+                research_path = output_dir / "open_notebook_research.json"
+                research_path.write_text(json.dumps(on_research, ensure_ascii=False, indent=2))
+                env["OPEN_NOTEBOOK_RESEARCH_PATH"] = str(research_path)
         lock = self.guard.video_lock() if kind == "video" else nullcontext()
         with lock:
             proc = subprocess.run(
