@@ -1,0 +1,15 @@
+[Unit]
+Description=Hermes AI content topic collection and draft generation
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+ExecStart=%h/.local/bin/content-platform auto --limit 3 --platform wechat --platform xiaohongshu --profile tech --refresh
+WorkingDirectory=%h/.ai-self-media-tools
+Nice=10
+MemoryMax=1200M
+CPUQuota=180%
+TimeoutStartSec=900
+OOMPolicy=stop
+
