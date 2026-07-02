@@ -1,0 +1,11 @@
+[Unit]
+Description=Create Hermes content drafts every morning
+
+[Timer]
+OnCalendar=*-*-* 06:30:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+
