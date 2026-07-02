@@ -463,8 +463,8 @@ class DeAIProcessor:
 class SubtitleGenerator:
     """基于TTS时间戳生成SRT字幕（中英文自适应切分）"""
 
-    # 中/日文标点（切割点）
-    _CJK_PUNCT = set("，。！？；：、""''（）——《》【】…,.;:!?")
+    # 中文句尾标点（只在这些点切分，保证每段是完整句子/短语）
+    _CJK_SENTENCE_END = set("。！？")
 
     @staticmethod
     def _is_cjk(text: str) -> bool:
@@ -473,7 +473,7 @@ class SubtitleGenerator:
 
     @staticmethod
     def merge(all_timings: list[list[dict]], texts: list[str]) -> str:
-        """合并时间戳为SRT：中文按短语/句子切，英文按词切"""
+        """合并时间戳为SRT：中文按句切（。！？或≥5字），英文按词切"""
         lines, index = [], 1
         current_offset = 0.0
         for timing, text in zip(all_timings, texts):
@@ -481,7 +481,7 @@ class SubtitleGenerator:
                 continue
             is_cjk = SubtitleGenerator._is_cjk(text)
             if is_cjk:
-                # 中文/日文：按短语合并（3-8字 or 遇到标点切割）
+                # 中文/日文：句尾标点或≥5字时切分，保证每段语义完整
                 chunk_units, chunk_start = [], None
                 for t in timing:
                     if chunk_start is None:
@@ -489,9 +489,9 @@ class SubtitleGenerator:
                     w = t["word"]
                     chunk_units.append(w)
                     text_sofar = "".join(chunk_units)
-                    # 切割条件：≥8字，或遇到中文标点，或最后一段
-                    if (len(text_sofar) >= 8
-                            or w in SubtitleGenerator._CJK_PUNCT
+                    # 切割条件：≥5字，或遇到句尾标点，或最后一段
+                    if (len(text_sofar) >= 5
+                            or w in SubtitleGenerator._CJK_SENTENCE_END
                             or t is timing[-1]):
                         lines.append(SubtitleGenerator._fmt(
                             index, current_offset + chunk_start,
