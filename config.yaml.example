@@ -1,0 +1,21 @@
+# AI Self-Media Tools - Configuration Template
+# Copy to config.yaml and fill in real values.
+
+paths:
+  scripts_dir: ./scripts
+  data_dir: ./data
+  video_output: ./data/video_output
+
+api_keys:
+  aitoearn:
+    key: "YOUR_AITOEARN_API_KEY"
+    url: "https://aitoearn.cn/api/unified/mcp"
+
+  openai:
+    key: "YOUR_OPENAI_API_KEY"
+
+  github:
+    token: ""  # Optional: increases API rate limit to 5000/hr
+
+channels:
+  enabled: []

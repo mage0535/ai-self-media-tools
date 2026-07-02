@@ -907,3 +907,114 @@ This is the path that `scripts/install.py` generates by default, making future r
 - The `.gitattributes` file ensures that Git always stores LF and checks out LF on all platforms. If a contributor reports "file modified but no diff", they should run `git add --renormalize .` to apply the attribute rules.
 - To run the full purity check before any sync or publish: `python -m content_platform project-audit`
 - To export a clean mirror bundle: `python scripts/release_bundle.py --target <export-dir>`
+
+## 2026-07-02 Three-Project Integration Wave
+
+### Background
+
+Three independent content-creation patterns were identified in the self-media ecosystem, each addressing a different content production need:
+
+1. **AutoClip** — "long video -> AI highlights -> clip compilation" (inspired by zhihu/pin/2055628331433858821)
+2. **GitHub Star Explorer** — "daily trending project discovery -> cross-channel promo" (inspired by Douyin "GitHub-Star-OpenMontage")
+3. **XCrawl Data Collector** — "web crawl -> structured data -> Excel/report" (inspired by Douyin "Codex-XCrawl")
+
+All three were designed to integrate into the existing Hermes content pipeline without disrupting the running production system.
+
+### Scope Completed
+
+Four new modules were built and integrated:
+
+#### 1. AutoClip Adapter (`scripts/autoclip_adapter.py`)
+
+Core capabilities:
+- `download_video(url, output_dir)` — yt-dlp download with auto-subs (en/zh)
+- `transcribe_video(video_path)` — Whisper base model transcription
+- `clip_segments(video_path, segments, output_dir)` — FFmpeg segment extraction
+- `create_compilation(clips, output_path)` — concat compilation
+- `run_autoclip_pipeline(url, task_id)` — end-to-end entry point
+- `quality_check(clips)` — duration and file-existence validation
+
+Design decisions:
+- Did NOT clone the full AutoClip FastAPI/Redis/Celery stack (too heavy)
+- Whisper runs locally (no external LLM API dependency for transcription)
+- `llm_ready=True` flag allows upper-layer Hermes to inject LLM-based highlight refinement
+- Registered as `video_autoclip` content type in `content_generator.py`
+
+#### 2. GitHub Star Explorer (`scripts/github_star_explorer.py`)
+
+Core capabilities:
+- `fetch_trending()` — GitHub Search API with optional token auth
+- `generate_content(project, lang)` — bilingual (en/zh) promo generation
+- `daily_pick(lang)` — quality-filtered top project selection
+- `quality_check(project)` — minimum stars and description validation
+
+Design decisions:
+- Falls back gracefully on API rate limits (60/hr unauthenticated)
+- Template format compatible with `promo_pipeline.py` CONTENT_TEMPLATES_V2 structure
+
+#### 3. Data Collector (`scripts/data_collector.py`)
+
+Core capabilities:
+- `scrape_urls(urls, timeout)` — batch URL fetching with requests
+- `to_excel(data, columns, output_path)` — pandas XLSX or CSV fallback
+- `content_research(topic, max_sources)` — HN + GitHub search aggregation
+- `quality_check(data)` — source validity rate verification
+
+Design decisions:
+- Uses requests+BeautifulSoup (XCrawl npm package not available for Python)
+- Compatible with promo_pipeline context injection pattern
+
+#### 4. Unified Quality Gate (`scripts/content_quality_gate.py`)
+
+Core capabilities:
+- `run_quality_gate(content_type, content_data)` — single entry point
+- `audit_autoclip(result)` — clip count and compilation validation
+- `audit_github_star(project)` — star threshold and description check
+- `audit_collected_data(data)` — source validity rate verification
+
+Design decisions:
+- Extensible dictionary-based gate registry (`GATES` dict)
+- Reuses `promo_pipeline.py` `quality_review` patterns
+
+### Pipeline Modifications
+
+Four existing production files were patched with surgical insertions only (no lines deleted, no refactoring):
+
+| File | Patch |
+|------|-------|
+| `content_generator.py` | Added `gen_autoclip_video()` function + `video_autoclip` entry in CONTENT_GENERATORS + dispatch branch |
+| `video_operator.py` | Added `video_autoclip` handler branch calling `run_autoclip_pipeline()` |
+| `unified_pipeline.py` | Added `github_stars` channel to CHANNEL_ROSTER with `use_github_explorer` flag |
+| `promo_pipeline.py` | Added `github-star-explorer` template (en/zh) to CONTENT_TEMPLATES_V2 + GitHub trending injection before Step 3 |
+
+Original files backed up as `*.bak.integration` on the server before patching.
+
+### Skill Registration
+
+Two new Hermes skills registered:
+
+| Skill | Path | Trigger Keywords |
+|-------|------|------------------|
+| `content-ai-autoclip` | `skills/content-ai-autoclip/SKILL.md` | autoclip, highlight-extraction, video-slicing |
+| `content-github-star-explorer` | `skills/content-github-star-explorer/SKILL.md` | github-star, trending, open-source-discovery |
+
+### Configuration Templates
+
+New files for clean installation:
+- `config.yaml.example` — paths, API keys, channel config
+- `requirements.txt` — pip dependencies (requests, pandas, openpyxl, openai-whisper, yt-dlp)
+
+### Validation Evidence
+
+- Server import test: all 4 modules importable, all deps satisfied (whisper + torch installed)
+- Quality gate integration test: all 3 content types pass audit
+- Local test suite: **78/78 passed** (no regressions)
+- Project audit: **89 files scanned, 0 issues**
+
+### Notes
+
+- AutoClip downloads can take 2-5 minutes for a 10-minute video (download + whisper + ffmpeg)
+- GitHub Star Explorer may return empty on first run if API is rate-limited; retries are automatic
+- Data Collector requires `requests` package; falls back gracefully if unavailable
+- The pipeline modifications follow the existing pattern of `sys.path.insert(0, SCRIPTS)` for intra-module imports
+- All new modules include `__name__ == "__main__"` CLI entry points for independent testing
