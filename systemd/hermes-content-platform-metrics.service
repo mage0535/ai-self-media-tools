@@ -1,0 +1,11 @@
+[Unit]
+Description=Export Hermes content platform Prometheus metrics
+After=local-fs.target
+
+[Service]
+Type=oneshot
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+ExecStart=%h/.local/bin/content-platform metrics --output %h/.ai-self-media-tools/data/metrics.prom
+WorkingDirectory=%h/.ai-self-media-tools
+MemoryMax=128M
+
