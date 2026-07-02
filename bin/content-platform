@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+ROOT="${CONTENT_PLATFORM_HOME:-$HOME/.ai-self-media-tools}"
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m content_platform "$@"
