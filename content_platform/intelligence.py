@@ -140,6 +140,19 @@ def build_generation_context(topic, brief):
     reference_titles = [row.get("title", "") for row in references if row.get("title")]
     audience = str(brief.get("audience", "")).strip()
     niche = str(brief.get("niche", "")).strip()
+
+    # 可选：Open Notebook 深度研究
+    on_research = {}
+    if brief.get("deep_research"):
+        try:
+            from scripts.open_notebook_integrator import research_topic
+            urls = brief.get("deep_research_urls", [])
+            texts = brief.get("deep_research_texts", [])
+            if urls or texts:
+                on_research = research_topic(topic, urls=urls, texts=texts)
+        except Exception:
+            on_research = {"error": "open_notebook unavailable"}
+
     content_form = strategy["content_form"]
     image_prompt = f"{topic} | niche={niche} | audience={audience} | form={content_form} | create a strong cover with high information density"
     video_prompt = f"{topic} | form={content_form} | start with a hook, explain three points, end with a CTA"
@@ -163,6 +176,7 @@ def build_generation_context(topic, brief):
         "niche_report": niche_report,
         "viral_score": viral_score,
         "strategy": strategy,
+        "open_notebook_research": on_research,
     }
 
 
@@ -183,6 +197,7 @@ def prompt_brief(topic, brief):
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
             "narration_guide": context.get("narration_guide", ""),
+            "open_notebook_research": context.get("open_notebook_research", {}),
         },
         ensure_ascii=False,
     )

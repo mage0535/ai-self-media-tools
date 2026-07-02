@@ -40,7 +40,20 @@ class ToolRegistry:
                 "available": self._exists(self.config.get("analysis", {}).get("script", "")),
                 "kind": "multimodal_analysis",
             },
+            "open_notebook": self._probe_open_notebook(),
         }
+
+    def _probe_open_notebook(self):
+        """探测 Open Notebook 服务"""
+        import os
+        api = os.environ.get("OPEN_NOTEBOOK_API", "http://<open-notebook-host>")
+        try:
+            import requests
+            r = requests.get(f"{api}/health", timeout=5)
+            ok = r.json().get("status") == "healthy"
+            return {"available": ok, "url": api, "kind": "research"}
+        except Exception:
+            return {"available": False, "url": api, "kind": "research"}
 
     def choose_provider(self, kind):
         cfg = self.config.get("media", {}).get(kind, {})

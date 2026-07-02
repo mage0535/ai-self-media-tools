@@ -1122,3 +1122,47 @@ run_voice_pipeline(script_text, lang, genre, mode)
 - TTS synthesis: English tech narration → 3.3s MP3 generated successfully
 - Full test suite: **78/78 passed**, no regressions
 - Project audit: 0 issues
+
+## 2026-07-02 Open Notebook 集成
+
+### 集成内容
+将 Open Notebook (lfnovo/open-notebook, 33.7k⭐) 深度研究能力集成到内容管线。
+
+### 新增文件
+
+| 文件 | 类型 | 说明 |
+|------|:----:|------|
+| `scripts/open_notebook_integrator.py` | 🔵 核心 | REST API 客户端 + digest/research 引擎 |
+| `skills/content/content-open-notebook/SKILL.md` | 🟢 Skill | Hermes skill 注册 |
+| `tests/test_open_notebook_integrator.py` | 🟣 测试 | 30 个单元/集成测试 |
+
+### 修改文件
+
+| 文件 | 改动 |
+|------|------|
+| `content_platform/tool_registry.py` | 添加 `_probe_open_notebook()` 探测 |
+| `content_platform/intelligence.py` | `build_generation_context()` 集成 `deep_research` 可选路径 |
+
+### 能力矩阵
+
+| 能力 | 状态 | 说明 |
+|------|:----:|------|
+| 素材消化 (URL→摘要) | ✅ | Notebook 创建→素材添加→搜索分析 |
+| 多素材联合研究 | ✅ | 单 Notebook 内多来源综合提问 |
+| 管线集成 | ✅ | `deep_research=True` 自动调用 |
+| 工具探测 | ✅ | `ToolRegistry.probe()` 包含 open_notebook |
+| `/api/search/ask` 提问 | ⚠️ | 需 Open Notebook UI 中先配置 AI provider |
+| 错误降级 | ✅ | 非致命错误不阻断管线 |
+
+### 验证
+- 测试: **30/30 passed** (全量 `107 passed`, 1 pre-existing failure in test_adapters)
+- CLI: `health` / `digest` / `research` 三子命令
+- API 真实交互: Notebook 创建→Source 添加(multipart)→搜索→清理 已测通
+
+### Open Notebook 服务
+```
+部署路径: /root/.open-notebook/
+Web UI:   http://localhost:8502
+REST API: http://<open-notebook-host> (healthy)
+SurrealDB: :8000
+```
