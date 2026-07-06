@@ -12,6 +12,8 @@
 | 6 | **translate-book** (deusyu) | ✅ | Translation | pip install, CLI wrapper |
 | 7 | **nexu** (nexu-io, 3.2k★) | 📝 | Desktop Client | Recorded for future desktop deployment |
 
+> **🧩 Hermes Skills 增强层（非独立项目）**：`content_gen_fusion.py` 可调用 Hermes 内置的写作/配图/审校/数据采集技能扩增项目一的内容生成能力。详见本目录 `CONTENT_GEN_ENHANCEMENT.md`。该层为可选增强，不替代项目一自有的 `generator.py`/`intelligence.py`。|
+
 ## Hermes Skills Created
 
 - `/root/.hermes/skills/content/html-anything/SKILL.md`
