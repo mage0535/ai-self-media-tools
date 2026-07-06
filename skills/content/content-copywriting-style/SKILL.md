@@ -65,6 +65,9 @@ category: content
 - 至少抽取 2 条参考内容后再定调
 - 若无参考样本，则退化为赛道默认模板，不允许空白生成
 
+## 参考
+- `GEO.md` — Generative Engine Optimization 方法论（KDD 2024 + ICLR 2026）
+
 ## 核心原则
 
 ### 标题法则
