@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .fusion import fusion_pipeline, format_content, format_for_channel, fetch_trends, council_review
 from .intelligence import build_generation_context
 from .niche_analysis import analyze_niche
 from .metrics import render_metrics
@@ -118,10 +119,41 @@ def parser():
     seo_geo.add_argument("job_id")
     demo = sub.add_parser("demo")
     demo.add_argument("--actor", default="demo-operator")
+
+    # ─── 7-project fusion subcommands ───
+    fusion_p = sub.add_parser("fusion")
+    fusion_sp = fusion_p.add_subparsers(dest="fusion_cmd", required=True)
+    fusion_sp.add_parser("trend").add_argument("--topic", required=True)
+    ff = fusion_sp.add_parser("format")
+    ff.add_argument("--template", default="article", choices=["article","xiaohongshu","twitter","poster","deck"])
+    ff.add_argument("--input")
+    fr = fusion_sp.add_parser("review")
+    fr.add_argument("--input")
+    fa = fusion_sp.add_parser("all")
+    fa.add_argument("--topic", required=True)
+    fa.add_argument("--channel", default="wechat")
+
     return p
 
 
 def execute(args):
+    if args.command == "fusion":
+        if args.fusion_cmd == "trend":
+            data = fetch_trends(args.topic)
+            return data or {"error": "trend fetch failed (cli not available?)"}
+        elif args.fusion_cmd == "format":
+            content = sys.stdin.read() if not args.input else Path(args.input).read_text(encoding="utf-8")
+            result = format_content(content, args.template)
+            if result:
+                print(result)
+                return {"ok": True, "bytes": len(result)}
+            return {"error": "format failed"}
+        elif args.fusion_cmd == "review":
+            content = sys.stdin.read() if not args.input else Path(args.input).read_text(encoding="utf-8")
+            return council_review(content)
+        elif args.fusion_cmd == "all":
+            return fusion_pipeline(args.topic, args.channel)
+
     store = Store(args.db)
     store.init()
     config = load_config(args.config, args.db)
