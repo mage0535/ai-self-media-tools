@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.4.0 - 2026-07-06
+
+- Integrated 7 open-source projects into Hermes ecosystem:
+  - html-anything: agentic HTML editor, CLI wrapper, 8 templates (article/deck/poster/xiaohongshu/tweet)
+  - last30days-skill: cross-16-platform trend research engine
+  - alphacouncil-agent: multi-agent investment council MCP server
+  - claude-obsidian: self-organizing knowledge vault pattern → KMM fusion
+  - translate-book: parallel subagent book translation
+  - open-connector: 840+ SaaS auth gateway (Docker pending upstream migration fix)
+  - nexu: desktop client (recorded for future deployment)
+- Created 6 Hermes skills for integrated projects
+- Created fusion connector script (7project-fusion.py) bridging trend/format/review pipelines
+- Created fusion architecture docs for KMM, HMFE, and channel tools
+- All tests passed: 6/7 integration tests, 3/3 fusion connector modes
+
 ## 3.3.0 - 2026-07-06
 
 - Integrated SEO Toolset: OpenSERP SERP search + pyseoanalyzer technical audit + GEO checklist
