@@ -41,7 +41,62 @@ class ToolRegistry:
                 "kind": "multimodal_analysis",
             },
             "open_notebook": self._probe_open_notebook(),
+            # --- v3.5.0: Content Generation Toolset ---
+            "autocli": self._probe_autocli(),
+            "browser_ext": self._probe_browser_ext(),
+            "khazix_skills": self._probe_skill_dir("khazix-skills"),
+            "kangarooking_skills": self._probe_skill_dir("kangarooking-skills"),
+            "canghe_skills": self._probe_skill_dir("canghe-skills"),
+            "huashu_skills": self._probe_skill_dir("huashu-skills"),
+            "skills_adapter": self._probe_skills_adapter(),
         }
+
+    def _probe_autocli(self):
+        ok = bool(shutil.which("autocli"))
+        daemon = False
+        try:
+            import requests
+            r = requests.get("http://127.0.0.1:19925/health", timeout=2)
+            daemon = r.status_code == 200
+        except Exception:
+            pass
+        return {"available": ok, "daemon": daemon, "kind": "data_collection"}
+
+    def _probe_browser_ext(self):
+        import os
+        ext = os.path.expanduser("~/.chrome-autocli/autocli-extension/manifest.json")
+        chrome = bool(shutil.which(os.path.expanduser("~/.cloakbrowser/chromium-146.0.7680.177.5/chrome")))
+        return {"available": os.path.exists(ext) and chrome, "kind": "browser_automation"}
+
+    def _probe_skill_dir(self, name):
+        import os
+        path = os.path.expanduser(f"~/.hermes/skills/{name}")
+        count = 0
+        if os.path.isdir(path):
+            import glob
+            count = len(glob.glob(os.path.join(path, "**/SKILL.md"), recursive=True))
+        return {"available": count > 0, "skill_count": count, "kind": "content_generation"}
+
+    def _probe_skills_adapter(self):
+        import os, importlib.util
+        path = os.path.expanduser("~/ai-self-media-tools/content_platform/skills_adapter.py")
+        if not os.path.exists(path):
+            return {"available": False, "kind": "skills_bridge"}
+        spec = importlib.util.spec_from_file_location("skills_adapter", path)
+        try:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            status = mod.get_status()
+            return {
+                "available": True,
+                "kind": "skills_bridge",
+                "autocli_ok": status["autocli"]["available"],
+                "fusion_script_ok": status["fusion_script"],
+                "chrome_ext_ok": status["chrome_ext"],
+                "total_skills": status["total_skills"],
+            }
+        except Exception:
+            return {"available": False, "kind": "skills_bridge", "error": "import_failed"}
 
     def _probe_open_notebook(self):
         """探测 Open Notebook 服务"""

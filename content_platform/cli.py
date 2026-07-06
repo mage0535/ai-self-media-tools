@@ -15,6 +15,7 @@ from .pipeline import Pipeline
 from .project_audit import audit_project
 from .profiles import resolve_profile
 from .readiness import inspect_delivery_readiness
+from .skills_adapter import fetch_hot_data, generate_content, get_status as skills_status
 from .store import Store
 from .task_market import TaskMarketRunner
 from .trends import TrendCollector, rank_trends
@@ -133,6 +134,22 @@ def parser():
     fa.add_argument("--topic", required=True)
     fa.add_argument("--channel", default="wechat")
 
+    # ─── Hermes Skills 增强层子命令 ───
+    gen = sub.add_parser("gen-content")
+    gen.add_argument("--topic", required=True)
+    gen.add_argument("--type", default="article",
+                     choices=["article","video-script","social-post","newsletter","image-series","topic-research"])
+    gen.add_argument("--save", action="store_true", help="Save to pipeline queue")
+
+    auto_gen = sub.add_parser("auto-gen")
+    auto_gen.add_argument("prompt", nargs="+", help="Natural language prompt, e.g. '写一篇AI热点公众号文章'")
+
+    hot = sub.add_parser("hot-data")
+    hot.add_argument("--source", default="bilibili", choices=["bilibili","douban","hackernews"])
+    hot.add_argument("--limit", type=int, default=5)
+
+    sub.add_parser("skill-status")
+
     return p
 
 
@@ -153,6 +170,41 @@ def execute(args):
             return council_review(content)
         elif args.fusion_cmd == "all":
             return fusion_pipeline(args.topic, args.channel)
+
+    # ─── Hermes Skills 增强层（无需 store） ───
+    if args.command == "gen-content":
+        result = generate_content(args.topic, args.type, args.save)
+        if "error" in result:
+            return result
+        print(result["output"])
+        return {"status": "ok", "topic": args.topic, "type": args.type}
+    if args.command == "auto-gen":
+        prompt_text = " ".join(args.prompt)
+        # Simple classifier: keyword → content type
+        prompt_lower = prompt_text.lower()
+        if any(w in prompt_lower for w in ["视频", "抖音", "脚本", "分镜", "视频大纲"]):
+            ctype = "video-script"
+        elif any(w in prompt_lower for w in ["配图", "封面", "海报", "信息图", "小红书图"]):
+            ctype = "image-series"
+        elif any(w in prompt_lower for w in ["热点", "趋势", "选题", "研究", "分析"]):
+            ctype = "topic-research"
+        elif any(w in prompt_lower for w in ["推广", "宣传", "广告", "促销"]):
+            ctype = "social-post"
+        elif any(w in prompt_lower for w in ["日报", "周报", "newsletter", "资讯"]):
+            ctype = "newsletter"
+        else:
+            ctype = "article"  # default: deep article
+
+        print(f"auto-gen: classified prompt as '{ctype}'", file=sys.stderr)
+        result = generate_content(prompt_text, ctype, args.save)
+        if "error" in result:
+            return result
+        print(result["output"])
+        return {"status": "ok", "prompt": prompt_text, "classified_as": ctype}
+    if args.command == "hot-data":
+        return fetch_hot_data(args.source, args.limit)
+    if args.command == "skill-status":
+        return skills_status()
 
     store = Store(args.db)
     store.init()

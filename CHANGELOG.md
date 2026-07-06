@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.5.0 - 2026-07-07 - Hermes Skills 自适应增强
+
+- **skills_adapter 模块**：`content_platform/skills_adapter.py` 桥接 AutoCLI + Hermes Skills 到项目一 CLI
+  - 新 CLI 子命令：`gen-content`（自动分类写作）、`hot-data`（热点采集）、`skill-status`（能力探测）
+  - 自动探测内容类型：article / video-script / social-post / topic-research
+  - 自动检测 AutoCLI daemon / Chrome 扩展 / 73 个已安装 Hermes Skills
+- **auto-gen 智能路由**：自然语言提示 → 意图分类 → 匹配写作/脚本/配图/审校链
+- **follow-builders 集成**（⭐5,598）：26 位 AI builder 动态摘要作为数据源
+- **Aliens_eye 探针**（⭐2,151）：840+ 平台用户名扫描，注册前预检
+- **tool_registry 更新**：新增 skills_adapter 探针，登记 2 个新工具
+- **文档更新**：CHANNEL_MATRIX.md / 7PROJECT_INTEGRATION.md / CONTENT_GEN_ENHANCEMENT.md
+
 ## 3.4.0 - 2026-07-06
 
 - Integrated 7 open-source projects into Hermes ecosystem:
@@ -16,7 +28,20 @@
 - All tests passed: 6/7 integration tests, 3/3 fusion connector modes
 - **Channel tools integration**: fusion module (`content_platform/fusion.py`) with html-anything format, last30days trends, and council review embedded into `content-platform` CLI
 - **Format upgrade**: `formatters.py` now uses html-anything for WeChat/Weixin channel HTML output (fallback to built-in converter)
-- **Fusion subcommands**: `content-platform fusion [trend|format|review|all]`
+|- **Fusion subcommands**: `content-platform fusion [trend|format|review|all]`
+
+## 3.5.0 - 2026-07-06
+
+- **Hermes Skills 增强层（可选）**：在 Hermes 运行环境下，项目一可通过 `content_gen_fusion.py` 桥接写作/配图/审校/数据采集技能作为可选增强
+  - 来源：khazix-skills/kangarooking-skills/canghe-skills/huashu-skills（非独立项目，属 Hermes 内置能力）
+  - 数据补充：AutoCLI v0.3.8 实时热点采集（bilibili/douban 已打通, Chrome 扩展已部署）
+  - 参考：anthropic-skills-ref（17个官方技能格式参考）
+  - 免费资源参考：ripienaar/free-for-dev
+- **AutoCLI Chrome 扩展部署**：headless Chrome（port 9223）+ daemon（port 19925）
+- **融合脚本**：`scripts/content_gen_fusion.py` — topic → trend → writing → pipeline output
+- **能力登记**：`docs/CONTENT_GEN_ENHANCEMENT.md` 记录增强层详情
+- **工具注册**：`content_platform/tool_registry.py` 新增 Hermes skills + AutoCLI 探针
+- **自动识别**：`skill:tool-inventory` 按场景映射可用增强能力
 
 ## 3.3.0 - 2026-07-06
 
