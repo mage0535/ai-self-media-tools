@@ -103,7 +103,7 @@ def geo_checklist(draft):
     checks["claims_with_sources"] = any(ind in body for ind in source_indicators)
 
     # 3. FAQ/QA format
-    checks["has_faq"] = "?" in body[:500] or "Q:" in body or "问：" in body
+    checks["has_faq"] = "?" in body[:500] or "q:" in body or "问：" in body
 
     # 4. Comparison tables
     checks["has_table"] = "|" in body and "---" in body
