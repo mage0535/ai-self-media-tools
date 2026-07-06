@@ -46,6 +46,12 @@
     "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/multimodal_analyze.py",
     "timeout": 180
   },
+  "seo": {
+    "openserp_host": "{{OPENSERP_HOST}}",
+    "default_engine": "duck",
+    "geo_checklist_enabled": true,
+    "tools": ["openserp", "pyseoanalyzer"]
+  },
   "delivery": {
     "max_attempts": 2,
     "backoff_seconds": 1,

@@ -5,3 +5,4 @@ pandas>=1.5
 openpyxl>=3.0
 openai-whisper>=20231117
 yt-dlp>=2023
+pyseoanalyzer>=2.5
