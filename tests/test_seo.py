@@ -45,11 +45,14 @@ class TestGeoChecklist(unittest.TestCase):
             "body": (
                 "总结：本评测覆盖60+AI工具的实战对比。\n\n"
                 "根据 ProductHunt 报告，AI 工具市场年增长 200%。\n\n"
+                "- 2019年至2024年市场扩大300%\n"
+                "- 技术年增长65.3%\n"
                 "Q: 哪个最好用？\n"
                 "A: Claude Code 排名第一。\n\n"
                 "| 工具 | 评分 |\n"
                 "| --- | --- |\n"
                 "| Claude | 9.5 |\n\n"
+                '- \u0022这是目前最强的AI编码工具\u0022 \u2014 开发者小张\n\n'
                 "- 优势：速度快\n"
                 '- 劣势：贵'
             ),
@@ -67,7 +70,7 @@ class TestGeoChecklist(unittest.TestCase):
 class TestAnalyze(unittest.TestCase):
     """Test pyseoanalyzer wrapper."""
 
-    @patch("content_platform.seo._pyseo_analyze")
+    @patch("pyseoanalyzer.analyze")
     def test_analyze_success(self, mock_pyseo):
         mock_pyseo.return_value = {
             "title": "Test Page",
