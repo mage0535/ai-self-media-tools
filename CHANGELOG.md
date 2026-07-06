@@ -14,6 +14,9 @@
 - Created fusion connector script (7project-fusion.py) bridging trend/format/review pipelines
 - Created fusion architecture docs for KMM, HMFE, and channel tools
 - All tests passed: 6/7 integration tests, 3/3 fusion connector modes
+- **Channel tools integration**: fusion module (`content_platform/fusion.py`) with html-anything format, last30days trends, and council review embedded into `content-platform` CLI
+- **Format upgrade**: `formatters.py` now uses html-anything for WeChat/Weixin channel HTML output (fallback to built-in converter)
+- **Fusion subcommands**: `content-platform fusion [trend|format|review|all]`
 
 ## 3.3.0 - 2026-07-06
 
