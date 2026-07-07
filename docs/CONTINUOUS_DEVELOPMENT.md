@@ -1251,3 +1251,268 @@ SurrealDB: :8000
 - [ ] 添加新发布器单元测试 (Mastodon/Bluesky/WriteAs 的 mock 测试)
 - [ ] `publish-matrix` 与 systemd 定时器集成，支持定时矩阵发布
 
+---
+
+# 2026-07-07 技术雷达 & 生态调研
+
+> 综合 GitHub、学术论文、工具生态的全域扫描，为项目后续演进提供参考。
+> 建议团队集体讨论优先级后，逐项纳入开发计划。
+
+---
+
+## 1. GEO (Generative Engine Optimization) — 学术前沿
+
+AI 搜索引擎 (ChatGPT/Perplexity/Gemini/Claude) 已从"排名列表"转向"引用合成回答"，
+传统 SEO 不再直接适用，GEO 是新的必然方向。以下是关键论文：
+
+### 1.1 基础论文
+
+| 论文 | 年份 | 会议 | 核心贡献 | 链接 |
+|------|:----:|------|----------|------|
+| **GEO: Generative Engine Optimization** | 2024 | ACM KDD | 首个 GEO 范式定义；9 种启发式优化策略；GEO-Bench 基准；Perplexity.ai 实测 +40% visibility | [arXiv:2311.09735](https://arxiv.org/abs/2311.09735) |
+| **FeatGEO** | 2025 | arXiv | 特征级多目标优化，而非 token 级改写；NSGA-II 搜索特征空间；三引擎 GPT-4o/Gemini/Qwen +37~96% | [arXiv:2604.19113](https://arxiv.org/abs/2604.19113) |
+| **MAGEO** | 2025 | arXiv | 多智能体 GEO 框架；策略学习 + 可复用 skill 蒸馏；DSV-CF 双轴评估指标；三个引擎实测 | [arXiv:2604.19516](https://arxiv.org/abs/2604.19516) |
+| **Mind Reader** | 2025 | ACL 2026 | 潜在用户需求引导的 GEO；DRQA 查询增强 + RCCO 推理覆盖优化；2.44× objective 提升 | [ACL 2026](https://aclanthology.org/2026.acl-long.1894.pdf) |
+| **AgenticGEO** | 2025 | arXiv | 自演化智能体 GEO；MAP-Elites 存档 + Co-Evolving Critic 代理评估；14 基线 × 3 数据集最优 | [arXiv:2603.20213](https://arxiv.org/abs/2603.20213) |
+| **GEO-SFE** | 2025 | arXiv | 结构特征工程 GEO；3 级结构 (宏观/中观/微观)；6 引擎 ±17.3% 引用提升 | [arXiv:2603.29979](https://arxiv.org/abs/2603.29979) |
+| **GEO: How to Dominate AI Search** | 2025 | arXiv | AI 搜索 vs Google 系统对比；Earned Media 压倒性偏向；多语言稳定性分析 | [arXiv:2509.08919](https://arxiv.org/abs/2509.08919) |
+
+### 1.2 核心方法论（已在 seo.py 中部分落地）
+
+| 策略 | 效果 | 本项目状态 |
+|------|:----:|-----------|
+| Cite Sources（引用可靠来源） | +30-40% 引用率 | ✅ `geo_check.claims_with_sources` |
+| Quotation Addition（添加权威引用） | +30-40% | ✅ `geo_check.authority_quotes` |
+| Statistics Addition（添加统计数据） | +30-40% | ✅ `geo_check.claims_with_numbers` |
+| 结构化列表 + FAQ 格式 | +28% 引用 | ✅ `geo_check.structured_list/faq_section` |
+| 前200字直接回答 | +340% 引用 | ✅ `geo_check.direct_answer` |
+| Feature-level optimization | +37-96% | ❌ 需重写引擎（FeatGEO/MAGEO） |
+| Strategy learning & reuse | 多引擎泛化 | ❌ 需 agentic 架构 |
+
+### 1.3 建议
+- **短期**: 当前 `seo.py` 的 GEO 检查已覆盖 7 个基础维度，接入 pipeline 即可
+- **中期**: 引入 OpenSERP 研究数据反哺内容生成（已在 cli.py 注册命令）
+- **长期**: 参考 MAGEO 的 strategy learning 架构，将 SEO 优化从"检查"升级为"自我优化"
+
+---
+
+## 2. 内容生成 — AI 写作工具 & Pipeline
+
+| 项目 | ⭐ | License | 定位 | 链接 |
+|------|:--:|:-------:|------|------|
+| **ContentForge** | — | MIT | 11 阶段 pipeline + 29 模式去 AI 化 + C2PA 签名 + .docx 输出；企业级内容工厂 | https://github.com/smarks26/contentforge |
+| **claude-blog** | — | MIT | 30 子技能 + 5 智能体 + 5 门交付合约 (≤90 分重写)；blog 全生命周期 | https://github.com/AgriciDaniel/claude-blog |
+| **seo-blog-writer-claude** | 30 | MIT | Claude Code skill；6 条反 AI 检测规则 + 完整 SEO 字段填充 | https://github.com/rediumvex/seo-blog-writer-claude |
+| **SEO Machine** | — | — | Claude Code 工作空间；10 智能体 + 5 分析模块；GA4/GSC/DataForSEO 集成 | https://github.com/kuishou68/seomachine |
+| **Poindexter** | — | Apache 2.0 | 本地优先 Ollama 驱动；多模型对抗 QA + 抗幻觉验证；Grafana 可观测；LangGraph 编排 | https://github.com/Glad-Labs/poindexter |
+| **WriteHERE** | — | MIT | 异质递归规划写作文法（arXiv:2503.08275）；任务分解 + 检索/推理/组合动态集成 | https://github.com/adsensex/WriteHERE |
+| **gemini-blog** | 4 | MIT | Claude-blog 的 Gemini CLI 移植；12 模板 + 5 分类评分 (100 分) | https://github.com/imitry/gemini-blog |
+
+### 关键观察
+- **Pipeline 化 > 单次 Prompt**：ContentForge/Claude-blog 都验证了多阶段 pipeline 的产出质量远高于单次生成
+- **Quality Gate 是标配**：所有成熟项目都有强制质量门，低于阈值自动重写
+- **Anti-Hallucination 多策略合并**：多模型对抗审查 + 程序化验证 + URL 可达性检查
+- **本地 LLM 路线可行**：Poindexter 用 Ollama + qwen3:8b + gemma3:27b 完成完整链路
+
+### 对本项目建议
+- 当前 `generator.py` 是单次生成的 fallback 模式
+- 建议引入 **质量门机制**：生成后 → 评分 → 低于阈值触发重写（参考 claude-blog 的 5 门合约）
+- 建议引入 **多模型对抗审查**：至少 2 个模型独立评分，综合判断（参考 Poindexter）
+
+---
+
+## 3. AI 文本去 AI 化 (Humanization)
+
+| 项目 | ⭐ | License | 核心技术 | 链接 |
+|------|:--:|:-------:|----------|------|
+| **untell** | 3 | MIT | 闭环检测-重写循环；实时 GPTZero/Originality/Turnitin 反馈；语义保真门 | https://github.com/ssamba1/untell |
+| **StealthHumanizer** | 66 | MIT | 35 提供商 + 4 级改写 + 6 风格 + 16 语言；12 指标本地检测；非 LLM 后处理 | https://github.com/rudra496/StealthHumanizer |
+| **UnMask.AI** | 3 | MIT | 3-pass pipeline；25 检测模式；单 HTML 文件无服务器 | https://github.com/imsv1301/unmask-ai |
+| **ai-humanizer** | 2 | MIT | 检测器引导外科手术式改写（arXiv:2506.07001）；锁定术语/数字/引用 | https://github.com/recomby-ai/ai-humanizer |
+| **TextHumanizer** | — | MIT | 47 谄媚模式 + 词汇堆叠 + 模糊语言 + 破折号识别；多语言规则集 | https://github.com/edsondviana8/ai-humanizer-core |
+
+### 关键发现
+1. **检测信号 ≠ 连接词**：Band-9 IELTS 范文满篇 "furthermore" 但 ZeroGPT 仅 19.6%；真正信号是**流畅度**（丝滑 = AI）和**词汇可预测性**
+2. **反复改写闭环 > 单次盲改写**：untell 的 closed-loop 比商业工具 (Undetectable.ai/QuillBot) 的单次改写更有效
+3. **术语锁定是关键差异点**：粗鲁改写会破坏数字/引用/命名实体，ai-humanizer 的术语锁定机制是最佳实践
+4. **语义门槛 0.76**（P-SP 阈值）：低于此值的改写会导致意义漂移
+
+### 对本项目建议
+- 当前 `voice_engine.py` 的 De-AI 处理 (呼吸音/停顿/语速波动/底噪) 只覆盖语音层面
+- 应引入**文本级去 AI 化**：在 `humanize.py` 基础上集成逆折度检测 (perplexity/burstiness 注入)
+- 参考 untell 的闭环架构：生成 → 检测 → 改写 → 再检测，直到通过
+
+---
+
+## 4. 视频制作 — AI 视频工具
+
+| 项目 | ⭐ | License | 核心能力 | 链接 |
+|------|:--:|:-------:|----------|------|
+| **OpenMontage** | — | AGPLv3 | 12 管线 + 52 工具 + 500+ agent skills；零付费 API key 可运行；Remotion + HyperFrames 双引擎 | https://github.com/calesthio/OpenMontage |
+| **ViMAX** | 10.9k | MIT | Idea→Video 全自动；多智能体 (导演/编剧/制片)；小说→视频适配 | https://github.com/HKUDS/ViMax |
+| **CineGen** | — | MIT | 专业 NLE 编辑器 + AI 生成集成；50+ 模型；节点式工作流；LLM 聊天助手 | https://github.com/christopherjohnogden/CineGen |
+| **Milimo Video** | 78 | — | 本地优先 NLE；LTX-2 19B 电影级生成；SAM 3 分割；Gemma 3 提示增强 | https://github.com/mainza-ai/milimovideo |
+| **BlueFish** | — | — | 剧本→分镜→视频 Web UI；多提供商；角色/场景管理；ElevenLabs TTS | https://github.com/bluefish2026/BlueFish |
+| **Kiwi-Edit** | 297 | MIT | 指令/参考引导视频编辑；MLLM 编码器 + 视频 DiT；Wan2.2-TI2V-5B 基础 | https://github.com/showlab/Kiwi-Edit |
+| **LTX Desktop** | — | — | 首个开源本地 NLE AI 视频编辑器；LTX-Video 引擎；LoRA 支持；8GB VRAM | https://github.com/Lightricks/LTX-Video |
+
+### 关键架构模式
+| 模式 | 说明 | 代表项目 |
+|------|------|---------|
+| **Agent-is-Orchestrator** | AI 编码代理本身就是编排器，Python 脚本是工具，Markdown/技能文件是知识 | OpenMontage |
+| **Pipeline-first** | 标准化工作流：研究→剧本→分镜→资产→组合→审查 | OpenMontage, ViMAX |
+| **Provider Abstraction** | 统一的提供商接口，可随时替换底层模型 | OpenMontage (12 提供商), BlueFish, CineGen |
+| **Self-review before render** | ffprobe/帧采样/音频分析/交付承诺验证 | OpenMontage |
+| **Remotion 引擎** | React-based 程序化视频：弹簧动画、图表、字幕、场景过渡 | OpenMontage, 当前 AutoClip |
+
+### 对本项目建议
+- AutoClip 仅覆盖"视频高光提取"，缺乏完整的"创意→成片" pipeline
+- 建议参考 OpenMontage 的 agentic 架构：Pipeline 是 Markdown 指令 → Agent 调用工具 → 自我审查
+- Remotion 作为 React-based 视频引擎，适合生成数据可视化 + 动态字幕的短视频
+- 本地 GPU 路线：Wan 2.1 / LTX-Video / CogVideo 可完全免费本地运行
+
+---
+
+## 5. 语音/TTS — 配音引擎
+
+| 项目 | ⭐ | License | 核心能力 | 链接 |
+|------|:--:|:-------:|----------|------|
+| **Kokoro** | 7.5k | Apache 2.0 | 82M 参数 TTS；8 语言；24000Hz；速度质量比最优 | https://github.com/hexgrad/kokoro |
+| **KokoClone** | 146 | Apache 2.0 | 基于 Kokoro-ONNX 的零样本声音克隆；文本→语音 + 音频→音频转换 | https://github.com/Ashish-Patnaik/kokoclone |
+| **Sirène** | — | MIT | 自托管多后端 TTS 平台；Kokoro/Qwen3-TTS/F5-TTS/Piper/CosyVoice/OpenAudio/Chatterbox 7 后端 | https://github.com/KevinBonnoron/sirene |
+| **F5-TTS** | — | — | 零样本声音克隆 + 流式生成；多语言 | — |
+| **CosyVoice** | — | — | 9 语言；零样本克隆 + 情感控制 + 语速控制 | — |
+| **Qwen3-TTS** | — | — | 阿里出品；10+ 语言；零样本克隆 | — |
+
+### 当前状态对比
+
+| 维度 | 当前 (voice_engine.py + edge-tts) | Kokoro | KokoClone |
+|------|:---:|:---:|:---:|
+| 语言 | 84+ (edge-tts) | 8 (en/zh/ja/fr/es/it/pt/hi) | 8 |
+| 声音克隆 | ❌ | ❌ | ✅ zero-shot |
+| 本地离线 | ❌ (需联网) | ✅ ONNX/GPU | ✅ ONNX/GPU |
+| 去 AI 化 | ✅ (FFmpeg 后处理) | ❌ | ❌ |
+| 内存 | ~200MB (python process) | ~500MB (82M 模型) | ~1GB |
+| 延迟 | ~1-3s per segment | ~0.5-1s | ~1-2s |
+
+### 建议
+- **当前保持不变**：edge-tts 以 84 语言覆盖面 + 零部署成本是主力引擎
+- **Kokoro 可作为离线备选**：在无网络环境下降级使用，或用于低延迟场景
+- **KokoClone 评测优先**：如需声音一致性（同一角色多部视频），克隆功能是关键差异点
+- **多后端路由**：参考 Sirène 设计，在 `VoiceEngine` 中实现多引擎可选 + 自动 fallback
+
+---
+
+## 6. 社交媒体分发 & 矩阵发布
+
+| 项目 | ⭐ | License | 定位 | 链接 |
+|------|:--:|:-------:|------|------|
+| **BrightBean Studio** | 1.8k | AGPLv3 | 自托管社交管理；10+ 平台；MCP 接口；可视化日历；多工作区 | https://github.com/brightbeanxyz/brightbean-studio |
+| **Open-Dispatch** | 3 | MIT | 单一 API 分发至 7 平台；自托管；JSONL/Redis/PG 队列；n8n 集成 | https://github.com/Matthew-Selvam/Open-Dispatch |
+| **OpenPost** | 10 | MIT | Typefully 式编辑器；单二进制；5 平台；工作区 + 媒体库 | https://github.com/rodrgds/openpost |
+| **USP** | 6 | MIT | 1 个 Markdown → 9 平台 (含 Reddit/Discord)；AI 平台适配；GitHub Action | https://github.com/adamarutyunov/usp |
+| **SocialPulses** | — | — | 15+ 平台；FastAPI；PG + Redis；AI 内容生成；分析 + 报告 | https://github.com/newdim001/socialpulses |
+| **MagicSync** | 41 | — | Nuxt 4 全栈；11 平台；AI 生成；批量调度；模板系统 | https://github.com/leamsigc/magicsync |
+
+### 关键架构对比
+
+| 特性 | 本项目 (publishers.py) | Open-Dispatch | BrightBean |
+|------|:---:|:---:|:---:|
+| 发布器数量 | 23+ (含新增 8) | 7 | 10+ |
+| 队列/重试 | ❌ 仅内存重试 | ✅ JSONL/Redis/PG | ✅ |
+| 调度 | ❌ | ✅ | ✅ 可视化日历 |
+| API/MCP | ❌ | ✅ REST + n8n | ✅ REST + MCP |
+| AI 内容适配 | ❌ | ✅ LLM per-platform rewrite | ✅ |
+| 媒体转码 | ❌ | ✅ 10 平台规格 | ✅ |
+| 分析/报告 | ✅ metrics.py | ❌ | ✅ |
+
+### 建议
+- **Open-Dispatch 设计最契合**：MIT + FastAPI + 单文件分发模式，与我们的 `publishers.py` 理念一致
+- **引入队列机制**：将当前同步 `_deliver()` 升级为异步队列，支持重试 + 速率限制（参考 Open-Dispatch 的 JSONL 队列）
+- **BrightBean MCP**：可直接从 AI Agent 调度发布，与我们的 agent-neutral 理念对应
+- **USP 的 Markdown→跨平台**：一个源文件自动适配多平台格式，可与 `copy_manager.py` 整合
+
+---
+
+## 7. 内容研究 & 题材发现
+
+| 项目 | ⭐ | License | 定位 | 链接 |
+|------|:--:|:-------:|------|------|
+| **OmniSearch** | 1 | — | 多智能体自主研究平台；MCTS 查询分解 + Crawl4AI + pgvector 混合检索 | https://github.com/CypherXXXX/OmniSearch |
+| **crawl4ai** | — | Apache 2.0 | 大规模 LLM 友好的网页提取；Markdown 输出 | https://github.com/unclecode/crawl4ai |
+| **ScrapeGraphAI** | — | — | LLM + 图逻辑驱动的爬虫管线 | https://github.com/ScrapeGraphAI/Scrapegraph-ai |
+| **Firecrawl** | — | — | 搜索/抓取/交互 API；Markdown + 结构化数据 | https://github.com/firecrawl/firecrawl |
+| **FeedRay** | 3 | Apache 2.0 | RSS→事件聚类→时间线→推荐；pgvector + 重要性评分 | https://github.com/johnvonneumann36/FeedRay |
+| **Clawler** | 2 | MIT | 75+ 源 CLI 新闻聚合；智能去重；质量评分；8 输出格式 | https://github.com/clawdiard/clawler |
+| **PipePost** | — | — | AI 内容策展管线：发现→翻译→改写→分发；OpenClaw 23+ 渠道 | https://github.com/densul/pipepost |
+
+### 建议
+- **Firecrawl**：替代当前简单的 `data_collector.py`，提供 LLM 友好的结构化网页提取
+- **Clawler**：作为趋势源替代/补充 `github_star_explorer.py`，75+ 源覆盖面更大
+- **FeedRay 的事件聚类**：将离散的趋势项聚类为持续事件，提升内容策划深度
+- **OmniSearch 的 MCTS 查询分解**：可应用于 `intelligence.py` 的 research_topic 流程
+
+---
+
+## 8. 内容分发 — RSS / Newsletter / 邮件
+
+| 项目 | ⭐ | License | 定位 | 链接 |
+|------|:--:|:-------:|------|------|
+| **AI Newsletter Agent** | — | MIT | 90+ 文章评分 → 精选 25 → LLM 写社论 → 发布；$0.006/run；6 行业配置 | https://github.com/anmolgupta824/ai-newsletter-agent |
+| **Broadside** | 1 | AGPLv3 | AI-native 自托管 Newsletter 平台；RSS/GitHub/HN 源 + 管线阶段 | https://github.com/hizachlee/broadside |
+| **RSS AI Digest** | — | GPLv3 | RSS→LLM 筛选→翻译→HTML 渲染→Resend 发送；GitHub Actions 自动化 | https://github.com/wyivz/rss_AI_digest_email_pipeline |
+| **feedmail** | — | AGPLv3 | Cloudflare Workers 驱动的 RSS→邮件微服务；双重选择加入；零追踪 | https://github.com/alexmensch/feedmail |
+| **rss2newsletter** | — | — | 任意 RSS→邮件 Newsletter；Mailchimp RSS-to-email 替代 | https://github.com/ElliotKillick/rss2newsletter |
+
+### 建议
+- **Newsletter 管线**：这是本项目缺失的一大块。RSS→筛选→翻译→模板→发送的完整链路
+- AI Newsletter Agent 的评分+社论模式可复用：收集素材 → LLM 评分 → 精选 → 写开篇
+- feedmail 的零追踪设计适合隐私优先的内容分发
+- 可结合 `content_platform/publishers.py` 新增 Newsletter 发布器（已有 Buttondown）
+
+---
+
+## 9. 工作流自动化 & MCP 生态
+
+| 项目 | ⭐ | License | 定位 | 链接 |
+|------|:--:|:-------:|------|------|
+| **n8n + MCP** | — | Fair-code | 400+ 集成 + 原生 MCP 支持；AI Agent 节点可调用 MCP 工具；HITL 审查 | https://n8n.io |
+| **n8n Unified MCP Server** | — | — | 30 工具 → AI Coding Agent 控制 n8n 工作流 | https://github.com/anshwysmcbel2710/n8n-unified-mcp-server |
+| **mcp-agent** | — | Apache 2.0 | MCP 全栈框架；自动管理 MCP server 生命周期；OpenAI/Anthropic agent | https://github.com/lastmile-ai/mcp-agent |
+| **n8n MCP Client Node** | — | — | n8n 社区节点，在 workflow 中调用 MCP server 工具 | https://github.com/nerding-io/n8n-nodes-mcp |
+
+### 对本项目的建议
+
+- **n8n 作为调度层**：systemd 定时器触发 n8n workflow，n8n 内串联多步骤（趋势获取→生成→审查→分发）
+- **MCP 接口**：将 `content_platform` 的功能封装为 MCP server，使外部 AI agent 可直接调用：
+  - `trends()` → 获取热点话题
+  - `create_job()` → 创建内容任务
+  - `publish()` → 发布到指定平台
+  - `geo_check()` → GEO 质量检查
+  - `voice_generate()` → 配音生成
+- **HITL (Human-in-the-Loop)**：利用 n8n 的审批节点，在关键环节（发布前审查、任务分配）引入人工确认
+
+---
+
+## 10. 优先级建议 (团队讨论)
+
+### P0 — 尽快落地 (1-2 周)
+1. **GEO 接入 pipeline**：`pipeline.run()` 后自动运行 `geo_check()`，结果写入 `draft_meta`
+2. **引入发布队列**：参考 Open-Dispatch 的 JSONL 队列模式，替换当前同步 `_deliver()`
+3. **系统化去 AI 化**：文本层面集成 StealthHumanizer/untell 的关键模式到 `humanize.py`
+
+### P1 — 中期优化 (2-4 周)
+4. **质量门机制**：参考 claude-blog 的 5 门交付合约，引入"评分+自动重写"机制
+5. **多后端 TTS 路由**：Kokoro 离线备选 + KokoClone 声音克隆（同一角色多视频场景）
+6. **Newsletter 管线**：RSS→筛选→翻译→邮件 完整链路
+
+### P2 — 架构演进 (1-3 月)
+7. **MCP Server 封装**：将 content_platform 能力封装为 MCP 工具
+8. **Agentic GEO**：参考 MAGEO/FeatGEO 的策略学习架构
+9. **本地 LLM 路线**：Ollama + qwen3 做低成本内容生成 + 评分
+
+### P3 — 探索方向
+10. **Video Pipeline 升级**：参考 OpenMontage 的 agentic 架构重建视频生成链路
+11. **n8n 深度集成**：用 n8n 替换 systemd 定时器做复杂工作流编排
+12. **多模型对抗审查**：至少 2 个独立 LLM 对产出质量交叉评分
+
