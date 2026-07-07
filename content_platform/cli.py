@@ -115,6 +115,9 @@ def parser():
     admin.add_argument("--password", required=True)
     admin.add_argument("--host", default="127.0.0.1")
     admin.add_argument("--port", type=int, default=0)
+    worker = sub.add_parser("delivery-worker")
+    worker.add_argument("--poll-interval", type=int, default=3)
+    worker.add_argument("--batch-size", type=int, default=20)
     seo_search = sub.add_parser("seo-search")
     seo_search.add_argument("--query", required=True)
     seo_search.add_argument("--engine", choices=["google", "bing", "duck", "baidu", "yandex", "ecosia"], default="duck")
@@ -259,12 +262,15 @@ def execute(args):
             "resources": pipeline.guard.probe(),
         }
     if args.command == "admin-serve":
-        server = make_admin_server(store.path, args.password, args.host, args.port)
+        server = make_admin_server(store.path, args.password, args.host, args.port, config=config)
         print(json.dumps({"ok": True, "access_url": server.launch_url, "host": args.host, "port": server.server_port}, ensure_ascii=False))
         try:
             server.serve_forever()
         finally:
             server.server_close()
+        return {"ok": True, "stopped": True}
+    if args.command == "delivery-worker":
+        pipeline.process_delivery_queue_forever(args.poll_interval, args.batch_size)
         return {"ok": True, "stopped": True}
     if args.command == "demo":
         job = pipeline.create("Hermes content platform offline acceptance", ["demo"], {"audience": "Hermes operator"})

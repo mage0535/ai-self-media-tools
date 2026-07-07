@@ -2,6 +2,7 @@ from collections import Counter, defaultdict
 
 from .admin_store import AdminStore
 from .platform_catalog import all_platforms, platform_definition
+from .readiness import inspect_delivery_readiness
 from .store import Store
 
 
@@ -157,7 +158,7 @@ def build_overview(db_path):
     }
 
 
-def build_platform_detail(db_path, platform):
+def build_platform_detail(db_path, platform, config=None):
     store = Store(db_path)
     admin_store = AdminStore(db_path)
     admin_store.init()
@@ -166,7 +167,7 @@ def build_platform_detail(db_path, platform):
     stats = _platform_stats(store, platform)
     latest_works = _latest_works(store, platform)
     failures = [row for row in latest_works if row["error"]]
-    readiness = store.latest_tool_inventory("content-tools").get("payload", {})
+    readiness = inspect_delivery_readiness(config or {})
     return {
         "platform": meta,
         "bindings": bindings,

@@ -215,6 +215,13 @@ class Pipeline:
             processed += 1
         return processed
 
+    def process_delivery_queue_forever(self, poll_interval=3, batch_size=20):
+        processed = 0
+        while True:
+            count = self.process_delivery_queue(limit=batch_size)
+            processed += count
+            time.sleep(max(1, int(poll_interval)))
+
     def _hydrate(self, job):
         result = dict(job)
         result["artifacts"] = self.store.artifacts(job["id"])
