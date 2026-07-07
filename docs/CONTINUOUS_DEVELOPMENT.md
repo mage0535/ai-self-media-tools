@@ -97,6 +97,52 @@ Prepare the repository for public release as version `0.1`, unify version labels
 - server `python3 -m content_platform project-audit`
 - GitHub repository visibility / about / website / topics / release configured
 
+## 2026-07-08 Management Console And Public Release 0.2 Wave
+
+### Goal
+
+Ship a public `0.2` release with:
+
+- a built-in management console
+- Chinese-default and English-switchable public docs
+- public GitHub metadata
+- release publication
+- full local + server verification
+
+### Functional Work Completed
+
+- added `admin_store.py`, `admin_data.py`, `admin_server.py`, and `platform_catalog.py`
+- added one-time-link password-protected management console
+- added platform overview and per-platform detail pages
+- added multi-account binding persistence and account status checks
+- added chart-driven overview and platform analytics
+- added `content-platform admin-serve --password ...`
+- updated public version from `0.1` to `0.2`
+- rewrote public Chinese/English docs for project, installation, acknowledgements, and release notes
+
+### GitHub Publication Work Completed
+
+- repository visibility switched to public
+- bilingual about text configured
+- website configured to repository README entry
+- repository topics configured
+- release `v0.1` was created earlier
+- release stream is now updated for `0.2` content preparation
+
+### Validation
+
+- local full suite: `151 passed`
+- local `project-audit`: `ok: true`
+- server full suite: `151 passed`
+- server `project-audit`: `ok: true`
+- server `health`: version `0.2`
+- fresh-install workflow validation: passed
+- admin-console API flow validation: passed
+
+### Notes
+
+- GitHub Pages could not be enabled because the current plan rejected Pages creation with HTTP `422`, so the repository website was set to the README URL instead.
+
 ## 2026-07-07 Core Capability Hardening Wave
 
 ### Goal

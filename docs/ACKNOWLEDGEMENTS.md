@@ -14,6 +14,7 @@
 - `Open Notebook`
 - `OpenSERP`
 - `pyseoanalyzer`
+- Microsoft Fluent 2 / Windows 11 / Edge design language
 
 ## 明确作为后续工具基线或能力参考的项目
 

@@ -2,31 +2,67 @@
 
 [中文](README.md) | [English](README.en.md)
 
-Current public version: `0.1`
+Current public version: `0.2`
 
-AI Self-Media Tools is a publishable, continuously developed, agent-neutral workflow system for self-media content research, generation, draft distribution, and automation.
+AI Self-Media Tools is an agent-neutral workflow system for content intelligence, generation, draft-first delivery, platform account management, and operational automation.
 
-This is not just a “copywriting script”. It is a full workflow around topic discovery, same-track analysis, content generation, media artifacts, draft-first delivery, task-market automation, and historical learning.
+It is built around:
 
-## What Problem It Solves
+- topic discovery
+- trend analysis
+- same-track references
+- topic clustering
+- historical performance learning
+- content generation
+- quality gates
+- draft-first delivery
+- management-console operations
 
-- Find topics worth producing from trends and same-track content
-- Match topics to the right content form and platform
-- Improve generated outputs with style signals and quality gates
-- Distribute outputs as stable drafts instead of risky direct publishing
-- Learn from historical performance over repeated runs
+## Problems It Solves
+
+- too many trend candidates, weak prioritization
+- too much reference material, weak structured analysis
+- generic AI outputs
+- multi-platform account and delivery complexity
+- no automatic learning from historical performance
 
 ## Core Capabilities Already Implemented
 
-- trend collection and ranking
+- trend collection and topic ranking
 - source normalization, account analysis, and topic clustering
 - viral scoring and strategy routing
 - humanization and quality gates
-- provider abstraction for image / video / OCR / transcription / analysis
 - queue-backed draft delivery
-- AiToEarn automation foundation
+- provider abstraction for image / video / OCR / transcription / analysis
+- multi-account platform bindings
+- one-time-link password-protected management console
 - publishable privacy audit
-- cross-agent install and operation
+
+## Management Console
+
+Start it with:
+
+```bash
+python -m content_platform admin-serve --password "your-password"
+```
+
+The command prints a one-time access URL.
+
+Properties:
+
+- one-time launch link
+- password required
+- browser-session login
+- session invalid after browser close
+
+The console provides:
+
+- global platform overview
+- per-platform detail pages
+- multi-account binding flow
+- account status checks
+- latest works, draft/published states, queue and failure panels
+- charts on both overview and platform detail pages
 
 ## Documentation
 
@@ -44,10 +80,11 @@ python scripts/install.py
 python -m content_platform health
 python -m content_platform content-readiness
 python -m content_platform analyze-topic --topic "AI workflows" --brief "{\"platforms\":[\"wechat\",\"douyin\"]}"
+python -m content_platform admin-serve --password "your-password"
 ```
 
 ## Version Note
 
-The public baseline version is unified as `0.1`.
+The public baseline version is unified as `0.2`.
 
-Older `v3.x` labels still appear inside historical development notes. Those are internal development-wave labels, not the current public version.
+Older `v3.x` labels inside the continuous-development log are internal development-wave labels, not the current public version.

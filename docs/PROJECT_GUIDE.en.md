@@ -2,13 +2,11 @@
 
 [中文](PROJECT_GUIDE.zh.md) | [English](PROJECT_GUIDE.en.md)
 
-Version: `0.1`
+Version: `0.2`
 
 ## 1. What This Project Is
 
-AI Self-Media Tools is a workflow system for content intelligence, generation, draft-first delivery, and automation.
-
-It is designed to turn repeated content work into a structured pipeline:
+AI Self-Media Tools is a workflow system that turns content work into a repeatable chain:
 
 - discover
 - analyze
@@ -16,17 +14,18 @@ It is designed to turn repeated content work into a structured pipeline:
 - generate
 - review
 - draft-deliver
+- manage
 - learn from results
 
 ## 2. Problems It Solves
 
 - too many trend candidates, weak prioritization
 - too much reference material, weak structured analysis
-- generated outputs becoming generic or platform-misaligned
-- multi-platform delivery being fragile and risky
-- historical performance being recorded but not actively reused
+- generic AI outputs
+- multi-platform delivery and account-management complexity
+- weak learning from historical performance
 
-## 3. Core Goal
+## 3. Goal
 
 Build a content system that:
 
@@ -35,6 +34,7 @@ Build a content system that:
 - gates low-quality outputs before delivery
 - defaults to drafts rather than unsafe live publishing
 - improves decisions over repeated runs
+- exposes platform/account/workflow state through a management console
 
 ## 4. Workflow
 
@@ -74,6 +74,24 @@ python -m content_platform record-performance <job_id> --platform wechat --views
 python -m content_platform feedback-summary
 ```
 
+### 4.6 Management Console
+
+```bash
+python -m content_platform admin-serve --password "your-password"
+```
+
+The command prints a one-time access URL.
+
+The console provides:
+
+- global platform overview
+- per-platform detail pages
+- multi-account binding
+- account status checks
+- latest works
+- review / queue / failure panels
+- charts on the home page and platform pages
+
 ## 5. Main Outputs
 
 - jobs
@@ -85,37 +103,21 @@ python -m content_platform feedback-summary
 - platform draft payloads
 - metrics
 - notification logs
+- management-console binding and chart data
 
-## 6. Installation Steps
+## 6. Installation Decisions
 
-```bash
-python scripts/install.py
-python -m content_platform health
-python -m content_platform content-readiness
-python -m content_platform project-audit
-```
+The user must decide:
 
-## 7. User Decisions During Installation
+1. install root
+2. generation provider
+3. media script paths
+4. delivery mode
+5. notification mode
+6. whether to use real credentials
+7. management-console password and access mode
 
-1. Install root  
-Choose whether to use the default home directory install root or a dedicated directory.
-
-2. Generation provider  
-Choose between Hermes CLI, OpenAI-compatible provider, or fallback-only mode.
-
-3. Media scripts  
-Decide whether image/video/OCR/transcription/analyze scripts already exist or should be stubbed first.
-
-4. Delivery mode  
-Decide whether to stay draft-only or connect real publishers.
-
-5. Notification mode  
-Choose local logs only or add Hermes / Telegram / webhook channels.
-
-6. Credentials  
-Decide whether this is a dry-run environment or a real delivery environment.
-
-## 8. Tooling
+## 7. Tooling
 
 Current integrated or detectable tooling includes:
 
@@ -127,13 +129,14 @@ Current integrated or detectable tooling includes:
 - AiToEarn
 - social-auto-upload
 - script-backed OCR / transcription / analysis
+- built-in management service
 
 See also:
 - [Acknowledgements](ACKNOWLEDGEMENTS.md)
 
-## 9. Current Roadmap Direction
+## 8. Current Roadmap Direction
 
-`0.1` already includes:
+`0.2` already includes:
 
 - thicker intelligence memory
 - topic clustering
@@ -141,6 +144,8 @@ See also:
 - quality gate
 - queue-backed delivery
 - provider abstraction
+- management console
+- multi-account platform binding and chart analytics
 
 Recommended next steps:
 

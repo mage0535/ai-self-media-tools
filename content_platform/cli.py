@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .admin_server import make_admin_server
 from .fusion import fusion_pipeline, format_content, format_for_channel, fetch_trends, council_review
 from .intelligence import build_generation_context
 from .niche_analysis import analyze_niche
@@ -110,6 +111,10 @@ def parser():
     sub.add_parser("feedback-summary")
     sub.add_parser("project-audit")
     sub.add_parser("health")
+    admin = sub.add_parser("admin-serve")
+    admin.add_argument("--password", required=True)
+    admin.add_argument("--host", default="127.0.0.1")
+    admin.add_argument("--port", type=int, default=0)
     seo_search = sub.add_parser("seo-search")
     seo_search.add_argument("--query", required=True)
     seo_search.add_argument("--engine", choices=["google", "bing", "duck", "baidu", "yandex", "ecosia"], default="duck")
@@ -253,6 +258,14 @@ def execute(args):
             "live_publish": os.environ.get("CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH") == "1",
             "resources": pipeline.guard.probe(),
         }
+    if args.command == "admin-serve":
+        server = make_admin_server(store.path, args.password, args.host, args.port)
+        print(json.dumps({"ok": True, "access_url": server.launch_url, "host": args.host, "port": server.server_port}, ensure_ascii=False))
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return {"ok": True, "stopped": True}
     if args.command == "demo":
         job = pipeline.create("Hermes content platform offline acceptance", ["demo"], {"audience": "Hermes operator"})
         pipeline.run(job["id"])

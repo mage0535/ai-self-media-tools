@@ -2,7 +2,7 @@
 
 [中文](INSTALL.md) | [English](INSTALL.en.md)
 
-Version: `0.1`
+Version: `0.2`
 
 ## 1. Short Path
 
@@ -21,7 +21,7 @@ Confirm:
 - whether Hermes CLI is available
 - whether an OpenAI-compatible API is available
 - whether media scripts already exist
-- whether this is dry-run only or a real delivery environment
+- whether this is a dry-run environment or a real delivery environment
 
 ## 3. Environment Variables
 
@@ -30,7 +30,7 @@ Confirm:
 - `CONTENT_PLATFORM_TREND_CACHE_DIR`
 - `SOCIAL_AUTO_UPLOAD_HOME`
 
-## 4. Decisions The User Must Make
+## 4. User Decisions
 
 ### 4.1 Install Root
 
@@ -38,7 +38,7 @@ Default install root is `.ai-self-media-tools` under the user home directory.
 
 ### 4.2 Generation Provider
 
-Decide whether to use:
+Choose between:
 
 - Hermes CLI
 - OpenAI-compatible provider
@@ -46,7 +46,7 @@ Decide whether to use:
 
 ### 4.3 Media Scripts
 
-These script paths are reserved by default:
+Reserved script paths:
 
 - `external/scripts/image_gen.py`
 - `external/scripts/video_pipeline.py`
@@ -63,8 +63,20 @@ Recommended default:
 
 ### 4.5 Notification Mode
 
-Decide whether to use:
+Choose whether to use:
 
 - local log only
 - Hermes notify
 - Telegram / webhook
+
+### 4.6 Management Console Password
+
+Start the console with:
+
+```bash
+python -m content_platform admin-serve --password "your-password"
+```
+
+The command prints a one-time access URL.
+
+The session is browser-session scoped and becomes invalid after browser close.
