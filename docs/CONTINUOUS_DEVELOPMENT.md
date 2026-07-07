@@ -108,6 +108,62 @@ Turn the already-present intelligence, routing, quality, delivery, and provider 
 - strengthen strategy and rewrite decisions with persisted historical performance, not only request-time heuristics
 - separate live runtime deployment from repository checkout once the current server workflow allows it
 
+## 2026-07-07 Topic Clustering And Full Workflow E2E Wave
+
+### Goal
+
+Finish the next recommended step from the prior hardening wave:
+
+- make topic clustering durable
+- feed historical performance back into generation-time decisions
+- verify the publishable package from a fresh user-style install on Hermes
+
+### Functional Changes Completed
+
+- added durable `topic_clusters` storage and lookup
+- added historical performance summarization by platform and related-topic lookup
+- enriched generation-time briefs with:
+  - `historical_feedback`
+  - `cluster_memory`
+- added `topic_clusters` into generation context and `draft_meta`
+- made clustering visible in analysis outputs and persisted pipeline state
+
+### End-To-End Validation On Hermes
+
+A fresh install-style workflow was executed in a separate directory tree:
+
+- clean source bundle exported to `<server-project-root>/src`
+- clean install root created at `<server-project-root>/home`
+- `scripts/install.py` executed successfully
+- minimal external tool scripts created under `home/external/scripts`
+- verified commands:
+  - `health`
+  - `content-readiness`
+  - `delivery-readiness`
+  - `analyze-topic`
+  - `account-report`
+  - OCR / transcription / analysis provider calls through `MediaBridge`
+  - create -> run -> approve -> publish -> status
+  - metrics export
+  - `project-audit`
+
+### Validation Evidence
+
+- local full suite: `148 passed`
+- server full suite: `148 passed`
+- local `project-audit`: `ok: true`
+- fresh Hermes install-root workflow:
+  - install succeeded
+  - tool scripts executed
+  - artifacts generated
+  - file-draft publishing succeeded for `wechat` and `xiaohongshu`
+  - clean audit passed
+
+### Observations
+
+- Open Notebook was unavailable in the fresh-install test environment, but degraded cleanly as expected.
+- `social_auto_upload` was not installed in the fresh-install test environment, and readiness correctly reported it as unavailable instead of failing the workflow.
+
 ## Current Project Structure
 
 - `content_platform/`
