@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2 - 2026-07-08 - Management Console And Public Release Hardening
+
+- Unified public version to `0.2`
+- Added one-time-link password-protected management console with Win11 / Edge inspired UI
+- Added platform overview, platform detail pages, multi-account binding flow, review/failure/queue panels, and chart-driven analytics
+- Added admin persistence and APIs for platform account bindings
+- Added `content-platform admin-serve --password ...` command
+- Expanded Chinese/English project and installation docs with management console instructions
+- Validated local and server workflows, including fresh-install and admin-console API verification
+- Published public release preparation materials for GitHub
 ## 0.1 - 2026-07-08 - Public Baseline Release
 
 - Unified public version to `0.1`

@@ -337,6 +337,9 @@ class Store:
     def deliveries(self, job_id):
         return self._rows("SELECT * FROM deliveries WHERE job_id=? ORDER BY id", (job_id,))
 
+    def deliveries_all(self):
+        return self._rows("SELECT * FROM deliveries ORDER BY updated_at DESC, id DESC", ())
+
     def record_performance(self, job_id, platform, views=0, likes=0, comments=0, shares=0):
         with self.connect() as conn:
             conn.execute(

@@ -2,7 +2,7 @@
 
 [中文](INSTALL.md) | [English](INSTALL.en.md)
 
-版本：`0.1`
+版本：`0.2`
 
 ## 1. 最短安装路径
 
@@ -20,8 +20,8 @@ python -m content_platform project-audit
 - Python 3.11+
 - 是否需要 Hermes CLI
 - 是否需要 OpenAI 兼容 API
-- 是否已有媒体脚本
-- 是否只是本地演练，还是要接真实平台
+- 是否已有图像 / 视频 / OCR / 转写 / 分析脚本
+- 是否只做本地演练，还是要接真实平台
 
 ## 3. 环境变量
 
@@ -34,7 +34,7 @@ python -m content_platform project-audit
 
 ### 4.1 安装目录
 
-默认会装到用户目录下的 `.ai-self-media-tools`。
+默认会安装到用户目录下的 `.ai-self-media-tools`。
 
 需要确认：
 
@@ -54,7 +54,7 @@ python -m content_platform project-audit
 
 ### 4.3 媒体脚本
 
-安装脚本会预留这些路径：
+安装脚本会预留以下脚本路径：
 
 - `external/scripts/image_gen.py`
 - `external/scripts/video_pipeline.py`
@@ -89,6 +89,20 @@ python -m content_platform project-audit
 - 是否启用 Hermes notify
 - 是否启用 Telegram / webhook
 
+### 4.6 管理页密码
+
+管理页启动时必须设置密码：
+
+```bash
+python -m content_platform admin-serve --password "你的密码"
+```
+
+需要确认：
+
+- 使用什么密码
+- 是否只在本机 / 本服务器回环地址开放
+- 是否由智能体返回访问链接给用户
+
 ## 5. 安装后验证
 
 ```bash
@@ -98,7 +112,22 @@ python -m content_platform delivery-readiness
 python -m content_platform project-audit
 ```
 
-## 6. 下一步
+## 6. 管理页面启动
+
+```bash
+python -m content_platform admin-serve --password "你的密码"
+```
+
+启动后会输出一次性访问链接。
+
+说明：
+
+- 链接一次性
+- 登录后使用浏览器会话 cookie
+- 浏览器关闭后登录失效
+- 适合通过智能体返回访问链接给用户
+
+## 7. 下一步
 
 安装完成后建议继续阅读：
 
