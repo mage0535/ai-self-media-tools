@@ -109,10 +109,27 @@ def parser():
     sub.add_parser("health")
     demo = sub.add_parser("demo")
     demo.add_argument("--actor", default="demo-operator")
+
+    # v3.1 — SEO/GEO commands
+    geo = sub.add_parser("seo-geo-check")
+    geo.add_argument("file", help="Path to markdown content file, or '-' for stdin")
+    kw = sub.add_parser("keyword-research")
+    kw.add_argument("query", help="Search query for OpenSERP")
+    kw.add_argument("--engine", default="duck", help="Search engine (duck, google, bing)")
+    kw.add_argument("--limit", type=int, default=10)
+    kw.add_argument("--endpoint", default="", help="OpenSERP instance URL")
+
+    # v3.1 — Publish matrix command
+    pub_matrix = sub.add_parser("publish-matrix")
+    pub_matrix.add_argument("--matrix", default="", help="Matrix directory path")
+    pub_matrix.add_argument("--platform", action="append", help="Target platform(s)")
+    pub_matrix.add_argument("--dry-run", action="store_true", help="Show what would be published without sending")
     return p
 
 
 def execute(args):
+    import time
+    from .formatters import format_for_platform
     store = Store(args.db)
     store.init()
     config = load_config(args.config, args.db)
@@ -228,6 +245,101 @@ def execute(args):
         pipeline.run(job["id"])
         pipeline.approve(job["id"], args.actor, "offline acceptance")
         return pipeline.publish(job["id"])
+
+    # ── v3.1: SEO/GEO commands ──
+    if args.command == "seo-geo-check":
+        from .seo import geo_check, format_geo_report
+        if args.file == "-":
+            text = sys.stdin.read()
+        else:
+            text = Path(args.file).read_text(encoding="utf-8")
+        # Strip YAML frontmatter
+        if text.startswith("---"):
+            end = text.find("---", 3)
+            if end != -1:
+                text = text[end+3:].strip()
+        result = geo_check(text)
+        report = format_geo_report(text, Path(args.file).name if args.file != "-" else "stdin")
+        print(report)
+        return result
+
+    if args.command == "keyword-research":
+        from .seo import openserp_search
+        result = openserp_search(args.query, args.engine, args.limit, args.endpoint)
+        if "error" in result:
+            return {"ok": False, "error": result["error"]}
+        print(f"\n## 关键词: {result['query']}")
+        print(f"引擎: {result['engine']}  |  结果数: {result['result_count']}")
+        print(f"SERP类型: {result['serp_types']}")
+        print()
+        for r in result.get("results", []):
+            print(f"  • [{r['title']}]({r['url']})")
+            if r.get("snippet"):
+                print(f"    {r['snippet'][:100]}")
+        if result.get("people_also_ask"):
+            print(f"\n**People Also Ask ({len(result['people_also_ask'])}):**")
+            for q in result["people_also_ask"]:
+                print(f"  - {q}")
+        if result.get("content_gaps"):
+            print(f"\n**内容空白 ({len(result['content_gaps'])}):**")
+            for g in result["content_gaps"]:
+                print(f"  ⚠️ {g}")
+        return result
+
+    # ── v3.1: Publish matrix ──
+    if args.command == "publish-matrix":
+        from .copy_manager import CopyMatrix
+        from .publishers import build_publisher
+
+        matrix_dir = args.matrix or os.environ.get("CONTENT_PLATFORM_MATRIX", "")
+        if not matrix_dir:
+            # Fall back to default matrix path
+            matrix_dir = str(Path(config.get("data_dir", "/tmp")) / "matrix")
+            Path(matrix_dir).mkdir(parents=True, exist_ok=True)
+
+        matrix = CopyMatrix(matrix_dir)
+        copies = matrix.load_all_copies()
+        if not copies:
+            return {"ok": False, "error": f"no copy files found in {matrix_dir}/copy/"}
+
+        platforms = args.platform if args.platform else list(matrix.load_content_rules().get("channel_rules", {}).keys())
+        if not platforms:
+            # Default platform list for matrix publishing
+            platforms = ["devto", "mastodon", "bluesky", "telegraph", "nostr", "writeas"]
+
+        results = []
+        for fname, content in copies.items():
+            for plat in platforms:
+                if args.dry_run:
+                    results.append({"platform": plat, "copy": fname, "action": "dry-run", "ok": True})
+                    continue
+                # Build publisher for this platform
+                try:
+                    pub = build_publisher(plat, config, config.get("data_dir", "/tmp"))
+                    # Create a minimal job-like dict
+                    adapted = format_for_platform({"title": fname.replace(".md", ""), "body": content}, plat)
+                    dummy_job = {
+                        "id": f"matrix-{fname}-{plat}-{int(time.time())}",
+                        "title": fname.replace(".md", ""),
+                        "body": content,
+                        "platform_payload": adapted,
+                    }
+                    delivery = pub.deliver(dummy_job, plat)
+                    results.append({"platform": plat, "copy": fname,
+                                    "ok": delivery.ok, "status": delivery.status,
+                                    "url": delivery.external_id, "error": delivery.error})
+                    matrix.log_publish(plat, delivery.ok, delivery.external_id, delivery.error)
+                except (ValueError, ImportError) as exc:
+                    results.append({"platform": plat, "copy": fname, "ok": False,
+                                    "error": str(exc)[:200]})
+
+        success = sum(1 for r in results if r.get("ok"))
+        print(f"发布结果: {success}/{len(results)}")
+        for r in results:
+            icon = "✅" if r.get("ok") else "❌"
+            print(f"  {icon} {r['platform']} | {r.get('copy','')}")
+        return {"success": success, "total": len(results), "results": results}
+
     raise ValueError(f"unsupported command: {args.command}")
 
 
