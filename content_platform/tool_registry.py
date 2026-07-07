@@ -1,5 +1,14 @@
+import os
 import shutil
 from pathlib import Path
+
+from .tool_adapters import (
+    ScriptAnalyzerProvider,
+    ScriptImageProvider,
+    ScriptOCRProvider,
+    ScriptTranscriberProvider,
+    ScriptVideoProvider,
+)
 
 
 class ToolRegistry:
@@ -41,7 +50,6 @@ class ToolRegistry:
                 "kind": "multimodal_analysis",
             },
             "open_notebook": self._probe_open_notebook(),
-            # --- v3.5.0: Content Generation Toolset ---
             "autocli": self._probe_autocli(),
             "browser_ext": self._probe_browser_ext(),
             "khazix_skills": self._probe_skill_dir("khazix-skills"),
@@ -56,37 +64,39 @@ class ToolRegistry:
         daemon = False
         try:
             import requests
-            r = requests.get("http://127.0.0.1:19925/health", timeout=2)
-            daemon = r.status_code == 200
+
+            response = requests.get("http://127.0.0.1:19925/health", timeout=2)
+            daemon = response.status_code == 200
         except Exception:
             pass
         return {"available": ok, "daemon": daemon, "kind": "data_collection"}
 
     def _probe_browser_ext(self):
-        import os
-        ext = os.path.expanduser("~/.chrome-autocli/autocli-extension/manifest.json")
+        extension = os.path.expanduser("~/.chrome-autocli/autocli-extension/manifest.json")
         chrome = bool(shutil.which(os.path.expanduser("~/.cloakbrowser/chromium-146.0.7680.177.5/chrome")))
-        return {"available": os.path.exists(ext) and chrome, "kind": "browser_automation"}
+        return {"available": os.path.exists(extension) and chrome, "kind": "browser_automation"}
 
     def _probe_skill_dir(self, name):
-        import os
         path = os.path.expanduser(f"~/.hermes/skills/{name}")
         count = 0
         if os.path.isdir(path):
             import glob
+
             count = len(glob.glob(os.path.join(path, "**/SKILL.md"), recursive=True))
         return {"available": count > 0, "skill_count": count, "kind": "content_generation"}
 
     def _probe_skills_adapter(self):
-        import os, importlib.util
-        path = os.path.expanduser("~/ai-self-media-tools/content_platform/skills_adapter.py")
-        if not os.path.exists(path):
+        import importlib.util
+
+        project_home = Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools"))
+        path = project_home / "content_platform" / "skills_adapter.py"
+        if not path.exists():
             return {"available": False, "kind": "skills_bridge"}
         spec = importlib.util.spec_from_file_location("skills_adapter", path)
         try:
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            status = mod.get_status()
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            status = module.get_status()
             return {
                 "available": True,
                 "kind": "skills_bridge",
@@ -99,19 +109,25 @@ class ToolRegistry:
             return {"available": False, "kind": "skills_bridge", "error": "import_failed"}
 
     def _probe_open_notebook(self):
-        """探测 Open Notebook 服务"""
-        import os
         api = os.environ.get("OPEN_NOTEBOOK_API", "http://<open-notebook-host>")
         try:
             import requests
-            r = requests.get(f"{api}/health", timeout=5)
-            ok = r.json().get("status") == "healthy"
+
+            response = requests.get(f"{api}/health", timeout=5)
+            ok = response.json().get("status") == "healthy"
             return {"available": ok, "url": api, "kind": "research"}
         except Exception:
             return {"available": False, "url": api, "kind": "research"}
 
     def choose_provider(self, kind):
-        cfg = self.config.get("media", {}).get(kind, {})
-        if cfg.get("script"):
-            return {"provider": "script", "script": cfg.get("script", "")}
-        return {"provider": "none"}
+        mapping = {
+            "image": (self.config.get("media", {}).get("image", {}), ScriptImageProvider),
+            "video": (self.config.get("media", {}).get("video", {}), ScriptVideoProvider),
+            "ocr": (self.config.get("ocr", {}), ScriptOCRProvider),
+            "transcription": (self.config.get("transcription", {}), ScriptTranscriberProvider),
+            "analysis": (self.config.get("analysis", {}), ScriptAnalyzerProvider),
+        }
+        cfg, provider_type = mapping.get(kind, ({}, None))
+        if provider_type and cfg.get("script"):
+            return provider_type(cfg.get("script", ""), cfg.get("timeout", 120))
+        return None

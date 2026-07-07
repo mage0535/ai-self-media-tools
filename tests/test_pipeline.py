@@ -16,7 +16,7 @@ class PipelineTests(unittest.TestCase):
             self.store,
             {
                 "data_dir": str(root),
-                "generator": {"allow_fallback": True},
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
                 "risk": {"block_words": ["blocked-word"], "review_words": ["guaranteed"]},
                 "publishers": {"default": {"type": "file"}},
                 "notifications": {"log_path": str(root / "notifications.jsonl")},
@@ -61,7 +61,7 @@ class PipelineTests(unittest.TestCase):
             self.store,
             {
                 "data_dir": str(Path(self.tmp.name)),
-                "generator": {"allow_fallback": True},
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
                 "publishers": {"default": {"type": "file"}},
                 "delivery": {"auto_stage_review_required": True},
                 "notifications": {"log_path": str(Path(self.tmp.name) / "notifications.jsonl")},
@@ -73,6 +73,8 @@ class PipelineTests(unittest.TestCase):
         deliveries = self.store.deliveries(job["id"])
         self.assertEqual(len(deliveries), 1)
         self.assertEqual(deliveries[0]["status"], "drafted")
+        queue = self.store.list_delivery_queue("completed")
+        self.assertEqual(len(queue), 1)
 
     def test_run_persists_intelligence_records(self):
         job = self.pipeline.create(
@@ -84,6 +86,15 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(self.store.source_items(job["id"]))
         self.assertTrue(self.store.account_snapshots(job["id"]))
         self.assertTrue(self.store.idea_candidates(job["id"]))
+        self.assertTrue(self.store.topic_clusters(job["id"]))
+
+    def test_publish_uses_delivery_queue(self):
+        job = self.pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
+        self.pipeline.run(job["id"])
+        self.pipeline.approve(job["id"], "operator", "ready")
+        published = self.pipeline.publish(job["id"])
+        self.assertEqual(published["state"], "published")
+        self.assertTrue(self.store.list_delivery_queue("completed"))
 
 
 if __name__ == "__main__":

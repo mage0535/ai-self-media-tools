@@ -52,7 +52,7 @@ class Pipeline:
             raise RuntimeError("job is already claimed by another worker")
         try:
             job = self.store.get_job(job_id)
-            draft = self.generator.generate(job["topic"], job["brief"])
+            draft = self.generator.generate(job["topic"], self._enrich_brief(job))
             self._persist_intelligence(job_id, draft.get("draft_meta", {}))
             text = draft["title"] + "\n" + draft["body"]
             risk = self.risk.evaluate(text)
@@ -60,6 +60,9 @@ class Pipeline:
             risk["compliance"] = compliance
             if risk["level"] == "pass" and compliance["level"] == "review":
                 risk["level"] = "review"
+            if risk["level"] == "pass" and not draft.get("draft_meta", {}).get("quality_gate", {}).get("passed", True):
+                risk["level"] = "review"
+                risk.setdefault("quality_gate", draft["draft_meta"]["quality_gate"])
             self.store.save_draft(
                 job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
             )
@@ -117,21 +120,14 @@ class Pipeline:
         owner = self._worker_id()
         if not self.store.claim(job_id, {job["state"]}, owner, 300, "publishing"):
             raise RuntimeError("job is already claimed by another worker")
-        job = self._hydrate(self.store.get_job(job_id))
-        successes = 0
         try:
             for platform in job["platforms"]:
-                prior = next((d for d in job["deliveries"] if d["platform"] == platform), None)
-                if prior and prior["status"] in {"drafted", "published", "handoff_pending"}:
-                    successes += 1
-                    continue
-                delivery_job = dict(job)
-                delivery_job["platform_payload"] = format_for_platform(job, platform)
-                result = self._deliver(platform, delivery_job)
-                self._save_delivery_result(job_id, platform, result)
-                successes += int(result.ok)
+                self.store.enqueue_delivery(job_id, platform, "publish", {"state": job["state"]})
+            processed = self.process_delivery_queue()
+            hydrated = self._hydrate(self.store.get_job(job_id))
+            successes = sum(1 for delivery in hydrated["deliveries"] if delivery["status"] in {"drafted", "published", "handoff_pending"})
             final_state = "published" if successes == len(job["platforms"]) else "partial"
-            final = self.store.release_claim(job_id, owner, final_state, "delivery_completed", detail={"success": successes})
+            final = self.store.release_claim(job_id, owner, final_state, "delivery_completed", detail={"success": successes, "processed": processed})
             self.notifier.send(final_state, final)
             return self._hydrate(final)
         except Exception as exc:
@@ -155,7 +151,7 @@ class Pipeline:
                     "account_handle": handle,
                     "platform": next(iter(niche_report.get("platform_distribution", {}).keys()), ""),
                     "display_name": handle,
-                    "sample_count": niche_report.get("sample_count", 0),
+                    "sample_count": niche_report.get("account_sample_count", {}).get(handle, niche_report.get("sample_count", 0)),
                     "roles": niche_report.get("account_roles", {}).get(handle, ""),
                 }
             )
@@ -172,30 +168,67 @@ class Pipeline:
                         "score": viral_score.get("total_score", 0),
                         "content_form": strategy.get("content_form", ""),
                         "platforms": strategy.get("primary_platforms", []),
+                        "secondary_platforms": strategy.get("secondary_platforms", []),
                         "reason": strategy.get("reason", {}),
+                        "confidence": strategy.get("confidence", 0),
+                        "warnings": strategy.get("warnings", []),
+                        "recommendation": viral_score.get("recommendation", "test"),
                     }
                 ],
             )
+        clusters = list(draft_meta.get("topic_clusters", []))
+        if clusters:
+            self.store.save_topic_clusters(job_id, clusters)
 
     def stage_drafts(self, job_id):
         job = self._hydrate(self.store.get_job(job_id))
         if job["state"] not in {"review_required", "approved", "partial", "published"}:
             raise PermissionError(f"job must be reviewable before draft staging, got: {job['state']}")
         for platform in job["platforms"]:
-            prior = next((d for d in job["deliveries"] if d["platform"] == platform), None)
+            self.store.enqueue_delivery(job_id, platform, "stage", {"state": job["state"]})
+        self.process_delivery_queue()
+        return self._hydrate(self.store.get_job(job_id))
+
+    def process_delivery_queue(self, limit=100):
+        processed = 0
+        owner = self._worker_id()
+        while processed < int(limit):
+            item = self.store.claim_delivery(owner, 300)
+            if not item:
+                break
+            job = self._hydrate(self.store.get_job(item["job_id"]))
+            prior = next((delivery for delivery in job["deliveries"] if delivery["platform"] == item["platform"]), None)
             if prior and prior["status"] in {"drafted", "published", "handoff_pending"}:
+                self.store.complete_delivery(item["id"], owner, "completed")
+                processed += 1
                 continue
             delivery_job = dict(job)
-            delivery_job["platform_payload"] = format_for_platform(job, platform)
-            result = self._deliver(platform, delivery_job)
-            self._save_delivery_result(job_id, platform, result)
-        return self._hydrate(self.store.get_job(job_id))
+            delivery_job["platform_payload"] = format_for_platform(job, item["platform"])
+            try:
+                result = self._deliver(item["platform"], delivery_job)
+                self._save_delivery_result(item["job_id"], item["platform"], result)
+                queue_state = "completed" if result.ok or result.status in {"blocked", "drafted", "published", "handoff_pending"} else "queued"
+                self.store.complete_delivery(item["id"], owner, queue_state, result.error)
+            except Exception as exc:
+                self.store.complete_delivery(item["id"], owner, "queued", redact_secrets(exc))
+                raise
+            processed += 1
+        return processed
 
     def _hydrate(self, job):
         result = dict(job)
         result["artifacts"] = self.store.artifacts(job["id"])
         result["deliveries"] = self.store.deliveries(job["id"])
         return result
+
+    def _enrich_brief(self, job):
+        brief = dict(job.get("brief", {}))
+        platforms = list(job.get("platforms", []))
+        topic = job.get("topic", "")
+        historical = self.store.historical_performance(platforms, topic)
+        brief.setdefault("historical_feedback", historical)
+        brief.setdefault("cluster_memory", historical.get("clusters", []))
+        return brief
 
     def _deliver(self, platform, job):
         cfg = self.config.get("delivery", {})

@@ -32,6 +32,7 @@ class StrategyTests(unittest.TestCase):
         self.assertEqual(report["account_count"], 2)
         self.assertIn("listicle", report["style_signature"]["formats"])
         self.assertIn("ops_lab", report["top_accounts"])
+        self.assertGreaterEqual(report["account_sample_count"]["ops_lab"], 2)
 
     def test_viral_score_rewards_visual_hot_platform_fit(self):
         references = [{"title": "Visual automation workflow", "body": "Strong hook. Save this.", "platform": "xiaohongshu"}]
@@ -69,6 +70,7 @@ class StrategyTests(unittest.TestCase):
         self.assertEqual(strategy["content_form"], "short_video")
         self.assertIn("douyin", strategy["primary_platforms"])
         self.assertIn("cover", strategy["asset_plan"])
+        self.assertIn("confidence", strategy)
 
 
 if __name__ == "__main__":

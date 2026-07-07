@@ -67,7 +67,7 @@ class AdapterTests(unittest.TestCase):
             (output_dir / "generated.mp4").write_bytes(b"video")
             return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
-        with patch("content_platform.media.subprocess.run", side_effect=fake_run) as run:
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
             artifact = bridge.generate("video", {"id": "j1", "topic": "Topic", "body": "Body"})
         command = run.call_args.args[0]
         self.assertNotIn("--output", command)

@@ -67,6 +67,7 @@ class DraftGenerator:
             "style": context["style"],
             "source_summary": context["source_summary"],
             "source_catalog": context["source_catalog"],
+            "topic_clusters": context.get("topic_clusters", []),
             "niche_report": context["niche_report"],
             "viral_score": context["viral_score"],
             "strategy": strategy,
@@ -78,6 +79,7 @@ class DraftGenerator:
             "content_form": strategy["content_form"],
             "media_plan": strategy["asset_plan"],
             "quality_scores": rewrite["quality_scores"],
+            "quality_gate": rewrite["quality_gate"],
             "rewrite_notes": rewrite["rewrite_notes"],
             "open_notebook_research": context.get("open_notebook_research", {}),
         }

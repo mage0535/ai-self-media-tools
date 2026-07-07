@@ -52,6 +52,29 @@ class StoreTests(unittest.TestCase):
         self.assertIn("account_snapshots", tables)
         self.assertIn("idea_candidates", tables)
         self.assertIn("tool_inventory", tables)
+        self.assertIn("delivery_queue", tables)
+
+    def test_delivery_queue_claim_and_complete_round_trip(self):
+        job = self.store.create_job("Topic", ["file"])
+        self.store.enqueue_delivery(job["id"], "file", "stage", {"state": "review_required"})
+        claimed = self.store.claim_delivery("worker-1", ttl_seconds=60)
+        self.assertEqual(claimed["platform"], "file")
+        self.assertEqual(claimed["action"], "stage")
+        self.store.complete_delivery(claimed["id"], "worker-1", "completed")
+        queue = self.store.list_delivery_queue("completed")
+        self.assertEqual(len(queue), 1)
+
+    def test_topic_clusters_and_historical_performance_are_queryable(self):
+        job = self.store.create_job("Automation visuals", ["wechat"])
+        self.store.save_topic_clusters(
+            job["id"],
+            [{"cluster_key": "automation-visuals", "label": "automation", "score": 0.81, "topic_signals": ["automation", "visuals"]}],
+        )
+        self.store.record_performance(job["id"], "wechat", views=120, likes=10, comments=3, shares=2)
+        clusters = self.store.related_topic_clusters("Automation visuals")
+        history = self.store.historical_performance(["wechat"], "Automation visuals")
+        self.assertEqual(clusters[0]["cluster_key"], "automation-visuals")
+        self.assertIn("wechat", history["platforms"])
 
     def test_connect_tolerates_wal_lock_fallback(self):
         real_connect = __import__("sqlite3").connect
