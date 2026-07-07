@@ -72,6 +72,31 @@ It is intended to replace fragmented machine-local scripts with one syncable pro
 - Agent-neutral packaging: no code path should require one specific agent runtime.
 - Clean distribution: the local/GitHub project must remain publishable without private infrastructure data.
 
+## 2026-07-08 Public Release 0.1 Wave
+
+### Goal
+
+Prepare the repository for public release as version `0.1`, unify version labels across local, GitHub, and Hermes, produce user-facing Chinese/English documentation, configure public GitHub metadata, and validate the full workflow again before final sync.
+
+### Scope
+
+- unify public version to `0.1`
+- add Chinese default README with English switch
+- add detailed Chinese/English project and installation guides
+- add public acknowledgements page
+- prepare GitHub Pages landing document
+- create release notes for `0.1`
+- publish repository metadata and release
+- keep continuous-development handoff current for future contributors
+
+### Validation Target
+
+- local `python -m pytest -q`
+- local `python -m content_platform project-audit`
+- server `python3 -m pytest -q`
+- server `python3 -m content_platform project-audit`
+- GitHub repository visibility / about / website / topics / release configured
+
 ## 2026-07-07 Core Capability Hardening Wave
 
 ### Goal
