@@ -126,11 +126,57 @@ def analyze_reference_posts(posts):
     }
 
 
+def cluster_reference_topics(items):
+    buckets = {}
+    for item in items or []:
+        signals = list(item.get("topic_signals", []))
+        forms = list(item.get("content_forms", []))
+        host = item.get("source_host", "")
+        platform = item.get("platform", "")
+        key_parts = signals[:2] or forms[:1] or [platform or host or "general"]
+        cluster_key = "-".join(str(part).casefold() for part in key_parts if str(part).strip())[:80] or "general"
+        bucket = buckets.setdefault(
+            cluster_key,
+            {
+                "cluster_key": cluster_key,
+                "label": key_parts[0] if key_parts else "general",
+                "sample_count": 0,
+                "platforms": set(),
+                "source_hosts": set(),
+                "topic_signals": set(),
+                "content_forms": set(),
+            },
+        )
+        bucket["sample_count"] += 1
+        if platform:
+            bucket["platforms"].add(platform)
+        if host:
+            bucket["source_hosts"].add(host)
+        bucket["topic_signals"].update(signals)
+        bucket["content_forms"].update(forms)
+    clusters = []
+    for bucket in buckets.values():
+        clusters.append(
+            {
+                "cluster_key": bucket["cluster_key"],
+                "label": bucket["label"],
+                "score": round(min(1.0, 0.35 + bucket["sample_count"] * 0.12 + len(bucket["platforms"]) * 0.08), 3),
+                "sample_count": bucket["sample_count"],
+                "platforms": sorted(bucket["platforms"]),
+                "source_hosts": sorted(bucket["source_hosts"]),
+                "topic_signals": sorted(bucket["topic_signals"])[:8],
+                "content_forms": sorted(bucket["content_forms"]),
+            }
+        )
+    return sorted(clusters, key=lambda row: (-row["score"], row["cluster_key"]))
+
+
 def build_generation_context(topic, brief):
     brief = brief or {}
     references = collect_reference_posts(brief)
     source_catalog = normalize_source_items(topic, brief, references)
     source_summary = summarize_source_items(source_catalog)
+    topic_clusters = cluster_reference_topics(source_catalog)
     style = analyze_reference_posts(references)
     niche_report = analyze_niche(topic, source_catalog or references)
     viral_score = score_topic_candidate(topic, brief, references, niche_report)
@@ -140,6 +186,8 @@ def build_generation_context(topic, brief):
     reference_titles = [row.get("title", "") for row in references if row.get("title")]
     audience = str(brief.get("audience", "")).strip()
     niche = str(brief.get("niche", "")).strip()
+    historical_feedback = brief.get("historical_feedback", {})
+    cluster_memory = brief.get("cluster_memory", [])
 
     # 可选：Open Notebook 深度研究
     on_research = {}
@@ -173,9 +221,12 @@ def build_generation_context(topic, brief):
         "hashtags": brief.get("keywords", [])[:6],
         "source_catalog": source_catalog,
         "source_summary": source_summary,
+        "topic_clusters": topic_clusters,
         "niche_report": niche_report,
         "viral_score": viral_score,
         "strategy": strategy,
+        "historical_feedback": historical_feedback,
+        "cluster_memory": cluster_memory,
         "open_notebook_research": on_research,
     }
 
@@ -191,9 +242,12 @@ def prompt_brief(topic, brief):
             "reference_titles": context["reference_titles"],
             "style": context["style"],
             "source_summary": context["source_summary"],
+            "topic_clusters": context["topic_clusters"],
             "niche_report": context["niche_report"],
             "viral_score": context["viral_score"],
             "strategy": context["strategy"],
+            "historical_feedback": context.get("historical_feedback", {}),
+            "cluster_memory": context.get("cluster_memory", []),
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
             "narration_guide": context.get("narration_guide", ""),

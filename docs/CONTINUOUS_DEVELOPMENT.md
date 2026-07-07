@@ -72,6 +72,42 @@ It is intended to replace fragmented machine-local scripts with one syncable pro
 - Agent-neutral packaging: no code path should require one specific agent runtime.
 - Clean distribution: the local/GitHub project must remain publishable without private infrastructure data.
 
+## 2026-07-07 Core Capability Hardening Wave
+
+### Goal
+
+Turn the already-present intelligence, routing, quality, delivery, and provider abstractions into real working subsystems rather than thin placeholders.
+
+### What Was Made Real
+
+- Intelligence enrichment:
+  - source normalization now records source host, stable fingerprints, content forms, and topic signals
+  - niche analysis now records account sample counts, richer role inference, and narrative devices
+- Viral and strategy upgrades:
+  - viral scoring now includes topic saturation, account diversity, evidence strength, and recommendation state
+  - strategy routing now outputs confidence, secondary platforms, warnings, and next-step guidance
+- Quality gate loop:
+  - humanize now returns a real quality gate with pass/fail dimensions
+  - fallback generation writes `quality_gate` into `draft_meta`
+  - pipeline escalates low-quality drafts to review instead of silently passing them through
+- Delivery queue:
+  - added `delivery_queue` storage, enqueue/claim/complete APIs, and queue-backed draft staging / publishing
+- Provider abstraction:
+  - tool adapters now include script-backed image/video providers in addition to OCR/transcription/analysis
+  - media bridge now resolves providers through `ToolRegistry` instead of hand-building subprocess calls
+
+### Validation
+
+- targeted upgraded-flow tests: passed
+- full test suite: `147 passed`
+- `python -m content_platform project-audit`: `ok: true`
+
+### Next Recommended Direction
+
+- build durable topic clustering and evidence-backed account memory on top of the enriched source/account tables
+- strengthen strategy and rewrite decisions with persisted historical performance, not only request-time heuristics
+- separate live runtime deployment from repository checkout once the current server workflow allows it
+
 ## Current Project Structure
 
 - `content_platform/`

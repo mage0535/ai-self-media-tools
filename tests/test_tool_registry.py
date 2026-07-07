@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from content_platform.tool_adapters import ScriptAnalyzerProvider, ScriptOCRProvider, ScriptTranscriberProvider
+from content_platform.tool_adapters import ScriptAnalyzerProvider, ScriptOCRProvider, ScriptTranscriberProvider, ScriptImageProvider
 from content_platform.tool_registry import ToolRegistry
 
 
@@ -33,6 +33,15 @@ class ToolRegistryTests(unittest.TestCase):
                 self.assertEqual(analyzer.run(str(sample))["summary"], "ok")
                 self.assertEqual(ocr.run(str(sample))["labels"][0], "automation")
                 self.assertEqual(transcriber.run(str(sample))["summary"], "ok")
+
+    def test_registry_can_build_provider_instances(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            script = root / "provider.py"
+            script.write_text("# fixture", encoding="utf-8")
+            registry = ToolRegistry({"media": {"image": {"script": str(script)}}})
+            provider = registry.choose_provider("image")
+            self.assertIsInstance(provider, ScriptImageProvider)
 
 
 if __name__ == "__main__":

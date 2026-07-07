@@ -81,6 +81,7 @@ class IntelligenceTests(unittest.TestCase):
         self.assertIn("niche_report", context)
         self.assertIn("viral_score", context)
         self.assertIn("strategy", context)
+        self.assertIn("topic_clusters", context)
         self.assertEqual(context["strategy"]["content_form"], "short_video")
 
 

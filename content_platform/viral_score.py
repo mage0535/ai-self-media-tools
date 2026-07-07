@@ -29,6 +29,9 @@ def score_topic_candidate(topic, brief, references, niche_report):
     reference_depth = min(1.0, len(references) / 3)
     creator_fit = min(1.0, 0.4 + niche_report.get("account_count", 0) * 0.15)
     novelty_gap = 0.7 if len({item.get("title", "") for item in references}) == len(references) else 0.45
+    topic_saturation = max(0.25, 1.0 - min(0.7, niche_report.get("sample_count", 0) / 12.0))
+    account_diversity = min(1.0, 0.35 + niche_report.get("account_count", 0) * 0.18)
+    evidence_strength = min(1.0, 0.3 + len([item for item in references if item.get("url") or item.get("body")]) * 0.18)
     feedback_signal = 0.5
     historical_feedback = brief.get("historical_feedback", {}).get("platforms", {})
     if historical_feedback and platforms:
@@ -48,13 +51,22 @@ def score_topic_candidate(topic, brief, references, niche_report):
         "visual_promise": round(visual_promise, 3),
         "utility": round(utility, 3),
         "novelty_gap": round(novelty_gap, 3),
+        "topic_saturation": round(topic_saturation, 3),
+        "account_diversity": round(account_diversity, 3),
+        "evidence_strength": round(evidence_strength, 3),
         "creator_fit": round(creator_fit, 3),
         "feedback_signal": round(feedback_signal, 3),
     }
     total = round(sum(dimensions.values()) / len(dimensions), 3)
+    recommendation = "expand"
+    if total < 0.52:
+        recommendation = "hold"
+    elif total < 0.68:
+        recommendation = "test"
     return {
         "topic": topic,
         "trend_stage": str(brief.get("trend_stage", "emerging")),
         "dimensions": dimensions,
         "total_score": total,
+        "recommendation": recommendation,
     }

@@ -142,8 +142,34 @@ class Store:
                     payload_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS delivery_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    platform TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    state TEXT NOT NULL DEFAULT 'queued',
+                    lease_owner TEXT NOT NULL DEFAULT '',
+                    lease_expires_at TEXT NOT NULL DEFAULT '',
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    error TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(job_id, platform, action)
+                );
+                CREATE TABLE IF NOT EXISTS topic_clusters (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    cluster_key TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    score REAL NOT NULL DEFAULT 0,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
                 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job_id, id);
+                CREATE INDEX IF NOT EXISTS idx_delivery_queue_state ON delivery_queue(state, id);
+                CREATE INDEX IF NOT EXISTS idx_topic_clusters_key ON topic_clusters(cluster_key, id);
                 """
             )
             for name, definition in {
@@ -412,6 +438,79 @@ class Store:
             row["payload"] = json.loads(row.pop("payload_json"))
         return rows
 
+    def save_topic_clusters(self, job_id, clusters):
+        with self.connect() as conn:
+            conn.execute("DELETE FROM topic_clusters WHERE job_id=?", (job_id,))
+            for cluster in clusters or []:
+                conn.execute(
+                    """INSERT INTO topic_clusters(job_id,cluster_key,label,score,payload_json,created_at)
+                    VALUES(?,?,?,?,?,?)""",
+                    (
+                        job_id,
+                        str(cluster.get("cluster_key", "")),
+                        str(cluster.get("label", "")),
+                        float(cluster.get("score", 0)),
+                        json.dumps(cluster, ensure_ascii=False),
+                        utc_now(),
+                    ),
+                )
+
+    def topic_clusters(self, job_id=None):
+        rows = self._rows("SELECT * FROM topic_clusters WHERE job_id=? ORDER BY score DESC,id", (job_id,)) if job_id else self._rows("SELECT * FROM topic_clusters ORDER BY score DESC,id", ())
+        for row in rows:
+            row["payload"] = json.loads(row.pop("payload_json"))
+        return rows
+
+    def related_topic_clusters(self, topic, limit=5):
+        tokens = {token for token in str(topic or "").casefold().replace("-", " ").split() if token}
+        matched = []
+        for row in self.topic_clusters():
+            payload = row.get("payload", {})
+            haystack = " ".join(
+                [
+                    str(row.get("cluster_key", "")),
+                    str(row.get("label", "")),
+                    " ".join(str(signal) for signal in payload.get("topic_signals", [])),
+                ]
+            ).casefold()
+            overlap = sum(1 for token in tokens if token in haystack)
+            if overlap:
+                matched.append((overlap, row))
+        matched.sort(key=lambda item: (-item[0], -float(item[1].get("score", 0))))
+        return [row for _, row in matched[:limit]]
+
+    def historical_performance(self, platforms=None, topic=None):
+        summary = {"platforms": {}, "clusters": []}
+        platforms = [str(platform) for platform in (platforms or []) if str(platform).strip()]
+        with self.connect() as conn:
+            args = []
+            sql = """SELECT p.platform,
+                AVG(p.views) avg_views,
+                AVG(p.likes + p.comments + p.shares) avg_engagement,
+                COUNT(*) sample_count
+                FROM performance p
+                JOIN jobs j ON j.id = p.job_id"""
+            clauses = []
+            if platforms:
+                placeholders = ",".join("?" for _ in platforms)
+                clauses.append(f"p.platform IN ({placeholders})")
+                args.extend(platforms)
+            if topic:
+                clauses.append("LOWER(j.topic) LIKE ?")
+                args.append(f"%{str(topic).casefold()}%")
+            if clauses:
+                sql += " WHERE " + " AND ".join(clauses)
+            sql += " GROUP BY p.platform ORDER BY p.platform"
+            for row in conn.execute(sql, tuple(args)):
+                summary["platforms"][row["platform"]] = {
+                    "views": round(float(row["avg_views"] or 0), 3),
+                    "engagement": round(float(row["avg_engagement"] or 0), 3),
+                    "sample_count": int(row["sample_count"] or 0),
+                }
+        if topic:
+            summary["clusters"] = [row.get("payload", {}) for row in self.related_topic_clusters(topic)]
+        return summary
+
     def save_tool_inventory(self, snapshot_name, payload):
         with self.connect() as conn:
             conn.execute(
@@ -430,6 +529,75 @@ class Store:
         result = dict(row)
         result["payload"] = json.loads(result.pop("payload_json"))
         return result
+
+    def enqueue_delivery(self, job_id, platform, action, payload=None):
+        now = utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO delivery_queue(job_id,platform,action,state,payload_json,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(job_id,platform,action) DO UPDATE SET
+                state=CASE WHEN delivery_queue.state='completed' THEN delivery_queue.state ELSE 'queued' END,
+                payload_json=excluded.payload_json,
+                updated_at=excluded.updated_at""",
+                (job_id, platform, action, "queued", json.dumps(payload or {}, ensure_ascii=False), now, now),
+            )
+            self._event(conn, job_id, "delivery_enqueued", {"platform": platform, "action": action})
+
+    def claim_delivery(self, owner, ttl_seconds=300):
+        owner = str(owner or "").strip()
+        if not owner:
+            raise ValueError("delivery claim requires owner")
+        now = utc_now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=int(ttl_seconds))).isoformat(timespec="seconds")
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """SELECT * FROM delivery_queue
+                WHERE state='queued' AND (lease_owner='' OR lease_expires_at='' OR lease_expires_at<=?)
+                ORDER BY id LIMIT 1""",
+                (now,),
+            ).fetchone()
+            if not row:
+                return {}
+            conn.execute(
+                """UPDATE delivery_queue
+                SET state='processing', lease_owner=?, lease_expires_at=?, attempts=attempts+1, updated_at=?
+                WHERE id=?""",
+                (owner, expires, now, row["id"]),
+            )
+            result = dict(row)
+            result["state"] = "processing"
+            result["lease_owner"] = owner
+            result["lease_expires_at"] = expires
+            result["attempts"] = int(result.get("attempts", 0)) + 1
+            result["payload"] = json.loads(result.pop("payload_json", "{}"))
+            return result
+
+    def complete_delivery(self, queue_id, owner, state, error=""):
+        if state not in {"completed", "failed", "queued"}:
+            raise ValueError("invalid delivery queue state")
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """UPDATE delivery_queue
+                SET state=?, lease_owner='', lease_expires_at='', error=?, updated_at=?
+                WHERE id=? AND lease_owner=?""",
+                (state, str(error), utc_now(), queue_id, owner),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("delivery claim is not owned by caller")
+
+    def list_delivery_queue(self, state=None):
+        sql = "SELECT * FROM delivery_queue"
+        args = []
+        if state:
+            sql += " WHERE state=?"
+            args.append(state)
+        sql += " ORDER BY id"
+        rows = self._rows(sql, tuple(args))
+        for row in rows:
+            row["payload"] = json.loads(row.pop("payload_json", "{}"))
+        return rows
 
     def used_topics(self):
         with self.connect() as conn:

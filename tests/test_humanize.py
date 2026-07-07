@@ -11,8 +11,10 @@ class HumanizeTests(unittest.TestCase):
         )
         self.assertIn("body", result)
         self.assertIn("quality_scores", result)
+        self.assertIn("quality_gate", result)
         self.assertIn("rewrite_notes", result)
         self.assertGreater(result["quality_scores"]["clarity"], 0)
+        self.assertIn("passed", result["quality_gate"])
 
 
 if __name__ == "__main__":
