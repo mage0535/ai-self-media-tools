@@ -1543,21 +1543,26 @@ Bring the local workspace, GitHub main branch, and Hermes server runtime back to
 - Fixed cross-platform CLI tests so they no longer assume a Linux-only working directory.
 - Rewrote Hermes/Open Notebook related docs and skill notes to be path-neutral and publish-safe.
 
-### Server Fixes Planned For This Wave
+### Server Fixes Completed
 
-- Keep `~/.ai-self-media-tools` as the only authoritative runtime copy.
-- Remove or archive the stale `~/ai-self-media-tools` copy.
-- Scrub token-bearing remote URLs from server-side git config.
-- Keep runtime data under ignored paths only.
+- Kept `~/.ai-self-media-tools` as the only authoritative runtime copy.
+- Archived the stale `~/ai-self-media-tools` copy under `~/archive/ai-self-media-tools-stale-20260707`.
+- Replaced token-bearing remote URLs in both server-side repository copies with the clean public remote form.
+- Kept runtime data under ignored paths only so the active runtime tree still passes `project-audit`.
 
-### Validation Target
+### Validation Evidence
 
-- local `python -m content_platform project-audit`
-- local `python -m pytest -q`
-- local `python scripts/release_bundle.py --target <temp-dir>`
-- server `python3 -m content_platform project-audit`
-- server `python3 -m pytest -q`
-- server `systemctl cat hermes-content-platform.service`
+- local commit: `4b17771`
+- GitHub `origin/main`: `4b17771`
+- server active runtime commit: `4b17771`
+- local `python -m content_platform project-audit`: `ok: true, scanned_files: 107`
+- local `python -m pytest -q`: `144 passed`
+- local `python scripts/release_bundle.py --target <temp-dir>`: passed
+- server `python3 -m content_platform project-audit`: `ok: true, scanned_files: 107`
+- server `python3 -m pytest -q`: `144 passed`
+- server `systemd` authority confirmed:
+  - `WorkingDirectory=%h/.ai-self-media-tools`
+  - `CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools`
 
 ### Notes For Future Contributors
 
