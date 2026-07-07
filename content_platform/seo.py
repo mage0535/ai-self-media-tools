@@ -216,3 +216,9 @@ def format_geo_report(text, label="content"):
     else:
         lines.append("**结论**: 未通过，需要重写 ❌")
     return "\n".join(lines)
+
+
+# -- v3.3 compatibility aliases --
+search = openserp_search
+analyze = seo_analyze
+geo_checklist = geo_check

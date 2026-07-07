@@ -116,8 +116,6 @@ def parser():
     seo_search.add_argument("--limit", type=int, default=5)
     seo_analyze = sub.add_parser("seo-analyze")
     seo_analyze.add_argument("url")
-    seo_geo = sub.add_parser("seo-geo-check")
-    seo_geo.add_argument("job_id")
     demo = sub.add_parser("demo")
     demo.add_argument("--actor", default="demo-operator")
 
