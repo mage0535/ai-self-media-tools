@@ -48,5 +48,7 @@ def inspect_delivery_readiness(config):
         "google_chrome_exists": browser_profile_roots()["google_chrome"].exists(),
         "chrome_for_testing_exists": browser_profile_roots()["chrome_for_testing"].exists(),
     }
-    result["tools"]["content_tools"] = ToolRegistry(config).probe()
+    probe_config = dict(config)
+    probe_config.setdefault("fast_probe", True)
+    result["tools"]["content_tools"] = ToolRegistry(probe_config).probe()
     return result
