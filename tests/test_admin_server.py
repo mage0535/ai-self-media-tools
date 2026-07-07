@@ -84,6 +84,7 @@ class AdminServerTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(platform_detail["platform"]["key"], "wechat")
             self.assertTrue(platform_detail["bindings"])
+            self.assertIn("readiness", platform_detail)
 
             with self.assertRaises(Exception):
                 self._open_json(urllib.request.build_opener(), login_url, method="POST", payload={"password": "secret123"})
