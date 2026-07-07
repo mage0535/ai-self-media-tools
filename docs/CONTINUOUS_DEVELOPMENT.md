@@ -1,6 +1,6 @@
 # Continuous Development
 
-Last updated: 2026-07-02
+Last updated: 2026-07-07
 
 ## Mandatory Rules
 
@@ -837,7 +837,7 @@ During Hermes sync and runtime validation, two production issues were found:
 Prior to this wave, the project was known to live in three locations:
 - local working directory (synced via OneDrive across machines)
 - GitHub repository `mage0535/ai-self-media-tools`
-- Hermes production server (207.57.129.132, non-git mirror at `~/.ai-self-media-tools`)
+- Hermes production server (deployment mirror under the operator home directory)
 
 A formal end-to-end consistency audit was requested to ensure all three copies are aligned, privacy-clean, and publishable, and that the install bootstrap produces an identical config on any agent runtime.
 
@@ -1162,7 +1162,7 @@ run_voice_pipeline(script_text, lang, genre, mode)
 | Tools | `deepseek-v4-flash` | OpenCode | REST API |
 | Embedding | `intfloat/multilingual-e5-small` | **GBrain** (`:8766`) | 手动注册 + 设默认 |
 
-embedding 通过 gbrain 自带的本地 OpenAI 兼容服务提供（`/root/gbrain/embedding_server.py`），无需额外部署。
+embedding 通过本地 OpenAI 兼容服务提供，无需额外部署。
 
 ### 验证
 - 测试: **30/30 passed** (全量 `107 passed`, 1 pre-existing failure in test_adapters)
@@ -1172,7 +1172,7 @@ embedding 通过 gbrain 自带的本地 OpenAI 兼容服务提供（`/root/gbrai
 
 ### Open Notebook 服务
 ```
-部署路径: /root/.open-notebook/
+部署路径: operator-managed local deployment
 Web UI:   http://localhost:8502
 REST API: http://localhost:5055 (healthy)
 SurrealDB: :8000
@@ -1515,4 +1515,52 @@ AI 搜索引擎 (ChatGPT/Perplexity/Gemini/Claude) 已从"排名列表"转向"�
 10. **Video Pipeline 升级**：参考 OpenMontage 的 agentic 架构重建视频生成链路
 11. **n8n 深度集成**：用 n8n 替换 systemd 定时器做复杂工作流编排
 12. **多模型对抗审查**：至少 2 个独立 LLM 对产出质量交叉评分
+## 2026-07-07 Three-End Consistency Repair Wave
 
+### Goal
+
+Bring the local workspace, GitHub main branch, and Hermes server runtime back to one auditable baseline while keeping the repository publishable and the server deployment continuously usable.
+
+### Real Findings
+
+- Local and GitHub were aligned at commit `e3944b0`.
+- Hermes had two repository copies:
+  - active runtime copy at `~/.ai-self-media-tools`
+  - stale secondary copy at `~/ai-self-media-tools`
+- The active server copy was on the correct commit, but it mixed runtime files into the working tree.
+- The repository still contained tracked machine-specific references:
+  - Hermes-home absolute paths
+  - server-specific deployment notes
+  - Linux-only cwd assumptions in tests
+- `project-audit` and the full test suite were not green before this wave.
+
+### Local Fixes Applied
+
+- Reworked `content_platform.project_audit` so ignored runtime directories such as `data/`, `secrets/`, `logs/`, `artifacts/`, `outbox/`, and `cookies/` do not invalidate the publishable scan.
+- Replaced hardcoded Hermes absolute paths in `content_platform.skills_adapter` with `${HERMES_HOME}` or `~/.hermes` resolution.
+- Removed the duplicate broken early `seo-geo-check` branch in `content_platform.cli`.
+- Updated package version metadata from `3.4.0` to `3.5.0` to match the current release line.
+- Fixed cross-platform CLI tests so they no longer assume a Linux-only working directory.
+- Rewrote Hermes/Open Notebook related docs and skill notes to be path-neutral and publish-safe.
+
+### Server Fixes Planned For This Wave
+
+- Keep `~/.ai-self-media-tools` as the only authoritative runtime copy.
+- Remove or archive the stale `~/ai-self-media-tools` copy.
+- Scrub token-bearing remote URLs from server-side git config.
+- Keep runtime data under ignored paths only.
+
+### Validation Target
+
+- local `python -m content_platform project-audit`
+- local `python -m pytest -q`
+- local `python scripts/release_bundle.py --target <temp-dir>`
+- server `python3 -m content_platform project-audit`
+- server `python3 -m pytest -q`
+- server `systemctl cat hermes-content-platform.service`
+
+### Notes For Future Contributors
+
+- This repository may be deployed into a live runtime directory, but tracked files must remain path-neutral and publish-safe.
+- Runtime-only state must stay inside ignored paths or outside the repository mirror entirely.
+- Server access details, private tokens, and machine-specific deployment paths must never be written into tracked docs again.

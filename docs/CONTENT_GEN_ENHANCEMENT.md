@@ -1,36 +1,41 @@
-# Hermes Skills 增强层 — 项目一可选能力
+# Content Generation Enhancement Layer
 
-## 定位
+## Purpose
 
-不是独立项目，是 Hermes 运行时可调用的能力层。
-项目一的自有 `generator.py`/`intelligence.py`/`humanize.py` 已覆盖基础内容生成。
-增强层通过 `content_gen_fusion.py` 桥接，在需要更高生成质量时按需启用。
+This repository has a built-in content pipeline.
+When a Hermes environment is available, it can optionally call extra skill-based tooling for research, writing, review, and media planning.
 
-## 调用方式
+## Base Mode
+
+Use the repository's own workflow:
 
 ```bash
-# 基础模式（使用项目一自有引擎）
 python -m content_platform trends --limit 5
-python -m content_platform analyze-topic --topic "..."
-
-# 增强模式（启用 Hermes Skills）
-python /root/.hermes/scripts/content_gen_fusion.py --topic "AI Agent" --type article
-python /root/.hermes/scripts/content_gen_fusion.py --topic "大模型落地" --type video-script
-python /root/.hermes/scripts/content_gen_fusion.py --list-types
+python -m content_platform analyze-topic --topic "AI Agent"
 ```
 
-## 对应关系
+## Enhanced Mode
 
-| 增强能力 | 对应 Skills | 补充项目一缺失的 |
-|---------|------------|----------------|
-| 实时热点采集 | AutoCLI (bilibili/douban) | 项目一无热数据采集 |
-| 封面/配图 | canghe-cover-image, canghe-xhs-images | 项目一无配图模块 |
-| 视频脚本 | huashu-douyin-script, huashu-video-outline | 项目一无脚本模块 |
-| 审校纠错 | huashu-proofreading | 比 humanize.py 更专业的审校 |
-| 系列信息图 | canghe-infographic, canghe-slide-deck | 项目一无信息图能力 |
+If the Hermes companion script exists under the local Hermes home, it can be invoked directly:
 
-## 前提
+```bash
+python "${HERMES_HOME:-$HOME/.hermes}/scripts/content_gen_fusion.py" --topic "AI Agent" --type article
+python "${HERMES_HOME:-$HOME/.hermes}/scripts/content_gen_fusion.py" --topic "大模型落地" --type video-script
+python "${HERMES_HOME:-$HOME/.hermes}/scripts/content_gen_fusion.py" --list-types
+```
 
-- Hermes 运行中（Gateway :8642）
-- Hermes skills 目录有对应 skill
-- AutoCLI 需要时 Chrome 扩展 + daemon（port 19925）
+## Optional Capabilities
+
+| Capability | Typical Source | Gap It Fills |
+|------------|----------------|--------------|
+| real-time trend collection | AutoCLI | live hot-topic collection |
+| cover and image planning | Hermes image skills | richer visual planning |
+| video script drafting | Hermes video skills | platform-native video outlines |
+| proofreading and review | Hermes review skills | stronger editorial checks |
+| infographic generation | Hermes design skills | structured visual assets |
+
+## Preconditions
+
+- Hermes runtime is installed and reachable.
+- Optional Hermes skills exist under `${HERMES_HOME:-~/.hermes}/skills/`.
+- AutoCLI browser-dependent features require the local daemon when used.
