@@ -5,3 +5,6 @@ pandas>=1.5
 openpyxl>=3.0
 openai-whisper>=20231117
 yt-dlp>=2023
+httpx>=0.24
+websocket-client>=1.6
+pynacl>=1.5

@@ -1177,3 +1177,77 @@ Web UI:   http://localhost:8502
 REST API: http://<open-notebook-host> (healthy)
 SurrealDB: :8000
 ```
+
+## 2026-07-02 v3.1 — SEO/GEO & Content Matrix
+
+### 功能扩展
+将 SEO/GEO 质量检查、OpenSERP 关键词研究、内容矩阵管理和多渠道发布能力集成到内容管线。
+
+### 新增文件
+
+| 文件 | 类型 | 说明 |
+|------|:----:|------|
+| `content_platform/seo.py` | 🔵 核心 | GEO 7 维质量检查 + OpenSERP SERP 分析 + pyseoanalyzer |
+| `content_platform/copy_manager.py` | 🔵 核心 | 内容矩阵管理：轮转调度、多格式适配 (blog/microblog/forum) |
+| `tests/test_seo.py` | 🟣 测试 | 18 个 GEO/SERP 单元测试 |
+| `tests/test_copy_manager.py` | 🟣 测试 | 18 个矩阵管理单元测试 |
+
+### 修改文件
+
+| 文件 | 改动 |
+|------|------|
+| `content_platform/cli.py` | 新增 3 个 CLI 命令：`seo-geo-check`、`keyword-research`、`publish-matrix` |
+| `content_platform/publishers.py` | 新增 8 个发布器：Mastodon、Bluesky、Nostr、WriteAs、GitHub Discussions、Buttondown、博客园、Steemit |
+| `requirements.txt` | 新增依赖：`httpx`、`websocket-client`、`pynacl` |
+
+### 能力矩阵
+
+#### SEO/GEO
+| 能力 | 状态 | 说明 |
+|------|:----:|------|
+| GEO 7 维质量检查 | ✅ | 数值声明/来源标注/权威引用/直接回答/短段落/结构化列表/FAQ |
+| 加权评分 (0-100) | ✅ | 7 维度加权，≥85 通过 |
+| OpenSERP 关键词研究 | ✅ | 环境变量配置 `OPENSERP_ENDPOINT` / `OPENSERP_API_KEY` |
+| SERP 内容空白分析 | ✅ | 自动检测对比内容/教程类空白 |
+| pyseoanalyzer 集成 | ✅ | pip pyseoanalyzer 或 seo-analyze CLI fallback |
+| 管线集成 | ⏳ | CLI 手动触发，未接入 `pipeline.run()` 自动流 |
+
+#### Content Matrix
+| 能力 | 状态 | 说明 |
+|------|:----:|------|
+| 矩阵目录加载 | ✅ | 从 `data/matrix/copy/` 读取 .md 文件 |
+| 按日轮转选择 | ✅ | `pick_copy(day_seed)` 确定性调度 |
+| 多格式适配 | ✅ | blog(完整) / microblog(≤500字) / forum(摘要+链接) |
+| 发布日志 | ✅ | JSONL 格式，记录平台/结果/URL/错误 |
+| 内容规则配置 | ✅ | `content_rules.json` 定义渠道启用/禁用 |
+| 管线集成 | ⏳ | CLI 手动触发 `publish-matrix`，未接入自动流 |
+
+#### 新增发布器
+| 发布器 | 类型 | 认证方式 | 依赖 |
+|--------|:----:|---------|------|
+| Mastodon | ActivityPub | 实例 URL + Access Token | `httpx` |
+| Bluesky | AT Protocol | 标识符 + 密码 → OAuth JWT | `httpx` |
+| Nostr | 去中心化协议 | 私钥签名 + WebSocket 广播 | `pynacl` `websocket-client` |
+| WriteAs | REST API | Token | `httpx` |
+| GitHub Discussions | GraphQL | GitHub Token | `httpx` |
+| Buttondown | REST API | API Key | `httpx` |
+| 博客园 | 连通性测试 | — | `httpx` |
+| Steemit | 连通性测试 | — | `httpx` |
+
+### 技术改进
+- `seo.py` `short_paragraphs`: 修复 CJK+English 句数检测，改用严格模式（任何长段落即失败）
+- `seo.py` `faq_section`: 扩宽 Q/A 模式匹配，支持行内 `Q:` `A:` 格式
+- `publishers.py` Nostr: 添加 `try/except` 包裹 `pynacl` 导入，缺失时返回清晰错误而非崩溃
+
+### 验证
+- 测试: **142/144 passed** (2 pre-existing: project_audit dirty repo, CLI hardcoded path)
+- 新增: **36/36 passed** (18 SEO + 18 Copy Manager)
+- 无回归
+
+### 下一步计划
+- [ ] SEO/GEO 接入 `pipeline.run()`：在生成后自动运行 `geo_check()` 并将结果写入 draft_meta
+- [ ] 注册 Hermes skill: `skills/content/content-seo/SKILL.md`
+- [ ] 注册 Hermes skill: `skills/content/content-copy-matrix/SKILL.md`
+- [ ] 添加新发布器单元测试 (Mastodon/Bluesky/WriteAs 的 mock 测试)
+- [ ] `publish-matrix` 与 systemd 定时器集成，支持定时矩阵发布
+

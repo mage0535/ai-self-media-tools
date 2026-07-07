@@ -8,6 +8,7 @@ import subprocess
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 import uuid
 from pathlib import Path
 
@@ -1050,6 +1051,43 @@ def build_publisher(platform, config, data_dir):
             cfg.get("password_env", "TABNEWS_PASSWORD"),
             cfg.get("env_file", ""),
         )
+    if kind == "mastodon":
+        return MastodonPublisher(
+            instance=cfg.get("instance", ""),
+            token_env=cfg.get("token_env", "MASTODON_TOKEN"),
+            env_file=cfg.get("env_file", ""),
+        )
+    if kind == "bluesky":
+        return BlueskyPublisher(
+            identifier_env=cfg.get("identifier_env", "BLUESKY_IDENTIFIER"),
+            password_env=cfg.get("password_env", "BLUESKY_PASSWORD"),
+            env_file=cfg.get("env_file", ""),
+        )
+    if kind == "nostr":
+        return NostrPublisher(
+            key_env=cfg.get("key_env", "NOSTR_PRIVATE_KEY"),
+            env_file=cfg.get("env_file", ""),
+        )
+    if kind == "writeas":
+        return WriteAsPublisher(
+            token_env=cfg.get("token_env", "WRITEAS_TOKEN"),
+            env_file=cfg.get("env_file", ""),
+        )
+    if kind == "github-discuss":
+        return GitHubDiscussPublisher(
+            token_env=cfg.get("token_env", "GITHUB_TOKEN"),
+            repo=cfg.get("repo", "user/repo"),
+            env_file=cfg.get("env_file", ""),
+        )
+    if kind == "buttondown":
+        return ButtondownPublisher(
+            api_key_env=cfg.get("api_key_env", "BUTTONDOWN_API_KEY"),
+            env_file=cfg.get("env_file", ""),
+        )
+    if kind == "cnblogs":
+        return CnblogsPublisher()
+    if kind == "steemit":
+        return SteemitPublisher()
     raise ValueError(f"unknown publisher type for {platform}: {kind}")
 
 
@@ -1153,3 +1191,240 @@ class TabnewsPublisher:
             return DeliveryResult(False, "failed", error=f"Tabnews HTTP {exc.code}: {body}")
         except Exception as exc:
             return DeliveryResult(False, "failed", error=str(exc)[:500])
+
+
+# ====== New channel-matrix publishers (v3.1) ======
+# Imported and adapted from Hermes channel_matrix.py
+# Each publisher implements .deliver(job, platform) -> DeliveryResult
+
+
+class MastodonPublisher:
+    """Mastodon / ActivityPub — post a status to a Mastodon instance."""
+    def __init__(self, instance="", token_env="MASTODON_TOKEN", env_file=""):
+        self.instance = instance.rstrip("/")
+        self.token_env = token_env
+        self.env_file = env_file
+
+    def deliver(self, job, platform):
+        token = read_setting(self.token_env, self.env_file)
+        if not token:
+            return DeliveryResult(False, "blocked", error=f"missing {self.token_env}")
+        if not self.instance:
+            return DeliveryResult(False, "blocked", error="no mastodon instance configured")
+        text = self._extract_text(job, platform, max_len=500)
+        import httpx
+        try:
+            r = httpx.post(f"{self.instance}/api/v1/statuses",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": text, "visibility": "unlisted"}, timeout=15)
+            ok = r.status_code == 200
+            return DeliveryResult(ok, "published" if ok else "failed",
+                str(r.json().get("id", "")) if ok else "",
+                error="" if ok else f"Mastodon HTTP {r.status_code}")
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc)[:300])
+
+    def _extract_text(self, job, platform, max_len=500):
+        formatted = job.get("platform_payload") or {}
+        text = formatted.get("text") or formatted.get("markdown") or job.get("body", "")
+        return text[:max_len]
+
+
+class BlueskyPublisher:
+    """Bluesky AT Protocol — create a post on bsky.social."""
+    def __init__(self, identifier_env="BLUESKY_IDENTIFIER", password_env="BLUESKY_PASSWORD",
+                 env_file="", identifier="", password=""):
+        self.identifier_env = identifier_env
+        self.password_env = password_env
+        self.env_file = env_file
+
+    def deliver(self, job, platform):
+        identifier = read_setting(self.identifier_env, self.env_file)
+        password = read_setting(self.password_env, self.env_file)
+        if not identifier or not password:
+            return DeliveryResult(False, "blocked", error="missing Bluesky credentials")
+        text = self._extract_text(job, platform, max_len=300)
+        import httpx
+        try:
+            s = httpx.Client(timeout=15)
+            r = s.post("https://bsky.social/xrpc/com.atproto.server.createSession",
+                json={"identifier": identifier, "password": password})
+            if r.status_code != 200:
+                return DeliveryResult(False, "failed", error="Bluesky auth failed")
+            t = r.json()["accessJwt"]
+            d = r.json()["did"]
+            from datetime import datetime
+            now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            r2 = s.post("https://bsky.social/xrpc/com.atproto.repo.createRecord",
+                headers={"Authorization": f"Bearer {t}"},
+                json={"repo": d, "collection": "app.bsky.feed.post",
+                      "record": {"$type": "app.bsky.feed.post", "text": text, "createdAt": now}})
+            s.close()
+            ok = r2.status_code == 200
+            uri = r2.json().get("uri", "") if ok else ""
+            return DeliveryResult(ok, "published" if ok else "failed", uri)
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc)[:300])
+
+    def _extract_text(self, job, platform, max_len=300):
+        formatted = job.get("platform_payload") or {}
+        text = formatted.get("text") or formatted.get("markdown") or job.get("body", "")
+        return text[:max_len]
+
+
+class NostrPublisher:
+    """Nostr — broadcast an event to configured relays."""
+    RELAYS = [
+        "wss://nos.lol", "wss://relay.snort.social",
+        "wss://nostr-pub.wellorder.net", "wss://relay.nostr.band",
+        "wss://relay.current.fyi",
+    ]
+
+    def __init__(self, key_env="NOSTR_PRIVATE_KEY", env_file="", relays=None):
+        self.key_env = key_env
+        self.env_file = env_file
+        if relays:
+            self.RELAYS = relays
+
+    def deliver(self, job, platform):
+        try:
+            from nacl.signing import SigningKey
+            from nacl.encoding import HexEncoder, RawEncoder
+            from websocket import create_connection
+        except ImportError as e:
+            return DeliveryResult(False, "blocked", error=f"Missing dependency: {e}. Run: pip install pynacl websocket-client")
+        key_hex = read_setting(self.key_env, self.env_file)
+        if not key_hex:
+            return DeliveryResult(False, "blocked", error=f"missing {self.key_env}")
+        text = self._extract_text(job, platform, max_len=8000)
+        sk = SigningKey(key_hex, encoder=HexEncoder)
+        pk = sk.verify_key.encode(encoder=HexEncoder).decode()
+        ev = {"pubkey": pk, "created_at": int(time.time()), "kind": 1, "tags": [], "content": text}
+        ser = json.dumps([0, pk, ev["created_at"], ev["kind"], ev["tags"], ev["content"]],
+                         separators=(",", ":"), ensure_ascii=False)
+        ev["id"] = hashlib.sha256(ser.encode()).hexdigest()
+        ev["sig"] = sk.sign(hashlib.sha256(ser.encode()).digest(), encoder=RawEncoder).signature.hex()
+        msg = json.dumps(["EVENT", ev])
+        success = 0
+        for rl in self.RELAYS:
+            try:
+                ws = create_connection(rl, timeout=5)
+                ws.send(msg)
+                ws.settimeout(3)
+                ws.recv()
+                ws.close()
+                success += 1
+            except Exception:
+                pass
+        ok = success > 0
+        return DeliveryResult(ok, "published" if ok else "failed",
+                              f"{success}/{len(self.RELAYS)}",
+                              error="" if ok else "all relays failed")
+
+    def _extract_text(self, job, platform, max_len=8000):
+        formatted = job.get("platform_payload") or {}
+        text = formatted.get("text") or formatted.get("markdown") or job.get("body", "")
+        return text[:max_len]
+
+
+class WriteAsPublisher:
+    """Write.as / WriteFreely — create a blog post."""
+    def __init__(self, token_env="WRITEAS_TOKEN", env_file=""):
+        self.token_env = token_env
+        self.env_file = env_file
+
+    def deliver(self, job, platform):
+        token = read_setting(self.token_env, self.env_file)
+        if not token:
+            return DeliveryResult(False, "blocked", error=f"missing {self.token_env}")
+        formatted = job.get("platform_payload") or {}
+        title = (formatted.get("title") or job.get("title", "Post"))[:80]
+        body = formatted.get("markdown") or job.get("body", "")
+        import httpx
+        try:
+            r = httpx.post("https://write.as/api/posts",
+                headers={"Authorization": f"Token {token}"},
+                json={"body": body, "title": title}, timeout=15)
+            ok = r.status_code in (200, 201)
+            url = r.json().get("data", {}).get("url", "") if ok else ""
+            return DeliveryResult(ok, "published" if ok else "failed", url)
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc)[:300])
+
+
+class GitHubDiscussPublisher:
+    """GitHub Discussions — create a discussion in a repo."""
+    def __init__(self, token_env="GITHUB_TOKEN", repo="user/repo", env_file=""):
+        self.token_env = token_env
+        self.repo = repo
+        self.env_file = env_file
+
+    def deliver(self, job, platform):
+        token = read_setting(self.token_env, self.env_file)
+        if not token:
+            return DeliveryResult(False, "blocked", error=f"missing {self.token_env}")
+        formatted = job.get("platform_payload") or {}
+        title = (formatted.get("title") or job.get("title", "Update"))[:80]
+        body = formatted.get("markdown") or job.get("body", "")
+        import httpx
+        try:
+            r = httpx.post(f"https://api.github.com/repos/{self.repo}/discussions",
+                headers={"Authorization": f"Bearer {token}",
+                         "Accept": "application/vnd.github.v3+json"},
+                json={"title": title, "body": body}, timeout=15)
+            ok = r.status_code in (200, 201)
+            url = r.json().get("html_url", "") if ok else ""
+            return DeliveryResult(ok, "published" if ok else "failed", url)
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc)[:300])
+
+
+class ButtondownPublisher:
+    """Buttondown.email — create a draft newsletter."""
+    def __init__(self, api_key_env="BUTTONDOWN_API_KEY", env_file=""):
+        self.api_key_env = api_key_env
+        self.env_file = env_file
+
+    def deliver(self, job, platform):
+        key = read_setting(self.api_key_env, self.env_file)
+        if not key:
+            return DeliveryResult(False, "blocked", error=f"missing {self.api_key_env}")
+        formatted = job.get("platform_payload") or {}
+        subject = (formatted.get("title") or job.get("title", "Newsletter"))[:80]
+        body = formatted.get("markdown") or job.get("body", "")
+        import httpx
+        try:
+            r = httpx.post("https://api.buttondown.email/v1/emails",
+                headers={"Authorization": f"Token {key}"},
+                json={"subject": subject, "body": body, "status": "draft"}, timeout=15)
+            ok = r.status_code in (200, 201)
+            eid = r.json().get("id", "") if ok else ""
+            return DeliveryResult(ok, "drafted" if ok else "failed", str(eid))
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc)[:300])
+
+
+class CnblogsPublisher:
+    """博客园 — connectivity test (XML-RPC publishing requires account config)."""
+    def deliver(self, job, platform):
+        import httpx
+        try:
+            r = httpx.get("https://www.cnblogs.com/", timeout=10)
+            ok = r.status_code == 200
+            return DeliveryResult(ok, "reachable" if ok else "unreachable",
+                                  f"HTTP {r.status_code}")
+        except Exception as exc:
+            return DeliveryResult(False, "unreachable", error=str(exc)[:300])
+
+
+class SteemitPublisher:
+    """Steem blockchain — connectivity test (full publish requires account keys)."""
+    def deliver(self, job, platform):
+        import httpx
+        try:
+            r = httpx.get("https://api.steemit.com", timeout=10)
+            ok = r.status_code == 200
+            return DeliveryResult(ok, "reachable" if ok else "unreachable",
+                                  f"HTTP {r.status_code}")
+        except Exception as exc:
+            return DeliveryResult(False, "unreachable", error=str(exc)[:300])
