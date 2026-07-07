@@ -14,6 +14,7 @@ from .tool_adapters import (
 class ToolRegistry:
     def __init__(self, config=None):
         self.config = config or {}
+        self.fast_probe = bool(self.config.get("fast_probe", False))
 
     def _exists(self, value):
         if not value:
@@ -65,7 +66,7 @@ class ToolRegistry:
         try:
             import requests
 
-            response = requests.get("http://127.0.0.1:19925/health", timeout=2)
+            response = requests.get("http://127.0.0.1:19925/health", timeout=0.5 if self.fast_probe else 2)
             daemon = response.status_code == 200
         except Exception:
             pass
@@ -113,7 +114,7 @@ class ToolRegistry:
         try:
             import requests
 
-            response = requests.get(f"{api}/health", timeout=5)
+            response = requests.get(f"{api}/health", timeout=0.8 if self.fast_probe else 5)
             ok = response.json().get("status") == "healthy"
             return {"available": ok, "url": api, "kind": "research"}
         except Exception:

@@ -117,6 +117,8 @@ Ship a public `0.2` release with:
 - added multi-account binding persistence and account status checks
 - added chart-driven overview and platform analytics
 - added `content-platform admin-serve --password ...`
+- added deeper readiness-backed platform checks
+- added standalone `delivery-worker` entry for queue consumption
 - updated public version from `0.1` to `0.2`
 - rewrote public Chinese/English docs for project, installation, acknowledgements, and release notes
 
@@ -131,13 +133,14 @@ Ship a public `0.2` release with:
 
 ### Validation
 
-- local full suite: `151 passed`
+- local full suite: `152 passed`
 - local `project-audit`: `ok: true`
-- server full suite: `151 passed`
+- server full suite: `152 passed`
 - server `project-audit`: `ok: true`
 - server `health`: version `0.2`
 - fresh-install workflow validation: passed
 - admin-console API flow validation: passed
+- admin-console server-side real login / binding / detail-page flow validation: passed
 
 ### Notes
 

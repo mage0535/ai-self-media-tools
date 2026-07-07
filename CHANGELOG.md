@@ -7,6 +7,7 @@
 - Added platform overview, platform detail pages, multi-account binding flow, review/failure/queue panels, and chart-driven analytics
 - Added admin persistence and APIs for platform account bindings
 - Added `content-platform admin-serve --password ...` command
+- Added deeper platform binding checks and a standalone `delivery-worker`
 - Expanded Chinese/English project and installation docs with management console instructions
 - Validated local and server workflows, including fresh-install and admin-console API verification
 - Published public release preparation materials for GitHub
