@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1 - 2026-07-08 - Public Baseline Release
+
+- Unified public version to `0.1`
+- Added public Chinese/English README and detailed project/installation guides
+- Added acknowledgements and GitHub Pages landing doc
+- Hardened intelligence memory, topic clustering, historical-feedback enrichment, quality gate, queue-backed delivery, and provider abstraction
+- Validated local and server workflows, including fresh-install end-to-end verification on Hermes
+
 ## 3.5.0 - 2026-07-07 - Hermes Skills 自适应增强
 
 - **skills_adapter 模块**：`content_platform/skills_adapter.py` 桥接 AutoCLI + Hermes Skills 到项目一 CLI
