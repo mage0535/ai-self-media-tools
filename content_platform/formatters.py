@@ -1,5 +1,40 @@
 import html
 import re
+import subprocess
+import tempfile
+from pathlib import Path
+
+
+def _html_anything(markdown: str) -> str | None:
+    """Try html-anything CLI, fall back to simple converter"""
+    md_path = None
+    out_path = None
+    try:
+        tf = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False)
+        tf.write(markdown)
+        md_path = tf.name
+        tf.close()
+        out_path = md_path + ".html"
+        r = subprocess.run(
+            ["html-anything", "-t", "article", "-o", out_path, md_path],
+            capture_output=True, text=True, timeout=15,
+        )
+        if r.returncode == 0:
+            html = Path(out_path).read_text(encoding="utf-8")
+            start = html.find("<body")
+            end = html.find("</body>")
+            if start != -1 and end != -1:
+                start = html.index(">", start) + 1
+                return html[start:end]
+            return html
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    finally:
+        for p in [md_path, out_path]:
+            if p:
+                try: Path(p).unlink(missing_ok=True)
+                except OSError: pass
+    return None
 
 
 def _plain(text):
@@ -37,7 +72,8 @@ def format_for_platform(job, platform):
     draft_meta = job.get("draft_meta", {})
     base = {"platform": platform, "sources": job.get("brief", {}).get("sources", []), "profile": profile}
     if platform in {"wechat", "weixin", "wechat_official"}:
-        return {**base, "kind": "article", "title": title[:64], "summary": _plain(body)[:120], "html": _html_article(body)}
+        html_body = _html_anything(body) or _html_article(body)
+        return {**base, "kind": "article", "title": title[:64], "summary": _plain(body)[:120], "html": html_body}
     if platform in {"xiaohongshu", "rednote"}:
         hook = (draft_meta.get("hook", "") + "\n\n") if draft_meta.get("hook") else ""
         return {**base, "kind": "note", "title": _plain(title)[:20], "text": (hook + _plain(body))[:950], "hashtags": _hashtags(job)}

@@ -5,14 +5,17 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .fusion import fusion_pipeline, format_content, format_for_channel, fetch_trends, council_review
 from .intelligence import build_generation_context
 from .niche_analysis import analyze_niche
 from .metrics import render_metrics
+from .seo import search as _seo_search, analyze as _seo_analyze, geo_checklist
 from .paths import project_home
 from .pipeline import Pipeline
 from .project_audit import audit_project
 from .profiles import resolve_profile
 from .readiness import inspect_delivery_readiness
+from .skills_adapter import fetch_hot_data, generate_content, get_status as skills_status
 from .store import Store
 from .task_market import TaskMarketRunner
 from .trends import TrendCollector, rank_trends
@@ -107,6 +110,14 @@ def parser():
     sub.add_parser("feedback-summary")
     sub.add_parser("project-audit")
     sub.add_parser("health")
+    seo_search = sub.add_parser("seo-search")
+    seo_search.add_argument("--query", required=True)
+    seo_search.add_argument("--engine", choices=["google", "bing", "duck", "baidu", "yandex", "ecosia"], default="duck")
+    seo_search.add_argument("--limit", type=int, default=5)
+    seo_analyze = sub.add_parser("seo-analyze")
+    seo_analyze.add_argument("url")
+    seo_geo = sub.add_parser("seo-geo-check")
+    seo_geo.add_argument("job_id")
     demo = sub.add_parser("demo")
     demo.add_argument("--actor", default="demo-operator")
 
@@ -136,6 +147,13 @@ def execute(args):
     pipeline = Pipeline(store, config)
     if args.command == "init":
         return {"ok": True, "db": str(store.path), "version": __version__}
+    if args.command == "seo-search":
+        return _seo_search(args.query, args.engine, args.limit)
+    if args.command == "seo-analyze":
+        return _seo_analyze(args.url)
+    if args.command == "seo-geo-check":
+        job = store.get_job(args.job_id)
+        return geo_checklist(job)
     if args.command == "create":
         brief = json.loads(args.brief)
         if not isinstance(brief, dict):
