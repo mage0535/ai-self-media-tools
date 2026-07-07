@@ -19,11 +19,16 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-FUSION_SCRIPT = Path("/root/.hermes/scripts/content_gen_fusion.py")
-OUTPUT_DIR = Path("/root/.hermes/pipeline/content_queue")
+
+def _hermes_home():
+    return Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+
+
+FUSION_SCRIPT = _hermes_home() / "scripts" / "content_gen_fusion.py"
+OUTPUT_DIR = _hermes_home() / "pipeline" / "content_queue"
 
 
 def _check_autocli():
@@ -46,20 +51,20 @@ def _check_autocli():
 
 
 def _check_follow_builders():
-    path = Path.home() / ".hermes" / "skills" / "follow-builders"
+    path = _hermes_home() / "skills" / "follow-builders"
     ok = path.is_dir() and (path / "SKILL.md").exists()
     return {"available": ok, "builder_count": 26, "kind": "ai_news_digest"}
 
 
 def _check_aliens_eye():
-    path = Path.home() / ".hermes" / "skills" / "aliens-eye"
+    path = _hermes_home() / "skills" / "aliens-eye"
     ok = path.is_dir() and (path / "README.md").exists()
     return {"available": ok, "platform_count": 840, "kind": "osint_username_scan"}
 
 
 def _check_skills():
     """Check which Hermes skill sets are available."""
-    skills_base = Path(os.path.expanduser("~/.hermes/skills"))
+    skills_base = _hermes_home() / "skills"
     checks = {}
     for name in ["khazix-skills", "kangarooking-skills",
                   "canghe-skills", "huashu-skills"]:

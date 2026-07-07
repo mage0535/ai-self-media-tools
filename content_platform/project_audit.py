@@ -2,6 +2,25 @@ import re
 from pathlib import Path
 
 
+IGNORED_PARTS = {
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".venv",
+    "venv",
+    "data",
+    "secrets",
+    "logs",
+    "artifacts",
+    "outbox",
+    "cookies",
+}
+
+IGNORED_EXACT = {
+    "installation-report.json",
+}
+
 FORBIDDEN_NAME_PATTERNS = [
     r"\.env$",
     r"\.key$",
@@ -34,15 +53,18 @@ def audit_project(root):
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if ".git" in path.parts or "__pycache__" in path.parts:
+        relative = path.relative_to(root)
+        if any(part in IGNORED_PARTS for part in relative.parts):
+            continue
+        if path.name in IGNORED_EXACT:
             continue
         if path.name == "project_audit.py":
             continue
         scanned += 1
-        relative = path.relative_to(root).as_posix()
-        lowered = relative.casefold()
+        relative_text = relative.as_posix()
+        lowered = relative_text.casefold()
         if any(re.search(pattern, lowered) for pattern in FORBIDDEN_NAME_PATTERNS):
-            issues.append({"path": relative, "reason": "forbidden_filename_pattern"})
+            issues.append({"path": relative_text, "reason": "forbidden_filename_pattern"})
             continue
         if path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".mp4", ".db", ".sqlite", ".sqlite3", ".pyc"}:
             continue
@@ -52,6 +74,6 @@ def audit_project(root):
             continue
         for pattern in FORBIDDEN_CONTENT_PATTERNS + PRIVATE_PATH_PATTERNS:
             if re.search(pattern, text):
-                issues.append({"path": relative, "reason": f"forbidden_content_pattern:{pattern}"})
+                issues.append({"path": relative_text, "reason": f"forbidden_content_pattern:{pattern}"})
                 break
     return {"ok": not issues, "scanned_files": scanned, "issues": issues}

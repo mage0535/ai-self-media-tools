@@ -355,5 +355,54 @@ def main():
         sys.exit(1)
 
 
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Open Notebook integration helper")
+    sub = parser.add_subparsers(dest="command")
+
+    digest_p = sub.add_parser("digest", help="digest one source")
+    digest_p.add_argument("--url", help="source URL")
+    digest_p.add_argument("--text", help="source text")
+    digest_p.add_argument("--title", default="", help="optional title")
+    digest_p.add_argument("--topic", default="general", help="topic label")
+
+    research_p = sub.add_parser("research", help="research one topic from multiple sources")
+    research_p.add_argument("--topic", required=True, help="research topic")
+    research_p.add_argument("--urls", nargs="*", default=[], help="related URLs")
+    research_p.add_argument("--texts", nargs="*", default=[], help="related texts")
+
+    sub.add_parser("health", help="check Open Notebook service health")
+
+    args = parser.parse_args()
+
+    if args.command == "digest":
+        if not args.url and not args.text:
+            print("ERROR: requires --url or --text")
+            sys.exit(1)
+        result = digest_source(url=args.url, text=args.text, title=args.title, topic=args.topic)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "research":
+        result = research_topic(topic=args.topic, urls=args.urls, texts=args.texts)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "health":
+        try:
+            client = OpenNotebookClient()
+            health = client.health()
+            print(f"OK: Open Notebook: {health.get('status', 'unknown')}")
+            print(f"API: {OPEN_NOTEBOOK_API}")
+        except Exception as exc:
+            print(f"ERROR: Open Notebook unreachable: {exc}")
+            sys.exit(1)
+        return
+
+    parser.print_help()
+    sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

@@ -2,6 +2,7 @@ import io
 import json
 import tempfile
 import unittest
+from contextlib import chdir
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -95,7 +96,8 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(result["platforms"]["wechat"]["views"], 100)
 
     def test_project_audit_command_reports_clean_repo(self):
-        code, result = self.call("project-audit")
+        with chdir(self.root):
+            code, result = self.call("project-audit")
         self.assertEqual(code, 0)
         self.assertTrue(result["ok"])
         self.assertIn("scanned_files", result)

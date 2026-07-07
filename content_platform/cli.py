@@ -149,9 +149,6 @@ def execute(args):
         return _seo_search(args.query, args.engine, args.limit)
     if args.command == "seo-analyze":
         return _seo_analyze(args.url)
-    if args.command == "seo-geo-check":
-        job = store.get_job(args.job_id)
-        return geo_checklist(job)
     if args.command == "create":
         brief = json.loads(args.brief)
         if not isinstance(brief, dict):
