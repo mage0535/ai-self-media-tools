@@ -146,6 +146,45 @@ Ship a public `0.2` release with:
 
 - GitHub Pages could not be enabled because the current plan rejected Pages creation with HTTP `422`, so the repository website was set to the README URL instead.
 
+## 2026-07-08 Admin Insight Deepening Wave
+
+### Goal
+
+Make the management console useful for real operators, not only for status viewing, by exposing richer account summaries, account analysis, historical signals, LLM suggestions, deeper platform checks, and a standalone queue worker path.
+
+### Work Completed
+
+- homepage platform cards now include account-level summary badges:
+  - display name
+  - track
+  - current status
+- platform detail pages now include:
+  - account analysis blocks
+  - account track distribution
+  - account current-status distribution
+  - historical platform performance payload
+  - LLM-generated platform summary and next-step suggestions with fallback path
+- platform binding records now persist:
+  - `track`
+  - `current_status`
+- binding checks now use readiness-backed platform requirements instead of only checking for a credentials reference
+- standalone `delivery-worker` remains available for queue consumption outside the main flow
+- server-side admin store migration now auto-adds new binding columns when older runtime databases are present
+
+### Validation
+
+- local full suite: `152 passed`
+- local `project-audit`: `ok: true`
+- server full suite: `152 passed`
+- server `project-audit`: `ok: true`
+- server management-console real flow:
+  - one-time launch URL opened
+  - password login succeeded
+  - overview loaded
+  - binding POST succeeded
+  - platform detail loaded
+  - account analysis and LLM suggestion payload returned
+
 ## 2026-07-07 Core Capability Hardening Wave
 
 ### Goal
