@@ -76,6 +76,14 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(clusters[0]["cluster_key"], "automation-visuals")
         self.assertIn("wechat", history["platforms"])
 
+    def test_draft_versions_are_recorded(self):
+        job = self.store.create_job("Topic", ["wechat"])
+        self.store.save_draft(job["id"], "Title A", "Body A", "review", {"hits": []}, draft_meta={"hook": "A"})
+        self.store.save_draft(job["id"], "Title B", "Body B", "review", {"hits": []}, draft_meta={"hook": "B"})
+        versions = self.store.draft_versions(job["id"])
+        self.assertEqual(len(versions), 2)
+        self.assertEqual(versions[0]["title"], "Title A")
+
     def test_connect_tolerates_wal_lock_fallback(self):
         real_connect = __import__("sqlite3").connect
         state = {"wal_attempts": 0}

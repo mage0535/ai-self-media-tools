@@ -85,9 +85,42 @@ class AdminServerTests(unittest.TestCase):
             self.assertEqual(platform_detail["platform"]["key"], "wechat")
             self.assertTrue(platform_detail["bindings"])
             self.assertIn("readiness", platform_detail)
+            self.assertIn("llm_analysis", platform_detail)
 
             with self.assertRaises(Exception):
                 self._open_json(urllib.request.build_opener(), login_url, method="POST", payload={"password": "secret123"})
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_task_center_and_task_actions_round_trip(self):
+        server = make_admin_server(self.db_path, password="secret123", host="127.0.0.1", port=0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            launch_url = server.launch_url
+            login_url = f"http://127.0.0.1:{server.server_port}/api/auth/login?" + launch_url.split("?", 1)[1]
+            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            opener.open(launch_url, timeout=5).read()
+            self._open_json(opener, login_url, method="POST", payload={"password": "secret123"})
+
+            tasks_url = f"http://127.0.0.1:{server.server_port}/api/tasks"
+            status, tasks = self._open_json(opener, tasks_url)
+            self.assertEqual(status, 200)
+            self.assertTrue(tasks["tasks"])
+            task_id = tasks["tasks"][0]["id"]
+
+            detail_url = f"http://127.0.0.1:{server.server_port}/api/tasks/{task_id}"
+            status, detail = self._open_json(opener, detail_url)
+            self.assertEqual(status, 200)
+            self.assertIn("draft_versions", detail)
+            self.assertIn("platform_payloads", detail)
+            self.assertIn("comparisons", detail)
+
+            approve_url = f"http://127.0.0.1:{server.server_port}/api/tasks/{task_id}/approve"
+            status, approved = self._open_json(opener, approve_url, method="POST", payload={"actor": "admin", "note": "checked"})
+            self.assertEqual(status, 200)
+            self.assertEqual(approved["state"], "approved")
         finally:
             server.shutdown()
             server.server_close()
