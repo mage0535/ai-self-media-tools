@@ -53,6 +53,15 @@ class AdminStore:
                 CREATE INDEX IF NOT EXISTS idx_platform_accounts_platform ON platform_accounts(platform, updated_at DESC);
                 """
             )
+            for name, definition in {
+                "track": "TEXT NOT NULL DEFAULT ''",
+                "current_status": "TEXT NOT NULL DEFAULT ''",
+                "config_json": "TEXT NOT NULL DEFAULT '{}'",
+                "enabled": "INTEGER NOT NULL DEFAULT 1",
+                "last_checked_at": "TEXT NOT NULL DEFAULT ''",
+                "last_error": "TEXT NOT NULL DEFAULT ''",
+            }.items():
+                self._ensure_column(conn, "platform_accounts", name, definition)
 
     def upsert_binding(self, platform, payload):
         payload = dict(payload or {})
@@ -161,3 +170,9 @@ class AdminStore:
         result["enabled"] = bool(result["enabled"])
         result["config"] = json.loads(result.pop("config_json", "{}"))
         return result
+
+    @staticmethod
+    def _ensure_column(conn, table, name, definition):
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if name not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
