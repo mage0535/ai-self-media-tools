@@ -15,6 +15,7 @@ from .publishers import build_publisher
 from .resource import ResourceGuard
 from .review import ReviewTokens
 from .risk import RiskFilter, redact_secrets
+from .seo import geo_check
 
 
 class Pipeline:
@@ -63,6 +64,12 @@ class Pipeline:
             if risk["level"] == "pass" and not draft.get("draft_meta", {}).get("quality_gate", {}).get("passed", True):
                 risk["level"] = "review"
                 risk.setdefault("quality_gate", draft["draft_meta"]["quality_gate"])
+            geo = geo_check(text)
+            self.store.save_geo_score(job_id, geo)
+            gate = self._quality_gate(job_id, draft, risk, geo)
+            draft["draft_meta"]["geo_score"] = geo["score"]
+            draft["draft_meta"]["geo_details"] = geo
+            draft["draft_meta"]["quality_gate"] = gate
             self.store.save_draft(
                 job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
             )
@@ -277,6 +284,27 @@ class Pipeline:
     def _save_delivery_result(self, job_id, platform, result):
         key = hashlib.sha256(f"{job_id}:{platform}".encode()).hexdigest()
         self.store.save_delivery(job_id, platform, result.status, result.external_id, redact_secrets(result.error), key)
+
+    def _quality_gate(self, job_id, draft, risk, geo):
+        dm = draft.get("draft_meta", {})
+        gate = {"passed": True, "gates": {}}
+        g1 = risk.get("level", "pass") != "block"
+        gate["gates"]["G1_risk_compliance"] = {"passed": g1, "level": risk.get("level", "pass")}
+        g2 = geo.get("score", 0) >= 40
+        gate["gates"]["G2_geo"] = {"passed": g2, "score": geo.get("score", 0)}
+        qg = dm.get("quality_gate", {})
+        g3 = qg.get("passed", True)
+        gate["gates"]["G3_anti_generic"] = {"passed": g3, "failed": qg.get("failed_dimensions", [])}
+        artifacts = dm.get("media_plan", [])
+        g4 = len(artifacts) > 0 if "short_video" == dm.get("content_form", "") else True
+        gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": artifacts}
+        platforms = dm.get("strategy", {}).get("primary_platforms", [])
+        g5 = len(platforms) > 0
+        gate["gates"]["G5_format"] = {"passed": g5, "platforms": platforms}
+        gate["passed"] = all(g["passed"] for g in gate["gates"].values())
+        gate["score"] = sum(1 for g in gate["gates"].values() if g["passed"])
+        gate["total"] = len(gate["gates"])
+        return gate
 
     @staticmethod
     def _worker_id():

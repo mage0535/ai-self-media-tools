@@ -630,6 +630,12 @@ def make_admin_server(db_path, password, host="127.0.0.1", port=0, config=None):
                 payload = self._body_json()
                 toggled = state.admin_store.toggle_binding(binding_id, bool(payload.get("enabled", True)))
                 return _json_response(self, toggled)
+            if route == "/api/schedules":
+                from .scheduler import schedule_job
+                from .store import Store
+                payload = self._body_json()
+                result = schedule_job(Store(state.db_path), **payload)
+                return _json_response(self, result)
             return _json_response(self, {"ok": False, "error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
         def log_message(self, format, *args):

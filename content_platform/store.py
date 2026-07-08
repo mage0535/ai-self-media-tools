@@ -175,6 +175,26 @@ class Store:
                     draft_meta_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS geo_scores (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    score INTEGER NOT NULL DEFAULT 0,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    topic TEXT NOT NULL,
+                    platforms TEXT NOT NULL DEFAULT '[]',
+                    brief TEXT NOT NULL DEFAULT '{}',
+                    profile TEXT NOT NULL DEFAULT 'default',
+                    cron TEXT NOT NULL DEFAULT '@daily',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    label TEXT NOT NULL DEFAULT '',
+                    next_run TEXT NOT NULL DEFAULT '',
+                    last_run TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
                 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job_id, id);
                 CREATE INDEX IF NOT EXISTS idx_delivery_queue_state ON delivery_queue(state, id);
@@ -672,6 +692,44 @@ class Store:
             paths = [row[0] for row in conn.execute("SELECT path FROM artifacts")]
             paths += [row[0] for row in conn.execute("SELECT external_id FROM deliveries WHERE external_id LIKE '/%' ")]
         return set(paths)
+
+    def save_geo_score(self, job_id, geo_result):
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO geo_scores(job_id,score,payload_json,created_at) VALUES(?,?,?,?)",
+                (job_id, geo_result.get("score", 0), json.dumps(geo_result, ensure_ascii=False), utc_now()),
+            )
+
+    def geo_scores(self, job_id=None):
+        with self.connect() as conn:
+            if job_id:
+                rows = conn.execute("SELECT * FROM geo_scores WHERE job_id=? ORDER BY id DESC LIMIT 1", (job_id,))
+            else:
+                rows = conn.execute("SELECT * FROM geo_scores ORDER BY id DESC LIMIT 100")
+            return [dict(row) for row in rows]
+
+    def save_schedule(self, payload):
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO schedules(topic,platforms,brief,profile,cron,enabled,label,next_run,last_run,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (payload["topic"], payload.get("platforms", "[]"), payload.get("brief", "{}"),
+                 payload.get("profile", "default"), payload.get("cron", "@daily"),
+                 payload.get("enabled", 1), payload.get("label", ""), payload.get("next_run", ""),
+                 payload.get("last_run", ""), payload.get("created_at", utc_now())),
+            )
+
+    def list_schedules(self):
+        with self.connect() as conn:
+            return [dict(row) for row in conn.execute("SELECT * FROM schedules ORDER BY id")]
+
+    def update_schedule(self, schedule_id, enabled=None, next_run=None, last_run=None):
+        with self.connect() as conn:
+            if enabled is not None:
+                conn.execute("UPDATE schedules SET enabled=? WHERE id=?", (int(enabled), schedule_id))
+            if next_run is not None:
+                conn.execute("UPDATE schedules SET next_run=? WHERE id=?", (next_run, schedule_id))
+            if last_run is not None:
+                conn.execute("UPDATE schedules SET last_run=? WHERE id=?", (last_run, schedule_id))
 
     def _rows(self, sql, args):
         with self.connect() as conn:
