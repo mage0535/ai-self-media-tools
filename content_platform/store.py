@@ -166,10 +166,20 @@ class Store:
                     payload_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS draft_versions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    risk_level TEXT NOT NULL DEFAULT '',
+                    draft_meta_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
                 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job_id, id);
                 CREATE INDEX IF NOT EXISTS idx_delivery_queue_state ON delivery_queue(state, id);
                 CREATE INDEX IF NOT EXISTS idx_topic_clusters_key ON topic_clusters(cluster_key, id);
+                CREATE INDEX IF NOT EXISTS idx_draft_versions_job ON draft_versions(job_id, id);
                 """
             )
             for name, definition in {
@@ -227,6 +237,10 @@ class Store:
             conn.execute(
                 "UPDATE jobs SET title=?,body=?,risk_level=?,risk_json=?,prompt_version=?,draft_meta_json=?,updated_at=? WHERE id=?",
                 (title, body, risk_level, json.dumps(risk, ensure_ascii=False), prompt_version, json.dumps(draft_meta or {}, ensure_ascii=False), utc_now(), job_id),
+            )
+            conn.execute(
+                "INSERT INTO draft_versions(job_id,title,body,risk_level,draft_meta_json,created_at) VALUES(?,?,?,?,?,?)",
+                (job_id, title, body, risk_level, json.dumps(draft_meta or {}, ensure_ascii=False), utc_now()),
             )
             self._event(conn, job_id, "draft_saved", {"risk_level": risk_level})
 
@@ -339,6 +353,12 @@ class Store:
 
     def deliveries_all(self):
         return self._rows("SELECT * FROM deliveries ORDER BY updated_at DESC, id DESC", ())
+
+    def draft_versions(self, job_id):
+        rows = self._rows("SELECT * FROM draft_versions WHERE job_id=? ORDER BY id", (job_id,))
+        for row in rows:
+            row["draft_meta"] = json.loads(row.pop("draft_meta_json", "{}"))
+        return rows
 
     def record_performance(self, job_id, platform, views=0, likes=0, comments=0, shares=0):
         with self.connect() as conn:
@@ -513,6 +533,38 @@ class Store:
         if topic:
             summary["clusters"] = [row.get("payload", {}) for row in self.related_topic_clusters(topic)]
         return summary
+
+    def learned_ranking_context(self, profile_name="default"):
+        platform_perf = self.feedback_summary().get("platforms", {})
+        cluster_rows = self.topic_clusters()
+        weighted_clusters = []
+        for row in cluster_rows:
+            payload = row.get("payload", {})
+            cluster_platforms = payload.get("platforms", [])
+            perf_boost = 0.0
+            for platform in cluster_platforms:
+                perf_boost += float(platform_perf.get(platform, {}).get("engagement", 0)) / max(
+                    1.0, float(platform_perf.get(platform, {}).get("views", 0))
+                )
+            weighted_clusters.append(
+                {
+                    "label": row.get("label", ""),
+                    "cluster_key": row.get("cluster_key", ""),
+                    "weight": round(float(row.get("score", 0)) + min(perf_boost, 1.0), 3),
+                    "topic_signals": payload.get("topic_signals", []),
+                }
+            )
+        weighted_clusters.sort(key=lambda item: item["weight"], reverse=True)
+        preferred_sources = {}
+        for platform, summary in platform_perf.items():
+            score = min(1.5, float(summary.get("engagement", 0)) / max(1.0, float(summary.get("views", 0))) * 3)
+            if score > 0:
+                preferred_sources[platform] = round(score, 3)
+        return {
+            "profile": profile_name,
+            "preferred_clusters": weighted_clusters[:8],
+            "preferred_sources": preferred_sources,
+        }
 
     def save_tool_inventory(self, snapshot_name, payload):
         with self.connect() as conn:
