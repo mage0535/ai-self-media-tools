@@ -222,6 +222,27 @@ class Pipeline:
             processed += count
             time.sleep(max(1, int(poll_interval)))
 
+    def process_generation_queue(self, limit=100, include_failed=False):
+        processed = 0
+        states = {"created"}
+        if include_failed:
+            states.update({"failed", "blocked", "rejected"})
+        for state in states:
+            jobs = self.store.list_jobs(limit=limit, state=state)
+            for job in jobs:
+                self.run(job["id"], force=(state != "created"))
+                processed += 1
+                if processed >= limit:
+                    return processed
+        return processed
+
+    def process_generation_queue_forever(self, poll_interval=3, batch_size=20, include_failed=False):
+        processed = 0
+        while True:
+            count = self.process_generation_queue(batch_size, include_failed)
+            processed += count
+            time.sleep(max(1, int(poll_interval)))
+
     def _hydrate(self, job):
         result = dict(job)
         result["artifacts"] = self.store.artifacts(job["id"])

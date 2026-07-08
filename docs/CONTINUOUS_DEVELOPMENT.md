@@ -185,6 +185,42 @@ Make the management console useful for real operators, not only for status viewi
   - platform detail loaded
   - account analysis and LLM suggestion payload returned
 
+## 2026-07-08 Operator Console Completion Wave
+
+### Goal
+
+Push the management console from a useful admin panel to a true operator control console by adding direct task-center actions, draft detail and diff views, finer worker split, and learned topic ranking calibration.
+
+### Work Completed
+
+- added task-center APIs and direct actions:
+  - run
+  - approve
+  - reject
+  - publish
+- added task detail APIs with:
+  - current draft body
+  - platform payload detail
+  - draft version history
+  - unified diff between recent versions
+- added `draft_versions` persistence
+- added `generation-worker`
+- added learned ranking context based on topic clusters and historical performance
+- wired learned ranking into trend ranking flow
+
+### Validation
+
+- local full suite: `157 passed`
+- local `project-audit`: `ok: true`
+- server full suite: `157 passed`
+- server `project-audit`: `ok: true`
+- server operator-console workflow:
+  - overview
+  - binding creation
+  - platform detail
+  - task-center detail and actions
+  all verified through the live runtime
+
 ## 2026-07-07 Core Capability Hardening Wave
 
 ### Goal

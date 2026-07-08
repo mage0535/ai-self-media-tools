@@ -10,11 +10,14 @@ def normalize_topic(title):
     return " ".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", str(title).casefold()))
 
 
-def rank_trends(items, profile=None, used=None, limit=10):
+def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     profile, used = profile or {}, {normalize_topic(item) for item in (used or set())}
+    learned = learned or {}
     keywords = [str(word).casefold() for word in profile.get("keywords", [])]
     source_weights = profile.get("source_weights", {})
     banned = [str(word).casefold() for word in profile.get("banned_topics", [])]
+    preferred_sources = learned.get("preferred_sources", {})
+    preferred_clusters = learned.get("preferred_clusters", [])
     unique = {}
     for item in items:
         title = str(item.get("title", "")).strip()
@@ -23,9 +26,17 @@ def rank_trends(items, profile=None, used=None, limit=10):
             continue
         source_score = float(source_weights.get(item.get("source", ""), 0))
         fit_score = sum(3 for word in keywords if word in title.casefold())
+        learned_source_score = float(preferred_sources.get(item.get("source", ""), 0))
+        learned_cluster_score = 0.0
+        for cluster in preferred_clusters:
+            if str(cluster.get("label", "")).casefold() in title.casefold():
+                learned_cluster_score = max(learned_cluster_score, float(cluster.get("weight", 0)))
+            for signal in cluster.get("topic_signals", []):
+                if str(signal).casefold() in title.casefold():
+                    learned_cluster_score = max(learned_cluster_score, float(cluster.get("weight", 0)))
         if source_score <= 0 and fit_score <= 0:
             continue
-        score = source_score + fit_score
+        score = source_score + fit_score + learned_source_score + learned_cluster_score
         score += math.log1p(max(0, float(item.get("points", 0) or 0))) / 4
         stage = "emerging"
         points = max(0, float(item.get("points", 0) or 0))
@@ -38,7 +49,15 @@ def rank_trends(items, profile=None, used=None, limit=10):
             angle = "爆款信号解读"
         elif stage == "hot":
             angle = "热点深度分析"
-        candidate = {**item, "score": round(score, 3), "fingerprint": normalized, "trend_stage": stage, "trend_angle": angle}
+        candidate = {
+            **item,
+            "score": round(score, 3),
+            "fingerprint": normalized,
+            "trend_stage": stage,
+            "trend_angle": angle,
+            "learned_source_score": round(learned_source_score, 3),
+            "learned_cluster_score": round(learned_cluster_score, 3),
+        }
         if normalized not in unique or candidate["score"] > unique[normalized]["score"]:
             unique[normalized] = candidate
     ranked = sorted(unique.values(), key=lambda row: (-row["score"], row["title"]))

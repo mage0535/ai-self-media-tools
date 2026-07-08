@@ -109,6 +109,11 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(result["failed"], 0)
         self.assertIn("reason", result)
 
+    def test_generation_worker_exits_cleanly_when_no_jobs(self):
+        code, result = self.call("generation-worker", "--poll-interval", "1", "--batch-size", "1", "--once")
+        self.assertEqual(code, 0)
+        self.assertIn("processed", result)
+
 
 if __name__ == "__main__":
     unittest.main()
