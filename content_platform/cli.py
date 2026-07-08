@@ -118,6 +118,12 @@ def parser():
     worker = sub.add_parser("delivery-worker")
     worker.add_argument("--poll-interval", type=int, default=3)
     worker.add_argument("--batch-size", type=int, default=20)
+    worker.add_argument("--once", action="store_true")
+    gen_worker = sub.add_parser("generation-worker")
+    gen_worker.add_argument("--poll-interval", type=int, default=3)
+    gen_worker.add_argument("--batch-size", type=int, default=20)
+    gen_worker.add_argument("--include-failed", action="store_true")
+    gen_worker.add_argument("--once", action="store_true")
     seo_search = sub.add_parser("seo-search")
     seo_search.add_argument("--query", required=True)
     seo_search.add_argument("--engine", choices=["google", "bing", "duck", "baidu", "yandex", "ecosia"], default="duck")
@@ -227,7 +233,7 @@ def execute(args):
     if args.command in {"trends", "auto"}:
         items = TrendCollector(config.get("trends", {})).collect(args.refresh)
         profile = resolve_profile(config.get("profiles", {}), args.profile)
-        items = rank_trends(items, profile, store.used_topics(), args.limit)
+        items = rank_trends(items, profile, store.used_topics(), args.limit, store.learned_ranking_context(args.profile))
         if args.command == "trends":
             return items
         jobs = []
@@ -270,8 +276,15 @@ def execute(args):
             server.server_close()
         return {"ok": True, "stopped": True}
     if args.command == "delivery-worker":
-        pipeline.process_delivery_queue_forever(args.poll_interval, args.batch_size)
-        return {"ok": True, "stopped": True}
+        processed = pipeline.process_delivery_queue(args.batch_size) if args.once else pipeline.process_delivery_queue_forever(args.poll_interval, args.batch_size)
+        return {"ok": True, "processed": processed}
+    if args.command == "generation-worker":
+        processed = (
+            pipeline.process_generation_queue(args.batch_size, args.include_failed)
+            if args.once
+            else pipeline.process_generation_queue_forever(args.poll_interval, args.batch_size, args.include_failed)
+        )
+        return {"ok": True, "processed": processed}
     if args.command == "demo":
         job = pipeline.create("Hermes content platform offline acceptance", ["demo"], {"audience": "Hermes operator"})
         pipeline.run(job["id"])

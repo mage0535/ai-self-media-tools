@@ -1,7 +1,9 @@
+import difflib
 from collections import Counter, defaultdict
 
 from .admin_analysis import platform_llm_analysis
 from .admin_store import AdminStore
+from .formatters import format_for_platform
 from .platform_catalog import all_platforms, platform_definition
 from .readiness import inspect_delivery_readiness
 from .store import Store
@@ -231,4 +233,51 @@ def build_platform_detail(db_path, platform, config=None):
             "current_statuses": [{"label": key, "value": value} for key, value in sorted(status_counts.items()) if key],
         },
         "readiness": readiness,
+    }
+
+
+def build_task_center(db_path):
+    store = Store(db_path)
+    tasks = []
+    for job in store.list_jobs(limit=100):
+        deliveries = store.deliveries(job["id"])
+        tasks.append(
+            {
+                "id": job["id"],
+                "topic": job["topic"],
+                "title": job["title"],
+                "state": job["state"],
+                "risk_level": job["risk_level"],
+                "platforms": job["platforms"],
+                "updated_at": job["updated_at"],
+                "deliveries": deliveries,
+            }
+        )
+    return {
+        "tasks": tasks,
+        "summary": dict(Counter(task["state"] for task in tasks)),
+    }
+
+
+def build_task_detail(db_path, job_id):
+    store = Store(db_path)
+    job = store.get_job(job_id)
+    artifacts = store.artifacts(job_id)
+    deliveries = store.deliveries(job_id)
+    versions = store.draft_versions(job_id)
+    platform_payloads = {}
+    for platform in job["platforms"]:
+        platform_payloads[platform] = format_for_platform(job, platform)
+    comparisons = []
+    if len(versions) >= 2:
+        old = versions[-2]["body"].splitlines()
+        new = versions[-1]["body"].splitlines()
+        comparisons = list(difflib.unified_diff(old, new, fromfile="previous", tofile="current", lineterm=""))
+    return {
+        "job": job,
+        "artifacts": artifacts,
+        "deliveries": deliveries,
+        "draft_versions": versions,
+        "platform_payloads": platform_payloads,
+        "comparisons": comparisons,
     }
