@@ -39,6 +39,8 @@ class AdminStore:
                     auth_type TEXT NOT NULL DEFAULT 'manual',
                     status TEXT NOT NULL DEFAULT 'pending',
                     credentials_ref TEXT NOT NULL DEFAULT '',
+                    track TEXT NOT NULL DEFAULT '',
+                    current_status TEXT NOT NULL DEFAULT '',
                     notes TEXT NOT NULL DEFAULT '',
                     config_json TEXT NOT NULL DEFAULT '{}',
                     enabled INTEGER NOT NULL DEFAULT 1,
@@ -65,6 +67,8 @@ class AdminStore:
             "auth_type": str(payload.get("auth_type") or "manual").strip(),
             "status": str(payload.get("status") or "pending").strip(),
             "credentials_ref": str(payload.get("credentials_ref") or "").strip(),
+            "track": str(payload.get("track") or "").strip(),
+            "current_status": str(payload.get("current_status") or "").strip(),
             "notes": str(payload.get("notes") or "").strip(),
             "config_json": json.dumps(payload.get("config") or {}, ensure_ascii=False),
             "enabled": 1 if payload.get("enabled", True) else 0,
@@ -72,13 +76,15 @@ class AdminStore:
         }
         with self.connect() as conn:
             conn.execute(
-                """INSERT INTO platform_accounts(platform,account_key,display_name,auth_type,status,credentials_ref,notes,config_json,enabled,last_checked_at,last_error,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?, '', '', ?, ?)
+                """INSERT INTO platform_accounts(platform,account_key,display_name,auth_type,status,credentials_ref,track,current_status,notes,config_json,enabled,last_checked_at,last_error,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?, '', '', ?, ?)
                 ON CONFLICT(platform,account_key) DO UPDATE SET
                 display_name=excluded.display_name,
                 auth_type=excluded.auth_type,
                 status=excluded.status,
                 credentials_ref=excluded.credentials_ref,
+                track=excluded.track,
+                current_status=excluded.current_status,
                 notes=excluded.notes,
                 config_json=excluded.config_json,
                 enabled=excluded.enabled,
@@ -90,6 +96,8 @@ class AdminStore:
                     row["auth_type"],
                     row["status"],
                     row["credentials_ref"],
+                    row["track"],
+                    row["current_status"],
                     row["notes"],
                     row["config_json"],
                     row["enabled"],

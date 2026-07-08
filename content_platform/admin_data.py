@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 
+from .admin_analysis import platform_llm_analysis
 from .admin_store import AdminStore
 from .platform_catalog import all_platforms, platform_definition
 from .readiness import inspect_delivery_readiness
@@ -48,6 +49,7 @@ def _latest_works(store, platform):
     rows = []
     for row in latest:
         perf = _job_performance(store, row["id"], platform)
+        engagement = int(perf.get("likes", 0)) + int(perf.get("comments", 0)) + int(perf.get("shares", 0))
         rows.append(
             {
                 "job_id": row["id"],
@@ -59,6 +61,7 @@ def _latest_works(store, platform):
                 "error": row["error"],
                 "updated_at": row["updated_at"],
                 "performance": perf,
+                "engagement": engagement,
             }
         )
     return rows
@@ -106,6 +109,15 @@ def _platform_list(store, admin_store):
                 "queue_counts": stats["queue_counts"],
                 "latest_count": stats["latest_count"],
                 "supports": meta["supports"],
+                "account_summaries": [
+                    {
+                        "display_name": binding["display_name"],
+                        "track": binding.get("track", ""),
+                        "current_status": binding.get("current_status", ""),
+                        "status": binding.get("status", ""),
+                    }
+                    for binding in bindings[:3]
+                ],
             }
         )
     return result
@@ -168,24 +180,55 @@ def build_platform_detail(db_path, platform, config=None):
     latest_works = _latest_works(store, platform)
     failures = [row for row in latest_works if row["error"]]
     readiness = inspect_delivery_readiness(config or {})
-    return {
+    track_counts = Counter(binding.get("track", "") for binding in bindings if binding.get("track"))
+    status_counts = Counter(binding.get("current_status", "") for binding in bindings if binding.get("current_status"))
+    historical = store.historical_performance([platform], platform)
+    account_analysis = [
+        {
+            "id": binding["id"],
+            "display_name": binding["display_name"],
+            "account_key": binding["account_key"],
+            "track": binding.get("track", ""),
+            "current_status": binding.get("current_status", ""),
+            "status": binding.get("status", ""),
+            "auth_type": binding.get("auth_type", ""),
+            "credentials_ref": binding.get("credentials_ref", ""),
+            "notes": binding.get("notes", ""),
+            "diagnosis": "已具备基础绑定条件" if binding.get("status") == "connected" else "建议先补全凭据与检测链路",
+        }
+        for binding in bindings
+    ]
+    llm_payload = {
         "platform": meta,
         "bindings": bindings,
         "stats": stats,
         "latest_works": latest_works,
+        "historical": historical,
+        "track_distribution": dict(track_counts),
+        "current_status_distribution": dict(status_counts),
+    }
+    llm_analysis = platform_llm_analysis((config or {}).get("generator", {}), llm_payload)
+    return {
+        "platform": meta,
+        "bindings": bindings,
+        "binding_snapshot": {
+            "track_distribution": dict(track_counts),
+            "current_status_distribution": dict(status_counts),
+        },
+        "stats": stats,
+        "historical": historical,
+        "latest_works": latest_works,
         "recent_failures": failures,
+        "account_analysis": account_analysis,
+        "llm_analysis": llm_analysis,
         "binding_guide": meta["binding_steps"],
         "charts": {
             "deliveries_by_status": [{"label": key, "value": value} for key, value in sorted(stats["delivery_counts"].items())],
             "queue_by_state": [{"label": key, "value": value} for key, value in sorted(stats["queue_counts"].items())],
             "latest_views": [{"label": row["title"][:18] or row["topic"][:18], "value": int(row["performance"]["views"])} for row in latest_works],
-            "latest_engagement": [
-                {
-                    "label": row["title"][:18] or row["topic"][:18],
-                    "value": int(row["performance"]["likes"]) + int(row["performance"]["comments"]) + int(row["performance"]["shares"]),
-                }
-                for row in latest_works
-            ],
+            "latest_engagement": [{"label": row["title"][:18] or row["topic"][:18], "value": int(row["engagement"])} for row in latest_works],
+            "tracks": [{"label": key, "value": value} for key, value in sorted(track_counts.items()) if key],
+            "current_statuses": [{"label": key, "value": value} for key, value in sorted(status_counts.items()) if key],
         },
         "readiness": readiness,
     }
