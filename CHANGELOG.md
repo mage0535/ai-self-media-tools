@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.2 - 2026-07-08 - Management Console And Public Release Hardening
+## 0.2 - 2026-07-08 — Phase 1-8 Full Implementation
+
+- GEO check integrated into `pipeline.run()` auto-flow, 5-gate quality contract
+- Text de-AI fully upgraded (47 phrases/sycophancy/hedging/burstiness/term locking)
+- Content calendar + RSS ingestion + Newsletter pipeline + MCP Server
+- Operations dashboard (GEO trend/heatmap/failure classification)
+- Multi-backend TTS stubs (Piper/Kokoro)
+- Management console task center CRUD + draft version diff
+- 157/157 tests passed, three-end consistent
+- Rewrote README.md + README_EN.md following KMM format
+
+## 0.2 - 2026-07-08 — Management Console And Public Release Hardening
 
 - Unified public version to `0.2`
 - Added one-time-link password-protected management console with Win11 / Edge inspired UI
