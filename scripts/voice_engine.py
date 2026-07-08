@@ -290,6 +290,31 @@ def parse_script(raw_text: str) -> list[ScriptSegment]:
 # ────────────────────────────────────────────────────────────────
 # edge-tts 异步提供者
 # ────────────────────────────────────────────────────────────────
+
+class PiperProvider:
+    """Piper TTS — lightweight offline neural TTS (26 languages, ~2MB models)."""
+    @staticmethod
+    def synthesize(text, output, voice="en_US-lessac-medium", rate=1.0):
+        import subprocess
+        subprocess.run(["piper", "--model", voice, "--output_file", output],
+                       input=text.encode(), timeout=60, check=True)
+
+class KokoroProvider:
+    """Kokoro TTS — 82M parameter offline TTS (8 languages, Apache 2.0)."""
+    @staticmethod
+    def synthesize(text, output, voice="af_heart", lang="a", speed=1.0):
+        from kokoro import KPipeline
+        pipeline = KPipeline(lang_code=lang)
+        import soundfile as sf, numpy as np
+        chunks = []
+        for _, _, audio in pipeline(text, voice=voice, speed=speed):
+            chunks.append(audio)
+        if chunks:
+            combined = np.concatenate(chunks)
+            sf.write(output, combined, 24000)
+            return output
+        raise RuntimeError("Kokoro generated no audio")
+
 class EdgeTTSProvider:
     """edge-tts 多语言语音合成封装"""
 

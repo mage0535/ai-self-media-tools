@@ -51,6 +51,7 @@ class ToolRegistry:
                 "kind": "multimodal_analysis",
             },
             "open_notebook": self._probe_open_notebook(),
+            "tts_engines": self._probe_tts(),
             "autocli": self._probe_autocli(),
             "browser_ext": self._probe_browser_ext(),
             "khazix_skills": self._probe_skill_dir("khazix-skills"),
@@ -119,6 +120,17 @@ class ToolRegistry:
             return {"available": ok, "url": api, "kind": "research"}
         except Exception:
             return {"available": False, "url": api, "kind": "research"}
+
+    def _probe_tts(self):
+        engines = {}
+        for name in ["edge-tts", "kokoro"]:
+            try:
+                __import__(name)
+                engines[name] = True
+            except ImportError:
+                engines[name] = False
+        engines["piper"] = shutil.which("piper") is not None
+        return engines
 
     def choose_provider(self, kind):
         mapping = {

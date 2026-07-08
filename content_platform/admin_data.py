@@ -1,4 +1,5 @@
 import difflib
+import json
 from collections import Counter, defaultdict
 
 from .admin_analysis import platform_llm_analysis
@@ -268,6 +269,7 @@ def build_task_detail(db_path, job_id):
     platform_payloads = {}
     for platform in job["platforms"]:
         platform_payloads[platform] = format_for_platform(job, platform)
+    geo_scores = store.geo_scores(job["id"])
     comparisons = []
     if len(versions) >= 2:
         old = versions[-2]["body"].splitlines()
@@ -279,5 +281,44 @@ def build_task_detail(db_path, job_id):
         "deliveries": deliveries,
         "draft_versions": versions,
         "platform_payloads": platform_payloads,
+        "geo_scores": [{"score": g["score"], "when": g["created_at"], "details": json.loads(g.get("payload_json", "{}"))} for g in geo_scores],
         "comparisons": comparisons,
     }
+
+
+def build_dashboard(db_path):
+    store = Store(db_path)
+    admin_store = AdminStore(db_path)
+    admin_store.init()
+    jobs = store.list_jobs(limit=500)
+    total = len(jobs)
+    published = sum(1 for j in jobs if j.get("state") == "published")
+    review = sum(1 for j in jobs if j.get("state") == "review_required")
+    blocked = sum(1 for j in jobs if j.get("state") == "blocked")
+    failed = sum(1 for j in jobs if j.get("state") == "failed")
+    geo_rows = store.geo_scores()
+    geo_trend = []
+    for g in geo_rows[-100:]:
+        geo_trend.append({"score": g["score"], "when": g["created_at"][:10]})
+    day_counts = {}
+    for j in jobs:
+        day = j.get("created_at", "")[:10]
+        day_counts[day] = day_counts.get(day, 0) + 1
+    heatmap = [{"day": k, "count": v} for k, v in sorted(day_counts.items())[-30:]]
+    perf = [dict(p) for p in store._rows("SELECT * FROM performance", [])]
+    failures = sum(1 for p in perf if p.get("views", 0) == 0)
+    delivery_all = store.deliveries_all()
+    fail_detail = {}
+    for d in delivery_all:
+        if d.get("status") == "failed":
+            platform = d.get("platform", "unknown")
+            fail_detail[platform] = fail_detail.get(platform, 0) + 1
+    bindings = admin_store.list_bindings()
+    return {
+        "overview": {"total_jobs": total, "published": published, "review": review,
+                      "blocked": blocked, "failed": failed,
+                      "bindings": len(bindings), "failures": failures},
+        "geo_trend": geo_trend,
+        "content_heatmap": heatmap,
+        "failures_by_platform": fail_detail,
+     }

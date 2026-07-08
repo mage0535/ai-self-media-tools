@@ -1088,6 +1088,15 @@ def build_publisher(platform, config, data_dir):
         return CnblogsPublisher()
     if kind == "steemit":
         return SteemitPublisher()
+    if kind == "email":
+        return EmailPublisher(
+            smtp_host=cfg.get("smtp_host", ""),
+            smtp_port=int(cfg.get("smtp_port", 587)),
+            smtp_user=cfg.get("smtp_user", ""),
+            smtp_pass=cfg.get("smtp_pass", ""),
+            from_addr=cfg.get("from_addr", ""),
+            to_addrs=cfg.get("to_addrs", ""),
+        )
     raise ValueError(f"unknown publisher type for {platform}: {kind}")
 
 
@@ -1403,6 +1412,40 @@ class ButtondownPublisher:
         except Exception as exc:
             return DeliveryResult(False, "failed", error=str(exc)[:300])
 
+
+
+class EmailPublisher:
+    """Simple SMTP email publisher for newsletters."""
+    def __init__(self, smtp_host="", smtp_port=587, smtp_user="", smtp_pass="", from_addr="", to_addrs=""):
+        self.smtp_host = smtp_host
+        self.smtp_port = int(smtp_port)
+        self.smtp_user = smtp_user
+        self.smtp_pass = smtp_pass
+        self.from_addr = from_addr or smtp_user
+        self.to_addrs = to_addrs
+
+    def deliver(self, job, platform):
+        if not self.smtp_host:
+            return DeliveryResult(False, "blocked", error="no smtp host configured")
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        formatted = job.get("platform_payload", {})
+        html = formatted.get("html") or job.get("body", "")
+        title = formatted.get("title") or job.get("title", "Newsletter")
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = title
+        msg["From"] = self.from_addr
+        msg["To"] = self.to_addrs
+        msg.attach(MIMEText(html, "html", "utf-8"))
+        try:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as server:
+                server.starttls()
+                server.login(self.smtp_user, self.smtp_pass)
+                server.send_message(msg)
+            return DeliveryResult(True, "published")
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=str(exc)[:500])
 
 class CnblogsPublisher:
     """博客园 — connectivity test (XML-RPC publishing requires account config)."""

@@ -147,6 +147,22 @@ def parser():
     pub_matrix.add_argument("--matrix", default="", help="Matrix directory path")
     pub_matrix.add_argument("--platform", action="append", help="Target platform(s)")
     pub_matrix.add_argument("--dry-run", action="store_true", help="Show what would be published without sending")
+        # v0.2 — RSS Ingest
+    rss = sub.add_parser("rss-ingest")
+    rss.add_argument("feed", nargs="+", help="RSS feed URLs")
+    rss.add_argument("--topic", default="", help="Optional topic tag")
+    # v0.2 — Schedule
+    sub.add_parser("schedule-list")
+    sc = sub.add_parser("schedule-create")
+    sc.add_argument("--topic", required=True)
+    sc.add_argument("--platform", action="append", required=True)
+    sc.add_argument("--cron", default="@daily")
+    sc.add_argument("--label", default="")
+    # v0.2 — Newsletter
+    nl = sub.add_parser("newsletter")
+    nl.add_argument("feeds", nargs="+", help="RSS feed URLs")
+    nl.add_argument("--keywords", nargs="*", default=[])
+    nl.add_argument("--max", type=int, default=10)
     return p
 
 
@@ -385,6 +401,20 @@ def execute(args):
             print(f"  {icon} {r['platform']} | {r.get('copy','')}")
         return {"success": success, "total": len(results), "results": results}
 
+    if args.command == "rss-ingest":
+        from .rss_ingest import ingest_multi
+        return ingest_multi(args.feed, store)
+    if args.command == "schedule-list":
+        from .scheduler import list_schedules
+        return {"schedules": list_schedules(store)}
+    if args.command == "schedule-create":
+        from .scheduler import schedule_job
+        return schedule_job(store, args.topic, args.platform, cron=args.cron, label=args.label or args.topic)
+    if args.command == "newsletter":
+        from .newsletter import pipeline as newsletter_pipeline
+        from .paths import project_home
+        return newsletter_pipeline(args.feeds, keywords=args.keywords, max_selected=args.max,
+                                   config={"data_dir": str(project_home() / "data")})
     raise ValueError(f"unsupported command: {args.command}")
 
 

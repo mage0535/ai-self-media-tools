@@ -355,7 +355,6 @@ def main():
         sys.exit(1)
 
 
-def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Open Notebook integration helper")
