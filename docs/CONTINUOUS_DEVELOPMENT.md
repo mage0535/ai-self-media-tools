@@ -1810,3 +1810,119 @@ Bring the local workspace, GitHub main branch, and Hermes server runtime back to
 - This repository may be deployed into a live runtime directory, but tracked files must remain path-neutral and publish-safe.
 - Runtime-only state must stay inside ignored paths or outside the repository mirror entirely.
 - Server access details, private tokens, and machine-specific deployment paths must never be written into tracked docs again.
+
+## 2026-07-08 Phase 1-8 Full Implementation Wave
+
+### Goal
+
+Execute all 8 planned phases from the 2026-07-07 Tech Radar in a single wave, bringing the project to a "complete state" — GEO in pipeline, text de-AI, quality gate contract, TTS multi-backend, content scheduling, RSS ingestion, MCP server, newsletter pipeline, dashboard analytics.
+
+### Phase 1 — Basic Fixes
+
+- Unified version to `0.2` (pyproject.toml, __init__.py)
+- Removed duplicate `main()` in `scripts/open_notebook_integrator.py`
+
+### Phase 2 — GEO In Pipeline + Quality Gate
+
+| Change | File | Detail |
+|--------|------|--------|
+| GEO auto-check in `pipeline.run()` | `pipeline.py` | `geo_check(text)` called before `save_draft()`, score persisted to `store.geo_scores` |
+| 5-gate quality contract | `pipeline.py:_quality_gate()` | G1=risk/compliance, G2=geo(≥40), G3=anti-generic, G4=media_assets, G5=format |
+| GEO score in draft_meta | `pipeline.py` | `draft_meta.geo_score`, `draft_meta.geo_details`, `draft_meta.quality_gate` |
+| `geo_scores` table | `store.py` | New SQLite table + `save_geo_score()`/`geo_scores()` methods |
+| Task detail GEO display | `admin_data.py` | `build_task_detail()` includes `geo_scores` array |
+
+### Phase 3 — Text De-AI Upgrade (humanize.py)
+
+| Feature | Detail |
+|---------|--------|
+| 30-item generic phrase catalog | 5 categories: conclusions, transitions, importance claims, hedging, sycophancy |
+| Sycophancy removal | 7 patterns (I apologize..., I understand..., I appreciate..., etc.) |
+| Hedging replacement | 6 patterns (perhaps you might consider..., it could be argued..., etc.) |
+| Em-dash pileup prevention | Auto-reduces em-dashes when >4 in text |
+| Burstiness scoring | `_burstiness_score()` — sentence-length variance metric |
+| Term locking | `_lock_terms()`/`_verify_terms()` — numbers, URLs, named entities, percentages, dates preserved |
+| Quality targets updated | 5 dimensions: clarity(0.65), authenticity(0.62), hook_strength(0.60), platform_fit(0.60), burstiness(0.45) |
+
+### Phase 4 — Multi-Backend TTS
+
+- `voice_engine.py`: Added `PiperProvider` (26 languages, ~2MB models) and `KokoroProvider` (82M parameters, 8 languages, Apache 2.0) as offline fallback providers
+- `tool_registry.py`: Added `_probe_tts()` — detects edge-tts, kokoro, piper availability
+- TTS probe results exposed in `ToolRegistry.probe()` as `tts_engines`
+
+### Phase 5 — Content Calendar + RSS Ingestion
+
+| Module | File | Capability |
+|--------|------|-----------|
+| Scheduler | `content_platform/scheduler.py` | Cron-driven scheduling (`@daily`, `@weekly`, `@hourly`), next_run calculation, `schedule_job()`, `list_schedules()`, `process_due_schedules()` |
+| RSS Ingest | `content_platform/rss_ingest.py` | RSS 2.0 + Atom feed parsing, source normalization, `ingest_feed()`, `ingest_multi()` |
+| Admin routes | `admin_server.py` | `GET /api/schedules`, `POST /api/schedules` |
+| CLI commands | `cli.py` | `rss-ingest`, `schedule-list`, `schedule-create` |
+| `schedules` table | `store.py` | New SQLite table + `save_schedule()`/`list_schedules()`/`update_schedule()` |
+
+### Phase 6 — MCP Server
+
+- `content_platform/mcp_server.py`: FastMCP-based server (pip install mcp)
+- 8 MCP tools: `seo_geo_check`, `trends_query`, `create_job`, `run_job`, `approve_job`, `publish_job`, `review_status`, `generate_audio`
+- Dual transport: `stdio` (for CLI agents) + `SSE` (HTTP on port 9600)
+- Graceful degradation: `pip install mcp` required, clean error if not installed
+
+### Phase 7 — Newsletter Pipeline + Email Publisher
+
+| Module | File | Capability |
+|--------|------|-----------|
+| Newsletter | `content_platform/newsletter.py` | RSS→curation→HTML email pipeline. Article scoring by keyword match, curation to top-N, Jinja2-free HTML rendering, SMTP delivery |
+| EmailPublisher | `content_platform/publishers.py` | SMTP email publisher for newsletter delivery, integrated into `build_publisher()` dispatch as `kind="email"` |
+| CLI | `cli.py` | `newsletter <feeds...> --keywords --max` command |
+
+### Phase 8 — Dashboard Analytics
+
+- `admin_data.py:build_dashboard()`: Overview (total_jobs, published, review, blocked, failed, bindings, failures), GEO trend (last 100 scores by date), content heatmap (last 30 days), failures_by_platform
+- Dashboard exposed at `GET /api/dashboard` in admin_server
+
+### New Files Summary
+
+| File | Lines | Role |
+|------|:----:|------|
+| `content_platform/scheduler.py` | ~55 | Cron scheduling + calendar integration |
+| `content_platform/rss_ingest.py` | ~80 | RSS/Atom feed ingestion + normalization |
+| `content_platform/newsletter.py` | ~90 | RSS→curation→HTML email pipeline |
+| `content_platform/mcp_server.py` | ~110 | MCP server (8 tools, dual transport) |
+
+### Modified Files
+
+| File | Changes |
+|------|--------|
+| `content_platform/pipeline.py` | GEO check integration, 5-gate quality contract |
+| `content_platform/humanize.py` | Full rewrite: 30 phrases, sycophancy, hedging, em-dash, burstiness, term locking |
+| `content_platform/store.py` | `geo_scores` + `schedules` tables with 6 new methods |
+| `content_platform/admin_data.py` | `build_dashboard()`, GEO scores in task detail |
+| `content_platform/admin_server.py` | `/api/dashboard`, `/api/schedules` routes |
+| `content_platform/tool_registry.py` | `_probe_tts()` method |
+| `content_platform/publishers.py` | `EmailPublisher` class + builder dispatch |
+| `content_platform/cli.py` | `rss-ingest`, `schedule-list`, `schedule-create`, `newsletter` commands |
+| `scripts/open_notebook_integrator.py` | Removed duplicate `main()` |
+| `scripts/voice_engine.py` | `PiperProvider`, `KokoroProvider` stubs |
+
+### Validation
+
+- Server full test suite: **157/157 passed**
+- Server `project-audit`: `ok: true, scanned_files: 129`
+- E2E workflow verified:
+  - Health: ok=True, version=0.2
+  - Demo: state=published, geo_score=PRESENT (60/100)
+  - GEO standalone: 90/100, 6/7 checks passed
+  - Humanize: burstiness=0.3, 6 rewrite notes, term locking active
+  - Scheduler: next_run calculated, schedule persisted
+  - RSS Ingest: 20 items from Hacker News RSS
+  - Newsletter: 3/3 articles curated
+  - Dashboard: overview + geo_trend populated
+  - TTS probing: edge-tts/kokoro/piper detected correctly
+
+### Notes
+
+- GitHub push blocked by credential rotation (`gh` logged in as `<github-account>`, `<github-account>` token expired). Push pending token refresh.
+- Kokoro/Piper TTS providers are compiled stubs — full integration requires `pip install kokoro` or piper binary on the server.
+- MCP server requires `pip install mcp` (FastMCP package). Not installed by default; graceful error on import.
+- Newsletter SMTP delivery is configured via publisher config, not the newsletter CLI. The CLI renders HTML to `data/newsletters/` directory.
+
