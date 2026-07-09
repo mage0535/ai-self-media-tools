@@ -61,6 +61,8 @@ class ToolRegistry:
             "guizang_material_illustration": self._probe_skill_dir("creative/guizang-material-illustration"),
             "guizang_social_card": self._probe_skill_dir("creative/guizang-social-card"),
             "guizang_ppt": self._probe_skill_dir("creative/guizang-ppt"),
+            "humanizer_zh": self._probe_skill_dir("humanizer-zh"),
+            "logo_generator": self._probe_skill_dir("creative/logo-generator"),
             "skills_adapter": self._probe_skills_adapter(),
         }
 

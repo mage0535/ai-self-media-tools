@@ -70,6 +70,24 @@ class Pipeline:
             draft["draft_meta"]["geo_score"] = geo["score"]
             draft["draft_meta"]["geo_details"] = geo
             draft["draft_meta"]["quality_gate"] = gate
+            # Humanizer-zh: 草稿 AI 去痕处理
+            humanize_enabled = self.config.get("humanizer", {}).get("enabled", True)
+            if humanize_enabled and risk["level"] == "pass":
+                try:
+                    from .humanizer import humanize_text
+                    style_hint = draft.get("draft_meta", {}).get("strategy", {}).get("tone", "")
+                    h_result = humanize_text(draft["title"], draft["body"], style_hint=style_hint)
+                    if h_result.get("ok") and h_result.get("patterns_detected"):
+                        draft["title"] = h_result["title"]
+                        draft["body"] = h_result["body"]
+                        self.store.record_event(job_id, "humanized", {
+                            "patterns_found": list(h_result["patterns_detected"].keys()),
+                            "score": h_result.get("score", 0),
+                        })
+                except ImportError:
+                    pass  # humanizer module not available
+                except Exception as exc:
+                    self.store.record_event(job_id, "humanize_failed", {"error": redact_secrets(exc)})
             self.store.save_draft(
                 job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
             )

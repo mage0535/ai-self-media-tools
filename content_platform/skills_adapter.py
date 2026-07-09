@@ -104,6 +104,28 @@ def _check_guizang_material_illustration():
     }
 
 
+def _check_humanizer_zh():
+    """Check if Humanizer-zh AI de-writer is available."""
+    path = _hermes_home() / "skills" / "humanizer-zh"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    return {
+        "available": ok,
+        "rule_count": 24,
+        "kind": "text_humanization",
+    }
+
+
+def _check_logo_generator():
+    """Check if logo-generator skill is available."""
+    path = _hermes_home() / "skills" / "creative" / "logo-generator"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    return {
+        "available": ok,
+        "capability": "svg_logo_generation",
+        "kind": "logo_generation",
+    }
+
+
 def get_status():
     """Return dict of all available enhancements."""
     autocli = _check_autocli()
@@ -115,6 +137,8 @@ def get_status():
         "follow_builders": _check_follow_builders(),
         "aliens_eye": _check_aliens_eye(),
         "guizang_material_illustration": _check_guizang_material_illustration(),
+        "humanizer_zh": _check_humanizer_zh(),
+        "logo_generator": _check_logo_generator(),
         "skills": skills,
         "total_skills": sum(s["skill_count"] for s in skills.values()),
     }
