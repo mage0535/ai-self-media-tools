@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4 - 2026-07-09 — Humanizer-zh + logo-generator + guizang-s-prompt 集成
+
+- **Humanizer-zh 桥接**：新增 `content_platform/humanizer.py` — 24 条中文 AI 写作检测规则，
+  草稿通过风险审查后自动去 AI 痕迹（夸大的象征意义/三段式法则/AI 词汇/否定式排比等 8 大类），
+  保留修改记录（patterns_found + quality score）
+- **logo-generator 桥接**：新增 `content_platform/logogen.py` — SVG Logo 生成，
+  基于归藏设计范式（6 种视觉方向/极简几何/node network/letter mark），
+  零 API key 依赖（纯 LLM 生成 SVG）
+- **guizang-s-prompt 参考库**：克隆到 `~/.hermes/skills/references/guizang-s-prompt/` —
+  16 个图像 + 1 个视频 prompt 模板，作为内容生成时的 prompt 参考
+- **管线集成**：`pipeline.run()` 新增 humanizer 步骤（G3 审查后自动运行）；
+  `media.py` 新增 `logo` 媒体类型 + `_generate_logo()` 方法
+- **能力探测**：`skills_adapter.py` 新增 `_check_humanizer_zh()` / `_check_logo_generator()`；
+  `tool_registry.py` 新增 2 个归藏技能探针
+- **技能安装**：`~/.hermes/skills/humanizer-zh/` (Humanizer-zh v1.0, 12.6k⭐)；
+  `~/.hermes/skills/creative/logo-generator/` (归藏 Logo 生成器)
+- **渠道推广增强**：Logo 生成可用于推广项目品牌标识制作
+
 ## 0.3 - 2026-07-09 — 归藏材质插画集成
 
 - **归藏材质插画桥接**：新增 `content_platform/illustrator.py` — 自动从文章内容提取核心概念，按归藏材质风格生成带中文标签的解释图提示词（8 种图解结构：循环/流程/中心辐射/对比/层级/数据场景/科学/文本场景）

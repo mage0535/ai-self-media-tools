@@ -38,10 +38,12 @@ class MediaBridge:
         return provider.run(target)
 
     def generate(self, kind, job):
-        if kind not in {"image", "video", "audio", "illustration"}:
+        if kind not in {"image", "video", "audio", "illustration", "logo"}:
             raise ValueError(f"unsupported media kind: {kind}")
         if kind == "illustration":
             return self._generate_illustration(job)
+        if kind == "logo":
+            return self._generate_logo(job)
         cfg = self.config.get(kind, {})
         if not cfg.get("enabled", False):
             return None
@@ -56,6 +58,40 @@ class MediaBridge:
         if kind == "image":
             return self._generate_image(job, output_dir, cfg)
         return self._generate_video(job, output_dir)
+
+    def _generate_logo(self, job):
+        """使用归藏 logo-generator 为品牌/产品生成 SVG Logo 变体。"""
+        try:
+            from .logogen import generate_logo
+
+            name = job.get("title", job.get("topic", "MyBrand"))
+            draft_meta = job.get("draft_meta", {})
+            industry = draft_meta.get("industry", "")
+            concept = draft_meta.get("core_concept", "")
+
+            output_dir = self.data_dir / "artifacts" / job["id"] / "logo"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            result = generate_logo(
+                name=name,
+                industry=industry or "",
+                concept=concept or "",
+                output_dir=str(output_dir),
+            )
+
+            if not result.get("ok"):
+                return None
+
+            return {
+                "kind": "logo",
+                "variants": result.get("variants", []),
+                "count": result.get("count", 0),
+                "output_dir": str(output_dir),
+            }
+        except ImportError:
+            return None
+        except Exception as exc:
+            raise RuntimeError(f"logo generation failed: {exc}")
 
     def _generate_image(self, job, output_dir, cfg):
         provider = self.registry.choose_provider("image")
@@ -139,6 +175,8 @@ class MediaBridge:
             return None
         except Exception as exc:
             raise RuntimeError(f"illustration generation failed: {exc}")
+
+    def _generate_audio(self, job, output_dir, cfg):
         root = Path(__file__).resolve().parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
