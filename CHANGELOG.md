@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6 - 2026-07-09 — magazine-layout + gif-splitter 集成（jiamu-skills）
+
+- **magazine-layout 桥接**：新增 `content_platform/magazine.py` — 12 套杂志视觉风格
+  （经典优雅/现代极简/科技杂志/自然生活/大胆社论/复古怀旧/商务专业/创意艺术/学术期刊/时尚奢华/新闻报道/暗黑科技），
+  Tailwind CSS 精致排版 + Playwright PDF 导出，适用于 Dev.to/博客园/Steemit 等独立文章页
+- **gif-splitter 桥接**：新增 `content_platform/gif_utils.py` — GIF 动图帧数检测 & 智能切分，
+  Pillow 实现（280 帧阈值），直接补充 gzh-design 发布链（公众号 300 帧限制）
+- **管线集成**：`pipeline.run()` 新增 magazine_format 步骤（非 WeChat 平台自动生成杂志 HTML）；
+  `media.py` 新增 `magazine_format` 类型 + `_format_magazine()` 方法
+- **能力探测**：`skills_adapter.py` 新增 `_check_magazine_layout()` / `_check_gif_splitter()`；
+  `tool_registry.py` 新增 2 个探针
+- **技能安装**：`~/.hermes/skills/creative/magazine-layout/`（1235 行风格定义 + PDF 导出脚本）；
+  `~/.hermes/skills/utilities/gif-splitter/`（Pillow 动图处理）
+- **渠道推广增强**：杂志 HTML 格式可用于分发到非 WeChat 平台；GIF 切分解决 WeChat 上传瓶颈
+
+## 0.5 - 2026-07-09 — gzh-design-skill 集成（公众号精美排版）
+
+- **gzh-design-skill 桥接**：新增 `content_platform/gzh_design.py` — 基于 isjiamu/gzh-design-skill（1664⭐）的
+  Markdown 转公众号 HTML 引擎，6 套主题，自动章节编号、关键词下划线、合规校验
+- **管线集成**：`pipeline.run()` 新增 wechat_format 步骤；`media.py` 新增 `wechat_format` + `_format_wechat()`
+- **能力探测**：`skills_adapter.py` 新增 `_check_gzh_design()`；`tool_registry.py` 新增探针
+- **技能安装**：`~/.hermes/skills/creative/gzh-design-skill/`（71 文件，6 主题库 + 4 校验脚本）
+
 ## 0.4 - 2026-07-09 — Humanizer-zh + logo-generator + guizang-s-prompt 集成
 
 - **Humanizer-zh 桥接**：新增 `content_platform/humanizer.py` — 24 条中文 AI 写作检测规则，

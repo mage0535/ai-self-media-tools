@@ -38,7 +38,7 @@ class MediaBridge:
         return provider.run(target)
 
     def generate(self, kind, job):
-        if kind not in {"image", "video", "audio", "illustration", "logo", "wechat_format"}:
+        if kind not in {"image", "video", "audio", "illustration", "logo", "wechat_format", "magazine_format"}:
             raise ValueError(f"unsupported media kind: {kind}")
         if kind == "illustration":
             return self._generate_illustration(job)
@@ -46,6 +46,8 @@ class MediaBridge:
             return self._generate_logo(job)
         if kind == "wechat_format":
             return self._format_wechat(job)
+        if kind == "magazine_format":
+            return self._format_magazine(job)
         cfg = self.config.get(kind, {})
         if not cfg.get("enabled", False):
             return None
@@ -128,6 +130,32 @@ class MediaBridge:
             return None
         except Exception as exc:
             raise RuntimeError(f"wechat formatting failed: {exc}")
+
+    def _format_magazine(self, job):
+        """Use magazine-layout skill to create standalone article HTML."""
+        try:
+            from .magazine import create_magazine
+
+            body = job.get("body", "")
+            title = job.get("title", job.get("topic", ""))
+            cfg = self.config.get("magazine_format", {})
+            style = cfg.get("default_style", "现代极简")
+
+            result = create_magazine(markdown=f"# {title}\n\n{body}",
+                                      style=style, title=title)
+            if not result.get("ok"):
+                return None
+
+            return {
+                "kind": "magazine_format",
+                "html": result["html"],
+                "html_path": result.get("path", ""),
+                "style": result.get("style", style),
+            }
+        except ImportError:
+            return None
+        except Exception as exc:
+            raise RuntimeError(f"magazine formatting failed: {exc}")
 
     def _generate_image(self, job, output_dir, cfg):
         provider = self.registry.choose_provider("image")
