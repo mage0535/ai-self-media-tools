@@ -91,6 +91,19 @@ def _check_chrome_ext():
         return False
 
 
+def _check_guizang_material_illustration():
+    """Check if Guizang material illustration skill is available."""
+    path = _hermes_home() / "skills" / "creative" / "guizang-material-illustration"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    refs = len(list(path.rglob("*.md"))) if ok else 0
+    return {
+        "available": ok,
+        "ref_count": refs - 3 if ok else 0,
+        "capability": "labeled_explanatory_illustrations",
+        "kind": "illustration_generation",
+    }
+
+
 def get_status():
     """Return dict of all available enhancements."""
     autocli = _check_autocli()
@@ -101,6 +114,7 @@ def get_status():
         "fusion_script": FUSION_SCRIPT.exists(),
         "follow_builders": _check_follow_builders(),
         "aliens_eye": _check_aliens_eye(),
+        "guizang_material_illustration": _check_guizang_material_illustration(),
         "skills": skills,
         "total_skills": sum(s["skill_count"] for s in skills.values()),
     }

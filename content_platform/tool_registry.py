@@ -58,6 +58,9 @@ class ToolRegistry:
             "kangarooking_skills": self._probe_skill_dir("kangarooking-skills"),
             "canghe_skills": self._probe_skill_dir("canghe-skills"),
             "huashu_skills": self._probe_skill_dir("huashu-skills"),
+            "guizang_material_illustration": self._probe_skill_dir("creative/guizang-material-illustration"),
+            "guizang_social_card": self._probe_skill_dir("creative/guizang-social-card"),
+            "guizang_ppt": self._probe_skill_dir("creative/guizang-ppt"),
             "skills_adapter": self._probe_skills_adapter(),
         }
 

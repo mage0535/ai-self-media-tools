@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.2 - 2026-07-08 — Phase 1-8 Full Implementation
+## 0.3 - 2026-07-09 — 归藏材质插画集成
+
+- **归藏材质插画桥接**：新增 `content_platform/illustrator.py` — 自动从文章内容提取核心概念，按归藏材质风格生成带中文标签的解释图提示词（8 种图解结构：循环/流程/中心辐射/对比/层级/数据场景/科学/文本场景）
+- **管线集成**：`pipeline.run()` 新增插画生成步骤（草稿通过风险审查后 → 自动生成插画提示词 → 存入 artifacts）
+- **媒体工厂扩展**：`media.py` 新增 `illustration` 媒体类型 + `_generate_illustration()` 方法
+- **能力探测**：`skills_adapter.py` 新增 `_check_guizang_material_illustration()` — 检测归藏材质插画技能是否可用
+- **工具注册**：`tool_registry.py` 新增 3 个归藏系列技能探针（material-illustration / social-card / ppt）
+- **渠道推广矩阵增强**：`promo/HERMES_SKILLS_ENHANCEMENT.md` + 推广使用指南
+- **技能安装**：`~/.hermes/skills/creative/guizang-material-illustration/` (归藏材质插画 v0.1, 54⭐)
 
 - GEO check integrated into `pipeline.run()` auto-flow, 5-gate quality contract
 - Text de-AI fully upgraded (47 phrases/sycophancy/hedging/burstiness/term locking)
