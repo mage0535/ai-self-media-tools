@@ -63,6 +63,7 @@ class ToolRegistry:
             "guizang_ppt": self._probe_skill_dir("creative/guizang-ppt"),
             "humanizer_zh": self._probe_skill_dir("humanizer-zh"),
             "logo_generator": self._probe_skill_dir("creative/logo-generator"),
+            "gzh_design_skill": self._probe_skill_dir("creative/gzh-design-skill"),
             "skills_adapter": self._probe_skills_adapter(),
         }
 
