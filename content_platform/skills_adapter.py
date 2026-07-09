@@ -126,6 +126,20 @@ def _check_logo_generator():
     }
 
 
+def _check_gzh_design():
+    """Check if gzh-design-skill is available (WeChat article formatting)."""
+    path = _hermes_home() / "skills" / "creative" / "gzh-design-skill"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    scripts = list(path.rglob("*.py")) if ok else []
+    return {
+        "available": ok,
+        "theme_count": 6,
+        "scripts": len(scripts),
+        "capability": "markdown_to_wechat_html",
+        "kind": "wechat_formatting",
+    }
+
+
 def get_status():
     """Return dict of all available enhancements."""
     autocli = _check_autocli()
@@ -139,6 +153,7 @@ def get_status():
         "guizang_material_illustration": _check_guizang_material_illustration(),
         "humanizer_zh": _check_humanizer_zh(),
         "logo_generator": _check_logo_generator(),
+        "gzh_design": _check_gzh_design(),
         "skills": skills,
         "total_skills": sum(s["skill_count"] for s in skills.values()),
     }

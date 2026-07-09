@@ -38,12 +38,14 @@ class MediaBridge:
         return provider.run(target)
 
     def generate(self, kind, job):
-        if kind not in {"image", "video", "audio", "illustration", "logo"}:
+        if kind not in {"image", "video", "audio", "illustration", "logo", "wechat_format"}:
             raise ValueError(f"unsupported media kind: {kind}")
         if kind == "illustration":
             return self._generate_illustration(job)
         if kind == "logo":
             return self._generate_logo(job)
+        if kind == "wechat_format":
+            return self._format_wechat(job)
         cfg = self.config.get(kind, {})
         if not cfg.get("enabled", False):
             return None
@@ -92,6 +94,40 @@ class MediaBridge:
             return None
         except Exception as exc:
             raise RuntimeError(f"logo generation failed: {exc}")
+
+    def _format_wechat(self, job):
+        """Use gzh-design-skill to convert markdown to WeChat HTML."""
+        try:
+            from .gzh_design import format_for_wechat
+
+            body = job.get("body", "")
+            title = job.get("title", job.get("topic", ""))
+            draft_meta = job.get("draft_meta", {})
+
+            # Pick theme from config or auto-detect from content form
+            cfg = self.config.get("wechat_format", {})
+            theme = cfg.get("default_theme", "摸鱼绿")
+
+            result = format_for_wechat(
+                markdown=f"# {title}\n\n{body}",
+                theme=theme,
+                title=title,
+            )
+
+            if not result.get("ok"):
+                return None
+
+            return {
+                "kind": "wechat_format",
+                "html": result["html"],
+                "html_path": result.get("html_path", ""),
+                "theme": result.get("theme", theme),
+                "validated": result.get("validation", {}).get("ok", False),
+            }
+        except ImportError:
+            return None
+        except Exception as exc:
+            raise RuntimeError(f"wechat formatting failed: {exc}")
 
     def _generate_image(self, job, output_dir, cfg):
         provider = self.registry.choose_provider("image")

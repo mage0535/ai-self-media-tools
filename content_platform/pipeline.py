@@ -105,6 +105,21 @@ class Pipeline:
                             self.store.add_artifact(job_id, "illustration", art["prompt_path"], "")
                 except Exception as exc:
                     self.store.record_event(job_id, "media_failed", {"kind": "illustration", "error": redact_secrets(exc)})
+            # gzh-design：Markdown → 公众号 HTML 格式转换
+            gzh_enabled = self.config.get("media", {}).get("wechat_format", {}).get("enabled", False)
+            if gzh_enabled and any("wechat" in p.lower() for p in job.get("brief", {}).get("platforms", job.get("platforms", []))):
+                try:
+                    gzh_artifact = self.media.generate("wechat_format", self.store.get_job(job_id))
+                    if gzh_artifact:
+                        self.store.add_artifact(job_id, "wechat_format",
+                                                 gzh_artifact.get("html_path", ""),
+                                                 gzh_artifact.get("validated", False))
+                        self.store.record_event(job_id, "wechat_formatted", {
+                            "theme": gzh_artifact.get("theme", "摸鱼绿"),
+                            "validated": gzh_artifact.get("validated", False),
+                        })
+                except Exception as exc:
+                    self.store.record_event(job_id, "media_failed", {"kind": "wechat_format", "error": redact_secrets(exc)})
             for kind in ("image", "video", "audio"):
                 try:
                     artifact = self.media.generate(kind, self.store.get_job(job_id))
