@@ -38,8 +38,10 @@ class MediaBridge:
         return provider.run(target)
 
     def generate(self, kind, job):
-        if kind not in {"image", "video", "audio"}:
+        if kind not in {"image", "video", "audio", "illustration"}:
             raise ValueError(f"unsupported media kind: {kind}")
+        if kind == "illustration":
+            return self._generate_illustration(job)
         cfg = self.config.get(kind, {})
         if not cfg.get("enabled", False):
             return None
@@ -88,7 +90,55 @@ class MediaBridge:
         checksum = hashlib.sha256(output.read_bytes()).hexdigest()
         return {"kind": "video", "path": str(output), "checksum": checksum}
 
-    def _generate_audio(self, job, output_dir, cfg):
+    def _generate_illustration(self, job):
+        """使用归藏材质插画风格生成带中文标签的解释图。"""
+        try:
+            from .illustrator import illustrate_for_pipeline
+
+            draft_meta = job.get("draft_meta", {})
+            draft = {
+                "title": job.get("title", ""),
+                "body": job.get("body", ""),
+                "topic": job.get("topic", ""),
+            }
+            # 优先从 draft_meta 取图提示词，没有则自动生成
+            if draft_meta.get("illustration_prompts"):
+                concepts = draft_meta["illustration_prompts"]
+            else:
+                result = illustrate_for_pipeline(draft)
+                if not result or not result.get("illustrations"):
+                    return None
+                concepts = result["illustrations"]
+
+            output_dir = self.data_dir / "artifacts" / job["id"]
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            artifacts = []
+            for idx, concept in enumerate(concepts):
+                prompt = concept["prompt"]
+                # 调用 hermes image_generate 生成图片
+                # 这里保存提示词，实际生成由 pipeline 编排层或外部调用
+                prompt_path = output_dir / f"illustration-{idx+1}-prompt.txt"
+                prompt_path.write_text(prompt, encoding="utf-8")
+                artifacts.append({
+                    "kind": "illustration",
+                    "index": idx,
+                    "prompt": prompt,
+                    "prompt_path": str(prompt_path),
+                    "structure": concept.get("structure", ""),
+                    "labels": concept.get("labels", []),
+                    "accent": concept.get("accent", "ikb_blue"),
+                })
+
+            return {
+                "kind": "illustration",
+                "artifacts": artifacts,
+                "prompt_count": len(artifacts),
+            }
+        except ImportError:
+            return None
+        except Exception as exc:
+            raise RuntimeError(f"illustration generation failed: {exc}")
         root = Path(__file__).resolve().parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
