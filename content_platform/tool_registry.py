@@ -64,6 +64,8 @@ class ToolRegistry:
             "humanizer_zh": self._probe_skill_dir("humanizer-zh"),
             "logo_generator": self._probe_skill_dir("creative/logo-generator"),
             "gzh_design_skill": self._probe_skill_dir("creative/gzh-design-skill"),
+            "magazine_layout": self._probe_skill_dir("creative/magazine-layout"),
+            "gif_splitter_skill": self._probe_skill_dir("utilities/gif-splitter"),
             "skills_adapter": self._probe_skills_adapter(),
         }
 

@@ -120,6 +120,20 @@ class Pipeline:
                         })
                 except Exception as exc:
                     self.store.record_event(job_id, "media_failed", {"kind": "wechat_format", "error": redact_secrets(exc)})
+            # magazine-layout：Markdown → 杂志风格 HTML（独立文章页）
+            magazine_enabled = self.config.get("media", {}).get("magazine_format", {}).get("enabled", False)
+            if magazine_enabled and any(p not in ("wechat", "weixin") for p in job.get("brief", {}).get("platforms", job.get("platforms", []))):
+                try:
+                    mag_artifact = self.media.generate("magazine_format", self.store.get_job(job_id))
+                    if mag_artifact:
+                        self.store.add_artifact(job_id, "magazine_format",
+                                                 mag_artifact.get("html_path", ""),
+                                                 mag_artifact.get("style", "现代极简"))
+                        self.store.record_event(job_id, "magazine_formatted", {
+                            "style": mag_artifact.get("style", "现代极简"),
+                        })
+                except Exception as exc:
+                    self.store.record_event(job_id, "media_failed", {"kind": "magazine_format", "error": redact_secrets(exc)})
             for kind in ("image", "video", "audio"):
                 try:
                     artifact = self.media.generate(kind, self.store.get_job(job_id))
