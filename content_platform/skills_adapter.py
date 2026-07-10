@@ -91,6 +91,80 @@ def _check_chrome_ext():
         return False
 
 
+def _check_guizang_material_illustration():
+    """Check if Guizang material illustration skill is available."""
+    path = _hermes_home() / "skills" / "creative" / "guizang-material-illustration"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    refs = len(list(path.rglob("*.md"))) if ok else 0
+    return {
+        "available": ok,
+        "ref_count": refs - 3 if ok else 0,
+        "capability": "labeled_explanatory_illustrations",
+        "kind": "illustration_generation",
+    }
+
+
+def _check_humanizer_zh():
+    """Check if Humanizer-zh AI de-writer is available."""
+    path = _hermes_home() / "skills" / "humanizer-zh"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    return {
+        "available": ok,
+        "rule_count": 24,
+        "kind": "text_humanization",
+    }
+
+
+def _check_logo_generator():
+    """Check if logo-generator skill is available."""
+    path = _hermes_home() / "skills" / "creative" / "logo-generator"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    return {
+        "available": ok,
+        "capability": "svg_logo_generation",
+        "kind": "logo_generation",
+    }
+
+
+def _check_gzh_design():
+    """Check if gzh-design-skill is available (WeChat article formatting)."""
+    path = _hermes_home() / "skills" / "creative" / "gzh-design-skill"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    scripts = list(path.rglob("*.py")) if ok else []
+    return {
+        "available": ok,
+        "theme_count": 6,
+        "scripts": len(scripts),
+        "capability": "markdown_to_wechat_html",
+        "kind": "wechat_formatting",
+    }
+
+
+def _check_magazine_layout():
+    """Check if magazine-layout skill is available (article HTML & PDF)."""
+    path = _hermes_home() / "skills" / "creative" / "magazine-layout"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    return {
+        "available": ok,
+        "style_count": 12,
+        "has_pdf_export": ok and (path / "scripts" / "html_to_pdf.py").exists(),
+        "capability": "markdown_to_magazine_html",
+        "kind": "magazine_layout",
+    }
+
+
+def _check_gif_splitter():
+    """Check if gif-splitter skill is available (GIF frame splitting)."""
+    path = _hermes_home() / "skills" / "utilities" / "gif-splitter"
+    ok = path.is_dir() and (path / "SKILL.md").exists()
+    return {
+        "available": ok,
+        "script_available": ok and (path / "scripts" / "split_gif.py").exists(),
+        "capability": "gif_frame_splitting",
+        "kind": "gif_utility",
+    }
+
+
 def get_status():
     """Return dict of all available enhancements."""
     autocli = _check_autocli()
@@ -101,6 +175,12 @@ def get_status():
         "fusion_script": FUSION_SCRIPT.exists(),
         "follow_builders": _check_follow_builders(),
         "aliens_eye": _check_aliens_eye(),
+        "guizang_material_illustration": _check_guizang_material_illustration(),
+        "humanizer_zh": _check_humanizer_zh(),
+        "logo_generator": _check_logo_generator(),
+        "gzh_design": _check_gzh_design(),
+        "magazine_layout": _check_magazine_layout(),
+        "gif_splitter": _check_gif_splitter(),
         "skills": skills,
         "total_skills": sum(s["skill_count"] for s in skills.values()),
     }
