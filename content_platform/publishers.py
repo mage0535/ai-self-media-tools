@@ -165,6 +165,8 @@ class SocialAutoUploadPublisher:
         python_bin=str(social_auto_upload_home() / "venv/bin/python"),
         schedule_at="2099-12-31 23:59",
         extra_args=None,
+        video_extra_args=None,
+        note_extra_args=None,
     ):
         self.platform_name = platform_name
         self.account_name = account_name
@@ -172,6 +174,8 @@ class SocialAutoUploadPublisher:
         self.python_bin = python_bin
         self.schedule_at = schedule_at
         self.extra_args = list(extra_args or [])
+        self.video_extra_args = list(video_extra_args or [])
+        self.note_extra_args = list(note_extra_args or [])
 
     def _run(self, args):
         command = [self.python_bin, "sau_cli.py", self.platform_name, *args]
@@ -211,6 +215,7 @@ class SocialAutoUploadPublisher:
             ]
             if tags:
                 args.extend(["--tags", tags])
+            args.extend(self.video_extra_args)
         else:
             images = self._image_files(job)
             if not images:
@@ -226,12 +231,27 @@ class SocialAutoUploadPublisher:
             ]
             if tags:
                 args.extend(["--tags", tags])
+            args.extend(self.note_extra_args)
         args.extend(self.extra_args)
         upload = self._run(args)
         if upload.returncode == 0:
             info = (upload.stdout or "").strip()[:300]
             return DeliveryResult(True, "drafted", f"{self.platform_name}:{self.account_name}", error=f"scheduled via social-auto-upload: {info}")
         return DeliveryResult(False, "failed", error=(upload.stderr or upload.stdout)[:300])
+
+
+class FallbackPublisher:
+    def __init__(self, publishers):
+        self.publishers = list(publishers)
+
+    def deliver(self, job, platform):
+        errors = []
+        for publisher in self.publishers:
+            result = publisher.deliver(job, platform)
+            if result.ok:
+                return result
+            errors.append(result.error or result.status)
+        return DeliveryResult(False, "blocked", error="; ".join(errors)[-500:])
 
 
 class TelegraphPublisher:
@@ -961,6 +981,14 @@ def build_publisher(platform, config, data_dir):
     publishers = config.get("publishers", {})
     cfg = publishers.get("platforms", {}).get(platform, publishers.get("default", {"type": "file"}))
     kind = cfg.get("type", "file")
+    if kind == "fallback":
+        options = cfg.get("publishers", [])
+        if not options:
+            raise ValueError(f"fallback publisher for {platform} requires publishers")
+        return FallbackPublisher([
+            build_publisher(platform, {"publishers": {"default": option}}, data_dir)
+            for option in options
+        ])
     if kind == "file":
         return FileDraftPublisher(cfg.get("outbox", str(Path(data_dir) / "outbox")))
     if kind == "devto-draft":
@@ -1000,6 +1028,8 @@ def build_publisher(platform, config, data_dir):
             python_bin=cfg.get("python_bin", str(social_auto_upload_home() / "venv/bin/python")),
             schedule_at=cfg.get("schedule_at", "2099-12-31 23:59"),
             extra_args=cfg.get("extra_args", []),
+            video_extra_args=cfg.get("video_extra_args", []),
+            note_extra_args=cfg.get("note_extra_args", []),
         )
     if kind == "aitoearn-draft":
         return AiToEarnDraftPublisher(
