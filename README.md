@@ -30,16 +30,17 @@
               │
      ┌────────┴──────────────────┐
      │    pipeline.run()         │
-     │  G1:风控 → G2:GEO → G3:去AI  │
-     │  → G4:媒体 → G5:格式完整   │
-     │  5门质量合约 · auto-rewrite │
+     |    G1:风控 → G2:GEO → G3:去AI  |
+     |     |  → humanizer(24规则) → G4:媒体 → G5:格式完整 |
+     |  5门质量合约 · auto-rewrite · Humanizer-zh
      └────────┬──────────────────┘
               │
          media.py — 媒体工厂
-    ┌──────────┼──────────┐
-  image.py   video.py   audio.py
-  ComfyUI/   Remotion/  edge-tts/
-  QwenImage  AutoClip   Kokoro/Piper
+        ┌──────────┬──────────┬──────────┐
+      image.py   video.py   audio.py   illustrator.py
+                                    (新增)归藏材质插画
+      ComfyUI/   Remotion/  edge-tts/  8 种图解结构
+      QwenImage  AutoClip   Kokoro     GPT-Image 2.0
               │
     ┌─────────┴───────────┐
     │    分发展        │
@@ -67,7 +68,10 @@
 | **去 AI 优化** | `content_platform/humanize.py` | 47 短语目录 + 谄媚/模糊词替换 + 折度 + 术语锁 |
 | **多平台发布** | `content_platform/publishers.py` | 23+ 发布器（微信/抖音/YouTube/LinkedIn/B站等） |
 | **配音引擎** | `scripts/voice_engine.py` | edge-tts 84 语言 + Kokoro/Piper 离线备选，去 AI 后处理 |
-| **管理控制台** | `content_platform/admin_server.py` | 全平台总览、详情、绑定、任务中心、GEO 趋势、仪表盘 |
+|| **归藏材质插画** | `content_platform/illustrator.py` | 自动提取概念→判断图解结构→生成归藏风格带中文标签提示词（8 种结构） |
+|| **Humanizer-zh 写作去痕** | `content_platform/humanizer.py` | 24 条中文 AI 写作检测规则，自动去 AI 痕迹，Hermes LLM 驱动 |
+|| **归藏 Logo 生成** | `content_platform/logogen.py` | SVG Logo 生成，6 种视觉方向，零 API 依赖 |
+|| **管理控制台** | `content_platform/admin_server.py` | 全平台总览、详情、绑定、任务中心、GEO 趋势、仪表盘 |
 | **内容日历** | `content_platform/scheduler.py` | Cron 驱动的内容排期、日历 API |
 | **RSS 摄入** | `content_platform/rss_ingest.py` | RSS/Atom 馈送解析、源项归一化 |
 | **Newsletter** | `content_platform/newsletter.py` | RSS→策展→HTML 邮件管线 |

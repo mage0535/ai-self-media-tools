@@ -70,6 +70,24 @@ class Pipeline:
             draft["draft_meta"]["geo_score"] = geo["score"]
             draft["draft_meta"]["geo_details"] = geo
             draft["draft_meta"]["quality_gate"] = gate
+            # Humanizer-zh: 草稿 AI 去痕处理
+            humanize_enabled = self.config.get("humanizer", {}).get("enabled", True)
+            if humanize_enabled and risk["level"] == "pass":
+                try:
+                    from .humanizer import humanize_text
+                    style_hint = draft.get("draft_meta", {}).get("strategy", {}).get("tone", "")
+                    h_result = humanize_text(draft["title"], draft["body"], style_hint=style_hint)
+                    if h_result.get("ok") and h_result.get("patterns_detected"):
+                        draft["title"] = h_result["title"]
+                        draft["body"] = h_result["body"]
+                        self.store.record_event(job_id, "humanized", {
+                            "patterns_found": list(h_result["patterns_detected"].keys()),
+                            "score": h_result.get("score", 0),
+                        })
+                except ImportError:
+                    pass  # humanizer module not available
+                except Exception as exc:
+                    self.store.record_event(job_id, "humanize_failed", {"error": redact_secrets(exc)})
             self.store.save_draft(
                 job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
             )
@@ -77,6 +95,45 @@ class Pipeline:
                 blocked = self.store.release_claim(job_id, owner, "blocked", "risk_blocked", detail={"hits": risk["hits"]})
                 self.notifier.send("blocked", blocked)
                 return self._hydrate(blocked)
+            # 归藏材质插画：为文章内容生成带中文标签的解释图
+            illustration_enabled = self.config.get("media", {}).get("illustration", {}).get("enabled", False)
+            if illustration_enabled:
+                try:
+                    illustration_artifacts = self.media.generate("illustration", self.store.get_job(job_id))
+                    if illustration_artifacts:
+                        for art in illustration_artifacts.get("artifacts", []):
+                            self.store.add_artifact(job_id, "illustration", art["prompt_path"], "")
+                except Exception as exc:
+                    self.store.record_event(job_id, "media_failed", {"kind": "illustration", "error": redact_secrets(exc)})
+            # gzh-design：Markdown → 公众号 HTML 格式转换
+            gzh_enabled = self.config.get("media", {}).get("wechat_format", {}).get("enabled", False)
+            if gzh_enabled and any("wechat" in p.lower() for p in job.get("brief", {}).get("platforms", job.get("platforms", []))):
+                try:
+                    gzh_artifact = self.media.generate("wechat_format", self.store.get_job(job_id))
+                    if gzh_artifact:
+                        self.store.add_artifact(job_id, "wechat_format",
+                                                 gzh_artifact.get("html_path", ""),
+                                                 gzh_artifact.get("validated", False))
+                        self.store.record_event(job_id, "wechat_formatted", {
+                            "theme": gzh_artifact.get("theme", "摸鱼绿"),
+                            "validated": gzh_artifact.get("validated", False),
+                        })
+                except Exception as exc:
+                    self.store.record_event(job_id, "media_failed", {"kind": "wechat_format", "error": redact_secrets(exc)})
+            # magazine-layout：Markdown → 杂志风格 HTML（独立文章页）
+            magazine_enabled = self.config.get("media", {}).get("magazine_format", {}).get("enabled", False)
+            if magazine_enabled and any(p not in ("wechat", "weixin") for p in job.get("brief", {}).get("platforms", job.get("platforms", []))):
+                try:
+                    mag_artifact = self.media.generate("magazine_format", self.store.get_job(job_id))
+                    if mag_artifact:
+                        self.store.add_artifact(job_id, "magazine_format",
+                                                 mag_artifact.get("html_path", ""),
+                                                 mag_artifact.get("style", "现代极简"))
+                        self.store.record_event(job_id, "magazine_formatted", {
+                            "style": mag_artifact.get("style", "现代极简"),
+                        })
+                except Exception as exc:
+                    self.store.record_event(job_id, "media_failed", {"kind": "magazine_format", "error": redact_secrets(exc)})
             for kind in ("image", "video", "audio"):
                 try:
                     artifact = self.media.generate(kind, self.store.get_job(job_id))

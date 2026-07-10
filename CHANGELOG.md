@@ -1,6 +1,55 @@
 # Changelog
 
-## 0.2 - 2026-07-08 — Phase 1-8 Full Implementation
+## 0.6 - 2026-07-09 — magazine-layout + gif-splitter 集成（jiamu-skills）
+
+- **magazine-layout 桥接**：新增 `content_platform/magazine.py` — 12 套杂志视觉风格
+  （经典优雅/现代极简/科技杂志/自然生活/大胆社论/复古怀旧/商务专业/创意艺术/学术期刊/时尚奢华/新闻报道/暗黑科技），
+  Tailwind CSS 精致排版 + Playwright PDF 导出，适用于 Dev.to/博客园/Steemit 等独立文章页
+- **gif-splitter 桥接**：新增 `content_platform/gif_utils.py` — GIF 动图帧数检测 & 智能切分，
+  Pillow 实现（280 帧阈值），直接补充 gzh-design 发布链（公众号 300 帧限制）
+- **管线集成**：`pipeline.run()` 新增 magazine_format 步骤（非 WeChat 平台自动生成杂志 HTML）；
+  `media.py` 新增 `magazine_format` 类型 + `_format_magazine()` 方法
+- **能力探测**：`skills_adapter.py` 新增 `_check_magazine_layout()` / `_check_gif_splitter()`；
+  `tool_registry.py` 新增 2 个探针
+- **技能安装**：`~/.hermes/skills/creative/magazine-layout/`（1235 行风格定义 + PDF 导出脚本）；
+  `~/.hermes/skills/utilities/gif-splitter/`（Pillow 动图处理）
+- **渠道推广增强**：杂志 HTML 格式可用于分发到非 WeChat 平台；GIF 切分解决 WeChat 上传瓶颈
+
+## 0.5 - 2026-07-09 — gzh-design-skill 集成（公众号精美排版）
+
+- **gzh-design-skill 桥接**：新增 `content_platform/gzh_design.py` — 基于 isjiamu/gzh-design-skill（1664⭐）的
+  Markdown 转公众号 HTML 引擎，6 套主题，自动章节编号、关键词下划线、合规校验
+- **管线集成**：`pipeline.run()` 新增 wechat_format 步骤；`media.py` 新增 `wechat_format` + `_format_wechat()`
+- **能力探测**：`skills_adapter.py` 新增 `_check_gzh_design()`；`tool_registry.py` 新增探针
+- **技能安装**：`~/.hermes/skills/creative/gzh-design-skill/`（71 文件，6 主题库 + 4 校验脚本）
+
+## 0.4 - 2026-07-09 — Humanizer-zh + logo-generator + guizang-s-prompt 集成
+
+- **Humanizer-zh 桥接**：新增 `content_platform/humanizer.py` — 24 条中文 AI 写作检测规则，
+  草稿通过风险审查后自动去 AI 痕迹（夸大的象征意义/三段式法则/AI 词汇/否定式排比等 8 大类），
+  保留修改记录（patterns_found + quality score）
+- **logo-generator 桥接**：新增 `content_platform/logogen.py` — SVG Logo 生成，
+  基于归藏设计范式（6 种视觉方向/极简几何/node network/letter mark），
+  零 API key 依赖（纯 LLM 生成 SVG）
+- **guizang-s-prompt 参考库**：克隆到 `~/.hermes/skills/references/guizang-s-prompt/` —
+  16 个图像 + 1 个视频 prompt 模板，作为内容生成时的 prompt 参考
+- **管线集成**：`pipeline.run()` 新增 humanizer 步骤（G3 审查后自动运行）；
+  `media.py` 新增 `logo` 媒体类型 + `_generate_logo()` 方法
+- **能力探测**：`skills_adapter.py` 新增 `_check_humanizer_zh()` / `_check_logo_generator()`；
+  `tool_registry.py` 新增 2 个归藏技能探针
+- **技能安装**：`~/.hermes/skills/humanizer-zh/` (Humanizer-zh v1.0, 12.6k⭐)；
+  `~/.hermes/skills/creative/logo-generator/` (归藏 Logo 生成器)
+- **渠道推广增强**：Logo 生成可用于推广项目品牌标识制作
+
+## 0.3 - 2026-07-09 — 归藏材质插画集成
+
+- **归藏材质插画桥接**：新增 `content_platform/illustrator.py` — 自动从文章内容提取核心概念，按归藏材质风格生成带中文标签的解释图提示词（8 种图解结构：循环/流程/中心辐射/对比/层级/数据场景/科学/文本场景）
+- **管线集成**：`pipeline.run()` 新增插画生成步骤（草稿通过风险审查后 → 自动生成插画提示词 → 存入 artifacts）
+- **媒体工厂扩展**：`media.py` 新增 `illustration` 媒体类型 + `_generate_illustration()` 方法
+- **能力探测**：`skills_adapter.py` 新增 `_check_guizang_material_illustration()` — 检测归藏材质插画技能是否可用
+- **工具注册**：`tool_registry.py` 新增 3 个归藏系列技能探针（material-illustration / social-card / ppt）
+- **渠道推广矩阵增强**：`promo/HERMES_SKILLS_ENHANCEMENT.md` + 推广使用指南
+- **技能安装**：`~/.hermes/skills/creative/guizang-material-illustration/` (归藏材质插画 v0.1, 54⭐)
 
 - GEO check integrated into `pipeline.run()` auto-flow, 5-gate quality contract
 - Text de-AI fully upgraded (47 phrases/sycophancy/hedging/burstiness/term locking)
