@@ -87,6 +87,64 @@
 | **微信** | REST API | app_id+secret | 图文草稿创建（含封面图） |
 | **小红书** | 格式化 | draft | 图文笔记排版 |
 | **抖音/快手/视频号** | social-auto-upload | cookie | 短视频发布 |
+
+### 国内浏览器发布后端
+
+抖音、B站、小红书、快手等需要浏览器会话的平台，建议统一走 `social-auto-upload` 后端：
+
+1. 将外部工具安装在项目内 `external/social-auto-upload`，或设置 `SOCIAL_AUTO_UPLOAD_HOME` 指向已有安装目录。
+2. 使用外部工具登录账号，账号文件保存在该工具自己的 `cookies/` 目录，例如 `douyin_<account>.json`、`bilibili_<account>.json`。
+3. 在运行目录的 `config.json` 中把对应平台配置为 `type: "social-auto-upload"`。
+4. 用 `python -m content_platform delivery-readiness` 检查项目目录、Python 环境、CLI 可启动性和账号文件数量。
+
+示例：
+
+```json
+{
+  "publishers": {
+    "platforms": {
+      "douyin": {
+        "type": "fallback",
+        "publishers": [
+          {
+            "type": "social-auto-upload",
+            "platform_name": "douyin",
+            "account_name": "<account-alias>"
+          },
+          {
+            "type": "file"
+          }
+        ]
+      },
+      "bilibili": {
+        "type": "fallback",
+        "publishers": [
+          {
+            "type": "social-auto-upload",
+            "platform_name": "bilibili",
+            "account_name": "<account-alias>",
+            "video_extra_args": ["--tid", "171"]
+          },
+          {
+            "type": "aitoearn-draft",
+            "env_file": "secrets/aitoearn.env"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+B站首次恢复或新增账号时运行：
+
+```bash
+cd "$SOCIAL_AUTO_UPLOAD_HOME"
+./venv/bin/python sau_cli.py bilibili login --account <account-alias>
+./venv/bin/python sau_cli.py bilibili check --account <account-alias>
+```
+
+新增渠道时优先复用同一模型：外部工具提供 `<platform> check/login/upload-*`，本项目配置 `platform_name`、`account_name` 和必要的 `extra_args`。上线初期可以用 `type: "fallback"` 保留旧后端兜底，不要把 cookie、token 或服务器路径写入仓库。
 | **B 站** | REST API | sessdata | 文章草稿 |
 | **博客园** | HTTP | 连通性测试 | 连接检测 |
 

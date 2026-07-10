@@ -2,6 +2,73 @@
 
 Last updated: 2026-07-07
 
+## 2026-07-11 Domestic Browser Publisher Recovery Wave
+
+### Goal
+
+Fix the server-side mismatch between the main project and the working browser-publishing toolchain, restore a maintainable Bilibili path, and make the new Douyin Chrome/cookie workflow a first-class publisher backend instead of a one-off server script.
+
+### Root Cause
+
+- The active project expected `social-auto-upload` under `CONTENT_PLATFORM_HOME/external/social-auto-upload` unless `SOCIAL_AUTO_UPLOAD_HOME` was set.
+- The server's working browser-publishing tool was installed as a separate runtime directory, so the main project could not reliably discover it.
+- The active project had no runtime `config.json`, so Douyin/Bilibili publisher selection fell back to defaults or older AiToEarn/env-cookie assumptions.
+- Bilibili had two incompatible credential models in circulation:
+  - the older built-in publisher expects `BILIBILI_SESSDATA` / `BILIBILI_JCT`
+  - `social-auto-upload` expects `cookies/bilibili_<account>.json`
+- No `bilibili_<account>.json` file was found during the server inspection, so Bilibili credentials could not be reconstructed from the filesystem.
+
+### Work Completed
+
+- `social_auto_upload_home()` now resolves in this order:
+  - explicit `SOCIAL_AUTO_UPLOAD_HOME`
+  - bundled `CONTENT_PLATFORM_HOME/external/social-auto-upload`
+  - user-home sibling `~/social-auto-upload`
+- `delivery-readiness` now reports:
+  - resolved `social-auto-upload` home
+  - project and Python runtime existence
+  - lightweight CLI startup probe
+  - Douyin and Bilibili cookie/account file counts
+- platform binding checks now treat Douyin, Bilibili, and Xiaohongshu as `social-auto-upload` account-file based bindings instead of hardcoding Bilibili to `BILIBILI_SESSDATA`.
+- `SocialAutoUploadPublisher` now supports `video_extra_args` and `note_extra_args`, so Bilibili category `--tid` and future platform-specific CLI flags can be configured without code changes.
+- added generic `FallbackPublisher`, so a new browser backend can be tried first while an older backend remains available as a rollout safety path.
+- README now documents the domestic browser publisher model, Bilibili recovery login command, and future channel integration pattern.
+
+### Server Remediation Applied
+
+- The active runtime should keep `CONTENT_PLATFORM_HOME` pointing at the main project runtime directory.
+- The external browser publisher should be exposed through `SOCIAL_AUTO_UPLOAD_HOME`.
+- The runtime `config.json` should map Douyin and Bilibili to `type: "social-auto-upload"` with `account_name: "main"`.
+- During recovery, Douyin and Bilibili can use `type: "fallback"` with `social-auto-upload` first and the previous draft backend second.
+- Bilibili recovery requires a fresh interactive login if `cookies/bilibili_<account>.json` is absent:
+
+```bash
+cd "$SOCIAL_AUTO_UPLOAD_HOME"
+./venv/bin/python sau_cli.py bilibili login --account <account-alias>
+./venv/bin/python sau_cli.py bilibili check --account <account-alias>
+```
+
+### Validation
+
+- Local targeted regression tests: `14 passed`
+- Local full suite: `161 passed`
+- Local `project-audit`: `ok: true`
+- Server full suite: `161 passed`
+- Server `project-audit`: `ok: true`
+- Server `social-auto-upload` checks:
+  - Douyin `main`: `valid`
+  - Bilibili account: `invalid` until `cookies/bilibili_<account>.json` is created by interactive login; fallback backends are configured.
+- Added tests for:
+  - configured `SOCIAL_AUTO_UPLOAD_HOME` readiness resolution
+  - Bilibili account-file based binding checks
+  - Bilibili `social-auto-upload` publisher command construction with configurable `--tid`
+
+### Notes For Future Contributors
+
+- Do not store cookies, SESSDATA, bili_jct, AppSecret, server IPs, passwords, or private paths in the repository.
+- Treat this repository as the orchestration layer and `social-auto-upload` as an external runtime dependency.
+- For a new domestic browser platform, add or install the platform implementation in the external tool, then configure this project with `type: "social-auto-upload"`, `platform_name`, `account_name`, and any required `video_extra_args` / `note_extra_args`.
+
 ## Mandatory Rules
 
 - This document is the single ongoing handoff document for all future work.
@@ -1925,4 +1992,3 @@ Execute all 8 planned phases from the 2026-07-07 Tech Radar in a single wave, br
 - Kokoro/Piper TTS providers are compiled stubs — full integration requires `pip install kokoro` or piper binary on the server.
 - MCP server requires `pip install mcp` (FastMCP package). Not installed by default; graceful error on import.
 - Newsletter SMTP delivery is configured via publisher config, not the newsletter CLI. The CLI renders HTML to `data/newsletters/` directory.
-

@@ -15,7 +15,16 @@ def trend_cache_dir():
 
 
 def social_auto_upload_home():
-    return Path(os.environ.get("SOCIAL_AUTO_UPLOAD_HOME", project_home() / "external" / "social-auto-upload"))
+    explicit = os.environ.get("SOCIAL_AUTO_UPLOAD_HOME")
+    if explicit:
+        return Path(explicit)
+    bundled = project_home() / "external" / "social-auto-upload"
+    if bundled.exists():
+        return bundled
+    sibling = Path.home() / "social-auto-upload"
+    if sibling.exists():
+        return sibling
+    return bundled
 
 
 def browser_profile_roots():

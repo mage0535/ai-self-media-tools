@@ -64,6 +64,64 @@ The console provides:
 - latest works, draft/published states, queue and failure panels
 - charts on both overview and platform detail pages
 
+## Domestic Browser Publishing Backend
+
+Platforms that require a browser session, such as Douyin, Bilibili, Xiaohongshu, and Kuaishou, should use `social-auto-upload` as the external runtime:
+
+1. Install the external tool under `external/social-auto-upload`, or set `SOCIAL_AUTO_UPLOAD_HOME` to an existing runtime.
+2. Log in through that tool. Account files stay in its local `cookies/` directory, such as `douyin_<account>.json` and `bilibili_<account>.json`.
+3. Configure each platform in the runtime `config.json` with `type: "social-auto-upload"`.
+4. Run `python -m content_platform delivery-readiness` to verify the tool path, Python runtime, CLI startup, and account-file counts.
+
+Example:
+
+```json
+{
+  "publishers": {
+    "platforms": {
+      "douyin": {
+        "type": "fallback",
+        "publishers": [
+          {
+            "type": "social-auto-upload",
+            "platform_name": "douyin",
+            "account_name": "<account-alias>"
+          },
+          {
+            "type": "file"
+          }
+        ]
+      },
+      "bilibili": {
+        "type": "fallback",
+        "publishers": [
+          {
+            "type": "social-auto-upload",
+            "platform_name": "bilibili",
+            "account_name": "<account-alias>",
+            "video_extra_args": ["--tid", "171"]
+          },
+          {
+            "type": "aitoearn-draft",
+            "env_file": "secrets/aitoearn.env"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+To recover or add a Bilibili account:
+
+```bash
+cd "$SOCIAL_AUTO_UPLOAD_HOME"
+./venv/bin/python sau_cli.py bilibili login --account <account-alias>
+./venv/bin/python sau_cli.py bilibili check --account <account-alias>
+```
+
+Do not commit cookies, tokens, server paths, or account data. New browser-based channels should follow the same model: external tool implementation plus `platform_name`, `account_name`, and optional `extra_args` configuration. During rollout, use `type: "fallback"` to keep an older backend available while the new browser backend is being validated.
+
 ## Documentation
 
 - [Project Guide (Chinese)](docs/PROJECT_GUIDE.zh.md)
