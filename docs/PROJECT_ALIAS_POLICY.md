@@ -2,10 +2,10 @@
 
 ## Purpose
 
-This project is part of a larger Hermes-side toolchain. Similar names such as
-`promo`, `matrix`, and `content-platform` can appear in parallel workspaces.
-To avoid cross-project confusion, every long-lived workspace should have one
-stable human-readable alias and one clear technical anchor.
+This project is intended to work across multiple agents and runtimes. Similar
+names such as `promo`, `matrix`, and `content-platform` can appear in parallel
+workspaces. To avoid cross-project confusion, every long-lived workspace should
+have one stable human-readable alias and one clear technical anchor.
 
 ## Public Alias For This Repository
 
@@ -40,7 +40,7 @@ For this repository, that means:
 2. the main content-platform orchestration runtime
 3. the paired `social-auto-upload` domestic browser-publishing runtime
 
-## Distinguish From Other Hermes Workspaces
+## Distinguish From Other Similar Workspaces
 
 Do not use `自媒体推广工具` or `AI自媒体运营推广工具` as a loose synonym for:
 
@@ -50,6 +50,17 @@ Do not use `自媒体推广工具` or `AI自媒体运营推广工具` as a loose
 - a historical backup snapshot
 
 Each of those should have its own alias and its own anchor set.
+
+## Multi-Agent Rule
+
+The alias policy should be usable by Hermes, Codex, Claude Code, OpenCode, or
+any other agent runtime. Public documentation should stay agent-neutral and
+describe:
+
+1. the stable alias
+2. the repository anchor
+3. the runtime pairing model
+4. the rule that the agent must stop if the anchor set is not confirmed
 
 ## Operator Rule
 

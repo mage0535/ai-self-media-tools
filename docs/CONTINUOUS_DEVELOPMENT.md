@@ -6,7 +6,7 @@ Last updated: 2026-07-07
 
 ### Goal
 
-Reduce future Hermes-side project confusion by defining a stable public alias
+Reduce future multi-agent project confusion by defining a stable public alias
 for this repository and separating public alias policy from server-private path
 registries.
 
@@ -16,6 +16,8 @@ registries.
 - kept `AI自媒体运营推广工具` as a compatible legacy alias
 - added a publishable alias-policy document:
   - `docs/PROJECT_ALIAS_POLICY.md`
+- added a publish-safe agent-neutral routing snippet:
+  - `docs/AGENT_CONTEXT_SNIPPET.md`
 - documented that server-specific absolute paths must live in a private alias
   registry outside the repository
 - reserved distinct naming space so this repository is not treated as a loose
@@ -28,7 +30,7 @@ registries.
 
 - `自媒体推广工具` should resolve only to this repository and its paired
   domestic browser-publishing runtime
-- similar Hermes-side workspaces such as promotion matrices or older content
+- similar parallel workspaces such as promotion matrices or older content
   stacks should use their own aliases and their own anchor sets
 
 ## 2026-07-11 Domestic Browser Publisher Recovery Wave
