@@ -16,6 +16,7 @@ logs/
 artifacts/
 outbox/
 installation-report.json
+config.json
 social-auto-upload/
 external/social-auto-upload/
 qrcode.png
