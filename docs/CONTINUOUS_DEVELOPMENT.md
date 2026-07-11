@@ -2,6 +2,34 @@
 
 Last updated: 2026-07-07
 
+## 2026-07-11 Project Alias Registry Wave
+
+### Goal
+
+Reduce future Hermes-side project confusion by defining a stable public alias
+for this repository and separating public alias policy from server-private path
+registries.
+
+### Work Completed
+
+- defined the public alias for this repository as `AI自媒体运营推广工具`
+- added a publishable alias-policy document:
+  - `docs/PROJECT_ALIAS_POLICY.md`
+- documented that server-specific absolute paths must live in a private alias
+  registry outside the repository
+- reserved distinct naming space so this repository is not treated as a loose
+  synonym for:
+  - generic `promo`
+  - generic `matrix`
+  - older `content-platform` mirrors or backups
+
+### Expected Hermes Usage
+
+- `AI自媒体运营推广工具` should resolve only to this repository and its paired
+  domestic browser-publishing runtime
+- similar Hermes-side workspaces such as promotion matrices or older content
+  stacks should use their own aliases and their own anchor sets
+
 ## 2026-07-11 Domestic Browser Publisher Recovery Wave
 
 ### Goal
