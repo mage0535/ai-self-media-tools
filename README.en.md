@@ -127,6 +127,7 @@ Do not commit cookies, tokens, server paths, or account data. New browser-based 
 - [Project Guide (Chinese)](docs/PROJECT_GUIDE.zh.md)
 - [Project Guide (English)](docs/PROJECT_GUIDE.en.md)
 - [Project Alias Policy](docs/PROJECT_ALIAS_POLICY.md)
+- [Agent Context Snippet](docs/AGENT_CONTEXT_SNIPPET.md)
 - [Installation Guide (Chinese)](docs/INSTALL.md)
 - [Installation Guide (English)](docs/INSTALL.en.md)
 - [Acknowledgements](docs/ACKNOWLEDGEMENTS.md)
