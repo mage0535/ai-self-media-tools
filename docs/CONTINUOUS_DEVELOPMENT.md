@@ -12,7 +12,8 @@ registries.
 
 ### Work Completed
 
-- defined the public alias for this repository as `AI自媒体运营推广工具`
+- defined the primary public alias for this repository as `自媒体推广工具`
+- kept `AI自媒体运营推广工具` as a compatible legacy alias
 - added a publishable alias-policy document:
   - `docs/PROJECT_ALIAS_POLICY.md`
 - documented that server-specific absolute paths must live in a private alias
@@ -25,7 +26,7 @@ registries.
 
 ### Expected Hermes Usage
 
-- `AI自媒体运营推广工具` should resolve only to this repository and its paired
+- `自媒体推广工具` should resolve only to this repository and its paired
   domestic browser-publishing runtime
 - similar Hermes-side workspaces such as promotion matrices or older content
   stacks should use their own aliases and their own anchor sets

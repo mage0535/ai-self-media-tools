@@ -9,7 +9,11 @@ stable human-readable alias and one clear technical anchor.
 
 ## Public Alias For This Repository
 
-The public alias for this repository is:
+The primary public alias for this repository is:
+
+- `自媒体推广工具`
+
+Compatible legacy alias:
 
 - `AI自媒体运营推广工具`
 
@@ -38,7 +42,7 @@ For this repository, that means:
 
 ## Distinguish From Other Hermes Workspaces
 
-Do not use `AI自媒体运营推广工具` as a loose synonym for:
+Do not use `自媒体推广工具` or `AI自媒体运营推广工具` as a loose synonym for:
 
 - a generic `promo` workspace
 - a generic `matrix` workspace
