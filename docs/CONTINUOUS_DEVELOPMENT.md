@@ -1512,8 +1512,8 @@ embedding 通过本地 OpenAI 兼容服务提供，无需额外部署。
 ### Open Notebook 服务
 ```
 部署路径: operator-managed local deployment
-Web UI:   http://localhost:8502
-REST API: http://<open-notebook-host> (healthy)
+Web UI:   http://<local-web-ui-host>:8502
+REST API: http://<local-api-host>:5055 (healthy)
 SurrealDB: :8000
 ```
 

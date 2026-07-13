@@ -197,7 +197,7 @@ python -m content_platform analyze-topic \
 
 python -m content_platform account-report \
   --topic "AI automation" \
-  --brief '{"reference_posts":[{"title":"Title","body":"Content","account_handle":"ai_lab","platform":"xiaohongshu"}]}'
+  --brief '{"reference_posts":[{"title":"Title","body":"Content","account_handle":"example_creator","platform":"xiaohongshu"}]}'
 
 python -m content_platform trends
 ```
@@ -218,7 +218,7 @@ python -m content_platform demo
 ### 4. Management Console
 
 ```bash
-python -m content_platform admin-serve --password "your-password"
+python -m content_platform admin-serve --password "<admin-password>"
 # Outputs one-time access link → browser → enter password
 ```
 

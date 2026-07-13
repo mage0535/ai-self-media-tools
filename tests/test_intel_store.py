@@ -19,13 +19,13 @@ class IntelStoreTests(unittest.TestCase):
         self.store.save_source_items(
             self.job["id"],
             [
-                {"source_type": "reference_post", "platform": "xiaohongshu", "account_handle": "ops_lab", "title": "Title", "body": "Body"},
+                {"source_type": "reference_post", "platform": "xiaohongshu", "account_handle": "example_creator", "title": "Title", "body": "Body"},
                 {"source_type": "reference_post", "platform": "douyin", "account_handle": "video_maker", "title": "Title 2", "body": "Body 2"},
             ],
         )
         self.store.save_account_snapshots(
             self.job["id"],
-            [{"account_handle": "ops_lab", "platform": "xiaohongshu", "display_name": "Ops Lab", "sample_count": 4}],
+            [{"account_handle": "example_creator", "platform": "xiaohongshu", "display_name": "Example Creator", "sample_count": 4}],
         )
         self.store.save_idea_candidates(
             self.job["id"],

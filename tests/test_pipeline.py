@@ -80,7 +80,7 @@ class PipelineTests(unittest.TestCase):
         job = self.pipeline.create(
             "Automation visuals",
             ["wechat"],
-            {"platforms": ["wechat", "douyin"], "reference_posts": [{"title": "Hook", "body": "1. A\n2. B\nSave this.", "account_handle": "ops_lab"}]},
+            {"platforms": ["wechat", "douyin"], "reference_posts": [{"title": "Hook", "body": "1. A\n2. B\nSave this.", "account_handle": "example_creator"}]},
         )
         self.pipeline.run(job["id"])
         self.assertTrue(self.store.source_items(job["id"]))

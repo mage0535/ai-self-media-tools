@@ -45,7 +45,7 @@ class CliTests(unittest.TestCase):
                         "--topic",
                         "Automation visuals",
                         "--brief",
-                        '{"platforms":["douyin"],"reference_posts":[{"title":"Hook","body":"1. A\\n2. B\\nSave this.","account_handle":"ops_lab"}]}',
+                        '{"platforms":["douyin"],"reference_posts":[{"title":"Hook","body":"1. A\\n2. B\\nSave this.","account_handle":"example_creator"}]}',
                     ]
                 )
             result = json.loads(output.getvalue())
@@ -67,13 +67,13 @@ class CliTests(unittest.TestCase):
                         "--topic",
                         "Automation visuals",
                         "--brief",
-                        '{"reference_posts":[{"title":"Hook","body":"1. A 2. B Save this.","account_handle":"ops_lab","platform":"xiaohongshu"}]}',
+                        '{"reference_posts":[{"title":"Hook","body":"1. A 2. B Save this.","account_handle":"example_creator","platform":"xiaohongshu"}]}',
                     ]
                 )
             result = json.loads(output.getvalue())
         self.assertEqual(code, 0)
         self.assertEqual(result["account_count"], 1)
-        self.assertIn("ops_lab", result["top_accounts"])
+        self.assertIn("example_creator", result["top_accounts"])
 
 
 if __name__ == "__main__":

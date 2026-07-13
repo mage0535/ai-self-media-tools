@@ -60,7 +60,7 @@ result = research_topic(
 
 Default API endpoint:
 
-- `http://<open-notebook-host>`
+- `OPEN_NOTEBOOK_API` environment variable
 
 Typical endpoints:
 

@@ -17,8 +17,8 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
             python_bin.parent.mkdir(parents=True)
             python_bin.write_text("#!/usr/bin/env python\n", encoding="utf-8")
             (root / "cookies").mkdir()
-            (root / "cookies" / "bilibili_<account>.json").write_text("{}", encoding="utf-8")
-            (root / "cookies" / "douyin_<account>.json").write_text("{}", encoding="utf-8")
+            (root / "cookies" / "bilibili_example.json").write_text("{}", encoding="utf-8")
+            (root / "cookies" / "douyin_example.json").write_text("{}", encoding="utf-8")
 
             with patch.dict(os.environ, {"SOCIAL_AUTO_UPLOAD_HOME": str(root)}):
                 with patch("content_platform.readiness.subprocess.run") as run:
@@ -35,7 +35,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "cookies").mkdir()
-            (root / "cookies" / "bilibili_<account>.json").write_text("{}", encoding="utf-8")
+            (root / "cookies" / "bilibili_example.json").write_text("{}", encoding="utf-8")
             readiness = {
                 "tools": {
                     "social_auto_upload": {
@@ -47,7 +47,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                 }
             }
             with patch.dict(os.environ, {"SOCIAL_AUTO_UPLOAD_HOME": str(root)}, clear=True):
-                result = evaluate_platform_binding("bilibili", {"account_key": "main"}, readiness)
+                result = evaluate_platform_binding("bilibili", {"account_key": "example"}, readiness)
             self.assertEqual(result["status"], "connected")
 
     def test_social_auto_upload_bilibili_video_extra_args_are_config_driven(self):
@@ -67,7 +67,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                         "platforms": {
                             "bilibili": {
                                 "type": "social-auto-upload",
-                                "account_name": "<account-alias>",
+                                "account_name": "example",
                                 "project_dir": tmp,
                                 "python_bin": "python",
                                 "video_extra_args": ["--tid", "171"],
@@ -105,7 +105,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                             "publishers": [
                                 {
                                     "type": "social-auto-upload",
-                                    "account_name": "<account-alias>",
+                                    "account_name": "example",
                                     "project_dir": tmp,
                                     "python_bin": "python",
                                 },

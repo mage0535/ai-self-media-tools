@@ -11,13 +11,13 @@ class StrategyTests(unittest.TestCase):
             {
                 "title": "3 ways to automate research",
                 "body": "Start with the conclusion.\n\n1. Define the workflow\n2. Gather examples\n3. Review output\n\nSave this for later.",
-                "account_handle": "ops_lab",
+                "account_handle": "example_creator",
                 "platform": "xiaohongshu",
             },
             {
                 "title": "How I cut 2 hours from publishing",
                 "body": "Here is the checklist.\n\nUse one workflow, one review gate, one publishing queue.",
-                "account_handle": "ops_lab",
+                "account_handle": "example_creator",
                 "platform": "wechat",
             },
             {
@@ -31,8 +31,8 @@ class StrategyTests(unittest.TestCase):
         self.assertEqual(report["sample_count"], 3)
         self.assertEqual(report["account_count"], 2)
         self.assertIn("listicle", report["style_signature"]["formats"])
-        self.assertIn("ops_lab", report["top_accounts"])
-        self.assertGreaterEqual(report["account_sample_count"]["ops_lab"], 2)
+        self.assertIn("example_creator", report["top_accounts"])
+        self.assertGreaterEqual(report["account_sample_count"]["example_creator"], 2)
 
     def test_viral_score_rewards_visual_hot_platform_fit(self):
         references = [{"title": "Visual automation workflow", "body": "Strong hook. Save this.", "platform": "xiaohongshu"}]

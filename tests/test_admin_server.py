@@ -38,7 +38,7 @@ class AdminServerTests(unittest.TestCase):
         return response.status, json.loads(body)
 
     def test_one_time_launch_login_and_platform_binding_flow(self):
-        server = make_admin_server(self.db_path, password="secret123", host="127.0.0.1", port=0)
+        server = make_admin_server(self.db_path, password="test-password", host="127.0.0.1", port=0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -51,7 +51,7 @@ class AdminServerTests(unittest.TestCase):
                 html = response.read().decode()
             self.assertIn("AI Self-Media Control Center", html)
 
-            status, logged_in = self._open_json(opener, login_url, method="POST", payload={"password": "secret123"})
+            status, logged_in = self._open_json(opener, login_url, method="POST", payload={"password": "test-password"})
             self.assertEqual(status, 200)
             self.assertTrue(logged_in["ok"])
 
@@ -88,13 +88,13 @@ class AdminServerTests(unittest.TestCase):
             self.assertIn("llm_analysis", platform_detail)
 
             with self.assertRaises(Exception):
-                self._open_json(urllib.request.build_opener(), login_url, method="POST", payload={"password": "secret123"})
+                self._open_json(urllib.request.build_opener(), login_url, method="POST", payload={"password": "test-password"})
         finally:
             server.shutdown()
             server.server_close()
 
     def test_task_center_and_task_actions_round_trip(self):
-        server = make_admin_server(self.db_path, password="secret123", host="127.0.0.1", port=0)
+        server = make_admin_server(self.db_path, password="test-password", host="127.0.0.1", port=0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -102,7 +102,7 @@ class AdminServerTests(unittest.TestCase):
             login_url = f"http://127.0.0.1:{server.server_port}/api/auth/login?" + launch_url.split("?", 1)[1]
             opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
             opener.open(launch_url, timeout=5).read()
-            self._open_json(opener, login_url, method="POST", payload={"password": "secret123"})
+            self._open_json(opener, login_url, method="POST", payload={"password": "test-password"})
 
             tasks_url = f"http://127.0.0.1:{server.server_port}/api/tasks"
             status, tasks = self._open_json(opener, tasks_url)

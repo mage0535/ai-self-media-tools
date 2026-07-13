@@ -260,7 +260,7 @@ python -m content_platform analyze-topic \
 # 账号分析
 python -m content_platform account-report \
   --topic "AI automation" \
-  --brief '{"reference_posts":[{"title":"标题","body":"正文","account_handle":"ai_lab","platform":"xiaohongshu"}]}'
+  --brief '{"reference_posts":[{"title":"标题","body":"正文","account_handle":"example_creator","platform":"xiaohongshu"}]}'
 
 # 趋势排名
 python -m content_platform trends
@@ -283,7 +283,7 @@ python -m content_platform demo
 ### 4. 管理控制台
 
 ```bash
-python -m content_platform admin-serve --password "your-password"
+python -m content_platform admin-serve --password "<admin-password>"
 # 输出一次性访问链接 → 浏览器打开 → 输入密码
 ```
 

@@ -331,24 +331,27 @@ def main():
 
     if args.command == "digest":
         if not args.url and not args.text:
-            print("❌ 需要 --url 或 --text")
+            print("ERROR: requires --url or --text")
             sys.exit(1)
         result = digest_source(url=args.url, text=args.text, title=args.title, topic=args.topic)
         print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
 
     elif args.command == "research":
         result = research_topic(topic=args.topic, urls=args.urls, texts=args.texts)
         print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
 
     elif args.command == "health":
         try:
             client = OpenNotebookClient()
             h = client.health()
-            print(f"✅ Open Notebook: {h.get('status', 'unknown')}")
-            print(f"   API: {OPEN_NOTEBOOK_API}")
+            print(f"Open Notebook: {h.get('status', 'unknown')}")
+            print(f"API: {OPEN_NOTEBOOK_API}")
         except Exception as e:
-            print(f"❌ Open Notebook unreachable: {e}")
+            print(f"Open Notebook unreachable: {e}")
             sys.exit(1)
+        return
 
     else:
         parser.print_help()

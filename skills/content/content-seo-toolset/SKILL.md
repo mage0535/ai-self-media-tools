@@ -15,7 +15,7 @@ tools:
 
 ## OpenAI SERP Data (OpenSERP)
 
-VPS 自托管 Docker: `{{OPENSERP_HOST}}`, 无需 API key, 6 引擎
+通过 `OPENSERP_ENDPOINT` / `OPENSERP_HOST` 指向你的自托管或代理服务，不要在仓库里写入真实服务器地址。支持 6 个搜索引擎。
 
 ```bash
 content-platform seo-search --query "AI 工具" --engine duck --limit 5

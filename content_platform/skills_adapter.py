@@ -17,8 +17,10 @@ skills_adapter.py — 桥接项目三 (Hermes Skills + AutoCLI) 到项目一的 
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -33,18 +35,12 @@ OUTPUT_DIR = _hermes_home() / "pipeline" / "content_queue"
 
 def _check_autocli():
     """Check if autocli binary + daemon are available."""
-    ok = bool(subprocess.run(
-        ["which", "autocli"], capture_output=True, text=True
-    ).returncode == 0)
+    ok = bool(shutil.which("autocli"))
     daemon = False
     if ok:
         try:
-            r = subprocess.run(
-                ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-                 "http://127.0.0.1:19925/health"],
-                capture_output=True, text=True, timeout=3
-            )
-            daemon = r.stdout.strip() == "200"
+            with urllib.request.urlopen("http://127.0.0.1:19925/health", timeout=3) as response:
+                daemon = response.status == 200
         except Exception:
             pass
     return {"available": ok, "daemon_running": daemon}

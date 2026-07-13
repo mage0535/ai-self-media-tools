@@ -19,8 +19,11 @@ class ToolRegistry:
     def _exists(self, value):
         if not value:
             return False
-        path = Path(str(value))
-        return path.exists() if path.drive or str(value).startswith(("/", ".")) else bool(shutil.which(str(value)))
+        text = str(value)
+        path = Path(text).expanduser()
+        if path.is_absolute() or text.startswith(".") or "/" in text or "\\" in text:
+            return path.exists()
+        return bool(shutil.which(text))
 
     def probe(self):
         media_cfg = self.config.get("media", {})

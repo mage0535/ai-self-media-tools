@@ -89,7 +89,7 @@ python -m content_platform feedback-summary
 ### 5.6 管理页面
 
 ```bash
-python -m content_platform admin-serve --password "你的密码"
+python -m content_platform admin-serve --password "<admin-password>"
 ```
 
 操作流程：
@@ -182,7 +182,7 @@ python -m content_platform status <job_id>
 ### 8.6 管理页启动与操作
 
 ```bash
-python -m content_platform admin-serve --password "你的密码"
+python -m content_platform admin-serve --password "<admin-password>"
 ```
 
 ## 9. 生成的产物

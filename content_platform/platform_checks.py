@@ -23,8 +23,8 @@ def _account_name(binding):
     return config.get("account_name") or binding.get("account_key") or "default"
 
 
-def _social_account_candidates(platform, account_name):
-    root = social_auto_upload_home() / "cookies"
+def _social_account_candidates(platform, account_name, project_dir=""):
+    root = (Path(project_dir) if project_dir else social_auto_upload_home()) / "cookies"
     legacy_dirs = {
         "douyin": root / "douyin_uploader" / f"{account_name}.json",
         "kuaishou": root / "ks_uploader" / f"{account_name}.json",
@@ -51,10 +51,13 @@ def evaluate_platform_binding(platform, binding, readiness):
             missing.append(str(path))
     if requirements.get("social_auto_upload"):
         account_name = _account_name(binding)
-        candidates = _social_account_candidates(platform, account_name)
+        publisher_cfg = readiness.get("publishers", {}).get(platform, {})
+        binding_cfg = binding.get("config") or {}
+        project_dir = binding_cfg.get("project_dir") or binding.get("project_dir") or ""
+        candidates = _social_account_candidates(platform, account_name, project_dir)
         if not any(path.exists() for path in candidates):
             missing.append(" or ".join(str(path) for path in candidates))
-        social_tool = readiness.get("tools", {}).get("social_auto_upload", {})
+        social_tool = publisher_cfg if publisher_cfg.get("type") == "social-auto-upload" else readiness.get("tools", {}).get("social_auto_upload", {})
         if not social_tool.get("project_dir_exists") or not social_tool.get("python_bin_exists"):
             missing.append("social-auto-upload runtime")
         cli_probe = social_tool.get("cli_probe") or {}

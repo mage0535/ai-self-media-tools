@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from content_platform.skills_adapter import get_status
 from content_platform.tool_adapters import ScriptAnalyzerProvider, ScriptOCRProvider, ScriptTranscriberProvider, ScriptImageProvider
 from content_platform.tool_registry import ToolRegistry
 
@@ -42,6 +43,17 @@ class ToolRegistryTests(unittest.TestCase):
             registry = ToolRegistry({"media": {"image": {"script": str(script)}}})
             provider = registry.choose_provider("image")
             self.assertIsInstance(provider, ScriptImageProvider)
+
+    def test_registry_reports_repo_relative_script_paths(self):
+        registry = ToolRegistry({"media": {"image": {"script": "scripts/voice_engine.py"}}})
+        result = registry.probe()
+        self.assertTrue(result["image_script"]["available"])
+
+    def test_skills_adapter_status_handles_missing_autocli_without_crashing(self):
+        with patch("content_platform.skills_adapter.shutil.which", return_value=""):
+            status = get_status()
+        self.assertIn("autocli", status)
+        self.assertFalse(status["autocli"]["available"])
 
 
 if __name__ == "__main__":

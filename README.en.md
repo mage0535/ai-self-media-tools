@@ -43,7 +43,7 @@ It is built around:
 Start it with:
 
 ```bash
-python -m content_platform admin-serve --password "your-password"
+python -m content_platform admin-serve --password "<admin-password>"
 ```
 
 The command prints a one-time access URL.
@@ -140,7 +140,7 @@ python scripts/install.py
 python -m content_platform health
 python -m content_platform content-readiness
 python -m content_platform analyze-topic --topic "AI workflows" --brief "{\"platforms\":[\"wechat\",\"douyin\"]}"
-python -m content_platform admin-serve --password "your-password"
+python -m content_platform admin-serve --password "<admin-password>"
 ```
 
 ## Version Note

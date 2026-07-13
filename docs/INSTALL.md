@@ -94,7 +94,7 @@ python -m content_platform project-audit
 管理页启动时必须设置密码：
 
 ```bash
-python -m content_platform admin-serve --password "你的密码"
+python -m content_platform admin-serve --password "<admin-password>"
 ```
 
 需要确认：
@@ -115,7 +115,7 @@ python -m content_platform project-audit
 ## 6. 管理页面启动
 
 ```bash
-python -m content_platform admin-serve --password "你的密码"
+python -m content_platform admin-serve --password "<admin-password>"
 ```
 
 启动后会输出一次性访问链接。

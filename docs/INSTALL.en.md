@@ -74,7 +74,7 @@ Choose whether to use:
 Start the console with:
 
 ```bash
-python -m content_platform admin-serve --password "your-password"
+python -m content_platform admin-serve --password "<admin-password>"
 ```
 
 The command prints a one-time access URL.

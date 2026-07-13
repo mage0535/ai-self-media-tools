@@ -75,7 +75,7 @@ class IntelligenceTests(unittest.TestCase):
             {
                 "trend_stage": "hot",
                 "platforms": ["douyin", "xiaohongshu"],
-                "reference_posts": [{"title": "Hook first", "body": "1. Step one\n2. Step two\nSave this.", "account_handle": "ops_lab", "platform": "xiaohongshu"}],
+                "reference_posts": [{"title": "Hook first", "body": "1. Step one\n2. Step two\nSave this.", "account_handle": "example_creator", "platform": "xiaohongshu"}],
             },
         )
         self.assertIn("niche_report", context)
