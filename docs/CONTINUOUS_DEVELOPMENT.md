@@ -2091,3 +2091,6 @@ Convert the "publish less, publish clearer" SEO/GEO guidance into a real pre-gen
 
 - Focused tests: `python -m pytest tests/test_store.py tests/test_intelligence.py tests/test_pipeline.py`
 - Compile check: `python -m compileall content_platform scripts`
+- Full tests: `python -m pytest` -> 172 passed
+- GitHub sync: `main` pushed with commit `d9302843feb7ba1ca80526fe3fce407e46c1100b`
+- Local/GitHub state: local `main` is aligned with `origin/main`
