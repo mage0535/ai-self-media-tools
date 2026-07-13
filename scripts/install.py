@@ -59,16 +59,37 @@ def render_config(home: Path):
                 "timeout": 120,
             },
             "video": {
-                "enabled": True,
+                "enabled": False,
                 "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
                 "script": str(home / "external" / "scripts" / "video_pipeline.py"),
                 "timeout": 600,
             },
+            "audio": {
+                "enabled": False,
+                "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
+                "mode": "auto",
+                "timeout": 300,
+            },
+        },
+        "content_policy": {
+            "original_content": "image_text_only",
+            "short_video": "repurpose_existing_source_only",
+            "allow_local_video_generation": False,
+            "allow_local_audio_generation": False,
         },
         "ocr": {"script": str(home / "external" / "scripts" / "ocr_pipeline.py"), "timeout": 120},
         "transcription": {"script": str(home / "external" / "scripts" / "transcribe_pipeline.py"), "timeout": 300},
         "analysis": {"script": str(home / "external" / "scripts" / "multimodal_analyze.py"), "timeout": 180},
         "publishers": {
+            "routing_defaults": {
+                "enabled": True,
+                "domestic": {"type": "social-auto-upload", "account_name": "<account-alias>"},
+                "international": {
+                    "type": "aitoearn-draft",
+                    "base_url": "https://aitoearn.ai/api/unified/mcp",
+                    "api_key_env": "AITOEARN_INTL_API_KEY",
+                },
+            },
             "default": {"type": "file", "outbox": str(home / "data" / "outbox")}
         },
         "notifications": {

@@ -7,6 +7,7 @@ from unittest.mock import patch
 from content_platform.media import MediaBridge
 from content_platform.notify import Notifier
 from content_platform.publishers import FileDraftPublisher, TelegraphPublisher
+from scripts.autoclip_adapter import run_autoclip_pipeline
 
 
 class AdapterTests(unittest.TestCase):
@@ -55,6 +56,11 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(bridge.ocr(str(sample))["summary"], "ok")
             self.assertEqual(bridge.transcribe(str(sample))["summary"], "ok")
             self.assertEqual(bridge.analyze(str(sample))["summary"], "ok")
+
+    def test_autoclip_local_video_processing_is_disabled_by_default(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "local video processing is disabled"):
+                run_autoclip_pipeline("https://example.com/video")
 
     def test_video_bridge_passes_approved_copy_and_discovers_generated_file(self):
         script = self.root / "video_pipeline.py"

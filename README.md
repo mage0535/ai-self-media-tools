@@ -4,7 +4,7 @@
 
 > 📦 **定位**：面向 Hermes / OpenCode / Claude Code / Codex 等智能体的内容生产工具链。非独立应用，而是智能体编排的内容工厂。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/) [![edge-tts](https://img.shields.io/badge/edge--tts-84%2B%20languages-green)](https://github.com/rany2/edge-tts) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/<github-owner>/<repository>/pulls) [![Version](https://img.shields.io/badge/version-0.2-orange)](.)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/) [![edge-tts](https://img.shields.io/badge/edge--tts-84%2B%20languages-green)](https://github.com/rany2/edge-tts) [![Version](https://img.shields.io/badge/version-0.2-orange)](.)
 
 **[English](README.en.md)**
 
@@ -437,7 +437,7 @@ python -m content_platform.mcp_server --transport sse --port 9600
 
 ## 相关项目
 
-- **[Knowledge-and-Memory-Management](https://github.com/<github-owner>/<related-repository>)** — AI 知识采集与记忆体管理插件。40+ 采集工具、SenseNova 文档引擎、12+ 云盘同步、三层知识召回。
+- **Knowledge-and-Memory-Management** — AI 知识采集与记忆体管理插件。40+ 采集工具、SenseNova 文档引擎、12+ 云盘同步、三层知识召回。
 - **[Hermes Agent](https://github.com/nousresearch/hermes)** — Hermes 智能体框架
 - **[edge-tts](https://github.com/rany2/edge-tts)** — 84+ 语言 TTS 引擎
 - **[Kokoro](https://github.com/hexgrad/kokoro)** — 82M 参数离线 TTS

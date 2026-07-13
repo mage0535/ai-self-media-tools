@@ -163,6 +163,37 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertEqual(result.status, "drafted")
         self.assertEqual(result.external_id, "draft-1")
 
+    def test_routing_defaults_send_domestic_to_social_auto_upload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            publisher = build_publisher(
+                "douyin",
+                {
+                    "publishers": {
+                        "routing_defaults": {
+                            "enabled": True,
+                            "domestic": {"account_name": "example", "project_dir": tmp, "python_bin": "python"},
+                        }
+                    }
+                },
+                tmp,
+            )
+
+        self.assertIsInstance(publisher, SocialAutoUploadPublisher)
+        self.assertEqual(publisher.platform_name, "douyin")
+        self.assertEqual(publisher.account_name, "example")
+
+    def test_routing_defaults_send_international_to_aitoearn_intl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            publisher = build_publisher(
+                "tiktok",
+                {"publishers": {"routing_defaults": {"enabled": True}}},
+                tmp,
+            )
+
+        self.assertIsInstance(publisher, AiToEarnDraftPublisher)
+        self.assertEqual(publisher.base_url, "https://aitoearn.ai/api/unified/mcp")
+        self.assertEqual(publisher.api_key_env, "AITOEARN_INTL_API_KEY")
+
     def test_aitoearn_flow_publisher_returns_handoff_pending(self):
         class FakeClient:
             def get_platform_metadata(self, platform):

@@ -122,7 +122,9 @@ class ToolRegistry:
             return {"available": False, "kind": "skills_bridge", "error": "import_failed"}
 
     def _probe_open_notebook(self):
-        api = os.environ.get("OPEN_NOTEBOOK_API", "http://<open-notebook-host>")
+        api = os.environ.get("OPEN_NOTEBOOK_API", "")
+        if not api:
+            return {"available": False, "url": "", "kind": "research"}
         try:
             import requests
 

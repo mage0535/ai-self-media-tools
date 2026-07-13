@@ -1,4 +1,5 @@
-SHORT_VIDEO_PLATFORMS = {"douyin", "tiktok", "youtube", "bilibili", "kuaishou"}
+from .content_policy import SHORT_VIDEO_PLATFORMS
+
 NOTE_PLATFORMS = {"xiaohongshu", "rednote", "instagram", "threads"}
 ARTICLE_PLATFORMS = {"wechat", "weixin", "devto", "linkedin", "telegraph", "mataroa", "tabnews"}
 
@@ -15,7 +16,7 @@ def choose_content_strategy(topic, brief, viral_score, niche_report):
     recommendation = str(viral_score.get("recommendation", "test"))
     if any(platform in SHORT_VIDEO_PLATFORMS for platform in primary_platforms) and visual >= 0.75:
         content_form = "short_video"
-        asset_plan = ["script", "cover", "audio", "video"]
+        asset_plan = ["source_video", "cover", "caption"]
     elif any(platform in NOTE_PLATFORMS for platform in primary_platforms):
         content_form = "social_note"
         asset_plan = ["cover", "content_images", "caption"]
@@ -33,6 +34,8 @@ def choose_content_strategy(topic, brief, viral_score, niche_report):
         warnings.append("topic score is below publish threshold; gather more references before scaling")
     if not niche_report.get("account_count", 0):
         warnings.append("same-track account evidence is thin")
+    if content_form == "short_video":
+        warnings.append("short video strategy requires an existing source video; local video generation is disabled by default")
     return {
         "topic": topic,
         "content_form": content_form,

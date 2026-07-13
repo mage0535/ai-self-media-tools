@@ -28,7 +28,7 @@ from typing import Optional
 import requests
 
 # ── 配置 ─────────────────────────────────────────────
-OPEN_NOTEBOOK_API = os.environ.get("OPEN_NOTEBOOK_API", "http://<open-notebook-host>")
+OPEN_NOTEBOOK_API = os.environ.get("OPEN_NOTEBOOK_API", "")
 OPEN_NOTEBOOK_PASSWORD = os.environ.get("OPEN_NOTEBOOK_PASSWORD", "")
 DEFAULT_TIMEOUT = 60
 

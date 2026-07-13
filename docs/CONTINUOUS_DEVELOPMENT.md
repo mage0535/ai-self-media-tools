@@ -2019,7 +2019,48 @@ Execute all 8 planned phases from the 2026-07-07 Tech Radar in a single wave, br
 
 ### Notes
 
-- GitHub push blocked by credential rotation (`gh` logged in as `<github-account>`, `<github-account>` token expired). Push pending token refresh.
+- GitHub push blocked by credential rotation. Push pending token refresh.
 - Kokoro/Piper TTS providers are compiled stubs — full integration requires `pip install kokoro` or piper binary on the server.
 - MCP server requires `pip install mcp` (FastMCP package). Not installed by default; graceful error on import.
 - Newsletter SMTP delivery is configured via publisher config, not the newsletter CLI. The CLI renders HTML to `data/newsletters/` directory.
+
+## 2026-07-13 Content Strategy Hardening
+
+### Trigger
+
+Teammate handoff fixed the operating strategy:
+
+- Short video content uses repurposed source assets only.
+- Original content is image/text only.
+- Domestic publishing goes through `social-auto-upload` (SAU).
+- International publishing goes through AiToEarn Intl.
+- Local model/FFmpeg video generation must not be part of the default business path.
+
+The referenced server-only 2026-07-13 handoff document is not present in this checkout. The local repo was therefore hardened against the rules above, and the server-only document/modules still need a separate backfill pass if live server access is available.
+
+### Code Changes
+
+| Area | Change |
+|------|--------|
+| Strategy policy | Added `content_platform/content_policy.py` for platform region routing, short-video platform detection, generated-media rules, and default publisher config. |
+| Original pipeline | `Pipeline.run()` now asks the policy layer which local media kinds may be generated. Default behavior is image-only; local `video` and `audio` require explicit policy opt-in. |
+| Short video strategy | `strategy_router.py` now plans `source_video + cover + caption` instead of `script + cover + audio + video`, and emits a warning that source video is required. |
+| Quality gate | Short-video `G4_media_assets` now checks for `source_video` in the plan instead of accepting any media plan. |
+| Publishing defaults | `build_publisher()` supports `publishers.routing_defaults`: domestic platforms default to SAU; international platforms default to AiToEarn Intl. Explicit platform config still wins. |
+| AiToEarn routing | Explicit `aitoearn-draft` / `aitoearn-flow` config on international platforms now defaults to `https://aitoearn.ai/api/unified/mcp` and `AITOEARN_INTL_API_KEY`. |
+| Install/config defaults | `config.example.json` and `scripts/install.py` now default local video/audio generation to disabled and include the fixed content policy. |
+| Legacy AutoClip | `scripts/autoclip_adapter.py` now requires `CONTENT_PLATFORM_ENABLE_LOCAL_VIDEO_PROCESSING=1` before running local ffmpeg/whisper processing. |
+
+### Validation
+
+- Focused tests: `python -m pytest tests/test_strategy.py tests/test_pipeline.py tests/test_publishers_v2.py tests/test_social_auto_upload_runtime.py`
+- Compile check: `python -m compileall content_platform`
+- Full tests: `python -m pytest` -> 168 passed
+- Proxy-stability fix: local admin/metrics HTTP tests now disable external proxy handlers for `127.0.0.1` requests.
+- Publish-safe scan: no hits for known server paths, old account aliases, concrete local Open Notebook endpoint, or previously removed secret placeholders.
+
+### Remaining Backfill
+
+- Sync or inspect the server-only `DEVELOPMENT_LOG_20260713.md`.
+- Confirm whether `cross-platform-video-pipeline`, `format_registry`, `content_generator`, `slide_deck`, and Pixabay integration exist only on the server or in another repository.
+- After backfill, update this document with verified server module locations using publish-safe wording only.

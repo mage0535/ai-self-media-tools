@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 from .compliance import ComplianceChecker
+from .content_policy import generated_media_kinds_for_job
 from .formatters import format_for_platform
 from .generator import DraftGenerator
 from .media import MediaBridge
@@ -134,7 +135,7 @@ class Pipeline:
                         })
                 except Exception as exc:
                     self.store.record_event(job_id, "media_failed", {"kind": "magazine_format", "error": redact_secrets(exc)})
-            for kind in ("image", "video", "audio"):
+            for kind in generated_media_kinds_for_job(self.store.get_job(job_id), self.config):
                 try:
                     artifact = self.media.generate(kind, self.store.get_job(job_id))
                     if artifact:
@@ -353,7 +354,10 @@ class Pipeline:
         g3 = qg.get("passed", True)
         gate["gates"]["G3_anti_generic"] = {"passed": g3, "failed": qg.get("failed_dimensions", [])}
         artifacts = dm.get("media_plan", [])
-        g4 = len(artifacts) > 0 if "short_video" == dm.get("content_form", "") else True
+        if "short_video" == dm.get("content_form", ""):
+            g4 = "source_video" in artifacts
+        else:
+            g4 = True
         gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": artifacts}
         platforms = dm.get("strategy", {}).get("primary_platforms", [])
         g5 = len(platforms) > 0

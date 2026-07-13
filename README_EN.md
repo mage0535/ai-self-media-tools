@@ -4,7 +4,7 @@
 
 > 📦 **Positioning**: Content production toolchain for AI coding agents (Hermes / OpenCode / Claude Code / Codex). Not a standalone application, but a content factory orchestrated by agents.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/) [![edge-tts](https://img.shields.io/badge/edge--tts-84%2B%20languages-green)](https://github.com/rany2/edge-tts) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/<github-owner>/<repository>/pulls) [![Version](https://img.shields.io/badge/version-0.2-orange)](.)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/) [![edge-tts](https://img.shields.io/badge/edge--tts-84%2B%20languages-green)](https://github.com/rany2/edge-tts) [![Version](https://img.shields.io/badge/version-0.2-orange)](.)
 
 **[中文文档](README.md)**
 
@@ -366,7 +366,7 @@ Available MCP tools: `seo_geo_check`, `trends_query`, `create_job`, `run_job`, `
 
 ## Related Projects
 
-- **[Knowledge-and-Memory-Management](https://github.com/<github-owner>/<related-repository>)** — AI knowledge collection & memory management plugin. 40+ collection tools, SenseNova document engine, 12+ cloud sync, 3-tier knowledge recall.
+- **Knowledge-and-Memory-Management** — AI knowledge collection & memory management plugin. 40+ collection tools, SenseNova document engine, 12+ cloud sync, 3-tier knowledge recall.
 - **[Hermes Agent](https://github.com/nousresearch/hermes)** — Hermes agent framework
 - **[edge-tts](https://github.com/rany2/edge-tts)** — 84+ language TTS engine
 - **[Kokoro](https://github.com/hexgrad/kokoro)** — 82M parameter offline TTS

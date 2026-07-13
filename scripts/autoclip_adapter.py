@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-AutoClip Hermes adapter - wraps AI video highlight extraction into a callable module.
-Integrates into content_generator.py video pipeline.
+AutoClip adapter for legacy local video processing.
+
+The fixed content policy keeps short-video publishing on repurposed source
+assets. This local ffmpeg/whisper path is disabled unless explicitly enabled by
+deployment config.
 """
 import json
 import os
@@ -15,6 +18,7 @@ from pathlib import Path
 CST = timezone(timedelta(hours=8))
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = Path(os.environ.get("HERMES_DATA_DIR", os.path.expanduser("~/.hermes/data"))) / "video_output"
+ENABLE_LOCAL_VIDEO_PROCESSING = "CONTENT_PLATFORM_ENABLE_LOCAL_VIDEO_PROCESSING"
 
 
 def log(msg):
@@ -126,6 +130,10 @@ def quality_check(clips, min_duration=10, max_duration=300):
 
 
 def run_autoclip_pipeline(url, task_id=None):
+    if os.environ.get(ENABLE_LOCAL_VIDEO_PROCESSING) != "1":
+        raise RuntimeError(
+            f"local video processing is disabled; set {ENABLE_LOCAL_VIDEO_PROCESSING}=1 only for approved repurpose jobs"
+        )
     import time as _time
     task_id = task_id or f"ac_{int(_time.time())}"
     workdir = OUTPUT_DIR / task_id

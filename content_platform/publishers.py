@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from .aitoearn import AitoEarnClient
+from .content_policy import default_publisher_config, platform_region
 from .formatters import format_for_platform
 from .models import DeliveryResult
 from .paths import social_auto_upload_home
@@ -979,7 +980,8 @@ def international_platforms():
 
 def build_publisher(platform, config, data_dir):
     publishers = config.get("publishers", {})
-    cfg = publishers.get("platforms", {}).get(platform, publishers.get("default", {"type": "file"}))
+    platform_cfg = publishers.get("platforms", {}).get(platform)
+    cfg = platform_cfg or default_publisher_config(platform, publishers.get("routing_defaults", {})) or publishers.get("default", {"type": "file"})
     kind = cfg.get("type", "file")
     if kind == "fallback":
         options = cfg.get("publishers", [])
@@ -1032,9 +1034,11 @@ def build_publisher(platform, config, data_dir):
             note_extra_args=cfg.get("note_extra_args", []),
         )
     if kind == "aitoearn-draft":
+        default_base_url = "https://aitoearn.ai/api/unified/mcp" if platform_region(platform) == "international" else "https://aitoearn.cn/api/unified/mcp"
+        default_key_env = "AITOEARN_INTL_API_KEY" if platform_region(platform) == "international" else "AITOEARN_API_KEY"
         return AiToEarnDraftPublisher(
-            base_url=cfg.get("base_url", "https://aitoearn.cn/api/unified/mcp"),
-            api_key_env=cfg.get("api_key_env", "AITOEARN_API_KEY"),
+            base_url=cfg.get("base_url", default_base_url),
+            api_key_env=cfg.get("api_key_env", default_key_env),
             env_file=cfg.get("env_file", ""),
             api_key=cfg.get("api_key", ""),
             image_model=cfg.get("image_model", "gpt-image-2"),
@@ -1044,10 +1048,12 @@ def build_publisher(platform, config, data_dir):
             poll_interval=cfg.get("poll_interval", 2),
         )
     if kind == "aitoearn-flow":
+        default_base_url = "https://aitoearn.ai/api/unified/mcp" if platform_region(platform) == "international" else "https://aitoearn.cn/api/unified/mcp"
+        default_key_env = "AITOEARN_INTL_API_KEY" if platform_region(platform) == "international" else "AITOEARN_API_KEY"
         return AiToEarnFlowPublisher(
             account_id=cfg.get("account_id", ""),
-            base_url=cfg.get("base_url", "https://aitoearn.cn/api/unified/mcp"),
-            api_key_env=cfg.get("api_key_env", "AITOEARN_API_KEY"),
+            base_url=cfg.get("base_url", default_base_url),
+            api_key_env=cfg.get("api_key_env", default_key_env),
             env_file=cfg.get("env_file", ""),
             api_key=cfg.get("api_key", ""),
             option=cfg.get("option", {}),

@@ -22,17 +22,23 @@
       "timeout": 120
     },
     "video": {
-      "enabled": true,
+      "enabled": false,
       "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
       "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/video_pipeline.py",
       "timeout": 600
     },
     "audio": {
-      "enabled": true,
+      "enabled": false,
       "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
       "mode": "auto",
       "timeout": 300
     }
+  },
+  "content_policy": {
+    "original_content": "image_text_only",
+    "short_video": "repurpose_existing_source_only",
+    "allow_local_video_generation": false,
+    "allow_local_audio_generation": false
   },
   "ocr": {
     "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/ocr_pipeline.py",
@@ -66,6 +72,18 @@
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/trend_collector.py"
   },
   "publishers": {
+    "routing_defaults": {
+      "enabled": true,
+      "domestic": {
+        "type": "social-auto-upload",
+        "account_name": "<account-alias>"
+      },
+      "international": {
+        "type": "aitoearn-draft",
+        "base_url": "https://aitoearn.ai/api/unified/mcp",
+        "api_key_env": "AITOEARN_INTL_API_KEY"
+      }
+    },
     "default": {
       "type": "file",
       "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"

@@ -69,8 +69,12 @@ class StrategyTests(unittest.TestCase):
         )
         self.assertEqual(strategy["content_form"], "short_video")
         self.assertIn("douyin", strategy["primary_platforms"])
+        self.assertIn("source_video", strategy["asset_plan"])
         self.assertIn("cover", strategy["asset_plan"])
+        self.assertNotIn("video", strategy["asset_plan"])
+        self.assertNotIn("audio", strategy["asset_plan"])
         self.assertIn("confidence", strategy)
+        self.assertTrue(any("source video" in warning for warning in strategy["warnings"]))
 
 
 if __name__ == "__main__":

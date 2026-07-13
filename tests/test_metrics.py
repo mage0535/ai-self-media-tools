@@ -35,7 +35,8 @@ class MetricsTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/metrics", timeout=2) as response:
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(f"http://127.0.0.1:{server.server_port}/metrics", timeout=2) as response:
                     body = response.read().decode()
                 self.assertEqual(response.status, 200)
                 self.assertIn("hermes_content_jobs", body)

@@ -96,6 +96,28 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(published["state"], "published")
         self.assertTrue(self.store.list_delivery_queue("completed"))
 
+    def test_run_skips_local_video_and_audio_generation_by_default_policy(self):
+        root = Path(self.tmp.name)
+        self.pipeline = Pipeline(
+            self.store,
+            {
+                "data_dir": str(root),
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
+                "media": {
+                    "video": {"enabled": True, "script": str(root / "missing-video.py")},
+                    "audio": {"enabled": True},
+                },
+                "publishers": {"default": {"type": "file"}},
+                "notifications": {"log_path": str(root / "notifications.jsonl")},
+            },
+        )
+        job = self.pipeline.create("Visual workflow", ["douyin"], {"platforms": ["douyin"], "keywords": ["visual"]})
+        reviewed = self.pipeline.run(job["id"])
+
+        self.assertEqual(reviewed["state"], "review_required")
+        failed_media = [event for event in self.store.events(job["id"]) if event["event"] == "media_failed"]
+        self.assertFalse(any('"video"' in event["detail_json"] or '"audio"' in event["detail_json"] for event in failed_media))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,12 @@ class AdminServerTests(unittest.TestCase):
             body = response.read().decode()
         return response.status, json.loads(body)
 
+    def _local_opener(self, cookie_jar=None):
+        handlers = [urllib.request.ProxyHandler({})]
+        if cookie_jar is not None:
+            handlers.append(urllib.request.HTTPCookieProcessor(cookie_jar))
+        return urllib.request.build_opener(*handlers)
+
     def test_one_time_launch_login_and_platform_binding_flow(self):
         server = make_admin_server(self.db_path, password="test-password", host="127.0.0.1", port=0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -45,7 +51,7 @@ class AdminServerTests(unittest.TestCase):
             launch_url = server.launch_url
             login_url = f"http://127.0.0.1:{server.server_port}/api/auth/login?" + launch_url.split("?", 1)[1]
             cookie_jar = http.cookiejar.CookieJar()
-            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+            opener = self._local_opener(cookie_jar)
 
             with opener.open(launch_url, timeout=5) as response:
                 html = response.read().decode()
@@ -88,7 +94,7 @@ class AdminServerTests(unittest.TestCase):
             self.assertIn("llm_analysis", platform_detail)
 
             with self.assertRaises(Exception):
-                self._open_json(urllib.request.build_opener(), login_url, method="POST", payload={"password": "test-password"})
+                self._open_json(self._local_opener(), login_url, method="POST", payload={"password": "test-password"})
         finally:
             server.shutdown()
             server.server_close()
@@ -100,7 +106,7 @@ class AdminServerTests(unittest.TestCase):
         try:
             launch_url = server.launch_url
             login_url = f"http://127.0.0.1:{server.server_port}/api/auth/login?" + launch_url.split("?", 1)[1]
-            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            opener = self._local_opener(http.cookiejar.CookieJar())
             opener.open(launch_url, timeout=5).read()
             self._open_json(opener, login_url, method="POST", payload={"password": "test-password"})
 
