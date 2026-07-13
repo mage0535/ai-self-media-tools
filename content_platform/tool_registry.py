@@ -2,6 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
+from .paths import project_home
 from .tool_adapters import (
     ScriptAnalyzerProvider,
     ScriptImageProvider,
@@ -101,8 +102,7 @@ class ToolRegistry:
     def _probe_skills_adapter(self):
         import importlib.util
 
-        project_home = Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools"))
-        path = project_home / "content_platform" / "skills_adapter.py"
+        path = project_home() / "content_platform" / "skills_adapter.py"
         if not path.exists():
             return {"available": False, "kind": "skills_bridge"}
         spec = importlib.util.spec_from_file_location("skills_adapter", path)

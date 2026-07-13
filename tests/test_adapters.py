@@ -113,6 +113,23 @@ class AdapterTests(unittest.TestCase):
         self.assertTrue(result["telegram"])
         self.assertIn("fake-token", urlopen.call_args.args[0].full_url)
 
+    def test_notifier_message_includes_reddit_management_context(self):
+        message = Notifier._message(
+            {
+                "event": "review_required",
+                "job_id": "j-reddit",
+                "title": "Reddit launch checklist",
+                "state": "review_required",
+                "platforms": ["reddit"],
+                "deliveries": [{"platform": "reddit", "status": "review_required", "external_id": "outbox/reddit/j-reddit.json"}],
+                "review_actions": {"approve": "approve-token", "reject": "reject-token"},
+            }
+        )
+        self.assertIn("platforms=reddit", message)
+        self.assertIn("reddit:review_required", message)
+        self.assertIn("outbox/reddit/j-reddit.json", message)
+        self.assertIn("content-platform review-action approve-token --action approve", message)
+
 
 if __name__ == "__main__":
     unittest.main()

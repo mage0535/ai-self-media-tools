@@ -16,12 +16,14 @@ except ImportError:
 
 
 def _get_db_path():
-    home = Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools"))
+    configured_home = os.environ.get("CONTENT_PLATFORM_HOME")
+    home = Path(configured_home) if configured_home else Path.home() / ".ai-self-media-tools"
     return str(home / "data" / "state.db")
 
 
 def _load_config(db_path):
-    home = Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools"))
+    configured_home = os.environ.get("CONTENT_PLATFORM_HOME")
+    home = Path(configured_home) if configured_home else Path.home() / ".ai-self-media-tools"
     config_path = home / "config.json"
     if config_path.is_file():
         return json.loads(config_path.read_text(encoding="utf-8"))
@@ -75,6 +77,38 @@ def _tools():
         pending = store2.list_jobs(limit=20, state="review_required")
         return {"pending_count": len(pending), "jobs": pending}
 
+    async def mcp_reddit_channel_status() -> dict:
+        from content_platform.admin_store import AdminStore
+        from content_platform.platform_catalog import platform_definition
+        from content_platform.readiness import inspect_delivery_readiness
+
+        db_path = _get_db_path()
+        config = _load_config(db_path)
+        admin_store = AdminStore(db_path)
+        admin_store.init()
+        bindings = admin_store.list_bindings("reddit")
+        readiness = inspect_delivery_readiness(config)
+        trend_cfg = config.get("trends", {}).get("reddit", {})
+        publisher_cfg = config.get("publishers", {}).get("platforms", {}).get("reddit", {})
+        pending = [
+            job
+            for job in store.list_jobs(limit=50, state="review_required")
+            if "reddit" in [str(platform).casefold() for platform in job.get("platforms", [])]
+        ]
+        return {
+            "platform": platform_definition("reddit"),
+            "configured": bool(trend_cfg or publisher_cfg or bindings),
+            "trend_enabled": bool(trend_cfg.get("enabled", False)),
+            "subreddits": trend_cfg.get("subreddits", []),
+            "publisher_type": publisher_cfg.get("type", ""),
+            "binding_count": len(bindings),
+            "connected_count": sum(1 for item in bindings if item.get("status") == "connected"),
+            "pending_review_count": len(pending),
+            "pending_reviews": pending[:10],
+            "readiness": readiness.get("publishers", {}).get("reddit", {}),
+            "policy": "human_review_draft_only",
+        }
+
     async def mcp_generate_audio(text: str, lang: str = "auto", genre: str = "auto") -> dict:
         output_dir = Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools")) / "data" / "mcp_audio"
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +125,7 @@ def _tools():
         (mcp_approve_job, "approve_job", "Approve a job for publishing", {"job_id": str, "actor": str}),
         (mcp_publish_job, "publish_job", "Publish a job to configured platforms", {"job_id": str}),
         (mcp_review_status, "review_status", "Get current review queue status", {}),
+        (mcp_reddit_channel_status, "reddit_channel_status", "Get Reddit trend, draft, binding, and review status", {}),
         (mcp_generate_audio, "generate_audio", "Generate audio narration", {"text": str, "lang": str, "genre": str}),
     ]
 

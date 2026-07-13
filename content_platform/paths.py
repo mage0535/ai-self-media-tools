@@ -2,16 +2,26 @@ import os
 from pathlib import Path
 
 
+def _home():
+    try:
+        return Path.home()
+    except RuntimeError:
+        return Path.cwd()
+
+
 def project_home():
-    return Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools"))
+    explicit = os.environ.get("CONTENT_PLATFORM_HOME")
+    return Path(explicit) if explicit else _home() / ".ai-self-media-tools"
 
 
 def style_guide_path():
-    return Path(os.environ.get("CONTENT_PLATFORM_STYLE_GUIDE", project_home() / "skills" / "content" / "content-copywriting-style" / "SKILL.md"))
+    explicit = os.environ.get("CONTENT_PLATFORM_STYLE_GUIDE")
+    return Path(explicit) if explicit else project_home() / "skills" / "content" / "content-copywriting-style" / "SKILL.md"
 
 
 def trend_cache_dir():
-    return Path(os.environ.get("CONTENT_PLATFORM_TREND_CACHE_DIR", project_home() / "data" / "trend-cache"))
+    explicit = os.environ.get("CONTENT_PLATFORM_TREND_CACHE_DIR")
+    return Path(explicit) if explicit else project_home() / "data" / "trend-cache"
 
 
 def social_auto_upload_home():
@@ -21,14 +31,14 @@ def social_auto_upload_home():
     bundled = project_home() / "external" / "social-auto-upload"
     if bundled.exists():
         return bundled
-    sibling = Path.home() / "social-auto-upload"
+    sibling = _home() / "social-auto-upload"
     if sibling.exists():
         return sibling
     return bundled
 
 
 def browser_profile_roots():
-    home = Path.home()
+    home = _home()
     return {
         "chromium": home / ".config" / "chromium",
         "google_chrome": home / ".config" / "google-chrome",

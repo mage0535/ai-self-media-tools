@@ -2129,3 +2129,11 @@ Add Reddit to the self-media tooling as a real centralized channel without addin
 - Full tests: `python -m pytest -q` -> 177 passed
 - Publish-safe audit: `python -m content_platform project-audit` -> `ok: true`
 - Privacy scan: no Reddit cookies, OAuth values, account data, or server paths were added to tracked files.
+
+### Hermes And Telegram Management Follow-Up
+
+- Clarified that the operator-facing "frontend" also includes Telegram/Hermes management, not only the browser admin console.
+- `Notifier` messages now carry platform and delivery context, so Reddit review alerts can show `platforms=reddit`, `reddit:review_required`, the local draft packet path, and approve/reject CLI commands.
+- `mcp_server.py` exposes `reddit_channel_status` for Hermes/MCP agents to query Reddit channel config, binding count, pending review jobs, trend enablement, publisher type, and the fixed policy `human_review_draft_only`.
+- `paths.py` and `tool_registry.py` were hardened so Hermes/MCP status checks do not fail when the runtime environment has `CONTENT_PLATFORM_HOME` but lacks a resolvable user home.
+- Added `docs/HERMES_REDDIT_CHANNEL_INTEGRATION.md` as the copy-pasteable handoff for Hermes and teammate testing.
