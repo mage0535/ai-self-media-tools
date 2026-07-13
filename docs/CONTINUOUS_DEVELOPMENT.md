@@ -2064,3 +2064,30 @@ The referenced server-only 2026-07-13 handoff document is not present in this ch
 - Sync or inspect the server-only `DEVELOPMENT_LOG_20260713.md`.
 - Confirm whether `cross-platform-video-pipeline`, `format_registry`, `content_generator`, `slide_deck`, and Pixabay integration exist only on the server or in another repository.
 - After backfill, update this document with verified server module locations using publish-safe wording only.
+
+## 2026-07-13 Content Hygiene Guard
+
+### Goal
+
+Convert the "publish less, publish clearer" SEO/GEO guidance into a real pre-generation control so the project stops wasting cycles on near-duplicate topics.
+
+### Code Changes
+
+| Area | Change |
+|------|--------|
+| Duplicate-topic audit | Added `content_platform/content_hygiene.py` with lightweight token-overlap scoring and executable `blocked/review/pass` decisions. |
+| Store access | Added `Store.content_candidates()` so the pipeline can inspect recent drafts/jobs before generating new content. |
+| Pipeline guard | `Pipeline.run()` now performs a content-hygiene audit before generation. High-overlap topics are blocked before draft generation; medium-overlap topics are forced into review. |
+| Cornerstone guidance | `intelligence.py` and `generator.py` now carry `content_hygiene` plus `cornerstone_mode` into prompt context, telling the model to refresh/merge with a canonical asset instead of producing another near-duplicate article. |
+| Default config | `config.example.json` and `scripts/install.py` now include `content_hygiene` thresholds so new deployments inherit the guard by default. |
+
+### Operational Effect
+
+- Exact or near-exact repeat topics no longer consume generation work by default.
+- Related follow-up topics still run, but they are tagged as canonical-merge candidates and require review.
+- The system now prefers updating an existing topic asset over creating more semantic clutter.
+
+### Validation
+
+- Focused tests: `python -m pytest tests/test_store.py tests/test_intelligence.py tests/test_pipeline.py`
+- Compile check: `python -m compileall content_platform scripts`

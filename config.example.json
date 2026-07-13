@@ -40,6 +40,12 @@
     "allow_local_video_generation": false,
     "allow_local_audio_generation": false
   },
+  "content_hygiene": {
+    "enabled": true,
+    "candidate_limit": 200,
+    "block_threshold": 0.72,
+    "review_threshold": 0.58
+  },
   "ocr": {
     "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/ocr_pipeline.py",
     "timeout": 120

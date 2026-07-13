@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 from .compliance import ComplianceChecker
+from .content_hygiene import audit_topic
 from .content_policy import generated_media_kinds_for_job
 from .formatters import format_for_platform
 from .generator import DraftGenerator
@@ -38,6 +39,8 @@ class Pipeline:
         notify_cfg = dict(self.config.get("notifications", {}))
         notify_cfg.setdefault("log_path", str(self.data_dir / "notifications.jsonl"))
         self.notifier = Notifier(notify_cfg)
+        self.content_hygiene_cfg = dict(self.config.get("content_hygiene", {}))
+        self.content_hygiene_cfg.setdefault("enabled", True)
 
     def create(self, topic, platforms, brief=None, profile="default", topic_fingerprint=""):
         resolved = resolve_profile(self.config.get("profiles", {}), profile, brief or {})
@@ -54,12 +57,29 @@ class Pipeline:
             raise RuntimeError("job is already claimed by another worker")
         try:
             job = self.store.get_job(job_id)
-            draft = self.generator.generate(job["topic"], self._enrich_brief(job))
+            hygiene = self._content_hygiene(job)
+            if hygiene["status"] == "blocked" and not force:
+                blocked = self.store.release_claim(
+                    job_id,
+                    owner,
+                    "blocked",
+                    "content_hygiene_blocked",
+                    detail={
+                        "reason": "near_duplicate_topic",
+                        "content_hygiene": hygiene,
+                    },
+                )
+                self.notifier.send("blocked", blocked)
+                return self._hydrate(blocked)
+            draft = self.generator.generate(job["topic"], self._enrich_brief(job, hygiene))
             self._persist_intelligence(job_id, draft.get("draft_meta", {}))
             text = draft["title"] + "\n" + draft["body"]
             risk = self.risk.evaluate(text)
             compliance = self.compliance.evaluate(text, job["brief"], job["platforms"])
             risk["compliance"] = compliance
+            if hygiene["status"] == "review" and risk["level"] == "pass":
+                risk["level"] = "review"
+                risk["content_hygiene"] = hygiene
             if risk["level"] == "pass" and compliance["level"] == "review":
                 risk["level"] = "review"
             if risk["level"] == "pass" and not draft.get("draft_meta", {}).get("quality_gate", {}).get("passed", True):
@@ -314,14 +334,27 @@ class Pipeline:
         result["deliveries"] = self.store.deliveries(job["id"])
         return result
 
-    def _enrich_brief(self, job):
+    def _enrich_brief(self, job, hygiene=None):
         brief = dict(job.get("brief", {}))
         platforms = list(job.get("platforms", []))
         topic = job.get("topic", "")
         historical = self.store.historical_performance(platforms, topic)
         brief.setdefault("historical_feedback", historical)
         brief.setdefault("cluster_memory", historical.get("clusters", []))
+        if hygiene:
+            brief["content_hygiene"] = hygiene
         return brief
+
+    def _content_hygiene(self, job):
+        if not self.content_hygiene_cfg.get("enabled", True):
+            return {"status": "pass", "recommended_action": "proceed", "best_score": 0.0, "matches": []}
+        candidates = self.store.content_candidates(
+            limit=int(self.content_hygiene_cfg.get("candidate_limit", 200)),
+            exclude_job_id=job["id"],
+        )
+        hygiene = audit_topic(job.get("topic", ""), candidates, self.content_hygiene_cfg)
+        self.store.record_event(job["id"], "content_hygiene_checked", {"content_hygiene": hygiene})
+        return hygiene
 
     def _deliver(self, platform, job):
         cfg = self.config.get("delivery", {})

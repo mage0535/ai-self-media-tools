@@ -84,6 +84,20 @@ class IntelligenceTests(unittest.TestCase):
         self.assertIn("topic_clusters", context)
         self.assertEqual(context["strategy"]["content_form"], "short_video")
 
+    def test_generation_context_carries_content_hygiene_and_cornerstone_mode(self):
+        context = build_generation_context(
+            "Automation visuals",
+            {
+                "content_hygiene": {
+                    "status": "review",
+                    "recommended_action": "merge_into_cornerstone",
+                    "canonical_job_id": "job-1",
+                }
+            },
+        )
+        self.assertEqual(context["content_hygiene"]["canonical_job_id"], "job-1")
+        self.assertTrue(context["cornerstone_mode"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -77,6 +77,12 @@ def render_config(home: Path):
             "allow_local_video_generation": False,
             "allow_local_audio_generation": False,
         },
+        "content_hygiene": {
+            "enabled": True,
+            "candidate_limit": 200,
+            "block_threshold": 0.72,
+            "review_threshold": 0.58,
+        },
         "ocr": {"script": str(home / "external" / "scripts" / "ocr_pipeline.py"), "timeout": 120},
         "transcription": {"script": str(home / "external" / "scripts" / "transcribe_pipeline.py"), "timeout": 300},
         "analysis": {"script": str(home / "external" / "scripts" / "multimodal_analyze.py"), "timeout": 180},

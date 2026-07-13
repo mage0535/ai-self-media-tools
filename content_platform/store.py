@@ -252,6 +252,22 @@ class Store:
         with self.connect() as conn:
             return [self._job(row) for row in conn.execute(sql, args)]
 
+    def content_candidates(self, limit=200, states=None, exclude_job_id=""):
+        states = tuple(states or ("review_required", "approved", "published", "partial", "created"))
+        sql = "SELECT * FROM jobs"
+        args = []
+        if states:
+            placeholders = ",".join("?" for _ in states)
+            sql += f" WHERE state IN ({placeholders})"
+            args.extend(states)
+        if exclude_job_id:
+            sql += " AND id<>?" if states else " WHERE id<>?"
+            args.append(exclude_job_id)
+        sql += " ORDER BY updated_at DESC, created_at DESC LIMIT ?"
+        args.append(int(limit))
+        with self.connect() as conn:
+            return [self._job(row) for row in conn.execute(sql, args)]
+
     def save_draft(self, job_id, title, body, risk_level, risk, prompt_version="", draft_meta=None):
         with self.connect() as conn:
             conn.execute(

@@ -188,6 +188,8 @@ def build_generation_context(topic, brief):
     niche = str(brief.get("niche", "")).strip()
     historical_feedback = brief.get("historical_feedback", {})
     cluster_memory = brief.get("cluster_memory", [])
+    content_hygiene = brief.get("content_hygiene", {})
+    cornerstone_mode = bool(content_hygiene and content_hygiene.get("recommended_action") in {"merge_into_cornerstone", "refresh_existing_cornerstone"})
 
     # 可选：Open Notebook 深度研究
     on_research = {}
@@ -228,6 +230,8 @@ def build_generation_context(topic, brief):
         "historical_feedback": historical_feedback,
         "cluster_memory": cluster_memory,
         "open_notebook_research": on_research,
+        "content_hygiene": content_hygiene,
+        "cornerstone_mode": cornerstone_mode,
     }
 
 
@@ -248,6 +252,8 @@ def prompt_brief(topic, brief):
             "strategy": context["strategy"],
             "historical_feedback": context.get("historical_feedback", {}),
             "cluster_memory": context.get("cluster_memory", []),
+            "content_hygiene": context.get("content_hygiene", {}),
+            "cornerstone_mode": context.get("cornerstone_mode", False),
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
             "narration_guide": context.get("narration_guide", ""),

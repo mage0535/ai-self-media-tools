@@ -84,6 +84,13 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(len(versions), 2)
         self.assertEqual(versions[0]["title"], "Title A")
 
+    def test_content_candidates_can_exclude_current_job(self):
+        first = self.store.create_job("Automation visuals", ["wechat"])
+        second = self.store.create_job("Automation visuals update", ["wechat"])
+        candidates = self.store.content_candidates(exclude_job_id=second["id"])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["id"], first["id"])
+
     def test_connect_tolerates_wal_lock_fallback(self):
         real_connect = __import__("sqlite3").connect
         state = {"wal_attempts": 0}

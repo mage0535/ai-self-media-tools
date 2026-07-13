@@ -118,6 +118,41 @@ class PipelineTests(unittest.TestCase):
         failed_media = [event for event in self.store.events(job["id"]) if event["event"] == "media_failed"]
         self.assertFalse(any('"video"' in event["detail_json"] or '"audio"' in event["detail_json"] for event in failed_media))
 
+    def test_run_blocks_near_duplicate_topic_before_generation(self):
+        original = self.pipeline.create("Automation visuals", ["wechat"], {"audience": "operators"})
+        self.pipeline.run(original["id"])
+
+        duplicate = self.pipeline.create("Automation visuals", ["wechat"], {"audience": "operators"})
+        blocked = self.pipeline.run(duplicate["id"])
+
+        self.assertEqual(blocked["state"], "blocked")
+        self.assertEqual(blocked["title"], "")
+        events = self.store.events(duplicate["id"])
+        self.assertTrue(any(event["event"] == "content_hygiene_blocked" for event in events))
+
+    def test_run_marks_overlap_topics_for_review_when_not_blocked(self):
+        root = Path(self.tmp.name)
+        self.pipeline = Pipeline(
+            self.store,
+            {
+                "data_dir": str(root),
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
+                "content_hygiene": {"block_threshold": 0.95, "review_threshold": 0.2},
+                "publishers": {"default": {"type": "file"}},
+                "notifications": {"log_path": str(root / "notifications.jsonl")},
+            },
+        )
+        original = self.pipeline.create("Automation visuals", ["wechat"], {"audience": "operators"})
+        self.pipeline.run(original["id"])
+
+        derivative = self.pipeline.create("Automation workflow visuals", ["wechat"], {"audience": "operators"})
+        reviewed = self.pipeline.run(derivative["id"])
+
+        self.assertEqual(reviewed["state"], "review_required")
+        self.assertEqual(reviewed["risk_level"], "review")
+        self.assertEqual(reviewed["draft_meta"]["content_hygiene"]["status"], "review")
+        self.assertTrue(reviewed["draft_meta"]["cornerstone_mode"])
+
 
 if __name__ == "__main__":
     unittest.main()

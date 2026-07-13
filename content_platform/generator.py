@@ -82,6 +82,8 @@ class DraftGenerator:
             "quality_gate": rewrite["quality_gate"],
             "rewrite_notes": rewrite["rewrite_notes"],
             "open_notebook_research": context.get("open_notebook_research", {}),
+            "content_hygiene": context.get("content_hygiene", {}),
+            "cornerstone_mode": context.get("cornerstone_mode", False),
         }
         return {
             "title": str(draft["title"]),
@@ -96,6 +98,7 @@ class DraftGenerator:
             "Return only JSON. Do not use markdown fences. "
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
             "Write a factual, high-retention draft. First learn from same-track references, then generate. "
+            "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
             "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting.\n"
             f"Style guide:\n{self._style_guide()}\n\n"
             f"Planning context:\n{prompt_brief(topic, brief)}"
@@ -148,7 +151,8 @@ class DraftGenerator:
         model = self.config.get("model") or os.environ.get("CONTENT_PLATFORM_MODEL", "gpt-4.1-mini")
         prompt = (
             "Return JSON with title and body, plus optional hook, cta, hashtags. "
-            "Write a factual, visually scannable, engaging draft. Learn from the reference style signals and trend stage before generating.\n"
+            "Write a factual, visually scannable, engaging draft. Learn from the reference style signals and trend stage before generating. "
+            "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article.\n"
             f"Style guide:\n{self._style_guide()}\n\n"
             f"Planning context:\n{prompt_brief(topic, brief)}"
         )
