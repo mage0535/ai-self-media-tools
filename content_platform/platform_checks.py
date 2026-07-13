@@ -15,6 +15,7 @@ PLATFORM_REQUIREMENTS = {
     "telegraph": {"envs": ["TELEGRAPH_TOKEN"], "tools": []},
     "mastodon": {"envs": ["MASTODON_TOKEN"], "tools": []},
     "bluesky": {"envs": ["BLUESKY_IDENTIFIER", "BLUESKY_PASSWORD"], "tools": []},
+    "reddit": {"envs": ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_REFRESH_TOKEN"], "tools": []},
 }
 
 

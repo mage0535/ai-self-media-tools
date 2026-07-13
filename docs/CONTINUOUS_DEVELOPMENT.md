@@ -2094,3 +2094,38 @@ Convert the "publish less, publish clearer" SEO/GEO guidance into a real pre-gen
 - Full tests: `python -m pytest` -> 172 passed
 - GitHub sync: `main` pushed with commit `d9302843feb7ba1ca80526fe3fce407e46c1100b`
 - Local/GitHub state: local `main` is aligned with `origin/main`
+
+## 2026-07-13 Reddit Channel Integration
+
+### Goal
+
+Add Reddit to the self-media tooling as a real centralized channel without adding bypass, stealth, proxy-rotation, automated spam, or cookie-based anti-detection behavior.
+
+### Code Changes
+
+| Area | Change |
+|------|--------|
+| Trend analysis | Added `RedditTrendCollector` using Reddit OAuth bearer requests against `oauth.reddit.com`, converting subreddit listings into scored trend items with score, comments, upvote ratio, URL, subreddit, and keyword metadata. |
+| Trend aggregation | `TrendCollector` can merge enabled Reddit trend items with the existing legacy trend cache and deduplicate by title. |
+| Content formatting | Reddit payloads now include `kind=post`, title/text limits, and a `manual-selection` or draft-provided subreddit. |
+| Promotion path | Added `RedditDraftPublisher`, which writes local review packets and returns `review_required`; it does not auto-post, auto-comment, vote, DM, or bypass platform checks. |
+| Publisher routing | `build_publisher()` supports `type: "reddit-draft"` for Reddit-specific human-review drafts. |
+| Central management | Added Reddit to the platform catalog with `trend`, `post`, and `draft` support, OAuth/manual-review auth modes, binding guide, and readiness checks for Reddit OAuth env vars. |
+| Install/config defaults | `config.example.json` and `scripts/install.py` include disabled-by-default Reddit trend settings and a Reddit draft publisher config. |
+
+### Operating Rules
+
+- Store Reddit credentials only in local environment variables or ignored secret files.
+- Do not commit Reddit cookies, account IDs, OAuth tokens, subreddit-specific private notes, or live account metadata.
+- Use Reddit first for trend discovery and topic validation.
+- Promotion output must stay as a human-reviewed draft unless a future explicit compliant OAuth publisher is added.
+- Before manual posting, verify subreddit rules, affiliation disclosure requirements, duplicate risk, and whether the content is genuinely useful to the community.
+
+### Validation
+
+- Failing tests were added first for Reddit trend collection, Reddit draft publishing, publisher factory dispatch, and admin-console centralized management.
+- Focused tests: `python -m pytest tests/test_trends.py tests/test_publishers_v2.py tests/test_admin_server.py -q` -> 21 passed
+- Compile check: `python -m compileall content_platform scripts`
+- Full tests: `python -m pytest -q` -> 177 passed
+- Publish-safe audit: `python -m content_platform project-audit` -> `ok: true`
+- Privacy scan: no Reddit cookies, OAuth values, account data, or server paths were added to tracked files.

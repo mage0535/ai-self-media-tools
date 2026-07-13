@@ -11,6 +11,7 @@ from content_platform.publishers import (
     AiToEarnFlowPublisher,
     AyrsharePublisher,
     DevtoDraftPublisher,
+    RedditDraftPublisher,
     SocialAutoUploadPublisher,
     WechatDraftPublisher,
     build_publisher,
@@ -257,6 +258,35 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertEqual(result.status, "drafted")
         self.assertEqual(calls[0][2:5], ["bilibili", "check", "--account"])
         self.assertIn("--schedule", calls[1])
+
+    def test_reddit_draft_publisher_writes_human_review_packet(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            publisher = RedditDraftPublisher(outbox=Path(tmp) / "outbox", default_subreddit="SideProject")
+            result = publisher.deliver(
+                {
+                    "id": "job10",
+                    "title": "Launch checklist",
+                    "body": "Useful field notes, not a hard sell.",
+                    "draft_meta": {"subreddit": "Entrepreneur"},
+                },
+                "reddit",
+            )
+            payload = json.loads(Path(result.external_id).read_text(encoding="utf-8"))
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "review_required")
+        self.assertEqual(payload["platform_payload"]["subreddit"], "Entrepreneur")
+        self.assertFalse(payload["live_publish"])
+        self.assertIn("human review", " ".join(payload["safety_notes"]))
+
+    def test_build_publisher_supports_reddit_draft_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            publisher = build_publisher(
+                "reddit",
+                {"publishers": {"platforms": {"reddit": {"type": "reddit-draft", "outbox": str(Path(tmp) / "reddit")}}}},
+                tmp,
+            )
+        self.assertIsInstance(publisher, RedditDraftPublisher)
 
 
 if __name__ == "__main__":

@@ -75,7 +75,19 @@
   },
   "trends": {
     "legacy_data_dir": "{{CONTENT_PLATFORM_HOME}}/data/trend-cache",
-    "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/trend_collector.py"
+    "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/trend_collector.py",
+    "reddit": {
+      "enabled": false,
+      "client_id_env": "REDDIT_CLIENT_ID",
+      "client_secret_env": "REDDIT_CLIENT_SECRET",
+      "refresh_token_env": "REDDIT_REFRESH_TOKEN",
+      "user_agent": "ai-self-media-tools/0.2 by configured-operator",
+      "subreddits": ["SideProject", "ArtificialInteligence", "Entrepreneur"],
+      "keywords": ["AI workflow", "automation", "content operations"],
+      "limit_per_subreddit": 25,
+      "sort": "hot",
+      "time_filter": "week"
+    }
   },
   "publishers": {
     "routing_defaults": {
@@ -88,6 +100,13 @@
         "type": "aitoearn-draft",
         "base_url": "https://aitoearn.ai/api/unified/mcp",
         "api_key_env": "AITOEARN_INTL_API_KEY"
+      }
+    },
+    "platforms": {
+      "reddit": {
+        "type": "reddit-draft",
+        "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox",
+        "default_subreddit": "manual-selection"
       }
     },
     "default": {

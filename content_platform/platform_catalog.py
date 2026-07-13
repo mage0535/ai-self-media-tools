@@ -120,6 +120,19 @@ PLATFORM_CATALOG = {
             "填写账号信息并执行检测。",
         ],
     },
+    "reddit": {
+        "key": "reddit",
+        "label": "Reddit",
+        "group": "global",
+        "auth_modes": ["manual_review", "oauth_env"],
+        "supports": ["trend", "post", "draft"],
+        "binding_steps": [
+            "Prepare a Reddit developer app and OAuth environment variables: REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_REFRESH_TOKEN.",
+            "Use Reddit as a trend source first; collect subreddit topics with rate limits and a clear User-Agent.",
+            "Promotion output is staged as a local human-review draft by default, not auto-posted.",
+            "Before posting, verify subreddit rules, affiliation disclosure, duplicate risk, and content fit.",
+        ],
+    },
 }
 
 

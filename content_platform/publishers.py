@@ -53,6 +53,41 @@ class FileDraftPublisher:
         return DeliveryResult(True, "drafted", str(path))
 
 
+class RedditDraftPublisher:
+    def __init__(self, outbox, default_subreddit=""):
+        self.outbox = Path(outbox)
+        self.default_subreddit = default_subreddit
+
+    def deliver(self, job, platform):
+        directory = self.outbox / "reddit"
+        directory.mkdir(parents=True, exist_ok=True)
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        subreddit = (
+            job.get("draft_meta", {}).get("subreddit")
+            or formatted.get("subreddit")
+            or self.default_subreddit
+            or "manual-selection"
+        )
+        formatted["subreddit"] = subreddit
+        payload = {
+            "job_id": job["id"],
+            "platform": "reddit",
+            "status": "review_required",
+            "live_publish": False,
+            "title": job["title"],
+            "body": job["body"],
+            "platform_payload": formatted,
+            "safety_notes": [
+                "human review required before posting",
+                "do not duplicate substantially similar posts across subreddits",
+                "follow subreddit rules and disclose affiliation when relevant",
+            ],
+        }
+        path = directory / f"{job['id']}.json"
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return DeliveryResult(True, "review_required", str(path), error="reddit draft requires human review")
+
+
 class DevtoDraftPublisher:
     def __init__(self, api_key_env="DEVTO_API_KEY", env_file="", api_key=""):
         self.api_key_env = api_key_env
@@ -993,6 +1028,11 @@ def build_publisher(platform, config, data_dir):
         ])
     if kind == "file":
         return FileDraftPublisher(cfg.get("outbox", str(Path(data_dir) / "outbox")))
+    if kind == "reddit-draft":
+        return RedditDraftPublisher(
+            cfg.get("outbox", str(Path(data_dir) / "outbox")),
+            cfg.get("default_subreddit", ""),
+        )
     if kind == "devto-draft":
         return DevtoDraftPublisher(cfg.get("api_key_env", "DEVTO_API_KEY"), cfg.get("env_file", ""))
     if kind == "wechat-draft":

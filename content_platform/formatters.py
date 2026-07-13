@@ -95,7 +95,7 @@ def format_for_platform(job, platform):
         text = f"{title}\n\n{_plain(body)}"[:3000]
         return {**base, "kind": "post", "title": title[:200], "text": text, "hashtags": _hashtags(job)}
     if platform in {"reddit"}:
-        return {**base, "kind": "post", "title": title[:300], "text": body[:40000], "subreddit": "auto"}
+        return {**base, "kind": "post", "title": title[:300], "text": body[:40000], "subreddit": draft_meta.get("subreddit", "manual-selection")}
     if platform in {"facebook", "instagram", "pinterest"}:
         text = _plain(body)[:2000]
         return {**base, "kind": "short", "text": text}

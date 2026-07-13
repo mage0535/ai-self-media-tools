@@ -66,6 +66,9 @@ class AdminServerTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertIn("platforms", overview)
             self.assertIn("charts", overview)
+            reddit_card = next(item for item in overview["platforms"] if item["key"] == "reddit")
+            self.assertIn("trend", reddit_card["supports"])
+            self.assertIn("draft", reddit_card["supports"])
 
             bind_url = f"http://127.0.0.1:{server.server_port}/api/platforms/wechat/bindings"
             status, binding = self._open_json(
@@ -95,6 +98,27 @@ class AdminServerTests(unittest.TestCase):
 
             with self.assertRaises(Exception):
                 self._open_json(self._local_opener(), login_url, method="POST", payload={"password": "test-password"})
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_reddit_platform_detail_is_available_for_central_management(self):
+        server = make_admin_server(self.db_path, password="test-password", host="127.0.0.1", port=0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            launch_url = server.launch_url
+            login_url = f"http://127.0.0.1:{server.server_port}/api/auth/login?" + launch_url.split("?", 1)[1]
+            opener = self._local_opener(http.cookiejar.CookieJar())
+            opener.open(launch_url, timeout=5).read()
+            self._open_json(opener, login_url, method="POST", payload={"password": "test-password"})
+
+            status, detail = self._open_json(opener, f"http://127.0.0.1:{server.server_port}/api/platforms/reddit")
+            self.assertEqual(status, 200)
+            self.assertEqual(detail["platform"]["key"], "reddit")
+            self.assertIn("oauth_env", detail["platform"]["auth_modes"])
+            self.assertIn("manual_review", detail["platform"]["auth_modes"])
+            self.assertTrue(any("OAuth" in step for step in detail["binding_guide"]))
         finally:
             server.shutdown()
             server.server_close()
