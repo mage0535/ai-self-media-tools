@@ -50,10 +50,13 @@ def check_resources():
         r = subprocess.run(["curl","-s","--max-time","8","--socks5","127.0.0.1:1080","https://httpbin.org/ip"], capture_output=True, text=True, timeout=12)
         ip_data = json.loads(r.stdout)
         ip = ip_data.get("origin", "")
-        if "47.104.142.32" in ip:
-            ok(f"CN代理: {ip}")
+        expected_ips = [x.strip() for x in os.getenv("KUAISHOU_EXPECTED_CN_PROXY_IPS", "").split(",") if x.strip()]
+        if expected_ips and not any(expected in ip for expected in expected_ips):
+            die("CN代理IP异常: 当前出口不在 KUAISHOU_EXPECTED_CN_PROXY_IPS 白名单中")
+        if ip:
+            ok("CN代理: 出口IP已验证")
         else:
-            die(f"CN代理IP异常: {ip}")
+            die("CN代理IP异常: 未返回出口IP")
     except Exception as e:
         die(f"CN代理不可用: {str(e)[:80]}")
     # 磁盘

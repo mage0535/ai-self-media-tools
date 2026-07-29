@@ -47,7 +47,7 @@
     "timeout": 180
   },
   "seo": {
-    "openserp_host": "107.174.192.69:7000",
+    "openserp_host": "localhost:7000",
     "default_engine": "duck",
     "geo_checklist_enabled": true,
     "tools": ["openserp", "pyseoanalyzer"]

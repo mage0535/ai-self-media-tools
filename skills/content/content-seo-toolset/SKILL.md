@@ -15,7 +15,7 @@ tools:
 
 ## OpenAI SERP Data (OpenSERP)
 
-VPS 自托管 Docker: `107.174.192.69:7000`, 无需 API key, 6 引擎
+OpenSERP 自托管 Docker: 使用 `config.json` 中的 `seo.openserp_host`，示例 `localhost:7000`，无需 API key，6 引擎
 
 ```bash
 content-platform seo-search --query "AI 工具" --engine duck --limit 5
