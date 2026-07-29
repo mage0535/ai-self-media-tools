@@ -3,6 +3,7 @@ import json
 import urllib.request
 from pathlib import Path
 
+from .auth_registry import resolve_cookie_file
 from .formatters import format_for_platform
 from .models import DeliveryResult
 
@@ -26,7 +27,7 @@ class JuejinPublisher:
         self.save_as_draft = save_as_draft
 
     def _cookie_and_csrf(self):
-        cookie_file = Path(self.cookie_dir) / f"juejin_{self.account}.json"
+        cookie_file = resolve_cookie_file("juejin", self.account, self.cookie_dir)
         if not cookie_file.is_file():
             return None, None, ""
         storage = json.loads(cookie_file.read_text(encoding="utf-8"))

@@ -112,6 +112,10 @@ def parser():
     account_report.add_argument("--topic", required=True)
     account_report.add_argument("--brief", default="{}", help="JSON object")
     sub.add_parser("content-readiness")
+    cookie_inv = sub.add_parser("cookie-inventory")
+    cookie_inv.add_argument("--platform", action="append")
+    cookie_inv.add_argument("--account", default="main")
+    cookie_inv.add_argument("--cookie-dir", default="")
     sub.add_parser("feedback-summary")
     sub.add_parser("project-audit")
     sub.add_parser("health")
@@ -298,6 +302,10 @@ def execute(args):
         result = inspect_delivery_readiness(config)
         store.save_tool_inventory("content-tools", result.get("tools", {}).get("content_tools", {}))
         return result
+    if args.command == "cookie-inventory":
+        from .auth_registry import cookie_inventory
+        platforms = args.platform or sorted((config.get("publishers") or {}).get("platforms") or {})
+        return cookie_inventory(platforms, args.account, args.cookie_dir)
     if args.command == "feedback-summary":
         return store.feedback_summary()
     if args.command == "project-audit":
@@ -452,9 +460,9 @@ def execute(args):
                 matrix.log_publish(plat, False, "", error)
 
         success = sum(1 for r in results if r.get("ok"))
-        print(f"发布结果: {success}/{len(results)}")
+        print(f"publish results: {success}/{len(results)}")
         for r in results:
-            icon = "✅" if r.get("ok") else "❌"
+            icon = "OK" if r.get("ok") else "FAIL"
             print(f"  {icon} {r['platform']} | {r.get('copy','')}")
         return {"success": success, "total": len(results), "results": results}
 
