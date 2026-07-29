@@ -2,6 +2,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import time
 import urllib.parse
@@ -153,6 +154,7 @@ class TrendCollector:
             "hackernews": {"enabled": True, "limit": 20},
             "github": {"enabled": True, "limit": 20, "query": "AI workflow automation content operations"},
             "bilibili": {"enabled": True, "limit": 20},
+            "wewrite_hotspots": {"enabled": False, "limit": 20},
         }
         if isinstance(configured, dict):
             for name, value in configured.items():
@@ -245,6 +247,8 @@ class DirectTrendSource:
             return self._github()
         if self.name == "bilibili":
             return self._bilibili()
+        if self.name == "wewrite_hotspots":
+            return self._wewrite_hotspots()
         raise ValueError(f"unknown direct trend source: {self.name}")
 
     def _request_json(self, url, headers=None):
@@ -272,6 +276,39 @@ class DirectTrendSource:
                 "url": row.get("url") or f"https://news.ycombinator.com/item?id={row.get('objectID')}",
                 "points": int(row.get("points") or 0),
                 "comments": int(row.get("num_comments") or 0),
+            })
+        return items
+
+    def _wewrite_hotspots(self):
+        binary = os.path.expanduser(str(self.config.get("wewrite_bin") or shutil.which("wewrite") or "~/.local/bin/wewrite"))
+        if not Path(binary).is_file():
+            raise RuntimeError(f"wewrite CLI not found: {binary}")
+        proc = subprocess.run(
+            [binary, "hotspots", "--limit", str(self.limit)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=self.timeout,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stderr or proc.stdout or "wewrite hotspots failed")[:240])
+        payload = json.loads(proc.stdout or "[]")
+        rows = payload if isinstance(payload, list) else payload.get("items", payload.get("hotspots", []))
+        items = []
+        for row in rows[: self.limit]:
+            if isinstance(row, str):
+                row = {"title": row}
+            title = str(row.get("title") or row.get("topic") or row.get("keyword") or "").strip()
+            if not title:
+                continue
+            items.append({
+                **row,
+                "title": title,
+                "source": row.get("source", "wewrite_hotspots"),
+                "url": row.get("url", ""),
+                "points": int(row.get("points") or row.get("score") or row.get("heat") or 0),
             })
         return items
 

@@ -90,6 +90,11 @@
       "bilibili": {
         "enabled": true,
         "limit": 20
+      },
+      "wewrite_hotspots": {
+        "enabled": false,
+        "limit": 20,
+        "wewrite_bin": "{{HOME}}/.local/bin/wewrite"
       }
     },
     "reddit": {
