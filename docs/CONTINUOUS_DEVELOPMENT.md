@@ -2370,3 +2370,24 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - MediaBridge rejects required video outputs that lack full toolchain contract evidence.
 - Real MediaBridge knowledge-card smoke returned a valid `video` artifact with `manifest_status=rendered`, cinema gate passed, and 11 planned tools.
 - Localized repost fail-closed smoke returned `status=source_required`, `ok=false`, and did not create `cards.json`.
+
+## 2026-07-29 - Shotcraft Motion Engine Integration
+
+### Fixed
+- Promoted `scripts/shotcraft_moves.py` into the tracked project video toolchain instead of leaving it as an ignored runtime-only script.
+- Added Shotcraft to `content_platform.video_toolchain.build_video_toolchain_plan()` as a required motion designer for generated video workflows.
+- Integrated `shotcraft_moves.shot_plan_for_text()` and `shotcraft_moves.shot_sequence()` into `scripts/video_toolchain_runner.py`.
+- Runner manifests now record `shotcraft_motion_plan`, registry count, selected shots, and timeline evidence; generated `cards.json` includes per-card `shotcraft` motion metadata.
+- `MediaBridge` now rejects required generated-video artifacts that lack a usable Shotcraft motion plan.
+- `video_toolchain_runner.py` now reads `VIDEO_TOOLCHAIN_PLAN_PATH` with `utf-8-sig`, so plan JSON files written with a UTF-8 BOM still load correctly.
+
+### Verification
+- Shotcraft registry import returned 121 registered motions.
+- Dry-run runner smoke returned `shotcraft_available=true`, `registry_count=121`, `selected_count=5`, first card motion `hero-card`, and `planned_tools` containing `shotcraft_moves.shot_plan_for_text`.
+- Video integration tests: `python -m pytest tests/test_video_toolchain.py tests/test_video_toolchain_runner.py tests/test_rule_system.py -q` => `30 passed`.
+- Full suite: `python -m pytest -q` => `352 passed, 2 subtests passed`.
+- `project-audit` => `ok: true`, `issues: []`.
+- Strict tracked-file privacy scan found no cookie, API key, token, private key, public IP, or server path leaks.
+
+### Operational Note
+- Shotcraft is now part of the generated-video path for knowledge-card, tutorial, and original short-form videos. Localized repost workflows still require real source-video evidence first; Shotcraft may be used for overlays, title cards, transitions, or packaging, but must not replace source-video handling.
