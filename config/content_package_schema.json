@@ -1,0 +1,24 @@
+{
+  "version": "content_rules_v1",
+  "required_for_new_content": [
+    "content_package_id",
+    "platform",
+    "account_id",
+    "content_type",
+    "topic",
+    "status"
+  ],
+  "publish_receipt_statuses": [
+    "created",
+    "draft_created",
+    "upload_submitted",
+    "platform_processing",
+    "pending_review",
+    "scheduled",
+    "published",
+    "manual_confirmation_required",
+    "verification_failed",
+    "publish_failed",
+    "cancelled"
+  ]
+}

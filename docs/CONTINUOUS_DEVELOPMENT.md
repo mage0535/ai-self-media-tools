@@ -2137,3 +2137,236 @@ Add Reddit to the self-media tooling as a real centralized channel without addin
 - `mcp_server.py` exposes `reddit_channel_status` for Hermes/MCP agents to query Reddit channel config, binding count, pending review jobs, trend enablement, publisher type, and the fixed policy `human_review_draft_only`.
 - `paths.py` and `tool_registry.py` were hardened so Hermes/MCP status checks do not fail when the runtime environment has `CONTENT_PLATFORM_HOME` but lacks a resolvable user home.
 - Added `docs/HERMES_REDDIT_CHANNEL_INTEGRATION.md` as the copy-pasteable handoff for Hermes and teammate testing.
+---
+
+## 2026-07-28 - Workflow Ordering, Gate Enforcement, Serial Execution Review
+
+### Scope
+
+Follow-up review and hardening for the Hermes-hosted ai-self-media-tools workflow execution order, gate bypass risk, and task concurrency.
+
+### Implemented
+
+- Added persistent workflow infrastructure in SQLite:
+  - `workflow_locks`
+  - `workflow_steps`
+  - `workflow_reports`
+- Added strict serial workflow locking around:
+  - `Pipeline.run()`
+  - `Pipeline.publish()`
+  - `Pipeline.process_delivery_queue()`
+- Added structured workflow step recording for generation, safety, quality, media, platform gate, publish/draft, verification, receipt, report, and notification steps.
+- Enforced production quality blocking when `feature_flags.channel_auto_workflow_gate == "enforce"` or `workflow.require_gate_pass_before_next_step` is enabled.
+- Added required image gate behavior for `media.image.required=true`.
+- Changed delivery-worker default behavior to safe serial processing.
+- Disabled live `publish-matrix` direct publisher calls. Non-dry-run matrix publishing is now blocked and must be converted to a Pipeline job so locks, gates, receipts, postchecks, and reports run.
+- Fixed publisher failure semantics: a failed publisher result is recorded as `FAILED_RETRYABLE`, not as a successful publish step.
+- Added platform report generation and `platform_report` notifications with report path.
+
+### Verification
+
+- Full test suite: `258 passed, 2 subtests passed`
+- Project audit: `ok: true, issues: []`
+- Compile check: `python3 -m compileall -q content_platform tests`
+- Health refresh service: latest systemd run exited `status=0/SUCCESS`
+- Delivery worker empty queue smoke: `{"ok": true, "processed": 0}`
+- Workflow smoke:
+  - job final state: `partial` when delivery health blocks publish
+  - platform steps include `run_platform_pre_publish_gate:BLOCKED`
+  - `generate_platform_report:SUCCEEDED`
+  - `send_completion_report:SUCCEEDED`
+  - global workflow lock released after completion
+
+### Current Limits
+
+- Channel health remains deployment-dependent. Current health refresh still reports 24 configured channels and 6 blocked/non-publishable channels.
+- Blocked channels must not be forced through publish. They require credential, SAU runtime, health refresher, or postcheck evidence fixes.
+- Existing uncommitted worktree contains teammate changes and runtime-added files; no destructive cleanup was performed.
+---
+
+## 2026-07-29 - Codex P0 Workflow Closure Review
+
+### Scope
+
+Follow-up hardening for generation-stage blocked reporting, Kuaishou postcheck semantics, and direct live publish guardrails after Hermes/Codex review.
+
+### Implemented
+
+- Generation-stage `WorkflowBlocked` now writes `workflow_reports` and a markdown report before notifying `blocked`, closing the no-report gap for jobs blocked before delivery.
+- Production quality gate remains enforced when `feature_flags.channel_auto_workflow_gate == "enforce"` or `workflow.require_gate_pass` is set; default/local Pipeline configs can still run review-only gates without false blocking.
+- Kuaishou live publish wrapper now requires an ops-runner context (`CONTENT_PLATFORM_OPS_RUNNER`, `WORKFLOW_ID`, `RUN_ID`, `JOB_ID`) before doing any publish work.
+- `--skip-preflight` is no longer accepted based on historical manifest flags or `KUAISHOU_ALLOW_HISTORICAL_SKIP_PREFLIGHT`; it requires a matching `OPS_SKIP_PREFLIGHT_AUDIT` file with workflow/run/job IDs and a reason.
+- Kuaishou management-page postcheck now treats `under_review` as `passed: false`; scheduled posts require both title and schedule evidence before passing.
+
+### Verification
+
+- Targeted tests: `6 passed`
+- Full test suite: `262 passed, 2 subtests passed`
+- Project audit: `ok: true, issues: []`
+- Compile check: `content_platform/pipeline.py`, `scripts/kuaishou_publish_with_postcheck.py`, `scripts/kuaishou_postcheck_manifest.py`
+- Health refresh: generated `data/delivery_health_state.json`; 24 configured channels, 19 currently publishable, 5 correctly blocked/manual/unverified.
+- Delivery worker empty queue smoke: `{"ok": true, "processed": 0}`
+- Workflow smoke: final state `partial`, `run_platform_pre_publish_gate:BLOCKED`, report generated, completion notification step recorded, active workflow locks released.
+
+### Remaining Operational Boundary
+
+- Live Kuaishou automation must be launched through the ops-runner context only; direct script invocation is intentionally rejected.
+- `douyin`, `xiaohongshu`, `shipinhao`, `juejin`, and `zhihu` remain blocked/manual/unverified until their route-specific health refreshers or postcheck evidence are implemented.
+
+---
+
+## 2026-07-29 - WeChat Draft Quality Gate And Adapter Routing Fix
+
+### Scope
+
+Fix WeChat Official Account draft quality enforcement after a drafted item exposed that generic `quality_gate=5/5` did not prove channel-specific article completeness, theme rendering, inline image mapping, or draft-list postcheck.
+
+### Implemented
+
+- Changed `wechat-draft` publisher routing to use `HermesWechatAdapter` by default.
+- Kept the legacy direct WeChat API route available only as explicit `wechat-legacy-draft`.
+- Added adapter preflight validation before any external runner call:
+  - current `visual_content_design_policy_v1`
+  - `validate_article_packet()` pass
+  - at least 3 inline `section_image_map` entries
+  - Hermes knowledge-card-designer evidence
+  - WeChat renderer/publisher/image tool refs
+  - 109-theme requirement
+  - strategy theme/SEO-GEO evidence
+- Adapter now treats a submitted draft with failed/missing batchget postcheck as `handoff_pending`, not completed `drafted`.
+
+### Verification
+
+- Publisher, adapter, and media quality tests: `55 passed`
+- Full test suite: `281 passed, 2 subtests passed`
+- Project audit: `ok: true, issues: []`
+- Production config route check: `wechat` builds `HermesWechatAdapter`.
+
+### Operational Notes
+
+- The existing WeChat draft from job `d273494875494be6` should not be used as the quality baseline because it was created before this routing fix.
+- Re-run WeChat generation with a complete article packet: 1800-2500 characters, 3 inline images, selected theme, section-image-map, and batchget postcheck evidence.
+- Do not resume multi-channel execution until WeChat single-channel revalidation passes through the adapter route.
+
+## 2026-07-29 - WeChat Professional Toolchain Invocation Gate
+
+- Wired production WeChat generation to `content_platform.wechat_toolchain.prepare_wechat_professional_draft()` before safety, quality, package, media, and delivery stages.
+- Production `feature_flags.channel_auto_workflow_gate=enforce` now requires successful `wewrite llm-write` evidence for WeChat Official Account jobs; missing or failed writer config blocks generation instead of falling back to a generic draft.
+- `HermesWechatAdapter` now merges professional packet fields from `draft_meta` and refuses WeChat delivery unless `tool_invocations.wewrite.status == used` plus `llm-write` command evidence are present.
+- Added tests for toolchain requirement routing, fake WeWrite successful article generation, failure evidence, publisher blocking without WeWrite evidence, and Pipeline blocking when WeWrite is unavailable.
+- Verification: `python3 -m pytest -q --tb=short` => 286 passed, 2 subtests passed; `project-audit` => ok:true, scanned_files=240, issues=[].
+- Current production caveat: WeWrite CLI exists, but the interactive shell did not expose `WEWRITE_WRITER_API_KEY`; configure it in the appropriate private runtime env for automatic WeChat generation.
+
+## 2026-07-29 - Automatic Video Toolchain Selection And Runner
+
+- Added `content_platform.video_toolchain.build_video_toolchain_plan()` so channel strategy now emits a structured `video_toolchain_plan` for short-video and mixed video forms.
+- `DraftGenerator` persists `draft_meta.video_toolchain_plan`; `MediaBridge` reads it, writes `video_toolchain_plan.json`, exports `VIDEO_TOOLCHAIN_PLAN_PATH`, `VIDEO_SELECTED_PIPELINE`, and `VIDEO_TEMPLATE_FAMILY`, then selects the configured renderer.
+- Added `scripts/video_toolchain_runner.py` as the Pipeline-compatible video entrypoint. It converts script/body plus plan into renderer-ready `cards.json`, selects template family, and delegates rendering to the configured renderer without creating a publishing bypass.
+- `config.json` now enables `media.video.script` to point at the project `scripts/video_toolchain_runner.py` and maps localized repost, knowledge-card video, mixed note short video, and tutorial video pipelines to the runner by default.
+- Verification: `tests/test_video_toolchain.py tests/test_video_toolchain_runner.py tests/test_strategy.py tests/test_adapters.py` => 15 passed; full suite => 290 passed, 2 subtests passed; `project-audit` => ok:true, scanned_files=244, issues=[].
+- Non-publish smoke: `VIDEO_TOOLCHAIN_DRY_RUN=1` with production media config generated a video artifact and persisted the plan file under `/tmp/video-toolchain-smoke-*`.
+- Operational note: production rendering now auto-invokes the video runner, but true live render quality still depends on renderer dependencies and source/video asset availability; failures are surfaced as `media_failed` and downstream publishers remain blocked if no real video artifact exists.
+
+﻿
+## 2026-07-29 Platform Quality Gate And Video Dry-Run Closure
+
+- Follow-up finding: generic Pipeline `quality_gate=5/5` could still pass while channel-specific packet validators would reject the same content. The WeChat incident showed this clearly: the draft had insufficient long-form depth, no WeWrite evidence, no section-image map, no embedded knowledge cards, and no publish-ready article artifact probe.
+- Generation-stage quality now includes a platform-specific `G6_platform_quality` gate when `feature_flags.channel_auto_workflow_gate=enforce`. It calls the existing channel validators (`validate_wechat_auto_packet`, `validate_kuaishou_auto_packet`, `validate_shipinhao_auto_packet`, `validate_bilibili_auto_packet`, `validate_douyin_auto_packet`, `validate_xiaohongshu_auto_packet`, and article validators) before the job can be treated as quality-passed.
+- `MediaBridge` now rejects video toolchain dry-run outputs. A `video_toolchain_runner_manifest.json` with `dry_run=true/status=dry_run`, a `dry_run.mp4` filename, or the dry-run marker bytes no longer becomes a publishable `video` artifact.
+- Video Channels (`shipinhao`) is now consistently included in strategy and source platform detection. `channels.weixin.qq.com` URLs normalize to `shipinhao`, preventing operations-analysis samples from being misclassified as WeChat Official Account sources.
+- Regression coverage added for incomplete WeChat packets being caught at generation quality gate time, `shipinhao` strategy routing to video form, dry-run video artifact rejection, and Video Channels source normalization.
+- Verification after local and Hermes sync: local full suite returned `333 passed, 31 subtests passed`; local `project-audit` returned `ok: true`. Hermes full suite returned `295 passed, 2 subtests passed`; Hermes `project-audit` returned `ok: true, scanned_files=246, issues=[]`; compile checks passed on both sides. The previous WeChat job `d273494875494be6` now evaluates as `passed:false` with `G6_platform_quality` failing, so it can no longer be reported as `5/5` quality-passed.
+
+## 2026-07-29 - Cross-Workflow Closure Review
+
+- Daily systemd entrypoint `scripts/run_daily_25_channels.py` now runs `content_platform auto` once per configured platform instead of creating one all-platform job. This preserves channel-specific operation analysis, generation context, quality gates, topic history, and real-time per-platform progress events.
+- Server-only legacy Video Channels upload scripts (`shipinhao_fresh_upload.py`, `shipinhao_cdp_v2.py`, `cdp_upload_final.py`) are archived fail-closed. They no longer upload, save drafts, submit, or rewrite browser storage state; operators must use Pipeline + packet validation + handoff/postcheck.
+- Hermes private direct-publisher helpers (`full_channel_publish.py`, `fast_channel_publish.py`, `real_publish_test.py`, `publish_today.py`) are archived fail-closed to prevent direct `build_publisher().deliver()` bypasses.
+- Legacy `content-review-auto-clear.sh` is archived fail-closed. Bulk automatic approval of `review_required` jobs is not allowed outside explicit review evidence and Pipeline/admin workflow.
+- Video media generation is now required when `draft_meta.video_toolchain_plan.required=true`, even if `media.video.required` is not set globally. Missing/disabled/failed video renderer blocks the workflow instead of being treated as optional media failure.
+- `Store.recover_stale()` now recovers stale `delivery_queue.processing` items. Attempts below 3 are requeued; attempts at or above 3 are marked failed. The old Reddit flair-required stuck item was closed as failed.
+- Verification: targeted workflow/video/reliability tests passed; full test suite passed (`298 passed, 2 subtests passed`); `project-audit` passed (`ok:true`); health-refresh reports 24 configured objects, 19 publish-capable/postcheck-capable, 5 intentionally blocked/manual/unverified.
+
+## 2026-07-29 - Cross-Workflow Quality Closure, Platform Language, and WeWrite Visual Guard
+
+### Fixed
+- Scoped topic history by `(fingerprint, platform)` so one channel no longer starves other channels after selecting the same trend; blocked/failed jobs no longer mark topics as used.
+- Persisted target platforms into Pipeline-created briefs and added platform-aware language defaults: global/international platforms default to English unless the caller explicitly locks language.
+- Switched production generation to `hermes-cli` with fallback disabled in `config.json`; provider output now accepts strict JSON or long raw article text while still passing normalization and gates.
+- Added article packet evidence during generation: preflight manifest, visual policy, growth strategy, template selection, section-image map, real-scene image plan, knowledge-card plan, cover design, and platform adaptation fields.
+- Fixed English G3 hook scoring so international article channels are judged by real problem/payoff/contrast signals; weak generic openings and ordinary hyphenated words do not receive a false boost.
+- Improved workflow observability by preserving redacted body excerpts in `generate_content` step output instead of only `<N chars>`.
+- Enforced WeWrite visual usage on the CLI path: `wewrite topic/article/full` now uses `--visual-mode prompts --max-images 3`, matching the professional WeChat toolchain instead of `visual-mode none`.
+- Daily workflow runner remains platform-serial and reports each channel start/result independently; stale delivery recovery leaves no active processing jobs.
+
+### Verified
+- `python3 -m pytest tests/ -q` => `309 passed, 2 subtests passed`.
+- `python3 -m content_platform --config config.json --db data/state.db project-audit` => `ok: true`, `issues: []`.
+- `health-refresh` with private proxy environment configured => 24 configured objects, 19 `can_publish_now=true`, 5 blocked (`douyin`, `xiaohongshu`, `juejin`, `shipinhao`, `zhihu`).
+- `CONTENT_PLATFORM_DAILY_PER_PLATFORM_LIMIT=0 scripts/run_daily_25_channels.py` => 24 `platform_start` events and exit 0.
+- Dev.to real Pipeline smoke created job `c299d27b635f4d90`: English article, G1-G6 all passed, final state `review_required` with risk `review`; no publish was approved.
+- Database status after verification: active workflow locks `0`, processing deliveries `0`, delivery queue states `completed=6`, `failed=1`.
+
+### Remaining Operational Boundaries
+- `review_required` still requires explicit approval before live publish; this is intentional for source/risk review and prevents silent publication of generated drafts.
+- `douyin` and `xiaohongshu` remain manual handoff; `juejin`, `shipinhao`, and `zhihu` remain blocked until their health refreshers/publisher verification paths are implemented.
+- Real platform delivery still depends on current cookies/API credentials and platform anti-abuse behavior; health refresh verifies presence/route health, not guaranteed user-visible publication.
+
+## 2026-07-29 - Cinema Composition Video Toolchain Closure
+
+### Fixed
+- Corrected `scripts/cinema_composition.py` CSS output so `card_bg` and `card_border` now emit valid `rgba(...)` values usable by HTML templates.
+- Fixed `scripts/visual_gate.py --min-size` so the CLI threshold actually overrides the default size gate.
+- Integrated `scripts.cinema_composition.storyboard()` into the production `scripts/video_toolchain_runner.py` path. Runner-created `cards.json` now carries per-card cinema fields: `cinema`, `traffic_pattern`, `composition_advice`, `layout_template`, `color_scheme`, and `css`.
+- `video_toolchain_runner_manifest.json` now records `cinema_storyboard` for the whole video.
+- Preserved renderer-safe card layouts such as `cover` while attaching cinema layout advice separately, avoiding regressions in existing card rendering.
+- Added non-dry-run post-render Cinema visual gate: rendered card images under `cards/` are checked with `visual_gate.py --cinema`; failure prevents the runner from returning a publishable video artifact.
+
+### Verified
+- New TDD regression tests first failed for invalid CSS, ignored `--min-size`, and missing cinema fields; after implementation they pass.
+- Video-related suite: `tests/test_video_toolchain.py tests/test_video_toolchain_runner.py tests/test_media_quality.py tests/test_platform_quality_gate_runtime.py -q` => `51 passed`.
+- Full suite: `python3 -m pytest tests/ -q` => `312 passed, 2 subtests passed`.
+- `project-audit` => `ok: true`, `issues: []`.
+- `compileall` for `scripts` and `content_platform` passed.
+- Dry-run smoke output `/tmp/video_toolchain_cinema_verify2` confirmed `cinema_storyboard` length 8 and first card retains `layout=cover`, `hook`, `traffic_pattern`, `composition_advice`, `layout_template`, and valid `rgba(...)` CSS.
+
+### Operational Note
+- This completes integration for the ai-self-media-tools primary video path (`media.video.script` points to the project `scripts/video_toolchain_runner.py`). Legacy or independent Hermes-only workflows that call an external screencast engine directly are outside the project Pipeline and must route through the project video runner, or receive a separate guarded integration before being considered production-equivalent.
+
+## 2026-07-29 - Video Toolchain Contract Enforcement
+
+### Fixed
+- Expanded `content_platform.video_toolchain.build_video_toolchain_plan()` so every generated video plan declares the full required toolchain: cinema composition, card rendering, TTS, segment rendering, concatenation, BGM mix, subtitle burn, final encoding, and post-render visual gate.
+- Added machine-checkable `renderer_steps` and `effect_stack` to video plans. This prevents agent prompts from being the only place that remembers which video tools, effects, scripts, and templates must be used.
+- Extended `scripts/video_toolchain_runner.py` manifest output with `toolchain_contract`, `renderer_command_preview`, `bgm_style`, template registry, planned tools, renderer steps, effect stack, and post-render gates.
+- `video_toolchain_runner.py` now passes the cinema-derived `--bgm-style` into the renderer instead of relying on the renderer default.
+- `scripts/intl_short_video_pipeline.py` now routes self-generated international videos through the project video runner first. Legacy screencast/static fallback is fail-closed unless `INTL_VIDEO_ALLOW_LEGACY_FALLBACK=1` is explicitly set.
+- `scripts/kuaishou_render.py` now consumes cinema CSS for no-background-image card rendering, adding gradient and texture layers instead of falling back to flat solid backgrounds.
+- Video output assertions now use ffprobe structural validation when short valid MP4s fall below legacy byte-size thresholds.
+- BGM retrieval now falls back to a generated local low-volume synthetic BGM bed and records `bgm_source.json` if online BGM retrieval is unavailable.
+- Packet schedule generation now handles working directories that do not end with a digit.
+
+### Verification
+- `python3 -m pytest tests/test_video_toolchain.py tests/test_video_toolchain_runner.py -q` -> 13 passed.
+- Related video quality tests -> 57 passed.
+- Full suite -> 318 passed, 2 subtests passed.
+- Dry-run manifest `/tmp/video_toolchain_full_contract_verify/video_toolchain_runner_manifest.json` recorded 11 planned tools, 12 renderer steps, 8 cinema scenes, effect stack, BGM style, and `--bgm-style` renderer command.
+- Real render smoke `/tmp/video_toolchain_real_contract_verify/video_toolchain_runner_manifest.json` returned `ok=true`, `status=rendered`, output `final.mp4`, cinema visual gate passed, and recorded the full toolchain contract.
+
+## 2026-07-29 - Deep Video Workflow QA Closure
+
+### Fixed
+- Added fail-closed guards to remaining legacy/demo video generation scripts so they cannot directly create publishable videos outside Pipeline unless `HERMES_ALLOW_LEGACY_RENDER_DEMO=1` is explicitly set.
+- Disabled the old Douyin original card generator by default. Douyin video work must use repost/handoff source workflows, not original card-video generation.
+- Hardened `MediaBridge` so required video plans must include a valid `video_toolchain_runner_manifest.json`. Missing/partial manifests, missing `toolchain_contract`, incomplete cinema storyboard, failed cinema visual gate, or output outside the working directory now block the artifact.
+- Split required manifest validation by video pipeline:
+  - knowledge/tutorial/card videos require cinema storyboard, card renderer, TTS, BGM, subtitles, encoder, and cinema visual gate evidence.
+  - localized repost videos require source evidence, source asset match, and repost/autoclip toolchain evidence.
+- `localized_repost_video` in `video_toolchain_runner.py` is now fail-closed when no `source_video_path` or `source_url` is provided. It refuses original card fallback and does not generate `cards.json`.
+- Local source reposts copy the provided source video into the output package and record `repost_source` plus `source_asset_match` evidence. URL reposts route through `scripts/autoclip_adapter.py` and fail if source processing fails.
+
+### Verification
+- Legacy guard regression test confirms `animated_card_pipeline.py`, `knowledge_card_demo.py`, `kuaishou_final_pipeline.py`, `render_animation.py`, and `douyin_cat_cards.py` are fail-closed by default.
+- MediaBridge rejects required video outputs that lack full toolchain contract evidence.
+- Real MediaBridge knowledge-card smoke returned a valid `video` artifact with `manifest_status=rendered`, cinema gate passed, and 11 planned tools.
+- Localized repost fail-closed smoke returned `status=source_required`, `ok=false`, and did not create `cards.json`.

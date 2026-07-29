@@ -1,0 +1,12 @@
+{
+  "stages": {
+    "bootstrap": {"description": "No reliable history yet; use channel baseline and low-frequency tests."},
+    "cold_start": {"description": "Early account with limited data; test formats carefully."},
+    "exploration": {"description": "Validating lanes, hooks, and content formats."},
+    "growth": {"description": "Scaling proven lane and format signals."},
+    "mature": {"description": "Stable lane and audience; optimize efficiency and quality."},
+    "recovery": {"description": "Performance or account health declined; reduce risk and frequency."},
+    "restricted": {"description": "Account risk is active; block automated publishing."}
+  },
+  "data_statuses": ["sufficient", "partial", "bootstrap", "unavailable"]
+}

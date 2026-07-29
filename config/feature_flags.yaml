@@ -1,0 +1,29 @@
+content_package_v1: true
+
+security_gate: enforce
+account_health_gate: enforce
+delivery_health_gate: enforce
+proxy_policy_gate: enforce
+
+asset_license_gate: enforce_for_new_content
+publish_receipt_required: enforce
+
+topic_scoring_mode: shadow
+quality_gate_enhanced: shadow
+duplication_detector: shadow
+
+performance_collector: on
+feedback_memory: on
+strategy_updater_mode: observe
+
+channel_rollout:
+  wechat:
+    enabled: true
+  kuaishou:
+    enabled: true
+  shipinhao:
+    enabled: true
+  douyin:
+    enabled: true
+  xiaohongshu:
+    enabled: false

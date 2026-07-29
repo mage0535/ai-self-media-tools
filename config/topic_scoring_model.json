@@ -1,0 +1,23 @@
+{
+  "weights": {
+    "account_track_match": 20,
+    "audience_demand": 15,
+    "platform_trend": 15,
+    "platform_fit": 10,
+    "title_potential": 10,
+    "save_share_value": 10,
+    "differentiation": 10,
+    "asset_availability": 10,
+    "duplication_risk": -5,
+    "compliance_risk": -5
+  },
+  "thresholds": {
+    "auto_production": 70,
+    "manual_review": 60,
+    "reject_below": 60
+  },
+  "override": {
+    "enabled": true,
+    "required_fields": ["override_reason", "operator", "approved_at"]
+  }
+}

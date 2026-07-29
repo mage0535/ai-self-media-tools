@@ -15,3 +15,19 @@ content-platform = "content_platform.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["content_platform*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [
+  ".git",
+  ".codex-server-runtime",
+  ".codex-tmp",
+  "__codex_proxy_sync_tmp__",
+  "data",
+  "local-ops-lab",
+  "tmp",
+  "logs",
+  "artifacts",
+  "outbox",
+  "secrets",
+]

@@ -1,0 +1,31 @@
+{
+  "review_points": [
+    {"after_publish_hours": 1, "purpose": "发布状态、审核状态、链接可用性、异常检查"},
+    {"after_publish_hours": 24, "purpose": "早期曝光、阅读/播放、互动、收藏、转粉等核心指标"},
+    {"after_publish_hours": 72, "purpose": "中期表现、评论反馈、传播趋势"},
+    {"after_publish_hours": 168, "purpose": "长尾表现、搜索流量、长期转化"}
+  ],
+  "metric_schema_v2": {
+    "common": ["views", "likes", "comments", "shares", "saves", "follows"],
+    "article": ["impressions", "clicks", "click_through_rate", "finish_read_rate"],
+    "video": ["three_second_view_rate", "completion_rate", "avg_watch_seconds"],
+    "platform_specific": {
+      "wechat": ["open_rate", "finish_read_rate", "share_rate"],
+      "douyin": ["three_second_view_rate", "completion_rate", "avg_watch_seconds", "follow_conversion_rate"],
+      "kuaishou": ["completion_rate", "avg_watch_seconds", "comment_rate", "follow_conversion_rate"],
+      "bilibili": ["favorite_rate", "coin_rate", "danmaku_rate", "avg_watch_seconds"],
+      "shipinhao": ["three_second_view_rate", "completion_rate", "share_rate", "save_rate"],
+      "xiaohongshu": ["click_through_rate", "save_rate", "comment_rate", "follow_conversion_rate"]
+    }
+  },
+  "diagnosis_rules": [
+    "low_click_rate_means_title_cover_first_screen_rebuild",
+    "low_three_second_rate_means_first_motion_or_first_sentence_rebuild",
+    "low_completion_rate_means_script_rhythm_scene_change_or_payoff_position_rebuild",
+    "low_save_rate_means_information_density_checklist_or_card_value_rebuild",
+    "low_comment_rate_means_comment_prompt_and_topic_conflict_rebuild",
+    "low_follow_conversion_means_series_positioning_and_account_promise_rebuild"
+  ],
+  "unavailable_data_policy": "record_unavailable_reason",
+  "strategy_update_mode": "observe"
+}
