@@ -3,8 +3,10 @@ import math
 import os
 import re
 import subprocess
+import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .paths import project_home, trend_cache_dir
 
@@ -80,26 +82,88 @@ class TrendCollector:
         self.config = config or {}
 
     def collect(self, refresh=False):
+        report = self.collect_with_report(refresh=refresh)
+        return report["items"]
+
+    def collect_with_report(self, refresh=False):
+        sources = []
+        items = []
         reddit_items = []
         reddit_cfg = self.config.get("reddit", {})
         if reddit_cfg.get("enabled"):
-            reddit_items = RedditTrendCollector(reddit_cfg).collect()
+            started = time.time()
+            try:
+                reddit_items = RedditTrendCollector(reddit_cfg).collect()
+                sources.append(_source_report("reddit", "ok" if reddit_items else "empty", len(reddit_items), started))
+            except Exception as exc:  # noqa: BLE001 - source failures must be reported, not hidden.
+                reddit_items = []
+                sources.append(_source_report("reddit", "failed", 0, started, str(exc)[:240]))
+        for source_name, source_cfg in self._direct_sources().items():
+            started = time.time()
+            try:
+                source_items = DirectTrendSource(source_name, source_cfg).collect()
+                items.extend(source_items)
+                sources.append(_source_report(source_name, "ok" if source_items else "empty", len(source_items), started))
+            except Exception as exc:  # noqa: BLE001
+                sources.append(_source_report(source_name, "failed", 0, started, str(exc)[:240]))
         data_dir = Path(self.config.get("legacy_data_dir", str(trend_cache_dir())))
+        legacy_items = []
         if refresh:
             script = Path(self.config.get("legacy_script", str(project_home() / "external" / "scripts" / "trend_collector.py")))
             if script.is_file():
+                started = time.time()
                 proc = subprocess.run(["python3", str(script)], capture_output=True, text=True, timeout=120, check=False)
                 if proc.returncode != 0:
-                    raise RuntimeError((proc.stderr or proc.stdout)[-500:])
+                    sources.append(_source_report("legacy_script", "failed", 0, started, (proc.stderr or proc.stdout)[-240:]))
+                else:
+                    sources.append(_source_report("legacy_script", "ok", 0, started))
         files = sorted(data_dir.glob("trending_*.json"), reverse=True)
-        if not files:
-            if reddit_items:
-                return reddit_items
-            if self.config.get("fallback_enabled"):
-                return self._fallback_items()
-            return []
-        payload = json.loads(files[0].read_text(encoding="utf-8"))
-        rows = payload if isinstance(payload, list) else payload.get("trends", payload.get("items", []))
+        if files:
+            started = time.time()
+            payload = json.loads(files[0].read_text(encoding="utf-8"))
+            rows = payload if isinstance(payload, list) else payload.get("trends", payload.get("items", []))
+            legacy_items = self._normalize_rows(rows, "legacy_cache")
+            sources.append(_source_report("legacy_cache", "ok" if legacy_items else "empty", len(legacy_items), started, metadata={"file": str(files[0])}))
+        items.extend(legacy_items)
+        items.extend(reddit_items)
+        deduped = self._dedupe(items)
+        fallback_used = False
+        if not deduped and self.config.get("fallback_enabled"):
+            fallback_used = True
+            deduped = self._fallback_items()
+            sources.append(_source_report("fallback", "ok", len(deduped), time.time()))
+        return {
+            "items": deduped,
+            "sources": sources,
+            "summary": {
+                "total_sources": len(sources),
+                "ok_sources": sum(1 for row in sources if row.get("status") == "ok"),
+                "failed_sources": sum(1 for row in sources if row.get("status") == "failed"),
+                "empty_sources": sum(1 for row in sources if row.get("status") == "empty"),
+                "items": len(deduped),
+                "fallback_used": fallback_used,
+            },
+        }
+
+    def _direct_sources(self):
+        configured = self.config.get("direct_sources", {})
+        if configured is False:
+            return {}
+        defaults = {
+            "hackernews": {"enabled": True, "limit": 20},
+            "github": {"enabled": True, "limit": 20, "query": "AI workflow automation content operations"},
+            "bilibili": {"enabled": True, "limit": 20},
+        }
+        if isinstance(configured, dict):
+            for name, value in configured.items():
+                if isinstance(value, dict):
+                    defaults[name] = {**defaults.get(name, {}), **value}
+                else:
+                    defaults[name] = {"enabled": bool(value)}
+        return {name: cfg for name, cfg in defaults.items() if cfg.get("enabled", True)}
+
+    @staticmethod
+    def _normalize_rows(rows, default_source):
         seen, result = set(), []
         for row in rows:
             if isinstance(row, str):
@@ -108,8 +172,13 @@ class TrendCollector:
             key = title.casefold()
             if title and key not in seen:
                 seen.add(key)
-                result.append({"title": title, "source": row.get("source", "unknown"), "url": row.get("url", "")})
-        for item in reddit_items:
+                result.append({**row, "title": title, "source": row.get("source", default_source), "url": row.get("url", "")})
+        return result
+
+    @staticmethod
+    def _dedupe(rows):
+        seen, result = set(), []
+        for item in rows:
             title = str(item.get("title", "")).strip()
             key = title.casefold()
             if title and key not in seen:
@@ -144,6 +213,110 @@ class TrendCollector:
                 "fallback": True,
             })
         return result
+
+
+def _source_report(name, status, count, started, error="", metadata=None):
+    report = {
+        "source": name,
+        "status": status,
+        "count": int(count),
+        "elapsed_ms": int((time.time() - started) * 1000),
+    }
+    if error:
+        report["error"] = error
+    if metadata:
+        report["metadata"] = metadata
+    return report
+
+
+class DirectTrendSource:
+    """Small no-browser trend collectors used before falling back to Hermes tools."""
+
+    def __init__(self, name, config=None):
+        self.name = str(name).casefold()
+        self.config = config or {}
+        self.limit = int(self.config.get("limit", 20))
+        self.timeout = int(self.config.get("timeout", 15))
+
+    def collect(self):
+        if self.name == "hackernews":
+            return self._hackernews()
+        if self.name == "github":
+            return self._github()
+        if self.name == "bilibili":
+            return self._bilibili()
+        raise ValueError(f"unknown direct trend source: {self.name}")
+
+    def _request_json(self, url, headers=None):
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": self.config.get("user_agent", "ai-self-media-tools/0.2 trend collector"),
+                **(headers or {}),
+            },
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            return json.loads(response.read())
+
+    def _hackernews(self):
+        payload = self._request_json("https://hn.algolia.com/api/v1/search?tags=front_page")
+        items = []
+        for row in payload.get("hits", [])[: self.limit]:
+            title = str(row.get("title") or row.get("story_title") or "").strip()
+            if not title:
+                continue
+            items.append({
+                "title": title,
+                "source": "hackernews",
+                "url": row.get("url") or f"https://news.ycombinator.com/item?id={row.get('objectID')}",
+                "points": int(row.get("points") or 0),
+                "comments": int(row.get("num_comments") or 0),
+            })
+        return items
+
+    def _github(self):
+        since = (datetime.now(timezone.utc) - timedelta(days=int(self.config.get("days", 14)))).date().isoformat()
+        query = str(self.config.get("query") or "AI workflow automation")
+        q = urllib.parse.urlencode({
+            "q": f"{query} created:>={since}",
+            "sort": "stars",
+            "order": "desc",
+            "per_page": min(self.limit, 50),
+        })
+        payload = self._request_json(f"https://api.github.com/search/repositories?{q}")
+        items = []
+        for row in payload.get("items", [])[: self.limit]:
+            name = str(row.get("full_name") or row.get("name") or "").strip()
+            desc = str(row.get("description") or "").strip()
+            if not name:
+                continue
+            items.append({
+                "title": f"{name}: {desc}" if desc else name,
+                "source": "github",
+                "url": row.get("html_url", ""),
+                "points": int(row.get("stargazers_count") or 0),
+                "language": row.get("language"),
+            })
+        return items
+
+    def _bilibili(self):
+        payload = self._request_json(f"https://api.bilibili.com/x/web-interface/popular?ps={min(self.limit, 50)}&pn=1")
+        rows = payload.get("data", {}).get("list", [])
+        items = []
+        for row in rows[: self.limit]:
+            title = str(row.get("title") or "").strip()
+            if not title:
+                continue
+            stat = row.get("stat") or {}
+            items.append({
+                "title": title,
+                "source": "bilibili",
+                "url": row.get("short_link_v2") or row.get("short_link") or row.get("uri", ""),
+                "points": int(stat.get("view") or 0) + int(stat.get("like") or 0) * 2 + int(stat.get("danmaku") or 0),
+                "author": (row.get("owner") or {}).get("name", ""),
+            })
+        return items
 
 
 class RedditTrendCollector:

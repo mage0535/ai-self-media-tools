@@ -76,6 +76,22 @@
   "trends": {
     "legacy_data_dir": "{{CONTENT_PLATFORM_HOME}}/data/trend-cache",
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/trend_collector.py",
+    "fallback_enabled": true,
+    "direct_sources": {
+      "hackernews": {
+        "enabled": true,
+        "limit": 20
+      },
+      "github": {
+        "enabled": true,
+        "limit": 20,
+        "query": "AI workflow automation content operations"
+      },
+      "bilibili": {
+        "enabled": true,
+        "limit": 20
+      }
+    },
     "reddit": {
       "enabled": false,
       "client_id_env": "REDDIT_CLIENT_ID",
