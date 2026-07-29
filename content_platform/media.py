@@ -261,6 +261,8 @@ class MediaBridge:
             return
         required_tools = {
             "cinema_composition.storyboard",
+            "shotcraft_moves.shot_plan_for_text",
+            "shotcraft_moves.shot_sequence",
             "video_toolchain_runner.build_cards",
             "kuaishou_render.render_cards",
             "kuaishou_render.gen_tts",
@@ -277,6 +279,9 @@ class MediaBridge:
             raise RuntimeError(f"required video toolchain_contract missing tools: {missing}")
         if "cinema_storyboard" not in manifest or len(manifest.get("cinema_storyboard") or []) < 8:
             raise RuntimeError("required video cinema_storyboard missing or incomplete")
+        shotcraft_plan = manifest.get("shotcraft_motion_plan") or {}
+        if not shotcraft_plan.get("available") or len(shotcraft_plan.get("timeline") or []) < 3:
+            raise RuntimeError("required video shotcraft_motion_plan missing or incomplete")
         if not (manifest.get("cinema_visual_gate") or {}).get("passed"):
             raise RuntimeError("required video cinema visual gate did not pass")
         output = Path(str(manifest.get("output") or ""))

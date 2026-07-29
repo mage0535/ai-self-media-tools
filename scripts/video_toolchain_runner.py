@@ -25,6 +25,16 @@ if str(Path(__file__).resolve().parents[1]) not in sys.path:
 
 from scripts.cinema_composition import storyboard
 
+try:
+    from scripts.shotcraft_moves import SHOT_CARD_REGISTRY, shot_plan_for_text, shot_sequence
+except Exception as exc:  # pragma: no cover - exercised through manifest fallback
+    SHOT_CARD_REGISTRY = {}
+    _SHOTCRAFT_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+    shot_plan_for_text = None
+    shot_sequence = None
+else:
+    _SHOTCRAFT_IMPORT_ERROR = ""
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RENDERER = ROOT / "scripts" / "kuaishou_render.py"
@@ -38,6 +48,8 @@ THEME_BY_TEMPLATE = {
 }
 PLANNED_TOOLS = [
     "cinema_composition.storyboard",
+    "shotcraft_moves.shot_plan_for_text",
+    "shotcraft_moves.shot_sequence",
     "video_toolchain_runner.build_cards",
     "kuaishou_render.render_cards",
     "kuaishou_render.gen_tts",
@@ -51,6 +63,7 @@ PLANNED_TOOLS = [
 ]
 RENDERER_STEPS = [
     "cinema_storyboard",
+    "shotcraft_motion_plan",
     "build_cards",
     "render_cards",
     "gen_tts",
@@ -67,6 +80,7 @@ EFFECT_STACK = [
     "template_theme",
     "cinema_color_css",
     "cinema_composition_layout",
+    "shotcraft_motion_css",
     "motion_card_layouts",
     "lower_third_subtitles",
     "licensed_bgm_mix",
@@ -94,7 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     if str(plan.get("selected_pipeline") or "") == "localized_repost_video" and os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") != "1":
         return _run_localized_repost(plan, output_dir, title)
     cinema_scenes = storyboard(script_body or title, 8)
-    cards = build_cards(script_body, title, plan, cinema_scenes)
+    shotcraft_plan = _shotcraft_motion_plan(script_body or title)
+    cards = build_cards(script_body, title, plan, cinema_scenes, shotcraft_plan)
     cards_path = output_dir / "cards.json"
     cards_path.write_text(json.dumps(cards, ensure_ascii=False, indent=2), encoding="utf-8")
     renderer = _renderer_path(plan)
@@ -114,11 +129,12 @@ def main(argv: list[str] | None = None) -> int:
         "toolchain_contract": toolchain_contract,
         "dry_run": os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1",
         "cinema_storyboard": cinema_scenes,
+        "shotcraft_motion_plan": shotcraft_plan,
     }
     if manifest["dry_run"]:
         fake = output_dir / "dry_run.mp4"
         fake.write_bytes(b"video-toolchain-dry-run")
-        manifest.update({"ok": True, "output": str(fake), "status": "dry_run"})
+        manifest.update({"ok": True, "output": str(fake), "status": "dry_run", "executed_tools": PLANNED_TOOLS})
         _write_manifest(output_dir, manifest)
         print(json.dumps({"ok": True, "output": str(fake)}, ensure_ascii=False))
         return 0
@@ -149,8 +165,15 @@ def main(argv: list[str] | None = None) -> int:
     return proc.returncode or 3
 
 
-def build_cards(script_body: str, title: str, plan: dict, cinema_scenes: list[dict] | None = None) -> list[dict]:
+def build_cards(
+    script_body: str,
+    title: str,
+    plan: dict,
+    cinema_scenes: list[dict] | None = None,
+    shotcraft_plan: dict | None = None,
+) -> list[dict]:
     beats = _beats(script_body)
+    shotcraft_timeline = list((shotcraft_plan or {}).get("timeline") or [])
     cards = []
     for index in range(8):
         beat = beats[index] if index < len(beats) else f"Step {index + 1}: keep the visual rhythm aligned with the script."
@@ -169,6 +192,7 @@ def build_cards(script_body: str, title: str, plan: dict, cinema_scenes: list[di
             "layout_template": scene.get("layout_template", layout),
             "color_scheme": scene.get("color_scheme", {}),
             "css": scene.get("css", {}),
+            "shotcraft": _shotcraft_for_card(shotcraft_timeline, index),
         }
         if layout == "cover":
             card.update({"sub": _summary(script_body)[:40], "hook": title[:42], "hook_prefix": "Auto selected video workflow"})
@@ -180,6 +204,53 @@ def build_cards(script_body: str, title: str, plan: dict, cinema_scenes: list[di
             card["items"] = [beat, "Add voiceover", "Add licensed music", "Run post-render checks"]
         cards.append(card)
     return cards
+
+
+def _shotcraft_motion_plan(text: str, num_shots: int = 8) -> dict:
+    if not shot_plan_for_text or not shot_sequence:
+        return {
+            "available": False,
+            "error": _SHOTCRAFT_IMPORT_ERROR or "shotcraft module unavailable",
+            "registry_count": 0,
+            "selected_shots": [],
+            "timeline": [],
+        }
+    selected = shot_plan_for_text(text, num_shots=num_shots)
+    timeline = shot_sequence(selected)
+    return {
+        "available": True,
+        "registry_count": len(SHOT_CARD_REGISTRY),
+        "selected_shots": [
+            {"name": name, "duration_frames": duration, "params": params or {}}
+            for name, duration, params in selected
+        ],
+        "timeline": [
+            {
+                "name": item.get("name", ""),
+                "start_frame": item.get("start_frame", 0),
+                "end_frame": item.get("end_frame", 0),
+                "duration_frames": item.get("duration_frames", 0),
+                "params": item.get("params") or {},
+                "css_selectors": sorted((item.get("css") or {}).keys()),
+                "keyframes": sorted((item.get("keyframes") or {}).keys()),
+            }
+            for item in timeline
+        ],
+    }
+
+
+def _shotcraft_for_card(timeline: list[dict], index: int) -> dict:
+    if not timeline:
+        return {"available": False}
+    item = timeline[index % len(timeline)]
+    return {
+        "available": True,
+        "name": item.get("name", ""),
+        "start_frame": item.get("start_frame", 0),
+        "end_frame": item.get("end_frame", 0),
+        "css_selectors": item.get("css_selectors") or [],
+        "keyframes": item.get("keyframes") or [],
+    }
 
 
 def _run_cinema_visual_gate(output_dir: Path) -> dict:
@@ -205,7 +276,7 @@ def _run_cinema_visual_gate(output_dir: Path) -> dict:
 def _load_plan() -> dict:
     path = os.environ.get("VIDEO_TOOLCHAIN_PLAN_PATH", "")
     if path and Path(path).is_file():
-        return json.loads(Path(path).read_text(encoding="utf-8"))
+        return json.loads(Path(path).read_text(encoding="utf-8-sig"))
     return {
         "selected_pipeline": os.environ.get("VIDEO_SELECTED_PIPELINE", "knowledge_card_video"),
         "template_family": os.environ.get("VIDEO_TEMPLATE_FAMILY", "knowledge_card_motion_case"),
@@ -255,6 +326,7 @@ def _toolchain_contract(plan: dict, theme: str, bgm_style: str, renderer: Path) 
             "theme": theme,
             "renderer": str(renderer),
             "card_layouts": LAYOUTS,
+            "shotcraft_registry_count": len(SHOT_CARD_REGISTRY),
         },
         "bgm_style": bgm_style,
         "post_render_gates": ["visual_gate.py --cinema"],
