@@ -1,6 +1,7 @@
-SHORT_VIDEO_PLATFORMS = {"douyin", "tiktok", "youtube", "bilibili", "kuaishou"}
+from .video_toolchain import build_video_toolchain_plan
+SHORT_VIDEO_PLATFORMS = {"douyin", "tiktok", "youtube", "bilibili", "kuaishou", "shipinhao"}
 NOTE_PLATFORMS = {"xiaohongshu", "rednote", "instagram", "threads"}
-ARTICLE_PLATFORMS = {"wechat", "weixin", "devto", "linkedin", "telegraph", "mataroa", "tabnews"}
+ARTICLE_PLATFORMS = {"wechat", "weixin", "devto", "telegraph", "mataroa", "tabnews"}
 
 
 def choose_content_strategy(topic, brief, viral_score, niche_report):
@@ -33,12 +34,21 @@ def choose_content_strategy(topic, brief, viral_score, niche_report):
         warnings.append("topic score is below publish threshold; gather more references before scaling")
     if not niche_report.get("account_count", 0):
         warnings.append("same-track account evidence is thin")
+    video_toolchain_plan = build_video_toolchain_plan(
+        {
+            "content_form": content_form,
+            "primary_platforms": primary_platforms,
+            "asset_plan": asset_plan,
+        },
+        brief,
+    )
     return {
         "topic": topic,
         "content_form": content_form,
         "primary_platforms": primary_platforms,
         "secondary_platforms": secondary_platforms,
         "asset_plan": asset_plan,
+        "video_toolchain_plan": video_toolchain_plan,
         "recommended_next_step": recommendation,
         "confidence": round((viral_score.get("total_score", 0.0) + utility + visual) / 3, 3),
         "warnings": warnings,
