@@ -108,6 +108,49 @@ class HealthRefreshTests(unittest.TestCase):
         self.assertEqual(entry["state"], "usable")
         self.assertTrue(entry["can_publish_now"])
 
+    def test_juejin_api_is_usable_when_cookie_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie_dir = Path(tmp)
+            (cookie_dir / "juejin_main.json").write_text(json.dumps([{"name": "sessionid", "value": "x"}]), encoding="utf-8")
+            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+                entry = classify_platform_health(
+                    "juejin",
+                    {"type": "juejin-api", "account": "main", "cookie_dir": str(cookie_dir)},
+                )
+
+        self.assertEqual(entry["state"], "usable_with_postcheck_required")
+        self.assertTrue(entry["can_publish_now"])
+        self.assertTrue(entry["require_postcheck"])
+
+    def test_zhihu_playwright_requires_cookie_and_playwright_dependency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie_dir = Path(tmp)
+            (cookie_dir / "zhihu_main.json").write_text(json.dumps([{"name": "z_c0", "value": "x"}]), encoding="utf-8")
+            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+                with patch("content_platform.health_refresh.importlib.util.find_spec", return_value=object()):
+                    entry = classify_platform_health(
+                        "zhihu",
+                        {"type": "zhihu-playwright", "account": "main", "cookie_dir": str(cookie_dir)},
+                    )
+
+        self.assertEqual(entry["state"], "usable_with_postcheck_required")
+        self.assertTrue(entry["can_publish_now"])
+
+    def test_zhihu_playwright_reports_missing_dependency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie_dir = Path(tmp)
+            (cookie_dir / "zhihu_main.json").write_text(json.dumps([{"name": "z_c0", "value": "x"}]), encoding="utf-8")
+            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+                with patch("content_platform.health_refresh.importlib.util.find_spec", return_value=None):
+                    entry = classify_platform_health(
+                        "zhihu",
+                        {"type": "zhihu-playwright", "account": "main", "cookie_dir": str(cookie_dir)},
+                    )
+
+        self.assertEqual(entry["state"], "auth_required")
+        self.assertFalse(entry["can_publish_now"])
+        self.assertIn("playwright", entry["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()
