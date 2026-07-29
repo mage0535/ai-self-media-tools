@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -98,9 +99,10 @@ def _invoke_wewrite(cfg: dict[str, Any], brief_path: Path, article_path: Path, t
     base = {"tool": "wewrite", "bin": wewrite_bin, "status": "failed", "commands": []}
     if not Path(wewrite_bin).is_file():
         return {**base, "error": "wewrite CLI not found"}
+    command_prefix = [sys.executable, wewrite_bin] if wewrite_bin.endswith(".py") else [wewrite_bin]
     try:
         start = subprocess.run(
-            [wewrite_bin, "run", "start", "--topic", topic, "--mode", "draft", "--visual-mode", "prompts", "--max-images", "3"],
+            [*command_prefix, "run", "start", "--topic", topic, "--mode", "draft", "--visual-mode", "prompts", "--max-images", "3"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -114,7 +116,7 @@ def _invoke_wewrite(cfg: dict[str, Any], brief_path: Path, article_path: Path, t
         if run_id:
             base["run_id"] = run_id
         write = subprocess.run(
-            [wewrite_bin, "llm-write", "--brief", str(brief_path), "--output", str(article_path), "--system-extra", _system_extra()],
+            [*command_prefix, "llm-write", "--brief", str(brief_path), "--output", str(article_path), "--system-extra", _system_extra()],
             capture_output=True,
             text=True,
             encoding="utf-8",
