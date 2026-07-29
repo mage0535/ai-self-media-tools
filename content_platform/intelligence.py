@@ -10,6 +10,26 @@ from .sources import normalize_source_items, summarize_source_items
 from .strategy_router import choose_content_strategy
 from .viral_score import score_topic_candidate
 
+GLOBAL_EN_PLATFORMS = {"devto", "buttondown", "writeas", "telegraph", "mastodon", "bluesky", "threads", "twitter", "x", "tiktok", "youtube", "nostr", "instagram"}
+CN_PLATFORMS = {"wechat", "weixin", "wechat_official", "douyin", "xiaohongshu", "rednote", "bilibili", "kuaishou", "shipinhao", "juejin", "zhihu", "csdn", "baijiahao"}
+
+
+def infer_content_language(brief):
+    brief = brief or {}
+    explicit = str(brief.get("language") or brief.get("locale") or "").strip().lower()
+    if explicit:
+        if explicit.startswith(("en", "english")):
+            return "en"
+        if explicit.startswith(("zh", "cn", "chinese")) or "中文" in explicit:
+            return "zh"
+        return explicit[:16]
+    platforms = [str(p).casefold() for p in brief.get("platforms", []) if str(p).strip()]
+    if platforms and all(p in GLOBAL_EN_PLATFORMS for p in platforms):
+        return "en"
+    if any(p in CN_PLATFORMS for p in platforms):
+        return "zh"
+    return "zh"
+
 
 def _plain(text):
     text = re.sub(r"<[^>]+>", " ", str(text))
@@ -173,6 +193,7 @@ def cluster_reference_topics(items):
 
 def build_generation_context(topic, brief):
     brief = brief or {}
+    language = infer_content_language(brief)
     references = collect_reference_posts(brief)
     source_catalog = normalize_source_items(topic, brief, references)
     source_summary = summarize_source_items(source_catalog)
@@ -205,12 +226,19 @@ def build_generation_context(topic, brief):
     image_prompt = f"{topic} | niche={niche} | audience={audience} | form={content_form} | create a strong cover with high information density"
     video_prompt = f"{topic} | form={content_form} | start with a hook, explain three points, end with a CTA"
     # 配音脚本生成指南（传给生成器）
-    narration_guide = (
-        f"生成中文配音脚本。跟踪赛道(niche={niche})和内容形式({content_form})自动适配风格。"
-        "单人播报模式：直接输出配音文本。"
-        "多人对话模式：使用[角色A]台词\\n[角色B]台词格式标记不同说话人。"
-    )
+    if language == "en":
+        narration_guide = (
+            f"Generate an English narration script. Adapt tone to niche={niche} and content_form={content_form}. "
+            "Single-speaker mode: output narration text directly. Multi-speaker mode: use [Speaker A] lines."
+        )
+    else:
+        narration_guide = (
+            f"生成中文配音脚本。跟踪赛道(niche={niche})和内容形式({content_form})自动适配风格。"
+            "单人播报模式：直接输出配音文本。"
+            "多人对话模式：使用[角色A]台词\n[角色B]台词格式标记不同说话人。"
+        )
     return {
+        "language": language,
         "trend_stage": trend_stage,
         "trend_angle": trend_angle,
         "reference_titles": reference_titles[:5],
@@ -237,6 +265,7 @@ def prompt_brief(topic, brief):
         {
             "topic": topic,
             "brief": brief,
+            "language": context.get("language", "zh"),
             "trend_stage": context["trend_stage"],
             "trend_angle": context["trend_angle"],
             "reference_titles": context["reference_titles"],

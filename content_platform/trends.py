@@ -34,6 +34,8 @@ def rank_trends(items, profile=None, used=None, limit=10, learned=None):
             for signal in cluster.get("topic_signals", []):
                 if str(signal).casefold() in title.casefold():
                     learned_cluster_score = max(learned_cluster_score, float(cluster.get("weight", 0)))
+        if item.get("fallback"):
+            source_score = max(source_score, 0.5)
         if source_score <= 0 and fit_score <= 0:
             continue
         score = source_score + fit_score + learned_source_score + learned_cluster_score
@@ -86,6 +88,8 @@ class TrendCollector:
                     raise RuntimeError((proc.stderr or proc.stdout)[-500:])
         files = sorted(data_dir.glob("trending_*.json"), reverse=True)
         if not files:
+            if self.config.get("fallback_enabled"):
+                return self._fallback_items()
             return []
         payload = json.loads(files[0].read_text(encoding="utf-8"))
         rows = payload if isinstance(payload, list) else payload.get("trends", payload.get("items", []))
@@ -98,4 +102,35 @@ class TrendCollector:
             if title and key not in seen:
                 seen.add(key)
                 result.append({"title": title, "source": row.get("source", "unknown"), "url": row.get("url", "")})
+        return result
+
+    def _fallback_items(self):
+        raw_keywords = self.config.get("fallback_keywords")
+        if not raw_keywords:
+            raw_keywords = self.config.get("keywords")
+        if isinstance(raw_keywords, dict):
+            keywords = []
+            for value in raw_keywords.values():
+                if isinstance(value, list):
+                    keywords.extend(value)
+        elif isinstance(raw_keywords, list):
+            keywords = raw_keywords
+        else:
+            keywords = []
+        if not keywords:
+            keywords = ["AI self media workflow", "content operations automation", "short video distribution"]
+        result, seen = [], set()
+        for index, keyword in enumerate(keywords):
+            title = str(keyword).strip()
+            key = title.casefold()
+            if not title or key in seen:
+                continue
+            seen.add(key)
+            result.append({
+                "title": title,
+                "source": "fallback",
+                "url": "",
+                "points": max(1, len(keywords) - index),
+                "fallback": True,
+            })
         return result
