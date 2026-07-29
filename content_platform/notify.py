@@ -22,6 +22,7 @@ class Notifier:
             "state": job.get("state", ""),
             "platforms": job.get("platforms", []),
             "deliveries": job.get("deliveries", []),
+            "report_path": job.get("report_path", ""),
             "review_actions": job.get("review_actions", {}),
         }
         with log_path.open("a", encoding="utf-8") as handle:
@@ -41,11 +42,7 @@ class Notifier:
             return False
         message = self._message(row)
         proc = subprocess.run(
-            ["hermes", "send", "--to", target, "--quiet", message],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
+            ["hermes", "send", "--to", target, "--quiet", message], capture_output=True, text=True, timeout=30, check=False
         )
         return proc.returncode == 0
 
@@ -63,26 +60,13 @@ class Notifier:
     @staticmethod
     def _message(row):
         text = f"[{row['event']}] {row['title']}\njob={row['job_id']} state={row['state']}"
-        platforms = [str(item) for item in row.get("platforms", []) if str(item)]
-        if platforms:
-            text += "\nplatforms=" + ",".join(platforms)
-        deliveries = []
-        for item in row.get("deliveries", [])[:5]:
-            platform = str(item.get("platform", ""))
-            status = str(item.get("status", ""))
-            external_id = str(item.get("external_id", ""))
-            if platform and status:
-                delivery = f"{platform}:{status}"
-                if platform == "reddit" and external_id:
-                    delivery += f" {external_id}"
-                deliveries.append(delivery)
-        if deliveries:
-            text += "\ndeliveries=" + "; ".join(deliveries)
+        if row.get("report_path"):
+            text += f"\nreport={row['report_path']}"
         actions = row.get("review_actions", {})
         if actions.get("approve"):
-            text += f"\n\napprove: content-platform review-action {actions['approve']} --action approve --actor REVIEWER"
+            text += f"\n\n批准：content-platform review-action {actions['approve']} --action approve --actor REVIEWER"
         if actions.get("reject"):
-            text += f"\nreject: content-platform review-action {actions['reject']} --action reject --actor REVIEWER"
+            text += f"\n拒绝：content-platform review-action {actions['reject']} --action reject --actor REVIEWER"
         return text
 
     def _setting(self, name):

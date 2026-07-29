@@ -11,7 +11,9 @@ def _cookie_count(path, pattern="*"):
     return sum(1 for _ in base.glob(pattern))
 
 
-def _probe_social_cli(project_dir, python_bin):
+def _probe_social_cli(project_dir, python_bin, skip=False):
+    if skip:
+        return {"skipped": True, "available": False, "error": "skipped by config"}
     project = Path(project_dir)
     python = Path(python_bin)
     if not project.is_dir() or not python.is_file():
@@ -33,6 +35,7 @@ def _probe_social_cli(project_dir, python_bin):
 
 def inspect_delivery_readiness(config):
     publishers = config.get("publishers", {}).get("platforms", {})
+    skip_cli_probe = bool(config.get("skip_cli_probe"))
     result = {"publishers": {}, "tools": {}}
     for name, cfg in sorted(publishers.items()):
         kind = cfg.get("type", "file")
@@ -50,7 +53,7 @@ def inspect_delivery_readiness(config):
             item["python_bin_exists"] = Path(python_bin).is_file()
             item["account_name"] = cfg.get("account_name", "")
             item["platform_name"] = cfg.get("platform_name", name)
-            item["cli_probe"] = _probe_social_cli(project_dir, python_bin)
+            item["cli_probe"] = _probe_social_cli(project_dir, python_bin, skip_cli_probe)
         elif kind == "wechat-draft":
             env_file = cfg.get("env_file", "")
             item["env_file_exists"] = Path(env_file).is_file() if env_file else False
@@ -62,7 +65,7 @@ def inspect_delivery_readiness(config):
         "resolved_home": str(social_root),
         "project_dir_exists": social_root.is_dir(),
         "python_bin_exists": python_bin.is_file(),
-        "cli_probe": _probe_social_cli(social_root, python_bin),
+        "cli_probe": _probe_social_cli(social_root, python_bin, skip_cli_probe),
         "cookie_counts": {
             "douyin": _cookie_count(social_root / "cookies", "douyin_*.json") + _cookie_count(social_root / "cookies/douyin_uploader", "*.json"),
             "bilibili": _cookie_count(social_root / "cookies", "bilibili_*.json"),
@@ -79,5 +82,8 @@ def inspect_delivery_readiness(config):
     }
     probe_config = dict(config)
     probe_config.setdefault("fast_probe", True)
-    result["tools"]["content_tools"] = ToolRegistry(probe_config).probe()
+    if skip_cli_probe:
+        result["tools"]["content_tools"] = {"skipped": True}
+    else:
+        result["tools"]["content_tools"] = ToolRegistry(probe_config).probe()
     return result

@@ -101,6 +101,9 @@ def parser():
     task_auto.add_argument("--env", choices=["cn", "intl"], default="cn")
     task_auto.add_argument("--page-size", type=int, default=20)
     sub.add_parser("delivery-readiness")
+    health_refresh = sub.add_parser("health-refresh")
+    health_refresh.add_argument("--output", default="")
+    health_refresh.add_argument("--platform", action="append")
     analyze = sub.add_parser("analyze-topic")
     analyze.add_argument("--topic", required=True)
     analyze.add_argument("--brief", default="{}", help="JSON object")
@@ -163,7 +166,65 @@ def parser():
     nl.add_argument("feeds", nargs="+", help="RSS feed URLs")
     nl.add_argument("--keywords", nargs="*", default=[])
     nl.add_argument("--max", type=int, default=10)
+
+    # v4.0 — WeWrite integration
+    ww = sub.add_parser("wewrite", help="Run WeWrite workflow for WeChat article")
+    ww.add_argument("action", choices=["hotspots", "topic", "article", "full"],
+                    help="Action: hotspots=topic discovery, topic=scored topics, article=write draft, full=complete pipeline")
+    ww.add_argument("--topic", default="", help="Topic for article action")
+    ww.add_argument("--output", default="", help="Output path for generated article")
     return p
+
+
+def _exec_wewrite(args, config):
+    """Execute WeWrite workflow actions via CLI wrapper.
+
+    Delegates to the wewrite CLI tool installed at ~/.local/bin/wewrite.
+    """
+    import subprocess, json
+    wewrite_bin = os.path.expanduser("~/.local/bin/wewrite")
+    if not os.path.exists(wewrite_bin):
+        return {"ok": False, "error": "wewrite CLI not found at " + wewrite_bin}
+
+    try:
+        if args.action == "hotspots":
+            r = subprocess.run([wewrite_bin, "hotspots", "--limit", "15"],
+                              capture_output=True, text=True, timeout=45)
+            if r.returncode != 0:
+                return {"ok": False, "error": r.stderr[:300]}
+            return {"ok": True, "hotspots": json.loads(r.stdout)}
+
+        elif args.action == "topic":
+            if not args.topic:
+                return {"ok": False, "error": "wewrite topic requires --topic"}
+            r = subprocess.run([wewrite_bin, "run", "start", "--topic", args.topic,
+                               "--mode", "draft", "--visual-mode", "prompts", "--max-images", "3"],
+                              capture_output=True, text=True, timeout=15)
+            return {"ok": r.returncode == 0, "output": r.stdout[:500], "run_id": json.loads(r.stdout).get("run_id") if r.stdout and r.returncode == 0 else ""}
+
+        elif args.action == "article":
+            topic = args.topic or "今日热点"
+            r = subprocess.run([wewrite_bin, "run", "start", "--topic", topic,
+                               "--mode", "draft", "--visual-mode", "prompts", "--max-images", "3"],
+                              capture_output=True, text=True, timeout=15)
+            if r.returncode != 0:
+                return {"ok": False, "error": r.stderr[:300]}
+            data = json.loads(r.stdout)
+            return {"ok": True, "run_id": data.get("run_id"), "status": "draft_created"}
+
+        elif args.action == "full":
+            topic = args.topic or "今日热点"
+            r = subprocess.run([wewrite_bin, "run", "start", "--topic", topic,
+                               "--mode", "complete", "--visual-mode", "prompts", "--max-images", "3"],
+                              capture_output=True, text=True, timeout=15)
+            if r.returncode != 0:
+                return {"ok": False, "error": r.stderr[:300]}
+            data = json.loads(r.stdout)
+            return {"ok": True, "run_id": data.get("run_id"), "status": "full_pipeline_started"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "wewrite command timed out"}
+    except json.JSONDecodeError:
+        return {"ok": True, "note": "wewrite executed but response not JSON"}
 
 
 def execute(args):
@@ -228,6 +289,10 @@ def execute(args):
         return TaskMarketRunner(args.db, config).auto_run(args.env, args.page_size)
     if args.command == "delivery-readiness":
         return inspect_delivery_readiness(config)
+    if args.command == "health-refresh":
+        from .health_refresh import refresh_delivery_health
+        output = args.output or str(Path(config.get("data_dir", Path(args.db).parent)) / "delivery_health_state.json")
+        return refresh_delivery_health(config, output, args.platform)
     if args.command == "content-readiness":
         result = inspect_delivery_readiness(config)
         store.save_tool_inventory("content-tools", result.get("tools", {}).get("content_tools", {}))
@@ -236,6 +301,8 @@ def execute(args):
         return store.feedback_summary()
     if args.command == "project-audit":
         return audit_project(Path.cwd())
+    if args.command == "wewrite":
+        return _exec_wewrite(args, config)
     if args.command == "analyze-topic":
         brief = json.loads(args.brief)
         if not isinstance(brief, dict):
@@ -249,29 +316,31 @@ def execute(args):
     if args.command in {"trends", "auto"}:
         items = TrendCollector(config.get("trends", {})).collect(args.refresh)
         profile = resolve_profile(config.get("profiles", {}), args.profile)
-        items = rank_trends(items, profile, store.used_topics(), args.limit, store.learned_ranking_context(args.profile))
+        platforms = list(getattr(args, "platform", None) or [])
+        if args.command == "auto" and args.region:
+            from .publishers import domestic_platforms, international_platforms
+            region_platforms = domestic_platforms() if args.region == "domestic" else international_platforms()
+            existing = set(platforms)
+            for p in region_platforms:
+                if p not in existing:
+                    platforms.append(p)
+        if args.command == "auto" and not platforms:
+            raise ValueError("must specify --platform or --region")
+        topic_scope = platforms[0] if args.command == "auto" and len(platforms) == 1 else None
+        items = rank_trends(items, profile, store.used_topics(topic_scope), args.limit, store.learned_ranking_context(args.profile))
         if args.command == "trends":
             return items
         jobs = []
         for item in items:
             sources = [item["url"]] if item.get("url") else []
-            # 合并 --region 和 --platform 指定的平台列表
-            platforms = list(args.platform or [])
-            if args.region:
-                from .publishers import domestic_platforms, international_platforms
-                region_platforms = domestic_platforms() if args.region == "domestic" else international_platforms()
-                # 去重合并：--region 为基础，--platform 可额外补充
-                existing = set(platforms)
-                for p in region_platforms:
-                    if p not in existing:
-                        platforms.append(p)
-            if not platforms:
-                raise ValueError("must specify --platform or --region")
             job = pipeline.create(
                 item["title"], platforms, {"source": item.get("source"), "sources": sources}, args.profile, item["fingerprint"]
             )
-            store.mark_topic_used(item["fingerprint"], item["title"], item.get("source", ""), job["id"])
-            jobs.append(pipeline.run(job["id"]))
+            result = pipeline.run(job["id"])
+            if result.get("state") not in {"blocked", "failed", "rejected"}:
+                for platform in platforms:
+                    store.mark_topic_used(item["fingerprint"], item["title"], item.get("source", ""), job["id"], platform=platform)
+            jobs.append(result)
         return jobs
     if args.command == "health":
         with store.connect() as conn:
@@ -350,7 +419,6 @@ def execute(args):
     # ── v3.1: Publish matrix ──
     if args.command == "publish-matrix":
         from .copy_manager import CopyMatrix
-        from .publishers import build_publisher
 
         matrix_dir = args.matrix or os.environ.get("CONTENT_PLATFORM_MATRIX", "")
         if not matrix_dir:
@@ -374,25 +442,9 @@ def execute(args):
                 if args.dry_run:
                     results.append({"platform": plat, "copy": fname, "action": "dry-run", "ok": True})
                     continue
-                # Build publisher for this platform
-                try:
-                    pub = build_publisher(plat, config, config.get("data_dir", "/tmp"))
-                    # Create a minimal job-like dict
-                    adapted = format_for_platform({"title": fname.replace(".md", ""), "body": content}, plat)
-                    dummy_job = {
-                        "id": f"matrix-{fname}-{plat}-{int(time.time())}",
-                        "title": fname.replace(".md", ""),
-                        "body": content,
-                        "platform_payload": adapted,
-                    }
-                    delivery = pub.deliver(dummy_job, plat)
-                    results.append({"platform": plat, "copy": fname,
-                                    "ok": delivery.ok, "status": delivery.status,
-                                    "url": delivery.external_id, "error": delivery.error})
-                    matrix.log_publish(plat, delivery.ok, delivery.external_id, delivery.error)
-                except (ValueError, ImportError) as exc:
-                    results.append({"platform": plat, "copy": fname, "ok": False,
-                                    "error": str(exc)[:200]})
+                error = "publish-matrix live publishing is disabled; create a Pipeline job so workflow locks, gates, receipts, postchecks, and reports run"
+                results.append({"platform": plat, "copy": fname, "ok": False, "status": "blocked", "error": error})
+                matrix.log_publish(plat, False, "", error)
 
         success = sum(1 for r in results if r.get("ok"))
         print(f"发布结果: {success}/{len(results)}")
