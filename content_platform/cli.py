@@ -68,6 +68,7 @@ def parser():
     trends.add_argument("--refresh", action="store_true")
     trends.add_argument("--profile", default="default")
     trends.add_argument("--limit", type=int, default=20)
+    trends.add_argument("--diagnostics", action="store_true", help="Include per-source trend collection status")
     auto = sub.add_parser("auto")
     auto.add_argument("--limit", type=int, default=3)
     auto.add_argument("--platform", action="append", help="目标平台（多次使用），不指定时用 --region 替代")
@@ -314,7 +315,9 @@ def execute(args):
             raise ValueError("brief must be a JSON object")
         return analyze_niche(args.topic, brief.get("reference_posts", []))
     if args.command in {"trends", "auto"}:
-        items = TrendCollector(config.get("trends", {})).collect(args.refresh)
+        collector = TrendCollector(config.get("trends", {}))
+        report = collector.collect_with_report(args.refresh)
+        items = report["items"]
         profile = resolve_profile(config.get("profiles", {}), args.profile)
         platforms = list(getattr(args, "platform", None) or [])
         if args.command == "auto" and args.region:
@@ -329,6 +332,8 @@ def execute(args):
         topic_scope = platforms[0] if args.command == "auto" and len(platforms) == 1 else None
         items = rank_trends(items, profile, store.used_topics(topic_scope), args.limit, store.learned_ranking_context(args.profile))
         if args.command == "trends":
+            if args.diagnostics:
+                return {**report, "ranked": items}
             return items
         jobs = []
         for item in items:
@@ -471,6 +476,13 @@ def execute(args):
 
 
 def main(argv=None):
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            try:
+                reconfigure(encoding="utf-8")
+            except Exception:
+                pass
     try:
         result = execute(parser().parse_args(argv))
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from content_platform.trends import RedditTrendCollector, TrendCollector
+from content_platform.trends import DirectTrendSource, RedditTrendCollector, TrendCollector
 
 
 class TrendTests(unittest.TestCase):
@@ -16,11 +16,11 @@ class TrendTests(unittest.TestCase):
                 json.dumps({"trends": [{"title": "New", "source": "hn"}, {"title": "New", "source": "other"}]}),
                 encoding="utf-8",
             )
-            trends = TrendCollector({"legacy_data_dir": str(root)}).collect(refresh=False)
+            trends = TrendCollector({"legacy_data_dir": str(root), "direct_sources": False}).collect(refresh=False)
         self.assertEqual([item["title"] for item in trends], ["New"])
 
     def test_refresh_default_script_path_uses_project_external_dir(self):
-        collector = TrendCollector({})
+        collector = TrendCollector({"direct_sources": False})
         with patch("content_platform.trends.Path.is_file", return_value=False):
             with patch("content_platform.trends.Path.glob", return_value=[]):
                 trends = collector.collect(refresh=True)
@@ -76,8 +76,37 @@ class TrendTests(unittest.TestCase):
 
     def test_trend_collector_can_merge_reddit_source(self):
         with patch("content_platform.trends.RedditTrendCollector.collect", return_value=[{"title": "Reddit topic", "source": "reddit:AI", "points": 3}]):
-            trends = TrendCollector({"reddit": {"enabled": True}}).collect(refresh=False)
+            trends = TrendCollector({"reddit": {"enabled": True}, "direct_sources": False}).collect(refresh=False)
         self.assertEqual(trends, [{"title": "Reddit topic", "source": "reddit:AI", "points": 3}])
+
+    def test_direct_hackernews_source_normalizes_items(self):
+        payload = {"hits": [{"title": "AI agents need better workflow gates", "url": "https://example.com/a", "points": 88, "num_comments": 12}]}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def read(self):
+                return json.dumps(payload).encode()
+
+        with patch("content_platform.trends.urllib.request.urlopen", return_value=FakeResponse()):
+            items = DirectTrendSource("hackernews", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "hackernews")
+        self.assertEqual(items[0]["points"], 88)
+        self.assertIn("workflow gates", items[0]["title"])
+
+    def test_collect_with_report_keeps_source_failures_visible(self):
+        with patch("content_platform.trends.DirectTrendSource.collect", side_effect=RuntimeError("source unavailable")):
+            report = TrendCollector({"direct_sources": {"hackernews": {"enabled": True}}, "fallback_enabled": True}).collect_with_report()
+
+        self.assertEqual(report["summary"]["failed_sources"], 3)
+        self.assertTrue(report["summary"]["fallback_used"])
+        self.assertGreaterEqual(len(report["items"]), 1)
+        self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:3]))
 
 
 if __name__ == "__main__":
