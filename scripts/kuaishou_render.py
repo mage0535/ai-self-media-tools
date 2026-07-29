@@ -16,7 +16,10 @@ Usage:
 """
 import argparse, asyncio, base64, json, os, re, subprocess, sys, time
 from pathlib import Path
-from playwright.async_api import async_playwright
+try:
+    from playwright.async_api import async_playwright
+except ModuleNotFoundError:
+    async_playwright = None
 
 # ── TTS voices (轮换) ──
 TTS_VOICES = ["zh-CN-YunxiNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-YunjianNeural"]
@@ -185,6 +188,8 @@ def _probe_video_output(path, size):
 
 async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
     """Render cards with Playwright → base64 bg → quality assert"""
+    if async_playwright is None:
+        raise RuntimeError("playwright is required for card rendering; install playwright before running render_cards")
     out_dir = Path(video_dir) / "cards"
     out_dir.mkdir(exist_ok=True)
 
