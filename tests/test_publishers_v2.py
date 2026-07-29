@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from content_platform.growth_policy import build_growth_strategy
+from content_platform.preflight_manifest import build_preflight_manifest
 from content_platform.publishers import (
     AiToEarnDraftPublisher,
     AiToEarnFlowPublisher,
@@ -13,6 +15,7 @@ from content_platform.publishers import (
     DevtoDraftPublisher,
     RedditDraftPublisher,
     SocialAutoUploadPublisher,
+    HermesWechatAdapter,
     WechatDraftPublisher,
     build_publisher,
 )
@@ -66,6 +69,133 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertFalse(any("freepublish" in url for url in urls))
         draft_request = call.call_args_list[-1].args[0]
         self.assertEqual(json.loads(draft_request.data)["articles"][0]["thumb_media_id"], "thumb-1")
+
+    def test_build_publisher_uses_hermes_wechat_adapter_for_wechat_draft(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            publisher = build_publisher(
+                "wechat",
+                {"publishers": {"platforms": {"wechat": {"type": "wechat-draft", "adapter_command": str(Path(tmp) / "missing.py")}}}},
+                tmp,
+            )
+        self.assertIsInstance(publisher, HermesWechatAdapter)
+
+    def test_hermes_wechat_adapter_blocks_incomplete_packet_before_runner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = Path(tmp) / "runner.py"
+            runner.write_text("raise SystemExit(9)", encoding="utf-8")
+            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner), require_cn_proxy=False)
+            result = publisher.deliver({"id": "j1", "title": "T", "body": "B"}, "wechat")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "blocked")
+        self.assertIn("visual_content_design_policy", result.error)
+
+    def test_hermes_wechat_adapter_blocks_packet_without_wewrite_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = Path(tmp) / "runner.py"
+            runner.write_text("raise SystemExit(9)", encoding="utf-8")
+            packet = self._complete_wechat_packet()
+            packet.pop("tool_invocations")
+            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner), require_cn_proxy=False)
+            result = publisher.deliver(packet, "wechat")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "blocked")
+        self.assertIn("WeWrite llm-write", result.error)
+
+    def test_hermes_wechat_adapter_returns_handoff_when_postcheck_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = Path(tmp) / "runner.py"
+            runner.write_text(
+                "import argparse,json\n"
+                "p=argparse.ArgumentParser();p.add_argument('--input');p.add_argument('--output');a=p.parse_args()\n"
+                "json.dump({'ok': False, 'status': 'handoff_pending', 'media_id': 'draft-1', 'postcheck': {'passed': False}, 'evidence_path': 'evidence.json'}, open(a.output,'w'))\n",
+                encoding="utf-8",
+            )
+            packet = self._complete_wechat_packet()
+            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner), require_cn_proxy=False)
+            result = publisher.deliver(packet, "wechat")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "handoff_pending")
+        self.assertEqual(result.external_id, "draft-1")
+
+    def _complete_wechat_packet(self):
+        body = "\n\n".join(["practical operating paragraph " * 10 for _ in range(5)])
+        return {
+            "id": "wechat-job",
+            "platform": "wechat",
+            "title": "WeChat adapter test",
+            "body": body,
+            "preflight_manifest": {
+                "version": "content_preflight_manifest_v1",
+                "channel": "wechat",
+                "content_type": "long_article",
+                "rulebook": {"loaded": True, "path": "config/channel_content_rulebook.json", "channel_rules_loaded": True},
+                "strategy": {"source": "hermes_operating_strategy", "result_path": "/ignored-runtime/wechat_strategy.json", "summary": "strategy loaded"},
+                **build_preflight_manifest(
+                    channel="wechat",
+                    content_type="long_article",
+                    strategy_source="hermes_operating_strategy",
+                    strategy_result_path="/ignored-runtime/wechat_strategy.json",
+                    strategy_summary="strategy loaded",
+                    selected_topic="WeChat adapter validation",
+                    selection_reason="matches lane",
+                    content_angle="case-led checklist article",
+                    required_assets=["cover", "inline_images", "embedded_knowledge_cards"],
+                    source_policy="licensed_or_verified_runtime_assets",
+                    quality_gates=["wechat_auto_packet", "asset_license", "draft_batchget_postcheck"],
+                    delivery_health_required=True,
+                    postcheck_required=True,
+                    extra_skills=["content/knowledge-card-designer"],
+                ),
+            },
+            "visual_content_policy": {
+                "policy_id": "visual_content_design_policy_v1",
+                "skill": "hermes_skill:content/knowledge-card-designer",
+                "tool_refs": {
+                    "image_generation_engine": "hermes_tool:image_generation_engine",
+                    "wechat_theme_renderer": "hermes_tool:wechat_theme_renderer",
+                    "wechat_publisher": "hermes_tool:wechat_publisher",
+                },
+                "wechat_requirements": {"theme_count_required": 109},
+            },
+            "growth_strategy": build_growth_strategy(["wechat"], "long_article"),
+            "opening_hook": "A useful article needs a real promise before it asks readers to spend attention.",
+            "hook_type": "reader_payoff",
+            "sections": ["problem", "case", "why old way fails", "method", "checklist"],
+            "visual_template_selection": {"selected": "case_story_v1", "ranked_scores": [{"template": "case_story_v1", "score": 80}], "recent_same_platform_templates": [], "penalties": {}},
+            "strategy_brief": {
+                "target_user": "operators", "channel_lane": "AI operations", "topic_basis": "recent delivery failures",
+                "click_reason": "avoid repeating a costly publishing mistake", "reader_payoff": "a reusable checklist",
+                "chosen_structure": "case-breakdown-method", "content_form": "longform article",
+                "seo_geo_intent": "AI operations search and WeChat recommendation intent",
+                "selected_theme_reason": "case-led technical operations article",
+            },
+            "section_image_map": [
+                {"section": "problem", "image": "01.png", "purpose": "open the pain point", "adjacent_to_text": True},
+                {"section": "case", "image": "02.png", "purpose": "show the case", "adjacent_to_text": True},
+                {"section": "method", "image": "03.png", "purpose": "explain the steps", "adjacent_to_text": True},
+            ],
+            "real_scene_background_plan": {
+                "required": True, "source_policy": "licensed_or_verified_real_scene_assets",
+                "primary_background_kind": "real_scene_photo", "no_css_gradient_primary": True,
+                "per_slide_backgrounds": [
+                    {"asset_id": "real-bg-1", "asset_type": "photo", "background_kind": "real_scene_photo", "source": "https://licensed.example/1.jpg", "rights_cleared": True, "real_scene": True, "match_reason": "matches", "section": "problem", "sections": ["problem"], "image": "01.png"},
+                    {"asset_id": "real-bg-2", "asset_type": "photo", "background_kind": "real_scene_photo", "source": "https://licensed.example/2.jpg", "rights_cleared": True, "real_scene": True, "match_reason": "matches", "section": "case", "sections": ["case"], "image": "02.png"},
+                    {"asset_id": "real-bg-3", "asset_type": "photo", "background_kind": "real_scene_photo", "source": "https://licensed.example/3.jpg", "rights_cleared": True, "real_scene": True, "match_reason": "matches", "section": "method", "sections": ["method"], "image": "03.png"},
+                ],
+            },
+            "knowledge_card_plan": {"skill": "hermes_skill:content/knowledge-card-designer", "card_type": "knowledge_summary", "platform": "wechat", "audience": "operators", "visual_scheme": "professional", "typography_hierarchy": "4:2:1", "self_check": ["readability", "attraction", "information_density", "share_or_save_value", "visual_match", "mobile_safe_boundaries"]},
+            "embedded_knowledge_cards": [
+                {"section": "problem", "card_type": "step_tutorial", "layout": "timeline", "visual_subject": "matched visual 1", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
+                {"section": "case", "card_type": "step_tutorial", "layout": "timeline", "visual_subject": "matched visual 2", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
+                {"section": "method", "card_type": "step_tutorial", "layout": "timeline", "visual_subject": "matched visual 3", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
+            ],
+            "cover_design": {"visual_subject": "failed schedule checklist", "topic_alignment": "matches promise", "mobile_readable": True, "visual_hierarchy": "title, warning mark, checklist", "template_family": "casebook"},
+            "differentiation_dimensions": ["case-led opening", "checklist structure", "warm warning tone"],
+            "reader_payoff": "reader can apply a checklist today",
+            "concrete_case": "failed scheduled publication diagnosis",
+            "actionable_checklist": ["check title", "check cover", "check postcheck"],
+            "tool_invocations": {"wewrite": {"status": "used", "commands": [{"name": "run start", "returncode": 0}, {"name": "llm-write", "returncode": 0}], "article_path": "/ignored-runtime/article.md"}},
+        }
 
     def test_ayrshare_live_gate_falls_back_to_local_draft_without_network(self):
         with tempfile.TemporaryDirectory() as tmp:

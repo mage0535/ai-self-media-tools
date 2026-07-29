@@ -62,18 +62,6 @@ PLATFORM_CATALOG = {
             "填写账号信息并执行检测。",
         ],
     },
-    "linkedin": {
-        "key": "linkedin",
-        "label": "LinkedIn",
-        "group": "global",
-        "auth_modes": ["manual", "access_token"],
-        "supports": ["article", "post", "publish"],
-        "binding_steps": [
-            "准备 access token 与可选 organization id。",
-            "填写账号名称和认证信息。",
-            "执行检测并确认可发布状态。",
-        ],
-    },
     "devto": {
         "key": "devto",
         "label": "Dev.to",

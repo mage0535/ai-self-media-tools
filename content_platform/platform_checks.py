@@ -10,7 +10,6 @@ PLATFORM_REQUIREMENTS = {
     "douyin": {"social_auto_upload": True, "tools": ["video_script"]},
     "bilibili": {"social_auto_upload": True, "tools": ["video_script"]},
     "youtube": {"envs": ["YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN"], "tools": ["video_script"]},
-    "linkedin": {"envs": ["LINKEDIN_ACCESS_TOKEN"], "tools": []},
     "devto": {"envs": ["DEVTO_API_KEY"], "tools": []},
     "telegraph": {"envs": ["TELEGRAPH_TOKEN"], "tools": []},
     "mastodon": {"envs": ["MASTODON_TOKEN"], "tools": []},

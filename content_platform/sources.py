@@ -3,13 +3,15 @@ from collections import Counter
 from urllib.parse import urlparse
 
 
-SHORT_VIDEO_PLATFORMS = {"douyin", "tiktok", "youtube", "bilibili", "kuaishou"}
+SHORT_VIDEO_PLATFORMS = {"douyin", "tiktok", "youtube", "bilibili", "kuaishou", "shipinhao"}
 NOTE_PLATFORMS = {"xiaohongshu", "rednote", "instagram", "threads"}
-ARTICLE_PLATFORMS = {"wechat", "weixin", "devto", "linkedin", "telegraph", "mataroa", "tabnews"}
+ARTICLE_PLATFORMS = {"wechat", "weixin", "devto", "telegraph", "mataroa", "tabnews"}
 
 
 def infer_platform(value):
     text = str(value or "").casefold()
+    if "channels.weixin" in text:
+        return "shipinhao"
     for platform in SHORT_VIDEO_PLATFORMS | NOTE_PLATFORMS | ARTICLE_PLATFORMS:
         if platform in text:
             return platform
@@ -21,6 +23,8 @@ def infer_platform(value):
         return "douyin"
     if "bilibili" in host:
         return "bilibili"
+    if "shipinhao" in host or "channels.weixin" in host:
+        return "shipinhao"
     if "youtube" in host or "youtu.be" in host:
         return "youtube"
     if "weixin" in host or "wechat" in host:
