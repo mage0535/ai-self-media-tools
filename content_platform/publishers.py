@@ -1247,14 +1247,14 @@ def build_publisher(platform, config, data_dir):
     if kind == "juejin-api":
         return JuejinPublisher(
             account=cfg.get("account", "main"),
-            cookie_dir=cfg.get("cookie_dir", "/root/social-auto-upload/cookies"),
+            cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
             proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
             save_as_draft=cfg.get("save_as_draft", True),
         )
     if kind == "zhihu-playwright":
         return ZhihuPublisher(
             account=cfg.get("account", "main"),
-            cookie_dir=cfg.get("cookie_dir", "/root/social-auto-upload/cookies"),
+            cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
             proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
             headless=cfg.get("headless", True),
             save_as_draft=cfg.get("save_as_draft", True),

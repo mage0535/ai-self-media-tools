@@ -18,9 +18,9 @@ from typing import Any
 from patchright.async_api import async_playwright
 
 
-DEFAULT_ACCOUNT = "/root/social-auto-upload/cookies/tencent_uploader/main.json"
-DEFAULT_OUT_DIR = "/root/.ai-self-media-tools/data/local_ops_shipinhao/postcheck"
-SOCIAL_AUTO_UPLOAD = os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", "/root/social-auto-upload")
+DEFAULT_ACCOUNT = str(Path(os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", str(Path.home() / "social-auto-upload"))) / "cookies" / "tencent_uploader" / "main.json")
+DEFAULT_OUT_DIR = str(Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))) / "data" / "local_ops_shipinhao" / "postcheck")
+SOCIAL_AUTO_UPLOAD = os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", str(Path.home() / "social-auto-upload"))
 
 
 def _load_social_auto_upload() -> None:

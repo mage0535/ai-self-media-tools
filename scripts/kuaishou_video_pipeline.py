@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 
-PROJECT_ROOT = Path("/root/.ai-self-media-tools")
+PROJECT_ROOT = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from content_platform.media_quality import validate_kuaishou_auto_packet

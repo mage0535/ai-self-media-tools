@@ -44,6 +44,7 @@ FORBIDDEN_CONTENT_PATTERNS = [
     r"-----BEGIN [A-Z ]+PRIVATE KEY-----",
     r"SESSDATA=[A-Za-z0-9%_\-]{8,}",
     r"bili_jct=[A-Za-z0-9%_\-]{8,}",
+    r"/root/",
     r"/root/\.hermes/",
 ]
 

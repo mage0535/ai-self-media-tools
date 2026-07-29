@@ -8,7 +8,7 @@ from .models import DeliveryResult
 
 
 class ZhihuPublisher:
-    def __init__(self, account="main", cookie_dir="/root/social-auto-upload/cookies",
+    def __init__(self, account="main", cookie_dir=str(Path.home() / "social-auto-upload" / "cookies"),
                  proxy="socks5://127.0.0.1:1080", headless=True, save_as_draft=True):
         self.account = account
         self.cookie_dir = cookie_dir

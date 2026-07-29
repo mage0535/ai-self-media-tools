@@ -24,7 +24,7 @@ print(f"{'='*50}")
 # 1. 环境检查
 check("CN代理配置存在", bool(os.environ.get("CN_PROXY")), "export CN_PROXY=socks5h://127.0.0.1:1080")
 
-env_file = "/root/.ai-self-media-tools/secrets/wechat.env"
+env_file = str(Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))) / "secrets" / "wechat.env")
 check("wechat.env 存在", os.path.exists(env_file), "创建 wechat.env")
 if os.path.exists(env_file):
     env_data = open(env_file).read()

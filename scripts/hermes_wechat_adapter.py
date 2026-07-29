@@ -154,7 +154,8 @@ def _upload_inline_images(packet: dict, work_dir: Path, token: str, wx) -> list[
             # Try job-level artifacts path
             job_id = packet.get("id", "")
             if job_id:
-                alt = Path("/root/.ai-self-media-tools/data/artifacts") / job_id / "section_image_map.json"
+                project_home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+                alt = project_home / "data" / "artifacts" / job_id / "section_image_map.json"
                 if alt.is_file():
                     artifacts_map = alt
         if artifacts_map.is_file():
@@ -205,7 +206,8 @@ def _generate_section_image(packet: dict, work_dir: Path, item: dict, idx: int) 
                 prompt = f"{desc}. {prompt}"
 
     # Use the ai-self-media-tools pipeline (CF Worker → Replicate → Pollinations)
-    image_gen_script = Path("/root/.ai-self-media-tools/scripts/image_gen.py")
+    project_home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+    image_gen_script = project_home / "scripts" / "image_gen.py"
     if image_gen_script.is_file():
         try:
             import subprocess, sys

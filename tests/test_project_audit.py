@@ -14,7 +14,7 @@ class ProjectAuditTests(unittest.TestCase):
             (runtime / ".env").write_text("OPENAI_API_KEY=dummy", encoding="utf-8")
             codex_tmp = root / ".codex-tmp"
             codex_tmp.mkdir()
-            private_path = "/root/" + ".hermes/private"
+            private_path = "/" + "root/" + ".hermes/private"
             (codex_tmp / "scratch.md").write_text(private_path, encoding="utf-8")
             (root / "README.md").write_text("public docs", encoding="utf-8")
 
