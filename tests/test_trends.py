@@ -108,6 +108,18 @@ class TrendTests(unittest.TestCase):
         self.assertGreaterEqual(len(report["items"]), 1)
         self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:3]))
 
+    def test_wewrite_hotspots_source_normalizes_cli_output(self):
+        payload = [{"title": "公众号热点选题", "heat": 42, "url": "https://example.com/w"}]
+        completed = type("Completed", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""})()
+
+        with patch("content_platform.trends.Path.is_file", return_value=True):
+            with patch("content_platform.trends.subprocess.run", return_value=completed):
+                items = DirectTrendSource("wewrite_hotspots", {"wewrite_bin": "/tmp/wewrite", "limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "wewrite_hotspots")
+        self.assertEqual(items[0]["points"], 42)
+        self.assertEqual(items[0]["title"], "公众号热点选题")
+
 
 if __name__ == "__main__":
     unittest.main()
