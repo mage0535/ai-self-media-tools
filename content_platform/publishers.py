@@ -1242,7 +1242,7 @@ def build_publisher(platform, config, data_dir):
             video_extra_args=cfg.get("video_extra_args", []),
             note_extra_args=cfg.get("note_extra_args", []),
         )
-    if kind == "aitoearn-draft":
+    if kind in {"aitoearn-draft", "aitoearn-intl"}:
         default_base_url = "https://aitoearn.ai/api/unified/mcp" if platform_region(platform) == "international" else "https://aitoearn.cn/api/unified/mcp"
         default_key_env = "AITOEARN_INTL_API_KEY" if platform_region(platform) == "international" else "AITOEARN_API_KEY"
         return AiToEarnDraftPublisher(

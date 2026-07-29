@@ -101,6 +101,7 @@ class Pipeline:
                 runner.succeeded("initialize_task", {"platforms": job["platforms"], "profile": job.get("profile", "")})
                 hygiene = self._content_hygiene(job)
                 if hygiene["status"] == "blocked" and not force:
+                    self.store.record_event(job_id, "content_hygiene_blocked", {"content_hygiene": hygiene})
                     runner.block(
                         "run_content_hygiene",
                         "content_hygiene_blocked",

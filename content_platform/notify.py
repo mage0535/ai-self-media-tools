@@ -60,6 +60,21 @@ class Notifier:
     @staticmethod
     def _message(row):
         text = f"[{row['event']}] {row['title']}\njob={row['job_id']} state={row['state']}"
+        platforms = [str(item) for item in row.get("platforms", []) if str(item)]
+        if platforms:
+            text += "\nplatforms=" + ",".join(platforms)
+        deliveries = []
+        for item in row.get("deliveries", [])[:5]:
+            platform = str(item.get("platform", ""))
+            status = str(item.get("status", ""))
+            external_id = str(item.get("external_id", ""))
+            if platform and status:
+                delivery = f"{platform}:{status}"
+                if platform == "reddit" and external_id:
+                    delivery += f" {external_id}"
+                deliveries.append(delivery)
+        if deliveries:
+            text += "\ndeliveries=" + "; ".join(deliveries)
         if row.get("report_path"):
             text += f"\nreport={row['report_path']}"
         actions = row.get("review_actions", {})
