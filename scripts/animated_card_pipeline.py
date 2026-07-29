@@ -185,11 +185,11 @@ async def capture():
         page = await browser.new_page(viewport={"width": 720, "height": 1280})
         await page.goto(f"file://{html_path}", wait_until="networkidle")
         await page.wait_for_timeout(1500)
-        
+
         for i in range(120):  # 24s * 5fps
             await page.screenshot(path=str(frames_dir / f"frame_{i:04d}.png"), full_page=False)
             await page.wait_for_timeout(200)
-        
+
         await browser.close()
         print(f"   截图完成: {len(list(frames_dir.glob('*.png')))}张")
 

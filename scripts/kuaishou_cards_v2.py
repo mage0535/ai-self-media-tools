@@ -34,24 +34,24 @@ cards_data = [
 def make_card(data, idx, w=720, h=1280):
     img = Image.new("RGB", (w, h), data["bg"])
     draw = ImageDraw.Draw(img)
-    
+
     # 渐变叠加（让背景有层次）
     for i in range(h):
         r = max(0, data["bg"][0] - int(20 * i / h))
         g = max(0, data["bg"][1] - int(15 * i / h))
         b = max(0, data["bg"][2] - int(25 * i / h))
         draw.line([(0, i), (w-1, i)], fill=(r, g, b), width=1)
-    
+
     # STEP/标签
     f_step = load_font(28)
     draw.text((40, 40), data["step"], fill=data["accent"], font=f_step)
-    
+
     # 用于文字排列的装饰线
     draw.rectangle([(40, 85), (w-40, 87)], fill=data["accent"])
-    
+
     # 正文（不同layout排版）
     lines = data["text"].split("\n")
-    
+
     if data["layout"] == "big_text_contrast":
         # 大字对比 — 首行超大
         f_big = load_font(48)
@@ -62,7 +62,7 @@ def make_card(data, idx, w=720, h=1280):
         # 高亮框
         draw.rounded_rectangle([(40, 450), (w-40, 520)], radius=12, fill=data["accent"], outline=None)
         draw.text((60, 460), "看完这条视频你就知道差距在哪", fill=(0,0,0), font=load_font(24))
-    
+
     elif data["layout"] == "split_left_right":
         # 左右分栏 — 左标题右列表
         f_t = load_font(40)
@@ -76,7 +76,7 @@ def make_card(data, idx, w=720, h=1280):
                     draw.text((40, 340 + j*80), parts[1], fill=(200,200,200), font=f_l)
             else:
                 draw.text((40, 300 + j*80), f"◉ {ln}", fill=(200,200,200), font=f_l)
-    
+
     elif data["layout"] == "timeline":
         # 时间线 — 水平箭头
         f_b = load_font(32)
@@ -90,7 +90,7 @@ def make_card(data, idx, w=720, h=1280):
                 draw.text((x+185, 370), "→", fill=(200,200,200), font=load_font(36))
         # 说明文字
         draw.text((40, 500), "一条链串联，全程自动化", fill=(180,180,180), font=load_font(28))
-    
+
     elif data["layout"] == "card_stack":
         # 卡片堆叠
         f_c = load_font(30)
@@ -98,12 +98,12 @@ def make_card(data, idx, w=720, h=1280):
         for j, item in enumerate(items):
             colors = [(60, 60, 80), (50, 50, 70), (40, 40, 60)]
             offset = 40 + j * 15
-            draw.rounded_rectangle([(40+offset, 250+j*150), (w-40+offset, 390+j*150)], 
+            draw.rounded_rectangle([(40+offset, 250+j*150), (w-40+offset, 390+j*150)],
                                   radius=12, fill=colors[j % 3], outline=data["accent"])
             draw.text((70+offset, 290+j*150), f"  {item}", fill=(240,240,240), font=f_c)
             # 编号
             draw.text((70+offset, 260+j*150), f"0{j+1}", fill=data["accent"], font=load_font(22))
-    
+
     elif data["layout"] == "big_number":
         # 大字报 — 数字特大
         f_num = load_font(80)
@@ -118,7 +118,7 @@ def make_card(data, idx, w=720, h=1280):
         draw.rounded_rectangle([(40, 650), (w-40, 680)], radius=8, fill=(60,60,80), outline=None)
         draw.rounded_rectangle([(40, 650), (600, 680)], radius=8, fill=data["accent"], outline=None)
         draw.text((310, 650), "省时 80%", fill=(0,0,0), font=load_font(24))
-    
+
     elif data["layout"] == "diagonal":
         # 对角切割 — 上色块下白底
         draw.polygon([(0, 0), (w, 0), (0, h)], fill=(data["bg"][0]+20, data["bg"][1]+15, data["bg"][2]+20))
@@ -130,7 +130,7 @@ def make_card(data, idx, w=720, h=1280):
         # 底部按钮
         draw.rounded_rectangle([(200, 1000), (w-200, 1080)], radius=24, fill=data["accent"], outline=None)
         draw.text((260, 1020), "点关注，不错过", fill=(0,0,0), font=load_font(28))
-    
+
     path = OUT_DIR / f"card_{idx+1:02d}.png"
     img.save(path)
     print(f"卡{idx+1} [{data['layout']}]: {path}")

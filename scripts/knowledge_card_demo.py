@@ -102,7 +102,7 @@ for i in range(1, 4):
     # Transition lasts 0.5s
     trans = xfade_types[i - 1]
     prev_dur = sum(durations[:i])
-    
+
     # We use the concat protocol instead since xfade requires precise overlapping
     # which is complex for multi-segment. For simplicity, demonstrate with concat
     # and add transition between first two segments as proof

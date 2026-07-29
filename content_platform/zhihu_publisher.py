@@ -31,22 +31,22 @@ class ZhihuPublisher:
         page.wait_for_timeout(300)
         page.query_selector('button[aria-label="图片"]').click()
         page.wait_for_timeout(1500)
-        
+
         fi = page.query_selector("input.UploadPicture-input[type='file']")
         if not fi: return ""
         fi.set_input_files(file_path)
-        
+
         for _ in range(25):
             page.wait_for_timeout(1000)
             if result: break
-        
+
         # Close modal
         page.keyboard.press("Escape")
         page.wait_for_timeout(500)
         # Second Escape to ensure modal is closed
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
-        
+
         return result[0] if result else ""
 
     def _import_markdown(self, page, md_path):
@@ -58,20 +58,20 @@ class ZhihuPublisher:
         page.wait_for_timeout(500)
         page.query_selector("text=导入文档MD/Doc").click()
         page.wait_for_timeout(1000)
-        
+
         fis = page.query_selector_all("input[type='file']")
         for fi in fis:
             if ".markdown" in (fi.get_attribute("accept") or ""):
                 fi.set_input_files(str(md_path))
                 break
-        
+
         # Wait for processing
         for _ in range(15):
             page.wait_for_timeout(1000)
             html = page.evaluate("() => document.querySelector('[contenteditable=true]')?.innerHTML || ''")
             if 'h3' in html or 'li' in html:
                 break
-        
+
         page.keyboard.press("Escape")
         page.wait_for_timeout(500)
 
