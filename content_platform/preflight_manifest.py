@@ -37,7 +37,7 @@ REQUIRED_SKILLS_BY_CHANNEL = {
     "bilibili": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
     "xiaohongshu": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
     "rednote": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-    
+
     "juejin": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
     "zhihu": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
 }

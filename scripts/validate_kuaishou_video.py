@@ -142,7 +142,7 @@ def check_card_content(d):
     except:
         warn("pytesseract不可用，跳过卡片OCR检测")
         return
-    
+
     # 检测 card_02: GitHub截图嵌入
     c2 = Path(d) / "card_02.png"
     if c2.exists():
@@ -158,7 +158,7 @@ def check_card_content(d):
                 ok(f"card_02: {sz//1024}KB, OCR含github信息")
         except:
             warn("card_02 OCR识别失败")
-    
+
     # 检测 card_08: 完整URL
     c8 = Path(d) / "card_08.png"
     if c8.exists():
@@ -172,7 +172,7 @@ def check_card_content(d):
                 warn("card_08 OCR未检测到github信息，可能缺少项目链接")
         except:
             warn("card_08 OCR识别失败")
-    
+
     # 卡片布局多样性（通过文件大小分布判断）
     cards = sorted(Path(d).glob("card_*.png"))
     if len(cards) >= 7:
@@ -186,7 +186,7 @@ def check_card_content(d):
 # ── 门禁核心 ──
 def run_gates(d):
     print("\n🔍 逐项门禁:")
-    
+
     # 卡片 — 支持7张或8张
     cards = sorted(Path(d).glob("card_*.png"))
     if len(cards) < 7: die(f"卡片不足: {len(cards)}（需要7-8张）")
@@ -195,7 +195,7 @@ def run_gates(d):
         for c in small_cards: warn(f"卡片 {c.name} 仅 {c.stat().st_size//1024}KB")
         die(f"{len(small_cards)}张卡片 <100KB（可能纯色背景）")
     ok(f"卡片{len(cards)}张全部 >100KB")
-    
+
     # TTS — 支持 tts_1 或 tts_01 格式
     found_tts = 0
     for i in range(1, 9):
@@ -205,7 +205,7 @@ def run_gates(d):
                 found_tts += 1; break
     if found_tts < len(cards): die(f"TTS不足: {found_tts}/{len(cards)}")
     ok(f"TTS {found_tts}段全部存在")
-    
+
     # Segments + 音频
     seg_ok = 0
     for i in range(1, 9):
@@ -216,13 +216,13 @@ def run_gates(d):
     need_seg = min(found_tts, 8)
     if seg_ok < need_seg: die(f"segment不足: {seg_ok}/{need_seg}（无音频）")
     ok(f"segment{seg_ok}段全部有音频")
-    
+
     # mixed.mp4 — 检查混音中间产物
     mixed = d / "mixed.mp4"
     if mixed.exists() and mixed.stat().st_size > 10000:
         mv = get_vol(mixed)
         ok(f"mixed.mp4 混音完成" + (f" ({mv}dB)" if mv else ""))
-    
+
     # raw.mp4
     raw = d / "raw.mp4"
     if not raw.exists() or raw.stat().st_size < MIN_RAW_SIZE or not has_audio(raw):
@@ -230,14 +230,14 @@ def run_gates(d):
     dur = get_duration(raw)
     if dur < MIN_DURATION: die(f"raw.mp4 时长 {dur:.1f}s < {MIN_DURATION}s")
     ok(f"raw.mp4: {dur:.1f}s")
-    
+
     # concat.txt 验证
     ct = d / "concat.txt"
     if ct.exists():
         entries = ct.read_text().strip().count("file ")
         if entries < 7: warn(f"concat.txt 仅 {entries} 条（异常）")
         else: ok(f"concat.txt: {entries} 条")
-    
+
     # final.mp4
     final = d / "final.mp4"
     if not final.exists() or final.stat().st_size < MIN_FINAL_SIZE:
@@ -248,20 +248,20 @@ def run_gates(d):
     if vol is None or vol < VOL_MIN or vol > VOL_MAX:
         die(f"final.mp4 音量 {vol}dB（需{VOL_MIN}~{VOL_MAX}dB）")
     dur2 = get_duration(final)
-    
+
     # 检查final vs mixed 大小 — 字幕烧录不应大幅缩小文件
     if mixed.exists() and mixed.stat().st_size > 10000:
         ratio = final.stat().st_size / mixed.stat().st_size
         if ratio < 0.3:
             warn(f"final.mp4 ({final.stat().st_size//1024}KB) << mixed.mp4 ({mixed.stat().st_size//1024}KB)，可能烧录异常")
-    
+
     # 检查final编码质量
     raw_br = get_bitrate(str(raw))
     final_br = get_bitrate(str(final))
     if final_br > 0 and raw_br > 0 and final_br < raw_br * 0.3:
         warn(f"final.mp4 bitrate {final_br:.0f}kbps << raw {raw_br:.0f}kbps（重编码异常）")
     ok(f"final.mp4: {dur2:.1f}s, {vol}dB, {final.stat().st_size//1024}KB")
-    
+
     # ASS字幕
     for ass_name in ["subtitles.ass", "subs.ass"]:
         ass = Path(d) / ass_name
@@ -273,13 +273,13 @@ def run_gates(d):
     else:
         die("ASS字幕文件不存在")
     check_ass_timestamps(d)
-    
+
     # 卡片内容OCR检测
     check_card_content(d)
-    
+
     # 黑帧检测（final.mp4）
     check_black_frames(final)
-    
+
     # ── 新增：定时时间验证 ──
     for mf_name in ["manifest.json", "packet.json"]:
         mf = Path(d) / mf_name
@@ -327,7 +327,7 @@ if __name__ == "__main__":
         print("  python3 validate_kuaishou_video.py check <目录>        # 门禁检查")
         print("  python3 validate_kuaishou_video.py self-test           # 自检（验证脚本自身）")
         sys.exit(0)
-    
+
     # 自检模式
     if sys.argv[1] == "self-test":
         print("🔧 自检模式:")
@@ -344,12 +344,12 @@ if __name__ == "__main__":
             import shutil
             shutil.rmtree(str(d))
         sys.exit(0)
-    
+
     cmd = sys.argv[1]
     workdir = sys.argv[2] if len(sys.argv) > 2 else "/tmp/ks_yoinks"
     d = Path(workdir)
     if not d.exists(): die(f"目录不存在: {workdir}")
-    
+
     if cmd == "check":
         check_resources()
         check_bgm_spectrum(d)
@@ -357,6 +357,6 @@ if __name__ == "__main__":
         print(f"\n{'='*50}")
         print("✅ 全部门禁通过！")
         print(f"{'='*50}")
-    
+
     elif cmd == "upload":
         die("validate_kuaishou_video.py upload is disabled; use scripts/kuaishou_publish_with_postcheck.py after the full auto packet passes preflight")

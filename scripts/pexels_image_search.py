@@ -19,10 +19,10 @@ def search_images(query, count=3, min_width=800, min_height=400):
     if not API_KEY:
         print("⚠️ PEXELS_API_KEY 未配置")
         return []
-    
+
     encoded = urllib.parse.quote(query)
     url = f"{BASE_URL}?query={encoded}&per_page={count}"
-    
+
     req = urllib.request.Request(url, headers={
         "Authorization": API_KEY,
         "User-Agent": "HermesContentBot/1.0",
@@ -57,7 +57,7 @@ def get_images_for_article(topic, keywords=None):
     # 从话题中提取关键词
     topic_keywords = [w for w in topic.split() if len(w) > 1]
     all_keywords.extend(topic_keywords[:3])
-    
+
     # 技术文章的默认关键词映射
     topic_mapping = {
         "n8n": ["automation", "workflow", "server", "technology"],
@@ -69,17 +69,17 @@ def get_images_for_article(topic, keywords=None):
         "代码": ["code", "programming", "developer"],
         "部署": ["server", "technology", "network", "datacenter"],
     }
-    
+
     # 合并关键词
     search_terms = []
     for kw in all_keywords:
         for key, terms in topic_mapping.items():
             if key.lower() in kw.lower():
                 search_terms.extend(terms)
-    
+
     if not search_terms:
         search_terms = ["technology", "workspace", "code"]
-    
+
     # 搜索第一组关键词
     query = "+".join(search_terms[:3])
     return search_images(query, count=2)

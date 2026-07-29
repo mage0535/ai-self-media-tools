@@ -20,17 +20,17 @@ def check_image(path: str, cinema_check: bool = False, min_size_kb: int = MIN_SI
     reports = []
     ok = True
     p = Path(path)
-    
+
     if not p.exists():
         return False, ["❌ 文件不存在"]
-    
+
     size_kb = p.stat().st_size / 1024
     reports.append(f"📦 大小: {size_kb:.0f}KB")
-    
+
     if size_kb < min_size_kb:
         reports.append(f"  ❌ 小于 {min_size_kb}KB，可能是纯色/空白图")
         ok = False
-    
+
     # 用 ffprobe 获取图片信息
     try:
         r = subprocess.run([
@@ -46,15 +46,15 @@ def check_image(path: str, cinema_check: bool = False, min_size_kb: int = MIN_SI
                 h = streams[0].get("height", 0)
                 codec = streams[0].get("codec_name", "?")
                 reports.append(f"📐 尺寸: {w}×{h}, 编码: {codec}")
-                
+
                 if w < MIN_DIMENSION or h < MIN_DIMENSION:
                     reports.append(f"  ❌ 边长 < {MIN_DIMENSION}px")
                     ok = False
-                
+
                 aspect = max(w, h) / min(w, h) if min(w, h) > 0 else 0
                 if aspect > MAX_ASPECT_RATIO:
                     reports.append(f"  ⚠ 宽高比 {aspect:.1f}:1 异常")
-                
+
                 # 检查是否是纯色（用 PIL 计算像素标准差）
                 try:
                     from PIL import Image

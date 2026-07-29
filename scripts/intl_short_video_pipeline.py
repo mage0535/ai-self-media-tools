@@ -191,7 +191,7 @@ def run_daily_pipeline(strategy=None, dry_run=False):
     topics = strategy or select_topics()
     log(f"📅 {topics['date']} | 自生成: {topics['self_gen']} | 搬运: {topics['cross_kw']}")
     results = {"self_gen":[], "cross_post":[], "date":topics["date"]}
-    
+
     # 自生成
     for i, topic in enumerate(topics["self_gen"]):
         plat = "youtube_shorts" if i == 0 else "tiktok"
@@ -202,20 +202,20 @@ def run_daily_pipeline(strategy=None, dry_run=False):
             if p: results["self_gen"].append({"topic":topic,"platform":plat,"file":p})
         else:
             results["self_gen"].append({"topic":topic,"platform":plat,"dry_run":True})
-    
+
     # 搬运（dry-run 模式下跳过）
     log(f"\n📦 搬运线...")
     for i, kw in enumerate(topics["cross_kw"]):
         plat = "tiktok" if i == 0 else "youtube_shorts"
         log(f"  [{plat}] {kw}")
         results["cross_post"].append({"keyword":kw,"platform":plat,"dry_run":True})
-    
+
     # 自动发布
     for item in results["self_gen"]:
         if item.get("file"):
             plat = "youtube" if "youtube" in item["platform"] else "tiktok"
             publish_video(item["file"], item["topic"], plat)
-    
+
     manifest = DRAFT_DIR / f"manifest_{topics['date']}.json"
     manifest.write_text(json.dumps(results, indent=2), encoding="utf-8")
     log(f"\n📋 清单: {manifest}")

@@ -242,7 +242,7 @@ def _generated_image_path(result, fallback: Path) -> Path | None:
 
 def _strip_redundant_title_heading(body: str, title: str) -> str:
     """Remove first line if it's a heading (# or ##) matching the article title.
-    
+
     WeChat renders the title separately from the body content via its draft API.
     A heading in the body that duplicates the title appears as two identical
     titles stacked on top of each other — visually broken.

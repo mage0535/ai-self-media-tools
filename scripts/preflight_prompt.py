@@ -15,7 +15,7 @@ REQUIRED = {
     "image": {
         "label": "生图",
         "elements": {
-            "主体/Subject": ["cat", "dog", "person", "man", "woman", "robot", "chip", "computer", 
+            "主体/Subject": ["cat", "dog", "person", "man", "woman", "robot", "chip", "computer",
                           "laptop", "desk", "office", "city", "mountain", "forest", "ocean",
                           "flower", "food", "car", "phone", "screen", "code", "device",
                           "hand", "eye", "face", "building", "room", "interior", "product",
@@ -75,20 +75,20 @@ def check_prompt(prompt: str, ptype: str) -> tuple[bool, list[str]]:
     """检查 prompt 是否包含必要要素"""
     if ptype not in REQUIRED:
         return True, ["未知类型，跳过检查"]
-    
+
     prompt_lower = prompt.lower()
     rules = REQUIRED[ptype]
     missing = []
-    
+
     for elem_name, keywords in rules["elements"].items():
         found = any(kw.lower() in prompt_lower for kw in keywords)
         if not found:
             missing.append(elem_name)
-    
+
     total = len(rules["elements"])
     found = total - len(missing)
     score = found / total * 100
-    
+
     return score >= 60, [
         f"[{rules['label']}] 要素覆盖: {found}/{total} ({score:.0f}%)",
         f"  通过线: ≥60%",
@@ -99,11 +99,11 @@ def main():
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--type", choices=["image", "copy", "video"], default="image")
     args = parser.parse_args()
-    
+
     ok, lines = check_prompt(args.prompt, args.type)
     for l in lines:
         print(l)
-    
+
     if not ok:
         print(f"\n❌ 不通过 — prompt 缺少必要要素，请补充后再生成")
         sys.exit(1)
