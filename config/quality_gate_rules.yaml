@@ -1,0 +1,26 @@
+article:
+  required_fields:
+    - title
+    - body_or_script
+    - visual_strategy
+  min_illustration_count: 1
+  require_section_image_map: true
+  require_seo_keywords: true
+  require_geo_fields_by_channel:
+    wechat: true
+
+video:
+  required_fields:
+    - title
+    - body_or_script
+    - storyboard
+  require_scene_asset_mapping: true
+  require_duration: true
+  require_aspect_ratio: true
+  require_audio: true
+  require_subtitle: true
+
+platform_overrides:
+  wechat:
+    article:
+      min_illustration_count: 3

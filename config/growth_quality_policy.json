@@ -1,0 +1,60 @@
+{
+  "version": "2026-07-26",
+  "policy_id": "growth_quality_policy_v1",
+  "scope": "real_use_channels",
+  "applies_to": ["douyin", "kuaishou", "wechat", "bilibili", "shipinhao", "xiaohongshu"],
+  "required_before_generation": [
+    "account_performance_snapshot_or_unavailable_reason",
+    "same_lane_hot_content_analysis",
+    "topic_selection_reason",
+    "target_user_action",
+    "hook_plan",
+    "retention_plan",
+    "interaction_plan",
+    "packaging_plan",
+    "post_publish_review_plan"
+  ],
+  "pre_publish_quality_targets": {
+    "hook_score_min": 0.78,
+    "first_frame_score_min": 0.76,
+    "save_value_score_min": 0.72,
+    "comment_prompt_score_min": 0.68,
+    "template_fatigue_risk_max": 0.35
+  },
+  "metric_schema_v2": [
+    "views",
+    "likes",
+    "comments",
+    "shares",
+    "saves",
+    "clicks",
+    "impressions",
+    "completion_rate",
+    "avg_watch_seconds",
+    "three_second_view_rate",
+    "follows",
+    "platform_specific_metrics"
+  ],
+  "post_publish_review": {
+    "review_points_hours": [1, 24, 72, 168],
+    "diagnosis_dimensions": [
+      "click_through_rate",
+      "three_second_view_rate",
+      "completion_rate",
+      "average_watch_seconds",
+      "save_rate",
+      "comment_rate",
+      "share_rate",
+      "follow_conversion_rate"
+    ],
+    "missing_data_policy": "record_unavailable_reason_and_block_strategy_confidence_boost"
+  },
+  "platform_rules": {
+    "douyin": ["strong_first_motion", "matched_real_footage", "lower_third_subtitles", "single_best_candidate"],
+    "kuaishou": ["trust_first_microcase", "plainspoken_voice", "series_prompt", "private_domain_reply"],
+    "wechat": ["title_open_rate", "first_screen_payoff", "section_value_density", "search_keyword_fit"],
+    "bilibili": ["tutorial_or_case_depth", "evidence_before_claim", "danmaku_prompt", "favorite_checkpoint"],
+    "shipinhao": ["wechat_social_context", "shareable_first_screen", "trust_signal", "no_kuaishou_reuse"],
+    "xiaohongshu": ["authentic_cover", "pain_point_title", "use_case_keywords", "early_comment_reply"]
+  }
+}
