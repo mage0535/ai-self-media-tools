@@ -17,11 +17,11 @@ async def main():
         page = await browser.new_page(viewport={"width": 720, "height": 1280})
         await page.goto(f"file://{HTML}", wait_until="networkidle")
         await page.wait_for_timeout(1500)
-        
+
         for i in range(180):  # 36s * 5fps
             await page.screenshot(path=f"{FRAMES}/frame_{i:04d}.png")
             await page.wait_for_timeout(200)
-        
+
         await browser.close()
         print(f"截图: {len(os.listdir(FRAMES))}张")
 

@@ -4,7 +4,7 @@
 
 使用方式：
   python toutiao_uploader.py --file article.md --title "标题" --tags tag1,tag2
-  
+
 环境变量：
   CN_PROXY — 国内代理地址（默认 socks5://127.0.0.1:1080）
   TOUTIAO_COOKIE — cookie 文件路径
@@ -96,10 +96,10 @@ def parse_markdown(file_path: str) -> tuple[str, str]:
     """解析 Markdown 文件，返回 (title, html_content)"""
     with open(file_path, "r", encoding="utf-8") as f:
         text = f.read()
-    
+
     title = ""
     content = text
-    
+
     # 提取 YAML frontmatter
     fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
     if fm_match:
@@ -108,14 +108,14 @@ def parse_markdown(file_path: str) -> tuple[str, str]:
         if title_m:
             title = title_m.group(1).strip().strip('"\'')
         content = text[fm_match.end():]
-    
+
     # 如果没有 frontmatter title，从第一个 # 标题提取
     if not title:
         h1 = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
         if h1:
             title = h1.group(1).strip()
             content = content[h1.end():].strip()
-    
+
     # 简单的 Markdown → 基础 HTML 转换（头条编辑器接受纯文本/Markdown）
     # 头条编辑器通常支持 Markdown 粘贴，所以保留原始格式
     return title, content
@@ -134,17 +134,17 @@ async def upload_article(
         cookie_path = COOKIE_PATH
     if not cookie_path:
         cookie_path = str(Path.home() / ".hermes" / "cookies" / "toutiao.json")
-    
+
     # 解析内容
     md_title, md_content = parse_markdown(file_path)
     final_title = title or md_title or Path(file_path).stem
     print(f"📄 标题: {final_title}")
     print(f"📝 正文: {len(md_content)} chars")
-    
+
     # 验证 cookie
     if not await cookie_auth(cookie_path):
         return {"success": False, "error": "Cookie 失效"}
-    
+
     async with async_playwright() as p:
         proxy = {"server": CN_PROXY} if CN_PROXY else None
         browser = await p.chromium.launch(headless=HEADLESS)
@@ -154,7 +154,7 @@ async def upload_article(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         )
         page = await context.new_page()
-        
+
         # 尝试进入编辑页
         editor_url = None
         for url in EDITOR_URLS:
@@ -168,7 +168,7 @@ async def upload_article(
             except Exception as e:
                 print(f"    ⚠ {e}")
                 continue
-        
+
         if not editor_url:
             # fallback: 从首页导航
             print("  → 编辑页直接访问失败，尝试首页导航")
@@ -187,7 +187,7 @@ async def upload_article(
                 print(f"  ⚠ 当前 URL: {page.url}")
                 page_title = await page.title()
                 print(f"  ⚠ 页面标题: {page_title}")
-                buttons = await page.evaluate('''() => 
+                buttons = await page.evaluate('''() =>
                     Array.from(document.querySelectorAll('a, button')).slice(0,20).map(e => ({
                         t: e.textContent?.trim()?.slice(0,40),
                         h: e.href || '',
@@ -197,10 +197,10 @@ async def upload_article(
                 for b in buttons:
                     if any(k in (b['t'] + b['c']).lower() for k in ['文章', '创作', '写', 'editor', 'publish']):
                         print(f"    [{b['t']}] href={b['h'][:60]}")
-        
+
         await page.wait_for_timeout(2000)
         print(f"📍 当前 URL: {page.url}")
-        
+
         # --- 填写标题 ---
         try:
             # 头条编辑器常见标题选择器
@@ -217,7 +217,7 @@ async def upload_article(
                 if await el.count() > 0 and await el.is_visible():
                     title_el = el
                     break
-            
+
             if title_el:
                 await title_el.click(force=True, timeout=5000)
                 await page.wait_for_timeout(300)
@@ -227,7 +227,7 @@ async def upload_article(
                 print("⚠ 未找到标题输入框")
         except Exception as e:
             print(f"⚠ 标题填写异常: {e}")
-        
+
         # --- 填写正文 ---
         try:
             # 头条编辑器通常是 contenteditable div 或 iframe
@@ -257,7 +257,7 @@ async def upload_article(
                     else:
                         body_el = el
                         break
-            
+
             if body_el:
                 await body_el.click(force=True, timeout=5000)
                 await page.wait_for_timeout(500)
@@ -275,7 +275,7 @@ async def upload_article(
                 print("⚠ 未找到编辑器区域")
         except Exception as e:
             print(f"⚠ 正文填写异常: {e}")
-        
+
         # --- 添加标签 ---
         if tags:
             try:
@@ -290,7 +290,7 @@ async def upload_article(
                     if await el.count() > 0 and await el.is_visible():
                         tag_el = el
                         break
-                
+
                 if tag_el:
                     for t in tags[:5]:
                         await tag_el.fill(t)
@@ -302,10 +302,10 @@ async def upload_article(
                 print(f"⚠ 标签填写异常: {e}")
         else:
             print("  无标签")
-        
+
         # --- 保存/发布 ---
         result = {"success": False, "url": "", "action": ""}
-        
+
         if save_as_draft:
             # 先找「存草稿」按钮
             draft_btn_selectors = [
@@ -328,20 +328,20 @@ async def upload_article(
                         break
                 except:
                     continue
-            
+
             if not clicked:
                 # 检查是否已保存（自动保存）
                 print("ℹ️ 未找到存草稿按钮，可能已自动保存")
                 result["action"] = "auto_save"
                 result["success"] = True
-        
+
         # 获取当前 URL 作为参考
         result["url"] = page.url
         result["editor_url"] = editor_url or page.url
-        
+
         # 更新 cookie
         await context.storage_state(path=cookie_path)
-        
+
         await browser.close()
         return result
 
@@ -356,28 +356,28 @@ async def main():
     parser.add_argument("--check", action="store_true", help="检查 cookie 状态")
     parser.add_argument("--publish", action="store_true", help="直接发布（默认存草稿）")
     parser.add_argument("--headless", action="store_true", help="无头模式")
-    
+
     args = parser.parse_args()
-    
+
     global HEADLESS
     if args.headless:
         HEADLESS = True
-    
+
     if args.login:
         await cookie_gen(args.cookie or "")
         return
-    
+
     if args.check:
         cookie = args.cookie or COOKIE_PATH or str(Path.home() / ".hermes" / "cookies" / "toutiao.json")
         ok = await cookie_auth(cookie)
         sys.exit(0 if ok else 1)
-    
+
     if not args.file:
         parser.print_help()
         return
-    
+
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] if args.tags else []
-    
+
     result = await upload_article(
         file_path=args.file,
         title=args.title,
@@ -385,7 +385,7 @@ async def main():
         cookie_path=args.cookie or "",
         save_as_draft=not args.publish,
     )
-    
+
     print(f"\n{'='*40}")
     if result["success"] or result["action"]:
         print(f"✅ 操作完成")
