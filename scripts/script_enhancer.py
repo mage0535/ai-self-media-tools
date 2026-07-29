@@ -38,7 +38,7 @@ CONTENT_TEMPLATES = {
 def generate_script(topic, duration_target=20):
     """根据话题生成多步脚本，使 Screencast 达到目标时长。"""
     steps = []
-    
+
     # 匹配话题关键词找到对应模板
     matched = False
     for keyword, templates in CONTENT_TEMPLATES.items():
@@ -46,10 +46,10 @@ def generate_script(topic, duration_target=20):
             steps = random.choice(templates)
             matched = True
             break
-    
+
     if not matched:
         steps = random.choice(CONTENT_TEMPLATES["default"])
-    
+
     # 组装为逗号分隔的内容行（Screencast 引擎格式）
     return ",".join(steps)
 
@@ -57,7 +57,7 @@ def generate_script(topic, duration_target=20):
 def enhance_screencast_call(topic, platform="youtube_shorts"):
     """生成增强后的 screencast 命令参数。"""
     script = generate_script(topic)
-    
+
     # 根据平台选择模板
     if any(w in topic for w in ["对比", "评测", "横评"]):
         template = "demo"
@@ -67,7 +67,7 @@ def enhance_screencast_call(topic, platform="youtube_shorts"):
         template = "cicd"
     else:
         template = "tutorial"
-    
+
     return {
         "type": template,
         "title": topic,

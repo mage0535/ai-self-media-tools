@@ -34,11 +34,11 @@ def validate_article(path: str, channel: str) -> dict:
     rules = CHANNEL_RULES.get(channel, {})
     if not os.path.exists(path):
         return {"passed": False, "errors": [f"文件不存在: {path}"], "channel": channel}
-    
+
     content = Path(path).read_text(encoding="utf-8")
     ext = Path(path).suffix.lower()
     errors, warnings = [], []
-    
+
     # 字数
     char_count = len(re.sub(r'\s', '', content))
     min_w = rules.get("word_count_min", 0)
@@ -47,22 +47,22 @@ def validate_article(path: str, channel: str) -> dict:
         errors.append(f"字数不足: {char_count}/{min_w}")
     if max_w and char_count > max_w:
         errors.append(f"字数超限: {char_count}/{max_w}")
-    
+
     # 图片：只认真实 <img 标签
     if channel == "wechat":
         img_count = content.count("<img ")
         min_imgs = rules.get("inline_images_min", 0)
         if min_imgs and img_count < min_imgs:
             errors.append(f"插图不足: {img_count}/{min_imgs}（需真实 <img> 标签，非 <!--IMG--> 注释）")
-        
+
         # 禁止 <!--IMG--> 伪图片
         if "<!--IMG" in content:
             warnings.append("发现 <!--IMG--> 伪图片标记，应替换为真实 <img> 标签")
-        
+
         # 检查微信CDN URL
         if img_count > 0 and not any("mmbiz.qpic.cn" in content for _ in range(1)):
             warnings.append("图片需上传微信CDN（mmbiz.qpic.cn），不接受外部URL")
-    
+
     # 编码检查（视频）
     if channel == "kuaishou" and ext in (".mp4", ".mov"):
         probe = subprocess.run([
@@ -75,7 +75,7 @@ def validate_article(path: str, channel: str) -> dict:
             errors.append(f"编码 {codec} 被禁止（快手黑屏），需用 h264")
         elif codec != "h264":
             warnings.append(f"编码 {codec}，建议 h264 保证兼容")
-        
+
         # 时长
         dur_p = subprocess.run([
             "ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -91,7 +91,7 @@ def validate_article(path: str, channel: str) -> dict:
                 errors.append(f"时长超限: {dur:.0f}s/{d_max}s")
         except ValueError:
             pass
-    
+
     # 页面检查（视频或卡片）
     if channel == "kuaishou" and ext == ".mp4":
         # 画面检查（非黑屏）
@@ -104,7 +104,7 @@ def validate_article(path: str, channel: str) -> dict:
             errors.append(f"画面可能黑屏（verify帧仅{vf_size}B）")
         else:
             os.remove("/tmp/preflight_verify.jpg")
-        
+
         # 音量检查
         vol_r = subprocess.run([
             "ffmpeg", "-i", path, "-af", "volumedetect", "-f", "null", "-"
@@ -114,7 +114,7 @@ def validate_article(path: str, channel: str) -> dict:
             mv = float(mv_match.group(1))
             if mv < -25:
                 warnings.append(f"音量偏低: {mv}dB（建议≥ -25dB）")
-    
+
     return {
         "passed": len(errors) == 0,
         "channel": channel,
@@ -131,17 +131,17 @@ def main():
     ap.add_argument("--channel", required=True, choices=list(CHANNEL_RULES.keys()))
     ap.add_argument("--content", help="内容文件路径")
     args = ap.parse_args()
-    
+
     if not args.content:
         print(json.dumps({"passed": False, "errors": ["缺少 --content 参数"]}, ensure_ascii=False))
         sys.exit(1)
-    
+
     result = validate_article(args.content, args.channel)
-    
+
     # 输出 JSON（只到第一个空行）
     print(json.dumps(result, ensure_ascii=False, indent=2))
     print()
-    
+
     if not result.get("passed"):
         print("❌ 规则门禁未通过！")
         for e in result.get("errors", []):

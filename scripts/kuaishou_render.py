@@ -6,13 +6,13 @@ Fixed 2026-07-24 issues: base64 bg, charset, parallel segments, .done markers, o
 Usage:
   # Full pipeline
   python3 kuaishou_render.py --video-dir /tmp/ks_myvideo --theme cyber-neon --gh-repo owner/repo
-  
+
   # Skip completed steps (uses .done markers)
   python3 kuaishou_render.py --video-dir /tmp/ks_myvideo --theme mint-fresh --skip-cards --skip-tts
-  
+
   # Just generate packet for existing final.mp4
   python3 kuaishou_render.py --video-dir /tmp/ks_myvideo --generate-packet --schedule "2026-07-24 11:15"
-  
+
 """
 import argparse, asyncio, base64, json, os, re, subprocess, sys, time
 from pathlib import Path
@@ -68,7 +68,7 @@ def build_card_html(card, idx, bg_b64, gh_b64, t):
             "repeating-linear-gradient(135deg, rgba(255,255,255,0.105) 0 3px, transparent 3px 13px),"
             f"{base_bg}"
         )
-    
+
     if l == "cover":
         # 钩子模式 vs 项目封面模式（2026-07-26 新增）
         if card.get("hook"):
@@ -187,7 +187,7 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
     """Render cards with Playwright → base64 bg → quality assert"""
     out_dir = Path(video_dir) / "cards"
     out_dir.mkdir(exist_ok=True)
-    
+
     # Load bg images as base64
     bg_b64s = []
     for i in range(len(cards)):
@@ -198,28 +198,28 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
                 b64 = img_to_b64(str(p))
                 if b64: break
         bg_b64s.append(b64)
-    
+
     gh_b64 = img_to_b64(str(Path(bg_dir) / "github_og.jpg")) if gh_repo else None
-    
+
     pw = await async_playwright().start()
     browser = await pw.chromium.launch(headless=True)
     page = await browser.new_page(viewport={"width": 720, "height": 1280})
-    
+
     for i, card in enumerate(cards):
         idx = i + 1
         html = build_card_html(card, idx, bg_b64s[i], gh_b64, theme_v)
         html_path = Path(video_dir) / f"card_{idx:02d}.html"
         png_path = out_dir / f"card_{idx:02d}.png"
         html_path.write_text(html, encoding="utf-8")
-        
+
         await page.goto(f"file://{html_path}", wait_until="networkidle", timeout=30000)
         await page.wait_for_timeout(3000)  # 3s for base64 images to render
         await page.screenshot(path=str(png_path), full_page=True)
-        
+
         sz = png_path.stat().st_size
         assert sz > 100000, f"card_{idx:02d}.png 太小({sz//1024}KB)，背景图可能未加载"
         print(f"  ✅ card_{idx:02d}.png ({sz//1024}KB)")
-    
+
     await browser.close()
     await pw.stop()
     (Path(video_dir) / "cards.done").write_text("ok")
@@ -232,7 +232,7 @@ async def gen_tts(video_dir, cards, voice_idx=0):
     tts_dir = Path(video_dir) / "tts"
     tts_dir.mkdir(exist_ok=True)
     voice = TTS_VOICES[voice_idx % len(TTS_VOICES)]
-    
+
     for i, card in enumerate(cards):
         idx = i + 1
         text = card.get("tts", "")
@@ -244,7 +244,7 @@ async def gen_tts(video_dir, cards, voice_idx=0):
         await edge_tts.Communicate(text, voice).save(str(out))
         dur = float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(out)],capture_output=True,text=True).stdout.strip() or 0)
         print(f"  ✅ tts_{idx:02d}: {out.stat().st_size//1024}KB, {dur:.1f}s ({voice})")
-    
+
     (Path(video_dir) / "tts.done").write_text("ok")
     print(f"  ✅ TTS完成 ({len(cards)}段, voice={voice})")
 
@@ -253,26 +253,26 @@ def render_segments(video_dir, cards):
     """Render segments sequentially"""
     seg_dir = Path(video_dir) / "segments"
     seg_dir.mkdir(exist_ok=True)
-    
+
     for i in range(len(cards)):
         idx = i + 1
         card_png = Path(video_dir) / "cards" / f"card_{idx:02d}.png"
         tts_mp3 = Path(video_dir) / "tts" / f"tts_{idx:02d}.mp3"
         seg_mp4 = seg_dir / f"seg_{idx:02d}.mp4"
-        
+
         dur_r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(tts_mp3)],capture_output=True,text=True)
         dur = float(dur_r.stdout.strip() or 6.0) + 0.5
-        
+
         subprocess.run(["ffmpeg","-y","-loop","1","-i",str(card_png),"-i",str(tts_mp3),
             "-c:v","libx264","-t",str(dur),"-preset","ultrafast","-crf","28",
             "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
             "-vf","scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2",
             "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
-        
+
         assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
         sz = os.path.getsize(str(seg_mp4))
         print(f"  ✅ seg_{idx:02d}.mp4 ({sz//1024}KB)")
-    
+
     (Path(video_dir) / "segments.done").write_text("ok")
     print(f"  ✅ 段渲染完成 ({len(cards)}段, 串行)")
 
@@ -294,14 +294,14 @@ def download_bgm(video_dir, style="acoustic guitar"):
     bgm = Path(video_dir) / "bgm.mp3"
     if bgm.exists() and bgm.stat().st_size > 50000:
         return str(bgm)
-    
+
     result = subprocess.run(["yt-dlp","-x","--audio-format","mp3","-f","bestaudio","-o",str(bgm),
         f"ytsearch:YouTube Audio Library {style} instrumental background music"],
         capture_output=True, timeout=60)
     if bgm.exists() and bgm.stat().st_size > 50000:
         _write_bgm_source(video_dir, "ytsearch", style, result.returncode)
         return str(bgm)
-    
+
     result = subprocess.run(["yt-dlp","-x","--audio-format","mp3","-f","bestaudio","-o",str(bgm),
         "https://youtu.be/L4y62AuUWj4"], capture_output=True, timeout=60)
     if bgm.exists() and bgm.stat().st_size > 50000:
@@ -402,7 +402,7 @@ def gen_subtitles(video_dir, cards):
         idx = i+1
         r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",f"{video_dir}/tts/tts_{idx:02d}.mp3"],capture_output=True,text=True)
         durations.append(float(r.stdout.strip() or 6.0))
-    
+
     ms_offset = 0
     events = []
     for i, card in enumerate(cards):
@@ -413,7 +413,7 @@ def gen_subtitles(video_dir, cards):
         text = (card.get("tts","") or "")[:28]+"…" if len(card.get("tts",""))>30 else card.get("tts","")
         events.append(f"Dialogue: 0,{m2a(ms_offset)},{m2a(ms_offset+dur_ms)},Default,,0,0,0,,{text}")
         ms_offset += dur_ms
-    
+
     ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 720
@@ -433,12 +433,12 @@ def encode_final(video_dir, add_like_overlay=True):
     mixed = Path(video_dir) / "mixed.mp4"
     ass = Path(video_dir) / "subtitles.ass"
     final = Path(video_dir) / "final.mp4"
-    
+
     # Base filter: subtitle burn
     vf_parts = []
     if ass.exists():
         vf_parts.append(f"ass={ass}:fontsdir=/usr/share/fonts")
-    
+
     # Like overlay: first 3 seconds (2026-07-26 视频号优化)
     if add_like_overlay:
         vf_parts.append(
@@ -448,19 +448,19 @@ def encode_final(video_dir, add_like_overlay=True):
             ":x=w-text_w-30:y=30"
             ":enable='between(t,0,3)'"
         )
-    
+
     vf_str = ",".join(vf_parts) if vf_parts else "null"
-    
+
     subprocess.run(["ffmpeg","-y","-i",str(mixed),
         "-vf", vf_str,
         "-c:v","libx264","-preset","medium","-crf","23",
         "-profile:v","baseline","-pix_fmt","yuv420p","-movflags","+faststart",
         "-c:a","aac","-b:a","128k",str(final)], capture_output=True)
-    
+
     assert_output(str(final), 3000000, "final.mp4")
     sz = final.stat().st_size
     print(f"  ✅ final.mp4 ({sz//1024}KB)")
-    
+
     # Verify
     r = subprocess.run(["ffprobe","-v","error","-select_streams","v:0","-show_entries","stream=profile,pix_fmt","-of","csv=p=0",str(final)],capture_output=True,text=True)
     print(f"  编码: {r.stdout.strip()}")
@@ -474,15 +474,15 @@ def generate_packet(video_dir, cards, args):
     """Generate full packet JSON from existing final.mp4 metadata"""
     final = Path(video_dir) / "final.mp4"
     assert final.exists(), "final.mp4 不存在，先渲染"
-    
+
     r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(final)],capture_output=True,text=True)
     dur = float(r.stdout.strip() or 0)
     sz = final.stat().st_size
-    
+
     layouts = list(dict.fromkeys([c["layout"] for c in cards]))
     name = os.path.basename(video_dir)
     slot = _safe_schedule_slot(name)
-    
+
     packet = {
         "platform": "kuaishou",
         "content_form": "voiceover_card_knowledge_video",
@@ -503,7 +503,7 @@ def generate_packet(video_dir, cards, args):
         "platform_adaptation": {"required_fields_checked": True, "topic_tag_count": len(args.tags) if args.tags else 2, "description_hashtag_count": 0},
         "workflow_evidence": {"completed_steps": ["card_design","tts","bgm","segment_render","concat","audio_mixing","subtitle","encoding"]},
     }
-    
+
     packet_path = Path(video_dir, "packet.json")
     packet_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2))
     print(f"  ✅ packet.json ({packet_path.stat().st_size//1024}KB)")
@@ -547,82 +547,82 @@ async def main():
     parser.add_argument("--upload", action="store_true", help="Disabled: upload must use the guarded publisher after preflight")
     parser.add_argument("--cleanup", action="store_true", help="Cleanup intermediates after upload")
     args = parser.parse_args()
-    
+
     vd = args.video_dir.rstrip("/")
     os.makedirs(vd, exist_ok=True)
     os.makedirs(f"{vd}/backgrounds", exist_ok=True)
-    
+
     # Load cards
     cards_path = Path(vd) / "cards.json"
     cards = json.loads(cards_path.read_text()) if cards_path.exists() else None
-    
+
     if args.generate_packet:
         assert cards, "--generate-packet 需要 cards.json"
         generate_packet(vd, cards, args)
         return
-    
+
     assert cards, f"cards.json 不存在: {vd}"
     assert args.theme in THEMES, f"未知主题: {args.theme}, 可选: {list(THEMES.keys())}"
-    
+
     theme_v = THEMES[args.theme]
     bg_dir = f"{vd}/backgrounds"
-    
+
     # ── Step 1: Cards ──
     if not args.skip_cards and not (Path(vd) / "cards.done").exists():
         print("\n=== Step 1: 卡片渲染 ===")
         await render_cards(vd, cards, theme_v, bg_dir, args.gh_repo)
     else:
         print("\n=== Step 1: 卡片 ✅ 跳过 ===")
-    
+
     # ── Step 2: TTS ──
     if not args.skip_tts and not (Path(vd) / "tts.done").exists():
         print("\n=== Step 2: TTS ===")
         await gen_tts(vd, cards, args.voice_idx)
     else:
         print("\n=== Step 2: TTS ✅ 跳过 ===")
-    
+
     # ── Step 3: Segments ──
     if not (Path(vd) / "segments.done").exists():
         print("\n=== Step 3: 分段渲染（并行4核）===")
         render_segments(vd, cards)
     else:
         print("\n=== Step 3: 分段 ✅ 跳过 ===")
-    
+
     # ── Step 4: Concat ──
     if not (Path(vd) / "concat.done").exists():
         print("\n=== Step 4: 拼接 ===")
         concat_video(vd, cards)
     else:
         print("\n=== Step 4: 拼接 ✅ 跳过 ===")
-    
+
     # ── Step 5: BGM + Mix ──
     if not (Path(vd) / "final.done").exists():
         print("\n=== Step 5: BGM + 混音 ===")
         download_bgm(vd, args.bgm_style)
         mix_audio(vd)
-    
+
     # ── Step 6: Subtitles ──
     if not (Path(vd) / "final.done").exists():
         print("\n=== Step 6: 字幕 ===")
         gen_subtitles(vd, cards)
-    
+
     # ── Step 7: Encode (一步到位) ──
     if not (Path(vd) / "final.done").exists():
         print("\n=== Step 7: 编码（一步到位）===")
         encode_final(vd)
-    
+
     # ── Step 8: Packet + Upload ──
     packet_path = Path(vd) / "packet.json"
     if not packet_path.exists():
         print("\n=== Step 8: Packet ===")
         generate_packet(vd, cards, args)
-    
+
     if args.upload:
         raise SystemExit("kuaishou_render.py --upload is disabled; use Pipeline or scripts/kuaishou_publish_with_postcheck.py after packet preflight passes")
     if args.cleanup and args.upload:
         print("\n=== Step 10: 清理 ===")
         cleanup(vd)
-    
+
     print(f"\n✅ {os.path.basename(vd)} 全部完成")
 
 

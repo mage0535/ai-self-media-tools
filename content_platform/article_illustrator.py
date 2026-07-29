@@ -64,7 +64,7 @@ IMAGE_GEN = Path("/root/.ai-self-media-tools/scripts/image_gen.py")
 
 def _detect_style(text: str) -> str:
     """Auto-detect best illustration style based on content keywords.
-    
+
     公众号配图强制规则：
     - 禁止像素风（仅限游戏/复古内容）
     - 科技/AI/效率类默认使用信息图或简笔画
