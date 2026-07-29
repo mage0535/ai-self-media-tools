@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh Hermes content-platform delivery health evidence periodically
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

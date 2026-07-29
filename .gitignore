@@ -1,5 +1,8 @@
 __pycache__/
 .pytest_cache/
+.codex-server-runtime/
+.codex-tmp/
+__codex_proxy_sync_tmp__/
 *.pyc
 *.pyo
 *.db
@@ -8,6 +11,8 @@ __pycache__/
 venv/
 .env
 .env.*
+.env_*
+*.orig
 *.local.json
 *.secret.json
 data/
@@ -15,10 +20,14 @@ secrets/
 logs/
 artifacts/
 outbox/
+tmp/
+local-ops-lab/
 installation-report.json
 config.json
 social-auto-upload/
 external/social-auto-upload/
 qrcode.png
 cookies/
+*.bak
+*.bak.*
 *.egg-info/
