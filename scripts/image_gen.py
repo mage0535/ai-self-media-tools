@@ -16,6 +16,7 @@ CF_WORKER = "https://flux-img-v2.samarthnadigprouniversity.workers.dev"
 REPLICATE_MODEL = "black-forest-labs/flux-1.1-pro"
 MIN_VALID_SIZE = 2048
 SN_API_KEY = os.environ.get("SN_API_KEY", "")
+PROJECT_HOME = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
 
 def _get_replicate_key():
     return os.environ.get("REPLICATE_API_KEY", "") or _from_env_file("REPLICATE_API_KEY")
@@ -182,7 +183,7 @@ def main():
 
     # 门禁1: prompt 质量检查
     r = subprocess.run(
-        [sys.executable, "/root/.ai-self-media-tools/scripts/preflight_prompt.py",
+        [sys.executable, str(PROJECT_HOME / "scripts" / "preflight_prompt.py"),
          "--prompt", args.prompt, "--type", "image"],
         capture_output=True, text=True, timeout=10)
     if r.returncode != 0:
@@ -201,7 +202,7 @@ def main():
 
     # 门禁2: 视觉质量检查
     r = subprocess.run(
-        [sys.executable, "/root/.ai-self-media-tools/scripts/visual_gate.py",
+        [sys.executable, str(PROJECT_HOME / "scripts" / "visual_gate.py"),
          "--image", args.output],
         capture_output=True, text=True, timeout=15)
     if r.returncode != 0:

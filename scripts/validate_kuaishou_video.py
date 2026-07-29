@@ -80,7 +80,8 @@ def check_resources():
     except: pass
     # SAU cookie
     try:
-        r = subprocess.run(["python3","/root/social-auto-upload/sau_cli.py","kuaishou","check","--account","main"],
+        sau_cli = Path(os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", str(Path.home() / "social-auto-upload"))) / "sau_cli.py"
+        r = subprocess.run(["python3", str(sau_cli), "kuaishou", "check", "--account", "main"],
             capture_output=True, text=True, timeout=15)
         if "SUCCESS" in r.stdout:
             ok("SAU cookie 有效")

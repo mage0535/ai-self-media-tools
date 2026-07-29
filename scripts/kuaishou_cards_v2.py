@@ -5,7 +5,7 @@ import json, os, textwrap
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR = Path("/root/.ai-self-media-tools/data/drafts/kuaishou_video")
+OUT_DIR = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))) / "data" / "drafts" / "kuaishou_video"
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 
 def load_font(size):

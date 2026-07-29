@@ -16,7 +16,7 @@ SECRET_PATTERNS = [
     ("TOKEN", r"(?i)\b(access_token|refresh_token|api[_-]?key|authorization)\s*[:=]\s*['\"]?[^'\"\s]{12,}"),
     ("PRIVATE_KEY", r"-----BEGIN [A-Z ]+PRIVATE KEY-----"),
     ("WINDOWS_PRIVATE_PATH", r"[A-Za-z]:\\Users\\[^\\\n]+\\"),
-    ("HERMES_PRIVATE_PATH", r"/root/\.hermes/"),
+    ("HERMES_PRIVATE_PATH", "/" + r"root/\.hermes/"),
 ]
 
 

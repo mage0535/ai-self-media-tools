@@ -20,7 +20,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SAU_DIR = Path(os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", "/root/social-auto-upload"))
+DEFAULT_SAU_DIR = Path(os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", str(Path.home() / "social-auto-upload")))
 DEFAULT_SAU_PYTHON = DEFAULT_SAU_DIR / "venv" / "bin" / "python"
 
 

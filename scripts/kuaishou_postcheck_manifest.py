@@ -73,7 +73,7 @@ def _storage_state_path() -> Path:
     explicit = os.environ.get("KUAISHOU_STORAGE_STATE") or os.environ.get("KS_STORAGE_STATE")
     if explicit:
         return Path(explicit).expanduser()
-    social_root = Path(os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", "/root/social-auto-upload")).expanduser()
+    social_root = Path(os.environ.get("SOCIAL_AUTO_UPLOAD_DIR", str(Path.home() / "social-auto-upload"))).expanduser()
     candidates = [
         social_root / "cookies" / "ks_uploader" / "main.json",
         social_root / "cookies" / "ks_uploader" / "account.json",

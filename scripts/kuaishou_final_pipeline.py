@@ -6,7 +6,7 @@ if os.environ.get('HERMES_ALLOW_LEGACY_RENDER_DEMO') != '1':
 import subprocess, os, sys, time
 from pathlib import Path
 
-OUT = Path("/root/.ai-self-media-tools/data/drafts/kuaishou_video")
+OUT = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))) / "data" / "drafts" / "kuaishou_video"
 
 scripts = [
     "想用AI提效但不知道从哪下手？今天教你一个最简单的切入点。",

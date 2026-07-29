@@ -7,7 +7,7 @@ import subprocess, json, textwrap
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-OUT = Path("/root/.ai-self-media-tools/data/drafts/douyin_video")
+OUT = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))) / "data" / "drafts" / "douyin_video"
 OUT.mkdir(parents=True, exist_ok=True)
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 

@@ -4,12 +4,13 @@ if os.environ.get('HERMES_ALLOW_LEGACY_RENDER_DEMO') != '1':
     raise SystemExit('legacy_render_demo_disabled: use Pipeline + validate_*_auto_packet + current manifest')
 """渲染知识卡片HTML为视频"""
 import asyncio, subprocess, os
+from pathlib import Path
 from playwright.async_api import async_playwright
 
 OUT = "/tmp/animated_card_demo"
 FRAMES = f"{OUT}/frames"
 os.makedirs(FRAMES, exist_ok=True)
-HTML = "/root/.ai-self-media-tools/scripts/knowledge_card_animation.html"
+HTML = str(Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))) / "scripts" / "knowledge_card_animation.html")
 
 async def main():
     async with async_playwright() as p:

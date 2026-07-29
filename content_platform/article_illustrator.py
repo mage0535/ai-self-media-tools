@@ -59,7 +59,8 @@ STYLE_KEYWORDS = {
 FORCE_BAN_STYLES = {"像素"}
 FORCE_DEFAULT_STYLES = ["信息图", "简笔画"]
 
-IMAGE_GEN = Path("/root/.ai-self-media-tools/scripts/image_gen.py")
+PROJECT_HOME = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+IMAGE_GEN = PROJECT_HOME / "scripts" / "image_gen.py"
 
 
 def _detect_style(text: str) -> str:

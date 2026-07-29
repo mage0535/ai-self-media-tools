@@ -385,8 +385,8 @@
       },
       "publish_policy": "semi_automatic_hermes_generates_complete_review_package_user_manual_publish_only",
       "auth_recovery": {
-        "canonical_account_file": "/root/social-auto-upload/cookies/douyin_uploader/main.json",
-        "legacy_copy_file": "/root/social-auto-upload/cookies/douyin_main.json",
+        "canonical_account_file": "<social-auto-upload-home>/cookies/douyin_uploader/main.json",
+        "legacy_copy_file": "<social-auto-upload-home>/cookies/douyin_main.json",
         "preferred_refresh_path": "cn_host_novnc_real_chrome_profile",
         "last_solidified": "2026-07-18",
         "last_solidified_source": "cn_host_novnc_manual_login_confirmed_by_user_and_user_manual_publish_success",
@@ -529,8 +529,8 @@
       },
       "auth_rule": "do_not_reauth_if_publish_entry_probe_reaches_post_create_with_file_inputs_1",
       "auth_persistence": {
-        "primary_state": "/root/social-auto-upload/cookies/tencent_uploader/profile_main",
-        "compat_storage_state": "/root/social-auto-upload/cookies/tencent_uploader/main.json",
+        "primary_state": "<social-auto-upload-home>/cookies/tencent_uploader/profile_main",
+        "compat_storage_state": "<social-auto-upload-home>/cookies/tencent_uploader/main.json",
         "refresh_route": "cn_proxy_visible_persistent_browser_then_export_storage_state",
         "health_probe_route": "cn_proxy_storage_state_then_profile_main_upload_entry",
         "entry_routes": [
