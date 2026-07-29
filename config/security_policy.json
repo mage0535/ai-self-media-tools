@@ -1,0 +1,9 @@
+{
+  "block_private_paths": true,
+  "block_cookie_like_values": true,
+  "block_api_keys": true,
+  "block_tokens": true,
+  "block_private_contact_info": false,
+  "redaction_keep_prefix": 4,
+  "redaction_keep_suffix": 4
+}

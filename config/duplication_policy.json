@@ -1,0 +1,10 @@
+{
+  "title_exact_duplicate": {"enabled": true, "scope": "same_account", "lookback_days": 30},
+  "url_duplicate": {"enabled": true, "scope": "global", "lookback_days": 365},
+  "asset_hash_duplicate": {"enabled": true, "scope": "same_account", "lookback_days": 90},
+  "cover_hash_duplicate": {"enabled": true, "scope": "same_account", "lookback_days": 30},
+  "content_package_duplicate": {"enabled": true, "scope": "global", "lookback_days": 365},
+  "topic_exact_duplicate": {"enabled": true, "scope": "same_account", "lookback_days": 7},
+  "same_day_template_duplicate": {"enabled": true, "scope": "same_account", "lookback_days": 1},
+  "override_required": true
+}

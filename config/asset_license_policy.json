@@ -1,0 +1,11 @@
+{
+  "allowed_source_types": ["self_owned", "licensed", "stock", "public_domain", "platform_provided", "user_provided"],
+  "verified_required_for_auto_publish": true,
+  "pending_review_allowed_actions": ["draft_created", "manual_review", "stage"],
+  "rejected_allowed_actions": [],
+  "unknown_allowed_actions": ["manual_review"],
+  "whitelisted_sources": [
+    {"name": "Pexels", "domains": ["pexels.com"], "default_source_type": "stock", "requires_asset_record": true},
+    {"name": "Pixabay", "domains": ["pixabay.com"], "default_source_type": "stock", "requires_asset_record": true}
+  ]
+}
