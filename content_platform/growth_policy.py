@@ -162,4 +162,3 @@ def validate_growth_strategy(plan: dict[str, Any], platform: str = "", content_t
         "failures": failures,
         "policy_id": GROWTH_POLICY_ID,
     }
-
