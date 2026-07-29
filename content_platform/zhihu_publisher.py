@@ -2,6 +2,7 @@
 import json, re
 from pathlib import Path
 
+from .auth_registry import resolve_cookie_file
 from .formatters import format_for_platform
 from .models import DeliveryResult
 
@@ -76,7 +77,7 @@ class ZhihuPublisher:
         page.wait_for_timeout(500)
 
     def deliver(self, job, platform):
-        cookie_file = Path(self.cookie_dir) / f"zhihu_{self.account}.json"
+        cookie_file = resolve_cookie_file("zhihu", self.account, self.cookie_dir)
         if not cookie_file.is_file():
             return DeliveryResult(False, "blocked", error=f"zhihu cookie not found: {cookie_file}")
         try:

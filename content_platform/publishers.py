@@ -16,11 +16,13 @@ from pathlib import Path
 from .aitoearn import AitoEarnClient
 from .content_policy import default_publisher_config, platform_region
 from .formatters import format_for_platform
+from .juejin_publisher import JuejinPublisher
 from .media_quality import validate_article_packet
 from .models import DeliveryResult
 from .paths import project_home, social_auto_upload_home
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, packet_uses_current_policy
 from .wechat_toolchain import TOOLCHAIN_META_KEYS
+from .zhihu_publisher import ZhihuPublisher
 
 
 def read_setting(name, env_file="", explicit=""):
@@ -1241,6 +1243,21 @@ def build_publisher(platform, config, data_dir):
             extra_args=cfg.get("extra_args", []),
             video_extra_args=cfg.get("video_extra_args", []),
             note_extra_args=cfg.get("note_extra_args", []),
+        )
+    if kind == "juejin-api":
+        return JuejinPublisher(
+            account=cfg.get("account", "main"),
+            cookie_dir=cfg.get("cookie_dir", "/root/social-auto-upload/cookies"),
+            proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
+            save_as_draft=cfg.get("save_as_draft", True),
+        )
+    if kind == "zhihu-playwright":
+        return ZhihuPublisher(
+            account=cfg.get("account", "main"),
+            cookie_dir=cfg.get("cookie_dir", "/root/social-auto-upload/cookies"),
+            proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
+            headless=cfg.get("headless", True),
+            save_as_draft=cfg.get("save_as_draft", True),
         )
     if kind in {"aitoearn-draft", "aitoearn-intl"}:
         default_base_url = "https://aitoearn.ai/api/unified/mcp" if platform_region(platform) == "international" else "https://aitoearn.cn/api/unified/mcp"

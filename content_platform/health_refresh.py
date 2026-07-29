@@ -17,6 +17,7 @@ from typing import Any
 
 from .content_policy import platform_region
 from .content_policy import is_douyin_platform, is_xiaohongshu_platform
+from .auth_registry import cookie_file_status, resolve_cookie_file
 from .publishers import read_setting
 
 
@@ -106,22 +107,20 @@ def _aitoearn_check(cfg: dict[str, Any]) -> tuple[bool, str]:
 
 
 def _cookie_file(cfg: dict[str, Any], platform: str) -> Path:
-    cookie_dir = Path(str(cfg.get("cookie_dir", ""))).expanduser()
     account = str(cfg.get("account") or "main")
-    return cookie_dir / f"{platform}_{account}.json"
+    return resolve_cookie_file(platform, account, str(cfg.get("cookie_dir", "")))
 
 
 def _cookie_json_check(cfg: dict[str, Any], platform: str) -> tuple[bool, str]:
     cookie_file = _cookie_file(cfg, platform)
-    if not cookie_file.is_file():
+    status = cookie_file_status(cookie_file, platform)
+    if not status.get("exists"):
         return False, f"{platform} cookie not found"
-    try:
-        payload = json.loads(cookie_file.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return False, f"{platform} cookie file invalid"
-    if not payload:
-        return False, f"{platform} cookie file empty"
-    return True, f"{platform} cookie present"
+    if not status.get("valid"):
+        missing = ",".join(status.get("required_names_missing", []))
+        detail = f" missing required names: {missing}" if missing else ""
+        return False, f"{platform} cookie file invalid or empty{detail}"
+    return True, f"{platform} cookie present at {cookie_file}"
 
 
 def _zhihu_check(cfg: dict[str, Any]) -> tuple[bool, str]:
