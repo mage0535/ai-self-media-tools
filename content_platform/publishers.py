@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -14,8 +15,11 @@ from pathlib import Path
 
 from .aitoearn import AitoEarnClient
 from .formatters import format_for_platform
+from .media_quality import validate_article_packet
 from .models import DeliveryResult
-from .paths import social_auto_upload_home
+from .paths import project_home, social_auto_upload_home
+from .visual_content_policy import KNOWLEDGE_CARD_SKILL, packet_uses_current_policy
+from .wechat_toolchain import TOOLCHAIN_META_KEYS
 
 
 def read_setting(name, env_file="", explicit=""):
@@ -154,6 +158,126 @@ class WechatDraftPublisher:
             return DeliveryResult(False, "failed", error=f"WeChat draft error code: {result.get('errcode', 'unknown')}")
         except Exception as exc:
             return DeliveryResult(False, "failed", error=str(exc)[:500])
+
+
+class HermesWechatAdapter:
+    """Delegate WeChat drafting to the Hermes article toolchain.
+
+    This path is intentionally stricter than the legacy direct API publisher:
+    it requires the channel visual policy, article packet quality gates, theme
+    selection evidence, inline image mapping, and adapter postcheck.
+    """
+
+    def __init__(self, data_dir, env_file="", command="", python_bin="", timeout=600, require_cn_proxy=True):
+        self.data_dir = Path(data_dir)
+        self.env_file = env_file
+        self.command = command
+        self.python_bin = python_bin or os.environ.get("PYTHON") or sys.executable
+        self.timeout = int(timeout or 600)
+        self.require_cn_proxy = bool(require_cn_proxy)
+
+    def deliver(self, job, platform):
+        packet = self._packet(job, platform)
+        validation_error = self._validation_error(packet)
+        if validation_error:
+            return DeliveryResult(False, "blocked", error=validation_error)
+        if self.require_cn_proxy and not read_setting("CN_PROXY", self.env_file):
+            return DeliveryResult(False, "blocked", error="missing CN_PROXY for WeChat Hermes adapter")
+        runner = Path(self.command or os.environ.get("HERMES_WECHAT_ADAPTER_COMMAND", ""))
+        if not str(runner):
+            runner = project_home() / "scripts" / "hermes_wechat_adapter.py"
+        if not runner.is_file():
+            return DeliveryResult(False, "blocked", error=f"Hermes WeChat adapter command not found: {runner}")
+        run_dir = self.data_dir / "runtime" / "wechat_adapter" / str(job.get("id", uuid.uuid4().hex))
+        run_dir.mkdir(parents=True, exist_ok=True)
+        input_path = run_dir / "input.json"
+        output_path = run_dir / "result.json"
+        input_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2), encoding="utf-8")
+        env = os.environ.copy()
+        self._load_env_file(env)
+        try:
+            proc = subprocess.run(
+                [self.python_bin, str(runner), "--input", str(input_path), "--output", str(output_path)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+                timeout=self.timeout,
+            )
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=f"Hermes WeChat adapter failed to start: {str(exc)[:300]}")
+        if proc.returncode != 0 and not output_path.is_file():
+            return DeliveryResult(False, "failed", error=(proc.stderr or proc.stdout or "Hermes WeChat adapter failed")[:500])
+        try:
+            result = json.loads(output_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=f"Hermes WeChat adapter returned no valid JSON: {str(exc)[:200]}")
+        postcheck = result.get("postcheck") or {}
+        media_id = str(result.get("media_id") or result.get("external_id") or "")
+        evidence = str(result.get("evidence_path") or result.get("error") or "")[:300]
+        if result.get("ok") and media_id and postcheck.get("passed"):
+            return DeliveryResult(True, "drafted", media_id, error=evidence)
+        if media_id:
+            return DeliveryResult(True, "handoff_pending", media_id, error="WeChat draft submitted but batchget postcheck is missing or failed")
+        return DeliveryResult(False, str(result.get("status") or "failed"), error=str(result.get("error") or "WeChat adapter failed")[:500])
+
+    def _load_env_file(self, env):
+        if not self.env_file or not Path(self.env_file).is_file():
+            return
+        for line in Path(self.env_file).read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.strip().partition("=")
+            if separator and key.strip() and key.strip() not in env:
+                env[key.strip()] = value.strip().strip("'\"")
+
+    def _packet(self, job, platform):
+        packet = dict(job)
+        draft_meta = job.get("draft_meta") or {}
+        if isinstance(draft_meta, dict):
+            for key in TOOLCHAIN_META_KEYS:
+                if key in draft_meta and key not in packet:
+                    packet[key] = draft_meta[key]
+        packet["platform"] = platform
+        packet["platform_payload"] = job.get("platform_payload") or format_for_platform(job, platform)
+        return packet
+
+    def _validation_error(self, job):
+        if not packet_uses_current_policy(job):
+            return "WeChat packet missing current visual_content_design_policy_v1"
+        quality = validate_article_packet(job)
+        if not quality.get("passed"):
+            return "WeChat packet failed media quality gates: " + ",".join(quality.get("failed_dimensions", []))
+        mapping = job.get("section_image_map") or []
+        if len(mapping) < 3:
+            return "WeChat packet requires at least 3 inline section images"
+        card_plan = job.get("knowledge_card_plan") or {}
+        if str(card_plan.get("skill", "")) != KNOWLEDGE_CARD_SKILL:
+            return "WeChat packet must use Hermes knowledge-card-designer skill"
+        policy = job.get("visual_content_policy") or {}
+        refs = policy.get("tool_refs") or {}
+        missing = [
+            key for key in ["image_generation_engine", "wechat_theme_renderer", "wechat_publisher"]
+            if not str(refs.get(key, "")).startswith("hermes_tool:")
+        ]
+        if missing:
+            return "WeChat visual policy missing tool refs: " + ",".join(missing)
+        requirements = policy.get("wechat_requirements") or {}
+        overrides = policy.get("platform_overrides") or {}
+        if isinstance(overrides.get("wechat"), dict):
+            requirements = {**requirements, **(overrides.get("wechat", {}).get("wechat_requirements") or {})}
+        if int(requirements.get("theme_count_required", 0)) < 109:
+            return "WeChat visual policy must require 109 themes"
+        strategy = job.get("strategy_brief") or {}
+        for key in ["seo_geo_intent", "selected_theme_reason"]:
+            if not strategy.get(key):
+                return f"WeChat strategy brief missing {key}"
+        wewrite = (job.get("tool_invocations") or {}).get("wewrite") or {}
+        if wewrite.get("status") != "used":
+            return "WeChat packet requires successful WeWrite llm-write tool invocation evidence"
+        commands = [item.get("name") for item in wewrite.get("commands", []) if isinstance(item, dict)]
+        if "llm-write" not in commands:
+            return "WeChat packet missing WeWrite llm-write command evidence"
+        return ""
 
 
 class SocialAutoUploadPublisher:
@@ -352,60 +476,6 @@ class YouTubePublisher:
                 url = f"https://youtube.com/watch?v={video_id}"
                 return DeliveryResult(True, "drafted", video_id, error=url)
             return DeliveryResult(False, "failed", error=f"YouTube response missing id: {str(result)[:200]}")
-        except Exception as exc:
-            return DeliveryResult(False, "failed", error=str(exc)[:500])
-
-
-class LinkedInPublisher:
-    def __init__(self, access_token_env="LINKEDIN_ACCESS_TOKEN", env_file="",
-                 access_token="", organization_id=""):
-        self.access_token_env = access_token_env
-        self.env_file = env_file
-        self.access_token = access_token
-        self.organization_id = organization_id
-
-    def deliver(self, job, platform):
-        token = read_setting(self.access_token_env, self.env_file, self.access_token)
-        if not token:
-            return DeliveryResult(False, "blocked", error=f"missing environment variable: {self.access_token_env}")
-        try:
-            formatted = job.get("platform_payload") or format_for_platform(job, platform)
-            me_req = urllib.request.Request(
-                "https://api.linkedin.com/v2/userinfo",
-                headers={"Authorization": f"Bearer {token}", "LinkedIn-Version": "202505",
-                         "User-Agent": "HermesContentPlatform/3.0"}
-            )
-            with urllib.request.urlopen(me_req, timeout=15) as resp:
-                user = json.loads(resp.read())
-            author_urn = f"urn:li:person:{user.get('sub', '')}"
-            body = {
-                "author": author_urn,
-                "commentary": formatted.get("text", job["body"])[:3000],
-                "visibility": "PUBLIC",
-                "lifecycleState": "PUBLISHED",
-                "isReshareDisabledByAuthor": False,
-                "distribution": {"feedDistribution": "MAIN_FEED", "targetEntities": [],
-                                 "thirdPartyDistributionChannels": []},
-            }
-            if self.organization_id:
-                body["container"] = f"urn:li:organization:{self.organization_id}"
-            req = urllib.request.Request(
-                "https://api.linkedin.com/v2/posts",
-                data=json.dumps(body).encode(),
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "LinkedIn-Version": "202505",
-                    "Content-Type": "application/json",
-                    "X-Restli-Protocol-Version": "2.0.0",
-                    "User-Agent": "HermesContentPlatform/3.0",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read())
-            post_id = result.get("id", "")
-            if post_id:
-                return DeliveryResult(True, "published", post_id)
-            return DeliveryResult(False, "failed", error=f"LinkedIn response: {str(result)[:200]}")
         except Exception as exc:
             return DeliveryResult(False, "failed", error=str(exc)[:500])
 
@@ -623,16 +693,106 @@ class AiToEarnFlowPublisher:
             return None
         return AitoEarnClient(self.base_url, key)
 
+    def _check_youtube_duplicate(self, client, title):
+        """Two-source duplicate check: publish records (ALL uploads) + channel works (visible)."""
+        if not title:
+            return False
+        normalized = title.strip().lower()
+        try:
+            records = client.list_channel_publish_records(platform="youtube", page_size=200)
+            for t in records.get("titles", []):
+                if t.strip().lower() == normalized:
+                    return True
+        except Exception:
+            pass
+        try:
+            result = client.list_channel_works("youtube", self.account_id)
+            for t in result.get("titles", []):
+                if t.strip().lower() == normalized:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _validate_video_quality(self, job, platform):
+        """Check video file quality before publishing (resolution, codec, audio, duration)."""
+        target = _aitoearn_platform(platform)
+        video_platforms = {"youtube", "tiktok", "douyin", "KWAI", "bilibili", "wxSph"}
+        if target not in video_platforms:
+            return True, ""
+        artifacts = job.get("artifacts", [])
+        video_artifacts = [a for a in artifacts if a.get("kind") == "video"]
+        if not video_artifacts:
+            return True, ""
+        video_path = video_artifacts[0].get("path") or video_artifacts[0].get("url", "")
+        if not video_path or not video_path.startswith(("/", "file://")):
+            return True, ""
+        if video_path.startswith("file://"):
+            video_path = video_path[7:]
+        if not os.path.isfile(video_path):
+            return False, f"❌ 视频文件不存在: {video_path}"
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "stream=codec_name,codec_type,width,height",
+                 "-show_entries", "format=duration", "-of", "json", video_path],
+                capture_output=True, text=True, timeout=30)
+            data = json.loads(result.stdout)
+            streams = data.get("streams", [])
+            fmt = data.get("format", {})
+            duration = float(fmt.get("duration", 0))
+            video_streams = [s for s in streams if s.get("codec_type") == "video"]
+            audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
+            if not video_streams:
+                return False, f"❌ 无视频流"
+            vinfo = video_streams[0]
+            codec = vinfo.get("codec_name", "?")
+            width = int(vinfo.get("width", 0))
+            height = int(vinfo.get("height", 0))
+            checks = []
+            if codec not in ("h264", "hevc"):
+                checks.append(f"编解码器 {codec}")
+            if width < 720 and height < 720:
+                checks.append(f"分辨率 {width}x{height}<720p")
+            if not audio_streams:
+                checks.append("无音轨")
+            min_dur = {"youtube": 3, "tiktok": 3, "douyin": 20, "KWAI": 5, "bilibili": 10, "wxSph": 5}
+            max_dur = {"youtube": 43200, "tiktok": 180, "douyin": 100, "KWAI": 600, "bilibili": 18000, "wxSph": 600}
+            plat_min = min_dur.get(target, 3)
+            plat_max = max_dur.get(target, 43200)
+            if duration > 0:
+                if duration < plat_min:
+                    checks.append(f"时长{duration:.0f}s<最短{plat_min}s")
+                if duration > plat_max:
+                    checks.append(f"时长{duration:.0f}s>最长{plat_max}s")
+            if checks:
+                return False, f"⚠️ {target}门禁: {'; '.join(checks)}"
+            return True, f"✅ {width}x{height} {codec} {duration:.0f}s"
+        except Exception as exc:
+            return True, f"⚠️ 检查异常: {exc}"
+
     def deliver(self, job, platform):
         client = self._client()
         if not client:
-            return DeliveryResult(False, "blocked", error=f"missing environment variable: {self.api_key_env}")
+            return DeliveryResult(False, "blocked", error=f"missing {self.api_key_env}")
         if not self.account_id:
-            return DeliveryResult(False, "blocked", error="missing AiToEarn account_id")
+            return DeliveryResult(False, "blocked", error="missing account_id")
         target = _aitoearn_platform(platform)
+
+        # Quality gate
+        quality_ok, quality_msg = self._validate_video_quality(job, platform)
+        if not quality_ok:
+            return DeliveryResult(False, "blocked", error=quality_msg)
+
+        # Duplicate check for YouTube
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        video_title = formatted.get("title", job.get("title", ""))
+        if target == "youtube" and video_title:
+            if self._check_youtube_duplicate(client, video_title):
+                return DeliveryResult(False, "duplicate",
+                    error=f"YouTube 已存在同名视频: 「{video_title}」")
+
         metadata = client.get_platform_metadata(target)
         strategy = metadata.get("publishPolicy", {}).get("completionStrategy", "") or "sync"
-        formatted = job.get("platform_payload") or format_for_platform(job, platform)
         media_urls = _public_media_urls(job.get("artifacts", []))
         content = {"body": formatted.get("text", formatted.get("markdown", job.get("body", "")))}
         if formatted.get("title") or job.get("title"):
@@ -912,7 +1072,7 @@ class AyrsharePublisher:
 
 PLATFORM_TIERS = {
     "wechat": "a", "weixin": "a", "devto": "a", "youtube": "a",
-    "linkedin": "a", "bluesky": "a", "telegram": "a", "telegraph": "a",
+    "kuaishou": "a", "bluesky": "a", "telegram": "a", "telegraph": "a",
     "mataroa": "a", "tabnews": "a",
     "bilibili": "b", "facebook": "b", "instagram": "b",
     "reddit": "b", "pinterest": "b", "threads": "b",
@@ -940,10 +1100,10 @@ PLATFORM_REGIONS = {
     "toutiao": "domestic",
     # 国际平台
     "devto": "international",
+    "telegraph": "international",
     "mataroa": "international",
     "tabnews": "international",
     "youtube": "international",
-    "linkedin": "international",
     "bluesky": "international",
     "telegram": "international",
     "telegraph": "international",
@@ -994,6 +1154,15 @@ def build_publisher(platform, config, data_dir):
     if kind == "devto-draft":
         return DevtoDraftPublisher(cfg.get("api_key_env", "DEVTO_API_KEY"), cfg.get("env_file", ""))
     if kind == "wechat-draft":
+        return HermesWechatAdapter(
+            data_dir=data_dir,
+            env_file=cfg.get("env_file", ""),
+            command=cfg.get("adapter_command", ""),
+            python_bin=cfg.get("python_bin", os.environ.get("PYTHON", "python3")),
+            timeout=cfg.get("timeout", 600),
+            require_cn_proxy=cfg.get("require_cn_proxy", True),
+        )
+    if kind == "wechat-legacy-draft":
         return WechatDraftPublisher(
             cfg.get("app_id_env", "WECHAT_APP_ID"), cfg.get("app_secret_env", "WECHAT_APP_SECRET"),
             cfg.get("env_file", "")
@@ -1008,11 +1177,11 @@ def build_publisher(platform, config, data_dir):
             cfg.get("env_file", ""),
             cfg.get("privacy", "unlisted"),
         )
-    if kind == "linkedin":
-        return LinkedInPublisher(
-            cfg.get("access_token_env", "LINKEDIN_ACCESS_TOKEN"),
+    if kind == "bluesky":
+        return BlueskyPublisher(
+            cfg.get("identifier_env", "BLUESKY_IDENTIFIER"),
+            cfg.get("password_env", "BLUESKY_PASSWORD"),
             cfg.get("env_file", ""),
-            organization_id=cfg.get("organization_id", ""),
         )
     if kind == "bilibili":
         return BilibiliPublisher(

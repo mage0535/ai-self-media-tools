@@ -91,9 +91,6 @@ def format_for_platform(job, platform):
         text = f"{_plain(title)}\n\n{_plain(body)}"
         limit = 280 if platform in {"twitter", "x"} else 500
         return {**base, "kind": "short", "text": text[:limit]}
-    if platform in {"linkedin"}:
-        text = f"{title}\n\n{_plain(body)}"[:3000]
-        return {**base, "kind": "post", "title": title[:200], "text": text, "hashtags": _hashtags(job)}
     if platform in {"reddit"}:
         return {**base, "kind": "post", "title": title[:300], "text": body[:40000], "subreddit": "auto"}
     if platform in {"facebook", "instagram", "pinterest"}:

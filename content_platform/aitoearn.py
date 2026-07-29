@@ -66,21 +66,9 @@ def _task_market_item(lines):
         elif stripped.startswith("- ") and len(stripped) > 2:
             value = stripped[2:].strip()
             if value in {
-                "douyin",
-                "xhs",
-                "wxSph",
-                "KWAI",
-                "youtube",
-                "wxGzh",
-                "bilibili",
-                "twitter",
-                "tiktok",
-                "facebook",
-                "instagram",
-                "threads",
-                "pinterest",
-                "linkedin",
-                "google_business",
+                "douyin", "xhs", "wxSph", "KWAI", "youtube", "wxGzh",
+                "bilibili", "twitter", "tiktok", "facebook", "instagram",
+                "threads", "pinterest", "google_business",
             }:
                 item.setdefault("platforms", []).append(value)
     return item
@@ -131,14 +119,19 @@ class AitoEarnClient:
             "method": "tools/call",
             "params": {"name": method, "arguments": arguments or {}},
         }
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "x-api-key": self.api_key,
+        }
+        # Intl endpoint needs extra headers to bypass Cloudflare WAF
+        if "aitoearn.ai" in self.base_url:
+            headers["User-Agent"] = "Hermes/1.0"
+            headers["Origin"] = "https://aitoearn.ai"
         request = urllib.request.Request(
             self.base_url,
             data=json.dumps(payload, ensure_ascii=False).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
-                "x-api-key": self.api_key,
-            },
+            headers=headers,
         )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read().decode()
@@ -170,6 +163,45 @@ class AitoEarnClient:
         payload = self.call("listChannelPlatforms", {}, timeout=60)
         return _extract_text(payload)
 
+    def list_channel_works(self, platform, account_id):
+        """List publicly visible works on a channel."""
+        payload = self.call("listChannelWorks", {"platform": platform, "accountId": account_id}, timeout=30)
+        text = _extract_text(payload)
+        titles = re.findall(r"^\s+title:\s*(.*?)$", text, re.MULTILINE)
+        return {"titles": [t.strip() for t in titles], "raw_text": text}
+
+    def list_channel_publish_records(self, platform="", page_size=100):
+        """List publish records. Filter by platform if provided."""
+        args = {"pageSize": page_size}
+        if platform:
+            args["platform"] = platform
+        payload = self.call("listChannelPublishRecords", args, timeout=30)
+        text = _extract_text(payload)
+        titles = re.findall(r"^\s+title:\s*(.*?)$", text, re.MULTILINE)
+        return {"titles": [t.strip() for t in titles], "raw_text": text}
+
+    def get_media_cdn_url(self, media_id, group_id=None, min_size_bytes=100000):
+        """Safely extract CDN URL for a media ID from listMedia.
+        Splits entries first to avoid cross-entry regex matching bug.
+        Returns (cdn_url, size_bytes) or ("", 0) if not found/too small.
+        """
+        args = {"pageSize": 50}
+        if group_id:
+            args["groupId"] = group_id
+        payload = self.call("listMedia", args, timeout=30)
+        text = _extract_text(payload)
+        entries = text.split("\n  - _id:")
+        for entry in entries:
+            if media_id in entry:
+                url_m = re.search(r'url:\s*(\S+)', entry)
+                size_m = re.search(r'size:\s*(\d+)', entry)
+                if url_m and size_m:
+                    size = int(size_m.group(1))
+                    cdn_url = f"https://assets.aitoearn.ai/{url_m.group(1)}"
+                    if size >= min_size_bytes:
+                        return cdn_url, size
+        return "", 0
+
     def get_platform_metadata(self, platform):
         platform = str(platform)
         if platform not in self._platform_cache:
@@ -187,8 +219,17 @@ class AitoEarnClient:
         return {
             "publish_record_id": _publish_record_id(text),
             "work_link": _first(r"workLink:\s*([^\n]+)", text),
-            "status": _to_int(_first(r"status:\s*([-\d]+)", text), 0),
+            "status": _to_int(_first(r"status:\s*([-\\d]+)", text), 0),
             "error": _first(r"errorMsg:\s*([^\n]+)", text),
+            "raw_text": text,
+        }
+
+    def get_channel_publish_record_by_task_id(self, task_id):
+        payload = self.call("getChannelPublishRecordByTaskId", {"taskId": task_id}, timeout=30)
+        text = _extract_text(payload)
+        return {
+            "work_link": _first(r"workLink:\s*([^\n]+)", text),
+            "status": _to_int(_first(r"status:\s*([-\\d]+)", text), 0),
             "raw_text": text,
         }
 
