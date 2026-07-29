@@ -27,6 +27,7 @@ class VideoToolchainTests(unittest.TestCase):
         self.assertIn("lower_third_subtitles", plan["required_tools"])
         for tool in [
             "cinema_composition_designer",
+            "shotcraft_motion_designer",
             "card_renderer",
             "tts_renderer",
             "segment_renderer",
@@ -41,6 +42,7 @@ class VideoToolchainTests(unittest.TestCase):
         self.assertIn("scene_to_script_mapping", plan["quality_gates"])
         for gate in [
             "cinema_storyboard_recorded",
+            "shotcraft_motion_plan_recorded",
             "tool_invocation_manifest_recorded",
             "post_render_cinema_visual_gate",
             "audio_mix_probe_recorded",
@@ -49,15 +51,17 @@ class VideoToolchainTests(unittest.TestCase):
             self.assertIn(gate, plan["quality_gates"])
         for ref in [
             "cinema_composition_designer",
+            "shotcraft_motion_designer",
             "video_toolchain_runner",
             "kuaishou_render",
             "visual_gate",
             "audio_mixer",
         ]:
             self.assertIn(ref, plan["tool_refs"])
-        for step in ["cinema_storyboard", "render_cards", "gen_tts", "mix_audio", "encode_final", "visual_gate_cinema"]:
+        for step in ["cinema_storyboard", "shotcraft_motion_plan", "render_cards", "gen_tts", "mix_audio", "encode_final", "visual_gate_cinema"]:
             self.assertIn(step, plan["renderer_steps"])
         self.assertIn("cinema_color_css", plan["effect_stack"])
+        self.assertIn("shotcraft_motion_css", plan["effect_stack"])
 
     def test_strategy_router_does_not_add_video_plan_for_wechat_article(self):
         strategy = choose_content_strategy(
@@ -163,10 +167,17 @@ def _valid_video_manifest(video):
         "status": "rendered",
         "output": str(video),
         "cinema_storyboard": [{} for _ in range(8)],
+        "shotcraft_motion_plan": {
+            "available": True,
+            "registry_count": 121,
+            "timeline": [{"name": "hero-card"}, {"name": "stagger-fade"}, {"name": "scale-bounce"}],
+        },
         "cinema_visual_gate": {"passed": True, "checked_images": [{"image": "card_01.png"}]},
         "toolchain_contract": {
             "planned_tools": [
                 "cinema_composition.storyboard",
+                "shotcraft_moves.shot_plan_for_text",
+                "shotcraft_moves.shot_sequence",
                 "video_toolchain_runner.build_cards",
                 "kuaishou_render.render_cards",
                 "kuaishou_render.gen_tts",

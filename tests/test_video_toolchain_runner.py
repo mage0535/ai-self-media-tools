@@ -43,6 +43,9 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(len(cards), 8)
             self.assertEqual(cards[0]["hook"], "Cat workflow")
             self.assertEqual(manifest["template_family"], "pet_repost_real_behavior")
+            self.assertTrue(manifest["shotcraft_motion_plan"]["available"])
+            self.assertGreaterEqual(manifest["shotcraft_motion_plan"]["registry_count"], 100)
+            self.assertTrue(cards[0]["shotcraft"]["available"])
 
     def test_localized_repost_refuses_original_card_fallback_without_source(self):
         root = Path(__file__).resolve().parents[1]
@@ -181,6 +184,8 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             contract = manifest["toolchain_contract"]
             for tool in [
                 "cinema_composition.storyboard",
+                "shotcraft_moves.shot_plan_for_text",
+                "shotcraft_moves.shot_sequence",
                 "video_toolchain_runner.build_cards",
                 "kuaishou_render.render_cards",
                 "kuaishou_render.gen_tts",
@@ -194,10 +199,85 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             ]:
                 self.assertIn(tool, contract["planned_tools"])
             self.assertIn("cinema_color_css", contract["effect_stack"])
+            self.assertIn("shotcraft_motion_css", contract["effect_stack"])
+            self.assertGreaterEqual(contract["template_registry"]["shotcraft_registry_count"], 100)
             self.assertEqual(contract["template_registry"]["theme"], "cyber-neon")
             self.assertIn("visual_gate.py --cinema", contract["post_render_gates"])
             self.assertIn("--bgm-style", manifest["renderer_command_preview"])
             self.assertEqual(manifest["bgm_style"], contract["bgm_style"])
+
+    def test_runner_dry_run_records_shotcraft_motion_plan(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            plan = {
+                "selected_pipeline": "knowledge_card_video",
+                "template_family": "knowledge_card_motion_case",
+                "platforms": ["youtube"],
+            }
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+                "VIDEO_TOOLCHAIN_DRY_RUN": "1",
+            }
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "AI tools can slow teams down.\n\nUse one tool per workflow stage.\n\nEnd with a clear rule.",
+                    "AI tool workflow rules",
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            cards = json.loads((out / "cards.json").read_text(encoding="utf-8"))
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            shotcraft = manifest["shotcraft_motion_plan"]
+            self.assertTrue(shotcraft["available"])
+            self.assertGreaterEqual(shotcraft["registry_count"], 100)
+            self.assertGreaterEqual(len(shotcraft["selected_shots"]), 3)
+            self.assertGreaterEqual(len(shotcraft["timeline"]), 3)
+            self.assertEqual(cards[0]["shotcraft"]["name"], shotcraft["timeline"][0]["name"])
+
+    def test_runner_accepts_bom_prefixed_plan_json(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            plan = {
+                "selected_pipeline": "knowledge_card_video",
+                "template_family": "knowledge_card_motion_case",
+                "platforms": ["youtube"],
+            }
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text("\ufeff" + json.dumps(plan), encoding="utf-8")
+            env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+                "VIDEO_TOOLCHAIN_DRY_RUN": "1",
+            }
+            proc = subprocess.run(
+                [sys.executable, str(script), "One useful script beat.\n\nAnother visual beat.", "BOM plan"],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest["shotcraft_motion_plan"]["available"])
 
     def test_intl_short_video_defaults_to_project_toolchain_before_legacy_fallback(self):
         root = Path(__file__).resolve().parents[1]

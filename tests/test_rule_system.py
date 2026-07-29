@@ -184,8 +184,9 @@ class RuleSystemTests(unittest.TestCase):
             "import json, os, pathlib\n"
             "out=pathlib.Path(os.environ['VIDEO_OUTPUT_DIR']); out.mkdir(parents=True, exist_ok=True)\n"
             "video=out/'generated.mp4'; video.write_bytes(b'video')\n"
-            "tools=['cinema_composition.storyboard','video_toolchain_runner.build_cards','kuaishou_render.render_cards','kuaishou_render.gen_tts','kuaishou_render.render_segments','kuaishou_render.concat_video','kuaishou_render.download_bgm','mix_bgm_with_gate.mix_bgm','kuaishou_render.gen_subtitles','kuaishou_render.encode_final','visual_gate.py --cinema']\n"
-            "manifest={'ok': True, 'status': 'rendered', 'output': str(video), 'selected_pipeline': 'knowledge_card_video', 'cinema_storyboard': [{} for _ in range(8)], 'cinema_visual_gate': {'passed': True}, 'toolchain_contract': {'planned_tools': tools}}\n"
+            "tools=['cinema_composition.storyboard','shotcraft_moves.shot_plan_for_text','shotcraft_moves.shot_sequence','video_toolchain_runner.build_cards','kuaishou_render.render_cards','kuaishou_render.gen_tts','kuaishou_render.render_segments','kuaishou_render.concat_video','kuaishou_render.download_bgm','mix_bgm_with_gate.mix_bgm','kuaishou_render.gen_subtitles','kuaishou_render.encode_final','visual_gate.py --cinema']\n"
+            "shotcraft={'available': True, 'registry_count': 121, 'timeline': [{'name': 'hero-card'}, {'name': 'stagger-fade'}, {'name': 'scale-bounce'}]}\n"
+            "manifest={'ok': True, 'status': 'rendered', 'output': str(video), 'selected_pipeline': 'knowledge_card_video', 'cinema_storyboard': [{} for _ in range(8)], 'shotcraft_motion_plan': shotcraft, 'cinema_visual_gate': {'passed': True}, 'toolchain_contract': {'planned_tools': tools}}\n"
             "(out/'video_toolchain_runner_manifest.json').write_text(json.dumps(manifest), encoding='utf-8')\n"
             "print('{}')\n",
             encoding="utf-8",
