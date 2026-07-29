@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from .resource import ResourceGuard
+from .tool_adapters import ScriptVideoProvider
 from .tool_registry import ToolRegistry
 
 
@@ -170,12 +171,19 @@ class MediaBridge:
         return {"kind": "image", "path": str(output), "checksum": checksum}
 
     def _generate_video(self, job, output_dir):
-        provider = self.registry.choose_provider("video")
+        plan = job.get("draft_meta", {}).get("video_toolchain_plan") or {}
+        provider = self._choose_video_provider(plan)
         if not provider:
             raise FileNotFoundError("video script not configured")
         script_body = job.get("draft_meta", {}).get("video_prompt") or job["body"][:1200]
         env = os.environ.copy()
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
+        if plan:
+            plan_path = output_dir / "video_toolchain_plan.json"
+            plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+            env["VIDEO_TOOLCHAIN_PLAN_PATH"] = str(plan_path)
+            env["VIDEO_SELECTED_PIPELINE"] = str(plan.get("selected_pipeline", ""))
+            env["VIDEO_TEMPLATE_FAMILY"] = str(plan.get("template_family", ""))
         on_research = job.get("draft_meta", {}).get("open_notebook_research") or {}
         if on_research:
             research_path = output_dir / "open_notebook_research.json"
@@ -183,12 +191,97 @@ class MediaBridge:
             env["OPEN_NOTEBOOK_RESEARCH_PATH"] = str(research_path)
         with self.guard.video_lock():
             provider.run(script_body, job.get("title") or job["topic"], env=env)
+        manifest = self._video_toolchain_manifest(output_dir)
+        if manifest.get("dry_run") or manifest.get("status") == "dry_run":
+            raise RuntimeError("video toolchain dry-run output is not publishable")
+        if plan.get("required"):
+            self._validate_required_video_toolchain_manifest(manifest, output_dir, plan)
         generated = sorted(output_dir.glob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
         output = generated[0] if generated else output_dir / "video.mp4"
         if not output.is_file():
             raise RuntimeError("video provider produced no output file")
-        checksum = hashlib.sha256(output.read_bytes()).hexdigest()
-        return {"kind": "video", "path": str(output), "checksum": checksum}
+        output_bytes = output.read_bytes()
+        if output.name == "dry_run.mp4" or output_bytes == b"video-toolchain-dry-run":
+            raise RuntimeError("video toolchain dry-run output is not publishable")
+        checksum = hashlib.sha256(output_bytes).hexdigest()
+        artifact = {"kind": "video", "path": str(output), "checksum": checksum}
+        if plan:
+            artifact["toolchain_plan"] = str(output_dir / "video_toolchain_plan.json")
+            artifact["selected_pipeline"] = str(plan.get("selected_pipeline", ""))
+            artifact["template_family"] = str(plan.get("template_family", ""))
+        return artifact
+
+    def _choose_video_provider(self, plan):
+        selected = str((plan or {}).get("selected_pipeline") or "")
+        scripts = self.config.get("video_toolchain", {}).get("scripts", {})
+        script = scripts.get(selected) if isinstance(scripts, dict) else ""
+        if script:
+            return ScriptVideoProvider(script, self.config.get("video", {}).get("timeout", 120))
+        return self.registry.choose_provider("video")
+
+    @staticmethod
+    def _video_toolchain_manifest(output_dir):
+        path = Path(output_dir) / "video_toolchain_runner_manifest.json"
+        if not path.is_file():
+            return {}
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    @staticmethod
+    def _validate_required_video_toolchain_manifest(manifest, output_dir, plan=None):
+        if not manifest:
+            raise RuntimeError("required video toolchain manifest is missing")
+        if not manifest.get("ok") or manifest.get("status") != "rendered":
+            raise RuntimeError("required video toolchain did not finish rendered")
+        selected_pipeline = str((plan or {}).get("selected_pipeline") or manifest.get("selected_pipeline") or "")
+        contract = manifest.get("toolchain_contract") or {}
+        planned_tools = set(contract.get("planned_tools") or [])
+        if selected_pipeline == "localized_repost_video":
+            required_repost_tools = {
+                "source_video_discovery",
+                "source_asset_matcher",
+                "autoclip_adapter.run_autoclip_pipeline",
+                "source_dedup_db",
+                "ffmpeg.clip_segments",
+                "ffmpeg.concat",
+                "repost_rights_manifest",
+            }
+            missing_repost = sorted(required_repost_tools - planned_tools)
+            if missing_repost:
+                raise RuntimeError(f"required localized repost toolchain_contract missing tools: {missing_repost}")
+            if not (manifest.get("source_asset_match") or {}).get("passed"):
+                raise RuntimeError("required localized repost source_asset_match did not pass")
+            if not manifest.get("repost_source"):
+                raise RuntimeError("required localized repost source evidence is missing")
+            output = Path(str(manifest.get("output") or ""))
+            if not output.is_file() or output_dir not in output.parents:
+                raise RuntimeError("required video manifest output is missing or outside output_dir")
+            return
+        required_tools = {
+            "cinema_composition.storyboard",
+            "video_toolchain_runner.build_cards",
+            "kuaishou_render.render_cards",
+            "kuaishou_render.gen_tts",
+            "kuaishou_render.render_segments",
+            "kuaishou_render.concat_video",
+            "kuaishou_render.download_bgm",
+            "mix_bgm_with_gate.mix_bgm",
+            "kuaishou_render.gen_subtitles",
+            "kuaishou_render.encode_final",
+            "visual_gate.py --cinema",
+        }
+        missing = sorted(required_tools - planned_tools)
+        if missing:
+            raise RuntimeError(f"required video toolchain_contract missing tools: {missing}")
+        if "cinema_storyboard" not in manifest or len(manifest.get("cinema_storyboard") or []) < 8:
+            raise RuntimeError("required video cinema_storyboard missing or incomplete")
+        if not (manifest.get("cinema_visual_gate") or {}).get("passed"):
+            raise RuntimeError("required video cinema visual gate did not pass")
+        output = Path(str(manifest.get("output") or ""))
+        if not output.is_file() or output_dir not in output.parents:
+            raise RuntimeError("required video manifest output is missing or outside output_dir")
 
     def _generate_illustration(self, job):
         """使用归藏材质插画风格生成带中文标签的解释图。"""

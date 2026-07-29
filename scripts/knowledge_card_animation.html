@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{width:720px;height:1280px;overflow:hidden;font-family:'PingFang SC','Microsoft YaHei',sans-serif;}
+.card{width:100%;height:100%;position:absolute;top:0;left:0;padding:60px;opacity:0;pointer-events:none;}
+.card.active{opacity:1;pointer-events:auto;}
+
+/* --- 标签（编号）--- */
+.tag{position:absolute;top:60px;left:60px;border-radius:12px;padding:8px 20px;font-size:22px;font-weight:bold;color:#fff;opacity:0;}
+.tag.a1{animation:fadeIn 0.3s ease 0.1s forwards;}
+
+/* --- 标题 6种动画 --- */
+.title{position:absolute;top:280px;left:60px;right:60px;font-size:48px;font-weight:bold;color:#f1f5f9;line-height:1.3;opacity:0;}
+/* 1. 从上方滑入 */
+.title.a1{animation:slideDown 0.5s cubic-bezier(0.22,1,0.36,1) 0.3s forwards;}
+/* 2. 放大弹入 */
+.title.a2{animation:scaleIn 0.5s cubic-bezier(0.68,-0.55,0.27,1.55) 0.3s forwards;}
+/* 3. 从左旋转入 */
+.title.a3{animation:rotateInLeft 0.6s ease-out 0.3s forwards;}
+/* 4. 模糊清晰 */
+.title.a4{animation:blurIn 0.6s ease 0.3s forwards;}
+/* 5. 从右切入（clip）*/
+.title.a5{animation:clipIn 0.5s ease 0.3s forwards;}
+/* 6. 弹性下落 */
+.title.a6{animation:bounceDown 0.7s cubic-bezier(0.22,1,0.36,1) 0.3s forwards;}
+
+/* --- 副标题（打字机 或 其他）--- */
+.sub{position:absolute;top:420px;left:60px;right:60px;font-size:28px;font-weight:500;opacity:0;display:flex;align-items:center;}
+.sub.a1{animation:subIn 0.4s ease-out 0.7s forwards;}
+.sub.a1 .cursor{display:inline-block;width:2px;height:28px;margin-left:2px;background:transparent;animation:blink 0.6s step-end 5;}
+.sub.a1.show .cursor{background:currentColor;}
+/* 2. 从左滑入 */
+.sub.a2{animation:slideInLeft 0.4s ease-out 0.7s forwards;}
+/* 3. 缩放弹入 */
+.sub.a3{animation:popIn 0.4s cubic-bezier(0.68,-0.55,0.27,1.55) 0.7s forwards;}
+/* 4. 从下上浮 */
+.sub.a4{animation:fadeUp 0.4s ease 0.7s forwards;}
+
+/* --- 正文1 --- */
+.b1{position:absolute;top:520px;left:60px;right:60px;font-size:26px;color:#cbd5e1;line-height:1.6;opacity:0;}
+.b1.a1{animation:slideInLeft 0.4s ease-out 1.1s forwards;}
+.b1.a2{animation:fadeUp 0.4s ease 1.1s forwards;}
+.b1.a3{animation:scaleIn 0.4s ease 1.1s forwards;}
+.b1.a4{animation:blurIn 0.5s ease 1.1s forwards;}
+.b1.a5{animation:rotateIn 0.5s ease 1.1s forwards;}
+.b1.a6{animation:bounceIn 0.5s ease 1.1s forwards;}
+
+/* --- 正文2 --- */
+.b2{position:absolute;top:600px;left:60px;right:60px;font-size:26px;color:#94a3b8;line-height:1.6;opacity:0;}
+.b2.a1{animation:slideInRight 0.4s ease-out 1.5s forwards;}
+.b2.a2{animation:fadeUp 0.4s ease 1.5s forwards;}
+.b2.a3{animation:scaleIn 0.4s ease 1.5s forwards;}
+.b2.a4{animation:flipIn 0.5s ease 1.5s forwards;}
+.b2.a5{animation:rotateIn 0.5s ease 1.5s forwards;}
+.b2.a6{animation:elasticIn 0.6s cubic-bezier(0.68,-0.55,0.27,1.55) 1.5s forwards;}
+
+/* --- 底部标签 --- */
+.ft{position:absolute;bottom:100px;left:60px;padding:10px 24px;border-radius:20px;font-size:20px;opacity:0;}
+.ft.a1{animation:fadeUp 0.5s ease 2.0s forwards;}
+.ft.a2{animation:slideInLeft 0.4s ease 2.0s forwards;}
+.ft.a3{animation:scaleIn 0.4s ease 2.0s forwards;}
+
+/* --- 高亮词 --- */
+.hl{display:inline-block;}
+.hl.a1{animation:pop 0.4s cubic-bezier(0.68,-0.55,0.27,1.55) 0.1s both;}
+.hl.a2{animation:wave 0.6s ease 0.1s both;}
+.hl.a3{color:inherit;border-bottom:2px solid;padding-bottom:2px;animation:underlineIn 0.4s ease 0.1s both;}
+.hl.a4{animation:glow 0.6s ease 0.1s both;}
+
+/* ===== 关键帧定义 ===== */
+@keyframes fadeIn{to{opacity:1;}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-30px);}to{opacity:1;transform:translateY(0);}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.7);}to{opacity:1;transform:scale(1);}}
+@keyframes rotateInLeft{from{opacity:0;transform:translateX(-40px) rotate(-10deg);}to{opacity:1;transform:translateX(0) rotate(0);}}
+@keyframes blurIn{from{opacity:0;filter:blur(8px);}to{opacity:1;filter:blur(0);}}
+@keyframes clipIn{from{clip-path:inset(0 100% 0 0);opacity:0;}to{clip-path:inset(0 0 0 0);opacity:1;}}
+@keyframes bounceDown{0%{opacity:0;transform:translateY(-40px);}60%{transform:translateY(5px);}80%{transform:translateY(-2px);}100%{opacity:1;transform:translateY(0);}}
+@keyframes subIn{to{opacity:1;}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-30px);}to{opacity:1;transform:translateX(0);}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+@keyframes popIn{from{opacity:0;transform:scale(0.5);}to{opacity:1;transform:scale(1);}}
+@keyframes rotateIn{from{opacity:0;transform:rotate(-15deg) scale(0.8);}to{opacity:1;transform:rotate(0) scale(1);}}
+@keyframes flipIn{from{opacity:0;transform:perspective(600px) rotateX(-60deg);}to{opacity:1;transform:perspective(600px) rotateX(0);}}
+@keyframes elasticIn{0%{opacity:0;transform:scale(0);}55%{transform:scale(1.08);}75%{transform:scale(0.95);}90%{transform:scale(1.02);}100%{opacity:1;transform:scale(1);}}
+@keyframes bounceIn{0%{opacity:0;transform:scale(0.3);}50%{transform:scale(1.05);}70%{transform:scale(0.9);}100%{opacity:1;transform:scale(1);}}
+@keyframes pop{0%{transform:scale(0);opacity:0;}70%{transform:scale(1.15);}100%{transform:scale(1);opacity:1;}}
+@keyframes wave{0%{transform:translateY(0);}25%{transform:translateY(-6px);}50%{transform:translateY(0);}75%{transform:translateY(-3px);}100%{transform:translateY(0);}}
+@keyframes underlineIn{from{width:0;}to{width:100%;}}
+@keyframes glow{0%{opacity:0;text-shadow:0 0 0 transparent;}50%{text-shadow:0 0 20px currentColor;}100%{opacity:1;text-shadow:0 0 0 transparent;}}
+@keyframes blink{50%{background:transparent;}}
+</style>
+</head>
+<body>
+
+<!-- 卡1 -->
+<div class="card c0"><div class="tag a1" style="background:#3b82f6">01</div>
+<div class="title a1">AI工具正在改变<span class="hl a1" style="color:#3b82f6">工作方式</span></div>
+<div class="sub a1" style="color:#3b82f6">效率提升看得见<span class="cursor"></span></div>
+<div class="b1 a1">自动处理重复性任务，释放你的创造力。</div>
+<div class="b2 a3">每天省下<span class="hl a2" style="color:#3b82f6">2小时</span>，专注真正重要的事。</div>
+<div class="ft a1" style="background:rgba(59,130,246,0.15);color:#60a5fa">效率工具 · 自动化</div>
+</div>
+
+<!-- 卡2 -->
+<div class="card c1"><div class="tag a1" style="background:#34d399">02</div>
+<div class="title a3">自动处理<span class="hl a3" style="color:#34d399">重复任务</span></div>
+<div class="sub a2" style="color:#34d399">每天省下2小时</div>
+<div class="b1 a2">数据录入、报表生成都能自动化。</div>
+<div class="b2 a5">让AI做<span class="hl a4" style="color:#34d399">重复的事</span>，你做真正创造价值的事。</div>
+<div class="ft a2" style="background:rgba(52,211,153,0.15);color:#6ee7b7">效率工具 · 自动化</div>
+</div>
+
+<!-- 卡3 -->
+<div class="card c2"><div class="tag a1" style="background:#8b5cf6">03</div>
+<div class="title a5"><span class="hl a1" style="color:#8b5cf6">实时数据</span>分析</div>
+<div class="sub a3" style="color:#8b5cf6">决策不再靠感觉</div>
+<div class="b1 a4">AI自动采集、清洗、可视化，分钟级出报告。</div>
+<div class="b2 a1">用<span class="hl a2" style="color:#8b5cf6">数据说话</span>，而不是凭经验拍脑袋。</div>
+<div class="ft a3" style="background:rgba(139,92,246,0.15);color:#a78bfa">效率工具 · 自动化</div>
+</div>
+
+<!-- 卡4 -->
+<div class="card c3"><div class="tag a1" style="background:#ec4899">04</div>
+<div class="title a2"><span class="hl a4" style="color:#ec4899">关注我</span></div>
+<div class="sub a4" style="color:#ec4899">持续分享AI效率工具</div>
+<div class="b1 a6">每周实测一款AI工具，帮你找到最适合的方案。</div>
+<div class="b2 a6">下一期教你用<span class="hl a3" style="color:#ec4899">OpenClaw</span>搭建自动化工作流。</div>
+<div class="ft a1" style="background:rgba(236,72,153,0.15);color:#f472b6">关注不迷路</div>
+</div>
+
+<!-- 卡5（用同卡1配色不同动画） -->
+<div class="card c0"><div class="tag a1" style="background:#3b82f6">05</div>
+<div class="title a4">AI不是替代你<br>而是<span class="hl a1" style="color:#3b82f6">放大你</span></div>
+<div class="sub a1" style="color:#3b82f6">人机协作新范式</div>
+<div class="b1 a3">AI处理重复劳动，你专注创意和决策。</div>
+<div class="b2 a4">未来不是人与AI的竞争，而是<span class="hl a3" style="color:#3b82f6">会用AI的人</span>与不会用AI的人的竞争。</div>
+<div class="ft a2" style="background:rgba(59,130,246,0.15);color:#60a5fa">效率工具 · 自动化</div>
+</div>
+
+<!-- 卡6 -->
+<div class="card c1"><div class="tag a1" style="background:#34d399">06</div>
+<div class="title a6">你的工作<br><span class="hl a2" style="color:#34d399">AI Ready</span>了吗？</div>
+<div class="sub a2" style="color:#34d399">现在就行动</div>
+<div class="b1 a5">从今天开始，每天找一个能自动化的任务。</div>
+<div class="b2 a2">三个月后你会发现，工作方式已经<span class="hl a4" style="color:#34d399">完全不同</span>。</div>
+<div class="ft a3" style="background:rgba(52,211,153,0.15);color:#6ee7b7">关注，持续更新</div>
+</div>
+
+<script>
+// 每6秒切卡
+const cards = document.querySelectorAll('.card');
+// 背景色
+const bgs = [
+  'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+  'linear-gradient(135deg, #0f2b1e 0%, #1a3a2a 100%)',
+  'linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 100%)',
+  'linear-gradient(135deg, #2d0a1a 0%, #4a1530 100%)',
+];
+cards.forEach((c, i) => c.style.background = bgs[i % 4]);
+
+let idx = 0;
+cards[0].style.opacity = 1;
+setInterval(() => {
+  cards[idx].style.opacity = 0;
+  idx = (idx + 1) % cards.length;
+  cards[idx].style.opacity = 1;
+  // re-trigger animations
+  cards[idx].querySelectorAll('.tag,.title,.sub,.b1,.b2,.ft').forEach(el => {
+    // Get the animation class (a1-a6)
+    const cls = Array.from(el.classList).find(c => c.startsWith('a'));
+    if (cls) {
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+    }
+  });
+}, 6000);
+</script>
+</body>
+</html>
