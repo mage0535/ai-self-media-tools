@@ -63,8 +63,52 @@ def _score(body, context):
     authenticity = max(0.15, 1.0 - auth_penalty)
     body_lines = [line.strip() for line in text.splitlines() if line.strip()]
     hook_strength = 0.75 if style.get("opening_patterns") else 0.45
-    if body_lines and any(line.endswith("?") for line in body_lines[:2]):
-        hook_strength = min(1.0, hook_strength + 0.12)
+    # English hooks should be judged by concrete problem/payoff signals, not only style samples.
+    english_hook_signals = 0
+    first_240 = text[:240]
+    english_start = first_240.casefold()
+    if not _contains_chinese(first_240):
+        if body_lines and any(line.endswith("?") for line in body_lines[:2]):
+            english_hook_signals += 1
+        if re.search(r"\b(why|how|what if|before you|stop|avoid|mistake|problem|trap|cost|waste|fails?|broken|wrong|friction|vanish|vetted|practical filter)\b", english_start):
+            english_hook_signals += 1
+        if re.search(r"\b(most|many|teams|creators|developers|users|founders)\b.{0,90}\b(do not|don't|are not|aren't|fail|waste|lose|overlook|miss|wrong|need)\b", english_start):
+            english_hook_signals += 1
+        if re.search(r"^\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b", english_start) or re.search(r"\b\d+\b", first_240[:120]):
+            english_hook_signals += 1
+        if re.search(r"[:—]\s*[A-Za-z]", first_240[:120]) or re.search(r"\s-\s*[A-Za-z]", first_240[:120]):
+            english_hook_signals += 1
+        if re.search(r"\bevery\s+(week|day|month|year)\b", english_start) and re.search(r"\b(most|few|but|friction|problem|waste|vetted|actually)\b", english_start):
+            english_hook_signals += 1
+        if english_hook_signals >= 2:
+            hook_strength = max(hook_strength, 0.72)
+        elif english_hook_signals == 1:
+            hook_strength = max(hook_strength, 0.60)
+    # Chinese-specific hook signals (independent of opening_patterns)
+    first_200 = text[:200]
+    cn_hook_signals = 0
+    # 1. Rhetorical patterns: 难道, 是不是, 有没有, 凭什么, 为什么
+    if re.search(r'(难道|是不是|有没有|凭什么|为什么|怎能|何不|岂不)', first_200):
+        cn_hook_signals += 1
+    # 2. Numbers at start (e.g. "15 个", "三个月", "第N刀")
+    if re.search(r'^[\s\n]*[\d一二两三四五六七八九十]+', first_200):
+        cn_hook_signals += 1
+    # 3. First-person conflict / personal pain: 我+痛点词
+    if re.search(r'(踩坑|踩了|我.*坏习惯|我.*后悔|我.*亏了|我.*错了|我.*教训)', first_200):
+        cn_hook_signals += 1
+    # 4. Colon-introduced conclusion (": " or "：")
+    if re.search(r'[：:]\s*[^\s，。,.]', first_200[:100]):
+        cn_hook_signals += 1
+    # 5. Explicit pain / problem keywords near start
+    if re.search(r'(问题|坑|陷阱|骗局|误区|反例|崩溃|翻车)', first_200[:100]):
+        cn_hook_signals += 1
+    # 6. First-person pronoun at text start
+    if re.search(r'^[\s\n]*我[\s\u4e00-\u9fff]', first_200[:50]):
+        cn_hook_signals += 1
+    if cn_hook_signals >= 2:
+        hook_strength = max(hook_strength, 0.72)
+    elif cn_hook_signals == 1:
+        hook_strength = max(hook_strength, 0.60)
     platform_fit = 0.75 if strategy.get("content_form") else 0.45
     if strategy.get("content_form") in {"short_video", "social_note"} and len(body_lines) >= 3:
         platform_fit = min(1.0, platform_fit + 0.10)
@@ -78,14 +122,31 @@ def _score(body, context):
     }
 
 
+def _contains_chinese(text):
+    """Return True if text contains a significant proportion of Chinese characters."""
+    if not text:
+        return False
+    cn_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    return cn_chars / max(1, len(text)) > 0.15
+
+
 def _burstiness_score(text):
     sentences = re.split(r"[。！？.!?\n]+", text)
-    lens = [len(s.strip().split()) for s in sentences if s.strip()]
+    if _contains_chinese(text):
+        # Chinese/ mixed: use character count per sentence (strip punctuation & whitespace)
+        lens = [len(re.sub(r'[\s\u3000\ufeff,，、；:：""\'\'（）()【】\[\]{}]', '', s))
+                for s in sentences if s.strip()]
+    else:
+        # English: use word-split count (original behavior)
+        lens = [len(s.strip().split()) for s in sentences if s.strip()]
     if len(lens) < 3:
         return 0.3
     diffs = [abs(lens[i] - lens[i - 1]) for i in range(1, len(lens))]
     avg_diff = sum(diffs) / len(diffs)
-    return round(min(1.0, avg_diff / 15.0), 3)
+    # Scale: for Chinese char-count, typical variation is 10-40 chars;
+    # for English word-count, typical variation is 3-15 words.
+    divisor = 20.0 if _contains_chinese(text) else 15.0
+    return round(min(1.0, avg_diff / divisor), 3)
 
 
 def _lock_terms(original_text):

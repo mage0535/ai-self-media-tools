@@ -93,7 +93,11 @@ class TrendCollector:
                     raise RuntimeError((proc.stderr or proc.stdout)[-500:])
         files = sorted(data_dir.glob("trending_*.json"), reverse=True)
         if not files:
-            return reddit_items
+            if reddit_items:
+                return reddit_items
+            if self.config.get("fallback_enabled"):
+                return self._fallback_items()
+            return []
         payload = json.loads(files[0].read_text(encoding="utf-8"))
         rows = payload if isinstance(payload, list) else payload.get("trends", payload.get("items", []))
         seen, result = set(), []
@@ -111,6 +115,34 @@ class TrendCollector:
             if title and key not in seen:
                 seen.add(key)
                 result.append(item)
+        return result
+
+    def _fallback_items(self):
+        raw_keywords = self.config.get("fallback_keywords")
+        if not raw_keywords:
+            raw_keywords = self.config.get("keywords")
+        if isinstance(raw_keywords, dict):
+            keywords = []
+            for value in raw_keywords.values():
+                if isinstance(value, list):
+                    keywords.extend(value)
+        elif isinstance(raw_keywords, list):
+            keywords = raw_keywords
+        else:
+            keywords = []
+        cleaned = [str(item).strip() for item in keywords if str(item).strip()]
+        if not cleaned:
+            cleaned = ["AI workflow automation", "content operations", "short video repurposing"]
+        result = []
+        for index, keyword in enumerate(cleaned[:10]):
+            title = f"{keyword}: practical workflow opportunity"
+            result.append({
+                "title": title,
+                "source": "fallback",
+                "url": "",
+                "points": max(1, len(keywords) - index),
+                "fallback": True,
+            })
         return result
 
 

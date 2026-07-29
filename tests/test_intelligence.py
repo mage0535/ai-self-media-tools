@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from content_platform.compliance import ComplianceChecker
-from content_platform.intelligence import analyze_reference_posts, build_generation_context, collect_reference_posts
+from content_platform.intelligence import analyze_reference_posts, build_generation_context, collect_reference_posts, infer_content_language
 from content_platform.trends import rank_trends
 
 
@@ -101,3 +101,12 @@ class IntelligenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_infer_language_uses_platform_when_not_explicit():
+    assert infer_content_language({"platforms": ["devto"]}) == "en"
+    assert infer_content_language({"platforms": ["wechat"]}) == "zh"
+
+
+def test_infer_language_respects_explicit_brief():
+    assert infer_content_language({"platforms": ["devto"], "language": "zh"}) == "zh"

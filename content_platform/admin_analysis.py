@@ -46,6 +46,8 @@ def _fallback_summary(payload):
 
 def platform_llm_analysis(config, payload):
     provider = str(config.get("provider", "")).strip()
+    if not provider and not config.get("enabled"):
+        return _fallback_summary(payload)
     api_key = _setting(config, config.get("api_key_env", "OPENAI_API_KEY"))
     if provider == "hermes-cli":
         try:
