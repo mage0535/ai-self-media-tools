@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,41 @@ def _aitoearn_check(cfg: dict[str, Any]) -> tuple[bool, str]:
     return True, "AiToEarn account and key present"
 
 
+def _cookie_file(cfg: dict[str, Any], platform: str) -> Path:
+    cookie_dir = Path(str(cfg.get("cookie_dir", ""))).expanduser()
+    account = str(cfg.get("account") or "main")
+    return cookie_dir / f"{platform}_{account}.json"
+
+
+def _cookie_json_check(cfg: dict[str, Any], platform: str) -> tuple[bool, str]:
+    cookie_file = _cookie_file(cfg, platform)
+    if not cookie_file.is_file():
+        return False, f"{platform} cookie not found"
+    try:
+        payload = json.loads(cookie_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False, f"{platform} cookie file invalid"
+    if not payload:
+        return False, f"{platform} cookie file empty"
+    return True, f"{platform} cookie present"
+
+
+def _zhihu_check(cfg: dict[str, Any]) -> tuple[bool, str]:
+    ok, reason = _cookie_json_check(cfg, "zhihu")
+    if not ok:
+        return ok, reason
+    if importlib.util.find_spec("playwright") is None:
+        return False, "zhihu playwright dependency missing"
+    return True, "zhihu cookie and playwright dependency present"
+
+
+def _juejin_check(cfg: dict[str, Any]) -> tuple[bool, str]:
+    ok, reason = _cookie_json_check(cfg, "juejin")
+    if not ok:
+        return ok, reason
+    return True, "juejin cookie present"
+
+
 def _env_publisher_check(kind: str, cfg: dict[str, Any]) -> tuple[bool, str]:
     env_file = str(cfg.get("env_file", ""))
     env_keys = TOKEN_PUBLISHERS.get(kind) or MULTI_SECRET_PUBLISHERS.get(kind) or []
@@ -156,6 +192,18 @@ def classify_platform_health(platform: str, cfg: dict[str, Any]) -> dict[str, An
         ok, reason = _aitoearn_check(cfg)
         if ok:
             return _entry("usable", True, reason, "health_refresh")
+        return _entry("auth_required", False, reason, "health_refresh")
+
+    if kind == "juejin-api":
+        ok, reason = _juejin_check(cfg)
+        if ok:
+            return _entry("usable_with_postcheck_required", True, reason, "health_refresh", require_postcheck=True)
+        return _entry("auth_required", False, reason, "health_refresh")
+
+    if kind == "zhihu-playwright":
+        ok, reason = _zhihu_check(cfg)
+        if ok:
+            return _entry("usable_with_postcheck_required", True, reason, "health_refresh", require_postcheck=True)
         return _entry("auth_required", False, reason, "health_refresh")
 
     if kind in TOKEN_PUBLISHERS or kind in MULTI_SECRET_PUBLISHERS:
