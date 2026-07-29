@@ -13,6 +13,7 @@ def utc_now():
 class Store:
     def __init__(self, path):
         self.path = Path(path)
+        self.init()
 
     @contextmanager
     def connect(self):
@@ -87,11 +88,13 @@ class Store:
                     UNIQUE(job_id, platform)
                 );
                 CREATE TABLE IF NOT EXISTS topic_history (
-                    fingerprint TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL,
+                    platform TEXT NOT NULL DEFAULT '',
                     title TEXT NOT NULL,
                     source TEXT NOT NULL,
                     job_id TEXT NOT NULL,
-                    used_at TEXT NOT NULL
+                    used_at TEXT NOT NULL,
+                    PRIMARY KEY(fingerprint, platform)
                 );
                 CREATE TABLE IF NOT EXISTS performance (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,13 +198,97 @@ class Store:
                     last_run TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS content_packages (
+                    content_package_id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL DEFAULT '',
+                    platform TEXT NOT NULL DEFAULT '',
+                    account_id TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'created',
+                    content_type TEXT NOT NULL DEFAULT '',
+                    topic TEXT NOT NULL DEFAULT '',
+                    title TEXT NOT NULL DEFAULT '',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS publish_receipts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_package_id TEXT NOT NULL DEFAULT '',
+                    job_id TEXT NOT NULL DEFAULT '',
+                    platform TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT '',
+                    verification_level TEXT NOT NULL DEFAULT '',
+                    platform_content_id TEXT NOT NULL DEFAULT '',
+                    url TEXT NOT NULL DEFAULT '',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS review_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_package_id TEXT NOT NULL DEFAULT '',
+                    job_id TEXT NOT NULL DEFAULT '',
+                    platform TEXT NOT NULL DEFAULT '',
+                    review_point_hours INTEGER NOT NULL DEFAULT 0,
+                    purpose TEXT NOT NULL DEFAULT '',
+                    state TEXT NOT NULL DEFAULT 'pending',
+                    due_at TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS workflow_locks (
+                    lock_name TEXT PRIMARY KEY,
+                    owner TEXT NOT NULL DEFAULT '',
+                    workflow_id TEXT NOT NULL DEFAULT '',
+                    heartbeat_at TEXT NOT NULL DEFAULT '',
+                    lease_expires_at TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS workflow_steps (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    workflow_id TEXT NOT NULL,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    platform TEXT NOT NULL DEFAULT '',
+                    step_name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    required INTEGER NOT NULL DEFAULT 1,
+                    depends_on_json TEXT NOT NULL DEFAULT '[]',
+                    attempt INTEGER NOT NULL DEFAULT 0,
+                    reason_code TEXT NOT NULL DEFAULT '',
+                    message TEXT NOT NULL DEFAULT '',
+                    input_json TEXT NOT NULL DEFAULT '{}',
+                    output_json TEXT NOT NULL DEFAULT '{}',
+                    gate_json TEXT NOT NULL DEFAULT '{}',
+                    started_at TEXT NOT NULL DEFAULT '',
+                    finished_at TEXT NOT NULL DEFAULT '',
+                    duration_ms INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(job_id, platform, step_name)
+                );
+                CREATE TABLE IF NOT EXISTS workflow_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    workflow_id TEXT NOT NULL,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    platform TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL,
+                    report_path TEXT NOT NULL DEFAULT '',
+                    summary_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    UNIQUE(job_id, platform)
+                );
                 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
                 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job_id, id);
                 CREATE INDEX IF NOT EXISTS idx_delivery_queue_state ON delivery_queue(state, id);
                 CREATE INDEX IF NOT EXISTS idx_topic_clusters_key ON topic_clusters(cluster_key, id);
                 CREATE INDEX IF NOT EXISTS idx_draft_versions_job ON draft_versions(job_id, id);
+                CREATE INDEX IF NOT EXISTS idx_content_packages_job ON content_packages(job_id, platform);
+                CREATE INDEX IF NOT EXISTS idx_publish_receipts_job ON publish_receipts(job_id, platform);
+                CREATE INDEX IF NOT EXISTS idx_review_tasks_state ON review_tasks(state, due_at);
+                CREATE INDEX IF NOT EXISTS idx_workflow_steps_job ON workflow_steps(job_id, platform, id);
+                CREATE INDEX IF NOT EXISTS idx_workflow_reports_job ON workflow_reports(job_id, platform);
                 """
             )
+            self._migrate_topic_history_platform_scope(conn)
             for name, definition in {
                 "profile": "TEXT NOT NULL DEFAULT 'default'",
                 "prompt_version": "TEXT NOT NULL DEFAULT ''",
@@ -218,6 +305,44 @@ class Store:
                 "attempts": "INTEGER NOT NULL DEFAULT 0",
             }.items():
                 self._ensure_column(conn, "deliveries", name, definition)
+            for name, definition in {
+                "topic": "TEXT NOT NULL DEFAULT ''",
+                "title": "TEXT NOT NULL DEFAULT ''",
+            }.items():
+                self._ensure_column(conn, "content_packages", name, definition)
+            for name, definition in {
+                "url": "TEXT NOT NULL DEFAULT ''",
+            }.items():
+                self._ensure_column(conn, "publish_receipts", name, definition)
+
+
+    def _migrate_topic_history_platform_scope(self, conn):
+        rows = conn.execute("PRAGMA table_info(topic_history)").fetchall()
+        columns = [row[1] for row in rows]
+        pk_columns = [row[1] for row in sorted((row for row in rows if row[5]), key=lambda row: row[5])]
+        if "platform" in columns and pk_columns == ["fingerprint", "platform"]:
+            return
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS topic_history_v2 (
+                fingerprint TEXT NOT NULL,
+                platform TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL,
+                source TEXT NOT NULL,
+                job_id TEXT NOT NULL,
+                used_at TEXT NOT NULL,
+                PRIMARY KEY(fingerprint, platform)
+            )"""
+        )
+        platform_expr = "platform" if "platform" in columns else "''"
+        conn.execute(
+            f"""INSERT OR REPLACE INTO topic_history_v2(fingerprint, platform, title, source, job_id, used_at)
+            SELECT fingerprint, COALESCE({platform_expr}, ''), title, source, job_id, used_at FROM topic_history"""
+        )
+        conn.execute("DROP TABLE topic_history")
+        conn.execute("ALTER TABLE topic_history_v2 RENAME TO topic_history")
+
+    def init_db(self):
+        self.init()
 
     def create_job(self, topic, platforms, brief=None, profile="default", topic_fingerprint=""):
         topic = str(topic).strip()
@@ -328,11 +453,203 @@ class Store:
                 )
                 self._event(conn, row["id"], "stale_job_recovered", {"from": row["state"], "to": new_state})
                 recovered += 1
+
+            deliveries = conn.execute(
+                """SELECT id,job_id,state,attempts,error FROM delivery_queue
+                WHERE state='processing' AND lease_expires_at<>'' AND lease_expires_at<=?""",
+                (now,),
+            ).fetchall()
+            for row in deliveries:
+                attempts = int(row["attempts"] or 0)
+                terminal = attempts >= 3
+                new_state = "failed" if terminal else "queued"
+                error = row["error"] or "stale delivery lease recovered"
+                if terminal and "stale delivery failed after max attempts" not in error:
+                    error = f"stale delivery failed after max attempts: {error}"
+                conn.execute(
+                    """UPDATE delivery_queue
+                    SET state=?, lease_owner='', lease_expires_at='', error=?, updated_at=?
+                    WHERE id=?""",
+                    (new_state, error, now, row["id"]),
+                )
+                self._event(
+                    conn,
+                    row["job_id"],
+                    "stale_delivery_recovered",
+                    {"queue_id": row["id"], "from": row["state"], "to": new_state, "attempts": attempts},
+                )
+                recovered += 1
         return recovered
 
     def record_event(self, job_id, event, detail=None):
         with self.connect() as conn:
             self._event(conn, job_id, event, detail or {})
+
+    def acquire_workflow_lock(self, owner, workflow_id, ttl_seconds=1800, lock_name="global"):
+        owner = str(owner or "").strip()
+        workflow_id = str(workflow_id or "").strip()
+        if not owner or not workflow_id:
+            raise ValueError("workflow lock requires owner and workflow_id")
+        now = utc_now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=int(ttl_seconds))).isoformat(timespec="seconds")
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM workflow_locks WHERE lock_name=?", (lock_name,)).fetchone()
+            if not row:
+                conn.execute(
+                    """INSERT INTO workflow_locks(lock_name,owner,workflow_id,heartbeat_at,lease_expires_at,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?)""",
+                    (lock_name, owner, workflow_id, now, expires, now, now),
+                )
+                return True
+            if row["owner"] in ("", owner) or row["lease_expires_at"] <= now:
+                conn.execute(
+                    """UPDATE workflow_locks SET owner=?,workflow_id=?,heartbeat_at=?,lease_expires_at=?,updated_at=?
+                    WHERE lock_name=?""",
+                    (owner, workflow_id, now, expires, now, lock_name),
+                )
+                return True
+            return False
+
+    def heartbeat_workflow_lock(self, owner, ttl_seconds=1800, lock_name="global"):
+        now = utc_now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=int(ttl_seconds))).isoformat(timespec="seconds")
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "UPDATE workflow_locks SET heartbeat_at=?,lease_expires_at=?,updated_at=? WHERE lock_name=? AND owner=?",
+                (now, expires, now, lock_name, owner),
+            )
+            return cursor.rowcount == 1
+
+    def release_workflow_lock(self, owner, lock_name="global"):
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "UPDATE workflow_locks SET owner='',workflow_id='',heartbeat_at='',lease_expires_at='',updated_at=? WHERE lock_name=? AND owner=?",
+                (utc_now(), lock_name, owner),
+            )
+            return cursor.rowcount == 1
+
+    def workflow_lock(self, lock_name="global"):
+        rows = self._rows("SELECT * FROM workflow_locks WHERE lock_name=?", (lock_name,))
+        return rows[0] if rows else {}
+
+    def save_workflow_step(
+        self,
+        workflow_id,
+        job_id,
+        platform,
+        step_name,
+        status,
+        required=True,
+        depends_on=None,
+        attempt=0,
+        reason_code="",
+        message="",
+        input_payload=None,
+        output_payload=None,
+        gate_result=None,
+        started_at="",
+        finished_at="",
+        duration_ms=0,
+    ):
+        now = utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO workflow_steps(
+                    workflow_id,job_id,platform,step_name,status,required,depends_on_json,attempt,reason_code,message,
+                    input_json,output_json,gate_json,started_at,finished_at,duration_ms,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(job_id,platform,step_name) DO UPDATE SET
+                    workflow_id=excluded.workflow_id,
+                    status=excluded.status,
+                    required=excluded.required,
+                    depends_on_json=excluded.depends_on_json,
+                    attempt=excluded.attempt,
+                    reason_code=excluded.reason_code,
+                    message=excluded.message,
+                    input_json=excluded.input_json,
+                    output_json=excluded.output_json,
+                    gate_json=excluded.gate_json,
+                    started_at=CASE WHEN excluded.started_at<>'' THEN excluded.started_at ELSE workflow_steps.started_at END,
+                    finished_at=excluded.finished_at,
+                    duration_ms=excluded.duration_ms,
+                    updated_at=excluded.updated_at""",
+                (
+                    workflow_id,
+                    job_id,
+                    platform or "",
+                    step_name,
+                    status,
+                    1 if required else 0,
+                    json.dumps(depends_on or [], ensure_ascii=False),
+                    int(attempt or 0),
+                    str(reason_code or ""),
+                    str(message or ""),
+                    json.dumps(input_payload or {}, ensure_ascii=False),
+                    json.dumps(output_payload or {}, ensure_ascii=False),
+                    json.dumps(gate_result or {}, ensure_ascii=False),
+                    started_at or "",
+                    finished_at or "",
+                    int(duration_ms or 0),
+                    now,
+                    now,
+                ),
+            )
+            self._event(conn, job_id, f"workflow_step_{status.lower()}", {
+                "workflow_id": workflow_id,
+                "platform": platform or "",
+                "step": step_name,
+                "required": bool(required),
+                "reason_code": reason_code or "",
+                "message": message or "",
+            })
+
+    def workflow_steps(self, job_id, platform=None):
+        sql = "SELECT * FROM workflow_steps WHERE job_id=?"
+        args = [job_id]
+        if platform is not None:
+            sql += " AND platform=?"
+            args.append(platform or "")
+        sql += " ORDER BY id"
+        rows = self._rows(sql, tuple(args))
+        for row in rows:
+            row["depends_on"] = json.loads(row.pop("depends_on_json", "[]"))
+            row["input"] = json.loads(row.pop("input_json", "{}"))
+            row["output"] = json.loads(row.pop("output_json", "{}"))
+            row["gate"] = json.loads(row.pop("gate_json", "{}"))
+            row["required"] = bool(row["required"])
+        return rows
+
+    def save_workflow_report(self, workflow_id, job_id, platform, status, report_path, summary):
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO workflow_reports(workflow_id,job_id,platform,status,report_path,summary_json,created_at)
+                VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(job_id,platform) DO UPDATE SET
+                    workflow_id=excluded.workflow_id,
+                    status=excluded.status,
+                    report_path=excluded.report_path,
+                    summary_json=excluded.summary_json,
+                    created_at=excluded.created_at""",
+                (workflow_id, job_id, platform or "", status, str(report_path or ""), json.dumps(summary or {}, ensure_ascii=False), utc_now()),
+            )
+
+    def workflow_reports(self, job_id=None, platform=None):
+        sql = "SELECT * FROM workflow_reports"
+        clauses, args = [], []
+        if job_id:
+            clauses.append("job_id=?")
+            args.append(job_id)
+        if platform is not None:
+            clauses.append("platform=?")
+            args.append(platform or "")
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY id"
+        rows = self._rows(sql, tuple(args))
+        for row in rows:
+            row["summary"] = json.loads(row.pop("summary_json", "{}"))
+        return rows
 
     def record_approval(self, job_id, actor, decision, note):
         with self.connect() as conn:
@@ -605,6 +922,144 @@ class Store:
         result["payload"] = json.loads(result.pop("payload_json"))
         return result
 
+    def save_content_package(self, package, job_id=""):
+        payload = package.to_dict() if hasattr(package, "to_dict") else dict(package)
+        content_package_id = str(payload.get("content_package_id") or "")
+        if not content_package_id:
+            raise ValueError("content_package_id is required")
+        now = utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO content_packages(
+                    content_package_id,job_id,platform,account_id,status,content_type,topic,title,payload_json,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(content_package_id) DO UPDATE SET
+                    job_id=excluded.job_id,
+                    platform=excluded.platform,
+                    account_id=excluded.account_id,
+                    status=excluded.status,
+                    content_type=excluded.content_type,
+                    topic=excluded.topic,
+                    title=excluded.title,
+                    payload_json=excluded.payload_json,
+                    updated_at=excluded.updated_at""",
+                (
+                    content_package_id,
+                    str(payload.get("job_id") or job_id or ""),
+                    str(payload.get("platform") or ""),
+                    str(payload.get("account_id") or ""),
+                    str(payload.get("status") or "created"),
+                    str(payload.get("content_type") or ""),
+                    str(payload.get("topic") or ""),
+                    str(payload.get("title") or ""),
+                    json.dumps(payload, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+        return self.get_content_package(content_package_id)
+
+    def get_content_package(self, content_package_id):
+        rows = self.content_packages(content_package_id=content_package_id, limit=1)
+        if not rows:
+            raise KeyError(f"content package not found: {content_package_id}")
+        return rows[0]
+
+    def content_packages(self, content_package_id="", job_id="", platform="", limit=200):
+        sql = "SELECT * FROM content_packages"
+        clauses, args = [], []
+        if content_package_id:
+            clauses.append("content_package_id=?")
+            args.append(content_package_id)
+        if job_id:
+            clauses.append("job_id=?")
+            args.append(job_id)
+        if platform:
+            clauses.append("platform=?")
+            args.append(platform)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        args.append(int(limit))
+        rows = self._rows(sql, tuple(args))
+        for row in rows:
+            row["payload"] = json.loads(row.pop("payload_json", "{}"))
+        return rows
+
+    def save_publish_receipt(self, content_package_id, platform, receipt, job_id=""):
+        payload = receipt.to_dict() if hasattr(receipt, "to_dict") else dict(receipt)
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO publish_receipts(
+                    content_package_id,job_id,platform,status,verification_level,platform_content_id,url,payload_json,created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (
+                    str(content_package_id or ""),
+                    str(job_id or payload.get("job_id") or ""),
+                    str(platform or payload.get("platform") or ""),
+                    str(payload.get("status") or ""),
+                    str(payload.get("verification_level") or ""),
+                    str(payload.get("platform_content_id") or ""),
+                    str(payload.get("url") or ""),
+                    json.dumps(payload, ensure_ascii=False),
+                    utc_now(),
+                ),
+            )
+
+    def publish_receipts(self, content_package_id="", job_id="", platform="", limit=100):
+        sql = "SELECT * FROM publish_receipts"
+        clauses, args = [], []
+        if content_package_id:
+            clauses.append("content_package_id=?")
+            args.append(content_package_id)
+        if job_id:
+            clauses.append("job_id=?")
+            args.append(job_id)
+        if platform:
+            clauses.append("platform=?")
+            args.append(platform)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY id DESC LIMIT ?"
+        args.append(int(limit))
+        rows = self._rows(sql, tuple(args))
+        for row in rows:
+            row["payload"] = json.loads(row.pop("payload_json", "{}"))
+        return rows
+
+    def create_review_tasks(self, content_package_id, platform, schedule, job_id=""):
+        created = []
+        with self.connect() as conn:
+            for item in schedule:
+                hours = int(item.get("hours", item.get("review_point_hours", item.get("after_publish_hours", 0))))
+                purpose = str(item.get("purpose") or f"status review at {hours}h")
+                due_at = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat(timespec="seconds")
+                conn.execute(
+                    """INSERT INTO review_tasks(content_package_id,job_id,platform,review_point_hours,purpose,state,due_at,created_at)
+                    VALUES(?,?,?,?,?,?,?,?)""",
+                    (content_package_id, job_id, platform, hours, purpose, "pending", due_at, utc_now()),
+                )
+                created.append({
+                    "content_package_id": content_package_id,
+                    "job_id": job_id,
+                    "platform": platform,
+                    "review_point_hours": hours,
+                    "purpose": purpose,
+                    "state": "pending",
+                    "due_at": due_at,
+                })
+        return created
+
+    def review_tasks(self, state="", limit=100):
+        sql = "SELECT * FROM review_tasks"
+        args = []
+        if state:
+            sql += " WHERE state=?"
+            args.append(state)
+        sql += " ORDER BY id LIMIT ?"
+        args.append(int(limit))
+        return self._rows(sql, tuple(args))
+
     def enqueue_delivery(self, job_id, platform, action, payload=None):
         now = utc_now()
         with self.connect() as conn:
@@ -674,17 +1129,25 @@ class Store:
             row["payload"] = json.loads(row.pop("payload_json", "{}"))
         return rows
 
-    def used_topics(self):
+    def used_topics(self, platform=None):
         with self.connect() as conn:
+            if platform:
+                return {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT fingerprint FROM topic_history WHERE platform IN (?, '')",
+                        (str(platform),),
+                    )
+                }
             return {row[0] for row in conn.execute("SELECT fingerprint FROM topic_history")}
 
-    def mark_topic_used(self, fingerprint, title, source, job_id):
+    def mark_topic_used(self, fingerprint, title, source, job_id, platform=""):
         if not fingerprint:
             return
         with self.connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO topic_history(fingerprint,title,source,job_id,used_at) VALUES(?,?,?,?,?)",
-                (fingerprint, title, source or "", job_id, utc_now()),
+                "INSERT OR REPLACE INTO topic_history(fingerprint,platform,title,source,job_id,used_at) VALUES(?,?,?,?,?,?)",
+                (fingerprint, str(platform or ""), title, source or "", job_id, utc_now()),
             )
 
     def protected_paths(self):

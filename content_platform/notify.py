@@ -20,6 +20,7 @@ class Notifier:
             "job_id": job["id"],
             "title": job.get("title") or job.get("topic", ""),
             "state": job.get("state", ""),
+            "report_path": job.get("report_path", ""),
             "review_actions": job.get("review_actions", {}),
         }
         with log_path.open("a", encoding="utf-8") as handle:
@@ -57,6 +58,8 @@ class Notifier:
     @staticmethod
     def _message(row):
         text = f"[{row['event']}] {row['title']}\njob={row['job_id']} state={row['state']}"
+        if row.get("report_path"):
+            text += f"\nreport={row['report_path']}"
         actions = row.get("review_actions", {})
         if actions.get("approve"):
             text += f"\n\n批准：content-platform review-action {actions['approve']} --action approve --actor REVIEWER"

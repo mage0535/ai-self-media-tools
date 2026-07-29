@@ -28,6 +28,28 @@ class ReliabilityTests(unittest.TestCase):
         self.assertEqual(recovered, 1)
         self.assertEqual(self.store.get_job(job["id"])["state"], "failed")
 
+
+    def test_stale_delivery_processing_is_failed_after_max_attempts(self):
+        job = self.store.create_job("topic", ["reddit"])
+        self.store.enqueue_delivery(job["id"], "reddit", "publish", {"state": "approved"})
+        item = self.store.claim_delivery("dead-worker", -1)
+        with self.store.connect() as conn:
+            conn.execute("UPDATE delivery_queue SET attempts=3, error='permanent flair error' WHERE id=?", (item["id"],))
+        recovered = self.store.recover_stale()
+        self.assertEqual(recovered, 1)
+        rows = self.store.list_delivery_queue()
+        self.assertEqual(rows[0]["state"], "failed")
+        self.assertIn("max attempts", rows[0]["error"])
+
+    def test_stale_delivery_processing_is_requeued_before_max_attempts(self):
+        job = self.store.create_job("topic", ["wechat"])
+        self.store.enqueue_delivery(job["id"], "wechat", "publish", {"state": "approved"})
+        self.store.claim_delivery("dead-worker", -1)
+        recovered = self.store.recover_stale()
+        self.assertEqual(recovered, 1)
+        rows = self.store.list_delivery_queue()
+        self.assertEqual(rows[0]["state"], "queued")
+
     def test_successful_delivery_cannot_be_downgraded(self):
         job = self.store.create_job("topic", ["wechat"])
         self.store.save_delivery(job["id"], "wechat", "drafted", "media-1", "", "stable-key")

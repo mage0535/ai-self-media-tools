@@ -4,6 +4,9 @@ from pathlib import Path
 
 IGNORED_PARTS = {
     ".git",
+    ".codex-server-runtime",
+    ".codex-tmp",
+    "__codex_proxy_sync_tmp__",
     "__pycache__",
     ".pytest_cache",
     ".mypy_cache",
@@ -15,13 +18,17 @@ IGNORED_PARTS = {
     "artifacts",
     "outbox",
     "cookies",
+    "local-ops-lab",
+    "tmp",
 }
 
 IGNORED_EXACT = {
+    "config.json",
     "installation-report.json",
 }
 
 FORBIDDEN_NAME_PATTERNS = [
+    r"\.bak",
     r"\.env$",
     r"\.key$",
     r"\.pem$",
@@ -63,6 +70,9 @@ def audit_project(root):
         scanned += 1
         relative_text = relative.as_posix()
         lowered = relative_text.casefold()
+        if len(relative.parts) == 1 and path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".mp4", ".mov", ".webm"}:
+            issues.append({"path": relative_text, "reason": "root_level_media_evidence"})
+            continue
         if any(re.search(pattern, lowered) for pattern in FORBIDDEN_NAME_PATTERNS):
             issues.append({"path": relative_text, "reason": "forbidden_filename_pattern"})
             continue
