@@ -19,9 +19,9 @@ Reddit is not configured for automated spam, voting, DMs, stealth browser operat
 Set these values only in the runtime environment or ignored secret files:
 
 ```bash
-export REDDIT_CLIENT_ID="<reddit-app-client-id>"
-export REDDIT_CLIENT_SECRET="<reddit-app-client-secret>"
-export REDDIT_REFRESH_TOKEN="<reddit-oauth-refresh-token>"
+export REDDIT_CLIENT_ID=REDDIT_APP_CLIENT_ID_PLACEHOLDER
+export REDDIT_CLIENT_SECRET=REDDIT_APP_CLIENT_SECRET_PLACEHOLDER
+export REDDIT_REFRESH_TOKEN=REDDIT_OAUTH_REFRESH_TOKEN_PLACEHOLDER
 ```
 
 Enable Reddit trend collection in the local runtime `config.json`:

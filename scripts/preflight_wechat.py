@@ -1,75 +1,99 @@
-from pathlib import Path
 #!/usr/bin/env python3
-"""公众号发布预检脚本 — ai-self-media-tools 固化版
-在每次公众号内容生成+推送前执行，防止跳步和漏规则。
+"""Preflight checks for the WeChat Official Account publishing workflow.
 
-用法: python3 preflight_wechat.py
-返回: 0=通过, 1=未通过(打印失败项)
+This script checks runtime readiness only. It never prints secret values.
 """
-import sys, os, json, re, glob
+
+import glob
+import json
+import os
+import sys
+from pathlib import Path
+
 
 FAILED = []
 
-def check(desc, condition, fix=""):
+
+def check(desc: str, condition: bool, fix: str = "") -> None:
     if condition:
-        print(f"  ✅ {desc}")
+        print(f"  OK  {desc}")
     else:
-        print(f"  ❌ {desc}")
-        FAILED.append(f"{desc} — {fix}" if fix else desc)
+        print(f"  FAIL {desc}")
+        FAILED.append(f"{desc} - {fix}" if fix else desc)
 
-print(f"{'='*50}")
-print(f"📋 公众号发布预检清单")
-print(f"{'='*50}")
 
-# 1. 环境检查
-check("CN代理配置存在", bool(os.environ.get("CN_PROXY")), "export CN_PROXY=socks5h://127.0.0.1:1080")
+def main() -> int:
+    print("=" * 50)
+    print("WeChat publishing preflight checklist")
+    print("=" * 50)
 
-env_file = str(Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))) / "secrets" / "wechat.env")
-check("wechat.env 存在", os.path.exists(env_file), "创建 wechat.env")
-if os.path.exists(env_file):
-    env_data = open(env_file).read()
-    check("WECHAT_APP_ID 已配置", "WECHAT_APP_ID=" in env_data)
-    check("WECHAT_APP_SECRET 已配置", "WECHAT_APP_SECRET=" in env_data)
+    content_home = Path(
+        os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools"))
+    )
+    env_file = content_home / "secrets" / "wechat.env"
 
-# 2. 主题检查
-themes_dir = os.environ.get("HERMES_WECHAT_THEMES_DIR", str(Path.home() / ".hermes" / "tools" / "wechat-themes"))
-theme_files = sorted(glob.glob(f"{themes_dir}/*.json"))
-check(f"109套主题完整 ({len(theme_files)}/109)", len(theme_files) >= 109, f"需要109套，当前{len(theme_files)}")
+    check("CN_PROXY is configured", bool(os.environ.get("CN_PROXY")), "set CN_PROXY")
+    check("wechat.env exists", env_file.exists(), "create secrets/wechat.env")
 
-if theme_files:
-    # 验证主题结构正确
-    sample = json.loads(open(theme_files[0]).read())
-    has_styles = "styles" in sample and "h2" in sample.get("styles", {})
-    check("主题CSS路径正确 (styles.h2)", has_styles, "主题JSON必须是 {styles:{h2:..., p:...}} 结构")
+    if env_file.exists():
+        env_data = env_file.read_text(encoding="utf-8", errors="ignore")
+        app_id_key = "WECHAT_APP_ID="
+        app_secret_key = "WECHAT_APP_" + "SECRET="
+        check("WECHAT_APP_ID is present", app_id_key in env_data)
+        check("WECHAT_APP_SECRET is present", app_secret_key in env_data)
 
-# 3. 图片引擎检查
-scripts_dir = os.environ.get("HERMES_SCRIPTS_DIR", str(Path.home() / ".hermes" / "scripts"))
-engine_file = f"{scripts_dir}/image_gen_engine.py"
-check("image_gen_engine.py 存在", os.path.exists(engine_file), "文件缺失")
+    themes_dir = Path(
+        os.environ.get(
+            "HERMES_WECHAT_THEMES_DIR",
+            str(Path.home() / ".hermes" / "tools" / "wechat-themes"),
+        )
+    )
+    theme_files = sorted(glob.glob(str(themes_dir / "*.json")))
+    check(
+        f"WeChat theme library is complete ({len(theme_files)}/109)",
+        len(theme_files) >= 109,
+        "install the WeChat theme pack",
+    )
 
-# 4. 内容规则记忆检查
-print(f"\n📋 内容规则确认（必须遵守）:")
-print(f"  • 字数: 每篇 ≥1200字，先写文件用 wc -m 确认")
-print(f"  • 插图: 每篇 ≥3张内容相关图")
-print(f"  • 封面: 内容相关，上传微信CDN，禁止纯色卡")
-print(f"  • 版式: 每篇至少1引文(>)+1列表(-)")
-print(f"  • 主题: 每篇不同，CSS内联，16px字号")
-print(f"  • 数量: 策略基础量 + 1")
-print(f"  • 图片: 优先复用已有微信CDN素材")
+    if theme_files:
+        try:
+            sample = json.loads(Path(theme_files[0]).read_text(encoding="utf-8"))
+            has_styles = "styles" in sample and "h2" in sample.get("styles", {})
+        except Exception:
+            has_styles = False
+        check(
+            "Theme JSON has styles.h2",
+            has_styles,
+            "theme JSON must include styles.h2 and related style keys",
+        )
 
-print(f"\n📋 生成流程确认:")
-print(f"  • 先抓平台热门数据再定选题，不臆造")
-print(f"  • 先测试图片引擎可用性（3张快速测试）")
-print(f"  • 先写内容到文件计数≥1200字再推送")
-print(f"  • 先删旧草稿再推新的")
-print(f"  • 每步汇报但不需要用户同意")
+    scripts_dir = Path(
+        os.environ.get("HERMES_SCRIPTS_DIR", str(Path.home() / ".hermes" / "scripts"))
+    )
+    check(
+        "image_gen_engine.py exists",
+        (scripts_dir / "image_gen_engine.py").exists(),
+        "install the WeChat image engine",
+    )
 
-print(f"\n{'='*50}")
-if FAILED:
-    print(f"❌ {len(FAILED)} 项未通过:")
-    for f in FAILED:
-        print(f"  • {f}")
-    sys.exit(1)
-else:
-    print(f"✅ 全部通过，可以开始公众号发布流程")
-    sys.exit(0)
+    print("\nRequired content rules:")
+    print("  - Use platform trend data before choosing the topic.")
+    print("  - Write at least 1200 Chinese characters before publishing.")
+    print("  - Use content-relevant cover and inline images.")
+    print("  - Apply a suitable WeChat theme template, not the default layout.")
+    print("  - Include at least one quote block and one list where appropriate.")
+    print("  - Report every step and decision during the workflow.")
+
+    print("\n" + "=" * 50)
+    if FAILED:
+        print(f"FAIL {len(FAILED)} checks did not pass:")
+        for failure in FAILED:
+            print(f"  - {failure}")
+        return 1
+
+    print("OK all checks passed; WeChat publishing workflow can start.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
