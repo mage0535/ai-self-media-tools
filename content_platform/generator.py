@@ -105,6 +105,7 @@ class DraftGenerator:
             "topic_clusters": context.get("topic_clusters", []),
             "niche_report": context["niche_report"],
             "viral_score": context["viral_score"],
+            "viral_growth_report": context.get("viral_growth_report", {}),
             "strategy": strategy,
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
