@@ -9,6 +9,7 @@ from .paths import trend_cache_dir
 from .sources import normalize_source_items, summarize_source_items
 from .strategy_router import choose_content_strategy
 from .viral_score import score_topic_candidate
+from .viral_monitor import build_viral_report
 
 GLOBAL_EN_PLATFORMS = {"devto", "buttondown", "writeas", "telegraph", "mastodon", "bluesky", "threads", "twitter", "x", "tiktok", "youtube", "nostr", "instagram"}
 CN_PLATFORMS = {"wechat", "weixin", "wechat_official", "douyin", "xiaohongshu", "rednote", "bilibili", "kuaishou", "shipinhao", "juejin", "zhihu", "csdn", "baijiahao"}
@@ -57,6 +58,12 @@ def collect_reference_posts(brief, limit=3):
                     "account_handle": str(row.get("account_handle", "")),
                     "platform": str(row.get("platform", "")),
                     "url": str(row.get("url", "")),
+                    "views": row.get("views", row.get("plays", row.get("impressions", 0))),
+                    "likes": row.get("likes", 0),
+                    "comments": row.get("comments", 0),
+                    "shares": row.get("shares", row.get("reposts", 0)),
+                    "saves": row.get("saves", row.get("favorites", 0)),
+                    "followers": row.get("followers", row.get("account_followers", 0)),
                 }
             )
     if posts:
@@ -201,7 +208,8 @@ def build_generation_context(topic, brief):
     style = analyze_reference_posts(references)
     niche_report = analyze_niche(topic, source_catalog or references)
     viral_score = score_topic_candidate(topic, brief, references, niche_report)
-    strategy = choose_content_strategy(topic, brief, viral_score, niche_report)
+    viral_growth_report = build_viral_report(source_catalog or references, brief.get("recent_by_account", {}))
+    strategy = choose_content_strategy(topic, brief, viral_score, niche_report, viral_growth_report)
     trend_stage = brief.get("trend_stage", viral_score["trend_stage"])
     trend_angle = brief.get("trend_angle", "")
     reference_titles = [row.get("title", "") for row in references if row.get("title")]
@@ -254,6 +262,7 @@ def build_generation_context(topic, brief):
         "topic_clusters": topic_clusters,
         "niche_report": niche_report,
         "viral_score": viral_score,
+        "viral_growth_report": viral_growth_report,
         "strategy": strategy,
         "historical_feedback": historical_feedback,
         "cluster_memory": cluster_memory,

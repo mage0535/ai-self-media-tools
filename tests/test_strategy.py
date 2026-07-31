@@ -76,6 +76,33 @@ class StrategyTests(unittest.TestCase):
         self.assertIn("confidence", strategy)
         self.assertTrue(any("source video" in warning for warning in strategy["warnings"]))
 
+    def test_strategy_router_selects_article_explainer_for_utility_video_platforms(self):
+        strategy = choose_content_strategy(
+            "AI workflow rules",
+            {"platforms": ["youtube"], "keywords": ["workflow", "guide"]},
+            {"total_score": 0.8, "dimensions": {"visual_promise": 0.65, "utility": 0.9}, "trend_stage": "hot"},
+            {"style_signature": {"formats": ["tutorial"]}, "platform_distribution": {"youtube": 2}},
+            {"viral_candidates": [{"title": "AI workflow rules", "grade": "T2"}], "topic_ammo": [{"title": "workflow guide"}]},
+        )
+
+        self.assertEqual(strategy["content_form"], "article_explainer_video")
+        self.assertIn("article", strategy["asset_plan"])
+        self.assertIn("knowledge_cards", strategy["asset_plan"])
+        self.assertTrue(strategy["video_toolchain_plan"]["required"])
+        self.assertEqual(strategy["video_toolchain_plan"]["selected_pipeline"], "article_explainer_video")
+        self.assertIn("article_explainer_planner", strategy["video_toolchain_plan"]["required_tools"])
+
+    def test_repost_source_overrides_article_explainer_selection(self):
+        strategy = choose_content_strategy(
+            "AI workflow source video",
+            {"platforms": ["youtube"], "source_url": "https://example.com/video.mp4", "keywords": ["workflow", "guide"]},
+            {"total_score": 0.8, "dimensions": {"visual_promise": 0.9, "utility": 0.9}, "trend_stage": "hot"},
+            {"style_signature": {"formats": ["tutorial"]}, "platform_distribution": {"youtube": 2}},
+        )
+
+        self.assertEqual(strategy["content_form"], "short_video")
+        self.assertEqual(strategy["video_toolchain_plan"]["selected_pipeline"], "localized_repost_video")
+
 
 if __name__ == "__main__":
     unittest.main()

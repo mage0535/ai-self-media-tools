@@ -127,8 +127,9 @@ class Pipeline:
                             k: v for k, v in ctx.items()
                             if k in {"trend_stage", "trend_angle", "reference_titles", "style",
                                       "source_summary", "source_catalog", "topic_clusters",
-                                      "niche_report", "viral_score", "strategy",
-                                      "image_prompt", "video_prompt", "hashtags",
+                                      "niche_report", "viral_score", "viral_growth_report", "strategy",
+                                      "image_prompt", "video_prompt", "hashtags", "narration_guide",
+                                      "open_notebook_research", "content_hygiene",
                                       "geo_score", "geo_details"}
                         },
                     }
@@ -137,6 +138,7 @@ class Pipeline:
                     draft["draft_meta"]["rewrite_notes"] = rewrite["rewrite_notes"]
                     draft["draft_meta"]["content_form"] = brief.get("content_form") or ctx.get("strategy", {}).get("content_form", "long_article")
                     draft["draft_meta"]["media_plan"] = ctx.get("strategy", {}).get("asset_plan", [])
+                    draft["draft_meta"]["video_toolchain_plan"] = ctx.get("strategy", {}).get("video_toolchain_plan", {})
                     # Record generate_content step for audit completeness
                     runner.succeeded("generate_content", {
                         "provider": "pre_populated",

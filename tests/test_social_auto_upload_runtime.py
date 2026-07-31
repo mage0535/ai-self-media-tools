@@ -50,7 +50,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                 result = evaluate_platform_binding("bilibili", {"account_key": "example"}, readiness)
             self.assertEqual(result["status"], "connected")
 
-    def test_social_auto_upload_bilibili_video_extra_args_are_config_driven(self):
+    def test_social_auto_upload_kuaishou_video_extra_args_are_config_driven(self):
         with tempfile.TemporaryDirectory() as tmp:
             video = Path(tmp) / "demo.mp4"
             video.write_bytes(b"video")
@@ -61,11 +61,11 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                 return type("Result", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
 
             publisher = build_publisher(
-                "bilibili",
+                "kuaishou",
                 {
                     "publishers": {
                         "platforms": {
-                            "bilibili": {
+                            "kuaishou": {
                                 "type": "social-auto-upload",
                                 "account_name": "example",
                                 "project_dir": tmp,
@@ -87,7 +87,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                         "platform_payload": {"kind": "video", "title": "Title", "caption": "Desc", "hashtags": ["#AI"]},
                         "artifacts": [{"kind": "video", "path": str(video)}],
                     },
-                    "bilibili",
+                    "kuaishou",
                 )
 
             self.assertIsInstance(publisher, SocialAutoUploadPublisher)
@@ -100,7 +100,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
             config = {
                 "publishers": {
                     "platforms": {
-                        "bilibili": {
+                        "kuaishou": {
                             "type": "fallback",
                             "publishers": [
                                 {
@@ -123,9 +123,9 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                 return type("Result", (), {"returncode": 1, "stdout": "invalid", "stderr": ""})()
 
             with patch("content_platform.publishers.subprocess.run", side_effect=fake_run):
-                result = build_publisher("bilibili", config, tmp).deliver(
+                result = build_publisher("kuaishou", config, tmp).deliver(
                     {"id": "job-fallback", "title": "Title", "body": "Body"},
-                    "bilibili",
+                    "kuaishou",
                 )
 
             self.assertTrue(result.ok)
