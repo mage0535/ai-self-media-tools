@@ -87,6 +87,8 @@ class TrendCollector:
         return report["items"]
 
     def collect_with_report(self, refresh=False):
+        started_all = time.time()
+        max_total_seconds = float(self.config.get("max_total_seconds", 45))
         sources = []
         items = []
         reddit_items = []
@@ -100,11 +102,18 @@ class TrendCollector:
                 reddit_items = []
                 sources.append(_source_report("reddit", "failed", 0, started, str(exc)[:240]))
         for source_name, source_cfg in self._direct_sources().items():
+            if time.time() - started_all >= max_total_seconds:
+                sources.append(_source_report(source_name, "skipped", 0, time.time(), "trend collection time budget exhausted"))
+                continue
             started = time.time()
             try:
                 source_items = DirectTrendSource(source_name, source_cfg).collect()
                 items.extend(source_items)
-                sources.append(_source_report(source_name, "ok" if source_items else "empty", len(source_items), started))
+                if source_items and all(row.get("source_unavailable") for row in source_items):
+                    status = "degraded"
+                else:
+                    status = "ok" if source_items else "empty"
+                sources.append(_source_report(source_name, status, len(source_items), started))
             except Exception as exc:  # noqa: BLE001
                 sources.append(_source_report(source_name, "failed", 0, started, str(exc)[:240]))
         data_dir = Path(self.config.get("legacy_data_dir", str(trend_cache_dir())))
@@ -113,11 +122,20 @@ class TrendCollector:
             script = Path(self.config.get("legacy_script", str(project_home() / "external" / "scripts" / "trend_collector.py")))
             if script.is_file():
                 started = time.time()
-                proc = subprocess.run(["python3", str(script)], capture_output=True, text=True, timeout=120, check=False)
-                if proc.returncode != 0:
-                    sources.append(_source_report("legacy_script", "failed", 0, started, (proc.stderr or proc.stdout)[-240:]))
-                else:
-                    sources.append(_source_report("legacy_script", "ok", 0, started))
+                try:
+                    proc = subprocess.run(
+                        ["python3", str(script)],
+                        capture_output=True,
+                        text=True,
+                        timeout=int(self.config.get("legacy_timeout", 20)),
+                        check=False,
+                    )
+                    if proc.returncode != 0:
+                        sources.append(_source_report("legacy_script", "failed", 0, started, (proc.stderr or proc.stdout)[-240:]))
+                    else:
+                        sources.append(_source_report("legacy_script", "ok", 0, started))
+                except subprocess.TimeoutExpired:
+                    sources.append(_source_report("legacy_script", "failed", 0, started, "legacy trend script timed out"))
         files = sorted(data_dir.glob("trending_*.json"), reverse=True)
         if files:
             started = time.time()
@@ -140,7 +158,9 @@ class TrendCollector:
                 "total_sources": len(sources),
                 "ok_sources": sum(1 for row in sources if row.get("status") == "ok"),
                 "failed_sources": sum(1 for row in sources if row.get("status") == "failed"),
+                "degraded_sources": sum(1 for row in sources if row.get("status") == "degraded"),
                 "empty_sources": sum(1 for row in sources if row.get("status") == "empty"),
+                "skipped_sources": sum(1 for row in sources if row.get("status") == "skipped"),
                 "items": len(deduped),
                 "fallback_used": fallback_used,
             },
@@ -151,10 +171,12 @@ class TrendCollector:
         if configured is False:
             return {}
         defaults = {
-            "hackernews": {"enabled": True, "limit": 20},
-            "github": {"enabled": True, "limit": 20, "query": "AI workflow automation content operations"},
-            "bilibili": {"enabled": True, "limit": 20},
-            "wewrite_hotspots": {"enabled": False, "limit": 20},
+            "hackernews": {"enabled": True, "limit": 20, "timeout": 8},
+            "github": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI workflow automation content operations"},
+            "bilibili": {"enabled": True, "limit": 20, "timeout": 8},
+            "zhihu": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:zhihu.com"},
+            "douyin": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891 \u6296\u97f3"},
+            "wewrite_hotspots": {"enabled": False, "limit": 20, "timeout": 8},
         }
         if isinstance(configured, dict):
             for name, value in configured.items():
@@ -247,6 +269,10 @@ class DirectTrendSource:
             return self._github()
         if self.name == "bilibili":
             return self._bilibili()
+        if self.name == "zhihu":
+            return self._web_search_source("zhihu", "AI 工具 效率 工作流 site:zhihu.com")
+        if self.name == "douyin":
+            return self._web_search_source("douyin", "AI 工具 效率 短视频 抖音")
         if self.name == "wewrite_hotspots":
             return self._wewrite_hotspots()
         raise ValueError(f"unknown direct trend source: {self.name}")
@@ -338,7 +364,10 @@ class DirectTrendSource:
         return items
 
     def _bilibili(self):
-        payload = self._request_json(f"https://api.bilibili.com/x/web-interface/popular?ps={min(self.limit, 50)}&pn=1")
+        try:
+            payload = self._request_json(f"https://api.bilibili.com/x/web-interface/popular?ps={min(self.limit, 50)}&pn=1")
+        except Exception:
+            return self._web_search_source("bilibili", "AI 工具 效率 工作流 site:bilibili.com")
         rows = payload.get("data", {}).get("list", [])
         items = []
         for row in rows[: self.limit]:
@@ -354,6 +383,142 @@ class DirectTrendSource:
                 "author": (row.get("owner") or {}).get("name", ""),
             })
         return items
+
+    def _web_search_source(self, source, default_query):
+        query = str(self.config.get("query") or default_query)
+        for collector in (self._searxng_search, self._duckduckgo_html_search, self._bing_html_search, self._baidu_html_search):
+            items = collector(source, query)
+            if items:
+                return items
+        if self.config.get("source_fallback_enabled", True):
+            return self._source_fallback_items(source, query)
+        return []
+
+    def _searxng_search(self, source, query):
+        base = str(self.config.get("searxng_url") or os.environ.get("SEARXNG_URL") or os.environ.get("SEARXNG_BASE_URL") or "").rstrip("/")
+        if not base:
+            return []
+        url = base + "/search?" + urllib.parse.urlencode({"q": query, "format": "json", "language": "zh-CN"})
+        try:
+            payload = self._request_json(url, headers={"Accept": "application/json"})
+        except Exception:
+            return []
+        rows = payload.get("results") or []
+        return self._search_rows_to_items(source, rows)
+
+    def _duckduckgo_html_search(self, source, query):
+        url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": self.config.get("user_agent", "Mozilla/5.0 ai-self-media-tools trend collector"),
+                "Accept": "text/html,application/xhtml+xml",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                html = response.read().decode("utf-8", errors="ignore")
+        except Exception:
+            return []
+        rows = []
+        for match in re.finditer(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, flags=re.I | re.S):
+            url = urllib.parse.unquote(re.sub(r"&amp;", "&", match.group(1)))
+            title = re.sub(r"<[^>]+>", "", match.group(2))
+            title = re.sub(r"\s+", " ", title).strip()
+            if title:
+                rows.append({"title": title, "url": url})
+            if len(rows) >= self.limit:
+                break
+        return self._search_rows_to_items(source, rows)
+
+    def _bing_html_search(self, source, query):
+        url = "https://www.bing.com/search?" + urllib.parse.urlencode({"q": query, "setlang": "zh-CN"})
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": self.config.get("user_agent", "Mozilla/5.0 ai-self-media-tools trend collector"),
+                "Accept": "text/html,application/xhtml+xml",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                html = response.read().decode("utf-8", errors="ignore")
+        except Exception:
+            return []
+        rows = []
+        for match in re.finditer(r'<li class="b_algo"[\s\S]*?<a href="([^"]+)"[^>]*>(.*?)</a>', html, flags=re.I):
+            title = re.sub(r"<[^>]+>", "", match.group(2))
+            title = re.sub(r"\s+", " ", title).strip()
+            if title:
+                rows.append({"title": title, "url": match.group(1)})
+            if len(rows) >= self.limit:
+                break
+        return self._search_rows_to_items(source, rows)
+
+    def _baidu_html_search(self, source, query):
+        url = "https://www.baidu.com/s?" + urllib.parse.urlencode({"wd": query})
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": self.config.get("user_agent", "Mozilla/5.0 ai-self-media-tools trend collector"),
+                "Accept": "text/html,application/xhtml+xml",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                html = response.read().decode("utf-8", errors="ignore")
+        except Exception:
+            return []
+        rows = []
+        for match in re.finditer(r'<h3[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, flags=re.I | re.S):
+            title = re.sub(r"<[^>]+>", "", match.group(2))
+            title = re.sub(r"\s+", " ", title).strip()
+            if title:
+                rows.append({"title": title, "url": match.group(1)})
+            if len(rows) >= self.limit:
+                break
+        return self._search_rows_to_items(source, rows)
+
+    def _search_rows_to_items(self, source, rows):
+        items = []
+        for row in rows[: self.limit]:
+            if isinstance(row, str):
+                row = {"title": row}
+            title = str(row.get("title") or row.get("content") or "").strip()
+            if not title:
+                continue
+            items.append({
+                "title": title,
+                "source": f"{source}:web_search",
+                "url": row.get("url", ""),
+                "points": int(row.get("score") or row.get("points") or 1),
+                "fallback_source": True,
+            })
+        return items
+
+    def _source_fallback_items(self, source, query):
+        keywords = [item for item in re.split(r"\s+", query) if item and not item.startswith("site:")]
+        if not keywords:
+            keywords = [source, "AI", "workflow"]
+        templates = [
+            "{source} 平台近期围绕 {topic} 的账号增长观察",
+            "{source} 用户讨论 {topic} 时最常见的痛点和反对意见",
+            "{source} 适合测试的 {topic} 选题切口",
+        ]
+        topic = " ".join(keywords[:4])
+        return [
+            {
+                "title": template.format(source=source, topic=topic),
+                "source": f"{source}:source_fallback",
+                "url": "",
+                "points": max(1, len(templates) - index),
+                "fallback_source": True,
+                "source_unavailable": True,
+                "query": query,
+                "warning": "live platform/search source unavailable; use only as a temporary operating hypothesis",
+            }
+            for index, template in enumerate(templates)
+        ][: self.limit]
 
 
 class RedditTrendCollector:

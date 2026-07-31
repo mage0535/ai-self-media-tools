@@ -294,10 +294,10 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertEqual(result.status, "drafted")
         self.assertEqual(result.external_id, "draft-1")
 
-    def test_routing_defaults_send_domestic_to_social_auto_upload(self):
+    def test_routing_defaults_send_kuaishou_to_social_auto_upload(self):
         with tempfile.TemporaryDirectory() as tmp:
             publisher = build_publisher(
-                "douyin",
+                "kuaishou",
                 {
                     "publishers": {
                         "routing_defaults": {
@@ -310,10 +310,43 @@ class PublisherV2Tests(unittest.TestCase):
             )
 
         self.assertIsInstance(publisher, SocialAutoUploadPublisher)
-        self.assertEqual(publisher.platform_name, "douyin")
+        self.assertEqual(publisher.platform_name, "kuaishou")
         self.assertEqual(publisher.account_name, "example")
 
-    def test_routing_defaults_send_international_to_aitoearn_intl(self):
+    def test_social_auto_upload_auto_schedule_resolves_to_cli_time(self):
+        publisher = SocialAutoUploadPublisher(
+            platform_name="kuaishou",
+            account_name="main",
+            project_dir="/tmp/social-auto-upload",
+            python_bin="python",
+            schedule_at="auto",
+            schedule_delay_hours=3,
+        )
+
+        self.assertRegex(publisher._schedule_at(), r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
+
+    def test_x_playwright_publisher_is_explicit_cookie_route(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            publisher = build_publisher(
+                "twitter",
+                {
+                    "publishers": {
+                        "platforms": {
+                            "twitter": {
+                                "type": "x-playwright",
+                                "account": "main",
+                                "cookie_dir": tmp,
+                                "live": True,
+                            }
+                        }
+                    }
+                },
+                tmp,
+            )
+
+        self.assertEqual(publisher.__class__.__name__, "XPlaywrightPublisher")
+
+    def test_routing_defaults_send_international_to_manual_handoff(self):
         with tempfile.TemporaryDirectory() as tmp:
             publisher = build_publisher(
                 "tiktok",
@@ -321,9 +354,34 @@ class PublisherV2Tests(unittest.TestCase):
                 tmp,
             )
 
-        self.assertIsInstance(publisher, AiToEarnDraftPublisher)
-        self.assertEqual(publisher.base_url, "https://aitoearn.ai/api/unified/mcp")
-        self.assertEqual(publisher.api_key_env, "AITOEARN_INTL_API_KEY")
+            result = publisher.deliver({"id": "job7", "title": "T", "body": "B"}, "tiktok")
+
+        self.assertEqual(result.status, "handoff_pending")
+        self.assertIn("manual", result.error)
+
+    def test_manual_only_platforms_override_any_auto_publisher_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for platform in ["douyin", "shipinhao", "tiktok", "xiaohongshu"]:
+                publisher = build_publisher(
+                    platform,
+                    {
+                        "publishers": {
+                            "platforms": {
+                                platform: {
+                                    "type": "aitoearn-flow",
+                                    "account_id": "acct",
+                                    "api_key": "secret",
+                                }
+                            }
+                        }
+                    },
+                    tmp,
+                )
+                result = publisher.deliver({"id": "job7", "title": "T", "body": "B"}, platform)
+
+                self.assertEqual(publisher.__class__.__name__, "ManualHandoffPublisher")
+                self.assertEqual(result.status, "handoff_pending")
+                self.assertIn("manual-only", result.error)
 
     def test_aitoearn_flow_publisher_returns_handoff_pending(self):
         class FakeClient:

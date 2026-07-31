@@ -10,6 +10,10 @@ Prompt 质量门禁 — 生成前验证 prompt 是否包含必要要素
 """
 import argparse, re, sys
 
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 # 各类型的必要要素关键词
 REQUIRED = {
     "image": {

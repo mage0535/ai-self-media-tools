@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shutil
 import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -162,22 +163,139 @@ class MediaBridge:
         provider = self.registry.choose_provider("image")
         if not provider:
             raise FileNotFoundError("image script not configured")
-        output = output_dir / "cover.png"
-        prompt = job.get("draft_meta", {}).get("image_prompt") or job["topic"]
-        provider.run(prompt, output, ["--method", cfg.get("method", "pil")])
-        if not output.is_file():
-            raise RuntimeError("image provider produced no output file")
-        checksum = hashlib.sha256(output.read_bytes()).hexdigest()
-        return {"kind": "image", "path": str(output), "checksum": checksum}
+        minimum = self._required_image_count(job, cfg)
+        prompts = self._image_prompts(job, minimum)
+        extra_args = [
+            "--method",
+            cfg.get("method", "auto"),
+            "--provider",
+            cfg.get("provider", "auto"),
+            "--size",
+            cfg.get("size", "1024x1024"),
+            "--quality",
+            cfg.get("quality", "low"),
+        ]
+        if cfg.get("model"):
+            extra_args.extend(["--model", str(cfg["model"])])
+        input_image = job.get("draft_meta", {}).get("image_reference") or job.get("draft_meta", {}).get("input_image")
+        if input_image:
+            extra_args.extend(["--input-image", str(input_image)])
+        images = []
+        for idx, item in enumerate(prompts):
+            output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
+            provider.run(item["prompt"], output, extra_args)
+            if not output.is_file():
+                raise RuntimeError("image provider produced no output file")
+            checksum = hashlib.sha256(output.read_bytes()).hexdigest()
+            images.append(
+                {
+                    "kind": "image",
+                    "role": item["role"],
+                    "section": item.get("section", ""),
+                    "purpose": item.get("purpose", ""),
+                    "path": str(output),
+                    "checksum": checksum,
+                }
+            )
+        section_map = [
+            {
+                "section": item["section"],
+                "image": item["path"],
+                "purpose": item["purpose"],
+                "adjacent_to_text": True,
+            }
+            for item in images
+            if item["role"] == "section"
+        ]
+        if section_map:
+            (output_dir / "section_image_map.json").write_text(json.dumps(section_map, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"kind": "image", "path": images[0]["path"], "checksum": images[0]["checksum"], "images": images, "section_image_map": section_map}
+
+    @staticmethod
+    def _required_image_count(job, cfg):
+        if cfg.get("min_count") is not None:
+            return max(1, int(cfg.get("min_count", 1)))
+        platforms = {str(item).lower() for item in job.get("platforms", [])}
+        body_length = len(str(job.get("body") or ""))
+        if "xiaohongshu" in platforms:
+            return 6
+        if platforms.intersection({"wechat", "zhihu", "juejin", "bilibili"}) or body_length >= 1000:
+            return 3
+        return 1
+
+    @staticmethod
+    def _default_image_prompt(job):
+        topic = job.get("topic") or job.get("title") or "content cover"
+        platforms = ", ".join(job.get("platforms") or [])
+        return (
+            f"{topic}. Clean editorial illustration for {platforms or 'social media'} content, "
+            "clear subject on a modern desk or workspace scene, professional magazine style, "
+            "soft natural lighting, balanced composition, visible foreground and background depth, "
+            "no logo, no watermark, minimal readable text."
+        )
+
+    @classmethod
+    def _image_prompt(cls, job):
+        custom = str((job.get("draft_meta") or {}).get("image_prompt") or "").strip()
+        if not custom:
+            return cls._default_image_prompt(job)
+        topic = job.get("topic") or job.get("title") or "content cover"
+        return (
+            f"{custom}. Topic context: {topic}. Clear subject, concrete workspace or real-scene background, "
+            "professional editorial illustration style, soft natural lighting, balanced composition, "
+            "foreground and background depth, no logo, no watermark, minimal readable text."
+        )
+
+    @classmethod
+    def _image_prompts(cls, job, minimum):
+        prompts = [
+            {
+                "role": "cover",
+                "section": "cover",
+                "purpose": "introduce the article promise with a topic-matched visual",
+                "prompt": cls._image_prompt(job),
+            }
+        ]
+        if minimum <= 1:
+            return prompts
+        sections = cls._article_sections(job)
+        for idx in range(1, minimum):
+            section = sections[idx - 1] if idx - 1 < len(sections) else f"section {idx}"
+            purpose = "explain or prove the adjacent article point"
+            prompt = (
+                f"Section illustration for: {section}. Topic context: {job.get('topic') or job.get('title') or 'article'}. "
+                "Concrete visual metaphor or workspace scene that explains the adjacent paragraph, "
+                "professional editorial illustration style, soft natural lighting, balanced composition, "
+                "clear foreground subject and background context, no logo, no watermark, minimal readable text."
+            )
+            prompts.append({"role": "section", "section": section, "purpose": purpose, "prompt": prompt})
+        return prompts
+
+    @staticmethod
+    def _article_sections(job):
+        meta_sections = (job.get("draft_meta") or {}).get("sections") or []
+        if isinstance(meta_sections, list) and meta_sections:
+            return [str(item)[:80] for item in meta_sections if str(item).strip()]
+        body = str(job.get("body") or "")
+        parts = [part.strip().replace("\n", " ") for part in body.split("\n\n") if len(part.strip()) > 40]
+        return [part[:80] for part in parts[:6]]
 
     def _generate_video(self, job, output_dir):
         plan = job.get("draft_meta", {}).get("video_toolchain_plan") or {}
         provider = self._choose_video_provider(plan)
         if not provider:
             raise FileNotFoundError("video script not configured")
+        visual_assets = self._prepare_video_visual_assets(job, output_dir, plan)
         script_body = job.get("draft_meta", {}).get("video_prompt") or job["body"][:1200]
         env = os.environ.copy()
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
+        platforms = [str(item).lower() for item in job.get("platforms", [])]
+        if platforms:
+            env["BGM_TARGET_PLATFORM"] = "youtube" if any(item in {"youtube", "youtube_shorts", "youtube-shorts"} for item in platforms) else platforms[0]
+        if visual_assets:
+            assets_path = output_dir / "video_visual_assets.json"
+            assets_path.write_text(json.dumps(visual_assets, ensure_ascii=False, indent=2), encoding="utf-8")
+            env["VIDEO_VISUAL_ASSETS_PATH"] = str(assets_path)
         if plan:
             plan_path = output_dir / "video_toolchain_plan.json"
             plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -209,7 +327,59 @@ class MediaBridge:
             artifact["toolchain_plan"] = str(output_dir / "video_toolchain_plan.json")
             artifact["selected_pipeline"] = str(plan.get("selected_pipeline", ""))
             artifact["template_family"] = str(plan.get("template_family", ""))
+        if visual_assets:
+            artifact["visual_assets"] = str(output_dir / "video_visual_assets.json")
         return artifact
+
+    def _prepare_video_visual_assets(self, job, output_dir, plan):
+        selected_pipeline = str((plan or {}).get("selected_pipeline") or "")
+        if selected_pipeline == "localized_repost_video":
+            return {}
+        image_paths = self._existing_image_paths(job, output_dir)
+        image_cfg = dict(self.config.get("image", {}))
+        required_count = max(1, int(self.config.get("video", {}).get("visual_image_count", 8)))
+        if not image_paths and image_cfg.get("enabled", False):
+            image_cfg.setdefault("min_count", required_count)
+            image_artifact = self._generate_image(job, output_dir, image_cfg)
+            image_paths = [item["path"] for item in image_artifact.get("images", []) if Path(item.get("path", "")).is_file()]
+        if not image_paths:
+            return {}
+        backgrounds = output_dir / "backgrounds"
+        backgrounds.mkdir(parents=True, exist_ok=True)
+        assignments = []
+        for index in range(required_count):
+            source = Path(image_paths[index % len(image_paths)])
+            suffix = source.suffix if source.suffix.casefold() in {".jpg", ".jpeg", ".png", ".webp"} else ".png"
+            target = backgrounds / f"bg_{index + 1:02d}{suffix}"
+            if source.resolve() != target.resolve():
+                shutil.copy2(source, target)
+            assignments.append(
+                {
+                    "scene": index + 1,
+                    "source_image": str(source),
+                    "background_image": str(target),
+                    "reused": index >= len(image_paths),
+                    "purpose": "scene background matched to narration and motion card",
+                }
+            )
+        return {
+            "source": "media.image",
+            "image_count": len(image_paths),
+            "scene_count": required_count,
+            "assignments": assignments,
+        }
+
+    @staticmethod
+    def _existing_image_paths(job, output_dir):
+        paths = []
+        for item in job.get("artifacts") or []:
+            if item.get("kind") == "image" and Path(item.get("path", "")).is_file():
+                paths.append(str(Path(item["path"])))
+        for pattern in ("cover.*", "section-*.*"):
+            for path in sorted(Path(output_dir).glob(pattern)):
+                if path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".webp"} and path.is_file():
+                    paths.append(str(path))
+        return list(dict.fromkeys(paths))
 
     def _choose_video_provider(self, plan):
         selected = str((plan or {}).get("selected_pipeline") or "")
@@ -279,6 +449,9 @@ class MediaBridge:
             raise RuntimeError(f"required video toolchain_contract missing tools: {missing}")
         if "cinema_storyboard" not in manifest or len(manifest.get("cinema_storyboard") or []) < 8:
             raise RuntimeError("required video cinema_storyboard missing or incomplete")
+        visual_assets = manifest.get("visual_assets") or {}
+        if len(visual_assets.get("assignments") or []) < 3:
+            raise RuntimeError("required original video visual asset assignments missing or incomplete")
         shotcraft_plan = manifest.get("shotcraft_motion_plan") or {}
         if not shotcraft_plan.get("available") or len(shotcraft_plan.get("timeline") or []) < 3:
             raise RuntimeError("required video shotcraft_motion_plan missing or incomplete")

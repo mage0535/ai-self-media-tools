@@ -14,7 +14,8 @@ import uuid
 from pathlib import Path
 
 from .aitoearn import AitoEarnClient
-from .content_policy import default_publisher_config, platform_region
+from .auth_registry import resolve_cookie_file
+from .content_policy import default_publisher_config, is_manual_handoff_platform, platform_region
 from .formatters import format_for_platform
 from .juejin_publisher import JuejinPublisher
 from .media_quality import validate_article_packet
@@ -23,6 +24,8 @@ from .paths import project_home, social_auto_upload_home
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, packet_uses_current_policy
 from .wechat_toolchain import TOOLCHAIN_META_KEYS
 from .zhihu_publisher import ZhihuPublisher
+
+AITOEARN_DISABLED_PLATFORMS = {"youtube", "tiktok", "twitter", "x", "threads"}
 
 
 def read_setting(name, env_file="", explicit=""):
@@ -57,6 +60,32 @@ class FileDraftPublisher:
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return DeliveryResult(True, "drafted", str(path))
+
+
+class ManualHandoffPublisher:
+    """Write a handoff package and make the non-automatic status explicit."""
+
+    def __init__(self, outbox, reason="manual publish required"):
+        self.outbox = Path(outbox)
+        self.reason = reason
+
+    def deliver(self, job, platform):
+        directory = self.outbox / platform
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{job['id']}.json"
+        payload = {
+            "job_id": job["id"],
+            "platform": platform,
+            "status": "handoff_pending",
+            "live_publish": False,
+            "reason": self.reason,
+            "title": job["title"],
+            "body": job["body"],
+            "artifacts": job.get("artifacts", []),
+            "platform_payload": job.get("platform_payload") or format_for_platform(job, platform),
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return DeliveryResult(True, "handoff_pending", str(path), error=self.reason)
 
 
 class RedditDraftPublisher:
@@ -329,12 +358,14 @@ class SocialAutoUploadPublisher:
         extra_args=None,
         video_extra_args=None,
         note_extra_args=None,
+        schedule_delay_hours=2,
     ):
         self.platform_name = platform_name
         self.account_name = account_name
         self.project_dir = project_dir
         self.python_bin = python_bin
         self.schedule_at = schedule_at
+        self.schedule_delay_hours = int(schedule_delay_hours or 2)
         self.extra_args = list(extra_args or [])
         self.video_extra_args = list(video_extra_args or [])
         self.note_extra_args = list(note_extra_args or [])
@@ -342,6 +373,11 @@ class SocialAutoUploadPublisher:
     def _run(self, args):
         command = [self.python_bin, "sau_cli.py", self.platform_name, *args]
         return subprocess.run(command, cwd=self.project_dir, capture_output=True, text=True, timeout=900)
+
+    def _schedule_at(self):
+        if str(self.schedule_at).strip().lower() != "auto":
+            return self.schedule_at
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + self.schedule_delay_hours * 3600))
 
     def _video_file(self, job):
         for item in job.get("artifacts", []):
@@ -373,7 +409,7 @@ class SocialAutoUploadPublisher:
                 "--file", video_path,
                 "--title", title,
                 "--desc", formatted.get("caption", job.get("body", ""))[:500],
-                "--schedule", self.schedule_at,
+                "--schedule", self._schedule_at(),
             ]
             if tags:
                 args.extend(["--tags", tags])
@@ -387,7 +423,7 @@ class SocialAutoUploadPublisher:
                 "--account", self.account_name,
                 "--title", title[:30],
                 "--note", formatted.get("text", formatted.get("markdown", job.get("body", "")))[:1000],
-                "--schedule", self.schedule_at,
+                "--schedule", self._schedule_at(),
                 "--images",
                 *images,
             ]
@@ -414,6 +450,69 @@ class FallbackPublisher:
                 return result
             errors.append(result.error or result.status)
         return DeliveryResult(False, "blocked", error="; ".join(errors)[-500:])
+
+
+class XPlaywrightPublisher:
+    """Post to X/Twitter with an operator-provided browser cookie state."""
+
+    def __init__(self, account="main", cookie_dir="", proxy="", headless=True, timeout=900, live=True):
+        self.account = account
+        self.cookie_dir = cookie_dir
+        self.proxy = proxy
+        self.headless = bool(headless)
+        self.timeout = int(timeout or 900)
+        self.live = bool(live)
+
+    def _compose_text(self, job, platform):
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        text = (
+            formatted.get("text")
+            or formatted.get("caption")
+            or formatted.get("markdown")
+            or f"{job.get('title', '')}\n\n{job.get('body', '')}"
+        )
+        return str(text).strip()[:280]
+
+    def deliver(self, job, platform):
+        if not self.live:
+            return DeliveryResult(False, "blocked", error="X live publishing disabled in publisher config")
+        cookie_file = resolve_cookie_file("twitter", self.account, self.cookie_dir)
+        if not cookie_file.is_file():
+            return DeliveryResult(False, "blocked", error="X/Twitter cookie not found")
+        text = self._compose_text(job, platform)
+        if len(text) < 8:
+            return DeliveryResult(False, "blocked", error="X/Twitter post text too short")
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            return DeliveryResult(False, "blocked", error="playwright not installed")
+        try:
+            storage = json.loads(cookie_file.read_text(encoding="utf-8"))
+        except Exception:
+            return DeliveryResult(False, "blocked", error="X/Twitter cookie file invalid")
+        try:
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=self.headless, args=["--no-sandbox"])
+                context_kwargs = {
+                    "storage_state": storage if isinstance(storage, dict) else {"cookies": storage},
+                    "locale": "en-US",
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                }
+                if self.proxy:
+                    context_kwargs["proxy"] = {"server": self.proxy}
+                context = browser.new_context(**context_kwargs)
+                page = context.new_page()
+                page.goto("https://x.com/compose/post", timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                box = page.locator('[data-testid="tweetTextarea_0"]').first
+                box.wait_for(timeout=30000)
+                box.fill(text)
+                button = page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]').first
+                button.click(timeout=30000)
+                page.wait_for_timeout(5000)
+                browser.close()
+            return DeliveryResult(True, "published", f"x:{job.get('id', '')}", error="X/Twitter post submitted via cookie browser session")
+        except Exception as exc:
+            return DeliveryResult(False, "failed", error=f"X/Twitter browser publish failed: {str(exc)[:300]}")
 
 
 class TelegraphPublisher:
@@ -1180,6 +1279,11 @@ def build_publisher(platform, config, data_dir):
     platform_cfg = publishers.get("platforms", {}).get(platform)
     cfg = platform_cfg or default_publisher_config(platform, publishers.get("routing_defaults", {})) or publishers.get("default", {"type": "file"})
     kind = cfg.get("type", "file")
+    if is_manual_handoff_platform(platform):
+        return ManualHandoffPublisher(
+            cfg.get("outbox", str(Path(data_dir) / "outbox")),
+            f"{platform} is manual-only by operator policy",
+        )
     if kind == "fallback":
         options = cfg.get("publishers", [])
         if not options:
@@ -1190,6 +1294,11 @@ def build_publisher(platform, config, data_dir):
         ])
     if kind == "file":
         return FileDraftPublisher(cfg.get("outbox", str(Path(data_dir) / "outbox")))
+    if kind == "manual-handoff":
+        return ManualHandoffPublisher(
+            cfg.get("outbox", str(Path(data_dir) / "outbox")),
+            cfg.get("reason", "manual publish required by operator policy"),
+        )
     if kind == "reddit-draft":
         return RedditDraftPublisher(
             cfg.get("outbox", str(Path(data_dir) / "outbox")),
@@ -1240,6 +1349,7 @@ def build_publisher(platform, config, data_dir):
             project_dir=cfg.get("project_dir", str(social_auto_upload_home())),
             python_bin=cfg.get("python_bin", str(social_auto_upload_home() / "venv/bin/python")),
             schedule_at=cfg.get("schedule_at", "2099-12-31 23:59"),
+            schedule_delay_hours=cfg.get("schedule_delay_hours", 2),
             extra_args=cfg.get("extra_args", []),
             video_extra_args=cfg.get("video_extra_args", []),
             note_extra_args=cfg.get("note_extra_args", []),
@@ -1259,6 +1369,15 @@ def build_publisher(platform, config, data_dir):
             headless=cfg.get("headless", True),
             save_as_draft=cfg.get("save_as_draft", True),
         )
+    if kind == "x-playwright":
+        return XPlaywrightPublisher(
+            account=cfg.get("account", "main"),
+            cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
+            proxy=cfg.get("proxy", os.environ.get("US_PROXY", "")),
+            headless=cfg.get("headless", True),
+            timeout=cfg.get("timeout", 900),
+            live=cfg.get("live", True),
+        )
     if kind in {"aitoearn-draft", "aitoearn-intl"}:
         default_base_url = "https://aitoearn.ai/api/unified/mcp" if platform_region(platform) == "international" else "https://aitoearn.cn/api/unified/mcp"
         default_key_env = "AITOEARN_INTL_API_KEY" if platform_region(platform) == "international" else "AITOEARN_API_KEY"
@@ -1274,6 +1393,11 @@ def build_publisher(platform, config, data_dir):
             poll_interval=cfg.get("poll_interval", 2),
         )
     if kind == "aitoearn-flow":
+        if platform.casefold() in AITOEARN_DISABLED_PLATFORMS:
+            return ManualHandoffPublisher(
+                cfg.get("outbox", str(Path(data_dir) / "outbox")),
+                f"{platform} is configured for cookie/manual route; AiToEarn is disabled by operator policy",
+            )
         default_base_url = "https://aitoearn.ai/api/unified/mcp" if platform_region(platform) == "international" else "https://aitoearn.cn/api/unified/mcp"
         default_key_env = "AITOEARN_INTL_API_KEY" if platform_region(platform) == "international" else "AITOEARN_API_KEY"
         return AiToEarnFlowPublisher(

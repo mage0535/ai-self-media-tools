@@ -24,6 +24,10 @@ class Notifier:
             "deliveries": job.get("deliveries", []),
             "report_path": job.get("report_path", ""),
             "review_actions": job.get("review_actions", {}),
+            "workflow_id": job.get("workflow_id", ""),
+            "step_name": job.get("step_name", ""),
+            "reason_code": job.get("reason_code", ""),
+            "message": job.get("message", ""),
         }
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -63,6 +67,14 @@ class Notifier:
         platforms = [str(item) for item in row.get("platforms", []) if str(item)]
         if platforms:
             text += "\nplatforms=" + ",".join(platforms)
+        if row.get("workflow_id"):
+            text += f"\nworkflow={row['workflow_id']}"
+        if row.get("step_name"):
+            text += f"\nstep={row['step_name']}"
+        if row.get("reason_code"):
+            text += f"\nreason={row['reason_code']}"
+        if row.get("message"):
+            text += f"\nmessage={str(row['message'])[:240]}"
         deliveries = []
         for item in row.get("deliveries", [])[:5]:
             platform = str(item.get("platform", ""))

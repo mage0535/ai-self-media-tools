@@ -41,7 +41,7 @@ INTERNATIONAL_PLATFORMS = {
 SHORT_VIDEO_PLATFORMS = {"bilibili", "douyin", "kuaishou", "shipinhao", "tiktok", "youtube"}
 XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
 DOUYIN_PLATFORMS = {"douyin"}
-MANUAL_HANDOFF_PLATFORMS = {"douyin", "shipinhao", "xiaohongshu", "rednote"}
+MANUAL_HANDOFF_PLATFORMS = {"douyin", "shipinhao", "tiktok", "xiaohongshu", "rednote"}
 
 
 def normalize_platform(platform):
@@ -125,7 +125,7 @@ def default_publisher_config(platform, routing_defaults):
     if region == "international":
         international = routing_defaults.get("international", {})
         return {
-            "type": "aitoearn-intl",
+            "type": international.get("type", "manual-handoff"),
             "platform_name": international.get("platform_name", platform),
             "account_name": international.get("account_name", "default"),
             **{k: v for k, v in international.items() if k != "platform_name"},

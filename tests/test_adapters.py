@@ -80,11 +80,156 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(command[-2:], ["Body", "Topic"])
         self.assertTrue(artifact["path"].endswith("generated.mp4"))
 
+    def test_image_bridge_passes_provider_options_and_reference_image(self):
+        script = self.root / "image_gen.py"
+        script.write_text("# fixture", encoding="utf-8")
+        ref = self.root / "reference.png"
+        ref.write_bytes(b"reference")
+        bridge = MediaBridge(
+            {
+                "image": {
+                    "enabled": True,
+                    "script": str(script),
+                    "provider": "gemini",
+                    "model": "gemini-test-image",
+                    "size": "1024x1024",
+                    "quality": "low",
+                }
+            },
+            self.root,
+        )
+
+        def fake_run(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"image")
+            return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
+
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
+            artifact = bridge.generate(
+                "image",
+                {"id": "j1", "topic": "Topic", "body": "Body", "draft_meta": {"image_reference": str(ref)}},
+            )
+        command = run.call_args.args[0]
+        self.assertIn("--provider", command)
+        self.assertIn("gemini", command)
+        self.assertIn("--model", command)
+        self.assertIn("gemini-test-image", command)
+        self.assertIn("--input-image", command)
+        self.assertEqual(artifact["kind"], "image")
+
+    def test_image_bridge_enriches_weak_draft_image_prompt(self):
+        script = self.root / "image_gen.py"
+        script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge({"image": {"enabled": True, "script": str(script), "provider": "pollinations"}}, self.root)
+
+        def fake_run(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"image")
+            return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
+
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
+            bridge.generate(
+                "image",
+                {"id": "j1", "topic": "AI workflow visual cover", "body": "Body", "draft_meta": {"image_prompt": "AI workflow visual cover"}},
+            )
+        prompt = run.call_args.args[0][2]
+        self.assertIn("professional editorial illustration style", prompt)
+        self.assertIn("soft natural lighting", prompt)
+        self.assertIn("balanced composition", prompt)
+
+    def test_image_bridge_generates_cover_and_section_map_when_min_count_requires_more(self):
+        script = self.root / "image_gen.py"
+        script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge(
+            {"image": {"enabled": True, "script": str(script), "provider": "pollinations", "min_count": 3}},
+            self.root,
+        )
+
+        def fake_run(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(f"image:{output.name}".encode())
+            return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
+
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run):
+            artifact = bridge.generate(
+                "image",
+                {
+                    "id": "j1",
+                    "topic": "AI workflow visual cover",
+                    "body": "Problem paragraph with enough detail for a section image.\n\nMethod paragraph with enough detail for another section image.",
+                    "draft_meta": {"image_prompt": "AI workflow visual cover"},
+                },
+            )
+
+        self.assertEqual(len(artifact["images"]), 3)
+        self.assertEqual(len(artifact["section_image_map"]), 2)
+        self.assertTrue((self.root / "artifacts" / "j1" / "section_image_map.json").is_file())
+
+    def test_image_bridge_defaults_to_article_image_package_for_long_form_platforms(self):
+        script = self.root / "image_gen.py"
+        script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge({"image": {"enabled": True, "script": str(script), "provider": "stock"}}, self.root)
+
+        def fake_run(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(f"image:{output.name}".encode())
+            return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
+
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run):
+            artifact = bridge.generate(
+                "image",
+                {
+                    "id": "j-article",
+                    "topic": "AI workflow",
+                    "body": "Opening paragraph.\n\nMethod paragraph.\n\nExample paragraph.",
+                    "platforms": ["wechat"],
+                },
+            )
+
+        self.assertEqual(len(artifact["images"]), 3)
+        self.assertEqual(len(artifact["section_image_map"]), 2)
+
+    def test_image_bridge_defaults_to_carousel_image_package_for_xiaohongshu(self):
+        script = self.root / "image_gen.py"
+        script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge({"image": {"enabled": True, "script": str(script), "provider": "stock"}}, self.root)
+
+        def fake_run(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(f"image:{output.name}".encode())
+            return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
+
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run):
+            artifact = bridge.generate(
+                "image",
+                {
+                    "id": "j-xhs",
+                    "topic": "AI workflow",
+                    "body": "Slide one.\n\nSlide two.\n\nSlide three.\n\nSlide four.\n\nSlide five.",
+                    "platforms": ["xiaohongshu"],
+                },
+            )
+
+        self.assertEqual(len(artifact["images"]), 6)
+        self.assertEqual(len(artifact["section_image_map"]), 5)
+
     def test_notifier_always_records_local_notification(self):
         notifier = Notifier({"log_path": str(self.root / "notifications.jsonl")})
         result = notifier.send("review_required", {"id": "j1", "title": "Title"})
         self.assertTrue(result["logged"])
         self.assertEqual(len((self.root / "notifications.jsonl").read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_notifier_records_workflow_step_context(self):
+        notifier = Notifier({"log_path": str(self.root / "notifications.jsonl")})
+        notifier.send("workflow_step_started", {"id": "j1", "title": "Title", "step_name": "generate_content", "workflow_id": "wf_j1"})
+        row = json.loads((self.root / "notifications.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual(row["step_name"], "generate_content")
+        self.assertIn("step=generate_content", Notifier._message(row))
 
     def test_notifier_can_reuse_hermes_home_channel(self):
         notifier = Notifier(

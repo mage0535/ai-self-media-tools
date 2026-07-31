@@ -118,6 +118,34 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result["account_count"], 1)
         self.assertIn("example_creator", result["top_accounts"])
 
+    def test_article_video_cli_writes_explainer_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            article = root / "article.md"
+            article.write_text("# AI工具使用规则\n\n先讲问题，再讲方法，最后给行动。", encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(["--db", str(root / "state.db"), "--config", "", "article-video", "--input", str(article), "--output-dir", str(root / "video")])
+            result = json.loads(output.getvalue())
+            plan_exists = Path(result["video_toolchain_plan"]).is_file()
+        self.assertEqual(code, 0)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["selected_pipeline"], "article_explainer_video")
+        self.assertTrue(plan_exists)
+
+    def test_viral_monitor_cli_scores_posts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "posts.json"
+            source.write_text(json.dumps({"posts": [{"title": "AI工作流爆款", "views": 5000, "likes": 500, "followers": 5000}]}), encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(["--db", str(root / "state.db"), "--config", "", "viral-monitor", "--input", str(source)])
+            result = json.loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

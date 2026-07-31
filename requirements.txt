@@ -8,3 +8,4 @@ yt-dlp>=2023
 httpx>=0.24
 websocket-client>=1.6
 pynacl>=1.5
+openai>=2.0

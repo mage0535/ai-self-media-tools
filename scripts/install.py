@@ -54,18 +54,23 @@ def render_config(home: Path):
         "media": {
             "image": {
                 "enabled": True,
-                "script": str(home / "external" / "scripts" / "image_gen.py"),
-                "method": "pil",
-                "timeout": 120,
+                "script": str(home / "scripts" / "image_gen.py"),
+                "method": "auto",
+                "provider": "auto",
+                "model": "",
+                "size": "1024x1024",
+                "quality": "low",
+                "timeout": 240,
             },
             "video": {
-                "enabled": False,
+                "enabled": True,
                 "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
                 "script": str(home / "external" / "scripts" / "video_pipeline.py"),
+                "visual_image_count": 8,
                 "timeout": 600,
             },
             "audio": {
-                "enabled": False,
+                "enabled": True,
                 "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
                 "mode": "auto",
                 "timeout": 300,
@@ -73,9 +78,9 @@ def render_config(home: Path):
         },
         "content_policy": {
             "original_content": "image_text_only",
-            "short_video": "repurpose_existing_source_only",
-            "allow_local_video_generation": False,
-            "allow_local_audio_generation": False,
+            "short_video": "original_or_repurpose_by_ops_analysis",
+            "allow_local_video_generation": True,
+            "allow_local_audio_generation": True,
         },
         "content_hygiene": {
             "enabled": True,
@@ -89,6 +94,9 @@ def render_config(home: Path):
         "trends": {
             "legacy_data_dir": str(home / "data" / "trend-cache"),
             "legacy_script": str(home / "external" / "scripts" / "trend_collector.py"),
+            "legacy_timeout": 20,
+            "max_total_seconds": 45,
+            "fallback_enabled": True,
             "reddit": {
                 "enabled": False,
                 "client_id_env": "REDDIT_CLIENT_ID",
@@ -107,9 +115,8 @@ def render_config(home: Path):
                 "enabled": True,
                 "domestic": {"type": "social-auto-upload", "account_name": "<account-alias>"},
                 "international": {
-                    "type": "aitoearn-draft",
-                    "base_url": "https://aitoearn.ai/api/unified/mcp",
-                    "api_key_env": "AITOEARN_INTL_API_KEY",
+                    "type": "manual-handoff",
+                    "reason": "international auto publishing requires explicit per-platform cookie publisher",
                 },
             },
             "platforms": {

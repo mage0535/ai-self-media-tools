@@ -591,6 +591,13 @@ class Pipeline:
             self.store.add_artifact(job_id, "magazine_format", artifact.get("html_path", ""), artifact.get("style", ""))
             self.store.record_event(job_id, "magazine_formatted", {"style": artifact.get("style", "")})
             return artifact
+        if kind == "image" and artifact.get("images"):
+            for item in artifact.get("images", []):
+                self.store.add_artifact(job_id, "image", item.get("path", ""), item.get("checksum", ""))
+            mapping_path = Path(artifact["path"]).parent / "section_image_map.json"
+            if mapping_path.is_file():
+                self.store.add_artifact(job_id, "section_image_map", mapping_path, "")
+            return artifact
         self.store.add_artifact(job_id, artifact["kind"], artifact["path"], artifact.get("checksum", ""))
         return artifact
 

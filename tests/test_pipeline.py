@@ -171,6 +171,44 @@ class PipelineTests(unittest.TestCase):
         image_step = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "generate_or_collect_images"][-1]
         self.assertEqual(image_step["status"], "BLOCKED")
 
+    def test_pipeline_records_all_generated_images_and_section_map(self):
+        pipeline = Pipeline(
+            self.store,
+            {
+                "data_dir": str(Path(self.tmp.name)),
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
+                "publishers": {"default": {"type": "file"}},
+                "media": {"image": {"enabled": True, "required": True, "min_count": 2}},
+                "notifications": {"log_path": str(Path(self.tmp.name) / "notifications.jsonl")},
+            },
+        )
+        job = pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
+        artifact_dir = Path(self.tmp.name) / "artifacts" / job["id"]
+        artifact_dir.mkdir(parents=True)
+        cover = artifact_dir / "cover.png"
+        inline = artifact_dir / "section-01.png"
+        mapping = artifact_dir / "section_image_map.json"
+        cover.write_bytes(b"cover")
+        inline.write_bytes(b"inline")
+        mapping.write_text("[]", encoding="utf-8")
+        media_artifact = {
+            "kind": "image",
+            "path": str(cover),
+            "checksum": "cover-checksum",
+            "images": [
+                {"kind": "image", "path": str(cover), "checksum": "cover-checksum", "role": "cover"},
+                {"kind": "image", "path": str(inline), "checksum": "inline-checksum", "role": "section"},
+            ],
+            "section_image_map": [{"section": "method", "image": str(inline), "purpose": "explain method"}],
+        }
+        with patch.object(pipeline.media, "generate", return_value=media_artifact):
+            result = pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "review_required")
+        artifacts = self.store.artifacts(job["id"])
+        self.assertEqual(len([item for item in artifacts if item["kind"] == "image"]), 2)
+        self.assertEqual(len([item for item in artifacts if item["kind"] == "section_image_map"]), 1)
+
     def test_delivery_worker_processes_one_item_by_default(self):
         job = self.pipeline.create("Practical automation", ["wechat", "devto"], {"audience": "operators"})
         self.pipeline.run(job["id"])

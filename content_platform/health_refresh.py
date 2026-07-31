@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .content_policy import platform_region
-from .content_policy import is_douyin_platform, is_xiaohongshu_platform
+from .content_policy import is_douyin_platform, is_manual_handoff_platform
 from .auth_registry import cookie_file_status, resolve_cookie_file
 from .publishers import read_setting
 
@@ -36,6 +36,8 @@ TOKEN_PUBLISHERS = {
 MULTI_SECRET_PUBLISHERS = {
     "bluesky": ["identifier_env", "password_env"],
 }
+
+AITOEARN_DISABLED_PLATFORMS = {"youtube", "tiktok", "twitter", "x", "threads"}
 
 
 def _now() -> str:
@@ -139,6 +141,15 @@ def _juejin_check(cfg: dict[str, Any]) -> tuple[bool, str]:
     return True, "juejin cookie present"
 
 
+def _x_check(cfg: dict[str, Any]) -> tuple[bool, str]:
+    ok, reason = _cookie_json_check(cfg, "twitter")
+    if not ok:
+        return ok, reason
+    if importlib.util.find_spec("playwright") is None:
+        return False, "x playwright dependency missing"
+    return True, "X/Twitter cookie and playwright dependency present"
+
+
 def _env_publisher_check(kind: str, cfg: dict[str, Any]) -> tuple[bool, str]:
     env_file = str(cfg.get("env_file", ""))
     env_keys = TOKEN_PUBLISHERS.get(kind) or MULTI_SECRET_PUBLISHERS.get(kind) or []
@@ -160,11 +171,11 @@ def _env_publisher_check(kind: str, cfg: dict[str, Any]) -> tuple[bool, str]:
 def classify_platform_health(platform: str, cfg: dict[str, Any]) -> dict[str, Any]:
     platform = str(platform)
     kind = str((cfg or {}).get("type", "file"))
-    if is_xiaohongshu_platform(platform):
+    if is_manual_handoff_platform(platform):
         return _entry(
             "manual_handoff_only",
             False,
-            "Xiaohongshu is semi-automatic; generate compliant local review packages only",
+            f"{platform} is manual-only by operator policy; generate compliant local review packages only",
             "health_refresh",
         )
     proxy_ok, proxy_reason = _proxy_state(platform)
@@ -188,6 +199,13 @@ def classify_platform_health(platform: str, cfg: dict[str, Any]) -> dict[str, An
         return _entry("auth_required", False, reason, "health_refresh")
 
     if kind == "aitoearn-flow":
+        if platform.casefold() in AITOEARN_DISABLED_PLATFORMS:
+            return _entry(
+                "manual_handoff_only",
+                False,
+                f"{platform} is configured for cookie/manual route; AiToEarn is disabled by operator policy",
+                "health_refresh",
+            )
         ok, reason = _aitoearn_check(cfg)
         if ok:
             return _entry("usable", True, reason, "health_refresh")
@@ -203,6 +221,12 @@ def classify_platform_health(platform: str, cfg: dict[str, Any]) -> dict[str, An
         ok, reason = _zhihu_check(cfg)
         if ok:
             return _entry("usable_with_postcheck_required", True, reason, "health_refresh", require_postcheck=True)
+        return _entry("auth_required", False, reason, "health_refresh")
+
+    if kind == "x-playwright":
+        ok, reason = _x_check(cfg)
+        if ok:
+            return _entry("usable", True, reason, "health_refresh")
         return _entry("auth_required", False, reason, "health_refresh")
 
     if kind in TOKEN_PUBLISHERS or kind in MULTI_SECRET_PUBLISHERS:

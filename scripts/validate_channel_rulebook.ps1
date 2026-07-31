@@ -21,28 +21,27 @@ foreach ($step in $requiredSequence) {
   }
 }
 
-$requiredChannels = @(
+$coreRequiredChannels = @(
   "douyin",
   "kuaishou",
   "shipinhao",
   "wechat",
   "xiaohongshu",
-  "toutiao",
   "juejin",
   "zhihu",
-  "csdn",
   "bilibili",
-  "weibo",
-  "segmentfault",
   "tiktok",
-  "youtube"
+  "youtube",
+  "twitter"
 )
 
 $channels = $rulebook.channel_rules.PSObject.Properties.Name
-foreach ($channel in $requiredChannels) {
+foreach ($channel in $coreRequiredChannels) {
   if ($channels -notcontains $channel) {
     throw "missing channel rule: $channel"
   }
+}
+foreach ($channel in $channels) {
   $rule = $rulebook.channel_rules.$channel
   foreach ($field in @("lane", "primary_types", "publish_policy", "must_use_tools", "quality_gates", "postcheck")) {
     if (-not $rule.PSObject.Properties.Name.Contains($field)) {
@@ -72,7 +71,7 @@ if ($rulebook.proxy_policy.international_proxy_env -ne "US_PROXY") {
   throw "international channels must use US_PROXY"
 }
 $proxyCovered = @($rulebook.proxy_policy.domestic_channels) + @($rulebook.proxy_policy.international_channels)
-foreach ($channel in $requiredChannels) {
+foreach ($channel in $channels) {
   if ($proxyCovered -notcontains $channel) {
     throw "channel missing from proxy policy: $channel"
   }
@@ -133,7 +132,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $root "scripts/validate_kuaishou_aut
 if (-not (Test-Path -LiteralPath (Join-Path $root "scripts/kuaishou_postcheck_manifest.py"))) {
   throw "kuaishou postcheck script is missing"
 }
-foreach ($gate in @("strategy_before_generation", "kuaishou_trend_evidence", "six_distinct_knowledge_card_layouts", "no_soundhelix_or_synthetic_bgm_without_explicit_exception")) {
+foreach ($gate in @("strategy_before_generation", "kuaishou_trend_evidence", "six_distinct_knowledge_card_layouts", "no_local_soundhelix_or_synthetic_bgm_without_explicit_exception")) {
   if ($kuaishou.quality_gates -notcontains $gate) {
     throw "kuaishou quality gate missing: $gate"
   }
@@ -188,8 +187,8 @@ foreach ($marker in @(
     "voiceover_must_match_source_entertainment_or_story_tone",
     "background_music",
     "background_music_must_be_selected_per_work",
-    "prefer_licensed_stock_music",
-    "procedural_bgm_is_fallback_only",
+    "online_real_instrument_bgm_required",
+    "local_bgm_library_and_procedural_bgm_are_forbidden",
     "same_batch_reusing_same_bgm_requires_current_ops_reason",
     "audio_stream_duration_must_equal_video_duration",
     "dry_voiceover_only"
@@ -199,4 +198,4 @@ foreach ($marker in @(
   }
 }
 
-Write-Output "channel rulebook ok: $($requiredChannels.Count) channels"
+Write-Output "channel rulebook ok: $($channels.Count) channels"

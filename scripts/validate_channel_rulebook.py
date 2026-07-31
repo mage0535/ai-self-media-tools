@@ -21,25 +21,22 @@ REQUIRED_SEQUENCE = {
     "write_metrics_review_row",
 }
 
-REQUIRED_CHANNELS = [
+CORE_REQUIRED_CHANNELS = [
     "douyin",
     "kuaishou",
     "shipinhao",
     "wechat",
     "xiaohongshu",
-    "toutiao",
     "juejin",
     "zhihu",
-    "csdn",
     "bilibili",
-    "weibo",
-    "segmentfault",
     "tiktok",
     "youtube",
+    "twitter",
 ]
 
 REQUIRED_CHANNEL_FIELDS = {"lane", "primary_types", "publish_policy", "must_use_tools", "quality_gates", "postcheck"}
-FULL_OPS_CHANNELS = ["xiaohongshu", "toutiao", "juejin", "zhihu"]
+FULL_OPS_CHANNELS = ["xiaohongshu", "juejin", "zhihu"]
 FULL_OPS_REQUIRED_TOOLS = {
     "hermes_operating_strategy",
     "account_data_analysis",
@@ -126,8 +123,9 @@ def main() -> None:
         require(step in sequence, f"missing mandatory sequence step: {step}")
 
     channel_rules = rulebook.get("channel_rules") or {}
-    for channel in REQUIRED_CHANNELS:
+    for channel in CORE_REQUIRED_CHANNELS:
         require(channel in channel_rules, f"missing channel rule: {channel}")
+    for channel in channel_rules:
         missing = REQUIRED_CHANNEL_FIELDS - set(channel_rules[channel])
         require(not missing, f"missing field for {channel}: {sorted(missing)}")
 
@@ -158,7 +156,7 @@ def main() -> None:
     overlap = domestic & international
     require(not overlap, f"channel appears in both proxy policies: {sorted(overlap)}")
     covered = domestic | international
-    for channel in REQUIRED_CHANNELS:
+    for channel in channel_rules:
         require(channel in covered, f"channel missing from proxy policy: {channel}")
 
     shipinhao = channel_rules["shipinhao"]
@@ -218,7 +216,7 @@ def main() -> None:
         require(tool in kuaishou_tools, f"kuaishou must_use_tools missing: {tool}")
     require((ROOT / "scripts" / "validate_kuaishou_auto_packet.py").is_file(), "kuaishou validator script is missing")
     require((ROOT / "scripts" / "kuaishou_postcheck_manifest.py").is_file(), "kuaishou postcheck script is missing")
-    for gate in ["strategy_before_generation", "kuaishou_trend_evidence", "six_distinct_knowledge_card_layouts", "no_soundhelix_or_synthetic_bgm_without_explicit_exception"]:
+    for gate in ["strategy_before_generation", "kuaishou_trend_evidence", "six_distinct_knowledge_card_layouts", "no_local_soundhelix_or_synthetic_bgm_without_explicit_exception"]:
         require(gate in (kuaishou.get("quality_gates") or []), f"kuaishou quality gate missing: {gate}")
     require(kuaishou.get("postcheck") == "kuaishou_management_pending_list_with_exact_schedule_time", "kuaishou postcheck must require exact schedule management-page evidence")
 
@@ -260,14 +258,14 @@ def main() -> None:
         "voiceover_must_match_source_entertainment_or_story_tone",
         "background_music",
         "background_music_must_be_selected_per_work",
-        "prefer_licensed_stock_music",
-        "procedural_bgm_is_fallback_only",
+        "online_real_instrument_bgm_required",
+        "local_bgm_library_and_procedural_bgm_are_forbidden",
         "same_batch_reusing_same_bgm_requires_current_ops_reason",
         "audio_stream_duration_must_equal_video_duration",
         "dry_voiceover_only",
     ]:
         require(marker in audio_rules, f"douyin tiktok audio adaptation must mention {marker}")
-    print(f"channel rulebook ok: {len(REQUIRED_CHANNELS)} channels")
+    print(f"channel rulebook ok: {len(channel_rules)} channels")
 
 
 if __name__ == "__main__":

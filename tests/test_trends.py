@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -103,10 +104,60 @@ class TrendTests(unittest.TestCase):
         with patch("content_platform.trends.DirectTrendSource.collect", side_effect=RuntimeError("source unavailable")):
             report = TrendCollector({"direct_sources": {"hackernews": {"enabled": True}}, "fallback_enabled": True}).collect_with_report()
 
-        self.assertEqual(report["summary"]["failed_sources"], 3)
+        self.assertEqual(report["summary"]["failed_sources"], 5)
         self.assertTrue(report["summary"]["fallback_used"])
         self.assertGreaterEqual(len(report["items"]), 1)
-        self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:3]))
+        self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:5]))
+
+    def test_refresh_legacy_script_timeout_is_reported_not_blocking_collection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "trend_collector.py"
+            script.write_text("print('slow')", encoding="utf-8")
+            with patch("content_platform.trends.subprocess.run", side_effect=subprocess.TimeoutExpired(["python3", str(script)], 1)):
+                report = TrendCollector({"legacy_script": str(script), "direct_sources": False}).collect_with_report(refresh=True)
+
+        self.assertEqual(report["sources"][0]["source"], "legacy_script")
+        self.assertEqual(report["sources"][0]["status"], "failed")
+        self.assertIn("timed out", report["sources"][0]["error"])
+
+    def test_bilibili_falls_back_to_web_search_when_api_fails(self):
+        with patch.object(DirectTrendSource, "_request_json", side_effect=RuntimeError("blocked")):
+            with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "B站 AI workflow", "source": "bilibili:web_search", "points": 1}]):
+                items = DirectTrendSource("bilibili", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "bilibili:web_search")
+
+    def test_zhihu_and_douyin_use_web_search_sources(self):
+        with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "AI tool topic", "source": "zhihu:web_search", "points": 1}]) as search:
+            items = DirectTrendSource("zhihu", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["title"], "AI tool topic")
+        self.assertTrue(search.called)
+
+        with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "Douyin AI workflow topic", "source": "douyin:web_search", "points": 1}]) as search:
+            items = DirectTrendSource("douyin", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "douyin:web_search")
+        self.assertTrue(search.called)
+
+    def test_web_search_source_degrades_with_explicit_unavailable_marker(self):
+        source = DirectTrendSource("zhihu", {"limit": 5, "source_fallback_enabled": True})
+        with patch.object(source, "_searxng_search", return_value=[]), \
+            patch.object(source, "_duckduckgo_html_search", return_value=[]), \
+            patch.object(source, "_bing_html_search", return_value=[]), \
+            patch.object(source, "_baidu_html_search", return_value=[]):
+            items = source.collect()
+
+        self.assertGreaterEqual(len(items), 1)
+        self.assertTrue(items[0]["source_unavailable"])
+        self.assertEqual(items[0]["source"], "zhihu:source_fallback")
+
+    def test_collect_report_marks_source_fallback_as_degraded(self):
+        with patch.object(DirectTrendSource, "collect", return_value=[{"title": "Fallback", "source": "zhihu:source_fallback", "source_unavailable": True}]):
+            report = TrendCollector({"direct_sources": {"zhihu": {"enabled": True}}}).collect_with_report()
+
+        self.assertEqual(report["sources"][0]["status"], "degraded")
+        self.assertEqual(report["summary"]["degraded_sources"], 5)
 
     def test_wewrite_hotspots_source_normalizes_cli_output(self):
         payload = [{"title": "公众号热点选题", "heat": 42, "url": "https://example.com/w"}]
