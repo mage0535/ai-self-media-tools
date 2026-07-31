@@ -63,7 +63,7 @@ def mix_bgm(video: Path, bgm: Path, output: Path, bgm_weight: float = 0.28, targ
     if duration <= 0:
         return {"ok": False, "error": "input_duration_unreadable", "input": str(video)}
     output.parent.mkdir(parents=True, exist_ok=True)
-    bgm_weight = max(0.2, min(float(bgm_weight), 0.35))
+    bgm_weight = max(0.3, min(float(bgm_weight), 1.0))
     command = [
         "ffmpeg",
         "-y",

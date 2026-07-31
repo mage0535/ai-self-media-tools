@@ -97,6 +97,28 @@ def check_bgm_spectrum(d):
         bgm = p
         break
     if not bgm:
+        die("BGM file is missing; spectrum gate cannot pass")
+
+    def measure(filter_chain):
+        result = subprocess.run(
+            ["ffmpeg", "-t", "5", "-i", str(bgm), "-af", filter_chain, "-f", "null", "-"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        match = re.search(r"mean_volume: ([\-\d\.]+)", result.stderr + "\n" + result.stdout)
+        return float(match.group(1)) if match else None
+
+    orig = measure("volumedetect")
+    filtered = measure("lowpass=f=1000,volumedetect")
+    if orig is None or filtered is None:
+        die("BGM spectrum is not parseable; gate cannot pass")
+    drop = orig - filtered
+    if drop >= BGM_LOWPASS_THRESHOLD:
+        die(f"BGM may be synthetic/electronic: original={orig}dB lowpass={filtered}dB drop={drop:.1f}dB")
+    ok(f"BGM spectrum passed: original={orig}dB lowpass={filtered}dB drop={drop:.1f}dB")
+    return
+    if not bgm:
         die("BGM文件不存在，不能跳过频谱验证")
     r = subprocess.run(["ffmpeg","-t","5","-i",str(bgm),
         "-filter_complex","[0:a]asplit=2[orig][lp];[lp]lowpass=f=1000[lpf]",
