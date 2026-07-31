@@ -41,7 +41,7 @@ INTERNATIONAL_PLATFORMS = {
 SHORT_VIDEO_PLATFORMS = {"bilibili", "douyin", "kuaishou", "shipinhao", "tiktok", "youtube"}
 XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
 DOUYIN_PLATFORMS = {"douyin"}
-MANUAL_HANDOFF_PLATFORMS = {"douyin", "shipinhao", "tiktok", "xiaohongshu", "rednote"}
+MANUAL_HANDOFF_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "xiaohongshu", "rednote"}
 
 
 def normalize_platform(platform):

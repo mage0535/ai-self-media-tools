@@ -170,7 +170,7 @@ class HealthRefreshTests(unittest.TestCase):
 
     def test_manual_only_platforms_override_any_auto_health_route(self):
         with patch.dict(os.environ, {"US_PROXY": "socks5://127.0.0.1:1091"}, clear=True):
-            for platform in ["douyin", "shipinhao", "tiktok", "xiaohongshu"]:
+            for platform in ["bilibili", "douyin", "shipinhao", "tiktok", "xiaohongshu"]:
                 entry = classify_platform_health(
                     platform,
                     {"type": "aitoearn-flow", "account_id": "acct", "api_key": "secret"},
