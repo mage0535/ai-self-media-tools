@@ -17,14 +17,19 @@
   "media": {
     "image": {
       "enabled": true,
-      "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/image_gen.py",
-      "method": "pil",
-      "timeout": 120
+      "script": "{{CONTENT_PLATFORM_HOME}}/scripts/image_gen.py",
+      "method": "auto",
+      "provider": "auto",
+      "model": "",
+      "size": "1024x1024",
+      "quality": "low",
+      "timeout": 240
     },
     "video": {
       "enabled": false,
       "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
       "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/video_pipeline.py",
+      "visual_image_count": 8,
       "timeout": 600
     },
     "audio": {
@@ -36,9 +41,9 @@
   },
   "content_policy": {
     "original_content": "image_text_only",
-    "short_video": "repurpose_existing_source_only",
-    "allow_local_video_generation": false,
-    "allow_local_audio_generation": false
+    "short_video": "original_or_repurpose_by_ops_analysis",
+    "allow_local_video_generation": true,
+    "allow_local_audio_generation": true
   },
   "content_hygiene": {
     "enabled": true,
@@ -76,24 +81,30 @@
   "trends": {
     "legacy_data_dir": "{{CONTENT_PLATFORM_HOME}}/data/trend-cache",
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/trend_collector.py",
+    "legacy_timeout": 20,
+    "max_total_seconds": 45,
     "fallback_enabled": true,
     "direct_sources": {
       "hackernews": {
         "enabled": true,
-        "limit": 20
+        "limit": 20,
+        "timeout": 8
       },
       "github": {
         "enabled": true,
         "limit": 20,
+        "timeout": 8,
         "query": "AI workflow automation content operations"
       },
       "bilibili": {
         "enabled": true,
-        "limit": 20
+        "limit": 20,
+        "timeout": 8
       },
       "wewrite_hotspots": {
         "enabled": false,
         "limit": 20,
+        "timeout": 8,
         "wewrite_bin": "{{HOME}}/.local/bin/wewrite"
       }
     },
@@ -118,9 +129,8 @@
         "account_name": "<account-alias>"
       },
       "international": {
-        "type": "aitoearn-draft",
-        "base_url": "https://aitoearn.ai/api/unified/mcp",
-        "api_key_env": "AITOEARN_INTL_API_KEY"
+        "type": "manual-handoff",
+        "reason": "international auto publishing requires explicit per-platform cookie publisher"
       }
     },
     "platforms": {

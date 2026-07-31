@@ -402,6 +402,10 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "audio_composition": {
             "passed": bool(packet.get("voiceover_present", True)) and bool(packet.get("background_music_present")),
         },
+        "background_music_source": {
+            "passed": bool(packet.get("background_music_present")) and bool(packet.get("bgm_source")),
+            "source": packet.get("bgm_source") or {},
+        },
         "natural_voice": {
             "passed": bool(voice_style.get("human_pacing"))
             and int(voice_style.get("segment_count", 0)) >= 4
@@ -492,6 +496,14 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     strategy = packet.get("strategy_brief") or {}
     source_data = packet.get("source_data") or {}
     selected_project = packet.get("selected_project") or {}
+    selected_project_url = str(selected_project.get("url") or selected_project.get("html_url") or "").strip()
+    selected_project_visual = str(
+        selected_project.get("screenshot_path")
+        or selected_project.get("screenshot_url")
+        or selected_project.get("og_image")
+        or selected_project.get("image_url")
+        or ""
+    ).strip()
     batch = packet.get("batch_plan") or {}
     cover = packet.get("cover_design") or {}
     publishing = packet.get("publishing_plan") or {}
@@ -550,8 +562,12 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "github_project_source": {
             "passed": ("github" in direction or bool(content_channels.get("daily_github_selection")))
             and len(github_projects) >= 1
-            and bool(selected_project.get("repo") or selected_project.get("url")),
+            and bool(selected_project.get("repo"))
+            and selected_project_url.startswith("http")
+            and bool(selected_project_visual),
             "project_count": len(github_projects),
+            "project_url_present": selected_project_url.startswith("http"),
+            "project_visual_present": bool(selected_project_visual),
         },
         "dual_content_channels": {
             "passed": bool(content_channels.get("daily_github_selection"))
@@ -626,14 +642,22 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
     trend = packet.get("trend_evidence") or strategy.get("trend_evidence") or {}
     workflow = packet.get("workflow_evidence") or {}
     card_sequence = packet.get("knowledge_card_sequence") or []
-    bgm = packet.get("bgm") or packet.get("background_music") or {}
+    bgm = packet.get("bgm") or packet.get("background_music") or packet.get("bgm_source") or {}
     bgm_manifest = packet.get("bgm_license_manifest") or bgm.get("manifest") or {}
     publishing = packet.get("publishing_plan") or {}
     artifact_probe = packet.get("video_artifact_probe") or {}
     if not isinstance(card_sequence, list):
         card_sequence = []
     layouts = [str(card.get("layout") or "") for card in card_sequence if isinstance(card, dict)]
-    forbidden_bgm_sources = {"soundhelix", "synthetic", "procedural", "generated_tone", "midi"}
+    forbidden_bgm_sources = {
+        "soundhelix",
+        "synthetic",
+        "procedural",
+        "generated_tone",
+        "midi",
+        "generated_synthetic_bgm",
+        "local_instrument_bgm_library",
+    }
     bgm_source = str(bgm.get("source") or "").casefold()
     normalized_phase = str(phase or "preflight").casefold()
     required_steps = [
@@ -668,18 +692,18 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
             "passed": bool(bgm_source)
             and bgm_source not in forbidden_bgm_sources
             and bool(bgm.get("license") or bgm.get("license_type"))
+            and bool(bgm.get("source_url"))
             and bool(bgm.get("fit_reason")),
             "source": bgm_source,
         },
         "bgm_license_manifest": {
             "passed": isinstance(bgm_manifest, dict)
-            and bool(bgm_manifest.get("source_url") or bgm_manifest.get("asset_id"))
+            and bool(bgm_manifest.get("source_url"))
             and bool(bgm_manifest.get("license") or bgm_manifest.get("license_type"))
             and bool(bgm_manifest.get("fingerprint") or bgm_manifest.get("checksum")),
         },
         "no_silent_bgm_fallback": {
-            "passed": not bool(bgm.get("fallback_used"))
-            or (bool(bgm.get("fallback_exception_reason")) and bgm_source not in forbidden_bgm_sources),
+            "passed": not bool(bgm.get("fallback_used")),
         },
         "schedule_and_postcheck_plan": {
             "passed": bool(publishing.get("schedule_at"))
@@ -705,6 +729,12 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
                 "unique_source_count >= 4",
                 "vertical resolution >= 1080x1920",
             ],
+        },
+        "subtitle_layout": {
+            "passed": (packet.get("burned_captions") or {}).get("position") == "lower_third"
+            and int((packet.get("burned_captions") or {}).get("margin_v") or 0) >= 180
+            and int((packet.get("burned_captions") or {}).get("max_chars_per_line") or 99) <= 18
+            and int((packet.get("burned_captions") or {}).get("max_lines") or 99) <= 2,
         },
     }
     return _result(gates)

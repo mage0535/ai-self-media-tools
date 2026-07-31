@@ -2343,7 +2343,7 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - `scripts/intl_short_video_pipeline.py` now routes self-generated international videos through the project video runner first. Legacy screencast/static fallback is fail-closed unless `INTL_VIDEO_ALLOW_LEGACY_FALLBACK=1` is explicitly set.
 - `scripts/kuaishou_render.py` now consumes cinema CSS for no-background-image card rendering, adding gradient and texture layers instead of falling back to flat solid backgrounds.
 - Video output assertions now use ffprobe structural validation when short valid MP4s fall below legacy byte-size thresholds.
-- BGM retrieval now falls back to a generated local low-volume synthetic BGM bed and records `bgm_source.json` if online BGM retrieval is unavailable.
+- BGM retrieval is now fail-closed: every video render must resolve an online, license-recorded, real-instrument track and write `bgm_source.json`; local libraries, SoundHelix, YouTube search scraping, and synthetic fallback beds are forbidden.
 - Packet schedule generation now handles working directories that do not end with a digit.
 
 ### Verification
@@ -2391,3 +2391,68 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ### Operational Note
 - Shotcraft is now part of the generated-video path for knowledge-card, tutorial, and original short-form videos. Localized repost workflows still require real source-video evidence first; Shotcraft may be used for overlays, title cards, transitions, or packaging, but must not replace source-video handling.
+
+## 2026-07-30 - OpenAI and Gemini Image Provider Integration
+
+### Fixed
+- Replaced the corrupted legacy `scripts/image_gen.py` with a provider-neutral JSON CLI for text-to-image and image editing.
+- Added `content_platform.image_provider` with first-class OpenAI GPT Image and Gemini Nano Banana REST support.
+- Added explicit Pollinations text-to-image fallback for low-cost concept backgrounds and draft illustrations. It records `provider=pollinations` and refuses image-editing requests.
+- `MediaBridge` now passes image provider, model, size, quality, and optional reference-image settings into the image script.
+- `MediaBridge` now enriches weak `draft_meta.image_prompt` values with required subject, scene, style, lighting, and composition constraints before calling the image script.
+- `MediaBridge` now treats `media.image.min_count` as the required image package size. It generates one cover plus section-mapped inline images, then writes `section_image_map.json` beside the image artifacts.
+- Pipeline artifact recording now stores every generated image plus the `section_image_map` artifact, instead of recording only the cover image.
+- Script subprocess calls now use UTF-8 safe decoding so Windows GBK consoles do not break image preflight or visual-gate output parsing.
+- `config.example.json` and `scripts/install.py` now point to the tracked project `scripts/image_gen.py` instead of the old external script path.
+- Added `docs/IMAGE_PROVIDER_SETUP.md` to document private credential placement, Hermes OAuth boundaries, provider selection, and acceptance criteria.
+
+### Verification
+- Local targeted tests: `python -m pytest tests/test_image_provider.py tests/test_adapters.py tests/test_tool_registry.py -q` => `23 passed`.
+- Local full suite: `python -m pytest -q` => `357 passed, 2 subtests passed`.
+- Server targeted tests after sync: `python3 -m pytest tests/test_image_provider.py tests/test_adapters.py -q` => `15 passed`.
+- Server CLI import/help smoke confirmed `content_platform/image_provider.py` and `scripts/image_gen.py` are present and parseable.
+- Server real MediaBridge smoke using production `config.json` generated an image artifact under the configured data artifacts directory.
+
+### 2026-07-30 - Stock Image Search Integrated Into Image Provider
+
+- Added `stock`, `pexels`, and `pixabay` providers to `content_platform.image_provider`.
+- `--provider auto` now tries OpenAI, Gemini, licensed stock search, then Pollinations.
+- Stock results record provider, mode, query, source URL, photographer/user, and license metadata.
+- `scripts/image_gen.py`, `config.example.json`, and `scripts/install.py` now expose the unified generated/edit/search image chain.
+- `MediaBridge` now chooses image package size by channel when `min_count` is unset: long-form article channels get cover plus inline images, Xiaohongshu gets carousel-ready images, and short-form channels keep a single cover.
+- Text-to-image is available through generated providers; image editing remains limited to OpenAI/Gemini because stock search and Pollinations intentionally fail closed for edits.
+
+### 2026-07-30 - Video Workflows Consume Image Provider Assets
+
+- Original card/knowledge video generation now prepares image assets before rendering.
+- `MediaBridge._generate_video()` reuses existing job image artifacts or calls the unified image chain to create scene backgrounds.
+- Scene backgrounds are written under the video artifact directory and recorded in `video_visual_assets.json`.
+- `scripts/video_toolchain_runner.py` loads `VIDEO_VISUAL_ASSETS_PATH`, binds scene images to cards, and records the bindings in the runner manifest.
+- Required original video manifests now fail closed when visual asset assignments are missing or incomplete.
+- `localized_repost_video` remains source-video-first and does not fabricate generated backgrounds.
+- Removed a hardcoded Pixabay credential from `scripts/kuaishou_render.py`; it now reads `PIXABAY_API_KEY` from the private runtime environment.
+- `scripts/kuaishou_render.py` now detects image MIME from file bytes instead of suffix, so stock JPEG/WebP files saved through `.png` artifact paths still render correctly as video backgrounds.
+- Replaced the corrupted legacy `scripts/pexels_image_search.py` with a UTF-8 compatibility wrapper that routes through the unified `content_platform.image_provider` stock provider.
+- Server Pipeline smoke with quality gate forced to pass for test isolation reached `generate_or_collect_images`, wrote one image artifact, and passed `validate_image_requirements`.
+- Local and server real multi-image smokes generated 3 images: one cover and two section images, with `section_image_map.json` present.
+
+### Operational Note
+- Server direct Gemini image smoke now reaches Google with the configured private Gemini key, but Google returns quota/billing error `HTTP 429`. The project-side provider path is wired; the remaining blocker is account quota/billing.
+- Server direct OpenAI image smoke still has no service-readable `OPENAI_API_KEY`. Hermes agent-native image generation can create images, but the verified smoke returned provider `pollinations`, not GPT Image. Do not record that as OpenAI output.
+- To make OpenAI/Gemini production-usable, configure `{{CONTENT_PLATFORM_HOME}}/secrets/image.env` with private keys that have image-generation quota or expose a stable Hermes local image proxy that reports the true upstream provider.
+
+## 2026-08-01 - Article-to-Explainer Video and Viral Monitor Integration
+
+### Fixed
+- Added `content_platform.explainer_video` as a first-class article-to-knowledge-video planner. It converts a finished Markdown article into a PPT-style explainer storyboard, narration script, per-page image prompts, and a `video_toolchain_plan.json`.
+- Added CLI command:
+  - `python -m content_platform article-video --input article.md --output-dir data/artifacts/article_video`
+- The generated plan now uses `content_form=article_explainer_video`, `selected_pipeline=article_explainer_video`, and `template_family=chaptered_explainer`.
+- Existing generated-video gates remain mandatory: section images, voiceover, lower-third subtitles, online real-instrument BGM, Cinema storyboard, Shotcraft motion plan, renderer manifest, and post-render visual gate.
+- Added `content_platform.viral_monitor` with R/M/T-style scoring for collected works. It turns multi-platform account observations into ranked `viral_candidates` and `topic_ammo`, so trend collection is not just raw title scraping.
+- Added CLI command:
+  - `python -m content_platform viral-monitor --input posts.json --output data/reports/viral_monitor.json`
+
+### Operational Rule
+- Knowledge-video work should now follow: platform trend/account evidence -> article generation -> `article-video` package -> image provider assets -> video toolchain runner -> media quality gates -> publish or manual handoff by channel policy.
+- Hermes must not treat article-to-video as an external ad-hoc script. It is a project workflow entrypoint and should be called through the CLI or Pipeline media path so reports, manifests, BGM evidence, image assignments, and visual gates remain observable.

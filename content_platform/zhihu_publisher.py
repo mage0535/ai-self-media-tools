@@ -7,6 +7,95 @@ from .formatters import format_for_platform
 from .models import DeliveryResult
 
 
+def _text_length(value):
+    return len("".join(str(value or "").split()))
+
+
+def _artifact_source(item):
+    url = item.get("url") or item.get("public_url") or ""
+    if isinstance(url, str) and url.startswith("http"):
+        return url
+    path = item.get("path") or ""
+    if path and Path(path).is_file():
+        return str(Path(path))
+    return ""
+
+
+def _section_map_valid(section_map):
+    if not isinstance(section_map, list) or len(section_map) < 3:
+        return False
+    seen = set()
+    for item in section_map:
+        if not isinstance(item, dict):
+            return False
+        image = str(item.get("image") or "").strip()
+        if not image or image in seen:
+            return False
+        seen.add(image)
+        if not item.get("section") or not item.get("purpose") or not item.get("adjacent_to_text"):
+            return False
+        purpose = str(item.get("purpose") or item.get("match_reason") or "").casefold()
+        if any(word in purpose for word in ["decorative", "random", "scenery", "unrelated", "placeholder"]):
+            return False
+    return True
+
+
+def _mapped_sources(section_map, artifacts):
+    lookup = {}
+    for item in artifacts:
+        source = _artifact_source(item)
+        if not source:
+            continue
+        keys = {str(item.get("url") or ""), str(item.get("public_url") or ""), str(item.get("path") or "")}
+        keys.add(Path(str(item.get("path") or source)).name)
+        for key in keys:
+            if key:
+                lookup[key] = source
+    sources = []
+    for row in section_map:
+        image = str(row.get("image") or "")
+        source = lookup.get(image) or lookup.get(Path(image).name)
+        if not source:
+            return []
+        sources.append(source)
+    return sources
+
+
+def _article_guard(job, title, body_text, platform_payload):
+    artifacts = job.get("artifacts") or []
+    draft_meta = job.get("draft_meta") or {}
+    section_map = (
+        platform_payload.get("section_image_map")
+        or draft_meta.get("section_image_map")
+        or job.get("section_image_map")
+        or []
+    )
+    template = (
+        platform_payload.get("visual_template_selection")
+        or draft_meta.get("visual_template_selection")
+        or job.get("visual_template_selection")
+        or {}
+    )
+    covers = [item for item in artifacts if item.get("kind") == "cover" and _artifact_source(item)]
+    images = [item for item in artifacts if item.get("kind") == "image" and _artifact_source(item)]
+    missing = []
+    if _text_length(title) < 8:
+        missing.append("title")
+    if _text_length(body_text) < 1200:
+        missing.append("body_1200_chars")
+    if not covers:
+        missing.append("cover_image")
+    if len(images) < 3:
+        missing.append("inline_images_3")
+    if not _section_map_valid(section_map):
+        missing.append("valid_section_image_map_3")
+    elif len(_mapped_sources(section_map, artifacts)) < 3:
+        missing.append("mapped_inline_images_3")
+    if not isinstance(template, dict) or not template.get("selected"):
+        missing.append("visual_template_selection")
+    return missing
+
+
 class ZhihuPublisher:
     def __init__(self, account="main", cookie_dir=str(Path.home() / "social-auto-upload" / "cookies"),
                  proxy="socks5://127.0.0.1:1080", headless=True, save_as_draft=True):
@@ -77,6 +166,13 @@ class ZhihuPublisher:
         page.wait_for_timeout(500)
 
     def deliver(self, job, platform):
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        title = formatted.get("title", job.get("title", ""))[:100]
+        body_text = job.get("body", "")
+        missing = _article_guard(job, title, body_text, formatted)
+        if missing:
+            return DeliveryResult(False, "blocked", error=f"zhihu article package incomplete: {', '.join(missing)}")
+
         cookie_file = resolve_cookie_file("zhihu", self.account, self.cookie_dir)
         if not cookie_file.is_file():
             return DeliveryResult(False, "blocked", error=f"zhihu cookie not found: {cookie_file}")
@@ -85,20 +181,19 @@ class ZhihuPublisher:
         except ImportError:
             return DeliveryResult(False, "blocked", error="playwright not installed")
 
-        formatted = job.get("platform_payload") or format_for_platform(job, platform)
-        title = formatted.get("title", job.get("title", ""))[:100]
-        body_text = job.get("body", "")
-
-        # Collect external image URLs (separate cover from inline)
-        cover_url = ""
-        ext_images = []
+        section_map = (
+            formatted.get("section_image_map")
+            or (job.get("draft_meta") or {}).get("section_image_map")
+            or job.get("section_image_map")
+            or []
+        )
+        cover_source = ""
         for item in job.get("artifacts", []):
-            if item.get("kind") == "cover":
-                url = item.get("url") or item.get("public_url") or ""
-                if url.startswith("http"): cover_url = url
-            elif item.get("kind") == "image":
-                url = item.get("url") or item.get("public_url") or ""
-                if url.startswith("http"): ext_images.append(url)
+            source = _artifact_source(item)
+            if item.get("kind") == "cover" and source:
+                cover_source = source
+                break
+        image_sources = _mapped_sources(section_map, job.get("artifacts", []))
 
         try:
             storage = json.loads(cookie_file.read_text(encoding="utf-8"))
@@ -119,11 +214,13 @@ class ZhihuPublisher:
 
             # 1) Upload external images to zhihu CDN
             cdn_urls = []
-            for i, img_url in enumerate(ext_images):
+            for i, img_source in enumerate([cover_source, *image_sources]):
                 try:
-                    import urllib.request
-                    local = f"/tmp/zhihu_upload_{i}.jpg"
-                    urllib.request.urlretrieve(img_url, local)
+                    local = str(img_source)
+                    if str(img_source).startswith("http"):
+                        import urllib.request
+                        local = f"/tmp/zhihu_upload_{i}.jpg"
+                        urllib.request.urlretrieve(img_source, local)
                     cdn = self._upload_to_zhihu_cdn(page, local)
                     if cdn:
                         # Fix domain: pic-private → pic1.zhimg (MD import only recognizes zhimg.com)
@@ -133,18 +230,22 @@ class ZhihuPublisher:
                 except Exception as e:
                     print(f"  Upload {i} failed: {e}")
 
-            # 2) Build markdown with CDN image URLs at marker positions
             md_body = body_text
-            for url in cdn_urls:
-                # Replace the first empty image marker with the CDN URL
-                # Markers look like: ![工具对比]  or  ![插图]
-                import re as _re
-                replaced = _re.sub(r'!\[([^\]]*)\]\(\)', f'![插图]({url})', md_body, count=1)
-                if replaced == md_body:
-                    # No empty marker found, append at end
-                    md_body += f"\n\n![插图]({url})"
-                else:
+            if cdn_urls:
+                md_body = f"![cover]({cdn_urls[0]})\n\n{md_body}"
+            import re as _re
+            for row, url in zip(section_map, cdn_urls[1:]):
+                label = str(row.get("purpose") or row.get("section") or "image")
+                replaced = _re.sub(r'!\[([^\]]*)\]\(\)', f'![{label}]({url})', md_body, count=1)
+                if replaced != md_body:
                     md_body = replaced
+                    continue
+                marker = str(row.get("section") or "").strip()
+                if marker and marker in md_body:
+                    md_body = md_body.replace(marker, f"{marker}\n\n![{label}]({url})", 1)
+                    continue
+                browser.close()
+                return DeliveryResult(False, "blocked", error="zhihu article image markers do not match section_image_map")
 
             md_path = Path("/tmp") / f"zhihu_{job.get('id', 'article')}.md"
             md_path.write_text(md_body, encoding="utf-8")

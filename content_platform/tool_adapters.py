@@ -13,6 +13,8 @@ class _BaseScriptProvider:
             [sys.executable, self.script, str(target), *(extra_args or [])],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=self.timeout,
             check=False,
             env=env,

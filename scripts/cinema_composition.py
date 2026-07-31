@@ -33,7 +33,7 @@ SCENE_COLOR_MAP = {
         "accent": (0, 200, 255),       # 青蓝 (终端绿/蓝)
         "source": "显示器蓝光 + 暗室环境",
         "mood": "专注、冷静、高信息密度",
-        "bgm_hint": "ambient electronic, minimal synth",
+        "bgm_hint": "soft piano and light strings",
     },
     r"AI|人工智能|机器学习|大模型|训练|推理": {
         "primary": (15, 10, 25),       # 深紫黑
@@ -41,7 +41,7 @@ SCENE_COLOR_MAP = {
         "accent": (180, 120, 255),     # 紫罗兰
         "source": "服务器指示灯 + 数据流光晕",
         "mood": "前沿、深邃、高能量",
-        "bgm_hint": "synthwave, cyberpunk ambient",
+        "bgm_hint": "muted percussion and low strings",
     },
     # 效率 / 工作流 / 自动化
     r"效率|工作流|自动化|流程|管线|pipeline|workflow": {
@@ -77,7 +77,7 @@ SCENE_COLOR_MAP = {
         "accent": (50, 210, 120),      # GitHub 绿
         "source": "屏幕投射 + 桌面灯光",
         "mood": "务实、可信、有活力",
-        "bgm_hint": "lo-fi beats, hip hop instrumental",
+        "bgm_hint": "upright piano and brushed drums",
     },
     # 创意 / 设计 / 视觉
     r"设计|创意|UI|UX|视觉|排版|审美": {
@@ -86,7 +86,7 @@ SCENE_COLOR_MAP = {
         "accent": (255, 100, 100),     # 珊瑚红
         "source": "设计台灯 + 校色屏幕",
         "mood": "干净、利落、高审美",
-        "bgm_hint": "jazz, chill electronic",
+        "bgm_hint": "live jazz trio with brushed drums",
     },
     # 默认回退
     r"": {

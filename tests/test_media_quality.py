@@ -137,6 +137,11 @@ def complete_video_metadata(platform: str = "kuaishou"):
         "visual_content_policy": visual_content_policy([platform], "short_video"),
         "video_plan": complete_video_plan(),
         "real_scene_background_plan": complete_real_scene_background_plan(8),
+        "bgm_source": {
+            "source": "licensed_music_manifest",
+            "license": "cc-by",
+            "fit_reason": "low-volume bed selected to support narration",
+        },
         "first_three_second_value": "the opening states the mistake to avoid before the user scrolls away",
         "differentiation_dimensions": ["diagnostic structure", "checklist visuals", "warning-first opening"],
         "platform_adaptation": adaptation,
@@ -360,7 +365,11 @@ def complete_wechat_auto_packet():
             "github_non_ai_projects": [{"repo": "owner/non-ai-repo", "url": "https://github.com/owner/non-ai-repo"}],
             "hot_content_items": [{"title": "h1"}, {"title": "h2"}, {"title": "h3"}],
         },
-        "selected_project": {"repo": "owner/repo", "url": "https://github.com/owner/repo"},
+        "selected_project": {
+            "repo": "owner/repo",
+            "url": "https://github.com/owner/repo",
+            "screenshot_url": "https://cdn.example/github-owner-repo.png",
+        },
         "batch_plan": {"expected_count": 2, "item_index": 1},
         "section_image_map": [
             {"section": "why", "image": "01.png", "purpose": "show repository value", "adjacent_to_text": True},
@@ -407,6 +416,7 @@ def complete_kuaishou_auto_packet():
             "font_size": 48,
             "max_chars_per_line": 16,
             "max_lines": 2,
+            "margin_v": 200,
         },
         "visual_probe": {"occupied_frame_ratio": 0.94, "distinct_scene_count": 8, "unique_source_count": 4},
         "knowledge_card_sequence": [
@@ -462,6 +472,7 @@ def complete_kuaishou_auto_packet():
         },
         "bgm": {
             "source": "jamendo",
+            "source_url": "https://jamendo.example/track/123",
             "license": "cc-by",
             "fit_reason": "acoustic bed does not mask the narration",
             "manifest": {
@@ -703,6 +714,16 @@ def test_wechat_auto_packet_requires_github_source_and_inline_images():
     assert "github_project_source" in result["failed_dimensions"]
 
 
+def test_wechat_auto_packet_requires_github_project_link_and_visual():
+    packet = complete_wechat_auto_packet()
+    packet["selected_project"] = {"repo": "owner/repo", "url": "https://github.com/owner/repo"}
+
+    result = validate_wechat_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "github_project_source" in result["failed_dimensions"]
+
+
 def test_wechat_auto_packet_requires_operations_context_before_content_workflow():
     packet = complete_wechat_auto_packet()
     assert validate_wechat_auto_packet(packet)["passed"] is True
@@ -848,6 +869,72 @@ def test_kuaishou_auto_packet_requires_bgm_license_manifest():
 
     assert result["passed"] is False
     assert "bgm_license_manifest" in result["failed_dimensions"]
+
+
+def test_kuaishou_auto_packet_requires_bgm_source_url_in_manifest():
+    packet = complete_kuaishou_auto_packet()
+    packet["bgm"]["manifest"] = {
+        "asset_id": "jamendo-123",
+        "license": "cc-by",
+        "fingerprint": "sha256:test-bgm",
+    }
+
+    result = validate_kuaishou_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "bgm_license_manifest" in result["failed_dimensions"]
+
+
+def test_kuaishou_auto_packet_rejects_any_bgm_fallback_even_with_reason():
+    packet = complete_kuaishou_auto_packet()
+    packet["bgm"]["fallback_used"] = True
+    packet["bgm"]["fallback_exception_reason"] = "all online sources timed out"
+
+    result = validate_kuaishou_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "no_silent_bgm_fallback" in result["failed_dimensions"]
+
+
+def test_kuaishou_auto_packet_rejects_bad_subtitle_layout():
+    packet = complete_kuaishou_auto_packet()
+    packet["burned_captions"]["margin_v"] = 60
+    packet["burned_captions"]["max_chars_per_line"] = 30
+
+    result = validate_kuaishou_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "subtitle_layout" in result["failed_dimensions"]
+
+
+def test_kuaishou_auto_packet_rejects_generated_synthetic_bgm_source():
+    packet = complete_kuaishou_auto_packet()
+    packet["bgm"] = {
+        "source": "generated_synthetic_bgm",
+        "license": "operator_provided",
+        "fit_reason": "fallback",
+        "manifest": {"asset_id": "synthetic", "license": "operator_provided", "fingerprint": "x"},
+    }
+
+    result = validate_kuaishou_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "real_music_source" in result["failed_dimensions"]
+
+
+def test_kuaishou_auto_packet_rejects_local_bgm_library_source():
+    packet = complete_kuaishou_auto_packet()
+    packet["bgm"] = {
+        "source": "local_instrument_bgm_library",
+        "license": "operator_provided",
+        "fit_reason": "local fallback",
+        "manifest": {"asset_id": "local", "license": "operator_provided", "fingerprint": "x"},
+    }
+
+    result = validate_kuaishou_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "real_music_source" in result["failed_dimensions"]
 
 
 def test_kuaishou_auto_packet_requires_real_video_artifact_probe():
@@ -1059,6 +1146,7 @@ def test_video_packet_rejects_silent_static_or_unverified_assets():
         "video_plan",
         "audio_stream",
         "audio_composition",
+        "background_music_source",
         "natural_voice",
         "subtitle_or_readable_cards",
         "lower_third_captions",

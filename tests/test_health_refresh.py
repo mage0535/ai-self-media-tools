@@ -9,11 +9,11 @@ from content_platform.health_refresh import classify_platform_health, refresh_de
 
 
 class HealthRefreshTests(unittest.TestCase):
-    def test_file_domestic_route_stays_unverified(self):
+    def test_file_manual_only_domestic_route_stays_manual_handoff(self):
         with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
             entry = classify_platform_health("douyin", {"type": "file"})
 
-        self.assertEqual(entry["state"], "route_unverified")
+        self.assertEqual(entry["state"], "manual_handoff_only")
         self.assertFalse(entry["can_publish_now"])
 
     def test_domestic_route_requires_cn_proxy_before_probe(self):
@@ -92,8 +92,8 @@ class HealthRefreshTests(unittest.TestCase):
 
             saved = json.loads(out.read_text(encoding="utf-8"))
 
-        self.assertEqual(result["platforms"]["douyin"]["state"], "route_unverified")
-        self.assertEqual(saved["platforms"]["douyin"]["state"], "route_unverified")
+        self.assertEqual(result["platforms"]["douyin"]["state"], "manual_handoff_only")
+        self.assertEqual(saved["platforms"]["douyin"]["state"], "manual_handoff_only")
 
     def test_known_token_publisher_is_usable_when_secret_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -150,6 +150,34 @@ class HealthRefreshTests(unittest.TestCase):
         self.assertEqual(entry["state"], "auth_required")
         self.assertFalse(entry["can_publish_now"])
         self.assertIn("playwright", entry["reason"])
+
+    def test_x_playwright_is_usable_when_cookie_and_playwright_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie_dir = Path(tmp)
+            (cookie_dir / "twitter_main.json").write_text(
+                json.dumps([{"name": "auth_token", "value": "x"}, {"name": "ct0", "value": "y"}]),
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"US_PROXY": "socks5://127.0.0.1:1091"}, clear=True):
+                with patch("content_platform.health_refresh.importlib.util.find_spec", return_value=object()):
+                    entry = classify_platform_health(
+                        "twitter",
+                        {"type": "x-playwright", "account": "main", "cookie_dir": str(cookie_dir)},
+                    )
+
+        self.assertEqual(entry["state"], "usable")
+        self.assertTrue(entry["can_publish_now"])
+
+    def test_manual_only_platforms_override_any_auto_health_route(self):
+        with patch.dict(os.environ, {"US_PROXY": "socks5://127.0.0.1:1091"}, clear=True):
+            for platform in ["douyin", "shipinhao", "tiktok", "xiaohongshu"]:
+                entry = classify_platform_health(
+                    platform,
+                    {"type": "aitoearn-flow", "account_id": "acct", "api_key": "secret"},
+                )
+                self.assertEqual(entry["state"], "manual_handoff_only")
+                self.assertFalse(entry["can_publish_now"])
+                self.assertIn("manual-only", entry["reason"])
 
 
 if __name__ == "__main__":

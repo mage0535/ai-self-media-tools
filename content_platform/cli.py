@@ -178,6 +178,16 @@ def parser():
                     help="Action: hotspots=topic discovery, topic=scored topics, article=write draft, full=complete pipeline")
     ww.add_argument("--topic", default="", help="Topic for article action")
     ww.add_argument("--output", default="", help="Output path for generated article")
+    explainer = sub.add_parser("article-video", help="Build an article-to-explainer-video package")
+    explainer.add_argument("--input", required=True, help="Markdown article path")
+    explainer.add_argument("--output-dir", required=True, help="Output directory for storyboard and plans")
+    explainer.add_argument("--title", default="")
+    explainer.add_argument("--pages", type=int, default=8)
+    explainer.add_argument("--aspect-ratio", default="16:9")
+    explainer.add_argument("--presenter-side", choices=["left", "right", "none"], default="right")
+    viral = sub.add_parser("viral-monitor", help="Score collected platform works for growth decisions")
+    viral.add_argument("--input", required=True, help="JSON file containing posts or {posts,recent_by_account}")
+    viral.add_argument("--output", default="")
     return p
 
 
@@ -312,6 +322,12 @@ def execute(args):
         return audit_project(Path.cwd())
     if args.command == "wewrite":
         return _exec_wewrite(args, config)
+    if args.command == "article-video":
+        from .explainer_video import write_explainer_package
+        return write_explainer_package(args.input, args.output_dir, args.title, args.pages, args.aspect_ratio, args.presenter_side)
+    if args.command == "viral-monitor":
+        from .viral_monitor import score_posts_file
+        return score_posts_file(args.input, args.output)
     if args.command == "analyze-topic":
         brief = json.loads(args.brief)
         if not isinstance(brief, dict):

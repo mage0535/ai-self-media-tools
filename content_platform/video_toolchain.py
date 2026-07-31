@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-VIDEO_FORMS = {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video"}
+VIDEO_FORMS = {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video", "article_explainer_video"}
 MIXED_VIDEO_FORMS = {"image_text_knowledge_card_short_video_mix"}
 VIDEO_ASSETS = {"short_video", "source_video", "human_voiceover", "background_music", "knowledge_cards"}
 SHORT_VIDEO_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "bilibili", "tiktok", "youtube"}
@@ -59,7 +59,7 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
             "subtitle_renderer": "hermes_tool:lower_third_subtitle_renderer",
             "subtitle_burner": "script:scripts/kuaishou_render.py::encode_final",
             "final_encoder": "script:scripts/kuaishou_render.py::encode_final",
-            "background_music": "hermes_tool:licensed_bgm_selector",
+            "background_music": "script:scripts/kuaishou_render.py::download_bgm",
             "effect_template_renderer": "hermes_tool:short_video_renderer",
             "visual_gate": "script:scripts/visual_gate.py --cinema",
         },
@@ -120,6 +120,8 @@ def _select_pipeline(platforms: list[str], content_form: str, asset_plan: set[st
     line = str(brief.get("content_line") or brief.get("video_line") or "").casefold()
     if "repost" in line or "source_video" in asset_plan or "douyin" in platforms or "tiktok" in platforms:
         return "localized_repost_video"
+    if content_form == "article_explainer_video":
+        return "article_explainer_video"
     if "bilibili" in platforms or "youtube" in platforms:
         return "tutorial_video"
     if content_form == "image_text_knowledge_card_short_video_mix":
@@ -134,6 +136,8 @@ def _select_template_family(platforms: list[str], content_form: str, brief: dict
         return "pet_repost_real_behavior"
     if "shipinhao" in platforms:
         return "wechat_ecosystem_microcase"
+    if content_form == "article_explainer_video":
+        return "chaptered_explainer"
     if "bilibili" in platforms or "youtube" in platforms:
         return "chaptered_tutorial"
     if content_form == "image_text_knowledge_card_short_video_mix":
@@ -148,7 +152,7 @@ def _required_tools(selected_pipeline: str, content_form: str, asset_plan: set[s
         "shotcraft_motion_designer",
         "voiceover",
         "lower_third_subtitles",
-        "licensed_bgm_selector",
+            "online_real_instrument_bgm_resolver",
         "effect_template_renderer",
         "card_renderer",
         "tts_renderer",
@@ -162,6 +166,8 @@ def _required_tools(selected_pipeline: str, content_form: str, asset_plan: set[s
     if selected_pipeline == "localized_repost_video" or "source_video" in asset_plan:
         tools.insert(0, "source_video_discovery")
         tools.insert(1, "source_asset_matcher")
+    if selected_pipeline == "article_explainer_video":
+        tools.insert(0, "article_explainer_planner")
     if content_form == "image_text_knowledge_card_short_video_mix":
         tools.append("manual_handoff_package_builder")
     return tools

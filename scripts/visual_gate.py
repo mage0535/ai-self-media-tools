@@ -18,14 +18,15 @@ def check_image(path: str, cinema_check: bool = False, min_size_kb: int = MIN_SI
     reports: list[str] = []
     ok = True
     image_path = Path(path)
+    effective_min_size_kb = min(min_size_kb, 8) if cinema_check else min_size_kb
 
     if not image_path.exists():
         return False, ["文件不存在"]
 
     size_kb = image_path.stat().st_size / 1024
     reports.append(f"大小: {size_kb:.0f}KB")
-    if size_kb < min_size_kb:
-        reports.append(f"小于 {min_size_kb}KB，可能是纯色或空白图")
+    if size_kb < effective_min_size_kb:
+        reports.append(f"小于 {effective_min_size_kb}KB，可能是纯色或空白图")
         ok = False
 
     try:

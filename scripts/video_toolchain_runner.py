@@ -43,6 +43,7 @@ THEME_BY_TEMPLATE = {
     "pet_repost_real_behavior": "mint-fresh",
     "wechat_ecosystem_microcase": "blueprint",
     "chaptered_tutorial": "blueprint",
+    "chaptered_explainer": "blueprint",
     "social_note_motion_cards": "mint-fresh",
     "knowledge_card_motion_case": "cyber-neon",
 }
@@ -102,14 +103,16 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     script_body = argv[0] if argv else ""
     title = argv[1] if len(argv) > 1 else "Untitled video"
-    output_dir = Path(os.environ.get("VIDEO_OUTPUT_DIR") or ROOT / "data" / "artifacts" / "video_toolchain")
+    output_dir = Path(os.environ.get("VIDEO_OUTPUT_DIR") or ROOT / "data" / "artifacts" / "video_toolchain").resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     plan = _load_plan()
     if str(plan.get("selected_pipeline") or "") == "localized_repost_video" and os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") != "1":
         return _run_localized_repost(plan, output_dir, title)
+    visual_assets = _load_visual_assets()
+    materialized_backgrounds = _materialize_visual_backgrounds(output_dir, visual_assets)
     cinema_scenes = storyboard(script_body or title, 8)
     shotcraft_plan = _shotcraft_motion_plan(script_body or title)
-    cards = build_cards(script_body, title, plan, cinema_scenes, shotcraft_plan)
+    cards = build_cards(script_body, title, plan, cinema_scenes, shotcraft_plan, visual_assets)
     cards_path = output_dir / "cards.json"
     cards_path.write_text(json.dumps(cards, ensure_ascii=False, indent=2), encoding="utf-8")
     renderer = _renderer_path(plan)
@@ -130,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         "dry_run": os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1",
         "cinema_storyboard": cinema_scenes,
         "shotcraft_motion_plan": shotcraft_plan,
+        "visual_assets": visual_assets,
+        "materialized_backgrounds": materialized_backgrounds,
     }
     if manifest["dry_run"]:
         fake = output_dir / "dry_run.mp4"
@@ -171,9 +176,11 @@ def build_cards(
     plan: dict,
     cinema_scenes: list[dict] | None = None,
     shotcraft_plan: dict | None = None,
+    visual_assets: dict | None = None,
 ) -> list[dict]:
     beats = _beats(script_body)
     shotcraft_timeline = list((shotcraft_plan or {}).get("timeline") or [])
+    visual_assignments = list((visual_assets or {}).get("assignments") or [])
     cards = []
     for index in range(8):
         beat = beats[index] if index < len(beats) else f"Step {index + 1}: keep the visual rhythm aligned with the script."
@@ -194,6 +201,8 @@ def build_cards(
             "css": scene.get("css", {}),
             "shotcraft": _shotcraft_for_card(shotcraft_timeline, index),
         }
+        if visual_assignments:
+            card["visual_asset"] = visual_assignments[index % len(visual_assignments)]
         if layout == "cover":
             card.update({"sub": _summary(script_body)[:40], "hook": title[:42], "hook_prefix": "Auto selected video workflow"})
         if layout == "card_stack":
@@ -283,6 +292,57 @@ def _load_plan() -> dict:
     }
 
 
+def _load_visual_assets() -> dict:
+    path = os.environ.get("VIDEO_VISUAL_ASSETS_PATH", "")
+    if not path:
+        return {}
+    source = Path(path)
+    if not source.is_file():
+        return {"error": "VIDEO_VISUAL_ASSETS_PATH missing", "path": path, "assignments": []}
+    try:
+        return json.loads(source.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"error": f"failed to load visual assets: {type(exc).__name__}", "path": path, "assignments": []}
+
+
+def _materialize_visual_backgrounds(output_dir: Path, visual_assets: dict) -> list[dict]:
+    assignments = list((visual_assets or {}).get("assignments") or [])
+    if not assignments:
+        return []
+    bg_dir = output_dir / "backgrounds"
+    bg_dir.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for index, item in enumerate(assignments, 1):
+        if not isinstance(item, dict):
+            continue
+        source_value = (
+            item.get("background_image")
+            or item.get("image")
+            or item.get("path")
+            or item.get("asset_path")
+            or ""
+        )
+        source = Path(str(source_value))
+        if not source.is_file():
+            continue
+        suffix = source.suffix.lower() if source.suffix else ".jpg"
+        dest = bg_dir / f"bg_{index:02d}{suffix}"
+        if source.resolve() != dest.resolve():
+            shutil.copy2(source, dest)
+        item["background_image"] = str(dest)
+        item["materialized_background"] = str(dest)
+        copied.append(
+            {
+                "scene": item.get("scene") or index,
+                "source": str(source),
+                "path": str(dest),
+                "rights_cleared": bool(item.get("rights_cleared", True)),
+                "real_scene": bool(item.get("real_scene", True)),
+            }
+        )
+    return copied
+
+
 def _renderer_path(plan: dict) -> Path:
     env_key = "VIDEO_RENDERER_" + re.sub(r"[^A-Z0-9]+", "_", str(plan.get("selected_pipeline") or "").upper())
     return Path(os.environ.get(env_key) or os.environ.get("VIDEO_TOOLCHAIN_RENDERER") or DEFAULT_RENDERER)
@@ -313,7 +373,7 @@ def _bgm_style(cinema_scenes: list[dict]) -> str:
         hint = str(scheme.get("bgm_hint") or scheme.get("bgm") or "").strip()
         if hint:
             return hint[:80]
-    return "warm optimistic electronic"
+    return "warm acoustic guitar and light piano"
 
 
 def _toolchain_contract(plan: dict, theme: str, bgm_style: str, renderer: Path) -> dict:
@@ -330,6 +390,7 @@ def _toolchain_contract(plan: dict, theme: str, bgm_style: str, renderer: Path) 
         },
         "bgm_style": bgm_style,
         "post_render_gates": ["visual_gate.py --cinema"],
+        "visual_asset_contract": "VIDEO_VISUAL_ASSETS_PATH assignments are bound to cards when provided",
     }
 
 

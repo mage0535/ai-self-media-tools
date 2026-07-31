@@ -52,6 +52,7 @@ class WorkflowStepRunner:
         self.notifier = notifier
 
     def succeeded(self, step_name, output=None, required=True, depends_on=None, message=""):
+        self._notify("workflow_step_succeeded", step_name, message=message)
         self.store.save_workflow_step(
             self.workflow_id,
             self.job_id,
@@ -67,6 +68,7 @@ class WorkflowStepRunner:
         )
 
     def skipped(self, step_name, reason_code, message, required=False, depends_on=None):
+        self._notify("workflow_step_skipped", step_name, reason_code=reason_code, message=message)
         self.store.save_workflow_step(
             self.workflow_id,
             self.job_id,
@@ -82,6 +84,7 @@ class WorkflowStepRunner:
         )
 
     def block(self, step_name, reason_code, message, gate_result=None, depends_on=None):
+        self._notify("workflow_step_blocked", step_name, reason_code=reason_code, message=message)
         self.store.save_workflow_step(
             self.workflow_id,
             self.job_id,
@@ -113,6 +116,7 @@ class WorkflowStepRunner:
             input_payload=input_payload or {},
             started_at=started,
         )
+        self._notify("workflow_step_started", step_name)
         try:
             result = func()
             if require_output and result in (None, "", [], {}):
@@ -131,6 +135,7 @@ class WorkflowStepRunner:
                 finished_at=finished,
                 duration_ms=int((time.monotonic() - started_mono) * 1000),
             )
+            self._notify("workflow_step_succeeded", step_name)
             return result
         except WorkflowBlocked:
             raise
@@ -150,9 +155,31 @@ class WorkflowStepRunner:
                 finished_at=utc_now(),
                 duration_ms=int((time.monotonic() - started_mono) * 1000),
             )
+            self._notify("workflow_step_failed", step_name, reason_code="exception", message=redact_secrets(exc))
             if required:
                 raise
             return None
+
+    def _notify(self, event, step_name, reason_code="", message=""):
+        if not self.notifier:
+            return
+        try:
+            self.notifier.send(
+                event,
+                {
+                    "id": self.job_id,
+                    "title": self.job_id,
+                    "state": event,
+                    "platforms": [self.platform] if self.platform else [],
+                    "workflow_id": self.workflow_id,
+                    "step_name": step_name,
+                    "reason_code": reason_code,
+                    "message": message,
+                },
+            )
+        except Exception:
+            # Progress reporting must never break the workflow itself.
+            return
 
     def _assert_dependencies(self, depends_on, step_name):
         if not depends_on:

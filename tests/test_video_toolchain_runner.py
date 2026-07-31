@@ -336,27 +336,195 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             with patch("scripts.kuaishou_render.subprocess.run", return_value=fake):
                 assert_output(str(video), 2_000_000, "short.mp4")
 
-    def test_bgm_download_falls_back_to_generated_synthetic_audio(self):
+    def test_bgm_download_uses_online_real_instrument_candidate(self):
+        from scripts.kuaishou_render import download_bgm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "raw.mp4").write_bytes(b"0" * 80_000)
+            candidate = {
+                "provider": "pixabay_music",
+                "download_url": "https://cdn.example/acoustic-guitar.mp3",
+                "source_url": "https://pixabay.com/music/acoustic-guitar",
+                "title": "Acoustic guitar instrumental",
+                "artist": "artist",
+                "license": "Pixabay Content License",
+                "attribution_required": False,
+                "duration": 90,
+                "asset_id": "px1",
+                "tags": "acoustic guitar instrumental folk",
+                "license_verified": True,
+            }
+
+            def fake_download(row, output):
+                output.write_bytes(b"1" * 80_000)
+
+            with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
+                with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
+                    bgm = download_bgm(root, "acoustic guitar")
+
+            self.assertEqual(Path(bgm), root / "bgm.mp3")
+            source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
+            self.assertEqual(source["source"], "pixabay_music")
+            self.assertEqual(source["license"], "Pixabay Content License")
+            self.assertTrue(source["sha256"])
+
+    def test_bgm_download_replaces_stale_existing_bgm_every_render(self):
+        from scripts.kuaishou_render import download_bgm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "bgm.mp3").write_bytes(b"old" * 30_000)
+            (root / "bgm_source.json").write_text(
+                json.dumps({"source": "local_instrument_bgm_library", "license": "operator_provided"}),
+                encoding="utf-8",
+            )
+            candidate = {
+                "provider": "openverse_audio",
+                "download_url": "https://cdn.example/acoustic.mp3",
+                "source_url": "https://freesound.example/sounds/1",
+                "title": "Acoustic guitar instrumental",
+                "artist": "artist",
+                "license": "https://creativecommons.org/licenses/by/4.0/",
+                "attribution_required": True,
+                "duration": 90,
+                "asset_id": "ov1",
+                "tags": "acoustic guitar instrumental",
+                "license_verified": True,
+            }
+
+            def fake_download(row, output):
+                output.write_bytes(b"new" * 30_000)
+
+            with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
+                with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
+                    download_bgm(root, "acoustic guitar")
+
+            self.assertEqual((root / "bgm.mp3").read_bytes(), b"new" * 30_000)
+            source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
+            self.assertEqual(source["source"], "openverse_audio")
+
+    def test_bgm_download_refuses_synthetic_or_no_bgm_fallback(self):
         from scripts.kuaishou_render import download_bgm
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "raw.mp4").write_bytes(b"0" * 80_000)
 
+            with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[]):
+                with self.assertRaisesRegex(RuntimeError, "online real-instrument BGM unavailable"):
+                    download_bgm(root, "lo-fi")
+
+    def test_bgm_download_rejects_electronic_synthetic_candidates(self):
+        from scripts.kuaishou_render import download_bgm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = {
+                "provider": "pixabay_music",
+                "download_url": "https://cdn.example/synth.mp3",
+                "source_url": "https://pixabay.com/music/synth",
+                "title": "Electronic synth lofi beat",
+                "artist": "artist",
+                "license": "Pixabay Content License",
+                "tags": "electronic synth instrumental",
+            }
+
+            with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
+                with self.assertRaisesRegex(RuntimeError, "no licensed real-instrument candidates"):
+                    download_bgm(root, "electronic")
+
+    def test_openverse_candidates_require_commercial_safe_license(self):
+        from scripts.kuaishou_render import _openverse_candidates
+
+        payload = {
+            "results": [
+                {
+                    "id": "ok",
+                    "title": "Acoustic guitar instrumental",
+                    "creator": "artist",
+                    "url": "https://cdn.example/ok.mp3",
+                    "foreign_landing_url": "https://example.test/ok",
+                    "license": "by",
+                    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+                    "duration": 90000,
+                    "audio_set": {"title": "Acoustic guitar"},
+                    "tags": [{"name": "guitar"}],
+                },
+                {
+                    "id": "blocked",
+                    "title": "Acoustic guitar nc",
+                    "creator": "artist",
+                    "url": "https://cdn.example/nc.mp3",
+                    "foreign_landing_url": "https://example.test/nc",
+                    "license": "by-nc",
+                    "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+                },
+            ]
+        }
+
+        with patch("scripts.kuaishou_render._request_json", return_value=payload):
+            rows = _openverse_candidates("acoustic guitar instrumental")
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["provider"], "openverse_audio")
+        self.assertEqual(rows[0]["duration"], 90)
+        self.assertTrue(rows[0]["license_verified"])
+
+    def test_youtube_audio_library_candidates_are_youtube_scoped(self):
+        from scripts.kuaishou_render import _bgm_candidate_allowed, _youtube_audio_library_candidates
+
+        payload = {
+            "all": [
+                {"id": "drive-id", "name": "Acoustic_Guitar_Story.mp3", "mimeType": "audio/mpeg"},
+                {"id": "blocked-id", "name": "Digital_Synth_Pulse.mp3", "mimeType": "audio/mpeg"},
+            ],
+            "map": {"drive-id": "https://docs.google.com/uc?export=open&id=drive-id"},
+        }
+
+        with patch.dict(os.environ, {"BGM_TARGET_PLATFORM": "youtube"}, clear=False):
+            with patch("scripts.kuaishou_render._request_json", return_value=payload):
+                rows = _youtube_audio_library_candidates("acoustic guitar instrumental")
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["provider"], "youtube_audio_library")
+        self.assertEqual(rows[0]["license_scope"], "youtube_only")
+        with patch.dict(os.environ, {"BGM_TARGET_PLATFORM": "youtube"}, clear=False):
+            self.assertTrue(_bgm_candidate_allowed(rows[0]))
+        with patch.dict(os.environ, {"BGM_TARGET_PLATFORM": "kuaishou"}, clear=False):
+            self.assertFalse(_bgm_candidate_allowed(rows[0]))
+
+    def test_subtitles_are_wrapped_and_kept_above_bottom_safe_area(self):
+        from scripts.kuaishou_render import gen_subtitles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tts = root / "tts"
+            tts.mkdir()
+            (tts / "tts_01.mp3").write_bytes(b"0")
+
             def fake_run(command, **kwargs):
-                if command[0] == "ffprobe":
-                    return type("Result", (), {"returncode": 0, "stdout": "12.0", "stderr": ""})()
-                if command[0] == "ffmpeg":
-                    (root / "bgm.mp3").write_bytes(b"1" * 80_000)
-                    return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
-                return type("Result", (), {"returncode": 1, "stdout": "", "stderr": "network unavailable"})()
+                return type("Result", (), {"returncode": 0, "stdout": "5.0", "stderr": ""})()
 
+            cards = [{"tts": "这是一条非常长的字幕内容必须自动换行不能超过视频宽度否则就会贴边"}]
             with patch("scripts.kuaishou_render.subprocess.run", side_effect=fake_run):
-                bgm = download_bgm(root, "lo-fi")
+                gen_subtitles(root, cards)
 
-            self.assertEqual(Path(bgm), root / "bgm.mp3")
-            source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
-            self.assertEqual(source["source"], "generated_synthetic_bgm")
+            ass = (root / "subtitles.ass").read_text(encoding="utf-8")
+            self.assertIn("20,20,200", ass)
+            self.assertIn(r"\N", ass)
+
+    def test_card_html_uses_sub_as_center_body_when_txt_missing(self):
+        from scripts.kuaishou_render import build_card_html
+
+        html = build_card_html(
+            {"layout": "two_column", "t": "Title", "sub": "center body from sub"},
+            1,
+            "",
+            "",
+            {"accent": "#fff", "accent2": "#eee", "bg": "000", "text": "#ddd", "card_bg": "rgba(0,0,0,.2)", "badge_bg": "rgba(0,0,0,.2)", "glass": "rgba(0,0,0,.2)"},
+        )
+        self.assertIn("center body from sub", html)
 
     def test_packet_schedule_slot_tolerates_non_numeric_working_directory(self):
         from scripts.kuaishou_render import _safe_schedule_slot
@@ -375,8 +543,11 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         ]
         for rel in guarded:
             source = (root / rel).read_text(encoding="utf-8")
-            self.assertIn("HERMES_ALLOW_LEGACY_RENDER_DEMO", source, rel)
             self.assertIn("raise SystemExit", source, rel)
+        kuaishou_legacy = (root / "scripts/kuaishou_final_pipeline.py").read_text(encoding="utf-8")
+        self.assertNotIn("SoundHelix", kuaishou_legacy)
+        self.assertNotIn("bgm_test", kuaishou_legacy)
+        self.assertNotIn("HERMES_ALLOW_LEGACY_RENDER_DEMO", kuaishou_legacy)
 
 
 if __name__ == "__main__":

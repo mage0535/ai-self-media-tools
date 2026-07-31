@@ -8,6 +8,90 @@ from .formatters import format_for_platform
 from .models import DeliveryResult
 
 
+def _text_length(value):
+    return len("".join(str(value or "").split()))
+
+
+def _public_url(item):
+    url = item.get("url") or item.get("public_url") or ""
+    return url if isinstance(url, str) and url.startswith("http") else ""
+
+
+def _section_map_valid(section_map):
+    if not isinstance(section_map, list) or len(section_map) < 3:
+        return False
+    seen = set()
+    for item in section_map:
+        if not isinstance(item, dict):
+            return False
+        image = str(item.get("image") or "").strip()
+        if not image or image in seen:
+            return False
+        seen.add(image)
+        if not item.get("section") or not item.get("purpose") or not item.get("adjacent_to_text"):
+            return False
+        purpose = str(item.get("purpose") or item.get("match_reason") or "").casefold()
+        if any(word in purpose for word in ["decorative", "random", "scenery", "unrelated", "placeholder"]):
+            return False
+    return True
+
+
+def _mapped_public_urls(section_map, artifacts):
+    lookup = {}
+    for item in artifacts:
+        url = _public_url(item)
+        if not url:
+            continue
+        keys = {str(item.get("url") or ""), str(item.get("public_url") or ""), str(item.get("path") or "")}
+        keys.add(Path(str(item.get("path") or url)).name)
+        for key in keys:
+            if key:
+                lookup[key] = url
+    urls = []
+    for row in section_map:
+        image = str(row.get("image") or "")
+        url = lookup.get(image) or lookup.get(Path(image).name)
+        if not url:
+            return []
+        urls.append(url)
+    return urls
+
+
+def _article_guard(job, title, body_text, platform_payload):
+    artifacts = job.get("artifacts") or []
+    draft_meta = job.get("draft_meta") or {}
+    section_map = (
+        platform_payload.get("section_image_map")
+        or draft_meta.get("section_image_map")
+        or job.get("section_image_map")
+        or []
+    )
+    template = (
+        platform_payload.get("visual_template_selection")
+        or draft_meta.get("visual_template_selection")
+        or job.get("visual_template_selection")
+        or {}
+    )
+    covers = [item for item in artifacts if item.get("kind") == "cover" and _public_url(item)]
+    images = [item for item in artifacts if item.get("kind") == "image" and _public_url(item)]
+    missing = []
+    if _text_length(title) < 8:
+        missing.append("title")
+    if _text_length(body_text) < 1200:
+        missing.append("body_1200_chars")
+    if not covers:
+        missing.append("public_cover_image")
+    if len(images) < 3:
+        missing.append("public_inline_images_3")
+    if not _section_map_valid(section_map):
+        missing.append("valid_section_image_map_3")
+    elif len(_mapped_public_urls(section_map, artifacts)) < 3:
+        missing.append("mapped_public_inline_images_3")
+    if not isinstance(template, dict) or not template.get("selected"):
+        missing.append("visual_template_selection")
+    return missing
+
+
 def _read_setting(name, env_file, default=""):
     if env_file and Path(env_file).is_file():
         for line in Path(env_file).read_text(encoding="utf-8").splitlines():
@@ -63,28 +147,38 @@ class JuejinPublisher:
             return {"err_no": -1, "err_msg": str(e)}
 
     def deliver(self, job, platform):
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        title = formatted.get("title", job.get("title", ""))[:100]
+        body_text = job.get("body", "")
+        missing = _article_guard(job, title, body_text, formatted)
+        if missing:
+            return DeliveryResult(False, "blocked", error=f"juejin article package incomplete: {', '.join(missing)}")
+
         cookie_str, csrf, storage = self._cookie_and_csrf()
         if not cookie_str:
             return DeliveryResult(False, "blocked", error="juejin cookie not found")
 
-        formatted = job.get("platform_payload") or format_for_platform(job, platform)
-        title = formatted.get("title", job.get("title", ""))[:100]
-        body_text = job.get("body", "")
-
-        # Build markdown with CDN image URLs at marker positions
+        section_map = (
+            formatted.get("section_image_map")
+            or (job.get("draft_meta") or {}).get("section_image_map")
+            or job.get("section_image_map")
+            or []
+        )
+        mapped_urls = _mapped_public_urls(section_map, job.get("artifacts", []))
         md_body = body_text
-        for item in job.get("artifacts", []):
-            if item.get("kind") in ("image", "cover"):
-                url = item.get("url") or item.get("public_url") or ""
-                if url.startswith("http"):
-                    # Replace first empty image marker with the actual URL
-                    import re as _re
-                    replaced = _re.sub(r'!\[([^\]]*)\]\(\)', f'![\\1]({url})', md_body, count=1)
-                    if replaced != md_body:
-                        md_body = replaced
-                    else:
-                        # No empty marker found, append at end
-                        md_body += f"\n\n![插图]({url})"
+        import re as _re
+
+        for row, url in zip(section_map, mapped_urls):
+            label = str(row.get("purpose") or row.get("section") or "image")
+            replaced = _re.sub(r'!\[([^\]]*)\]\(\)', f'![{label}]({url})', md_body, count=1)
+            if replaced != md_body:
+                md_body = replaced
+                continue
+            marker = str(row.get("section") or "").strip()
+            if marker and marker in md_body:
+                md_body = md_body.replace(marker, f"{marker}\n\n![{label}]({url})", 1)
+                continue
+            return DeliveryResult(False, "blocked", error="juejin article image markers do not match section_image_map")
 
         # Extract cover — only use if empty or already a juejin URL
         cover = ""
