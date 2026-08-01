@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from content_platform.platform_checks import evaluate_platform_binding
+from content_platform.publishers import domestic_platforms
 
 
 class PlatformChecksTests(unittest.TestCase):
@@ -33,6 +34,9 @@ class PlatformChecksTests(unittest.TestCase):
                 },
             )
         self.assertEqual(result["status"], "connected")
+
+    def test_baijiahao_is_not_in_current_domestic_platforms(self):
+        self.assertNotIn("baijiahao", domestic_platforms())
 
 
 if __name__ == "__main__":
