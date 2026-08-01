@@ -1,34 +1,40 @@
+#!/usr/bin/env python3
+"""Beginner-friendly installer for AI Self-Media Tools.
+
+The installer creates a private runtime skeleton and performs local checks. It
+does not ask for, print, or persist real cookies/API keys/proxy nodes.
+"""
+
+from __future__ import annotations
+
+import argparse
 import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 from pathlib import Path
+from typing import Any
+
 
 AGENTS = ["hermes", "codex", "claude", "opencode", "qwen"]
+OPTIONAL_TOOLS = ["git", "ffmpeg", "yt-dlp"]
 
 
-def detect_agents():
-    found = []
-    for name in AGENTS:
-        if shutil.which(name):
-            found.append(name)
-    return found
-
-
-def project_root():
+def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def install_root():
+def install_root() -> Path:
     return Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools"))
 
 
-def social_root(home: Path):
+def social_root(home: Path) -> Path:
     return Path(os.environ.get("SOCIAL_AUTO_UPLOAD_HOME", home / "external" / "social-auto-upload"))
 
 
-def style_path(home: Path):
+def style_path(home: Path) -> Path:
     override = os.environ.get("CONTENT_PLATFORM_STYLE_GUIDE")
     if override:
         return Path(override)
@@ -38,7 +44,49 @@ def style_path(home: Path):
     return home / "skills" / "content" / "content-copywriting-style" / "SKILL.md"
 
 
-def render_config(home: Path):
+def run(command: list[str], *, timeout: int = 180) -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            command,
+            cwd=project_root(),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return {
+            "ok": result.returncode == 0,
+            "returncode": result.returncode,
+            "stdout_tail": "\n".join((result.stdout or "").splitlines()[-8:]),
+            "stderr_tail": "\n".join((result.stderr or "").splitlines()[-8:]),
+        }
+    except Exception as exc:  # pragma: no cover - platform-specific diagnostics
+        return {"ok": False, "returncode": None, "error": str(exc)}
+
+
+def detect_agents() -> list[str]:
+    return [name for name in AGENTS if shutil.which(name)]
+
+
+def detect_tools() -> dict[str, bool]:
+    return {name: bool(shutil.which(name)) for name in OPTIONAL_TOOLS}
+
+
+def ensure_runtime_dirs(home: Path) -> None:
+    for rel in [
+        "data",
+        "data/outbox",
+        "data/drafts",
+        "data/reports",
+        "secrets",
+        "cookies",
+        "logs",
+        "artifacts",
+        "external/scripts",
+    ]:
+        (home / rel).mkdir(parents=True, exist_ok=True)
+
+
+def render_config(home: Path, *, overwrite: bool = False) -> Path:
     template = {
         "data_dir": str(home / "data"),
         "generator": {
@@ -54,7 +102,7 @@ def render_config(home: Path):
         "media": {
             "image": {
                 "enabled": True,
-                "script": str(home / "scripts" / "image_gen.py"),
+                "script": str(home / "external" / "scripts" / "image_gen.py"),
                 "method": "auto",
                 "provider": "auto",
                 "model": "",
@@ -116,7 +164,7 @@ def render_config(home: Path):
                 "domestic": {"type": "social-auto-upload", "account_name": "<account-alias>"},
                 "international": {
                     "type": "manual-handoff",
-                    "reason": "international auto publishing requires explicit per-platform cookie publisher",
+                    "reason": "international auto publishing requires explicit per-platform cookie/API publisher",
                 },
             },
             "platforms": {
@@ -124,9 +172,18 @@ def render_config(home: Path):
                     "type": "reddit-draft",
                     "outbox": str(home / "data" / "outbox"),
                     "default_subreddit": "manual-selection",
-                }
+                },
+                "youtube": {"type": "file", "outbox": str(home / "data" / "outbox")},
+                "tiktok": {"type": "file", "outbox": str(home / "data" / "outbox")},
+                "devto": {"type": "devto-draft", "api_key_env": "DEVTO_API_KEY"},
+                "telegraph": {"type": "telegraph"},
+                "mastodon": {"type": "mastodon", "access_token_env": "MASTODON_ACCESS_TOKEN"},
+                "bluesky": {"type": "bluesky", "password_env": "BLUESKY_APP_PASSWORD"},
+                "nostr": {"type": "nostr", "private_key_env": "NOSTR_PRIVATE_KEY"},
+                "writeas": {"type": "writeas", "api_key_env": "WRITEAS_API_KEY"},
+                "buttondown": {"type": "buttondown", "api_key_env": "BUTTONDOWN_API_KEY"},
             },
-            "default": {"type": "file", "outbox": str(home / "data" / "outbox")}
+            "default": {"type": "file", "outbox": str(home / "data" / "outbox")},
         },
         "notifications": {
             "log_path": str(home / "data" / "notifications.jsonl"),
@@ -135,29 +192,93 @@ def render_config(home: Path):
     }
     out = home / "config.json"
     out.parent.mkdir(parents=True, exist_ok=True)
+    if out.exists() and not overwrite:
+        return out
     out.write_text(json.dumps(template, ensure_ascii=False, indent=2), encoding="utf-8")
     return out
 
 
-def main():
-    home = install_root()
-    home.mkdir(parents=True, exist_ok=True)
-    (home / "data").mkdir(exist_ok=True)
-    (home / "secrets").mkdir(exist_ok=True)
-    (home / "external" / "scripts").mkdir(parents=True, exist_ok=True)
-    report = {
-        "python": sys.version.split()[0],
+def environment_report(home: Path) -> dict[str, Any]:
+    checks = {
+        "python_version": sys.version.split()[0],
+        "python_ok": sys.version_info >= (3, 11),
         "platform": platform.platform(),
-        "agents": detect_agents(),
         "project_root": str(project_root()),
         "install_root": str(home),
+        "agents": detect_agents(),
+        "tools": detect_tools(),
         "social_auto_upload_home": str(social_root(home)),
-        "config_path": str(render_config(home)),
     }
-    report_path = home / "installation-report.json"
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    checks["project_audit"] = run([sys.executable, "-m", "content_platform", "project-audit"], timeout=120)
+    checks["channel_rulebook"] = run([sys.executable, "scripts/validate_channel_rulebook.py"], timeout=120)
+    return checks
+
+
+def install_dependencies() -> dict[str, Any]:
+    return {
+        "requirements": run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], timeout=600),
+        "editable_install": run([sys.executable, "-m", "pip", "install", "-e", "."], timeout=600),
+    }
+
+
+def print_beginner_summary(mode: str, home: Path) -> None:
+    print("AI Self-Media Tools installer")
+    print(f"Mode: {mode}")
+    print(f"Private runtime directory: {home}")
+    print("")
+    print("This installer does not collect cookies, API keys, proxy nodes, or account data.")
+    print("After it finishes, run: python scripts/onboard_operator.py")
+    print("")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Install or check AI Self-Media Tools")
+    parser.add_argument(
+        "--mode",
+        choices=["full", "check", "config-only"],
+        default="full",
+        help="full installs dependencies and writes runtime config; check is read-only; config-only writes runtime skeleton only",
+    )
+    parser.add_argument("--force-config", action="store_true", help="Overwrite runtime config.json template")
+    args = parser.parse_args(argv)
+
+    home = install_root()
+    print_beginner_summary(args.mode, home)
+
+    dependency_result: dict[str, Any] | None = None
+    if args.mode != "check":
+        ensure_runtime_dirs(home)
+        config_path = render_config(home, overwrite=args.force_config)
+    else:
+        config_path = home / "config.json"
+
+    if args.mode == "full":
+        dependency_result = install_dependencies()
+
+    report = environment_report(home)
+    report["mode"] = args.mode
+    report["config_path"] = str(config_path)
+    report["dependency_install"] = dependency_result
+    report["next_steps"] = [
+        "Run: python scripts/onboard_operator.py",
+        "Bind one platform at a time.",
+        "Run project-audit and channel rulebook validation before real publishing.",
+        "Keep cookies, API keys, proxies, generated works, and account data outside Git.",
+    ]
+
+    if args.mode != "check":
+        report_path = home / "installation-report.json"
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Wrote installation report: {report_path}")
+
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    if not report["python_ok"]:
+        return 1
+    if args.mode == "full" and dependency_result:
+        if not dependency_result["requirements"]["ok"] or not dependency_result["editable_install"]["ok"]:
+            return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -2,7 +2,7 @@
 """Beginner-friendly onboarding wizard for a new operator.
 
 The script prints step-by-step guidance and performs safe local checks. It never
-prints cookie contents, API keys, or browser storage-state values.
+prints cookie contents, API keys, proxy nodes, or browser storage-state values.
 """
 
 from __future__ import annotations
@@ -114,6 +114,117 @@ PLATFORMS = {
             "Verify draft state; public 404 for a draft is not proof of failure.",
         ],
     },
+    "youtube": {
+        "name": "YouTube / YouTube Shorts",
+        "mode": "Manual package or verified uploader",
+        "steps": [
+            "Prepare your own Google/YouTube channel login and keep browser state outside this repository.",
+            "Generate video, title, description, tags, thumbnail, captions, and publish-time suggestion.",
+            "Use an international network route that can access YouTube.",
+            "Start with manual upload. Enable automation only after upload, visibility, and postcheck are verified.",
+        ],
+    },
+    "tiktok": {
+        "name": "TikTok",
+        "mode": "Source discovery, localization, or manual package",
+        "steps": [
+            "Use an international network route that can access TikTok.",
+            "For repost/localization workflows, keep source URL, video ID, caption, visual evidence, and license/compliance notes.",
+            "Do not treat a downloaded clip as ready content. It must be localized, edited, deduped, captioned, and quality-checked.",
+            "Manual publishing is recommended unless a current verified uploader exists.",
+        ],
+    },
+    "reddit": {
+        "name": "Reddit",
+        "mode": "Trend collector and draft package",
+        "steps": [
+            "Create your own Reddit app if enabling OAuth trend collection.",
+            "Store REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, and REDDIT_REFRESH_TOKEN in a private env file.",
+            "Use Reddit mainly for trend discovery and human-reviewed community drafts.",
+            "Check subreddit rules before posting. The default publisher does not auto-post.",
+        ],
+    },
+    "devto": {
+        "name": "Dev.to",
+        "mode": "Draft/API package",
+        "steps": [
+            "Create your own Dev.to API key and store it in DEVTO_API_KEY outside Git.",
+            "Generate English technical articles with clear examples and source links.",
+            "Start with drafts. Verify tags, canonical URL, and readability before publishing.",
+        ],
+    },
+    "telegraph": {
+        "name": "Telegraph",
+        "mode": "API or file publish",
+        "steps": [
+            "Use Telegraph for lightweight linkable articles.",
+            "Avoid putting private account data or secret links into public pages.",
+            "Verify generated HTML/Markdown before publishing.",
+        ],
+    },
+    "mastodon": {
+        "name": "Mastodon",
+        "mode": "API publisher",
+        "steps": [
+            "Choose your Mastodon instance and create an access token.",
+            "Store instance URL and token in private environment variables.",
+            "Keep posts concise, disclose affiliation where needed, and avoid duplicate blasts.",
+        ],
+    },
+    "bluesky": {
+        "name": "Bluesky",
+        "mode": "API publisher",
+        "steps": [
+            "Prepare your Bluesky handle and app password.",
+            "Store credentials outside Git.",
+            "Use link-card previews and concise hooks. Verify identity before enabling automated posts.",
+        ],
+    },
+    "nostr": {
+        "name": "Nostr",
+        "mode": "Signed publisher",
+        "steps": [
+            "Create or import your own Nostr private key in a private runtime only.",
+            "Configure trusted relays.",
+            "Never paste the private key into README, issue comments, chat logs, or tracked config.",
+        ],
+    },
+    "writeas": {
+        "name": "Write.as",
+        "mode": "API publisher",
+        "steps": [
+            "Create your own API key and store it in WRITEAS_API_KEY.",
+            "Use it for lightweight blog-style articles.",
+            "Verify public/private visibility before publishing.",
+        ],
+    },
+    "buttondown": {
+        "name": "Buttondown",
+        "mode": "Newsletter API publisher",
+        "steps": [
+            "Create your own Buttondown API key and keep it outside Git.",
+            "Generate newsletter-ready subject, preview text, body, and links.",
+            "Send tests to yourself before enabling a real campaign.",
+        ],
+    },
+    "linkedin": {
+        "name": "LinkedIn",
+        "mode": "Manual package by default",
+        "steps": [
+            "Generate professional posts, article drafts, or link distribution copy.",
+            "Manual publishing is recommended unless you have a verified API route.",
+            "Check compliance with LinkedIn account and automation policies before adding automation.",
+        ],
+    },
+    "x": {
+        "name": "X / Twitter",
+        "mode": "Manual package by default",
+        "steps": [
+            "Generate short posts, threads, or link distribution copy.",
+            "Manual publishing is recommended by default because account risk can be high.",
+            "If using API access, store keys in private environment variables and verify rate limits.",
+        ],
+    },
 }
 
 
@@ -177,7 +288,13 @@ def show_platform(platform: str) -> None:
 def show_all_platforms() -> None:
     print_step("Step 3 - Platform binding guide")
     print("Choose one platform at a time. Do not try to bind every platform on day one.")
-    for key in PLATFORMS:
+    domestic = ["wechat", "kuaishou", "douyin", "shipinhao", "bilibili", "xiaohongshu", "toutiao", "juejin", "zhihu"]
+    international = ["youtube", "tiktok", "reddit", "devto", "telegraph", "mastodon", "bluesky", "nostr", "writeas", "buttondown", "linkedin", "x"]
+    print("\nDomestic platforms:")
+    for key in domestic:
+        print(f"- {key}: {PLATFORMS[key]['name']} ({PLATFORMS[key]['mode']})")
+    print("\nInternational platforms:")
+    for key in international:
         print(f"- {key}: {PLATFORMS[key]['name']} ({PLATFORMS[key]['mode']})")
     print("\nExample: python scripts/onboard_operator.py --platform kuaishou")
 

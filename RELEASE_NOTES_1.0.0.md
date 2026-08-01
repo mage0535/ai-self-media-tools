@@ -5,9 +5,11 @@ This is the first public-ready release intended for operators other than the ori
 ## Highlights
 
 - Public-safe sharing workflow through `scripts/release_bundle.py`.
+- Beginner installer through `install.ps1`, `install.sh`, and `scripts/install.py`.
 - Beginner onboarding wizard through `scripts/onboard_operator.py`.
-- Clean Chinese and English GitHub README files.
-- Platform-by-platform setup guidance for WeChat, Kuaishou, Douyin, Video Channels, Bilibili, Xiaohongshu, Toutiao, Juejin, and Zhihu.
+- Expanded Chinese and English GitHub README files modeled after a public-release structure: what it is, why it exists, how it works, requirements, install modes, platform matrix, validation, troubleshooting, and privacy boundaries.
+- Platform-by-platform setup guidance for domestic channels: WeChat, Kuaishou, Douyin, Video Channels, Bilibili, Xiaohongshu, Toutiao, Juejin, and Zhihu.
+- Platform-by-platform setup guidance for international channels: YouTube, TikTok, Reddit, Dev.to, Telegraph, Mastodon, Bluesky, Nostr, Write.as, Buttondown, LinkedIn, and X/Twitter.
 - Growth review loop with saves, follows, completion rate, three-second view rate, average watch time, and platform-specific metrics.
 - Stronger quality gates for article packets, visual workflows, video artifacts, and preflight manifests.
 - Draft/manual-handoff defaults for sensitive platforms where unattended publishing should not be assumed.
@@ -21,6 +23,22 @@ cd ai-self-media-tools
 pip install -r requirements.txt
 pip install -e .
 python scripts/onboard_operator.py
+```
+
+Beginner install scripts:
+
+```bash
+./install.sh
+python scripts/install.py --mode check
+python scripts/install.py --mode config-only
+```
+
+Windows:
+
+```powershell
+.\install.ps1
+python scripts\install.py --mode check
+python scripts\install.py --mode config-only
 ```
 
 For a privacy-safe distributable copy:
@@ -55,4 +73,3 @@ python -m content_platform project-audit
 python scripts/validate_channel_rulebook.py
 pytest -q
 ```
-

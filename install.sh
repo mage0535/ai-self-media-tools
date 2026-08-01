@@ -1,2 +1,3 @@
 #!/usr/bin/env sh
-python3 scripts/install.py
+set -eu
+python3 scripts/install.py "$@"
