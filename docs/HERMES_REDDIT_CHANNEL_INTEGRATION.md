@@ -34,7 +34,7 @@ Enable Reddit trend collection in the local runtime `config.json`:
       "client_id_env": "REDDIT_CLIENT_ID",
       "client_secret_env": "REDDIT_CLIENT_SECRET",
       "refresh_token_env": "REDDIT_REFRESH_TOKEN",
-      "user_agent": "ai-self-media-tools/0.2 by configured-operator",
+      "user_agent": "ai-self-media-tools/1.0.0 by configured-operator",
       "subreddits": ["SideProject", "ArtificialInteligence", "Entrepreneur"],
       "keywords": ["AI workflow", "automation", "content operations"],
       "limit_per_subreddit": 25,

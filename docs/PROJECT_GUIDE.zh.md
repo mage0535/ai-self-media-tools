@@ -2,7 +2,7 @@
 
 [中文](PROJECT_GUIDE.zh.md) | [English](PROJECT_GUIDE.en.md)
 
-版本：`0.2`
+版本：`1.0.0`
 
 ## 1. 这个项目在做什么
 
@@ -210,7 +210,7 @@ python -m content_platform admin-serve --password "<admin-password>"
 
 ## 11. 规划
 
-当前 `0.2` 已完成的重点是：
+当前 `1.0.0` 已完成的重点是：
 
 - intelligence 厚化
 - topic clustering

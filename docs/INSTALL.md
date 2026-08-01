@@ -2,7 +2,7 @@
 
 [中文](INSTALL.md) | [English](INSTALL.en.md)
 
-版本：`0.2`
+版本：`1.0.0`
 
 ## 1. 最短安装路径
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0 - 2026-08-01 - Public Sharing And Operator Onboarding
+
+- Unified public package version to `1.0.0`.
+- Rewrote Chinese and English GitHub README files for external operators.
+- Added `scripts/onboard_operator.py`, a beginner-friendly setup, tool check, and platform binding wizard.
+- Added `RELEASE_NOTES_1.0.0.md` for GitHub Releases.
+- Hardened public bundle export so shared packages exclude private config, cookies, runtime data, generated works, logs, and databases.
+- Documented safe GitHub sharing and release asset boundaries.
+
 ## 0.6 - 2026-07-09 — magazine-layout + gif-splitter 集成（jiamu-skills）
 
 - **magazine-layout 桥接**：新增 `content_platform/magazine.py` — 12 套杂志视觉风格

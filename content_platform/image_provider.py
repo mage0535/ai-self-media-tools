@@ -252,7 +252,7 @@ def _pexels_image(
     )
     req = urllib.request.Request(
         url,
-        headers={"Authorization": key, "User-Agent": "Mozilla/5.0 ai-self-media-tools/0.2"},
+        headers={"Authorization": key, "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -304,7 +304,7 @@ def _pixabay_image(
             "orientation": orientation,
         }
     )
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/0.2"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
@@ -331,7 +331,7 @@ def _pixabay_image(
 
 
 def _download_image(url: str, output: Path) -> None:
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/0.2"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
     try:
         with urllib.request.urlopen(req, timeout=90) as resp:
             content_type = resp.headers.get("Content-Type", "")
@@ -399,7 +399,7 @@ def _pollinations_image(
         }
     )
     url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt[:1200])}?{query}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/0.2"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
             content_type = resp.headers.get("Content-Type", "")

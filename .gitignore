@@ -1,6 +1,7 @@
 __pycache__/
 .pytest_cache/
 .omx/
+.codex/
 .codex-server-runtime/
 .codex-tmp/
 __codex_proxy_sync_tmp__/

@@ -2,6 +2,14 @@
 
 Last updated: 2026-08-01
 
+## 2026-08-01 Public Release 1.0.0
+
+- Public version unified to `1.0.0` in package metadata, runtime version output, examples, and GitHub-facing docs.
+- GitHub README files were rewritten in clean Chinese and English for external operators.
+- Added `scripts/onboard_operator.py` as a beginner-friendly wizard for local checks, config creation, platform binding guidance, tool matching, and workflow reminders.
+- Added `RELEASE_NOTES_1.0.0.md` for GitHub Releases.
+- Public distribution remains privacy-safe: release bundles copy only Git-tracked files, skip runtime/private paths, and audit both source and target.
+
 ## 2026-08-01 Growth Metrics And Retired Baijiahao Cleanup
 
 - Baijiahao is retired from current routing. It is no longer included in current domestic platform selection or Chinese-platform language inference. Historical rows may remain in old databases, but new regional automation should not select it.

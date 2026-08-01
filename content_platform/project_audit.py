@@ -4,6 +4,7 @@ from pathlib import Path
 
 IGNORED_PARTS = {
     ".git",
+    ".codex",
     ".codex-server-runtime",
     ".codex-tmp",
     "__codex_proxy_sync_tmp__",
