@@ -1,5 +1,4 @@
 DOMESTIC_PLATFORMS = {
-    "baijiahao",
     "bilibili",
     "csdn",
     "douyin",

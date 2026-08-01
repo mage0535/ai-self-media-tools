@@ -12,7 +12,7 @@ from .viral_score import score_topic_candidate
 from .viral_monitor import build_viral_report
 
 GLOBAL_EN_PLATFORMS = {"devto", "buttondown", "writeas", "telegraph", "mastodon", "bluesky", "threads", "twitter", "x", "tiktok", "youtube", "nostr", "instagram"}
-CN_PLATFORMS = {"wechat", "weixin", "wechat_official", "douyin", "xiaohongshu", "rednote", "bilibili", "kuaishou", "shipinhao", "juejin", "zhihu", "csdn", "baijiahao"}
+CN_PLATFORMS = {"wechat", "weixin", "wechat_official", "douyin", "xiaohongshu", "rednote", "bilibili", "kuaishou", "shipinhao", "juejin", "zhihu", "csdn"}
 
 
 def infer_content_language(brief):

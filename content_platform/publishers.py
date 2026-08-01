@@ -1229,7 +1229,6 @@ PLATFORM_REGIONS = {
     "xiaohongshu": "domestic", "rednote": "domestic",
     "kuaishou": "domestic",
     "shipinhao": "domestic",
-    "baijiahao": "domestic",
     "zhihu": "domestic",
     "weibo": "domestic",
     "juejin": "domestic",
