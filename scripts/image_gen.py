@@ -22,6 +22,10 @@ if str(ROOT) not in sys.path:
 from content_platform.image_provider import ImageProviderError, generate_image
 
 
+def _skip_gate_authorized() -> bool:
+    return os.environ.get("IMAGE_GEN_ALLOW_SKIP_GATES") == "1"
+
+
 def _run_optional_gate(command: list[str], timeout: int) -> None:
     if not Path(command[1]).is_file():
         return
@@ -61,6 +65,8 @@ def main() -> int:
     prompt = args.prompt or args.positional_prompt or ""
     output = Path(args.output)
     try:
+        if (args.skip_preflight or args.skip_visual_gate) and not _skip_gate_authorized():
+            raise RuntimeError("image gate skip is disabled; set IMAGE_GEN_ALLOW_SKIP_GATES=1 only for audited emergency runs")
         if not args.skip_preflight:
             _run_optional_gate(
                 [sys.executable, str(ROOT / "scripts" / "preflight_prompt.py"), "--prompt", prompt, "--type", "image"],

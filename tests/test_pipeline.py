@@ -133,6 +133,37 @@ class PipelineTests(unittest.TestCase):
             publisher.assert_not_called()
 
 
+    def test_pre_populated_body_preserves_full_ops_brief_fields(self):
+        job = self.pipeline.create(
+            "Practical automation",
+            ["file"],
+            {
+                "strategy_brief": {"account_stage": "growth"},
+                "content_workflow_inputs": {"source_inputs": ["account_analysis"]},
+                "asset_mix_plan": {"real_material_retrieval": True},
+                "humanization_plan": {"voice": "human editor"},
+                "real_scene_backgrounds": [{"path": "/tmp/cat.jpg", "source": "stock"}],
+                "knowledge_card_plan": {"count": 6},
+                "growth_plan": {"goal": "completion_rate"},
+            },
+        )
+        with self.store.connect() as conn:
+            conn.execute(
+                "UPDATE jobs SET body=? WHERE id=?",
+                ("This is a manually prepared article body. " * 8, job["id"]),
+            )
+
+        reviewed = self.pipeline.run(job["id"])
+
+        self.assertEqual(reviewed["state"], "review_required")
+        meta = reviewed["draft_meta"]
+        self.assertEqual(meta["strategy_brief"]["account_stage"], "growth")
+        self.assertEqual(meta["content_workflow_inputs"]["source_inputs"], ["account_analysis"])
+        self.assertTrue(meta["asset_mix_plan"]["real_material_retrieval"])
+        self.assertEqual(meta["humanization_plan"]["voice"], "human editor")
+        self.assertEqual(meta["knowledge_card_plan"]["count"], 6)
+        self.assertEqual(meta["growth_plan"]["goal"], "completion_rate")
+
     def test_enforced_wechat_requires_professional_toolchain_before_quality_gate(self):
         pipeline = Pipeline(
             self.store,

@@ -202,12 +202,14 @@ class ZhihuPublisher:
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=self.headless, args=["--no-sandbox"])
-            context = browser.new_context(
+            ctx_kwargs = dict(
                 storage_state=storage if isinstance(storage, dict) else {"cookies": storage},
                 locale="zh-CN",
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                proxy={"server": self.proxy},
             )
+            if self.proxy:
+                ctx_kwargs["proxy"] = {"server": self.proxy}
+            context = browser.new_context(**ctx_kwargs)
             page = context.new_page()
             page.goto("https://zhuanlan.zhihu.com/write", timeout=60000, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)
