@@ -216,8 +216,8 @@ class DraftGenerator:
                 "cross_platform_trend_analysis": {"source": "trend_collector", "required_sources": sources, "topic_clusters": [topic_text]},
                 "topic_selection": {"selected_topic": topic_text, "selection_reason": "ranked trend and channel fit"},
                 "quantity_plan": {"final_count": 1, "decision_reason": "one channel-specific piece for this run"},
-                "content_generation_brief": {"source_inputs": sources, **{k: True for k in handoff}},
-                "content_workflow_inputs": {"source_inputs": sources, **{f"{k}_required": True for k in handoff}},
+                "content_generation_brief": {"source_inputs": sources, "asset_mix_plan": {"ai_generated": True, "real_material_retrieval": True, "ai_edit_real_material": True}, "humanization_plan": {"hook": True, "body": True, "voice": "casual"}},
+                "content_workflow_inputs": {"source_inputs": ["account_analysis", "content_brief", "cross_platform_trend_analysis", "quantity_plan", "same_lane_account_analysis", "topic_selection"], **{f"{k}_required": True for k in handoff}},
             })
             draft_meta["asset_mix_plan"] = {"ai_generated": "copy and cards", "real_material_retrieval": "stock photo search", "ai_edit_real_material": "section-matched card/cover composition"}
             draft_meta["humanization_plan"] = {"hook": opening, "body": "vary paragraph rhythm and use concrete case language", "voice": "human editor"}

@@ -133,6 +133,19 @@ class Pipeline:
                                       "geo_score", "geo_details"}
                         },
                     }
+                    user_brief = job.get("brief") or {}
+                    for _field in [
+                        "strategy_brief", "operations_workflow", "content_workflow_inputs",
+                        "asset_mix_plan", "humanization_plan",
+                        "opening_hook", "hook_type", "sections", "section_image_map",
+                        "visual_template_selection", "real_scene_backgrounds", "section_real_scene_mapping",
+                        "knowledge_card_plan", "embedded_knowledge_cards", "cover_design",
+                        "differentiation_dimensions", "reader_payoff", "concrete_case", "actionable_checklist",
+                        "growth_plan", "platform_identity", "platform_strategy", "platform_adaptation",
+                        "visual_content_policy", "preflight_manifest", "publishing_plan",
+                    ]:
+                        if user_brief.get(_field):
+                            draft["draft_meta"][_field] = user_brief[_field]
                     draft["draft_meta"]["quality_scores"] = rewrite["quality_scores"]
                     draft["draft_meta"]["quality_gate"] = rewrite["quality_gate"]
                     draft["draft_meta"]["rewrite_notes"] = rewrite["rewrite_notes"]

@@ -1,6 +1,20 @@
 # Continuous Development
 
-Last updated: 2026-07-07
+Last updated: 2026-08-01
+
+## 2026-08-01 Growth Metrics And Retired Baijiahao Cleanup
+
+- Baijiahao is retired from current routing. It is no longer included in current domestic platform selection or Chinese-platform language inference. Historical rows may remain in old databases, but new regional automation should not select it.
+- Performance review storage now records the growth metrics required by the rulebook: saves, follows, completion rate, three-second view rate, and average watch seconds. `feedback-summary`, historical performance context, and Prometheus metrics expose these fields so growth strategy can use real review data instead of only views/likes/comments/shares.
+- `scripts/image_gen.py --skip-preflight` and `--skip-visual-gate` remain available for legacy CLI compatibility but now require `IMAGE_GEN_ALLOW_SKIP_GATES=1`; otherwise the command fails closed.
+- Verification: local full test suite passed, project audit returned ok, and channel rulebook validation passed after the change.
+
+## 2026-08-01 Hermes Drift Review Cleanup
+
+- Remaining Hermes runtime edits were reviewed and normalized back into the project: generator evidence now carries explicit asset mix and humanization inputs, Pipeline keeps full-ops brief fields when using pre-populated body content, and Zhihu publishing tolerates an intentionally empty proxy instead of passing a blank Playwright proxy.
+- Kuaishou video quality remains strict vertical-only. The temporary Hermes relaxation that accepted horizontal `1280x720` output was not kept, and a regression test now rejects horizontal video probes.
+- Unreferenced `scripts/dynamic_mix.py` was removed from Hermes runtime. The supported BGM path remains the guarded `mix_bgm_with_gate.py` / video toolchain route, so future work does not accidentally use an unverified parallel mixer.
+- Verification: local and Hermes full test suites passed, project audit returned ok, and channel rulebook validation passed after the cleanup.
 
 ## 2026-07-11 Project Alias Registry Wave
 

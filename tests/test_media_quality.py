@@ -957,6 +957,16 @@ def test_kuaishou_auto_packet_requires_real_video_artifact_probe():
     assert "video_artifact_probe" in result["failed_dimensions"]
 
 
+def test_kuaishou_auto_packet_rejects_horizontal_video_resolution():
+    packet = complete_kuaishou_auto_packet()
+    packet["video_artifact_probe"]["resolution"] = "1280x720"
+
+    result = validate_kuaishou_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "video_artifact_probe" in result["failed_dimensions"]
+
+
 def test_kuaishou_preflight_does_not_require_future_postcheck_steps():
     packet = complete_kuaishou_auto_packet()
     packet["workflow_evidence"]["completed_steps"] = ["strategy", "trend_analysis", "content_generation", "quality_gate"]
