@@ -1,150 +1,158 @@
 # AI Self-Media Tools
 
-[中文](README.md) | [English](README.en.md)
+[中文](README.md) | Current version: `1.0.0`
 
-Current public version: `0.2`
+AI Self-Media Tools is a workflow toolkit for AI-assisted self-media operations. It connects operations analysis, topic planning, content generation, image/video production, quality gates, draft/publish validation, and performance review into one auditable process.
 
-AI Self-Media Tools is an agent-neutral workflow system for content intelligence, generation, draft-first delivery, platform account management, and operational automation.
+The project is safe to share as source code, but each operator must use their own accounts, cookies, proxies, API keys, and runtime data. This repository contains public code, rules, example configuration, and workflow tools only. It does not include the maintainer's private account state or generated works.
 
-It is built around:
+## Core Capabilities
 
-- topic discovery
-- trend analysis
-- same-track references
-- topic clustering
-- historical performance learning
-- content generation
-- quality gates
-- draft-first delivery
-- management-console operations
+- Operations strategy: account stage, niche positioning, same-lane references, cross-platform trends, and historical performance review.
+- Content generation: articles, image-text posts, knowledge cards, short-video scripts, titles, body copy, topics, SEO, and GEO.
+- Visual and video workflow: knowledge cards, real material matching, captions, voice-over, BGM, and vertical-video quality gates.
+- Platform adaptation: WeChat Official Account, Kuaishou, Douyin, Video Channels, Bilibili, Xiaohongshu, Toutiao, Juejin, Zhihu, and extension channels.
+- Delivery safety: draft/manual-handoff first; unattended publishing must pass health checks, content quality gates, asset-license checks, and postchecks.
+- Feedback loop: views, engagement, saves, follows, completion rate, three-second view rate, average watch time, and platform-specific metrics.
 
-## Problems It Solves
+## Who It Is For
 
-- too many trend candidates, weak prioritization
-- too much reference material, weak structured analysis
-- generic AI outputs
-- multi-platform account and delivery complexity
-- no automatic learning from historical performance
+- Operators who want AI-assisted multi-platform content workflows.
+- Builders who want repeatable content production and publishing rules.
+- Agent users who want Hermes, Codex, Claude Code, OpenCode, or similar agents to call a structured content toolchain.
+- Beginners who want to start with local drafts and manual publishing before enabling automation.
 
-## Core Capabilities Already Implemented
+## Installation
 
-- trend collection and topic ranking
-- source normalization, account analysis, and topic clustering
-- viral scoring and strategy routing
-- humanization and quality gates
-- queue-backed draft delivery
-- provider abstraction for image / video / OCR / transcription / analysis
-- multi-account platform bindings
-- one-time-link password-protected management console
-- publishable privacy audit
-
-## Management Console
-
-Start it with:
+Python 3.11 or newer is required.
 
 ```bash
-python -m content_platform admin-serve --password "<admin-password>"
+git clone https://github.com/mage0535/ai-self-media-tools.git
+cd ai-self-media-tools
+pip install -r requirements.txt
+pip install -e .
 ```
 
-The command prints a one-time access URL.
-
-Properties:
-
-- one-time launch link
-- password required
-- browser-session login
-- session invalid after browser close
-
-The console provides:
-
-- global platform overview
-- per-platform detail pages
-- multi-account binding flow
-- account status checks
-- latest works, draft/published states, queue and failure panels
-- charts on both overview and platform detail pages
-
-## Domestic Browser Publishing Backend
-
-Platforms that require a browser session, such as Douyin, Bilibili, Xiaohongshu, and Kuaishou, should use `social-auto-upload` as the external runtime:
-
-1. Install the external tool under `external/social-auto-upload`, or set `SOCIAL_AUTO_UPLOAD_HOME` to an existing runtime.
-2. Log in through that tool. Account files stay in its local `cookies/` directory, such as `douyin_<account>.json` and `bilibili_<account>.json`.
-3. Configure each platform in the runtime `config.json` with `type: "social-auto-upload"`.
-4. Run `python -m content_platform delivery-readiness` to verify the tool path, Python runtime, CLI startup, and account-file counts.
-
-Example:
-
-```json
-{
-  "publishers": {
-    "platforms": {
-      "douyin": {
-        "type": "fallback",
-        "publishers": [
-          {
-            "type": "social-auto-upload",
-            "platform_name": "douyin",
-            "account_name": "<account-alias>"
-          },
-          {
-            "type": "file"
-          }
-        ]
-      },
-      "bilibili": {
-        "type": "fallback",
-        "publishers": [
-          {
-            "type": "social-auto-upload",
-            "platform_name": "bilibili",
-            "account_name": "<account-alias>",
-            "video_extra_args": ["--tid", "171"]
-          },
-          {
-            "type": "aitoearn-draft",
-            "env_file": "secrets/aitoearn.env"
-          }
-        ]
-      }
-    }
-  }
-}
-```
-
-To recover or add a Bilibili account:
+Initialize and verify:
 
 ```bash
-cd "$SOCIAL_AUTO_UPLOAD_HOME"
-./venv/bin/python sau_cli.py bilibili login --account <account-alias>
-./venv/bin/python sau_cli.py bilibili check --account <account-alias>
+python -m content_platform init
+python -m content_platform project-audit
+python scripts/validate_channel_rulebook.py
+pytest -q
 ```
 
-Do not commit cookies, tokens, server paths, or account data. New browser-based channels should follow the same model: external tool implementation plus `platform_name`, `account_name`, and optional `extra_args` configuration. During rollout, use `type: "fallback"` to keep an older backend available while the new browser backend is being validated.
+## Beginner Onboarding Wizard
 
-## Documentation
-
-- [Project Guide (Chinese)](docs/PROJECT_GUIDE.zh.md)
-- [Project Guide (English)](docs/PROJECT_GUIDE.en.md)
-- [Project Alias Policy](docs/PROJECT_ALIAS_POLICY.md)
-- [Agent Context Snippet](docs/AGENT_CONTEXT_SNIPPET.md)
-- [Installation Guide (Chinese)](docs/INSTALL.md)
-- [Installation Guide (English)](docs/INSTALL.en.md)
-- [Acknowledgements](docs/ACKNOWLEDGEMENTS.md)
-- [Continuous Development Log](docs/CONTINUOUS_DEVELOPMENT.md)
-
-## Quick Start
+For non-technical users, start with the guided onboarding script. It does not print or upload cookie plaintext. It guides the operator through Python checks, local configuration, runtime folders, platform binding choices, and tool matching.
 
 ```bash
-python scripts/install.py
+python scripts/onboard_operator.py
+```
+
+Check current status only:
+
+```bash
+python scripts/onboard_operator.py --check
+```
+
+Create a local config file:
+
+```bash
+python scripts/onboard_operator.py --write-config
+```
+
+Show platform-specific binding guidance:
+
+```bash
+python scripts/onboard_operator.py --platform wechat
+python scripts/onboard_operator.py --platform kuaishou
+python scripts/onboard_operator.py --platform douyin
+python scripts/onboard_operator.py --platform shipinhao
+python scripts/onboard_operator.py --platform bilibili
+python scripts/onboard_operator.py --platform xiaohongshu
+python scripts/onboard_operator.py --platform toutiao
+python scripts/onboard_operator.py --platform juejin
+python scripts/onboard_operator.py --platform zhihu
+```
+
+## Platform Modes
+
+| Platform | Default mode | Notes |
+| --- | --- | --- |
+| WeChat Official Account | Draft/API or Hermes adapter | Long-form articles, knowledge cards, GitHub picks, trend articles |
+| Kuaishou | Automated workflow + postcheck | Knowledge-card video and real-material short video |
+| Douyin | Manual review package | Generate complete package; operator publishes manually |
+| Video Channels | Manual review package | Generate video, title, body, cover, and topics for operator review |
+| Bilibili | Draft/file package/extension uploader | Tutorial and knowledge videos |
+| Xiaohongshu | Manual review package | Image-text, knowledge blocks, and short-video combinations |
+| Toutiao | Draft/article package | Developed image-text articles |
+| Juejin | Draft/article package | Technical articles and open-source project analysis |
+| Zhihu | Draft/article package | Deep answers, tradeoff analysis, and experience reviews |
+
+## Configuration Rules
+
+Copy the example config:
+
+```bash
+cp config.example.json config.json
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item config.example.json config.json
+```
+
+Fill in only your own values. Never commit or share:
+
+- `config.json`
+- `.env`, `.env.*`
+- `data/`
+- `secrets/`
+- `cookies/`
+- `logs/`
+- `artifacts/`
+- `outbox/`
+- `.codex-server-runtime/`
+- any database, screenshot, generated video, publish record, platform cookie, browser profile, API key, or proxy node
+
+## Sharing With Friends
+
+Do not zip your working directory. Generate a clean public bundle:
+
+```bash
+python scripts/release_bundle.py --target /tmp/ai-self-media-tools-public
+```
+
+Windows PowerShell:
+
+```powershell
+python scripts\release_bundle.py --target C:\Temp\ai-self-media-tools-public
+```
+
+Share only the generated `ai-self-media-tools-public` directory. See [docs/PUBLIC_DISTRIBUTION.md](docs/PUBLIC_DISTRIBUTION.md).
+
+## Common Commands
+
+```bash
 python -m content_platform health
-python -m content_platform content-readiness
-python -m content_platform analyze-topic --topic "AI workflows" --brief "{\"platforms\":[\"wechat\",\"douyin\"]}"
-python -m content_platform admin-serve --password "<admin-password>"
+python -m content_platform delivery-readiness
+python -m content_platform health-refresh
+python -m content_platform feedback-summary
+python -m content_platform admin-serve --password "your-password"
 ```
 
-## Version Note
+## Pre-Publish Validation
 
-The public baseline version is unified as `0.2`.
+Before real publishing, run:
 
-Older `v3.x` labels inside the continuous-development log are internal development-wave labels, not the current public version.
+```bash
+python -m content_platform project-audit
+python scripts/validate_channel_rulebook.py
+pytest -q
+```
+
+## License
+
+MIT

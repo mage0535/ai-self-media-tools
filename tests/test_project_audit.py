@@ -16,6 +16,9 @@ class ProjectAuditTests(unittest.TestCase):
             codex_tmp.mkdir()
             private_path = "/" + "root/" + ".hermes/private"
             (codex_tmp / "scratch.md").write_text(private_path, encoding="utf-8")
+            codex_private = root / ".codex" / "attachments"
+            codex_private.mkdir(parents=True)
+            (codex_private / "pasted-text.txt").write_text("cookie=sessionid_private", encoding="utf-8")
             (root / "README.md").write_text("public docs", encoding="utf-8")
 
             result = audit_project(root)

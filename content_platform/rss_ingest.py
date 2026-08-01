@@ -9,7 +9,7 @@ from xml.etree import ElementTree
 
 
 def _fetch_feed(url, timeout=15):
-    req = urllib.request.Request(url, headers={"User-Agent": "ai-self-media-tools/0.2"})
+    req = urllib.request.Request(url, headers={"User-Agent": "ai-self-media-tools/1.0.0"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
 

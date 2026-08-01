@@ -2,7 +2,7 @@
 
 [中文](PROJECT_GUIDE.zh.md) | [English](PROJECT_GUIDE.en.md)
 
-Version: `0.2`
+Version: `1.0.0`
 
 ## 1. What This Project Is
 
@@ -136,7 +136,7 @@ See also:
 
 ## 8. Current Roadmap Direction
 
-`0.2` already includes:
+`1.0.0` already includes:
 
 - thicker intelligence memory
 - topic clustering

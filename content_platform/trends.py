@@ -282,7 +282,7 @@ class DirectTrendSource:
             url,
             headers={
                 "Accept": "application/json",
-                "User-Agent": self.config.get("user_agent", "ai-self-media-tools/0.2 trend collector"),
+                "User-Agent": self.config.get("user_agent", "ai-self-media-tools/1.0.0 trend collector"),
                 **(headers or {}),
             },
         )
@@ -552,7 +552,7 @@ class RedditTrendCollector:
             headers={
                 "Authorization": "Basic " + base64.b64encode(credentials).decode(),
                 "Content-Type": "application/x-www-form-urlencoded",
-                "User-Agent": self.config.get("user_agent", "ai-self-media-tools/0.2 by configured-operator"),
+                "User-Agent": self.config.get("user_agent", "ai-self-media-tools/1.0.0 by configured-operator"),
             },
         )
         with urllib.request.urlopen(request, timeout=int(self.config.get("timeout", 20))) as response:
@@ -576,7 +576,7 @@ class RedditTrendCollector:
             headers={
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/json",
-                "User-Agent": self.config.get("user_agent", "ai-self-media-tools/0.2 by configured-operator"),
+                "User-Agent": self.config.get("user_agent", "ai-self-media-tools/1.0.0 by configured-operator"),
             },
         )
         with urllib.request.urlopen(request, timeout=int(self.config.get("timeout", 20))) as response:

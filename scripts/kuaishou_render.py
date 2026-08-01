@@ -512,7 +512,7 @@ def _request_json(url, headers=None, timeout=ONLINE_BGM_TIMEOUT):
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "ai-self-media-tools/0.2 online-bgm-resolver",
+            "User-Agent": "ai-self-media-tools/1.0.0 online-bgm-resolver",
             "Accept": "application/json,text/plain,*/*",
             **(headers or {}),
         },
