@@ -104,6 +104,12 @@ class Store:
                     likes INTEGER NOT NULL DEFAULT 0,
                     comments INTEGER NOT NULL DEFAULT 0,
                     shares INTEGER NOT NULL DEFAULT 0,
+                    saves INTEGER NOT NULL DEFAULT 0,
+                    follows INTEGER NOT NULL DEFAULT 0,
+                    completion_rate REAL NOT NULL DEFAULT 0,
+                    three_second_view_rate REAL NOT NULL DEFAULT 0,
+                    avg_watch_seconds REAL NOT NULL DEFAULT 0,
+                    extra_metrics_json TEXT NOT NULL DEFAULT '{}',
                     recorded_at TEXT NOT NULL,
                     UNIQUE(job_id, platform)
                 );
@@ -314,6 +320,15 @@ class Store:
                 "url": "TEXT NOT NULL DEFAULT ''",
             }.items():
                 self._ensure_column(conn, "publish_receipts", name, definition)
+            for name, definition in {
+                "saves": "INTEGER NOT NULL DEFAULT 0",
+                "follows": "INTEGER NOT NULL DEFAULT 0",
+                "completion_rate": "REAL NOT NULL DEFAULT 0",
+                "three_second_view_rate": "REAL NOT NULL DEFAULT 0",
+                "avg_watch_seconds": "REAL NOT NULL DEFAULT 0",
+                "extra_metrics_json": "TEXT NOT NULL DEFAULT '{}'",
+            }.items():
+                self._ensure_column(conn, "performance", name, definition)
 
 
     def _migrate_topic_history_platform_scope(self, conn):
@@ -713,32 +728,128 @@ class Store:
             row["draft_meta"] = json.loads(row.pop("draft_meta_json", "{}"))
         return rows
 
-    def record_performance(self, job_id, platform, views=0, likes=0, comments=0, shares=0):
+    def record_performance(
+        self,
+        job_id,
+        platform,
+        views=0,
+        likes=0,
+        comments=0,
+        shares=0,
+        saves=0,
+        follows=0,
+        completion_rate=0.0,
+        three_second_view_rate=0.0,
+        avg_watch_seconds=0.0,
+        extra_metrics=None,
+    ):
+        extra_metrics = extra_metrics or {}
         with self.connect() as conn:
             conn.execute(
-                """INSERT INTO performance(job_id,platform,views,likes,comments,shares,recorded_at) VALUES(?,?,?,?,?,?,?)
+                """INSERT INTO performance(
+                    job_id,platform,views,likes,comments,shares,saves,follows,
+                    completion_rate,three_second_view_rate,avg_watch_seconds,extra_metrics_json,recorded_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(job_id,platform) DO UPDATE SET views=excluded.views,likes=excluded.likes,
-                comments=excluded.comments,shares=excluded.shares,recorded_at=excluded.recorded_at""",
-                (job_id, platform, int(views), int(likes), int(comments), int(shares), utc_now()),
+                comments=excluded.comments,shares=excluded.shares,saves=excluded.saves,follows=excluded.follows,
+                completion_rate=excluded.completion_rate,three_second_view_rate=excluded.three_second_view_rate,
+                avg_watch_seconds=excluded.avg_watch_seconds,extra_metrics_json=excluded.extra_metrics_json,recorded_at=excluded.recorded_at""",
+                (
+                    job_id,
+                    platform,
+                    int(views),
+                    int(likes),
+                    int(comments),
+                    int(shares),
+                    int(saves),
+                    int(follows),
+                    float(completion_rate),
+                    float(three_second_view_rate),
+                    float(avg_watch_seconds),
+                    json.dumps(extra_metrics, ensure_ascii=False, sort_keys=True),
+                    utc_now(),
+                ),
             )
 
     def performance(self, job_id=None):
         if job_id:
-            return self._rows("SELECT * FROM performance WHERE job_id=? ORDER BY platform", (job_id,))
-        return self._rows("SELECT * FROM performance ORDER BY recorded_at DESC", ())
+            rows = self._rows("SELECT * FROM performance WHERE job_id=? ORDER BY platform", (job_id,))
+        else:
+            rows = self._rows("SELECT * FROM performance ORDER BY recorded_at DESC", ())
+        for row in rows:
+            try:
+                extra_metrics = json.loads(row.pop("extra_metrics_json", "{}") or "{}")
+            except json.JSONDecodeError:
+                extra_metrics = {}
+            row["extra_metrics"] = extra_metrics if isinstance(extra_metrics, dict) else {}
+        return rows
 
     def feedback_summary(self):
-        summary = {"platforms": {}, "totals": {"views": 0, "likes": 0, "comments": 0, "shares": 0, "engagement": 0}}
+        count_by_platform = {}
+        extra_count_by_platform = {}
+        rate_fields = ("completion_rate", "three_second_view_rate", "avg_watch_seconds")
+        summary = {
+            "platforms": {},
+            "totals": {
+                "views": 0,
+                "likes": 0,
+                "comments": 0,
+                "shares": 0,
+                "saves": 0,
+                "follows": 0,
+                "engagement": 0,
+                "completion_rate": 0.0,
+                "three_second_view_rate": 0.0,
+                "avg_watch_seconds": 0.0,
+            },
+        }
         for row in self.performance():
             platform = row["platform"]
-            platform_entry = summary["platforms"].setdefault(platform, {"views": 0, "likes": 0, "comments": 0, "shares": 0, "engagement": 0})
-            for key in ("views", "likes", "comments", "shares"):
+            platform_entry = summary["platforms"].setdefault(
+                platform,
+                {
+                    "views": 0,
+                    "likes": 0,
+                    "comments": 0,
+                    "shares": 0,
+                    "saves": 0,
+                    "follows": 0,
+                    "engagement": 0,
+                    "completion_rate": 0.0,
+                    "three_second_view_rate": 0.0,
+                    "avg_watch_seconds": 0.0,
+                    "extra_metrics": {},
+                },
+            )
+            count_by_platform[platform] = count_by_platform.get(platform, 0) + 1
+            for key in ("views", "likes", "comments", "shares", "saves", "follows"):
                 value = int(row.get(key, 0))
                 platform_entry[key] += value
                 summary["totals"][key] += value
-            engagement = platform_entry["likes"] + platform_entry["comments"] + platform_entry["shares"]
+            for key in rate_fields:
+                platform_entry[key] += float(row.get(key, 0) or 0)
+                summary["totals"][key] += float(row.get(key, 0) or 0)
+            for key, value in (row.get("extra_metrics") or {}).items():
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                platform_entry["extra_metrics"][key] = platform_entry["extra_metrics"].get(key, 0.0) + numeric
+                extra_count_by_platform[(platform, key)] = extra_count_by_platform.get((platform, key), 0) + 1
+            engagement = platform_entry["likes"] + platform_entry["comments"] + platform_entry["shares"] + platform_entry["saves"]
             platform_entry["engagement"] = engagement
-        summary["totals"]["engagement"] = summary["totals"]["likes"] + summary["totals"]["comments"] + summary["totals"]["shares"]
+        total_rows = sum(count_by_platform.values())
+        for platform, count in count_by_platform.items():
+            for key in rate_fields:
+                summary["platforms"][platform][key] = round(summary["platforms"][platform][key] / max(1, count), 4)
+        for (platform, key), count in extra_count_by_platform.items():
+            summary["platforms"][platform]["extra_metrics"][key] = round(summary["platforms"][platform]["extra_metrics"][key] / max(1, count), 4)
+        if total_rows:
+            for key in rate_fields:
+                summary["totals"][key] = round(summary["totals"][key] / total_rows, 4)
+        summary["totals"]["engagement"] = (
+            summary["totals"]["likes"] + summary["totals"]["comments"] + summary["totals"]["shares"] + summary["totals"]["saves"]
+        )
         return summary
 
     def save_source_items(self, job_id, items):
@@ -862,7 +973,12 @@ class Store:
             args = []
             sql = """SELECT p.platform,
                 AVG(p.views) avg_views,
-                AVG(p.likes + p.comments + p.shares) avg_engagement,
+                AVG(p.likes + p.comments + p.shares + p.saves) avg_engagement,
+                AVG(p.saves) avg_saves,
+                AVG(p.follows) avg_follows,
+                AVG(p.completion_rate) avg_completion_rate,
+                AVG(p.three_second_view_rate) avg_three_second_view_rate,
+                AVG(p.avg_watch_seconds) avg_watch_seconds,
                 COUNT(*) sample_count
                 FROM performance p
                 JOIN jobs j ON j.id = p.job_id"""
@@ -881,6 +997,11 @@ class Store:
                 summary["platforms"][row["platform"]] = {
                     "views": round(float(row["avg_views"] or 0), 3),
                     "engagement": round(float(row["avg_engagement"] or 0), 3),
+                    "saves": round(float(row["avg_saves"] or 0), 3),
+                    "follows": round(float(row["avg_follows"] or 0), 3),
+                    "completion_rate": round(float(row["avg_completion_rate"] or 0), 4),
+                    "three_second_view_rate": round(float(row["avg_three_second_view_rate"] or 0), 4),
+                    "avg_watch_seconds": round(float(row["avg_watch_seconds"] or 0), 3),
                     "sample_count": int(row["sample_count"] or 0),
                 }
         if topic:

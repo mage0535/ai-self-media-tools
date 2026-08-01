@@ -95,6 +95,12 @@ def parser():
     performance.add_argument("--likes", type=int, default=0)
     performance.add_argument("--comments", type=int, default=0)
     performance.add_argument("--shares", type=int, default=0)
+    performance.add_argument("--saves", type=int, default=0)
+    performance.add_argument("--follows", type=int, default=0)
+    performance.add_argument("--completion-rate", type=float, default=0.0)
+    performance.add_argument("--three-second-view-rate", type=float, default=0.0)
+    performance.add_argument("--avg-watch-seconds", type=float, default=0.0)
+    performance.add_argument("--metric", action="append", default=[], help="Extra platform metric as key=value, for example coin_rate=0.08")
     task_scan = sub.add_parser("task-market-scan")
     task_scan.add_argument("--env", choices=["cn", "intl"], default="cn")
     task_scan.add_argument("--page-size", type=int, default=20)
@@ -296,8 +302,43 @@ def execute(args):
         return {"output": str(output), "bytes": len(content.encode())}
     if args.command == "record-performance":
         store.get_job(args.job_id)
-        store.record_performance(args.job_id, args.platform, args.views, args.likes, args.comments, args.shares)
-        return {"job_id": args.job_id, "platform": args.platform, "views": args.views, "likes": args.likes, "comments": args.comments, "shares": args.shares}
+        extra_metrics = {}
+        for item in args.metric:
+            key, separator, value = str(item).partition("=")
+            if not separator or not key.strip():
+                raise ValueError("--metric must use key=value")
+            try:
+                extra_metrics[key.strip()] = float(value)
+            except ValueError:
+                extra_metrics[key.strip()] = value
+        store.record_performance(
+            args.job_id,
+            args.platform,
+            args.views,
+            args.likes,
+            args.comments,
+            args.shares,
+            saves=args.saves,
+            follows=args.follows,
+            completion_rate=args.completion_rate,
+            three_second_view_rate=args.three_second_view_rate,
+            avg_watch_seconds=args.avg_watch_seconds,
+            extra_metrics=extra_metrics,
+        )
+        return {
+            "job_id": args.job_id,
+            "platform": args.platform,
+            "views": args.views,
+            "likes": args.likes,
+            "comments": args.comments,
+            "shares": args.shares,
+            "saves": args.saves,
+            "follows": args.follows,
+            "completion_rate": args.completion_rate,
+            "three_second_view_rate": args.three_second_view_rate,
+            "avg_watch_seconds": args.avg_watch_seconds,
+            "extra_metrics": extra_metrics,
+        }
     if args.command == "task-market-scan":
         return TaskMarketRunner(args.db, config).scan(args.env, args.page_size)
     if args.command == "task-market-auto":
