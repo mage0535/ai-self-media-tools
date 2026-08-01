@@ -123,11 +123,36 @@ class StoreTests(unittest.TestCase):
             job["id"],
             [{"cluster_key": "automation-visuals", "label": "automation", "score": 0.81, "topic_signals": ["automation", "visuals"]}],
         )
-        self.store.record_performance(job["id"], "wechat", views=120, likes=10, comments=3, shares=2)
+        self.store.record_performance(
+            job["id"],
+            "wechat",
+            views=120,
+            likes=10,
+            comments=3,
+            shares=2,
+            saves=4,
+            follows=1,
+            completion_rate=0.63,
+            three_second_view_rate=0.78,
+            avg_watch_seconds=41.2,
+        )
         clusters = self.store.related_topic_clusters("Automation visuals")
         history = self.store.historical_performance(["wechat"], "Automation visuals")
         self.assertEqual(clusters[0]["cluster_key"], "automation-visuals")
         self.assertIn("wechat", history["platforms"])
+        self.assertEqual(history["platforms"]["wechat"]["saves"], 4)
+        self.assertEqual(history["platforms"]["wechat"]["follows"], 1)
+        self.assertEqual(history["platforms"]["wechat"]["completion_rate"], 0.63)
+
+    def test_performance_ignores_corrupt_extra_metrics_json(self):
+        job = self.store.create_job("Topic", ["wechat"])
+        self.store.record_performance(job["id"], "wechat", views=10)
+        with self.store.connect() as conn:
+            conn.execute("UPDATE performance SET extra_metrics_json='not-json' WHERE job_id=?", (job["id"],))
+
+        rows = self.store.performance(job["id"])
+
+        self.assertEqual(rows[0]["extra_metrics"], {})
 
     def test_draft_versions_are_recorded(self):
         job = self.store.create_job("Topic", ["wechat"])

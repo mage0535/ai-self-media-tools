@@ -90,10 +90,41 @@ class CliV2Tests(unittest.TestCase):
 
     def test_feedback_summary_command_returns_aggregated_metrics(self):
         _, created = self.call("create", "--topic", "topic", "--platform", "wechat")
-        self.call("record-performance", created["id"], "--platform", "wechat", "--views", "100", "--likes", "12", "--comments", "3", "--shares", "2")
+        self.call(
+            "record-performance",
+            created["id"],
+            "--platform",
+            "wechat",
+            "--views",
+            "100",
+            "--likes",
+            "12",
+            "--comments",
+            "3",
+            "--shares",
+            "2",
+            "--saves",
+            "7",
+            "--follows",
+            "4",
+            "--completion-rate",
+            "0.58",
+            "--three-second-view-rate",
+            "0.73",
+            "--avg-watch-seconds",
+            "36.5",
+            "--metric",
+            "coin_rate=0.08",
+            "--metric",
+            "note=manual",
+        )
         code, result = self.call("feedback-summary")
         self.assertEqual(code, 0)
         self.assertEqual(result["platforms"]["wechat"]["views"], 100)
+        self.assertEqual(result["platforms"]["wechat"]["saves"], 7)
+        self.assertEqual(result["platforms"]["wechat"]["follows"], 4)
+        self.assertEqual(result["platforms"]["wechat"]["completion_rate"], 0.58)
+        self.assertEqual(result["platforms"]["wechat"]["extra_metrics"]["coin_rate"], 0.08)
 
     def test_project_audit_command_reports_clean_repo(self):
         with chdir(self.root):

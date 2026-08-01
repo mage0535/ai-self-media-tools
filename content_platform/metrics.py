@@ -1,5 +1,6 @@
 import os
 import time
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -24,6 +25,36 @@ def render_metrics(store):
         lines.extend(["# HELP hermes_content_views_total Recorded content views", "# TYPE hermes_content_views_total counter"])
         for row in conn.execute("SELECT platform,SUM(views) views FROM performance GROUP BY platform ORDER BY platform"):
             lines.append(f'hermes_content_views_total{{platform="{row["platform"]}"}} {row["views"] or 0}')
+        lines.extend(["# HELP hermes_content_saves_total Recorded content saves", "# TYPE hermes_content_saves_total counter"])
+        for row in conn.execute("SELECT platform,SUM(saves) saves FROM performance GROUP BY platform ORDER BY platform"):
+            lines.append(f'hermes_content_saves_total{{platform="{row["platform"]}"}} {row["saves"] or 0}')
+        lines.extend(["# HELP hermes_content_follows_total Recorded content follows", "# TYPE hermes_content_follows_total counter"])
+        for row in conn.execute("SELECT platform,SUM(follows) follows FROM performance GROUP BY platform ORDER BY platform"):
+            lines.append(f'hermes_content_follows_total{{platform="{row["platform"]}"}} {row["follows"] or 0}')
+        lines.extend(["# HELP hermes_content_completion_rate Average completion rate by platform", "# TYPE hermes_content_completion_rate gauge"])
+        for row in conn.execute("SELECT platform,AVG(completion_rate) completion_rate FROM performance GROUP BY platform ORDER BY platform"):
+            lines.append(f'hermes_content_completion_rate{{platform="{row["platform"]}"}} {row["completion_rate"] or 0}')
+        lines.extend(["# HELP hermes_content_three_second_view_rate Average three-second view rate by platform", "# TYPE hermes_content_three_second_view_rate gauge"])
+        for row in conn.execute("SELECT platform,AVG(three_second_view_rate) three_second_view_rate FROM performance GROUP BY platform ORDER BY platform"):
+            lines.append(f'hermes_content_three_second_view_rate{{platform="{row["platform"]}"}} {row["three_second_view_rate"] or 0}')
+        extra = {}
+        for row in conn.execute("SELECT platform,extra_metrics_json FROM performance"):
+            try:
+                payload = json.loads(row["extra_metrics_json"] or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+            for key, value in payload.items():
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                bucket = extra.setdefault((row["platform"], key), [])
+                bucket.append(numeric)
+        if extra:
+            lines.extend(["# HELP hermes_content_extra_metric Average platform-specific content metric", "# TYPE hermes_content_extra_metric gauge"])
+            for (platform, metric), values in sorted(extra.items()):
+                labels = f'platform="{_metric_label(platform)}",metric="{_metric_label(metric)}"'
+                lines.append(f"hermes_content_extra_metric{{{labels}}} {sum(values) / max(1, len(values))}")
         lines.extend(["# HELP hermes_content_delivery_failures Delivery failures", "# TYPE hermes_content_delivery_failures gauge"])
         for row in conn.execute("SELECT platform,COUNT(*) count FROM deliveries WHERE status IN ('failed','blocked') GROUP BY platform"):
             lines.append(f'hermes_content_delivery_failures{{platform="{row["platform"]}"}} {row["count"]}')
