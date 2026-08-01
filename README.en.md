@@ -221,8 +221,8 @@ Domestic platforms:
 | Bilibili | File package/draft/extension uploader | Tutorials, knowledge videos, longer case content | Requires category, cover, tags, captions, and clarity checks |
 | Xiaohongshu | Manual review package | Image-text notes, knowledge blocks, short-video mix | Focus on authenticity, save value, and manual publishing |
 | Toutiao | Draft/article package | Long-form image-text, trend analysis, experience posts | Next integration target |
-| Juejin | Draft/article package | Technical articles, OSS project analysis, engineering notes | Next integration target |
-| Zhihu | Draft/article package | Deep answers, opinion analysis, experience reviews | Next integration target |
+| Juejin | Automated article workflow + draft/publish preparation | Technical articles, OSS project analysis, engineering notes | Publisher integrated; requires operator credentials and article quality gates |
+| Zhihu | Automated article workflow + draft/publish preparation | Deep answers, opinion analysis, experience reviews | Publisher integrated; requires operator login state and article quality gates |
 
 International platforms:
 
