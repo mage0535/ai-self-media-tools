@@ -1,0 +1,112 @@
+# Public Distribution Guide
+
+Use this guide when sharing the project with another operator while keeping the
+current owner's cookies, account data, generated works, logs, databases, and
+runtime state private.
+
+## What To Share
+
+Share only a clean release bundle generated from Git-tracked project files:
+
+```bash
+python scripts/release_bundle.py --target /tmp/ai-self-media-tools-public
+```
+
+The bundle script audits the source tree first, copies only tracked files, skips
+private runtime paths, and audits the generated bundle again.
+
+Safe bundle contents include:
+
+- `content_platform/`
+- `scripts/`
+- `skills/`
+- `config/`
+- `docs/`
+- `tests/`
+- `README*.md`
+- `config.example.json`
+- `config.yaml.example`
+- `requirements.txt`
+- `pyproject.toml`
+
+## What Not To Share
+
+Never share these local or server runtime paths:
+
+- `.codex-server-runtime/`
+- `.codex-tmp/`
+- `.codex/`
+- `.agents/`
+- `.omx/`
+- `data/`
+- `secrets/`
+- `logs/`
+- `artifacts/`
+- `outbox/`
+- `tmp/`
+- `local-ops-lab/`
+- `cookies/`
+- `config.json`
+- `.env` or `.env.*`
+- `*.db`, `*.sqlite`, `*.log`
+- generated videos, screenshots, platform proofs, drafts, publish manifests, and account analytics exports
+
+Do not copy private Hermes runtime files, social-auto-upload cookies, browser
+profiles, proxy URLs, API keys, or platform account storage-state files into the
+public bundle.
+
+## New Operator Setup
+
+Each friend should create their own runtime state:
+
+1. Install Python 3.11+.
+2. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   pip install -e .
+   ```
+
+3. Copy `config.example.json` to `config.json`.
+4. Fill only their own local paths, account aliases, proxy settings, and API keys.
+5. Keep credentials in `.env`, `secrets/`, platform cookie folders, or their own external runtime. These paths are ignored and must not be committed.
+6. Run validation before any real channel work:
+
+   ```bash
+   python -m content_platform project-audit
+   python scripts/validate_channel_rulebook.py
+   pytest -q
+   ```
+
+## Platform Runtime Notes
+
+- Domestic channels must use the operator's own domestic proxy and account state.
+- International channels must use the operator's own international proxy and account state.
+- Browser-login platforms require the operator to create their own cookies or
+  browser profiles.
+- Semi-automatic platforms should generate review packages first; the operator
+  publishes manually unless their own verified publisher route is configured.
+- Direct public publishing should remain disabled until the operator has current
+  channel health, quality-gate pass, asset-license evidence, and postcheck proof.
+
+## Recommended Sharing Workflow
+
+1. Commit all intended source changes.
+2. Run:
+
+   ```bash
+   python -m content_platform project-audit
+   python scripts/validate_channel_rulebook.py
+   pytest -q
+   ```
+
+3. Create a clean bundle:
+
+   ```bash
+   python scripts/release_bundle.py --target /tmp/ai-self-media-tools-public
+   ```
+
+4. Inspect the bundle root. It should not contain runtime, data, cookie, secret,
+   log, or artifact directories.
+5. Zip or publish that bundle, not the working directory.
+
