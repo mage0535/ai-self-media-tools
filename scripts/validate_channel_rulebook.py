@@ -198,16 +198,53 @@ def main() -> None:
     require((ROOT / "scripts" / "validate_wechat_auto_packet.py").is_file(), "wechat validator script is missing")
     wechat_channels = wechat.get("content_channels") or {}
     require(
-        wechat_channels.get("daily_github_selection") == "one_ai_project_plus_one_non_ai_project_per_day",
-        "wechat daily_github_selection must require one AI and one non-AI GitHub project",
+        wechat_channels.get("github_selection") == "weekly_bundle_one_ai_project_plus_one_non_ai_project",
+        "wechat github_selection must require a weekly AI + non-AI GitHub project bundle",
     )
     require(wechat_channels.get("hot_content_generation"), "wechat hot_content_generation channel is required")
+    growth_strategy = wechat.get("growth_optimization_strategy") or {}
+    frequency = growth_strategy.get("publishing_frequency") or {}
+    require(str(frequency.get("recommended_articles_per_week") or "") in {"3-4", "2-4"}, "wechat frequency must be reduced to 3-4 articles/week")
+    require(frequency.get("max_articles_per_day") == 1, "wechat max articles per day must be 1")
+    require(frequency.get("avoid_three_articles_per_day_batching") is True, "wechat must forbid three-article daily batching")
+    require(len(growth_strategy.get("columns") or []) >= 4, "wechat growth strategy must define four columns")
+    title_rules = growth_strategy.get("title_rules") or {}
+    require((title_rules.get("max_chars") or 99) <= 28, "wechat title max chars must be <=28")
+    require((title_rules.get("keyword_first_chars") or 99) <= 15, "wechat title keyword must appear in first 15 chars")
+    article_structure = growth_strategy.get("article_structure") or {}
+    require((article_structure.get("retention_hook_interval_chars") or 999) <= 300, "wechat retention hook interval must be <=300 chars")
+    require((growth_strategy.get("interaction_conversion") or {}).get("backend_reply_keywords"), "wechat backend reply keywords are required")
+    require((growth_strategy.get("seo_geo") or {}).get("primary_keywords"), "wechat SEO/GEO keywords are required")
     wechat_strategy = wechat.get("strategy_requirements") or {}
     for field in ["account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection"]:
         require(field in (wechat_strategy.get("required_inputs_before_content_generation") or []), f"wechat strategy input missing: {field}")
-    for field in ["github_ai_projects", "github_non_ai_projects"]:
-        require(field in (wechat_strategy.get("daily_github_selection_required") or []), f"wechat daily github field missing: {field}")
-    for gate in ["account_data_analysis", "same_lane_account_benchmark", "cross_platform_trend_analysis", "content_workflow_inputs", "dual_content_channels"]:
+    for field in ["github_ai_projects", "github_non_ai_projects", "weekly_bundle_reason_or_ops_override"]:
+        require(field in (wechat_strategy.get("github_selection_required") or []), f"wechat github selection field missing: {field}")
+    for field in [
+        "growth_optimization_strategy",
+        "content_mix_plan",
+        "column_plan",
+        "frequency_plan",
+        "title_seo_plan",
+        "interaction_conversion_plan",
+        "post_publish_metric_plan",
+    ]:
+        require(field in (wechat_strategy.get("content_workflow_must_receive") or []), f"wechat content workflow handoff missing: {field}")
+    for gate in [
+        "account_data_analysis",
+        "same_lane_account_benchmark",
+        "cross_platform_trend_analysis",
+        "content_workflow_inputs",
+        "dual_content_channels",
+        "wechat_editorial_frequency_control",
+        "wechat_column_mix_plan",
+        "wechat_title_fatigue_gate",
+        "wechat_first_200_chars_payoff",
+        "wechat_retention_hook_every_300_chars",
+        "wechat_comment_backend_reply_cta",
+        "wechat_search_seo_layout",
+        "wechat_manual_data_review_plan",
+    ]:
         require(gate in (wechat.get("quality_gates") or []), f"wechat quality gate missing: {gate}")
 
     kuaishou = channel_rules["kuaishou"]

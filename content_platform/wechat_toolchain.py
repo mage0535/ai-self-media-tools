@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 
@@ -155,6 +156,12 @@ def _load_env_file(env: dict[str, str], env_file: str) -> None:
 
 def _write_brief(path: Path, topic: str, draft: dict[str, Any], job: dict[str, Any]) -> None:
     current = str(draft.get("body") or "").strip()
+    growth = build_growth_strategy(["wechat"], "long_article", (job.get("historical_feedback") or {}))
+    playbook = growth.get("wechat_growth_playbook") or {}
+    frequency = playbook.get("publishing_frequency") or {}
+    title_rules = playbook.get("title_rules") or {}
+    seo_geo = playbook.get("seo_geo") or {}
+    interaction = playbook.get("interaction_conversion") or {}
     lines = [
         f"# WeChat professional long-form brief: {topic}",
         "",
@@ -165,6 +172,18 @@ def _write_brief(path: Path, topic: str, draft: dict[str, Any], job: dict[str, A
         "Images: plan at least 3 inline knowledge cards or scene images mapped to adjacent sections.",
         "Facts: use only the brief and draft information; do not invent sources, percentages, rankings, or identity claims.",
         "Anti-AI: remove slogans, filler transitions, generic advice, and mechanical three-part phrasing.",
+        "",
+        "## WeChat growth playbook requirements",
+        f"- Publishing rhythm: {frequency.get('recommended_articles_per_week', '3-4')} articles/week, max {frequency.get('max_articles_per_day', 1)} article/day; do not split weak material into multiple same-day pieces.",
+        "- Column mix: AI说人话 / 我的AI工作台 / GitHub/工具精选 / 马吉克周记或你问我答. Pick the one column that best matches the topic and make the article clearly belong to it.",
+        "- GitHub selection: default to one weekly bundled article with one AI project and one non-AI project; only add extra GitHub articles when the ops strategy includes fresh evidence.",
+        f"- Title: <= {title_rules.get('max_chars', 28)} Chinese chars; put the core keyword in the first {title_rules.get('keyword_first_chars', 15)} chars; avoid repeating 实测/试了/值得试试 style frames within 7 days.",
+        "- First 200 chars: include reader pain, concrete payoff, and why this matters now.",
+        "- Retention: add a new conflict, example, checklist, or decision point about every 300 Chinese chars.",
+        "- Interaction: end with one specific comment question plus a keyword reply CTA, not a generic 评论区聊聊.",
+        f"- Backend reply keywords to use when natural: {', '.join(interaction.get('backend_reply_keywords') or ['工具箱', '清单', 'GitHub', '自动化'])}.",
+        f"- Search intent keywords to weave naturally: {', '.join(seo_geo.get('primary_keywords') or ['AI效率工具', 'AI自动化', '开源项目', 'GitHub精选', 'AI工作流'])}.",
+        "- Review fallback: if WeChat data APIs are unavailable, require a manual backend metrics row after publishing.",
         "",
         "## Topic",
         topic,
@@ -220,6 +239,7 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         for i, item in enumerate(section_map)
     ]
     strategy_reason = "WeWrite long-form article with theme and inline image planning"
+    growth_strategy = build_growth_strategy(["wechat"], "long_article", (job.get("historical_feedback") or {}))
     return {
         "preflight_manifest": build_preflight_manifest(
             channel="wechat",
@@ -241,7 +261,8 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         "hook_type": "case_conflict_reader_payoff",
         "sections": sections[:5] if len(sections) >= 5 else sections + [f"section_{i}" for i in range(len(sections) + 1, 6)],
         "visual_template_selection": {"selected": "wewrite_case_feature_109_theme", "ranked_scores": [{"template": "wewrite_case_feature_109_theme", "score": 92}], "recent_same_platform_templates": [], "penalties": {}},
-        "strategy_brief": {"target_user": "AI operators", "channel_lane": "AI operations", "topic_basis": str(job.get("topic") or title), "click_reason": "specific mistake and repair path", "reader_payoff": "a reusable operational checklist", "chosen_structure": "case-breakdown-method", "content_form": "longform article", "seo_geo_intent": "WeChat search and recommendation intent for AI operations", "selected_theme_reason": strategy_reason},
+        "strategy_brief": {"target_user": "AI operators", "channel_lane": "AI operations", "topic_basis": str(job.get("topic") or title), "click_reason": "specific mistake and repair path", "reader_payoff": "a reusable operational checklist", "chosen_structure": "case-breakdown-method", "content_form": "longform article", "seo_geo_intent": "WeChat search and recommendation intent for AI operations", "selected_theme_reason": strategy_reason, "growth_goal": growth_strategy.get("wechat_growth_playbook", {}).get("primary_goal", "")},
+        "growth_strategy": growth_strategy,
         "section_image_map": section_map,
         "real_scene_background_plan": {"required": True, "source_policy": "licensed_or_verified_real_scene_assets", "primary_background_kind": "real_scene_photo", "no_css_gradient_primary": True, "per_slide_backgrounds": backgrounds},
         "knowledge_card_plan": {"skill": KNOWLEDGE_CARD_SKILL, "card_type": "knowledge_summary", "platform": "wechat", "audience": "operators", "visual_scheme": "professional", "typography_hierarchy": "4:2:1", "self_check": ["readability", "attraction", "information_density", "share_or_save_value", "visual_match", "mobile_safe_boundaries"]},

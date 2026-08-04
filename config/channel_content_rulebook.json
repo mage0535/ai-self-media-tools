@@ -584,8 +584,91 @@
         "image_text_article"
       ],
       "content_channels": {
-        "daily_github_selection": "one_ai_project_plus_one_non_ai_project_per_day",
+        "github_selection": "weekly_bundle_one_ai_project_plus_one_non_ai_project",
         "hot_content_generation": "topic_selected_from_wechat_same_lane_and_external_platform_trends"
+      },
+      "growth_optimization_strategy": {
+        "diagnosis_date": "2026-08-04",
+        "primary_goal": "increase_read_to_follow_rate_without_sacrificing_finish_read_or_save_rate",
+        "publishing_frequency": {
+          "recommended_articles_per_week": "3-4",
+          "max_articles_per_day": 1,
+          "avoid_three_articles_per_day_batching": true
+        },
+        "content_mix": {
+          "personal_practice_story": 0.3,
+          "opinion_or_trend_interpretation": 0.25,
+          "github_or_tool_selection": 0.3,
+          "interactive_qa_or_weekly_recap": 0.15
+        },
+        "columns": [
+          "AI说人话",
+          "我的AI工作台",
+          "GitHub/工具精选",
+          "马吉克周记/你问我答"
+        ],
+        "title_rules": {
+          "max_chars": 28,
+          "keyword_first_chars": 15,
+          "template_fatigue_limit_days": 7,
+          "avoid_repeated_frames": [
+            "实测",
+            "试了",
+            "值得试试"
+          ]
+        },
+        "article_structure": {
+          "first_200_chars": "reader pain plus concrete payoff plus why now",
+          "retention_hook_interval_chars": 300,
+          "must_include": [
+            "real_case",
+            "specific_steps",
+            "failure_or_boundary",
+            "saveable_checklist",
+            "natural_follow_reason"
+          ]
+        },
+        "seo_geo": {
+          "primary_keywords": [
+            "AI效率工具",
+            "AI自动化",
+            "开源项目",
+            "GitHub精选",
+            "AI工作流"
+          ],
+          "placement": [
+            "title_first_15_chars",
+            "digest",
+            "first_200_chars",
+            "section_headings"
+          ]
+        },
+        "interaction_conversion": {
+          "backend_reply_keywords": [
+            "工具箱",
+            "清单",
+            "GitHub",
+            "自动化"
+          ],
+          "required": [
+            "specific_comment_prompt",
+            "share_reason",
+            "cross_platform_follow_funnel"
+          ]
+        },
+        "manual_review_when_api_unavailable": {
+          "trigger": "datacube_or_user_summary_api_48001",
+          "required_metrics": [
+            "impressions",
+            "open_rate",
+            "finish_read_rate",
+            "share_rate",
+            "save_rate",
+            "comment_rate",
+            "new_follows",
+            "read_to_follow_rate"
+          ]
+        }
       },
       "publish_policy": "draft_box_is_stage_success_public_publish_requires_user_action_or_explicit_approval",
       "must_use_tools": [
@@ -608,9 +691,10 @@
           "cross_platform_trend_analysis",
           "topic_selection"
         ],
-        "daily_github_selection_required": [
+        "github_selection_required": [
           "github_ai_projects",
-          "github_non_ai_projects"
+          "github_non_ai_projects",
+          "weekly_bundle_reason_or_ops_override"
         ],
         "hot_content_generation_required": [
           "wechat_same_lane_samples",
@@ -622,7 +706,14 @@
           "same_lane_account_analysis",
           "cross_platform_trend_analysis",
           "topic_selection",
-          "content_channels"
+          "content_channels",
+          "growth_optimization_strategy",
+          "content_mix_plan",
+          "column_plan",
+          "frequency_plan",
+          "title_seo_plan",
+          "interaction_conversion_plan",
+          "post_publish_metric_plan"
         ]
       },
       "quality_gates": [
@@ -633,6 +724,14 @@
         "topic_and_article_plan",
         "content_workflow_inputs",
         "dual_content_channels",
+        "wechat_editorial_frequency_control",
+        "wechat_column_mix_plan",
+        "wechat_title_fatigue_gate",
+        "wechat_first_200_chars_payoff",
+        "wechat_retention_hook_every_300_chars",
+        "wechat_comment_backend_reply_cta",
+        "wechat_search_seo_layout",
+        "wechat_manual_data_review_plan",
         "github_project_source_required",
         "batch_quantity_contract",
         "1200_to_3000_words_when_article",

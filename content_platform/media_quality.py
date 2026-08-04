@@ -514,6 +514,13 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     topic_selection = packet.get("topic_selection") or strategy.get("topic_selection") or {}
     content_brief = packet.get("content_generation_brief") or strategy.get("content_generation_brief") or {}
     content_channels = packet.get("content_channels") or strategy.get("content_channels") or {}
+    growth_strategy = packet.get("growth_strategy") or packet.get("growth_plan") or {}
+    wechat_playbook = (
+        (growth_strategy.get("wechat_growth_playbook") if isinstance(growth_strategy, dict) else {})
+        or packet.get("growth_optimization_strategy")
+        or strategy.get("growth_optimization_strategy")
+        or {}
+    )
     artifact_probe = packet.get("article_artifact_probe") or {}
     direction = str(strategy.get("content_direction") or packet.get("content_line") or "").casefold()
     github_projects = source_data.get("github_projects") or []
@@ -528,6 +535,12 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     wechat_trend_samples = trend_analysis.get("wechat_same_lane_samples") or trend_analysis.get("wechat_samples") or []
     external_trend_samples = trend_analysis.get("external_platform_samples") or trend_analysis.get("external_samples") or []
     content_brief_sources = {str(item).casefold() for item in (content_brief.get("source_inputs") or [])}
+    github_channel_enabled = bool(content_channels.get("github_selection") or content_channels.get("daily_github_selection"))
+    frequency = wechat_playbook.get("publishing_frequency") if isinstance(wechat_playbook, dict) else {}
+    title_rules = wechat_playbook.get("title_rules") if isinstance(wechat_playbook, dict) else {}
+    article_structure = wechat_playbook.get("article_structure") if isinstance(wechat_playbook, dict) else {}
+    interaction_conversion = wechat_playbook.get("interaction_conversion") if isinstance(wechat_playbook, dict) else {}
+    seo_geo = wechat_playbook.get("seo_geo") if isinstance(wechat_playbook, dict) else {}
     gates = {
         "base_article_quality": {"passed": bool(article.get("passed")), "failed": article.get("failed_dimensions", [])},
         "account_data_analysis": {
@@ -560,7 +573,7 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "source_inputs": sorted(content_brief_sources),
         },
         "github_project_source": {
-            "passed": ("github" in direction or bool(content_channels.get("daily_github_selection")))
+            "passed": ("github" in direction or github_channel_enabled)
             and len(github_projects) >= 1
             and bool(selected_project.get("repo"))
             and selected_project_url.startswith("http")
@@ -570,7 +583,7 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "project_visual_present": bool(selected_project_visual),
         },
         "dual_content_channels": {
-            "passed": bool(content_channels.get("daily_github_selection"))
+            "passed": github_channel_enabled
             and bool(content_channels.get("hot_content_generation"))
             and len(ai_github_projects) >= 1
             and len(non_ai_github_projects) >= 1
@@ -578,6 +591,26 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "ai_github_count": len(ai_github_projects),
             "non_ai_github_count": len(non_ai_github_projects),
             "hot_content_count": len(hot_content_items),
+        },
+        "wechat_growth_playbook": {
+            "passed": bool(wechat_playbook)
+            and str(frequency.get("recommended_articles_per_week") or "") in {"3-4", "2-4"}
+            and _safe_int(frequency.get("max_articles_per_day")) == 1
+            and bool((wechat_playbook.get("content_mix") or {}).get("personal_practice_story"))
+            and len(wechat_playbook.get("columns") or []) >= 4
+            and _safe_int(title_rules.get("keyword_first_chars")) <= 15
+            and _safe_int(article_structure.get("retention_hook_interval_chars")) <= 300
+            and bool(interaction_conversion.get("backend_reply_keywords"))
+            and bool(seo_geo.get("primary_keywords")),
+            "required": [
+                "publishing_frequency.max_articles_per_day=1",
+                "content_mix",
+                "columns",
+                "title_rules.keyword_first_chars<=15",
+                "article_structure.retention_hook_interval_chars<=300",
+                "backend_reply_keywords",
+                "seo_keywords",
+            ],
         },
         "batch_quantity_contract": {
             "passed": expected_count >= 2
