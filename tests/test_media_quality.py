@@ -15,6 +15,7 @@ from content_platform.media_quality import (
     validate_wechat_auto_packet,
     validate_xiaohongshu_auto_packet,
 )
+from content_platform.growth_policy import build_growth_strategy
 from content_platform.preflight_manifest import validate_preflight_manifest
 from content_platform.visual_content_policy import visual_content_policy
 
@@ -84,6 +85,8 @@ def complete_video_plan():
 
 
 def complete_growth_strategy(platform: str = "wechat", content_type: str = "long_article"):
+    if platform == "wechat":
+        return build_growth_strategy([platform], content_type)
     is_video = content_type in {"knowledge_card_video", "short_video", "edited_short_video", "microcase_video"}
     return {
         "policy_id": "growth_quality_policy_v1",
@@ -356,7 +359,7 @@ def complete_wechat_auto_packet():
             "article_plan": ["hook", "project value", "fit matrix", "hands-on check", "next action"],
         },
         "content_channels": {
-            "daily_github_selection": True,
+            "github_selection": True,
             "hot_content_generation": True,
         },
         "source_data": {
