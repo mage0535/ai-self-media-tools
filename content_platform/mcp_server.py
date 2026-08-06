@@ -117,6 +117,70 @@ def _tools():
         result = engine.synthesize(text, lang=lang, genre=genre)
         return {"audio": result.get("audio", ""), "subtitle": result.get("subtitle", "")}
 
+    async def mcp_capability_status() -> dict:
+        from content_platform.tool_registry import ToolRegistry
+        from content_platform.video_recipe import load_effect_module_registry
+
+        registry = load_effect_module_registry()
+        modules = registry.get("modules") if isinstance(registry, dict) else {}
+        families = registry.get("template_families") if isinstance(registry, dict) else {}
+        return {
+            "tools": ToolRegistry({"fast_probe": True}).probe(),
+            "video_effect_modules": {
+                "version": registry.get("version", ""),
+                "module_count": len(modules or {}),
+                "template_family_count": len(families or {}),
+            },
+            "mcp_tools": ["capability_status", "build_content_recipe", "validate_content_package"],
+        }
+
+    async def mcp_build_content_recipe(packet: str = "{}", platform: str = "") -> dict:
+        from content_platform.content_recipe import build_article_recipe, build_knowledge_card_recipe
+
+        data = json.loads(packet or "{}")
+        channel = platform or str(data.get("platform") or "")
+        cards = data.get("embedded_knowledge_cards") or data.get("knowledge_card_sequence") or []
+        result = {
+            "platform": channel,
+            "knowledge_card_recipe": build_knowledge_card_recipe(
+                platform=channel,
+                cards=cards,
+                content_type=str(data.get("content_type") or data.get("content_form") or "knowledge_cards"),
+            ),
+        }
+        content_type = str(data.get("content_type") or data.get("content_form") or "")
+        if content_type in {"long_article", "article", "checklist_article", "longform article"} or data.get("body"):
+            result["article_recipe"] = build_article_recipe(
+                platform=channel,
+                content_type=content_type or "article",
+                title=str(data.get("title") or ""),
+                body=str(data.get("body") or ""),
+                sections=data.get("sections") or [],
+                section_image_map=data.get("section_image_map") or data.get("image_text_plan") or [],
+                embedded_knowledge_cards=cards,
+                visual_template_selection=data.get("visual_template_selection") or {},
+            )
+        return result
+
+    async def mcp_validate_content_package(packet: str = "{}", platform: str = "") -> dict:
+        from content_platform.media_quality import (
+            validate_article_packet,
+            validate_platform_article_packet,
+            validate_video_packet,
+            validate_xiaohongshu_auto_packet,
+        )
+
+        data = json.loads(packet or "{}")
+        channel = (platform or str(data.get("platform") or "")).casefold()
+        content_type = str(data.get("content_type") or data.get("content_form") or "").casefold()
+        if channel in {"xiaohongshu", "rednote"}:
+            return validate_xiaohongshu_auto_packet(data)
+        if "video" in content_type or data.get("video_plan") or data.get("audio_probe"):
+            return validate_video_packet(data)
+        if channel in {"toutiao", "juejin", "zhihu"}:
+            return validate_platform_article_packet(data, channel)
+        return validate_article_packet(data)
+
     return [
         (mcp_seo_geo_check, "seo_geo_check", "Run 7-dim GEO quality check on text", {"text": str}),
         (mcp_trends_query, "trends_query", "Get current trending topics", {"limit": int}),
@@ -127,6 +191,9 @@ def _tools():
         (mcp_review_status, "review_status", "Get current review queue status", {}),
         (mcp_reddit_channel_status, "reddit_channel_status", "Get Reddit trend, draft, binding, and review status", {}),
         (mcp_generate_audio, "generate_audio", "Generate audio narration", {"text": str, "lang": str, "genre": str}),
+        (mcp_capability_status, "capability_status", "Report available tools, skills bridge, and video effect registry", {}),
+        (mcp_build_content_recipe, "build_content_recipe", "Build article and knowledge-card recipe evidence for a packet", {"packet": str, "platform": str}),
+        (mcp_validate_content_package, "validate_content_package", "Validate article, video, Xiaohongshu, or platform article package gates", {"packet": str, "platform": str}),
     ]
 
 

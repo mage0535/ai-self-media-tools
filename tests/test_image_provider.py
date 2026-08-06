@@ -330,3 +330,105 @@ def test_auto_falls_back_to_pollinations_when_paid_providers_unavailable(tmp_pat
 
     assert result["provider"] == "pollinations"
     assert Path(result["path"]).read_bytes() == image_bytes
+
+
+def test_auto_does_not_try_paid_providers_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.setenv("OPENAI_API_KEY", "paid-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "paid-key")
+    image_bytes = b"\x89PNG\r\n\x1a\n" + b"x" * 3000
+
+    class Headers:
+        def get(self, name, default=None):
+            return "image/png" if name == "Content-Type" else default
+
+    class Response:
+        headers = Headers()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return image_bytes
+
+    with patch("content_platform.image_provider.urllib.request.urlopen", return_value=Response()), patch(
+        "content_platform.image_provider._openai_image"
+    ) as openai_image, patch("content_platform.image_provider._gemini_image") as gemini_image:
+        result = generate_image("free image only", tmp_path / "out.png", provider="auto")
+
+    assert result["provider"] == "pollinations"
+    openai_image.assert_not_called()
+    gemini_image.assert_not_called()
+
+
+def test_cloudflare_generation_writes_direct_image_response(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.setenv("CF_WORKER_URL", "https://example.worker.dev/image")
+    monkeypatch.setenv("CF_WORKER_KEY", "worker-key")
+    image_bytes = b"\xff\xd8" + b"x" * 3000
+
+    class Headers:
+        def get(self, name, default=None):
+            return "image/jpeg" if name == "Content-Type" else default
+
+    class Response:
+        headers = Headers()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return image_bytes
+
+    def fake_urlopen(request, timeout):
+        assert request.full_url == "https://example.worker.dev/image"
+        assert request.headers["Authorization"] == "Bearer worker-key"
+        payload = json.loads(request.data.decode("utf-8"))
+        assert payload["width"] == 768
+        assert payload["height"] == 1024
+        return Response()
+
+    with patch("content_platform.image_provider.urllib.request.urlopen", side_effect=fake_urlopen):
+        result = generate_image("vertical tech cover", tmp_path / "out.jpg", provider="cloudflare", size="768x1024")
+
+    assert result["provider"] == "cloudflare"
+    assert Path(result["path"]).read_bytes() == image_bytes
+
+
+def test_image_provider_cache_reuses_previous_success(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    image_bytes = b"\x89PNG\r\n\x1a\n" + b"x" * 3000
+
+    class Headers:
+        def get(self, name, default=None):
+            return "image/png" if name == "Content-Type" else default
+
+    class Response:
+        headers = Headers()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return image_bytes
+
+    with patch("content_platform.image_provider.urllib.request.urlopen", return_value=Response()) as urlopen:
+        first = generate_image("cached visual", tmp_path / "one.png", provider="pollinations")
+        second = generate_image("cached visual", tmp_path / "two.png", provider="pollinations")
+
+    assert first["provider"] == "pollinations"
+    assert second["cache_hit"] is True
+    assert Path(second["path"]).read_bytes() == image_bytes
+    assert urlopen.call_count == 1

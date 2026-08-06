@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import mimetypes
 import os
+import shutil
+import time
 import urllib.parse
 import urllib.error
 import urllib.request
@@ -72,9 +75,12 @@ def generate_image(
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    providers = ["openai", "gemini", "stock", "pollinations"] if provider == "auto" else [provider]
+    providers = _provider_chain(provider)
     errors: list[str] = []
     for name in providers:
+        cached = _read_cache(prompt, output_path, name, model=model, size=size, input_image=input_image)
+        if cached:
+            return cached
         try:
             if name == "openai":
                 result = _openai_image(prompt, output_path, model=model, size=size, quality=quality, input_image=input_image)
@@ -88,10 +94,13 @@ def generate_image(
                 result = _pixabay_image(prompt, output_path, size=size, input_image=input_image)
             elif name == "pollinations":
                 result = _pollinations_image(prompt, output_path, model=model, size=size, input_image=input_image)
+            elif name == "cloudflare":
+                result = _cloudflare_image(prompt, output_path, model=model, size=size, input_image=input_image)
             else:
                 raise ImageProviderError(f"unsupported image provider: {name}")
             result["path"] = str(output_path)
             result["bytes"] = output_path.stat().st_size
+            _write_cache(prompt, output_path, name, result, model=model, size=size, input_image=input_image)
             return result
         except Exception as exc:
             errors.append(f"{name}: {type(exc).__name__}: {str(exc)[:180]}")
@@ -153,7 +162,7 @@ def _write_openai_response(response, output: Path) -> None:
         return
     url = getattr(data, "url", None)
     if url:
-        with urllib.request.urlopen(url, timeout=120) as resp:
+        with _urlopen_retry(url, timeout=120) as resp:
             output.write_bytes(resp.read())
         return
     raise ImageProviderError("OpenAI response did not include image data")
@@ -193,7 +202,7 @@ def _gemini_image(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
+        with _urlopen_retry(req, timeout=180) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:180]
@@ -255,7 +264,7 @@ def _pexels_image(
         headers={"Authorization": key, "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with _urlopen_retry(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:180]
@@ -306,7 +315,7 @@ def _pixabay_image(
     )
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with _urlopen_retry(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:180]
@@ -333,7 +342,7 @@ def _pixabay_image(
 def _download_image(url: str, output: Path) -> None:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
     try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
+        with _urlopen_retry(req, timeout=90) as resp:
             content_type = resp.headers.get("Content-Type", "")
             body = resp.read()
     except urllib.error.HTTPError as exc:
@@ -401,7 +410,7 @@ def _pollinations_image(
     url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt[:1200])}?{query}"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
     try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
+        with _urlopen_retry(req, timeout=90, attempts=3) as resp:
             content_type = resp.headers.get("Content-Type", "")
             body = resp.read()
     except urllib.error.HTTPError as exc:
@@ -415,6 +424,67 @@ def _pollinations_image(
     return {"provider": "pollinations", "model": model_name, "mode": "generate"}
 
 
+def _cloudflare_image(
+    prompt: str,
+    output: Path,
+    model: str = "",
+    size: str = "1024x1024",
+    input_image: str | Path | None = None,
+) -> dict:
+    if input_image:
+        raise ImageProviderError("Cloudflare image provider does not support image editing")
+    worker_url = load_secret("CF_WORKER_URL") or load_secret("CLOUDFLARE_IMAGE_WORKER_URL")
+    account_id = load_secret("CLOUDFLARE_ACCOUNT_ID")
+    token = load_secret("CLOUDFLARE_API_TOKEN") or load_secret("CF_WORKER_KEY")
+    model_name = model or os.environ.get("CLOUDFLARE_IMAGE_MODEL") or "@cf/black-forest-labs/flux-1-schnell"
+    width, height = _parse_size(size)
+    if worker_url:
+        url = worker_url
+        payload = json.dumps({"prompt": prompt, "width": width, "height": height, "model": model_name}).encode("utf-8")
+    elif account_id and token:
+        quoted_model = urllib.parse.quote(model_name, safe="/@")
+        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{quoted_model}"
+        payload = json.dumps({"prompt": prompt[:2048], "seed": int(time.time()) % 2_147_483_647, "steps": 4}).encode("utf-8")
+    else:
+        raise ImageProviderError("Cloudflare image provider is not configured")
+    headers = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+    try:
+        with _urlopen_retry(req, timeout=90, attempts=3) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            body = resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")[:180]
+        raise ImageProviderError(f"Cloudflare image call failed: HTTP {exc.code} {detail}") from exc
+    image = _extract_cloudflare_image(body, content_type)
+    if len(image) < 2048:
+        raise ImageProviderError("Cloudflare response was too small to be a valid image")
+    output.write_bytes(image)
+    return {"provider": "cloudflare", "model": model_name, "mode": "generate"}
+
+
+def _extract_cloudflare_image(body: bytes, content_type: str) -> bytes:
+    if "image" in content_type.lower() or body.startswith((b"\xff\xd8", b"\x89PNG", b"RIFF")):
+        return body
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        raise ImageProviderError(f"Cloudflare response was not an image: {content_type}") from exc
+    result = data.get("result") if isinstance(data, dict) else None
+    if isinstance(result, dict):
+        b64 = result.get("image") or result.get("b64_json")
+        if isinstance(b64, str) and b64:
+            return base64.b64decode(b64)
+        url = result.get("url")
+        if isinstance(url, str) and url:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
+            with _urlopen_retry(req, timeout=90) as resp:
+                return resp.read()
+    raise ImageProviderError("Cloudflare response did not include image data")
+
+
 def _parse_size(size: str) -> tuple[int, int]:
     try:
         width, height = [int(part) for part in str(size).lower().split("x", 1)]
@@ -423,3 +493,94 @@ def _parse_size(size: str) -> tuple[int, int]:
     width = max(256, min(width, 1536))
     height = max(256, min(height, 1536))
     return (width, height)
+
+
+def _provider_chain(provider: str) -> list[str]:
+    if provider != "auto":
+        return [provider]
+    configured = os.environ.get("IMAGE_PROVIDER_CHAIN", "").strip()
+    if configured:
+        return [p.strip() for p in configured.split(",") if p.strip()]
+    chain = ["stock", "pollinations", "cloudflare"]
+    if os.environ.get("IMAGE_PROVIDER_ALLOW_PAID") == "1":
+        chain.extend(["openai", "gemini"])
+    return chain
+
+
+def _cache_dir() -> Path:
+    content_home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+    path = Path(os.environ.get("IMAGE_PROVIDER_CACHE_DIR", str(content_home / "data" / "cache" / "image_provider")))
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _cache_key(prompt: str, provider: str, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None) -> str:
+    h = hashlib.sha256()
+    h.update(provider.encode("utf-8"))
+    h.update(b"\0")
+    h.update((model or "").encode("utf-8"))
+    h.update(b"\0")
+    h.update(size.encode("utf-8"))
+    h.update(b"\0")
+    h.update(prompt.encode("utf-8"))
+    if input_image:
+        source = Path(input_image)
+        h.update(b"\0")
+        h.update(str(source).encode("utf-8"))
+        try:
+            h.update(hashlib.sha256(source.read_bytes()).digest())
+        except OSError:
+            pass
+    return h.hexdigest()
+
+
+def _read_cache(prompt: str, output: Path, provider: str, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None) -> dict | None:
+    if os.environ.get("IMAGE_PROVIDER_DISABLE_CACHE") == "1":
+        return None
+    key = _cache_key(prompt, provider, model=model, size=size, input_image=input_image)
+    image = _cache_dir() / f"{key}.img"
+    meta = _cache_dir() / f"{key}.json"
+    if not image.is_file() or image.stat().st_size < 2048 or not meta.is_file():
+        return None
+    try:
+        result = json.loads(meta.read_text(encoding="utf-8"))
+        shutil.copyfile(image, output)
+        result.update({"path": str(output), "bytes": output.stat().st_size, "cache_hit": True})
+        return result
+    except Exception:
+        return None
+
+
+def _write_cache(prompt: str, output: Path, provider: str, result: dict, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None) -> None:
+    if os.environ.get("IMAGE_PROVIDER_DISABLE_CACHE") == "1":
+        return
+    if not output.is_file() or output.stat().st_size < 2048:
+        return
+    key = _cache_key(prompt, provider, model=model, size=size, input_image=input_image)
+    image = _cache_dir() / f"{key}.img"
+    meta = _cache_dir() / f"{key}.json"
+    cache_result = {k: v for k, v in result.items() if k not in {"path"}}
+    cache_result.update({"cache_key": key, "cached_at": int(time.time())})
+    try:
+        shutil.copyfile(output, image)
+        meta.write_text(json.dumps(cache_result, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        return
+
+
+def _urlopen_retry(request, timeout: int = 90, attempts: int = 2):
+    last: Exception | None = None
+    for idx in range(max(1, attempts)):
+        try:
+            return urllib.request.urlopen(request, timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in {408, 425, 429, 500, 502, 503, 504}:
+                raise
+            last = exc
+        except urllib.error.URLError as exc:
+            last = exc
+        if idx + 1 < attempts:
+            time.sleep(min(2 ** idx, 8))
+    if last:
+        raise last
+    raise ImageProviderError("urlopen failed without exception")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .video_recipe import build_visual_recipe
+
 
 VIDEO_FORMS = {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video", "article_explainer_video"}
 MIXED_VIDEO_FORMS = {"image_text_knowledge_card_short_video_mix"}
@@ -35,7 +37,7 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
     selected_pipeline = _select_pipeline(platforms, content_form, asset_plan, brief)
     template_family = _select_template_family(platforms, content_form, brief)
     required_tools = _required_tools(selected_pipeline, content_form, asset_plan)
-    return {
+    plan = {
         "required": True,
         "content_form": content_form,
         "platforms": platforms,
@@ -105,6 +107,8 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
             "lower_third_subtitles",
             "licensed_background_music",
             "template_family_recorded",
+            "visual_recipe_recorded",
+            "visual_recipe_fingerprint_recorded",
             "no_static_single_template_loop",
             "cinema_storyboard_recorded",
             "shotcraft_motion_plan_recorded",
@@ -114,6 +118,8 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
             "renderer_steps_recorded",
         ],
     }
+    plan["visual_recipe"] = build_visual_recipe(plan, title=str(brief.get("topic") or brief.get("title") or ""))
+    return plan
 
 
 def _select_pipeline(platforms: list[str], content_form: str, asset_plan: set[str], brief: dict[str, Any]) -> str:

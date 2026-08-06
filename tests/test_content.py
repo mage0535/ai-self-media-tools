@@ -62,6 +62,25 @@ class ContentTests(unittest.TestCase):
         self.assertTrue(any("Return only JSON" in item for item in run.call_args.args[0]))
         self.assertIn("same-track", run.call_args.args[0][2])
 
+    def test_full_ops_article_generator_emits_platform_source_matrix(self):
+        with patch.dict(os.environ, {}, clear=True):
+            draft = DraftGenerator({"allow_fallback": True}).generate(
+                "小红书知识卡片选题",
+                {
+                    "platforms": ["xiaohongshu"],
+                    "tone": "human",
+                    "audience": "new creators",
+                },
+            )
+        meta = draft["draft_meta"]
+        matrix = meta["platform_source_matrix"]
+        self.assertGreaterEqual(len(matrix["attempted_sources"]), 5)
+        self.assertGreaterEqual(matrix["successful_source_count"], 3)
+        self.assertTrue(matrix["platform_internal_verified"])
+        self.assertTrue(matrix["current_platform_specific_topic"])
+        self.assertFalse(matrix["shared_trend_only"])
+        self.assertEqual(meta["strategy_brief"]["platform_source_matrix"], matrix)
+
 
 if __name__ == "__main__":
     unittest.main()

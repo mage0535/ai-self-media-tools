@@ -449,32 +449,68 @@ def _write_bgm_source(video_dir, candidate, style):
     bgm = Path(video_dir) / "bgm.mp3"
     if bgm.exists():
         sha256 = hashlib.sha256(bgm.read_bytes()).hexdigest()
-    Path(video_dir, "bgm_source.json").write_text(
-        json.dumps(
-            {
-                "source": candidate.get("provider", "online_music_provider"),
-                "style": style,
-                "title": candidate.get("title", ""),
-                "artist": candidate.get("artist", ""),
-                "source_url": source_url,
-                "license": candidate.get("license", ""),
-                "attribution_required": bool(candidate.get("attribution_required")),
-                "fit_reason": candidate.get("fit_reason") or f"real-instrument instrumental background matched to {style}",
-                "duration": candidate.get("duration", 0),
-                "sha256": sha256,
-                "manifest": {
-                    "asset_id": candidate.get("asset_id") or sha256[:16],
-                    "license": candidate.get("license", ""),
-                    "fingerprint": sha256,
-                    "provider": candidate.get("provider", ""),
-                    "source_url": source_url,
-                },
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    meta = {
+        "source": candidate.get("provider", "online_music_provider"),
+        "style": style,
+        "title": candidate.get("title", ""),
+        "artist": candidate.get("artist", ""),
+        "source_url": source_url,
+        "license": candidate.get("license", ""),
+        "attribution_required": bool(candidate.get("attribution_required")),
+        "fit_reason": candidate.get("fit_reason") or f"real-instrument instrumental background matched to {style}",
+        "duration": candidate.get("duration", 0),
+        "sha256": sha256,
+        "manifest": {
+            "asset_id": candidate.get("asset_id") or sha256[:16],
+            "license": candidate.get("license", ""),
+            "fingerprint": sha256,
+            "provider": candidate.get("provider", ""),
+            "source_url": source_url,
+        },
+    }
+    _register_bgm_fingerprint(meta)
+    Path(video_dir, "bgm_source.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _bgm_registry_path():
+    configured = os.environ.get("BGM_FINGERPRINT_REGISTRY", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "data" / "bgm_fingerprint.json"
+
+
+def _register_bgm_fingerprint(meta):
+    fingerprint = str(meta.get("sha256") or (meta.get("manifest") or {}).get("fingerprint") or "").strip()
+    if not fingerprint:
+        raise RuntimeError("BGM fingerprint missing; refusing untracked music")
+    registry = _bgm_registry_path()
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    data = {"tracks": []}
+    if registry.exists():
+        try:
+            loaded = json.loads(registry.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data = loaded
+        except json.JSONDecodeError:
+            raise RuntimeError(f"BGM fingerprint registry invalid JSON: {registry}")
+    tracks = data.get("tracks")
+    if not isinstance(tracks, list):
+        tracks = []
+        data["tracks"] = tracks
+    if any(str(item.get("fingerprint") or item.get("sha256") or "").strip() == fingerprint for item in tracks if isinstance(item, dict)):
+        raise RuntimeError("BGM fingerprint already used; choose a different licensed track")
+    tracks.append(
+        {
+            "fingerprint": fingerprint,
+            "title": meta.get("title", ""),
+            "artist": meta.get("artist", ""),
+            "source": meta.get("source", ""),
+            "source_url": meta.get("source_url", ""),
+            "license": meta.get("license", ""),
+            "registered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
     )
+    registry.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _bgm_queries(style):

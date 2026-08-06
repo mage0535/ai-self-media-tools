@@ -483,9 +483,14 @@ class Pipeline:
         brief = dict(job.get("brief", {}))
         platforms = list(job.get("platforms", []))
         topic = job.get("topic", "")
-        historical = self.store.historical_performance(platforms, topic)
+        platform_history = self.store.historical_performance(platforms, "")
+        topic_history = self.store.historical_performance(platforms, topic)
+        historical = dict(platform_history)
+        historical["topic_history"] = topic_history
         brief.setdefault("historical_feedback", historical)
-        brief.setdefault("cluster_memory", historical.get("clusters", []))
+        brief.setdefault("platform_historical_feedback", platform_history)
+        brief.setdefault("topic_historical_feedback", topic_history)
+        brief.setdefault("cluster_memory", topic_history.get("clusters", []) or platform_history.get("clusters", []))
         if hygiene:
             brief["content_hygiene"] = hygiene
         return brief

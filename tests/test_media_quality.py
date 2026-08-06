@@ -15,6 +15,11 @@ from content_platform.media_quality import (
     validate_wechat_auto_packet,
     validate_xiaohongshu_auto_packet,
 )
+from content_platform.content_recipe import (
+    build_article_recipe,
+    build_knowledge_card_recipe,
+    build_tool_invocation_manifest,
+)
 from content_platform.growth_policy import build_growth_strategy
 from content_platform.preflight_manifest import validate_preflight_manifest
 from content_platform.visual_content_policy import visual_content_policy
@@ -84,6 +89,40 @@ def complete_video_plan():
     }
 
 
+def complete_visual_recipe(template_family: str = "knowledge_card_motion_case"):
+    return {
+        "version": "visual_recipe_v1",
+        "template_family": template_family,
+        "modules": [
+            "template_theme",
+            "knowledge_card_designer",
+            "cinema_color_css",
+            "shotcraft_motion_css",
+            "lower_third_subtitles",
+            "licensed_bgm_mix",
+        ],
+        "style_variants": {
+            "color_mood": "content_matched",
+            "motion_density": "medium",
+            "text_layout": "headline_plus_lower_third",
+            "scene_change_interval_sec": 4,
+        },
+        "asset_strategy": {
+            "primary": "verified_visual_assets",
+            "fallback": "html_css_knowledge_card_fallback",
+            "forbidden": ["random_unmatched_background", "single_static_background_loop"],
+        },
+        "selection_reason": "selected from strategy, topic, platform, and available assets",
+        "differentiation_reason": "module combination differs from recent same-platform renders",
+        "scene_asset_match": [
+            {"scene": i, "script_beat": f"beat-{i}", "visual_source": f"asset-{i}.png", "match_reason": "matches narrated beat"}
+            for i in range(1, 4)
+        ],
+        "avoid": ["same_recipe_fingerprint", "same_bgm_fingerprint", "cross_platform_final_reuse"],
+        "fingerprint": "sha256:test-visual-recipe",
+    }
+
+
 def complete_growth_strategy(platform: str = "wechat", content_type: str = "long_article"):
     if platform == "wechat":
         return build_growth_strategy([platform], content_type)
@@ -139,6 +178,8 @@ def complete_video_metadata(platform: str = "kuaishou"):
         "preflight_manifest": complete_preflight_manifest(platform, "knowledge_card_video"),
         "visual_content_policy": visual_content_policy([platform], "short_video"),
         "video_plan": complete_video_plan(),
+        "visual_recipe": complete_visual_recipe(),
+        "tool_invocation_manifest": complete_tool_invocation_manifest("video"),
         "real_scene_background_plan": complete_real_scene_background_plan(8),
         "bgm_source": {
             "source": "licensed_music_manifest",
@@ -149,6 +190,23 @@ def complete_video_metadata(platform: str = "kuaishou"):
         "differentiation_dimensions": ["diagnostic structure", "checklist visuals", "warning-first opening"],
         "platform_adaptation": adaptation,
         "growth_strategy": complete_growth_strategy(platform, "knowledge_card_video"),
+        "platform_render_identity": {
+            "output_path": f"/tmp/current-run/{platform}/final.mp4",
+            "script_hash": f"sha256:{platform}-script",
+            "visual_hash": f"sha256:{platform}-visual",
+            "bgm_fingerprint": f"sha256:{platform}-bgm",
+            "same_topic_platforms": ["kuaishou", "shipinhao", "youtube"],
+            "not_reused_from_other_platform": True,
+            "current_platform": platform,
+            "rendered_for_platform": platform,
+        },
+        "media_delivery": {
+            "mode": "independent_media_message",
+            "message_kind": "MEDIA",
+            "sent_as_separate_message": True,
+            "abs_paths": [f"/tmp/current-run/{platform}/final.mp4", f"/tmp/current-run/{platform}/cover.jpg"],
+            "text_report_separate": True,
+        },
     }
 
 
@@ -162,6 +220,27 @@ def complete_knowledge_card_plan(platform: str = "wechat"):
         "typography_hierarchy": "4:2:1",
         "self_check": ["readability", "attraction", "information_density", "share_or_save_value", "visual_match", "mobile_safe_boundaries"],
     }
+
+
+def complete_tool_invocation_manifest(content_type: str = "article"):
+    if content_type == "video":
+        planned = {
+            "video_toolchain_runner": "scripts/video_toolchain_runner.py",
+            "visual_recipe": "content_platform.video_recipe",
+            "mix_bgm_with_gate": "scripts/mix_bgm_with_gate.py",
+            "visual_gate": "scripts/visual_gate.py",
+        }
+    else:
+        planned = {
+            "generator_normalize": "content_platform.generator",
+            "preflight_manifest": "content_platform.preflight_manifest",
+            "visual_policy": "content_platform.visual_content_policy",
+            "knowledge_card_designer": "hermes_skill:content/knowledge-card-designer",
+        }
+    return build_tool_invocation_manifest(
+        planned_tools=planned,
+        invocations={name: {"status": "ok", "output": ref} for name, ref in planned.items()},
+    )
 
 
 def complete_knowledge_cards(prefix: str = "card", count: int = 3):
@@ -229,6 +308,21 @@ def complete_full_ops_evidence(platform: str):
         "content_brief",
     ]
     return {
+        "platform_source_matrix": {
+            "platform": platform,
+            "attempted_sources": [
+                {"source": "platform_internal_search", "status": "success", "sample_count": 3},
+                {"source": "account_history", "status": "success", "sample_count": 6},
+                {"source": "same_lane_accounts", "status": "success", "sample_count": 3},
+                {"source": "bilibili", "status": "success", "sample_count": 2},
+                {"source": "wechat", "status": "failed", "reason": "no same-day public rank"},
+            ],
+            "successful_source_count": 4,
+            "platform_internal_verified": True,
+            "current_platform_specific_topic": True,
+            "shared_trend_only": False,
+            "report_path": f"/tmp/current-run/{platform}/source_matrix.json",
+        },
         "operations_workflow": {
             "required": True,
             "platforms": [platform],
@@ -382,6 +476,29 @@ def complete_wechat_auto_packet():
         "real_scene_background_plan": complete_real_scene_background_plan(3),
         "knowledge_card_plan": complete_knowledge_card_plan("wechat"),
         "embedded_knowledge_cards": complete_knowledge_cards("wechat"),
+        "article_recipe": build_article_recipe(
+            platform="wechat",
+            content_type="long_article",
+            title="GitHub project selection for content operators",
+            body=body,
+            sections=["why", "fit", "test", "limits", "checklist"],
+            section_image_map=[
+                {"section": "why", "image": "01.png", "purpose": "show repository value", "adjacent_to_text": True},
+                {"section": "fit", "image": "02.png", "purpose": "map use case", "adjacent_to_text": True},
+                {"section": "test", "image": "03.png", "purpose": "show test checklist", "adjacent_to_text": True},
+            ],
+            embedded_knowledge_cards=complete_knowledge_cards("wechat"),
+            visual_template_selection={
+                "selected": "github_project_casebook",
+                "ranked_scores": [{"template": "github_project_casebook", "score": 90}, {"template": "magazine_grid", "score": 76}],
+            },
+        ),
+        "knowledge_card_recipe": build_knowledge_card_recipe(
+            platform="wechat",
+            cards=complete_knowledge_cards("wechat"),
+            content_type="long_article",
+        ),
+        "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
         "cover_design": {
             "visual_subject": "GitHub repository decision board",
             "topic_alignment": "matches the selected project",
@@ -484,6 +601,16 @@ def complete_kuaishou_auto_packet():
                 "fingerprint": "sha256:test-bgm",
             },
         },
+        "bgm_history_check": {
+            "registry_path": "~/.hermes/data/bgm_fingerprint.json",
+            "current_fingerprint": "sha256:test-bgm",
+            "current_title": "Independent acoustic bed",
+            "current_source_url": "https://jamendo.example/track/123",
+            "recent_fingerprints": ["sha256:older-bgm"],
+            "same_batch_fingerprints": ["sha256:other-video-bgm"],
+            "duplicate_found": False,
+            "checked": True,
+        },
         "publishing_plan": {
             "schedule_at": "2026-07-21 19:30",
             "postcheck": "kuaishou_management_pending_list_with_exact_schedule_time",
@@ -564,6 +691,12 @@ def complete_xiaohongshu_auto_packet():
         "body": "这条笔记给正在做内容自动化的人一个真实提醒：" + "流程能自动跑，不代表内容就值得发。" * 35 + "AI辅助创作，已人工复核。",
         "caption": "AI辅助创作，人工复核后发布。",
         "knowledge_card_sequence": complete_knowledge_cards("xiaohongshu"),
+        "knowledge_card_recipe": build_knowledge_card_recipe(
+            platform="xiaohongshu",
+            cards=complete_knowledge_cards("xiaohongshu"),
+            content_type="image_text_knowledge_card_short_video_mix",
+        ),
+        "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
         "section_image_map": [
             {"section": "hook", "image": "01.png", "purpose": "show the failed publish checkpoint"},
             {"section": "case", "image": "02.png", "purpose": "show the real review process"},
@@ -625,6 +758,25 @@ def test_article_packet_requires_hook_length_template_and_mapped_images():
         "real_scene_background_plan": complete_real_scene_background_plan(3),
         "knowledge_card_plan": complete_knowledge_card_plan(),
         "embedded_knowledge_cards": complete_knowledge_cards("article"),
+        "article_recipe": build_article_recipe(
+            platform="wechat",
+            content_type="long_article",
+            title="workflow quality gate case",
+            body="practical operating paragraph " * 80,
+            sections=["problem", "case", "why old way fails", "method", "checklist"],
+            section_image_map=[
+                {"section": "problem", "image": "01.png", "purpose": "open the pain point", "adjacent_to_text": True},
+                {"section": "case", "image": "02.png", "purpose": "show the specific case", "adjacent_to_text": True},
+                {"section": "method", "image": "03.png", "purpose": "explain the steps", "adjacent_to_text": True},
+            ],
+            embedded_knowledge_cards=complete_knowledge_cards("article"),
+            visual_template_selection={
+                "selected": "case_story_v1",
+                "ranked_scores": [{"template": "case_story_v1", "score": 80}, {"template": "field_note", "score": 70}],
+            },
+        ),
+        "knowledge_card_recipe": build_knowledge_card_recipe(platform="wechat", cards=complete_knowledge_cards("article"), content_type="long_article"),
+        "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
         "cover_design": {
             "visual_subject": "failed schedule checklist",
             "topic_alignment": "matches the article promise",
@@ -638,6 +790,47 @@ def test_article_packet_requires_hook_length_template_and_mapped_images():
         "actionable_checklist": ["check title", "check cover", "check postcheck"],
     }
     assert validate_article_packet(packet)["passed"] is True
+
+
+def test_content_recipe_core_fingerprint_ignores_platform_for_cross_platform_reuse():
+    cards = complete_knowledge_cards("reuse")
+    base = build_knowledge_card_recipe(platform="douyin", cards=cards, content_type="knowledge_card_video")
+    cross = build_knowledge_card_recipe(platform="youtube", cards=cards, content_type="knowledge_card_video")
+
+    assert base["core_fingerprint"] == cross["core_fingerprint"]
+    assert base["fingerprint"] != cross["fingerprint"]
+
+    article_a = build_article_recipe(
+        platform="wechat",
+        content_type="long_article",
+        title="A",
+        body="same article body " * 80,
+        sections=["hook", "case", "method"],
+        section_image_map=[
+            {"section": "hook", "image": "01.png", "purpose": "open"},
+            {"section": "case", "image": "02.png", "purpose": "prove"},
+            {"section": "method", "image": "03.png", "purpose": "teach"},
+        ],
+        embedded_knowledge_cards=cards,
+        visual_template_selection={"selected": "casebook", "ranked_scores": [{"template": "casebook", "score": 90}, {"template": "field", "score": 70}]},
+    )
+    article_b = {**article_a, "platform": "zhihu"}
+    article_b["core_fingerprint"] = build_article_recipe(
+        platform="zhihu",
+        content_type="long_article",
+        title="B",
+        body="same article body " * 80,
+        sections=["hook", "case", "method"],
+        section_image_map=[
+            {"section": "hook", "image": "01.png", "purpose": "open"},
+            {"section": "case", "image": "02.png", "purpose": "prove"},
+            {"section": "method", "image": "03.png", "purpose": "teach"},
+        ],
+        embedded_knowledge_cards=cards,
+        visual_template_selection={"selected": "casebook", "ranked_scores": [{"template": "casebook", "score": 90}, {"template": "field", "score": 70}]},
+    )["core_fingerprint"]
+
+    assert article_a["core_fingerprint"] == article_b["core_fingerprint"]
 
 
 def test_article_packet_rejects_css_gradient_backgrounds():
@@ -970,6 +1163,17 @@ def test_kuaishou_auto_packet_rejects_horizontal_video_resolution():
     assert "video_artifact_probe" in result["failed_dimensions"]
 
 
+def test_kuaishou_auto_packet_rejects_reused_bgm_fingerprint():
+    packet = complete_kuaishou_auto_packet()
+    packet["bgm_history_check"]["recent_fingerprints"].append("sha256:test-bgm")
+    packet["bgm_history_check"]["duplicate_found"] = True
+
+    result = validate_kuaishou_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "bgm_fingerprint_history" in result["failed_dimensions"]
+
+
 def test_kuaishou_preflight_does_not_require_future_postcheck_steps():
     packet = complete_kuaishou_auto_packet()
     packet["workflow_evidence"]["completed_steps"] = ["strategy", "trend_analysis", "content_generation", "quality_gate"]
@@ -1012,6 +1216,29 @@ def test_shipinhao_auto_packet_requires_ending_card_probe():
 
     assert result["passed"] is False
     assert "ending_card_visual_probe" in result["failed_dimensions"]
+
+
+def test_shipinhao_auto_packet_rejects_reused_cross_platform_render():
+    packet = complete_shipinhao_auto_packet()
+    packet["platform_render_identity"]["output_path"] = "/tmp/current-run/kuaishou/final.mp4"
+    packet["platform_render_identity"]["rendered_for_platform"] = "kuaishou"
+    packet["platform_render_identity"]["not_reused_from_other_platform"] = False
+
+    result = validate_shipinhao_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "platform_render_identity" in result["failed_dimensions"]
+
+
+def test_shipinhao_auto_packet_requires_independent_media_delivery_message():
+    packet = complete_shipinhao_auto_packet()
+    packet["media_delivery"]["sent_as_separate_message"] = False
+    packet["media_delivery"]["message_kind"] = "TEXT_WITH_MEDIA_TAIL"
+
+    result = validate_shipinhao_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "media_delivery_contract" in result["failed_dimensions"]
 
 
 def test_shipinhao_auto_packet_rejects_overlong_ending_title():
@@ -1071,6 +1298,18 @@ def test_xiaohongshu_auto_packet_rejects_invalid_source_asset_items():
     assert "authentic_source_evidence" in result["failed_dimensions"]
 
 
+def test_xiaohongshu_auto_packet_rejects_shared_trend_only_source_matrix():
+    packet = complete_xiaohongshu_auto_packet()
+    packet["platform_source_matrix"]["successful_source_count"] = 2
+    packet["platform_source_matrix"]["platform_internal_verified"] = False
+    packet["platform_source_matrix"]["shared_trend_only"] = True
+
+    result = validate_xiaohongshu_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "platform_independent_source_matrix" in result["failed_dimensions"]
+
+
 def test_pre_onboarding_article_platforms_use_explicit_article_gate():
     packet = complete_wechat_auto_packet()
     for platform in ["toutiao", "juejin", "zhihu"]:
@@ -1120,6 +1359,9 @@ def test_article_packet_rejects_missing_strategy_and_bottom_stacked_images():
     assert "strategy_brief" in result["failed_dimensions"]
     assert "section_images" in result["failed_dimensions"]
     assert "knowledge_card_plan" in result["failed_dimensions"]
+    assert "article_recipe" in result["failed_dimensions"]
+    assert "knowledge_card_recipe" in result["failed_dimensions"]
+    assert "tool_invocation_manifest" in result["failed_dimensions"]
     assert "embedded_knowledge_cards" in result["failed_dimensions"]
 
 
@@ -1157,6 +1399,8 @@ def test_video_packet_rejects_silent_static_or_unverified_assets():
         "visual_content_policy",
         "duration",
         "video_plan",
+        "visual_recipe",
+        "tool_invocation_manifest",
         "audio_stream",
         "audio_composition",
         "background_music_source",
@@ -1172,6 +1416,7 @@ def test_video_packet_rejects_silent_static_or_unverified_assets():
         "scene_visual_alignment",
             "scene_real_scene_mapping",
             "same_batch_differentiation",
+            "platform_render_identity",
             "platform_adaptation",
             "growth_plan",
         }

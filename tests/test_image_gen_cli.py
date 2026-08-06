@@ -35,3 +35,20 @@ def test_image_gen_skip_gates_authorized_for_audited_runs(tmp_path, monkeypatch)
 
     assert code == 0
     gate.assert_not_called()
+
+
+def test_image_gen_normalizes_short_prompts_before_gates_and_generation(tmp_path, monkeypatch):
+    output = tmp_path / "image.png"
+    monkeypatch.setattr(sys, "argv", ["image_gen.py", "--prompt", "AI workflow", "--output", str(output)])
+
+    def fake_generate_image(**kwargs):
+        assert "clear main subject" in kwargs["prompt"]
+        assert "soft natural lighting" in kwargs["prompt"]
+        Path(kwargs["output"]).write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 3000)
+        return {"provider": "fake", "output": str(kwargs["output"])}
+
+    with patch("scripts.image_gen.generate_image", side_effect=fake_generate_image), patch("scripts.image_gen._run_optional_gate") as gate:
+        code = image_gen.main()
+
+    assert code == 0
+    gate.assert_called()

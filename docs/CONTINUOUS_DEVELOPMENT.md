@@ -2478,3 +2478,177 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 ### Operational Rule
 - Knowledge-video work should now follow: platform trend/account evidence -> article generation -> `article-video` package -> image provider assets -> video toolchain runner -> media quality gates -> publish or manual handoff by channel policy.
 - Hermes must not treat article-to-video as an external ad-hoc script. It is a project workflow entrypoint and should be called through the CLI or Pipeline media path so reports, manifests, BGM evidence, image assignments, and visual gates remain observable.
+
+## 2026-08-04 - Performance Collection Hardening and Auth-State Probe
+
+### Fixed
+- `content_platform.performance_collectors` now accepts Hermes scraper reports in both bare platform format and wrapped `{platforms:{...}}` format.
+- Bilibili account metrics can now be collected from private SAU `cookie_info` files, not just public `mid` config.
+- WeChat Official Account Datacube collection now supports private `env_file` config and reports `api_permission_blocked` when WeChat returns `48001 api unauthorized`.
+- Login-state platforms now distinguish missing/cleaned state files (`login_required`) from present-but-unverified state files (`browser_probe_required`).
+- Added `scripts/platform_backend_metrics_probe.py` to verify creator-center login state through Playwright, save screenshots/text evidence, and classify `backend_loaded`, `login_required_or_verification`, or `loaded_but_metrics_not_visible`.
+
+### Hermes Runtime Findings
+- Bilibili authenticated API probe succeeded for account-level data: account name present, videos and likes were returned.
+- WeChat publishing credentials are usable, but Datacube statistics APIs returned `48001 api unauthorized`; use backend export/browser collection unless the official statistics API is enabled.
+- Douyin, Video Channels, Xiaohongshu, and TikTok creator-center probes redirected to login or verification pages. Their stale state files were moved to a private expired-state quarantine on Hermes so future runs fail clearly instead of treating file presence as usable auth.
+
+### Verification
+- Local targeted tests: `python -m pytest tests/test_performance_collectors.py -q` => `9 passed`.
+- Local full suite: `python -m pytest -q` => `447 passed, 2 subtests passed`.
+- Local project audit: `python -m content_platform.cli project-audit` => ok.
+- Server targeted tests after sync: `python3 -m pytest tests/test_performance_collectors.py -q` => `9 passed`.
+- Server project audit after sync: ok.
+
+## 2026-08-04 - Daily Growth Performance Cycle Enabled on Hermes
+
+### Added
+- Added `content_platform.performance_cycle` and CLI command `performance-cycle`.
+- The cycle runs analytics only: collection, persistence into `performance`, review generation, and growth-strategy snapshot refresh. It does not publish, upload, or mutate platform content.
+- Authenticated collectors and the Hermes public scraper are merged. Authenticated results win; Hermes public results fill gaps such as YouTube public account data.
+- Per-platform growth strategy snapshots are saved to `tool_inventory` as `growth_strategy:<platform>:latest`.
+- The full latest cycle report is saved as `performance_cycle_latest` and written to `data/performance/daily/performance_cycle_report.json`.
+- Added systemd templates:
+  - `systemd/hermes-content-platform-growth-cycle.service`
+  - `systemd/hermes-content-platform-growth-cycle.timer`
+
+### Hermes Runtime
+- Installed and enabled `hermes-content-platform-growth-cycle.timer`.
+- Timer next run after setup: daily around `05:30` Asia/Shanghai with randomized delay.
+- Manual systemd smoke returned `Result=success` and `ExecMainStatus=0`.
+- Latest activity summary: `collector_ran=true`, `platform_count=7`, `metrics_saved=2`, `unavailable_count=5`, `review_platform_count=7`, `healthy=true`.
+- Bilibili and YouTube metrics were written into `performance`; unavailable platforms preserved explicit reasons instead of fake zeros.
+
+### Growth Strategy Linkage
+- Future Pipeline jobs already call `store.historical_performance(platforms, topic)` during brief enrichment.
+- The newly persisted `performance` rows therefore feed `historical_feedback`, which `build_growth_strategy()` carries into generated packets as `historical_feedback_summary`.
+- This makes the account growth strategy data-backed whenever real metrics are available, while retaining explicit missing-data signals for blocked platforms.
+
+### Follow-up Hardening
+- `Pipeline._enrich_brief()` now provides both platform-level and topic-level history:
+  - `historical_feedback` defaults to platform-level history so new topics still receive account performance signals.
+  - `topic_historical_feedback` keeps topic-specific history for duplicate/topic-cluster context.
+  - `platform_historical_feedback` is available for strategy tools that need channel-level baselines.
+- Added regression coverage proving `performance-cycle` metrics feed the next Pipeline brief.
+- The systemd service now redirects full JSON output to `data/performance/daily/systemd-last.json` instead of dumping the full growth strategy into journald.
+- Server smoke after hardening: systemd service returned `Result=success`, `ExecMainStatus=0`, latest report had `collector_ran=true`, `platform_count=7`, `metrics_saved=2`, and the growth timer remained enabled.
+
+## 2026-08-05 - Public Profile Fallback for Growth Metrics
+
+### Fixed
+- `content_platform.performance_collectors` now tries a low-confidence public profile fallback when an authenticated creator-center/API collector is unavailable and the collector config includes `public_profile_url`, `profile_url`, `homepage_url`, `public_url`, or `public_urls`.
+- Public profile fallback extracts visible numeric account signals only: followers, following, works/posts/videos, likes, views/plays/reads, saves/favorites, comments, and shares/reposts.
+- Public fallback results are marked as `status=public_signal`, `confidence=low`, `metric_source=public_page`, and `metric_confidence=low`; the original backend/API failure is preserved as `backend_status` and `backend_reason`.
+- `content_platform.performance_cycle` now persists `public_signal` rows into the `performance` table, so growth strategy can still receive account-level signals when backend analytics are blocked.
+- Public pages with only a title/login screen and no visible numeric metrics are reported as `public_signal_unavailable`; they are not saved as performance data.
+
+### Operational Rule
+- Data priority is now: official/API or authenticated backend metrics first, Hermes browser scraper second, public profile visible metrics third, manual CSV import fourth.
+- Public profile metrics must never be treated as full analytics. They can guide account-level trend and follower/like movement, but they do not replace completion-rate, click-through-rate, read-depth, or backend conversion metrics.
+- Hermes private collector config should add public profile URLs for every platform that has a stable public homepage. Do not hardcode cookies, tokens, or private URLs in public config or docs.
+
+## 2026-08-05 - Single-Line Ops Postmortem Hardening
+
+### Fixed
+- Added video platform render identity gates. Video packets must now prove the output path, script hash, visual hash, BGM fingerprint, target platform, and `not_reused_from_other_platform=true`.
+- Added manual media delivery gates for B站、抖音、视频号、小红书、YouTube、TikTok. Handoff media must be sent as independent `MEDIA:<absolute_path>` messages, separate from long text reports, so Telegram length truncation cannot drop the video path.
+- Added BGM fingerprint history gates for 快手 auto packets. New renders must check the registry, current fingerprint, recent fingerprints, and same-batch fingerprints before passing quality gate.
+- `scripts/kuaishou_render.py` now writes BGM fingerprints to a registry (`BGM_FINGERPRINT_REGISTRY` or `~/.hermes/data/bgm_fingerprint.json`) and rejects reused tracks. Duplicate candidates can be skipped so the resolver can pick another licensed real-instrument track.
+- `performance-cycle` now writes full-default runs to `performance_cycle_report.json` and partial/single-platform runs to `performance_cycle_<platforms>.json`; single-platform repair probes no longer overwrite the full 11-platform report.
+- Full-ops article/note generation now emits `platform_source_matrix` evidence for 小红书、知乎、掘金, preventing shared-trend-only topic selection from passing downstream gates.
+
+### Operational Rule
+- Every platform video is a platform-specific render. Cross-platform reuse may share a theme, but must regenerate script, visual sequence, BGM, title/description, and final file.
+- Every platform strategy must include an independent source matrix: at least 5 attempted sources, at least 3 successful sources, platform-internal verification, and `shared_trend_only=false`.
+- Final video handoff must send files in separate media messages before or after the text report, never appended to the tail of a long status message.
+
+### Verification
+- Local targeted regression: `pytest tests/test_content.py tests/test_media_quality.py tests/test_performance_cycle.py tests/test_video_toolchain_runner.py -q` => `92 passed`.
+- Local full suite: `pytest -q` => `490 passed, 2 subtests passed`.
+- Local syntax check: `python -m py_compile content_platform/generator.py content_platform/media_quality.py content_platform/performance_cycle.py scripts/kuaishou_render.py` => passed.
+- Local project audit: `python -m content_platform.cli project-audit` => ok.
+- Server targeted regression after sync: `PYTHONPATH=. pytest tests/test_content.py tests/test_media_quality.py tests/test_performance_cycle.py tests/test_video_toolchain_runner.py -q` => `92 passed`.
+- Server full suite after sync: `PYTHONPATH=. pytest -q` => `492 passed, 2 subtests passed`.
+- Server project audit and channel rulebook validation => ok.
+- Server runtime performance-cycle smoke confirmed full run writes `performance_cycle_report.json` with `platform_count=11`, single-platform repair writes `performance_cycle_x.json`, and the full report remains intact.
+
+## 2026-08-06 - Free Image Provider Stability Hardening
+
+### Fixed
+- `content_platform.image_provider` now uses a free-first `auto` chain by default: stock images, Pollinations, then Cloudflare. OpenAI/Gemini are appended only when `IMAGE_PROVIDER_ALLOW_PAID=1` is explicitly set for an audited paid run.
+- Added Cloudflare image provider support using either a Worker URL or the direct Workers AI account API configuration.
+- Added retry handling for transient provider failures and a local image cache keyed by prompt, provider, model, size, and input image hash.
+- `scripts/image_gen.py` now normalizes short prompts by adding subject, environment, lighting, composition, style, and no-text constraints before prompt preflight.
+- The legacy Hermes image CLI is now a compatibility wrapper around the project image CLI, so legacy Hermes calls share the same free-first order, gates, and cache.
+- The legacy Hermes image engine now tries the project unified image CLI first for single-image calls, then falls back to legacy providers only if the unified path cannot produce an image.
+- Added `scripts/smoke_image_provider.py` to verify provider readiness without printing credentials.
+
+### Operational Rule
+- Pollinations and Cloudflare must be treated as intermittent external providers, not guaranteed infrastructure. Daily runs should execute `python3 scripts/smoke_image_provider.py --providers pollinations,cloudflare,auto` before content generation.
+- Cloudflare should be considered unavailable unless one of these is configured privately: `CF_WORKER_URL`, `CLOUDFLARE_IMAGE_WORKER_URL`, or `CLOUDFLARE_ACCOUNT_ID` plus `CLOUDFLARE_API_TOKEN`.
+- Generated image packets must record real provider, model, path, byte size, checksum, and cache status. Do not label fallback images as GPT/OpenAI output.
+
+### Verification
+- Local targeted regression: `python -m pytest tests/test_image_provider.py tests/test_image_gen_cli.py -q` => `17 passed`.
+- Server targeted regression after sync: `python3 -m pytest tests/test_image_provider.py tests/test_image_gen_cli.py -q` => `17 passed`.
+- Server smoke: Pollinations generated an image; `auto` generated a Pexels stock image; Cloudflare was correctly reported as `missing_config` rather than a generation failure.
+- Server cache smoke: repeated Pollinations prompt returned `cache_hit=true`.
+- Server legacy engine smoke returned a cached project-provider image through the unified path.
+
+### Cloudflare Workers AI Activation
+- Added private Cloudflare Workers AI credentials on Hermes after user-created token setup.
+- Fixed direct Workers AI REST model routing by preserving the model path (`@cf/...`) and using the FLUX input schema (`prompt`, `seed`, `steps`) for direct account API calls.
+- Server Cloudflare smoke passed with `selected_provider=cloudflare`, model `@cf/black-forest-labs/flux-1-schnell`, and a generated image artifact.
+- Repeated Cloudflare smoke returned `cache_hit=true`, confirming the provider cache protects routine workflows from intermittent external failures.
+
+## 2026-08-06 - Visual Recipe Video Orchestration Layer
+
+### Fixed
+- Added `content_platform.video_recipe` as a semantic planning layer for video rendering. It records why a video uses a template family, which verified modules are combined, how visuals match script beats, and what reuse patterns must be avoided.
+- Added `config/video_effect_modules.json` as a registry of existing verified video capabilities only. It does not create a parallel toolchain and does not replace existing quality, BGM, subtitle, or duplication gates.
+- Added `scripts/validate_visual_recipe.py` so the runner and Hermes can reject incomplete recipes before rendering.
+- `scripts/video_toolchain_runner.py` now writes `visual_recipe.json`, records `recipe_fingerprint`, includes the recipe in the runner manifest, and rejects invalid recipes before cards/render steps continue.
+- `content_platform.video_toolchain.build_video_toolchain_plan()` now includes `visual_recipe` in generated plans, and video quality gates now validate visual recipes through `content_platform.media_quality`.
+- Default recipes keep existing template/theme mappings as fallbacks, but include platform, pipeline, content form, and topic/title identity in the style variant fingerprint. This prevents different platform videos from passing as the same recipe just because they share a template family.
+
+### Operational Rule
+- A video template is only the starting visual family. Each video must still select a topic-specific recipe that combines at least 3 registered modules, scene-to-asset matches, style variants, asset strategy, and explicit anti-reuse rules.
+- Same-theme cross-platform videos may share research and strategy, but cannot share the same recipe fingerprint, final media file, BGM fingerprint, title, or visual sequence.
+- New video modules should be added to the registry only after the underlying script/skill/tool exists and has been validated. Do not register imagined or paid-only capabilities as available modules.
+
+### Verification
+- Local related regression: `python -m pytest tests/test_content.py tests/test_media_quality.py tests/test_video_toolchain.py tests/test_video_toolchain_runner.py tests/test_image_provider.py tests/test_image_gen_cli.py -q` => `108 passed`.
+- Local visual/video regression: `python -m pytest tests/test_video_toolchain_runner.py tests/test_video_toolchain.py tests/test_media_quality.py -q` => `85 passed`.
+- Local syntax check for visual recipe, media quality, video toolchain, runner, and validator => passed.
+- Server visual/video regression after sync => `85 passed`.
+- Server 7-case serial dry-run demo generated 7 manifests and 7 `visual_recipe.json` files. All recipe gates passed, every recipe had at least 7 modules, and all recipe fingerprints were unique.
+
+### Follow-up Hardening
+- Hermes read-only review found that a single instance fingerprint could hide a reused visual formula if only title/platform changed.
+- `visual_recipe` now records two identities:
+  - `core_fingerprint`: visual formula identity, excluding per-render `recipe_variant`; used to detect template/module/style reuse.
+  - `fingerprint`: per-render instance identity; used to track a unique video package.
+- `scripts/video_toolchain_runner.py` now checks the visual recipe history registry before rendering. If the same core recipe was used inside the configured duplication window, the runner returns `visual_recipe_reuse_failed` instead of rendering.
+- Successful non-dry-run renders are registered in the visual recipe history registry. Dry-run validation does not mutate production history.
+- Auto-generated recipes now include `auto_generated=true`, a topic/platform-specific `differentiation_reason`, and `requires_visual_asset_resolution=true` when no resolved visual asset assignments are present.
+- A second review found that title/platform-derived style variants could still pollute `core_fingerprint`. Core fingerprinting now normalizes variant-driven color, motion, text layout, and scene interval fields while still preserving explicitly supplied style differences.
+- Core fingerprints include real workflow dimensions (`selected_pipeline` and `content_form`) so different video production workflows can use the same template family without false-positive blocking.
+- Core fingerprints also include `semantic_visual_pattern`, derived from script beat structure rather than title/platform. This lets different scripts use different core recipes while the same script reused across platforms is still blocked.
+- `config/duplication_policy.json` now uses a 7-day window for template/recipe reuse detection, matching the operational requirement.
+
+## 2026-08-06 - Article and Knowledge Card Recipe Gate
+
+### Fixed
+- Added `content_platform.content_recipe` as the shared contract layer for non-video content. Long articles and knowledge-card packages now carry structured evidence for layout choice, section-to-visual binding, internal variation, payoff schedule, fatigue checks, and human-viewer value.
+- Article, Xiaohongshu mixed-note, and video validators now require `tool_invocation_manifest` evidence. Content packages must show which strategy, visual, knowledge-card, and media tools were planned and invoked instead of relying on memory or prose reports.
+- Article validators now require `article_recipe` and `knowledge_card_recipe`; Xiaohongshu mixed-note validators require `knowledge_card_recipe`. This closes the previous gap where text and card workflows could still repeat templates or use decorative images while video recipes were enforced.
+- `content_platform.mcp_server` now exposes `capability_status`, `build_content_recipe`, and `validate_content_package`, so Hermes and other agents can inspect callable capabilities and validate packets through the same gates used by Pipeline.
+
+### Operational Rule
+- Every generated article or note must include an article/knowledge-card recipe before draft, handoff, or publish. A template is not enough; the packet must explain section roles, visual matching, variation axes, first-screen promise, payoff schedule, and 7-day fatigue status.
+- Every content package must include a tool invocation manifest with at least 3 planned tools and matching invocation records. Missing or purely documented tools are a gate failure.
+- Recipe core fingerprints exclude platform/title identity. Reusing the same visual/content formula across platforms should be detected as reuse, while per-platform instance fingerprints can still identify individual deliverables.
+
+### Verification
+- Local media and MCP regression: `python -m pytest tests/test_media_quality.py tests/test_mcp_server.py -q` => `54 passed`.
+- Local related regression: `python -m pytest tests/test_content.py tests/test_media_quality.py tests/test_mcp_server.py tests/test_video_toolchain.py tests/test_video_toolchain_runner.py tests/test_image_provider.py tests/test_image_gen_cli.py -q` => `115 passed`.

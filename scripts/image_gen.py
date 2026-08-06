@@ -22,6 +22,27 @@ if str(ROOT) not in sys.path:
 from content_platform.image_provider import ImageProviderError, generate_image
 
 
+def _normalize_image_prompt(prompt: str) -> str:
+    text = " ".join(str(prompt or "").split()).strip()
+    if not text:
+        return text
+    lower = text.casefold()
+    additions: list[str] = []
+    if not any(marker in lower for marker in ["subject", "主体", "main subject", "visual metaphor"]):
+        additions.append("clear main subject")
+    if not any(marker in lower for marker in ["environment", "背景", "scene", "workspace", "studio"]):
+        additions.append("modern editorial workspace environment")
+    if not any(marker in lower for marker in ["light", "光", "lighting", "well-lit"]):
+        additions.append("soft natural lighting")
+    if not any(marker in lower for marker in ["composition", "构图", "close-up", "wide angle", "centered"]):
+        additions.append("balanced composition with foreground and background depth")
+    if not any(marker in lower for marker in ["style", "风格", "photography", "illustration", "cinematic"]):
+        additions.append("clean editorial illustration style")
+    if "no text" not in lower and "无文字" not in lower:
+        additions.append("no text")
+    return text if not additions else f"{text}, {', '.join(additions)}"
+
+
 def _skip_gate_authorized() -> bool:
     return os.environ.get("IMAGE_GEN_ALLOW_SKIP_GATES") == "1"
 
@@ -52,7 +73,11 @@ def main() -> int:
     parser.add_argument("--prompt", help="Prompt text")
     parser.add_argument("--input-image", help="Optional image to edit")
     parser.add_argument("--output", default="/tmp/ai-self-media-image.png")
-    parser.add_argument("--provider", choices=["auto", "openai", "gemini", "stock", "pexels", "pixabay", "pollinations"], default="auto")
+    parser.add_argument(
+        "--provider",
+        choices=["auto", "openai", "gemini", "stock", "pexels", "pixabay", "pollinations", "cloudflare"],
+        default="auto",
+    )
     parser.add_argument("--model", default="")
     parser.add_argument("--size", default="1024x1024")
     parser.add_argument("--quality", default="low")
@@ -62,7 +87,7 @@ def main() -> int:
     parser.add_argument("--method", default="")
     args = parser.parse_args()
 
-    prompt = args.prompt or args.positional_prompt or ""
+    prompt = _normalize_image_prompt(args.prompt or args.positional_prompt or "")
     output = Path(args.output)
     try:
         if (args.skip_preflight or args.skip_visual_gate) and not _skip_gate_authorized():
