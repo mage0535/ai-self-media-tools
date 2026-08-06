@@ -10,6 +10,8 @@ from .models import GateFailure, GateResult
 from .asset_license import validate_asset_licenses
 from .growth_policy import validate_growth_strategy
 from .preflight_manifest import validate_preflight_manifest
+from .video_recipe import load_effect_module_registry, validate_visual_recipe
+from .content_recipe import validate_article_recipe, validate_knowledge_card_recipe, validate_tool_invocation_manifest
 
 TIKTOK_REPOST_LINE = "tiktok_hot_localized_repost"
 ALLOWED_VISUAL_REVIEWS = {"passed", "approved", "verified", "manual_passed"}
@@ -48,6 +50,7 @@ REAL_SCENE_BACKGROUND_SOURCE_POLICY = {
     "licensed_or_verified_runtime_assets",
     "verified_real_material",
 }
+MANUAL_MEDIA_DELIVERY_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu", "rednote"}
 
 
 def _text_length(value: str) -> int:
@@ -59,6 +62,105 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _is_abs_media_path(value: Any) -> bool:
+    text = str(value or "").strip()
+    return bool(text) and (text.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", text) is not None)
+
+
+def _platform_source_matrix_gate(matrix: dict[str, Any], platform: str) -> dict[str, Any]:
+    attempted = matrix.get("attempted_sources") if isinstance(matrix, dict) else []
+    if not isinstance(attempted, list):
+        attempted = []
+    successful = [
+        item
+        for item in attempted
+        if isinstance(item, dict) and str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+    ]
+    success_count = max(_safe_int(matrix.get("successful_source_count")) if isinstance(matrix, dict) else 0, len(successful))
+    return {
+        "passed": isinstance(matrix, dict)
+        and str(matrix.get("platform") or platform).casefold() == str(platform).casefold()
+        and len(attempted) >= 5
+        and success_count >= 3
+        and bool(matrix.get("platform_internal_verified"))
+        and bool(matrix.get("current_platform_specific_topic"))
+        and not bool(matrix.get("shared_trend_only"))
+        and bool(matrix.get("report_path")),
+        "attempted": len(attempted),
+        "successful": success_count,
+        "required": ["attempted_sources >= 5", "successful_source_count >= 3", "platform_internal_verified", "not shared_trend_only"],
+    }
+
+
+def _platform_render_identity_gate(packet: dict[str, Any], platform: str) -> dict[str, Any]:
+    identity = packet.get("platform_render_identity") or {}
+    output_path = str(identity.get("output_path") or "").strip()
+    rendered = str(identity.get("rendered_for_platform") or identity.get("current_platform") or "").casefold()
+    normalized = str(platform or packet.get("platform") or "").casefold()
+    return {
+        "passed": isinstance(identity, dict)
+        and bool(output_path)
+        and _is_abs_media_path(output_path)
+        and bool(identity.get("script_hash"))
+        and bool(identity.get("visual_hash"))
+        and bool(identity.get("bgm_fingerprint"))
+        and identity.get("not_reused_from_other_platform") is True
+        and rendered == normalized,
+        "rendered_for_platform": rendered,
+        "platform": normalized,
+        "output_path": output_path,
+    }
+
+
+def _media_delivery_contract_gate(packet: dict[str, Any], platform: str) -> dict[str, Any]:
+    delivery = packet.get("media_delivery") or packet.get("handoff_media_delivery") or {}
+    paths = delivery.get("abs_paths") if isinstance(delivery, dict) else []
+    if not isinstance(paths, list):
+        paths = []
+    normalized = str(platform or packet.get("platform") or "").casefold()
+    must_deliver_media = normalized in MANUAL_MEDIA_DELIVERY_PLATFORMS or bool(delivery)
+    return {
+        "passed": (not must_deliver_media)
+        or (
+            isinstance(delivery, dict)
+            and str(delivery.get("mode") or "").casefold() == "independent_media_message"
+            and str(delivery.get("message_kind") or "").upper() == "MEDIA"
+            and delivery.get("sent_as_separate_message") is True
+            and delivery.get("text_report_separate") is True
+            and len(paths) >= 1
+            and all(_is_abs_media_path(path) for path in paths)
+        ),
+        "path_count": len(paths),
+        "required": ["MEDIA message", "sent_as_separate_message", "text_report_separate", "absolute media paths"],
+    }
+
+
+def _bgm_fingerprint_history_gate(packet: dict[str, Any]) -> dict[str, Any]:
+    check = packet.get("bgm_history_check") or {}
+    bgm = packet.get("bgm") or packet.get("background_music") or packet.get("bgm_source") or {}
+    manifest = packet.get("bgm_license_manifest") or (bgm.get("manifest") if isinstance(bgm, dict) else {}) or {}
+    current = str(
+        check.get("current_fingerprint")
+        or check.get("fingerprint")
+        or manifest.get("fingerprint")
+        or manifest.get("checksum")
+        or ""
+    ).strip()
+    recent = {str(item).strip() for item in (check.get("recent_fingerprints") or []) if str(item).strip()}
+    same_batch = {str(item).strip() for item in (check.get("same_batch_fingerprints") or []) if str(item).strip()}
+    return {
+        "passed": isinstance(check, dict)
+        and check.get("checked") is True
+        and bool(check.get("registry_path"))
+        and bool(current)
+        and current not in recent
+        and current not in same_batch
+        and not bool(check.get("duplicate_found")),
+        "current_fingerprint": current,
+        "duplicate_found": bool(check.get("duplicate_found")) or current in recent or current in same_batch,
+    }
 
 
 def _check_no_ai_slop(text: str) -> bool:
@@ -223,6 +325,9 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "passed": _valid_knowledge_card_plan(card_plan),
             "skill": str(card_plan.get("skill", "")),
         },
+        "article_recipe": validate_article_recipe(packet.get("article_recipe")),
+        "knowledge_card_recipe": validate_knowledge_card_recipe(packet.get("knowledge_card_recipe")),
+        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "embedded_knowledge_cards": {
             "passed": len(embedded_cards) >= 3
             and all(isinstance(card, dict) and _valid_knowledge_card(card) and card.get("section") for card in embedded_cards),
@@ -307,6 +412,8 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "count": len(cards),
             "minimum": 3,
         },
+        "knowledge_card_recipe": validate_knowledge_card_recipe(packet.get("knowledge_card_recipe")),
+        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "image_text_mapping": {
             "passed": len(images) >= 3
             and all(
@@ -361,6 +468,7 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
     voice_style = packet.get("voice_style") or {}
     pause_plan = voice_style.get("pause_plan") or []
     plan = packet.get("video_plan") or {}
+    visual_recipe = packet.get("visual_recipe") or (packet.get("video_toolchain_plan") or {}).get("visual_recipe") or {}
     differentiation = packet.get("differentiation_dimensions") or []
     platform = str(packet.get("platform", "")).casefold()
     platform_adaptation = packet.get("platform_adaptation") or {}
@@ -392,6 +500,8 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
                 ]
             ),
         },
+        "visual_recipe": validate_visual_recipe(visual_recipe, load_effect_module_registry()),
+        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "duration": {
             "passed": duration >= 40 and (duration <= 100 or bool(long_reason)),
             "actual": duration,
@@ -468,6 +578,8 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "scene_real_scene_mapping": _scene_real_scene_mapping_gate(packet, scenes),
         "same_batch_differentiation": {"passed": len(differentiation) >= 3, "count": len(differentiation), "minimum": 3},
+        "platform_render_identity": _platform_render_identity_gate(packet, platform),
+        "media_delivery_contract": _media_delivery_contract_gate(packet, platform),
         "platform_adaptation": {
             "passed": bool(platform_adaptation.get("required_fields_checked"))
             and (
@@ -738,6 +850,7 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
         "no_silent_bgm_fallback": {
             "passed": not bool(bgm.get("fallback_used")),
         },
+        "bgm_fingerprint_history": _bgm_fingerprint_history_gate(packet),
         "schedule_and_postcheck_plan": {
             "passed": bool(publishing.get("schedule_at"))
             and str(publishing.get("postcheck") or "").casefold()
@@ -807,6 +920,8 @@ def validate_shipinhao_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "retention_or_share_reason": {
             "passed": bool(strategy.get("target_share_or_save_reason") or strategy.get("retention_problem_addressed")),
         },
+        "platform_render_identity": _platform_render_identity_gate(packet, "shipinhao"),
+        "media_delivery_contract": _media_delivery_contract_gate(packet, "shipinhao"),
         "wechat_qr_ending_card": {
             "passed": bool(ending_card.get("required"))
             and bool(qr_asset)
@@ -991,6 +1106,7 @@ def _full_ops_gates(packet: dict[str, Any], platform: str) -> dict[str, dict[str
         return {}
     strategy = packet.get("strategy_brief") or {}
     workflow = packet.get("operations_workflow") or strategy.get("full_ops_workflow") or {}
+    source_matrix = packet.get("platform_source_matrix") or strategy.get("platform_source_matrix") or {}
     account = packet.get("account_analysis") or strategy.get("account_analysis") or {}
     same_lane = packet.get("same_lane_account_analysis") or strategy.get("same_lane_account_analysis") or {}
     trends = packet.get("cross_platform_trend_analysis") or strategy.get("cross_platform_trend_analysis") or {}
@@ -1007,6 +1123,7 @@ def _full_ops_gates(packet: dict[str, Any], platform: str) -> dict[str, dict[str
         "full_ops_workflow": {
             "passed": bool(workflow.get("required")) and normalized in {str(item).casefold() for item in (workflow.get("platforms") or [normalized])},
         },
+        "platform_independent_source_matrix": _platform_source_matrix_gate(source_matrix, normalized),
         "account_data_analysis": {
             "passed": all(account.get(key) for key in ["source", "account_lane", "current_content_data", "audience_profile"]),
         },

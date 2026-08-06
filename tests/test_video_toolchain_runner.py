@@ -43,9 +43,196 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(len(cards), 8)
             self.assertEqual(cards[0]["hook"], "Cat workflow")
             self.assertEqual(manifest["template_family"], "pet_repost_real_behavior")
+            self.assertTrue((out / "visual_recipe.json").is_file())
+            self.assertTrue(manifest["visual_recipe_gate"]["passed"])
+            self.assertTrue(str(manifest["recipe_fingerprint"]).startswith("sha256:"))
+            self.assertGreaterEqual(manifest["toolchain_contract"]["visual_recipe"]["module_count"], 3)
             self.assertTrue(manifest["shotcraft_motion_plan"]["available"])
             self.assertGreaterEqual(manifest["shotcraft_motion_plan"]["registry_count"], 100)
             self.assertTrue(cards[0]["shotcraft"]["available"])
+
+    def test_runner_rejects_invalid_visual_recipe(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            plan = {
+                "selected_pipeline": "knowledge_card_video",
+                "template_family": "knowledge_card_motion_case",
+                "platforms": ["kuaishou"],
+                "visual_recipe": {
+                    "template_family": "knowledge_card_motion_case",
+                    "modules": ["template_theme"],
+                    "selection_reason": "",
+                },
+            }
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+                "VIDEO_TOOLCHAIN_DRY_RUN": "1",
+            }
+            proc = subprocess.run(
+                [sys.executable, str(script), "Scene one.\nScene two.\nScene three.", "Invalid recipe"],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertNotEqual(proc.returncode, 0)
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "visual_recipe_failed")
+            self.assertFalse(manifest["visual_recipe_gate"]["passed"])
+
+    def test_runner_rejects_recent_duplicate_visual_recipe_core(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            first_out = Path(tmp) / "first"
+            out = Path(tmp) / "out"
+            registry = Path(tmp) / "visual_recipe_registry.json"
+            plan = {
+                "selected_pipeline": "knowledge_card_video",
+                "content_form": "knowledge_card_video",
+                "template_family": "knowledge_card_motion_case",
+                "platforms": ["kuaishou"],
+                "color_mood": "clean_blueprint",
+                "motion_density": "medium",
+                "text_layout": "timeline_cards",
+                "scene_change_interval_sec": 4,
+            }
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            first_env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(first_out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+                "VIDEO_TOOLCHAIN_DRY_RUN": "1",
+                "VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(registry),
+            }
+            first_proc = subprocess.run(
+                [sys.executable, str(script), "Scene one.\nScene two.\nScene three.", "Old topic"],
+                capture_output=True,
+                text=True,
+                env=first_env,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(first_proc.returncode, 0, first_proc.stderr)
+            first_manifest = json.loads((first_out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            duplicate = first_manifest["visual_recipe"]
+            registry.write_text(
+                json.dumps(
+                    {
+                        "recipes": [
+                            {
+                                "used_at": "2099-01-01T00:00:00+00:00",
+                                "core_fingerprint": duplicate["core_fingerprint"],
+                                "fingerprint": duplicate["fingerprint"],
+                                "template_family": duplicate["template_family"],
+                                "platforms": ["kuaishou"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+                "VIDEO_TOOLCHAIN_DRY_RUN": "1",
+                "VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(registry),
+            }
+            proc = subprocess.run(
+                [sys.executable, str(script), "Scene one.\nScene two.\nScene three.", "New topic"],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertNotEqual(proc.returncode, 0)
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "visual_recipe_reuse_failed")
+            self.assertFalse(manifest["recipe_reuse_gate"]["passed"])
+            self.assertEqual(manifest["recipe_reuse_gate"]["duplicate_count"], 1)
+
+    def test_runner_rejects_cross_platform_same_core_visual_recipe(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            first_out = Path(tmp) / "first"
+            out = Path(tmp) / "out"
+            registry = Path(tmp) / "visual_recipe_registry.json"
+            base_plan = {
+                "selected_pipeline": "knowledge_card_video",
+                "content_form": "knowledge_card_video",
+                "template_family": "knowledge_card_motion_case",
+            }
+            first_plan_path = Path(tmp) / "first_plan.json"
+            first_plan_path.write_text(json.dumps({**base_plan, "platforms": ["douyin"]}), encoding="utf-8")
+            first_env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(first_out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(first_plan_path),
+                "VIDEO_TOOLCHAIN_DRY_RUN": "1",
+                "VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(registry),
+            }
+            first_proc = subprocess.run(
+                [sys.executable, str(script), "Scene one.\nScene two.\nScene three.", "Old topic"],
+                capture_output=True,
+                text=True,
+                env=first_env,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(first_proc.returncode, 0, first_proc.stderr)
+            duplicate = json.loads((first_out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))["visual_recipe"]
+            registry.write_text(
+                json.dumps(
+                    {
+                        "recipes": [
+                            {
+                                "used_at": "2099-01-01T00:00:00+00:00",
+                                "core_fingerprint": duplicate["core_fingerprint"],
+                                "fingerprint": duplicate["fingerprint"],
+                                "template_family": duplicate["template_family"],
+                                "platforms": ["douyin"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps({**base_plan, "platforms": ["youtube"]}), encoding="utf-8")
+            env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+                "VIDEO_TOOLCHAIN_DRY_RUN": "1",
+                "VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(registry),
+            }
+            proc = subprocess.run(
+                [sys.executable, str(script), "Scene one.\nScene two.\nScene three.", "New platform topic"],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertNotEqual(proc.returncode, 0)
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "visual_recipe_reuse_failed")
+            self.assertFalse(manifest["recipe_reuse_gate"]["passed"])
+            self.assertEqual(manifest["recipe_reuse_gate"]["duplicates"][0]["duplicate_scope"], "cross_platform")
 
     def test_localized_repost_refuses_original_card_fallback_without_source(self):
         root = Path(__file__).resolve().parents[1]
@@ -341,6 +528,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            registry = root / "bgm_registry.json"
             (root / "raw.mp4").write_bytes(b"0" * 80_000)
             candidate = {
                 "provider": "pixabay_music",
@@ -359,21 +547,59 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             def fake_download(row, output):
                 output.write_bytes(b"1" * 80_000)
 
-            with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
-                with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
-                    bgm = download_bgm(root, "acoustic guitar")
+            with patch.dict(os.environ, {"BGM_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
+                with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
+                    with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
+                        bgm = download_bgm(root, "acoustic guitar")
 
             self.assertEqual(Path(bgm), root / "bgm.mp3")
             source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
             self.assertEqual(source["source"], "pixabay_music")
             self.assertEqual(source["license"], "Pixabay Content License")
             self.assertTrue(source["sha256"])
+            registry_data = json.loads(registry.read_text(encoding="utf-8"))
+            self.assertEqual(registry_data["tracks"][0]["fingerprint"], source["sha256"])
+
+    def test_bgm_download_rejects_registry_duplicate_fingerprint(self):
+        from scripts.kuaishou_render import download_bgm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / "bgm_registry.json"
+            duplicate_bytes = b"1" * 80_000
+            duplicate_hash = __import__("hashlib").sha256(duplicate_bytes).hexdigest()
+            registry.write_text(json.dumps({"tracks": [{"fingerprint": duplicate_hash, "title": "used"}]}), encoding="utf-8")
+            candidate = {
+                "provider": "pixabay_music",
+                "download_url": "https://cdn.example/acoustic-guitar.mp3",
+                "source_url": "https://pixabay.com/music/acoustic-guitar",
+                "title": "Acoustic guitar instrumental",
+                "artist": "artist",
+                "license": "Pixabay Content License",
+                "attribution_required": False,
+                "duration": 90,
+                "asset_id": "px1",
+                "tags": "acoustic guitar instrumental folk",
+                "license_verified": True,
+            }
+
+            def fake_download(row, output):
+                output.write_bytes(duplicate_bytes)
+
+            with patch.dict(os.environ, {"BGM_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
+                with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
+                    with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
+                        with self.assertRaisesRegex(RuntimeError, "BGM fingerprint already used"):
+                            download_bgm(root, "acoustic guitar")
+
+            self.assertFalse((root / "bgm_source.json").exists())
 
     def test_bgm_download_replaces_stale_existing_bgm_every_render(self):
         from scripts.kuaishou_render import download_bgm
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            registry = root / "bgm_registry.json"
             (root / "bgm.mp3").write_bytes(b"old" * 30_000)
             (root / "bgm_source.json").write_text(
                 json.dumps({"source": "local_instrument_bgm_library", "license": "operator_provided"}),
@@ -396,9 +622,10 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             def fake_download(row, output):
                 output.write_bytes(b"new" * 30_000)
 
-            with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
-                with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
-                    download_bgm(root, "acoustic guitar")
+            with patch.dict(os.environ, {"BGM_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
+                with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
+                    with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
+                        download_bgm(root, "acoustic guitar")
 
             self.assertEqual((root / "bgm.mp3").read_bytes(), b"new" * 30_000)
             source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))

@@ -18,12 +18,14 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 if str(Path(__file__).resolve().parents[1]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.cinema_composition import storyboard
+from content_platform.video_recipe import build_visual_recipe, load_effect_module_registry, validate_visual_recipe
 
 try:
     from scripts.shotcraft_moves import SHOT_CARD_REGISTRY, shot_plan_for_text, shot_sequence
@@ -112,19 +114,52 @@ def main(argv: list[str] | None = None) -> int:
     materialized_backgrounds = _materialize_visual_backgrounds(output_dir, visual_assets)
     cinema_scenes = storyboard(script_body or title, 8)
     shotcraft_plan = _shotcraft_motion_plan(script_body or title)
+    registry = load_effect_module_registry()
+    visual_recipe = build_visual_recipe(
+        plan,
+        script_body=script_body,
+        title=title,
+        cinema_scenes=cinema_scenes,
+        shotcraft_plan=shotcraft_plan,
+        visual_assets=visual_assets,
+        registry=registry,
+    )
+    recipe_gate = validate_visual_recipe(visual_recipe, registry)
+    recipe_reuse_gate = _recipe_reuse_gate(visual_recipe, plan)
+    recipe_path = output_dir / "visual_recipe.json"
+    recipe_path.write_text(json.dumps(visual_recipe, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not recipe_gate.get("passed") or not recipe_reuse_gate.get("passed"):
+        manifest = {
+            "ok": False,
+            "title": title,
+            "selected_pipeline": plan.get("selected_pipeline", ""),
+            "template_family": plan.get("template_family", ""),
+            "visual_recipe": visual_recipe,
+            "visual_recipe_path": str(recipe_path),
+            "visual_recipe_gate": recipe_gate,
+            "recipe_reuse_gate": recipe_reuse_gate,
+            "status": "visual_recipe_failed" if not recipe_gate.get("passed") else "visual_recipe_reuse_failed",
+            "error": "visual_recipe gate failed" if not recipe_gate.get("passed") else "visual_recipe reuse gate failed",
+            "dry_run": os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1",
+        }
+        _write_manifest(output_dir, manifest)
+        print(json.dumps({"ok": False, "error": manifest["error"], "visual_recipe_gate": recipe_gate, "recipe_reuse_gate": recipe_reuse_gate}, ensure_ascii=False), file=sys.stderr)
+        return 5
     cards = build_cards(script_body, title, plan, cinema_scenes, shotcraft_plan, visual_assets)
     cards_path = output_dir / "cards.json"
     cards_path.write_text(json.dumps(cards, ensure_ascii=False, indent=2), encoding="utf-8")
     renderer = _renderer_path(plan)
-    theme = THEME_BY_TEMPLATE.get(str(plan.get("template_family") or ""), "cyber-neon")
+    template_family = str(visual_recipe.get("template_family") or plan.get("template_family") or "")
+    style_variants = visual_recipe.get("style_variants") if isinstance(visual_recipe.get("style_variants"), dict) else {}
+    theme = str(style_variants.get("theme") or THEME_BY_TEMPLATE.get(template_family, "cyber-neon"))
     bgm_style = _bgm_style(cinema_scenes)
     renderer_cmd = _renderer_command(renderer, output_dir, theme, title, script_body, plan, bgm_style)
-    toolchain_contract = _toolchain_contract(plan, theme, bgm_style, renderer)
+    toolchain_contract = _toolchain_contract(plan, theme, bgm_style, renderer, visual_recipe)
     manifest = {
         "ok": False,
         "title": title,
         "selected_pipeline": plan.get("selected_pipeline", ""),
-        "template_family": plan.get("template_family", ""),
+        "template_family": template_family,
         "cards_json": str(cards_path),
         "renderer": str(renderer),
         "renderer_command_preview": renderer_cmd,
@@ -135,6 +170,12 @@ def main(argv: list[str] | None = None) -> int:
         "shotcraft_motion_plan": shotcraft_plan,
         "visual_assets": visual_assets,
         "materialized_backgrounds": materialized_backgrounds,
+        "visual_recipe": visual_recipe,
+        "visual_recipe_path": str(recipe_path),
+        "visual_recipe_gate": recipe_gate,
+        "recipe_reuse_gate": recipe_reuse_gate,
+        "recipe_fingerprint": visual_recipe.get("fingerprint"),
+        "recipe_core_fingerprint": visual_recipe.get("core_fingerprint"),
     }
     if manifest["dry_run"]:
         fake = output_dir / "dry_run.mp4"
@@ -161,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
             print(manifest["error"], file=sys.stderr)
             return 4
         manifest.update({"ok": True, "output": str(generated[0]), "status": "rendered", "executed_tools": PLANNED_TOOLS})
+        _register_visual_recipe_use(visual_recipe, plan, str(generated[0]))
         _write_manifest(output_dir, manifest)
         print(json.dumps({"ok": True, "output": str(generated[0])}, ensure_ascii=False))
         return 0
@@ -376,22 +418,128 @@ def _bgm_style(cinema_scenes: list[dict]) -> str:
     return "warm acoustic guitar and light piano"
 
 
-def _toolchain_contract(plan: dict, theme: str, bgm_style: str, renderer: Path) -> dict:
+def _toolchain_contract(plan: dict, theme: str, bgm_style: str, renderer: Path, visual_recipe: dict | None = None) -> dict:
+    recipe = visual_recipe or {}
+    recipe_modules = [str(item) for item in (recipe.get("modules") or [])]
     return {
         "planned_tools": PLANNED_TOOLS,
         "renderer_steps": RENDERER_STEPS,
-        "effect_stack": EFFECT_STACK,
+        "effect_stack": recipe_modules or EFFECT_STACK,
         "template_registry": {
-            "template_family": str(plan.get("template_family") or ""),
+            "template_family": str(recipe.get("template_family") or plan.get("template_family") or ""),
             "theme": theme,
             "renderer": str(renderer),
             "card_layouts": LAYOUTS,
             "shotcraft_registry_count": len(SHOT_CARD_REGISTRY),
         },
+        "visual_recipe": {
+            "version": recipe.get("version", ""),
+            "fingerprint": recipe.get("fingerprint", ""),
+            "core_fingerprint": recipe.get("core_fingerprint", ""),
+            "module_count": len(recipe_modules),
+            "selection_reason": recipe.get("selection_reason", ""),
+            "differentiation_reason": recipe.get("differentiation_reason", ""),
+        },
         "bgm_style": bgm_style,
-        "post_render_gates": ["visual_gate.py --cinema"],
+        "post_render_gates": ["validate_visual_recipe.py", "visual_gate.py --cinema"],
         "visual_asset_contract": "VIDEO_VISUAL_ASSETS_PATH assignments are bound to cards when provided",
     }
+
+
+def _duplication_policy() -> dict:
+    path = ROOT / "config" / "duplication_policy.json"
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+
+
+def _visual_recipe_registry_path() -> Path:
+    configured = os.environ.get("VISUAL_RECIPE_FINGERPRINT_REGISTRY", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "data" / "visual_recipe_fingerprints.json"
+
+
+def _load_visual_recipe_registry() -> dict:
+    path = _visual_recipe_registry_path()
+    if not path.is_file():
+        return {"recipes": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"visual recipe registry invalid JSON: {path}") from exc
+    recipes = data.get("recipes") if isinstance(data, dict) else []
+    return {"recipes": recipes if isinstance(recipes, list) else []}
+
+
+def _recipe_reuse_gate(recipe: dict, plan: dict) -> dict:
+    policy = _duplication_policy().get("same_day_template_duplicate") or {}
+    if policy.get("enabled") is False:
+        return {"passed": True, "policy_enabled": False}
+    lookback_days = int(policy.get("lookback_days") or 1)
+    core = str(recipe.get("core_fingerprint") or "").strip()
+    registry_path = _visual_recipe_registry_path()
+    registry = _load_visual_recipe_registry()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+    platforms = {str(item).casefold() for item in (plan.get("platforms") or []) if str(item).strip()}
+    duplicates = []
+    for item in registry.get("recipes", []):
+        if not isinstance(item, dict) or str(item.get("core_fingerprint") or "").strip() != core:
+            continue
+        used_at = _parse_utc(item.get("used_at"))
+        if used_at and used_at < cutoff:
+            continue
+        item_platforms = {str(value).casefold() for value in (item.get("platforms") or []) if str(value).strip()}
+        if platforms and item_platforms and platforms.isdisjoint(item_platforms):
+            # Cross-platform duplication still matters for video hardening, but surface it explicitly.
+            duplicates.append({**item, "duplicate_scope": "cross_platform"})
+        else:
+            duplicates.append({**item, "duplicate_scope": "same_platform_or_unknown"})
+    return {
+        "passed": not duplicates,
+        "policy_enabled": True,
+        "lookback_days": lookback_days,
+        "registry_path": str(registry_path),
+        "core_fingerprint": core,
+        "duplicate_count": len(duplicates),
+        "duplicates": duplicates[:5],
+    }
+
+
+def _register_visual_recipe_use(recipe: dict, plan: dict, output_path: str) -> None:
+    registry_path = _visual_recipe_registry_path()
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    data = _load_visual_recipe_registry()
+    rows = [item for item in data.get("recipes", []) if isinstance(item, dict)]
+    row = {
+        "used_at": datetime.now(timezone.utc).isoformat(),
+        "core_fingerprint": recipe.get("core_fingerprint"),
+        "fingerprint": recipe.get("fingerprint"),
+        "template_family": recipe.get("template_family"),
+        "modules": recipe.get("modules") or [],
+        "platforms": plan.get("platforms") or [],
+        "selected_pipeline": plan.get("selected_pipeline") or "",
+        "output_path": output_path,
+    }
+    rows.append(row)
+    data["recipes"] = rows[-500:]
+    registry_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _parse_utc(value) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _repost_contract(plan: dict) -> dict:

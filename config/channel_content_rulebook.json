@@ -140,6 +140,47 @@
       "platform_specific_metrics"
     ]
   },
+  "video_delivery_hardening": {
+    "policy_id": "video_delivery_hardening_v1",
+    "applies_to": [
+      "kuaishou",
+      "bilibili",
+      "douyin",
+      "shipinhao",
+      "xiaohongshu",
+      "youtube",
+      "tiktok"
+    ],
+    "hard_gates": [
+      "every_platform_video_requires_platform_render_identity",
+      "same_topic_cross_platform_video_must_be_independently_rendered",
+      "bgm_fingerprint_must_be_checked_against_recent_and_same_batch_registry",
+      "manual_handoff_media_must_be_sent_as_independent_MEDIA_message",
+      "long_text_report_must_not_contain_media_path_only_at_message_tail"
+    ],
+    "required_evidence_fields": [
+      "platform_render_identity.output_path",
+      "platform_render_identity.script_hash",
+      "platform_render_identity.visual_hash",
+      "platform_render_identity.bgm_fingerprint",
+      "platform_render_identity.rendered_for_platform",
+      "platform_render_identity.not_reused_from_other_platform",
+      "bgm_history_check.registry_path",
+      "bgm_history_check.current_fingerprint",
+      "bgm_history_check.checked",
+      "media_delivery.mode",
+      "media_delivery.message_kind",
+      "media_delivery.sent_as_separate_message",
+      "media_delivery.text_report_separate",
+      "media_delivery.abs_paths"
+    ],
+    "forbidden": [
+      "reuse_other_platform_final_mp4_as_current_platform_final",
+      "reuse_same_bgm_fingerprint_without_current_ops_exception",
+      "append_MEDIA_line_to_long_report_message",
+      "mark_handoff_pending_as_published"
+    ]
+  },
   "content_lanes": {
     "pet_healing": {
       "allowed_topics": [

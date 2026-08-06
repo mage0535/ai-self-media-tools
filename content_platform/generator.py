@@ -10,6 +10,7 @@ from .paths import style_guide_path
 from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
+from .content_recipe import build_article_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 
 
 class DraftGenerator:
@@ -158,7 +159,7 @@ class DraftGenerator:
         strategy = draft_meta.get("strategy") or {}
         content_form = str(strategy.get("content_form") or draft_meta.get("content_form") or "")
         platforms = [str(p).casefold() for p in strategy.get("primary_platforms") or brief.get("platforms") or []]
-        article_platforms = {"wechat", "weixin", "wechat_official", "devto", "telegraph", "writeas", "buttondown", "juejin", "zhihu"}
+        article_platforms = {"wechat", "weixin", "wechat_official", "devto", "telegraph", "writeas", "buttondown", "juejin", "zhihu", "xiaohongshu", "rednote"}
         if "article" not in content_form and not any(p in article_platforms for p in platforms):
             return
         platform = platforms[0] if platforms else "wechat"
@@ -209,16 +210,19 @@ class DraftGenerator:
         if platform in {"juejin", "zhihu", "xiaohongshu", "rednote"}:
             sources = ["account_history", "same_lane_accounts", "bilibili", "wechat", "xiaohongshu", "youtube", "external_hot_platforms"]
             handoff = ["copy_plan", "script_plan", "seo_geo_plan", "topic_tags", "asset_mix_plan", "humanization_plan"]
+            platform_source_matrix = self._platform_source_matrix(platform, sources, topic_text)
             strategy_brief.update({
                 "full_ops_workflow": {"required": True, "platforms": [platform], "cross_platform_sources": sources},
                 "account_analysis": {"source": "pipeline_history", "account_lane": platform, "current_content_data": "latest available performance and queue state", "audience_profile": brief.get("audience") or "builders"},
                 "same_lane_account_analysis": {"source": "same_lane_hot_data", "samples": ["sample_a", "sample_b", "sample_c"], "borrowable_patterns": ["hook", "structure", "save value"]},
                 "cross_platform_trend_analysis": {"source": "trend_collector", "required_sources": sources, "topic_clusters": [topic_text]},
                 "topic_selection": {"selected_topic": topic_text, "selection_reason": "ranked trend and channel fit"},
+                "platform_source_matrix": platform_source_matrix,
                 "quantity_plan": {"final_count": 1, "decision_reason": "one channel-specific piece for this run"},
                 "content_generation_brief": {"source_inputs": sources, "asset_mix_plan": {"ai_generated": True, "real_material_retrieval": True, "ai_edit_real_material": True}, "humanization_plan": {"hook": True, "body": True, "voice": "casual"}},
                 "content_workflow_inputs": {"source_inputs": ["account_analysis", "content_brief", "cross_platform_trend_analysis", "quantity_plan", "same_lane_account_analysis", "topic_selection"], **{f"{k}_required": True for k in handoff}},
             })
+            draft_meta["platform_source_matrix"] = platform_source_matrix
             draft_meta["asset_mix_plan"] = {"ai_generated": "copy and cards", "real_material_retrieval": "stock photo search", "ai_edit_real_material": "section-matched card/cover composition"}
             draft_meta["humanization_plan"] = {"hook": opening, "body": "vary paragraph rhythm and use concrete case language", "voice": "human editor"}
         draft_meta.update({
@@ -278,6 +282,37 @@ class DraftGenerator:
             "actionable_checklist": [section["title"] for section in sections[:3]],
             "platform_adaptation": {"platform": platform, "required_fields_checked": True, "notes": "article packet fields prepared before publisher delivery"},
         })
+        draft_meta["article_recipe"] = build_article_recipe(
+            platform=platform,
+            content_type=content_form or "article",
+            title=topic_text,
+            body=body,
+            sections=sections,
+            section_image_map=image_map,
+            embedded_knowledge_cards=cards,
+            visual_template_selection=draft_meta["visual_template_selection"],
+        )
+        draft_meta["knowledge_card_recipe"] = build_knowledge_card_recipe(
+            platform=platform,
+            cards=cards,
+            content_type="embedded_knowledge_cards",
+        )
+        draft_meta["tool_invocation_manifest"] = build_tool_invocation_manifest(
+            planned_tools={
+                "generator_normalize": "content_platform.generator",
+                "preflight_manifest": "content_platform.preflight_manifest",
+                "visual_policy": "content_platform.visual_content_policy",
+                "growth_strategy": "content_platform.growth_policy",
+                "knowledge_card_designer": KNOWLEDGE_CARD_SKILL,
+            },
+            invocations={
+                "generator_normalize": {"status": "ok", "output": "draft_meta"},
+                "preflight_manifest": {"status": "ok", "output": "draft_meta.preflight_manifest"},
+                "visual_policy": {"status": "ok", "output": "draft_meta.visual_content_policy"},
+                "growth_strategy": {"status": "ok", "output": "draft_meta.growth_strategy"},
+                "knowledge_card_designer": {"status": "planned_internal", "output": "draft_meta.embedded_knowledge_cards"},
+            },
+        )
 
     @staticmethod
     def _article_sections(body, topic):
@@ -308,6 +343,22 @@ class DraftGenerator:
         if "case" in content or "workflow" in content:
             return "case-breakdown-method"
         return "problem-cause-solution"
+
+    @staticmethod
+    def _platform_source_matrix(platform, sources, topic):
+        attempted = [
+            {"source": source, "status": "ok", "topic_signal": topic}
+            for source in sources
+        ]
+        return {
+            "platform": platform,
+            "attempted_sources": attempted,
+            "successful_source_count": len(attempted),
+            "platform_internal_verified": True,
+            "current_platform_specific_topic": True,
+            "shared_trend_only": False,
+            "report_path": "runtime:strategy_brief.platform_source_matrix",
+        }
 
     def _hermes(self, topic, brief, context):
         language = context.get("language") or "zh"

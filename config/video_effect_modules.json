@@ -1,0 +1,41 @@
+{
+  "version": "video_effect_modules_v1",
+  "notes": "Registry only lists existing, verified ai-self-media-tools/Hermes video capabilities. It is used by visual_recipe validation and does not replace quality_gate_rules or duplication_policy.",
+  "modules": {
+    "template_theme": {"kind": "template", "implementation": "scripts/video_toolchain_runner.py::THEME_BY_TEMPLATE"},
+    "cinema_color_css": {"kind": "visual", "implementation": "scripts/cinema_composition.py::color_narrative"},
+    "cinema_composition_layout": {"kind": "visual", "implementation": "scripts/cinema_composition.py::storyboard"},
+    "shotcraft_motion_css": {"kind": "motion", "implementation": "scripts/shotcraft_moves.py"},
+    "motion_card_layouts": {"kind": "layout", "implementation": "scripts/video_toolchain_runner.py::build_cards"},
+    "lower_third_subtitles": {"kind": "subtitle", "implementation": "scripts/kuaishou_render.py::gen_subtitles"},
+    "licensed_bgm_mix": {"kind": "audio", "implementation": "scripts/mix_bgm_with_gate.py"},
+    "audio_loudness_gate": {"kind": "audio_gate", "implementation": "scripts/kuaishou_render.py / ffmpeg loudnorm probes"},
+    "post_render_anti_template_gate": {"kind": "quality_gate", "implementation": "scripts/visual_gate.py --cinema and duplication_policy"},
+    "source_video_preserved": {"kind": "source_video", "implementation": "scripts/video_toolchain_runner.py::localized_repost_video"},
+    "localized_repost_packaging": {"kind": "packaging", "implementation": "scripts/autoclip_adapter.py"},
+    "visual_asset_assignments": {"kind": "asset", "implementation": "VIDEO_VISUAL_ASSETS_PATH assignments"},
+    "screencast_template": {"kind": "screencast", "implementation": "Hermes skill content/screencast-studio"},
+    "knowledge_card_designer": {"kind": "card", "implementation": "Hermes skill content/knowledge-card-designer"},
+    "image_provider_free_chain": {"kind": "image_provider", "implementation": "scripts/image_gen.py --provider auto"}
+  },
+  "template_families": {
+    "pet_repost_real_behavior": {
+      "default_modules": ["source_video_preserved", "localized_repost_packaging", "lower_third_subtitles", "licensed_bgm_mix", "post_render_anti_template_gate"]
+    },
+    "wechat_ecosystem_microcase": {
+      "default_modules": ["template_theme", "cinema_color_css", "cinema_composition_layout", "shotcraft_motion_css", "motion_card_layouts", "lower_third_subtitles", "licensed_bgm_mix", "post_render_anti_template_gate"]
+    },
+    "chaptered_tutorial": {
+      "default_modules": ["screencast_template", "shotcraft_motion_css", "cinema_composition_layout", "lower_third_subtitles", "licensed_bgm_mix", "audio_loudness_gate", "post_render_anti_template_gate"]
+    },
+    "chaptered_explainer": {
+      "default_modules": ["template_theme", "cinema_color_css", "knowledge_card_designer", "visual_asset_assignments", "lower_third_subtitles", "licensed_bgm_mix", "post_render_anti_template_gate"]
+    },
+    "social_note_motion_cards": {
+      "default_modules": ["knowledge_card_designer", "image_provider_free_chain", "motion_card_layouts", "shotcraft_motion_css", "lower_third_subtitles", "licensed_bgm_mix", "post_render_anti_template_gate"]
+    },
+    "knowledge_card_motion_case": {
+      "default_modules": ["template_theme", "knowledge_card_designer", "cinema_color_css", "shotcraft_motion_css", "motion_card_layouts", "lower_third_subtitles", "licensed_bgm_mix", "post_render_anti_template_gate"]
+    }
+  }
+}

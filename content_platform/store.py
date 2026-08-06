@@ -10,6 +10,35 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _performance_has_growth_signal(row):
+    platform = str(row.get("platform", "") or "")
+    views = float(row.get("views", 0) or 0)
+    likes = float(row.get("likes", 0) or 0)
+    comments = float(row.get("comments", 0) or 0)
+    shares = float(row.get("shares", 0) or 0)
+    saves = float(row.get("saves", 0) or 0)
+    follows = float(row.get("follows", 0) or 0)
+    extra = row.get("extra_metrics") or {}
+    if platform == "tiktok" and views and follows == views and float(extra.get("works", 0) or 0) == views and likes + comments + shares + saves <= 50:
+        return False
+    if platform == "tiktok" and views == 0 and likes + comments + shares + saves == 0:
+        return False
+    return any(
+        float(row.get(key, 0) or 0) > 0
+        for key in (
+            "views",
+            "likes",
+            "comments",
+            "shares",
+            "saves",
+            "follows",
+            "completion_rate",
+            "three_second_view_rate",
+            "avg_watch_seconds",
+        )
+    )
+
+
 class Store:
     def __init__(self, path):
         self.path = Path(path)
@@ -804,6 +833,8 @@ class Store:
             },
         }
         for row in self.performance():
+            if not _performance_has_growth_signal(row):
+                continue
             platform = row["platform"]
             platform_entry = summary["platforms"].setdefault(
                 platform,
@@ -818,10 +849,12 @@ class Store:
                     "completion_rate": 0.0,
                     "three_second_view_rate": 0.0,
                     "avg_watch_seconds": 0.0,
+                    "sample_count": 0,
                     "extra_metrics": {},
                 },
             )
             count_by_platform[platform] = count_by_platform.get(platform, 0) + 1
+            platform_entry["sample_count"] = count_by_platform[platform]
             for key in ("views", "likes", "comments", "shares", "saves", "follows"):
                 value = int(row.get(key, 0))
                 platform_entry[key] += value
@@ -983,6 +1016,11 @@ class Store:
                 FROM performance p
                 JOIN jobs j ON j.id = p.job_id"""
             clauses = []
+            clauses.append(
+                "(p.views > 0 OR p.likes > 0 OR p.comments > 0 OR p.shares > 0 OR p.saves > 0 OR p.follows > 0 OR "
+                "p.completion_rate > 0 OR p.three_second_view_rate > 0 OR p.avg_watch_seconds > 0)"
+            )
+            clauses.append("NOT (p.platform='tiktok' AND p.views=0 AND (p.likes + p.comments + p.shares + p.saves)=0)")
             if platforms:
                 placeholders = ",".join("?" for _ in platforms)
                 clauses.append(f"p.platform IN ({placeholders})")

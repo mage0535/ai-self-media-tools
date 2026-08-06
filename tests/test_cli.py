@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -7,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from content_platform.cli import _exec_wewrite, execute, main, parser
+from content_platform.cli import _exec_wewrite, _load_collector_config, _load_env_defaults, execute, main, parser
 
 
 class CliTests(unittest.TestCase):
@@ -145,6 +146,202 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(result["ok"])
         self.assertEqual(result["count"], 1)
+
+
+    def test_performance_import_and_review_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = str(root / "state.db")
+            job_output = io.StringIO()
+            with redirect_stdout(job_output):
+                self.assertEqual(main(["--db", db, "--config", "", "create", "--topic", "metrics", "--platform", "youtube"]), 0)
+            job = json.loads(job_output.getvalue())
+            metrics_file = root / "metrics.json"
+            metrics_file.write_text(
+                json.dumps(
+                    {
+                        "job_id": job["id"],
+                        "platform": "youtube",
+                        "views": 50,
+                        "likes": 1,
+                        "saves": 0,
+                        "follows": 0,
+                        "completion_rate": 0.2,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            import_output = io.StringIO()
+            with redirect_stdout(import_output):
+                self.assertEqual(main(["--db", db, "--config", "", "performance-import", str(metrics_file)]), 0)
+            review_output = io.StringIO()
+            with redirect_stdout(review_output):
+                self.assertEqual(main(["--db", db, "--config", "", "performance-review"]), 0)
+            imported = json.loads(import_output.getvalue())
+            review = json.loads(review_output.getvalue())
+        self.assertEqual(imported["imported"], 1)
+        self.assertIn("low_completion_rate", review["platforms"]["youtube"]["findings"])
+
+    def test_performance_collect_cli_marks_backend_platform(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_path = root / "collect.json"
+            output = io.StringIO()
+            with patch("content_platform.cli._load_env_defaults", return_value=""), patch(
+                "content_platform.cli._load_collector_config", return_value=({}, "")
+            ), redirect_stdout(output):
+                self.assertEqual(
+                    main([
+                        "--db",
+                        str(root / "state.db"),
+                        "--config",
+                        "",
+                        "performance-collect",
+                        "--platform",
+                        "wechat",
+                        "--output",
+                        str(output_path),
+                    ]),
+                    0,
+                )
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["platforms"]["wechat"]["status"], "backend_export_required")
+            self.assertTrue(output_path.is_file())
+
+    def test_performance_collect_cli_can_use_hermes_scraper(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = io.StringIO()
+            fake_report = {"status": "ok", "platforms": {"youtube": {"status": "ok", "account_metrics": {"subscribers": 8}}}}
+            with patch("content_platform.performance_collectors.collect_with_hermes_platform_scraper", return_value=fake_report) as collect:
+                with redirect_stdout(output):
+                    self.assertEqual(
+                        main([
+                            "--db",
+                            str(root / "state.db"),
+                            "--config",
+                            "",
+                            "performance-collect",
+                            "--platform",
+                            "youtube",
+                            "--hermes-platform-scraper",
+                        ]),
+                        0,
+                    )
+            result = json.loads(output.getvalue())
+        collect.assert_called_once()
+        self.assertEqual(result["platforms"]["youtube"]["account_metrics"]["subscribers"], 8)
+
+    def test_performance_source_audit_cli_writes_coverage_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = root / "collector.json"
+            out = root / "source_audit.json"
+            cfg.write_text(
+                json.dumps(
+                    {
+                        "douyin": {"state_file": "/private/douyin.json"},
+                        "youtube": {"channel_url": "https://youtube.example/channel"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(
+                    main(
+                        [
+                            "--db",
+                            str(root / "state.db"),
+                            "--config",
+                            "",
+                            "performance-source-audit",
+                            "--platform",
+                            "douyin",
+                            "--platform",
+                            "youtube",
+                            "--collector-config",
+                            str(cfg),
+                            "--output",
+                            str(out),
+                        ]
+                    ),
+                    0,
+                )
+            result = json.loads(output.getvalue())
+            output_exists = out.is_file()
+        self.assertEqual(result["source_coverage"]["platforms"]["douyin"]["status"], "backend_only")
+        self.assertEqual(result["source_coverage"]["platforms"]["youtube"]["status"], "configured")
+        self.assertTrue(output_exists)
+
+    def test_private_collector_config_is_discovered_from_runtime_secrets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            secrets = root / "secrets"
+            secrets.mkdir()
+            (secrets / "performance-collector.json").write_text(
+                json.dumps({"youtube": {"channel_url": "https://youtube.example/channel"}}),
+                encoding="utf-8",
+            )
+
+            with patch("content_platform.cli.project_home", return_value=root):
+                collector_config, source = _load_collector_config("")
+
+        self.assertEqual(collector_config["youtube"]["channel_url"], "https://youtube.example/channel")
+        self.assertTrue(source.endswith("performance-collector.json"))
+
+    def test_private_proxy_env_is_loaded_without_overriding_existing_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            secrets = root / "secrets"
+            secrets.mkdir()
+            (secrets / "proxy.env").write_text(
+                "CN_PROXY=socks5://127.0.0.1:1080\nUS_PROXY=socks5://127.0.0.1:1091\n",
+                encoding="utf-8",
+            )
+
+            with patch("content_platform.cli.project_home", return_value=root), patch.dict(
+                os.environ,
+                {"CN_PROXY": "socks5://already-set:1080"},
+                clear=False,
+            ):
+                source = _load_env_defaults()
+                cn_proxy = os.environ["CN_PROXY"]
+                us_proxy = os.environ["US_PROXY"]
+
+        self.assertTrue(source.endswith("proxy.env"))
+        self.assertEqual(cn_proxy, "socks5://already-set:1080")
+        self.assertEqual(us_proxy, "socks5://127.0.0.1:1091")
+
+    def test_performance_source_audit_uses_default_private_collector_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            secrets = root / "secrets"
+            secrets.mkdir()
+            (secrets / "performance-collector.json").write_text(
+                json.dumps({"youtube": {"channel_url": "https://youtube.example/channel"}}),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with patch("content_platform.cli.project_home", return_value=root), redirect_stdout(output):
+                self.assertEqual(
+                    main(
+                        [
+                            "--db",
+                            str(root / "state.db"),
+                            "--config",
+                            "",
+                            "performance-source-audit",
+                            "--platform",
+                            "youtube",
+                        ]
+                    ),
+                    0,
+                )
+            result = json.loads(output.getvalue())
+
+        self.assertEqual(result["source_coverage"]["platforms"]["youtube"]["status"], "configured")
 
 
 if __name__ == "__main__":

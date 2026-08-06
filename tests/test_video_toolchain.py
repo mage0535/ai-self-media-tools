@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from content_platform.media import MediaBridge
 from content_platform.strategy_router import choose_content_strategy
+from content_platform.video_recipe import build_visual_recipe
 
 
 class VideoToolchainTests(unittest.TestCase):
@@ -39,7 +40,12 @@ class VideoToolchainTests(unittest.TestCase):
         ]:
             self.assertIn(tool, plan["required_tools"])
         self.assertEqual(plan["template_family"], "pet_repost_real_behavior")
+        self.assertIn("visual_recipe", plan)
+        self.assertEqual(plan["visual_recipe"]["template_family"], "pet_repost_real_behavior")
+        self.assertGreaterEqual(len(plan["visual_recipe"]["modules"]), 3)
+        self.assertTrue(str(plan["visual_recipe"]["fingerprint"]).startswith("sha256:"))
         self.assertIn("scene_to_script_mapping", plan["quality_gates"])
+        self.assertIn("visual_recipe_recorded", plan["quality_gates"])
         for gate in [
             "cinema_storyboard_recorded",
             "shotcraft_motion_plan_recorded",
@@ -62,6 +68,37 @@ class VideoToolchainTests(unittest.TestCase):
             self.assertIn(step, plan["renderer_steps"])
         self.assertIn("cinema_color_css", plan["effect_stack"])
         self.assertIn("shotcraft_motion_css", plan["effect_stack"])
+
+    def test_visual_recipe_splits_core_and_instance_fingerprints(self):
+        base = {
+            "selected_pipeline": "knowledge_card_video",
+            "content_form": "knowledge_card_video",
+            "template_family": "knowledge_card_motion_case",
+            "platforms": ["kuaishou"],
+        }
+
+        first = build_visual_recipe(base, title="First topic")
+        second = build_visual_recipe({**base, "platforms": ["douyin"]}, title="Second topic")
+
+        self.assertEqual(first["core_fingerprint"], second["core_fingerprint"])
+        self.assertNotEqual(first["fingerprint"], second["fingerprint"])
+        self.assertTrue(first["style_variants"]["variant_driven"])
+        self.assertTrue(first["auto_generated"])
+        self.assertTrue(first["requires_visual_asset_resolution"])
+
+    def test_visual_recipe_core_keeps_explicit_style_differences(self):
+        base = {
+            "selected_pipeline": "knowledge_card_video",
+            "content_form": "knowledge_card_video",
+            "template_family": "knowledge_card_motion_case",
+            "platforms": ["kuaishou"],
+        }
+
+        first = build_visual_recipe({**base, "text_layout": "timeline_cards"}, title="Same topic")
+        second = build_visual_recipe({**base, "text_layout": "diagonal_hook_cards"}, title="Same topic")
+
+        self.assertNotEqual(first["core_fingerprint"], second["core_fingerprint"])
+        self.assertFalse(first["style_variants"]["variant_driven"])
 
     def test_strategy_router_does_not_add_video_plan_for_wechat_article(self):
         strategy = choose_content_strategy(

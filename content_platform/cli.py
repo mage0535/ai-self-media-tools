@@ -22,6 +22,61 @@ from .task_market import TaskMarketRunner
 from .trends import TrendCollector, rank_trends
 
 
+def _load_env_defaults(path: str | Path | None = None) -> str:
+    """Load private KEY=VALUE defaults without overriding the process env."""
+    candidates: list[Path] = []
+    if path:
+        candidates.append(Path(path))
+    env_override = os.environ.get("CONTENT_PLATFORM_PROXY_ENV_FILE", "").strip()
+    if env_override:
+        candidates.append(Path(env_override))
+    home = project_home()
+    candidates.extend(
+        [
+            home / "secrets" / "proxy.env",
+            Path("secrets") / "proxy.env",
+            Path("config") / "private" / "proxy.env",
+        ]
+    )
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        for raw_line in candidate.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip().removeprefix("export ").strip()
+            value = value.strip().strip("'\"")
+            if key and key not in os.environ:
+                os.environ[key] = value
+        return str(candidate)
+    return ""
+
+
+def _load_collector_config(path: str | Path | None = None) -> tuple[dict, str]:
+    """Load private performance collector settings from explicit or default paths."""
+    candidates: list[Path] = []
+    if path:
+        candidates.append(Path(path))
+    env_override = os.environ.get("CONTENT_PLATFORM_PERFORMANCE_COLLECTOR_CONFIG", "").strip()
+    if env_override:
+        candidates.append(Path(env_override))
+    home = project_home()
+    candidates.extend(
+        [
+            home / "secrets" / "performance-collector.json",
+            Path("secrets") / "performance-collector.json",
+            Path("config") / "private" / "performance_collectors.json",
+            Path("config") / "performance_collectors.json",
+        ]
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return json.loads(candidate.read_text(encoding="utf-8")), str(candidate)
+    return {}, ""
+
+
 def load_config(path, db_path):
     config = {}
     if path and Path(path).is_file():
@@ -123,6 +178,26 @@ def parser():
     cookie_inv.add_argument("--account", default="main")
     cookie_inv.add_argument("--cookie-dir", default="")
     sub.add_parser("feedback-summary")
+    perf_import = sub.add_parser("performance-import")
+    perf_import.add_argument("file", help="JSON/JSONL metrics file with job_id, platform, and metric fields")
+    perf_import.add_argument("--allow-unknown-job", action="store_true", help="Import records even when the job is not in this database")
+    perf_review = sub.add_parser("performance-review")
+    perf_review.add_argument("--output", default="", help="Optional JSON report output path")
+    perf_review.add_argument("--platform", action="append", help="Expected platform to include even when metrics are missing")
+    perf_collect = sub.add_parser("performance-collect")
+    perf_collect.add_argument("--platform", action="append", required=True)
+    perf_collect.add_argument("--collector-config", default="", help="JSON file with collector settings, for example YouTube channel_url or Bilibili mid")
+    perf_collect.add_argument("--output", default="", help="Optional JSON collection report path")
+    perf_collect.add_argument("--hermes-platform-scraper", action="store_true", help="Use the script configured by HERMES_PLATFORM_SCRAPER when available")
+    perf_cycle = sub.add_parser("performance-cycle")
+    perf_cycle.add_argument("--platform", action="append", help="Platform to include; defaults to growth-policy platforms")
+    perf_cycle.add_argument("--collector-config", default="", help="Private JSON collector settings")
+    perf_cycle.add_argument("--output-dir", default="", help="Directory for raw collection and review reports")
+    perf_cycle.add_argument("--hermes-platform-scraper", action="store_true", help="Use HERMES_PLATFORM_SCRAPER bridge for the collection step")
+    perf_source_audit = sub.add_parser("performance-source-audit")
+    perf_source_audit.add_argument("--platform", action="append", required=True)
+    perf_source_audit.add_argument("--collector-config", default="", help="Private JSON collector settings")
+    perf_source_audit.add_argument("--output", default="", help="Optional JSON source coverage report path")
     sub.add_parser("project-audit")
     sub.add_parser("health")
     admin = sub.add_parser("admin-serve")
@@ -359,6 +434,47 @@ def execute(args):
         return cookie_inventory(platforms, args.account, args.cookie_dir)
     if args.command == "feedback-summary":
         return store.feedback_summary()
+    if args.command == "performance-import":
+        from .performance_ingest import import_performance_file
+        return import_performance_file(store, args.file, allow_unknown_job=args.allow_unknown_job)
+    if args.command == "performance-review":
+        from .performance_ingest import review_performance
+        report = review_performance(store, expected_platforms=args.platform)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            report["output"] = str(output)
+        return report
+    if args.command == "performance-collect":
+        from .performance_collectors import collect_platform_metrics, collect_with_hermes_platform_scraper
+        if args.hermes_platform_scraper:
+            return collect_with_hermes_platform_scraper(args.platform, output=args.output or None)
+        _load_env_defaults()
+        collector_config, _collector_config_path = _load_collector_config(args.collector_config)
+        return collect_platform_metrics(args.platform, collector_config, output=args.output or None)
+    if args.command == "performance-cycle":
+        from .performance_cycle import run_performance_cycle
+        _load_env_defaults()
+        collector_config, _collector_config_path = _load_collector_config(args.collector_config)
+        return run_performance_cycle(
+            store,
+            platforms=args.platform,
+            collector_config=collector_config,
+            use_hermes_scraper=args.hermes_platform_scraper,
+            output_dir=args.output_dir or None,
+        )
+    if args.command == "performance-source-audit":
+        from .performance_cycle import _source_coverage
+        _load_env_defaults()
+        collector_config, _collector_config_path = _load_collector_config(args.collector_config)
+        report = {"status": "ok", "source_coverage": _source_coverage(args.platform, collector_config)}
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            report["output"] = str(output)
+        return report
     if args.command == "project-audit":
         return audit_project(Path.cwd())
     if args.command == "wewrite":

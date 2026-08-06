@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from content_platform.growth_policy import build_growth_strategy
+from content_platform.content_recipe import build_article_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 from content_platform.preflight_manifest import build_preflight_manifest
 from content_platform.publishers import (
     AiToEarnDraftPublisher,
@@ -119,6 +120,17 @@ class PublisherV2Tests(unittest.TestCase):
 
     def _complete_wechat_packet(self):
         body = "\n\n".join(["practical operating paragraph " * 10 for _ in range(5)])
+        section_image_map = [
+            {"section": "problem", "image": "01.png", "purpose": "open the pain point", "adjacent_to_text": True},
+            {"section": "case", "image": "02.png", "purpose": "show the case", "adjacent_to_text": True},
+            {"section": "method", "image": "03.png", "purpose": "explain the steps", "adjacent_to_text": True},
+        ]
+        embedded_cards = [
+            {"section": "problem", "card_type": "step_tutorial", "layout": "timeline", "visual_subject": "matched visual 1", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
+            {"section": "case", "card_type": "case_map", "layout": "split_panel", "visual_subject": "matched visual 2", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
+            {"section": "method", "card_type": "checklist", "layout": "big_number", "visual_subject": "matched visual 3", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
+        ]
+        visual_selection = {"selected": "case_story_v1", "ranked_scores": [{"template": "case_story_v1", "score": 80}, {"template": "magazine_grid", "score": 70}], "recent_same_platform_templates": [], "penalties": {}}
         return {
             "id": "wechat-job",
             "platform": "wechat",
@@ -161,7 +173,7 @@ class PublisherV2Tests(unittest.TestCase):
             "opening_hook": "A useful article needs a real promise before it asks readers to spend attention.",
             "hook_type": "reader_payoff",
             "sections": ["problem", "case", "why old way fails", "method", "checklist"],
-            "visual_template_selection": {"selected": "case_story_v1", "ranked_scores": [{"template": "case_story_v1", "score": 80}], "recent_same_platform_templates": [], "penalties": {}},
+            "visual_template_selection": visual_selection,
             "strategy_brief": {
                 "target_user": "operators", "channel_lane": "AI operations", "topic_basis": "recent delivery failures",
                 "click_reason": "avoid repeating a costly publishing mistake", "reader_payoff": "a reusable checklist",
@@ -169,11 +181,7 @@ class PublisherV2Tests(unittest.TestCase):
                 "seo_geo_intent": "AI operations search and WeChat recommendation intent",
                 "selected_theme_reason": "case-led technical operations article",
             },
-            "section_image_map": [
-                {"section": "problem", "image": "01.png", "purpose": "open the pain point", "adjacent_to_text": True},
-                {"section": "case", "image": "02.png", "purpose": "show the case", "adjacent_to_text": True},
-                {"section": "method", "image": "03.png", "purpose": "explain the steps", "adjacent_to_text": True},
-            ],
+            "section_image_map": section_image_map,
             "real_scene_background_plan": {
                 "required": True, "source_policy": "licensed_or_verified_real_scene_assets",
                 "primary_background_kind": "real_scene_photo", "no_css_gradient_primary": True,
@@ -184,11 +192,32 @@ class PublisherV2Tests(unittest.TestCase):
                 ],
             },
             "knowledge_card_plan": {"skill": "hermes_skill:content/knowledge-card-designer", "card_type": "knowledge_summary", "platform": "wechat", "audience": "operators", "visual_scheme": "professional", "typography_hierarchy": "4:2:1", "self_check": ["readability", "attraction", "information_density", "share_or_save_value", "visual_match", "mobile_safe_boundaries"]},
-            "embedded_knowledge_cards": [
-                {"section": "problem", "card_type": "step_tutorial", "layout": "timeline", "visual_subject": "matched visual 1", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
-                {"section": "case", "card_type": "step_tutorial", "layout": "timeline", "visual_subject": "matched visual 2", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
-                {"section": "method", "card_type": "step_tutorial", "layout": "timeline", "visual_subject": "matched visual 3", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
-            ],
+            "embedded_knowledge_cards": embedded_cards,
+            "article_recipe": build_article_recipe(
+                platform="wechat",
+                content_type="long_article",
+                title="WeChat adapter test",
+                body=body,
+                sections=["problem", "case", "why old way fails", "method", "checklist"],
+                section_image_map=section_image_map,
+                embedded_knowledge_cards=embedded_cards,
+                visual_template_selection=visual_selection,
+            ),
+            "knowledge_card_recipe": build_knowledge_card_recipe(platform="wechat", cards=embedded_cards, content_type="long_article"),
+            "tool_invocation_manifest": build_tool_invocation_manifest(
+                planned_tools={
+                    "generator_normalize": "content_platform.generator",
+                    "preflight_manifest": "content_platform.preflight_manifest",
+                    "visual_policy": "content_platform.visual_content_policy",
+                    "knowledge_card_designer": "hermes_skill:content/knowledge-card-designer",
+                },
+                invocations={
+                    "generator_normalize": {"status": "ok", "output": "packet"},
+                    "preflight_manifest": {"status": "ok", "output": "packet.preflight_manifest"},
+                    "visual_policy": {"status": "ok", "output": "packet.visual_content_policy"},
+                    "knowledge_card_designer": {"status": "planned_internal", "output": "packet.embedded_knowledge_cards"},
+                },
+            ),
             "cover_design": {"visual_subject": "failed schedule checklist", "topic_alignment": "matches promise", "mobile_readable": True, "visual_hierarchy": "title, warning mark, checklist", "template_family": "casebook"},
             "differentiation_dimensions": ["case-led opening", "checklist structure", "warm warning tone"],
             "reader_payoff": "reader can apply a checklist today",

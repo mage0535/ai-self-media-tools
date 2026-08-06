@@ -1,0 +1,14 @@
+[Unit]
+Description=Run Hermes content-platform performance and growth-strategy cycle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=HERMES_PLATFORM_SCRAPER=%h/.hermes/scripts/platform_scraper.py
+EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
+ExecStart=/bin/sh -lc 'mkdir -p %h/.ai-self-media-tools/data/performance/daily && %h/.local/bin/content-platform --config %h/.ai-self-media-tools/config.json --db %h/.ai-self-media-tools/data/state.db performance-cycle --platform wechat --platform kuaishou --platform douyin --platform shipinhao --platform xiaohongshu --platform bilibili --platform youtube --collector-config %h/.ai-self-media-tools/secrets/performance-collector.json --output-dir %h/.ai-self-media-tools/data/performance/daily --hermes-platform-scraper > %h/.ai-self-media-tools/data/performance/daily/systemd-last.json'
+WorkingDirectory=%h/.ai-self-media-tools
+MemoryMax=384M
+TimeoutStartSec=900

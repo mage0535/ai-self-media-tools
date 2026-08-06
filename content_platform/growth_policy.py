@@ -137,6 +137,21 @@ def _is_video(content_type: str) -> bool:
     return any(hint in content for hint in VIDEO_CONTENT_HINTS)
 
 
+def _has_effective_historical_feedback(historical_feedback: dict[str, Any]) -> bool:
+    if not isinstance(historical_feedback, dict) or not historical_feedback:
+        return False
+    platforms = historical_feedback.get("platforms")
+    if isinstance(platforms, dict) and any(isinstance(item, dict) and item for item in platforms.values()):
+        return True
+    clusters = historical_feedback.get("clusters")
+    if isinstance(clusters, list) and any(isinstance(item, dict) and item for item in clusters):
+        return True
+    return any(
+        key not in {"platforms", "clusters"} and value not in ({}, [], None, "")
+        for key, value in historical_feedback.items()
+    )
+
+
 def build_growth_strategy(
     platforms: list[str] | tuple[str, ...] | str | None,
     content_type: str,
@@ -147,6 +162,7 @@ def build_growth_strategy(
     rules = PLATFORM_GROWTH_RULES.get(platform, {})
     is_video = _is_video(content_type)
     historical_feedback = historical_feedback or {}
+    has_feedback = _has_effective_historical_feedback(historical_feedback)
     strategy = {
         "policy_id": GROWTH_POLICY_ID,
         "platform": platform,
@@ -194,7 +210,7 @@ def build_growth_strategy(
             "comment_prompt_score": 0.68,
             "template_fatigue_risk": 0.35,
         },
-        "historical_feedback_status": "available" if historical_feedback else "missing_or_empty",
+        "historical_feedback_status": "available" if has_feedback else "missing_or_empty",
         "historical_feedback_summary": historical_feedback,
     }
     if platform == "wechat" and isinstance(rules.get("wechat_growth_playbook"), dict):
