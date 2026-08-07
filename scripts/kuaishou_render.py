@@ -165,6 +165,19 @@ def _rendered_card_quality(path):
         return False, f"image_probe_failed:{type(exc).__name__}"
 
 
+def _bg_is_light(bg_hex):
+    try:
+        value = str(bg_hex or "").strip().lstrip("#")
+        if len(value) == 3:
+            value = "".join(ch * 2 for ch in value)
+        if len(value) not in {6, 8}:
+            return False
+        r, g, b = int(value[:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 160
+    except Exception:
+        return False
+
+
 def build_card_html(card, idx, bg_b64, gh_b64, t):
     """Card HTML with charset + base64 bg + theme colors. All templates verified fixed 2026-07-24."""
     css = card.get("css") or {}
@@ -184,6 +197,9 @@ def build_card_html(card, idx, bg_b64, gh_b64, t):
         bg = f"linear-gradient(180deg,rgba(0,0,0,0.1),rgba(0,0,0,0.55),rgba(0,0,0,0.82)),url('{bg_b64}')"
     else:
         base_bg = css.get("bg_gradient") or f"#{t['bg']}"
+        first_hex = re.search(r"#([0-9a-fA-F]{3,8})", str(base_bg))
+        if first_hex and _bg_is_light(first_hex.group(1)):
+            base_bg = f"linear-gradient(180deg,rgba(0,0,0,0.42),rgba(0,0,0,0.68)),{base_bg}"
         bg = (
             "radial-gradient(circle at 18% 22%, rgba(255,255,255,0.24) 0 2px, transparent 3px),"
             "radial-gradient(circle at 76% 14%, rgba(255,255,255,0.16) 0 3px, transparent 5px),"
@@ -376,7 +392,7 @@ async def gen_tts(video_dir, cards, voice_idx=0):
     print(f"  ✅ TTS完成 ({len(cards)}段, voice={voice})")
 
 
-def render_segments(video_dir, cards):
+def render_segments(video_dir, cards, width=1080, height=1920):
     """Render segments sequentially"""
     seg_dir = Path(video_dir) / "segments"
     seg_dir.mkdir(exist_ok=True)
@@ -393,7 +409,7 @@ def render_segments(video_dir, cards):
         subprocess.run(["ffmpeg","-y","-loop","1","-i",str(card_png),"-i",str(tts_mp3),
             "-c:v","libx264","-t",str(dur),"-preset","ultrafast","-crf","28",
             "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
-            "-vf","scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2",
+            "-vf",f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
             "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
 
         assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
@@ -944,7 +960,9 @@ def mix_audio(video_dir):
         "--probe",
         str(probe),
         "--bgm-weight",
-        "0.28",
+        os.environ.get("KUAISHOU_BGM_WEIGHT", "0.45"),
+        "--voice-gain",
+        os.environ.get("KUAISHOU_VOICE_GAIN", "2.2"),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=360)
     (Path(video_dir) / "mix_bgm_stdout.log").write_text(result.stdout, encoding="utf-8")
@@ -1102,6 +1120,8 @@ async def main():
     parser.add_argument("--tags", nargs="*", default=[], help="Tags for packet")
     parser.add_argument("--schedule", help="Schedule time (YYYY-MM-DD HH:MM)")
     parser.add_argument("--voice-idx", type=int, default=0, help="TTS voice index (0/1/2 for voice rotation)")
+    parser.add_argument("--width", type=int, default=1080, help="Output width; Kuaishou preflight requires 1080")
+    parser.add_argument("--height", type=int, default=1920, help="Output height; Kuaishou preflight requires 1920")
     parser.add_argument("--bgm-style", default="acoustic guitar", help="BGM style for online real-instrument music search")
     parser.add_argument("--skip-cards", action="store_true", help="Skip card rendering if cards.done exists")
     parser.add_argument("--skip-tts", action="store_true", help="Skip TTS if tts.done exists")
@@ -1146,7 +1166,7 @@ async def main():
     # ── Step 3: Segments ──
     if not (Path(vd) / "segments.done").exists():
         print("\n=== Step 3: 分段渲染（并行4核）===")
-        render_segments(vd, cards)
+        render_segments(vd, cards, args.width, args.height)
     else:
         print("\n=== Step 3: 分段 ✅ 跳过 ===")
 

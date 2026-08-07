@@ -391,6 +391,10 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(contract["template_registry"]["theme"], "cyber-neon")
             self.assertIn("visual_gate.py --cinema", contract["post_render_gates"])
             self.assertIn("--bgm-style", manifest["renderer_command_preview"])
+            self.assertIn("--width", manifest["renderer_command_preview"])
+            self.assertIn("1080", manifest["renderer_command_preview"])
+            self.assertIn("--height", manifest["renderer_command_preview"])
+            self.assertIn("1920", manifest["renderer_command_preview"])
             self.assertEqual(manifest["bgm_style"], contract["bgm_style"])
 
     def test_runner_dry_run_records_shotcraft_motion_plan(self):

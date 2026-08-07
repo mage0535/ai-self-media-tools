@@ -406,6 +406,10 @@ def _renderer_command(renderer: Path, output_dir: Path, theme: str, title: str, 
         bgm_style,
         "--tags",
         *_tags(plan),
+        "--width",
+        "1080",
+        "--height",
+        "1920",
     ]
 
 

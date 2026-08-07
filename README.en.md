@@ -2,108 +2,70 @@
 
 [中文](README.md) | Current version: `1.0.0`
 
-AI Self-Media Tools is a multi-platform content operations toolkit for self-media operators and AI agents. It connects account analysis, topic planning, trend collection, content generation, image/video production, quality gates, draft/manual-handoff publishing, and post-publish review into one auditable workflow.
+AI Self-Media Tools is a multi-platform content operations toolkit for self-media operators and AI agents. It connects account analytics, growth strategy, topic planning, article/video generation, asset licensing, quality gates, draft or handoff delivery, publishing checks, and performance review into an auditable workflow.
 
-This repository contains public source code, rules, example configuration, and helper scripts only. It does not contain the maintainer's cookies, browser state, API keys, proxy nodes, generated works, logs, or account data. Every operator must configure their own accounts and runtime state.
+This public repository contains source code, rules, example configuration, and helper scripts only. It does not include the maintainer's cookies, browser state, API keys, proxy nodes, account data, generated works, screenshots, logs, or databases. Every operator must bind their own accounts and runtime data.
 
-## What This Is
+## What It Solves
 
-The project addresses a practical problem: multi-platform content work easily drifts off-lane, becomes repetitive, and reports success without visible evidence.
+- Multi-platform work often reuses the same topic, template, BGM, and video file.
+- Content lacks hooks, useful detail, real visual matching, and clear CTA.
+- Videos may have no BGM, BGM may bury the voice, subtitles may block the subject, or visuals may not match the script.
+- Uploaders may report success while the platform backend contains no draft or work.
+- Private cookies, analytics, and generated works can accidentally leak into the project folder.
 
-It is not a "one click spam every platform" script. It is a rule-gated operations system:
+The goal is not "one-click spam". The goal is operations-first content production with executable gates and visible evidence.
 
-1. Analyze the account and platform before deciding topics.
-2. Generate reviewable content packages before draft or publish preparation.
-3. Require quality, asset-license, privacy, duplication, and platform checks before delivery.
-4. Feed performance metrics back into the next content cycle.
+## Workflow
 
-## Why It Was Built
+1. Account and niche analysis: platform rules, historical metrics, account state, and positioning.
+2. Trend and topic planning: platform data, same-lane accounts, external trend sources, and dedup history.
+3. Content planning: quantity, format, title, hook, script, asset needs, cover, and schedule.
+4. Content generation: articles, notes, knowledge cards, scripts, titles, captions, tags, SEO, and GEO.
+5. Media production: real or compliant generated assets, knowledge cards, voice-over, subtitles, BGM, covers, and final video files.
+6. Quality gates: preflight, recipes, tool invocation evidence, licenses, BGM fingerprint, subtitles, duplication, and platform format.
+7. Draft or handoff: platform draft, scheduled post, postcheck, or manual publishing package.
+8. Performance review: views, reads, likes, comments, saves, shares, follows, completion rate, 3-second rate, and average watch time.
 
-When operating multiple channels, these failures appear quickly:
+## Enforced Contract Layer
 
-- Every platform gets the same template.
-- Content has no hook, no useful detail, and no real visual match.
-- Video has captions but no voice, or BGM buries the voice.
-- The uploader reports success while the platform backend has no draft.
-- Cookies, logs, account data, and generated works leak into the project folder.
+Current builds turn rules into code-level gates:
 
-This project turns those lessons into executable rules and checks so work starts from operations analysis instead of mechanical copy generation.
+- `preflight_manifest`: proves that rules, strategy, asset needs, and publishing constraints were loaded.
+- `content_recipe`: required for articles, notes, and knowledge-card packages; records structure, visual binding, variation, first-screen promise, payoff schedule, and 7-day fatigue checks.
+- `visual_recipe`: required for videos; records template family, effect modules, scene-to-asset matching, visual differentiation, and anti-reuse identity.
+- `tool_invocation_manifest`: required evidence of planned and invoked tools.
+- BGM gate: requires real online instrument music with source, license, and fingerprint; rejects silence, synthetic fallback, and duplicates.
+- Media delivery gate: video and cover handoff must be sent as separate `MEDIA:<absolute_path>` messages, never appended to a long report tail.
 
-## Design Goals
+## Platform Scope
 
-- Draft/manual-handoff first. Real public publishing requires health checks and visible postchecks.
-- One strategy per platform, not one recycled template for all channels.
-- Articles must include developed copy, hooks, images/knowledge cards, SEO/GEO, and platform adaptation.
-- Videos must include clear human-like voice, suitable BGM, lower-third captions, real material matching, and preflight gates.
-- Public repositories must stay free of private paths, cookies, account data, and generated works.
-- Hermes, Codex, Claude Code, OpenCode, and similar agents can call stable scripts and rulebooks.
+Domestic platforms:
 
-## How It Works
+| Platform | Default mode | Content types |
+| --- | --- | --- |
+| WeChat Official Account | Draft/API/Hermes adapter | Long articles, GitHub picks, trend articles, knowledge cards |
+| Kuaishou | Automated upload + postcheck | Knowledge-card videos, real-material shorts, microcases |
+| Bilibili | Manual handoff | 16:9 tutorials, knowledge videos, case videos |
+| Zhihu | Draft/article package | Deep answers, opinion analysis, experience reviews |
+| Juejin | Draft/article package | Technical articles, open-source project reviews, engineering notes |
+| Douyin | Manual handoff | TikTok localized reposts, pet content, short videos |
+| WeChat Video Channels | Manual handoff | WeChat-ecosystem shorts, knowledge cards, case videos |
+| Xiaohongshu / RedNote | Manual handoff | Notes, knowledge blocks, short-video mix |
 
-1. Account and niche analysis: platform rules, historical data, account state, and positioning.
-2. Trend and topic planning: platform trends, competitor references, keyword heat, and dedup history.
-3. Content plan: quantity, format, topic angle, script structure, asset requirements, and suggested schedule.
-4. Content generation: articles, notes, knowledge cards, scripts, titles, body copy, tags, covers, SEO, and GEO.
-5. Media production: real material matching, knowledge-card rendering, voice-over, captions, BGM, covers, and video files.
-6. Quality gates: word count, images, licenses, captions, voice, BGM, clarity, platform rules, and duplication.
-7. Draft or handoff: platform draft, local package, semi-automatic review package, or manual publishing material.
-8. Performance review: views, clicks, saves, comments, follows, completion rate, 3-second view rate, and average watch time.
+International platforms:
 
-## Public Release Scope
+| Platform | Default mode | Content types |
+| --- | --- | --- |
+| X/Twitter | Automated or draft, depending on config | Short posts, links, growth experiments |
+| YouTube | Manual handoff | Shorts, landscape tutorials, knowledge videos |
+| TikTok | Manual handoff | Hot material analysis, localized short videos |
+| Dev.to | Draft/API | English technical articles |
+| Bluesky / Mastodon / Nostr | API or draft | Short posts and link sharing |
 
-`v1.0.0` is the first public-ready release for operators other than the original maintainer.
+Baijiahao and Toutiao are not part of the current main workflow.
 
-Included:
-
-- Operations strategy, content generation, media quality, channel rulebooks, and pre-publish checks.
-- Beginner installer and platform binding wizard.
-- Domestic and international platform examples.
-- Privacy-safe public bundle tooling.
-
-Not included:
-
-- Maintainer cookies, browser profiles, API keys, proxy nodes.
-- Live account analytics, generated works, logs, screenshots, databases, or publish records.
-- Private Hermes runtime directories or operator-specific state.
-
-## Requirements
-
-Base requirements:
-
-- Python `3.11+`
-- Git
-- Windows PowerShell, macOS Terminal, or Linux shell
-- Network access
-
-Recommended for video workflows:
-
-- `ffmpeg` for video rendering, subtitles, audio mixing, and validation.
-- Playwright browsers for browser-based draft workflows and login-state probes.
-- Optional: `yt-dlp`, OCR, TTS, image generation, and stock material retrieval tools.
-
-If you only create article drafts, you can start without the full video toolchain. If you use Kuaishou, Douyin, Video Channels, Bilibili, YouTube, or TikTok, configure `ffmpeg` and browser tooling first.
-
-## Before You Start
-
-Beginners should prepare:
-
-- A GitHub account to download the project.
-- Their own platform accounts.
-- A private local runtime directory, such as `%USERPROFILE%\.ai-self-media-tools` on Windows.
-- A safe place for secrets, such as `.env` or `secrets/provider.env`, never committed to Git.
-- A network route that can access the target platform. Domestic and international platforms may need different routes.
-- If using Hermes or a server, store cookies, proxies, and browser profiles in private runtime directories, not in this repository.
-
-Do not prepare or send to others:
-
-- Cookie plaintext
-- API key plaintext
-- Proxy node plaintext
-- Browser profiles
-- Platform backend screenshots
-- Original generated works or account analytics exports
-
-## Quick Start
+## Installation
 
 ### Windows PowerShell
 
@@ -123,64 +85,21 @@ cd ai-self-media-tools
 python scripts/onboard_operator.py
 ```
 
-Run a basic validation after installation:
+Basic validation:
 
 ```bash
-python -m content_platform project-audit
+python -m content_platform.cli project-audit
 python scripts/validate_channel_rulebook.py
 pytest -q
 ```
 
-## Install Modes
+## Beginner Onboarding
 
-The installer is the recommended beginner entrypoint. It:
-
-1. Checks Python, Git, project location, and optional video tools.
-2. Installs Python dependencies and registers the project locally.
-3. Creates a private runtime directory, usually `~/.ai-self-media-tools`.
-4. Writes an example runtime config without real secrets.
-5. Writes `installation-report.json` for humans or agents to inspect.
-6. Points the operator to the platform binding wizard.
-
-Common modes:
-
-```bash
-python scripts/install.py --mode full
-python scripts/install.py --mode check
-python scripts/install.py --mode config-only
-```
-
-Windows equivalents:
-
-```powershell
-python scripts\install.py --mode full
-python scripts\install.py --mode check
-python scripts\install.py --mode config-only
-```
-
-| Mode | What it does | Best for |
-| --- | --- | --- |
-| `full` | Checks environment, installs dependencies, creates runtime config | First-time setup |
-| `check` | Checks only; does not install or write config | Diagnosing a computer |
-| `config-only` | Creates runtime folders and example config only | Already configured machines |
-
-If dependency installation fails, run:
-
-```bash
-python scripts/install.py --mode check
-```
-
-Then fix the missing Python, Git, ffmpeg, or network issue before retrying.
-
-## Beginner Onboarding Wizard
-
-After installation:
+Run:
 
 ```bash
 python scripts/onboard_operator.py
 ```
-
-The wizard guides platform preparation, account binding choices, publishing modes, and validation steps. It never reads, prints, or uploads cookie plaintext.
 
 Status check only:
 
@@ -188,163 +107,80 @@ Status check only:
 python scripts/onboard_operator.py --check
 ```
 
-Create local `config.json`:
-
-```bash
-python scripts/onboard_operator.py --write-config
-```
-
-Show one platform guide:
+Single-platform guide:
 
 ```bash
 python scripts/onboard_operator.py --platform wechat
 python scripts/onboard_operator.py --platform kuaishou
-python scripts/onboard_operator.py --platform douyin
-python scripts/onboard_operator.py --platform shipinhao
 python scripts/onboard_operator.py --platform bilibili
 python scripts/onboard_operator.py --platform xiaohongshu
 python scripts/onboard_operator.py --platform youtube
 python scripts/onboard_operator.py --platform tiktok
-python scripts/onboard_operator.py --platform reddit
 ```
 
-## Platform Matrix
-
-Domestic platforms:
-
-| Platform | Default mode | Content types | Notes |
-| --- | --- | --- | --- |
-| WeChat Official Account | Draft/API or Hermes adapter | Long articles, GitHub picks, trend articles, knowledge cards | Requires AppID/AppSecret or verified adapter |
-| Kuaishou | Automated upload + postcheck | Knowledge-card videos, real-material shorts, microcases | Requires preflight, quality gate, and postcheck |
-| Douyin | Manual review package | TikTok localized reposts, pet knowledge, short videos | Default: generate complete package; operator publishes manually |
-| Video Channels | Manual review package | WeChat-ecosystem shorts, knowledge cards, case videos | Generates title, body, cover, tags, and video package |
-| Bilibili | File package/draft/extension uploader | Tutorials, knowledge videos, longer case content | Requires category, cover, tags, captions, and clarity checks |
-| Xiaohongshu | Manual review package | Image-text notes, knowledge blocks, short-video mix | Focus on authenticity, save value, and manual publishing |
-| Toutiao | Draft/article package | Long-form image-text, trend analysis, experience posts | Next integration target |
-| Juejin | Automated article workflow + draft/publish preparation | Technical articles, OSS project analysis, engineering notes | Publisher integrated; requires operator credentials and article quality gates |
-| Zhihu | Automated article workflow + draft/publish preparation | Deep answers, opinion analysis, experience reviews | Publisher integrated; requires operator login state and article quality gates |
-
-International platforms:
-
-| Platform | Default mode | Content types | Notes |
-| --- | --- | --- | --- |
-| YouTube / Shorts | Manual or verified uploader | Shorts, tutorials, knowledge videos | Requires channel login, title, description, tags, cover, and captions |
-| TikTok | Material source / manual package | Trend material analysis, shorts, localized edits | Requires international access route and source evidence |
-| Reddit | Trend collection + draft package | Community posts, discussion drafts, topic validation | Default: no auto-post; check subreddit rules |
-| Dev.to | Draft/API | English technical articles | Good for OSS projects, tutorials, and engineering recaps |
-| Telegraph | API/file publish | Lightweight articles | Useful for quick linkable pages |
-| Mastodon | API publisher | Short posts and link distribution | Requires instance URL and access token |
-| Bluesky | API publisher | Short posts and link distribution | Requires account credentials or app password |
-| Nostr | Signed publisher | Decentralized short posts | Private key must stay in private runtime |
-| Write.as | API publisher | Lightweight blog posts | Requires API key |
-| Buttondown | API publisher | Newsletter | Requires API key |
-| LinkedIn / X | Manual or extension publisher | Professional posts, short updates, link distribution | Manual publishing is recommended by default |
-
-## Recommended First Week
-
-Do not bind every platform on day one.
-
-1. Day 1: install, run checks, and create local config.
-2. Day 2: generate one manual review package for Xiaohongshu or Douyin.
-3. Day 3: configure WeChat draft flow and verify article images/knowledge cards.
-4. Day 4: configure one video platform such as Kuaishou or Bilibili.
-5. Day 5: start performance review metrics.
-6. Day 6+: gradually add international channels or more automation.
-
-## Configuration Rules
-
-Copy the example config:
+## Useful Commands
 
 ```bash
-cp config.example.json config.json
+# Privacy and release audit
+python -m content_platform.cli project-audit
+
+# Channel rule validation
+python scripts/validate_channel_rulebook.py
+
+# Free image provider smoke test without printing secrets
+python scripts/smoke_image_provider.py --providers pollinations,cloudflare,auto
+
+# Visual recipe validation
+python scripts/validate_visual_recipe.py --recipe /path/to/visual_recipe.json
+
+# BGM fingerprint gate
+python scripts/check_bgm_uniqueness.py /path/to/render_dir --platform kuaishou
+
+# Platform topic independence gate
+python scripts/check_platform_topic_independence.py 20260807 --platforms wechat,kuaishou,bilibili
+
+# Send media as separate Hermes messages; target comes from HERMES_DELIVERY_TARGET
+python scripts/deliver_media.py "video handoff" /path/to/final.mp4 /path/to/cover.jpg
 ```
 
-Windows PowerShell:
+## Privacy Boundary
 
-```powershell
-Copy-Item config.example.json config.json
-```
-
-Fill in only your own values. Never commit or share:
+Do not commit or share:
 
 - `config.json`
-- `.env`, `.env.*`
+- `.env`, `secrets/`
 - `data/`
-- `secrets/`
 - `cookies/`
 - `logs/`
 - `artifacts/`
-- `outbox/`
-- `.codex-server-runtime/`
-- any database, screenshot, generated video, publish record, platform cookie, browser profile, API key, or proxy node
+- browser profiles
+- account screenshots, generated works, databases, publish records
+- cookies, API keys, tokens, proxy nodes
 
-## Sharing With Friends
+When sharing with friends, share the GitHub repository or a clean public release bundle only. See [docs/PUBLIC_DISTRIBUTION.md](docs/PUBLIC_DISTRIBUTION.md).
 
-Do not zip your working directory. Generate a clean public bundle:
+## Hermes / Agent Usage
 
-```bash
-python scripts/release_bundle.py --target /tmp/ai-self-media-tools-public
-```
+Before an automated run, Hermes or another agent should:
 
-Windows PowerShell:
+1. Load the fixed account growth strategy.
+2. Run `performance-cycle` and refresh real platform data.
+3. Check `capability_status` through MCP or project tooling.
+4. Build an independent `platform_source_matrix` for every platform.
+5. Ensure each package contains `preflight_manifest`, `content_recipe` or `visual_recipe`, and `tool_invocation_manifest`.
+6. Run postcheck for automated platforms; use `handoff_pending` for manual platforms.
 
-```powershell
-python scripts\release_bundle.py --target C:\Temp\ai-self-media-tools-public
-```
+If a gate fails, repair and rerun. If repeated repair fails, mark the platform `blocked`. Do not bypass gates.
 
-Share only the generated `ai-self-media-tools-public` directory or the GitHub Release archive. See [docs/PUBLIC_DISTRIBUTION.md](docs/PUBLIC_DISTRIBUTION.md).
-
-## Validation
-
-Before real publishing:
+## Development Validation
 
 ```bash
-python -m content_platform project-audit
-python scripts/validate_channel_rulebook.py
+python -m py_compile content_platform/content_recipe.py content_platform/video_recipe.py scripts/mix_bgm_with_gate.py
 pytest -q
+python -m content_platform.cli project-audit
+python scripts/validate_channel_rulebook.py
 ```
 
-Common checks:
+## License and Compliance
 
-```bash
-python -m content_platform health
-python -m content_platform delivery-readiness
-python -m content_platform health-refresh
-python -m content_platform feedback-summary
-```
-
-Admin console:
-
-```bash
-python -m content_platform admin-serve --password "your-password"
-```
-
-## Troubleshooting
-
-| Problem | Fix |
-| --- | --- |
-| Python is not found | Install Python 3.11+ and reopen the terminal |
-| Dependency install failed | Run `python scripts/install.py --mode check` first |
-| Video has no voice or captions | Check `ffmpeg`, then rerun the video quality gate |
-| Platform draft is invisible | Verify in the backend draft list or management page, not just API output |
-| Cookie expired | Re-login with your own account and store state in private runtime |
-| Privacy concern | Run `project-audit`, then use `release_bundle.py` |
-
-## Repository Structure
-
-- `content_platform/`: core strategy, generation, gates, publishers, and review logic.
-- `scripts/`: install, validation, media production, quality checks, and publishing helpers.
-- `config/`: rulebooks, quality gates, growth strategy, and security config.
-- `docs/`: operations rules, release notes, public sharing, and continuous development notes.
-- `skills/`: reusable content, visual, and operations skills.
-- `tests/`: unit and regression tests.
-
-## Release
-
-- Current release: [v1.0.0](https://github.com/mage0535/ai-self-media-tools/releases/tag/v1.0.0)
-- Release notes: [RELEASE_NOTES_1.0.0.md](RELEASE_NOTES_1.0.0.md)
-- Public distribution guide: [docs/PUBLIC_DISTRIBUTION.md](docs/PUBLIC_DISTRIBUTION.md)
-
-## License
-
-MIT.
+You are responsible for complying with each platform's rules and every asset license. This project does not grant rights to third-party media, music, accounts, or platform APIs.
