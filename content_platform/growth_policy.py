@@ -9,6 +9,115 @@ GROWTH_POLICY_ID = "growth_quality_policy_v1"
 
 VIDEO_CONTENT_HINTS = {"video", "short", "repost", "microcase"}
 
+WECHAT_RECOVERY_PLAYBOOK: dict[str, Any] = {
+    "diagnosis_date": "2026-08-08",
+    "mode": "wechat_14_day_recovery",
+    "account_status": {
+        "certified": True,
+        "comments_enabled": True,
+        "advanced_data_api": "unavailable_or_unauthorized",
+        "manual_backend_export_required": True,
+    },
+    "primary_goal": "recover_open_rate_and_finish_read_rate_before_increasing_publish_frequency",
+    "publishing_frequency": {
+        "recommended_articles_per_week": "2",
+        "max_articles_per_week_recovery": 2,
+        "max_articles_per_week_after_recovery": 3,
+        "max_articles_per_day": 1,
+        "min_gap_hours_between_articles": 48,
+        "pause_days_before_next_publish": 2,
+        "avoid_daily_updates": True,
+        "avoid_three_articles_per_day_batching": True,
+        "reason": "recent 17-day run produced 15 articles and repeated automation topics; recovery needs fewer, stronger, more differentiated pieces",
+    },
+    "content_mix": {
+        "open_source_notes": 0.25,
+        "personal_practice_story": 0.30,
+        "opinion_or_trend_interpretation": 0.25,
+        "interactive_qa_or_weekly_recap": 0.20,
+    },
+    "columns": [
+        {"name": "马吉克开源笔记", "role": "open_source_notes", "recommended_day": "tuesday"},
+        {"name": "我的 AI 工作台", "role": "personal_practice_story", "recommended_day": "friday"},
+        {"name": "AI 说人话", "role": "opinion_or_trend_interpretation", "recommended_day": "alternate_tuesday"},
+        {"name": "你问我答 / 工具箱回访", "role": "interactive_qa_or_weekly_recap", "recommended_day": "alternate_friday"},
+    ],
+    "recovery_topic_policy": {
+        "duration_days": 14,
+        "topic_dedup_window_days": 14,
+        "title_frame_dedup_window_days": 14,
+        "suspend_topics": ["自动化实测", "办公自动化实测", "重复劳动自动化", "WordPress SEO 自动化"],
+        "fatigue_terms": ["实测", "自动化", "工具", "AI"],
+        "max_fatigue_terms_per_title": 1,
+        "same_topic_action": "block_and_reselect_topic",
+        "same_title_frame_action": "rewrite_title_or_switch_column",
+    },
+    "github_selection_policy": {
+        "default_mode": "weekly_or_biweekly_single_column",
+        "bundle_rule": "one carefully tested open-source project per issue; bundle only when each project has a distinct reader payoff",
+        "extra_issue_allowed_only_when": "current_ops_strategy_has_strong_trend_or_account_data_evidence",
+        "avoid": "daily_repetitive_github_listing_without_case_or_reader_payoff",
+    },
+    "title_rules": {
+        "ideal_chars": "12-22",
+        "max_chars": 24,
+        "keyword_first_chars": 15,
+        "must_include_one": ["pain", "result", "loss_avoidance", "specific_scenario", "contrast"],
+        "template_fatigue_limit": "same_title_frame_not_more_than_once_in_14_days",
+        "avoid_repeated_frames": ["实测", "试了", "值得试试", "自动化", "AI工具"],
+        "prepare_candidates": 3,
+        "reject_if_fatigue_terms_exceed": 1,
+    },
+    "article_structure": {
+        "first_200_chars": "state the reader pain, concrete payoff, and why this matters now",
+        "retention_hook_interval_chars": 350,
+        "structure_rotation_required": True,
+        "avoid_reusing_standard_template_for_14_days": True,
+        "allowed_structures": [
+            "story_driven_case",
+            "contrast_test",
+            "contrarian_opinion",
+            "reader_question_answer",
+            "open_source_project_note",
+        ],
+        "must_include": [
+            "real_case",
+            "specific_steps",
+            "failure_or_boundary",
+            "saveable_checklist",
+            "natural_follow_reason",
+        ],
+    },
+    "seo_geo": {
+        "primary_keywords": ["AI效率工具", "AI工作流", "开源项目", "GitHub精选", "AI实践复盘"],
+        "placement": ["title_first_15_chars", "digest", "first_200_chars", "section_headings"],
+        "search_footprint_goal": "improve_wechat_search_and_sogou_discoverability_without_keyword_stuffing",
+    },
+    "interaction_conversion": {
+        "backend_reply_keywords": ["工具箱", "清单", "GitHub", "开源笔记", "提问"],
+        "single_primary_cta_only": True,
+        "comment_prompt": "ask one concrete experience question tied to the article scenario",
+        "share_prompt": "state the colleague or operator who should read it",
+        "cross_platform_funnel": "short_video_and_answer_channels_point_to_wechat_keyword_reply",
+    },
+    "post_publish_review": {
+        "review_cadence": "weekly",
+        "required_metrics": [
+            "impressions",
+            "open_rate",
+            "finish_read_rate",
+            "share_rate",
+            "save_rate",
+            "comment_rate",
+            "new_follows",
+            "read_to_follow_rate",
+        ],
+        "api_unavailable_policy": "record_48001_or_backend_unavailable_reason_and_use_manual_export",
+        "recovery_exit_condition": "two consecutive weeks with improving open_rate and finish_read_rate",
+    },
+}
+
+
 PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
     "douyin": {
         "primary_metric": "completion_rate",
@@ -26,77 +135,21 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
         "primary_metric": "click_through_rate",
         "secondary_metrics": ["finish_read_rate", "save_rate", "share_rate", "follow_conversion_rate"],
         "rules": [
-            "wechat_editorial_frequency_control",
+            "wechat_14_day_recovery_frequency_control",
+            "wechat_14_day_topic_dedup",
             "columnized_personal_ip_mix",
             "title_keyword_first_15_chars",
-            "title_template_fatigue_limit",
+            "title_template_fatigue_limit_14_days",
             "first_200_chars_reader_payoff",
-            "every_300_chars_retention_hook",
+            "every_350_chars_retention_hook",
             "comment_backend_reply_and_share_cta",
+            "single_primary_cta_only",
             "wechat_search_seo_layout",
             "cross_platform_follow_funnel",
             "manual_backend_metrics_review_when_api_unavailable",
         ],
         "target_action": "read_to_follow",
-        "wechat_growth_playbook": {
-            "diagnosis_date": "2026-08-04",
-            "account_status": {
-                "certified": True,
-                "comments_enabled": True,
-                "advanced_data_api": "unavailable_or_unauthorized",
-                "manual_backend_export_required": True,
-            },
-            "primary_goal": "increase_read_to_follow_rate_without_sacrificing_finish_read_or_save_rate",
-            "publishing_frequency": {
-                "recommended_articles_per_week": "3-4",
-                "max_articles_per_day": 1,
-                "avoid_three_articles_per_day_batching": True,
-            },
-            "content_mix": {
-                "personal_practice_story": 0.30,
-                "opinion_or_trend_interpretation": 0.25,
-                "github_or_tool_selection": 0.30,
-                "interactive_qa_or_weekly_recap": 0.15,
-            },
-            "columns": [
-                {"name": "AI说人话", "role": "opinion_or_trend_interpretation", "recommended_day": "monday"},
-                {"name": "我的AI工作台", "role": "personal_practice_story", "recommended_day": "wednesday"},
-                {"name": "GitHub/工具精选", "role": "github_or_tool_selection", "recommended_day": "friday"},
-                {"name": "马吉克周记/你问我答", "role": "interactive_qa_or_weekly_recap", "recommended_day": "sunday_or_month_end"},
-            ],
-            "github_selection_policy": {
-                "default_mode": "weekly_bundle",
-                "bundle_rule": "one_ai_project_plus_one_non_ai_project_per_week",
-                "extra_issue_allowed_only_when": "current_ops_strategy_has_strong_trend_or_account_data_evidence",
-            },
-            "title_rules": {
-                "max_chars": 28,
-                "keyword_first_chars": 15,
-                "must_include_one": ["pain", "result", "loss_avoidance", "specific_scenario", "contrast"],
-                "template_fatigue_limit": "same_title_frame_not_more_than_once_in_7_days",
-                "avoid_repeated_frames": ["实测", "试了", "值得试试"],
-            },
-            "article_structure": {
-                "first_200_chars": "state the reader pain, result promise, and why this matters now",
-                "retention_hook_interval_chars": 300,
-                "must_include": ["real_case", "specific_steps", "failure_or_boundary", "saveable_checklist", "natural_follow_reason"],
-            },
-            "seo_geo": {
-                "primary_keywords": ["AI效率工具", "AI自动化", "开源项目", "GitHub精选", "AI工作流"],
-                "placement": ["title_first_15_chars", "digest", "first_200_chars", "section_headings"],
-            },
-            "interaction_conversion": {
-                "backend_reply_keywords": ["工具箱", "清单", "GitHub", "自动化"],
-                "comment_prompt": "ask one concrete experience question tied to the article scenario",
-                "share_prompt": "state the colleague or operator who should read it",
-                "cross_platform_funnel": "short_video_and_answer_channels_point_to_wechat_keyword_reply",
-            },
-            "post_publish_review": {
-                "review_cadence": "weekly",
-                "required_metrics": ["impressions", "open_rate", "finish_read_rate", "share_rate", "save_rate", "comment_rate", "new_follows", "read_to_follow_rate"],
-                "api_unavailable_policy": "record_48001_or_backend_unavailable_reason_and_use_manual_export",
-            },
-        },
+        "wechat_growth_playbook": WECHAT_RECOVERY_PLAYBOOK,
     },
     "bilibili": {
         "primary_metric": "average_watch_seconds",
@@ -246,6 +299,16 @@ def validate_growth_strategy(plan: dict[str, Any], platform: str = "", content_t
         failures.append("growth_quality_targets.missing:" + ",".join(target_failures))
     if len(diagnosis) < 5:
         failures.append("growth_review_plan.diagnosis_dimensions_incomplete")
+    if _normalized_platform(platform) == "wechat":
+        playbook = plan.get("wechat_growth_playbook") if isinstance(plan.get("wechat_growth_playbook"), dict) else {}
+        recovery = playbook.get("recovery_topic_policy") if isinstance(playbook.get("recovery_topic_policy"), dict) else {}
+        frequency = playbook.get("publishing_frequency") if isinstance(playbook.get("publishing_frequency"), dict) else {}
+        if playbook.get("mode") != "wechat_14_day_recovery":
+            failures.append("wechat_growth_playbook.recovery_mode_missing")
+        if int(frequency.get("max_articles_per_week_recovery") or 0) > 2:
+            failures.append("wechat_frequency.recovery_weekly_cap_too_high")
+        if int(recovery.get("topic_dedup_window_days") or 0) < 14:
+            failures.append("wechat_topic_dedup_window.too_short")
     return {
         "passed": not failures,
         "failures": failures,

@@ -204,15 +204,22 @@ def main() -> None:
     require(wechat_channels.get("hot_content_generation"), "wechat hot_content_generation channel is required")
     growth_strategy = wechat.get("growth_optimization_strategy") or {}
     frequency = growth_strategy.get("publishing_frequency") or {}
-    require(str(frequency.get("recommended_articles_per_week") or "") in {"3-4", "2-4"}, "wechat frequency must be reduced to 3-4 articles/week")
+    recovery_policy = growth_strategy.get("recovery_topic_policy") or {}
+    require(growth_strategy.get("mode") == "wechat_14_day_recovery", "wechat must be in 14-day recovery mode")
+    require(str(frequency.get("recommended_articles_per_week") or "") == "2", "wechat recovery frequency must be 2 articles/week")
+    require((frequency.get("max_articles_per_week_recovery") or 99) <= 2, "wechat recovery weekly cap must be <=2")
+    require((frequency.get("min_gap_hours_between_articles") or 0) >= 48, "wechat recovery articles must be separated by at least 48 hours")
     require(frequency.get("max_articles_per_day") == 1, "wechat max articles per day must be 1")
+    require(frequency.get("avoid_daily_updates") is True, "wechat must forbid daily updates during recovery")
     require(frequency.get("avoid_three_articles_per_day_batching") is True, "wechat must forbid three-article daily batching")
+    require((recovery_policy.get("topic_dedup_window_days") or 0) >= 14, "wechat topic dedup window must be >=14 days")
+    require((recovery_policy.get("max_fatigue_terms_per_title") or 99) <= 1, "wechat title fatigue terms must be capped at 1")
     require(len(growth_strategy.get("columns") or []) >= 4, "wechat growth strategy must define four columns")
     title_rules = growth_strategy.get("title_rules") or {}
-    require((title_rules.get("max_chars") or 99) <= 28, "wechat title max chars must be <=28")
+    require((title_rules.get("max_chars") or 99) <= 24, "wechat title max chars must be <=24 during recovery")
     require((title_rules.get("keyword_first_chars") or 99) <= 15, "wechat title keyword must appear in first 15 chars")
     article_structure = growth_strategy.get("article_structure") or {}
-    require((article_structure.get("retention_hook_interval_chars") or 999) <= 300, "wechat retention hook interval must be <=300 chars")
+    require((article_structure.get("retention_hook_interval_chars") or 999) <= 350, "wechat retention hook interval must be <=350 chars")
     require((growth_strategy.get("interaction_conversion") or {}).get("backend_reply_keywords"), "wechat backend reply keywords are required")
     require((growth_strategy.get("seo_geo") or {}).get("primary_keywords"), "wechat SEO/GEO keywords are required")
     wechat_strategy = wechat.get("strategy_requirements") or {}
@@ -240,7 +247,7 @@ def main() -> None:
         "wechat_column_mix_plan",
         "wechat_title_fatigue_gate",
         "wechat_first_200_chars_payoff",
-        "wechat_retention_hook_every_300_chars",
+        "wechat_retention_hook_every_350_chars",
         "wechat_comment_backend_reply_cta",
         "wechat_search_seo_layout",
         "wechat_manual_data_review_plan",
