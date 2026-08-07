@@ -40,7 +40,7 @@ PIXABAY_KEY = os.environ.get("PIXABAY_API_KEY", "")
 SUBTITLE_MARGIN_V = 200
 SUBTITLE_MAX_CHARS_PER_LINE = 16
 SUBTITLE_MAX_LINES = 2
-REAL_BGM_MIN_BYTES = 50_000
+REAL_BGM_MIN_BYTES = 800_000
 ONLINE_BGM_TIMEOUT = 20
 REAL_INSTRUMENT_TERMS = {
     "acoustic",
@@ -224,14 +224,14 @@ def build_card_html(card, idx, bg_b64, gh_b64, t):
 
     if l == "two_column":
         gh_html = f'''<div style="background:{t['card_bg']};border-radius:12px;padding:12px;border:1px solid {t['accent']}30;backdrop-filter:blur(4px)"><img src="{gh_b64}" style="width:100%;border-radius:8px;display:block"><div style="font-size:12px;opacity:0.5;text-align:center;margin-top:8px;color:{t['accent']}">▲ GitHub 仓库首页</div></div>''' if gh_b64 else ""
-        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px">
+        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px">
 <div style="font-size:13px;opacity:0.6;margin-bottom:12px;letter-spacing:2px;color:{t['accent']}">{card.get('label','') or '项目定位'}</div>
 <h2 style="font-size:32px;font-weight:700;margin-bottom:20px;border-left:4px solid {t['accent']};padding-left:18px;color:#fff">{card.get('t','')}</h2>
 <div style="font-size:21px;line-height:1.7;opacity:0.88;margin-bottom:28px;color:{t['text']}">{body.replace(chr(10),'<br>')}</div>{gh_html}</body></html>'''
 
     if l == "card_stack" and _card_items(card):
         items = "".join(f'<div style="display:flex;align-items:center;gap:16px;background:{t["glass"]};border-radius:12px;padding:18px 22px;margin-bottom:14px;backdrop-filter:blur(4px);border:1px solid {t["accent"]}15;font-size:20px;line-height:1.4;color:{t["text"]}"><div style="width:8px;height:8px;border-radius:50%;background:{t["accent"]};flex-shrink:0;box-shadow:0 0 8px {t["accent"]}"></div>{x}</div>' for x in _card_items(card))
-        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px"><h2 style="font-size:32px;font-weight:700;margin-bottom:30px;text-align:center;color:#fff">{card.get('t','')}</h2>{items}</body></html>'''
+        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px"><h2 style="font-size:32px;font-weight:700;margin-bottom:30px;text-align:center;color:#fff">{card.get('t','')}</h2>{items}</body></html>'''
 
     if l == "big_number":
         ex = "".join(f'<div style="font-size:18px;opacity:0.75;line-height:1.8;color:{t["text"]}">{e}</div>' for e in card.get("ext","").split("\n") if e)
@@ -247,12 +247,12 @@ def build_card_html(card, idx, bg_b64, gh_b64, t):
             items += f'''<div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:18px">
 <div style="width:34px;height:34px;border-radius:50%;border:1px solid {t['accent']};background:{t['badge_bg']};color:{t['accent']};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0">{num}</div>
 <div style="font-size:19px;line-height:1.5;padding-top:5px;opacity:0.9;color:{t['text']}">{x}</div></div>'''
-        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px"><h2 style="font-size:32px;font-weight:700;margin-bottom:28px;text-align:center;color:#fff">{card.get('t','')}</h2>{items}</body></html>'''
+        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px"><h2 style="font-size:32px;font-weight:700;margin-bottom:28px;text-align:center;color:#fff">{card.get('t','')}</h2>{items}</body></html>'''
 
     if l == "diagonal":
-        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px;position:relative">
+        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;padding:60px 50px;position:relative">
 <div style="position:absolute;top:0;right:0;width:200px;height:300px;background:linear-gradient(135deg,transparent 40%,{t['accent']}20 100%);clip-path:polygon(100% 0,0 0,100% 100%)"></div>
-<h2 style="font-size:32px;font-weight:700;margin-bottom:28px;border-left:4px solid {t['accent']};padding-left:18px;margin-top:60px;color:#fff">{card.get('t','')}</h2>
+<h2 style="font-size:32px;font-weight:700;margin-bottom:28px;border-left:4px solid {t['accent']};padding-left:18px;color:#fff">{card.get('t','')}</h2>
 <div style="font-size:20px;line-height:1.9;opacity:0.85;white-space:pre-line;color:{t['text']}">{body}</div></body></html>'''
 
     if l == "card_stack" and card.get("url"):
@@ -406,10 +406,30 @@ def render_segments(video_dir, cards, width=1080, height=1920):
         dur_r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(tts_mp3)],capture_output=True,text=True)
         dur = float(dur_r.stdout.strip() or 6.0) + 0.5
 
+        anim_mode = i % 4
+        fps = 25
+        total_frames = max(int(dur * fps), 63)
+        if anim_mode == 0:
+            zexpr = f"z='min(1.0+0.5*on/{total_frames},1.4)'"
+            xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
+        elif anim_mode == 1:
+            zexpr = f"z='max(1.4-0.5*on/{total_frames},1.0)'"
+            xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
+        elif anim_mode == 2:
+            zexpr = "z='1.15'"
+            xexpr, yexpr = "x='iw/2-iw/zoom/2+sin(on/30)*40'", "y='ih/2-ih/zoom/2'"
+        else:
+            zexpr = "z='1.15'"
+            xexpr, yexpr = "x='iw/2-iw/zoom/2-cos(on/30)*40'", "y='ih/2-ih/zoom/2'"
+        vf_anim = (
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,"
+            f"zoompan={zexpr}:{xexpr}:{yexpr}:d={total_frames}:s={width}x{height}:fps={fps}"
+        )
         subprocess.run(["ffmpeg","-y","-loop","1","-i",str(card_png),"-i",str(tts_mp3),
             "-c:v","libx264","-t",str(dur),"-preset","ultrafast","-crf","28",
             "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
-            "-vf",f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
+            "-vf",vf_anim,
             "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
 
         assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")

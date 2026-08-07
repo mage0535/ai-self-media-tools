@@ -533,7 +533,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             registry = root / "bgm_registry.json"
-            (root / "raw.mp4").write_bytes(b"0" * 80_000)
+            (root / "raw.mp4").write_bytes(b"0" * 900_000)
             candidate = {
                 "provider": "pixabay_music",
                 "download_url": "https://cdn.example/acoustic-guitar.mp3",
@@ -549,7 +549,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             }
 
             def fake_download(row, output):
-                output.write_bytes(b"1" * 80_000)
+                output.write_bytes(b"1" * 900_000)
 
             with patch.dict(os.environ, {"BGM_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
                 with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
@@ -570,7 +570,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             registry = root / "bgm_registry.json"
-            duplicate_bytes = b"1" * 80_000
+            duplicate_bytes = b"1" * 900_000
             duplicate_hash = __import__("hashlib").sha256(duplicate_bytes).hexdigest()
             registry.write_text(json.dumps({"tracks": [{"fingerprint": duplicate_hash, "title": "used"}]}), encoding="utf-8")
             candidate = {
@@ -604,7 +604,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             registry = root / "bgm_registry.json"
-            (root / "bgm.mp3").write_bytes(b"old" * 30_000)
+            (root / "bgm.mp3").write_bytes(b"old" * 300_000)
             (root / "bgm_source.json").write_text(
                 json.dumps({"source": "local_instrument_bgm_library", "license": "operator_provided"}),
                 encoding="utf-8",
@@ -624,14 +624,14 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             }
 
             def fake_download(row, output):
-                output.write_bytes(b"new" * 30_000)
+                output.write_bytes(b"new" * 300_000)
 
             with patch.dict(os.environ, {"BGM_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
                 with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
                     with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
                         download_bgm(root, "acoustic guitar")
 
-            self.assertEqual((root / "bgm.mp3").read_bytes(), b"new" * 30_000)
+            self.assertEqual((root / "bgm.mp3").read_bytes(), b"new" * 300_000)
             source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
             self.assertEqual(source["source"], "openverse_audio")
 
