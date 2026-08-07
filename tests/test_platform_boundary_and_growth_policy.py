@@ -27,3 +27,26 @@ def test_x_alias_uses_twitter_growth_policy():
     assert plan["platform"] == "twitter"
     assert "specific_observation_not_link_dump" in plan["platform_growth_rules"]
     assert validate_growth_strategy(plan, "twitter", "short_post")["passed"] is True
+
+
+def test_growth_strategy_turns_low_rates_into_required_actions():
+    plan = build_growth_strategy(
+        ["youtube"],
+        "short_video",
+        {"platforms": {"youtube": {"views": 10000, "engagement": 0, "saves": 0, "follows": 1}}},
+    )
+
+    improvement = plan["data_driven_improvement_plan"]
+    assert "low_engagement_rate" in improvement["diagnosis"]
+    assert "low_save_rate" in improvement["diagnosis"]
+    assert "low_follow_conversion" in improvement["diagnosis"]
+    assert "rebuild_title_cover_hook_and_comment_prompt" in improvement["required_actions"]
+    assert "increase_checklist_density_examples_and_embedded_knowledge_cards" in improvement["required_actions"]
+
+
+def test_growth_strategy_requires_metrics_when_history_is_missing():
+    plan = build_growth_strategy(["twitter"], "short_post", {})
+
+    improvement = plan["data_driven_improvement_plan"]
+    assert improvement["status"] == "needs_metrics"
+    assert "collect_1h_24h_72h_metrics_before_confidence_boost" in improvement["required_actions"]

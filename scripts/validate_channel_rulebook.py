@@ -94,6 +94,7 @@ GROWTH_REQUIRED_FIELDS = {
     "interaction_plan",
     "packaging_plan",
     "post_publish_review_plan",
+    "data_driven_improvement_plan",
 }
 GROWTH_METRICS_V2 = {
     "views",

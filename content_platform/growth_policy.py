@@ -288,6 +288,70 @@ def _has_effective_historical_feedback(historical_feedback: dict[str, Any]) -> b
     )
 
 
+def _rate(numerator: float, denominator: float) -> float:
+    return round(float(numerator or 0) / max(1.0, float(denominator or 0)), 4)
+
+
+def _feedback_row(historical_feedback: dict[str, Any], platform: str) -> dict[str, Any]:
+    platforms = historical_feedback.get("platforms") if isinstance(historical_feedback, dict) else {}
+    if not isinstance(platforms, dict):
+        return {}
+    row = platforms.get(platform) or platforms.get("x" if platform == "twitter" else platform) or {}
+    return row if isinstance(row, dict) else {}
+
+
+def _data_driven_improvement_plan(platform: str, historical_feedback: dict[str, Any], is_video: bool) -> dict[str, Any]:
+    row = _feedback_row(historical_feedback, platform)
+    if not row:
+        return {
+            "status": "needs_metrics",
+            "diagnosis": ["metrics_missing_or_untrusted"],
+            "required_actions": ["collect_1h_24h_72h_metrics_before_confidence_boost"],
+        }
+    views = float(row.get("views", 0) or 0)
+    engagement = float(row.get("engagement", 0) or 0)
+    saves = float(row.get("saves", 0) or 0)
+    follows = float(row.get("follows", 0) or 0)
+    completion = float(row.get("completion_rate", 0) or 0)
+    three_second = float(row.get("three_second_view_rate", 0) or 0)
+    engagement_rate = _rate(engagement, views)
+    save_rate = _rate(saves, views)
+    follow_rate = _rate(follows, views)
+    diagnosis: list[str] = []
+    actions: list[str] = []
+    if views > 0 and engagement_rate < 0.04:
+        diagnosis.append("low_engagement_rate")
+        actions.append("rebuild_title_cover_hook_and_comment_prompt")
+    if views > 0 and save_rate < 0.02:
+        diagnosis.append("low_save_rate")
+        actions.append("increase_checklist_density_examples_and_embedded_knowledge_cards")
+    if views > 0 and follow_rate < 0.005:
+        diagnosis.append("low_follow_conversion")
+        actions.append("make_series_promise_profile_follow_reason_and_next_episode_explicit")
+    if is_video and completion and completion < 0.35:
+        diagnosis.append("low_completion_rate")
+        actions.append("tighten_pacing_scene_changes_and_midpoint_payoff_density")
+    if is_video and three_second and three_second < 0.45:
+        diagnosis.append("low_three_second_view_rate")
+        actions.append("rewrite_first_second_motion_and_opening_sentence")
+    if not diagnosis:
+        diagnosis.append("no_major_growth_alarm")
+        actions.append("keep_current_lane_and_test_one_variable_only")
+    return {
+        "status": "active",
+        "diagnosis": diagnosis,
+        "required_actions": list(dict.fromkeys(actions)),
+        "metrics": {
+            "views": views,
+            "engagement_rate": engagement_rate,
+            "save_rate": save_rate,
+            "follow_rate": follow_rate,
+            "completion_rate": completion,
+            "three_second_view_rate": three_second,
+        },
+    }
+
+
 def build_growth_strategy(
     platforms: list[str] | tuple[str, ...] | str | None,
     content_type: str,
@@ -348,6 +412,7 @@ def build_growth_strategy(
         },
         "historical_feedback_status": "available" if has_feedback else "missing_or_empty",
         "historical_feedback_summary": historical_feedback,
+        "data_driven_improvement_plan": _data_driven_improvement_plan(platform, historical_feedback, is_video),
     }
     if platform == "wechat" and isinstance(rules.get("wechat_growth_playbook"), dict):
         strategy["wechat_growth_playbook"] = rules["wechat_growth_playbook"]

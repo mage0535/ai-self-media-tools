@@ -121,7 +121,8 @@
       "interaction_plan",
       "packaging_plan",
       "post_publish_review_plan",
-      "image_content_match_plan"
+      "image_content_match_plan",
+      "data_driven_improvement_plan"
     ],
     "pre_publish_gates": [
       "growth_strategy_present",
