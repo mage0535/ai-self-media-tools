@@ -270,7 +270,15 @@ class DirectTrendSource:
         if self.name == "bilibili":
             return self._bilibili()
         if self.name == "zhihu":
-            return self._web_search_source("zhihu", "AI 工具 效率 工作流 site:zhihu.com")
+            try:
+                return self._zhihu_cli_hot()
+            except Exception as exc:
+                if not self.config.get("source_fallback_enabled", True):
+                    raise
+                fallback = self._web_search_source("zhihu", "AI 工具 效率 工作流 site:zhihu.com")
+                if fallback:
+                    return fallback
+                raise
         if self.name == "douyin":
             return self._web_search_source("douyin", "AI 工具 效率 短视频 抖音")
         if self.name == "wewrite_hotspots":
@@ -383,6 +391,12 @@ class DirectTrendSource:
                 "author": (row.get("owner") or {}).get("name", ""),
             })
         return items
+
+    def _zhihu_cli_hot(self):
+        """Zhihu hot list via the zhihu CLI (pyzhihu-cli) with real heat metrics."""
+        from .zhihu_cli_adapter import ZhihuCliAdapter
+        adapter = ZhihuCliAdapter(timeout=int(self.config.get("timeout", 15)) + 30)
+        return adapter.fetch_hot(limit=self.limit)
 
     def _web_search_source(self, source, default_query):
         query = str(self.config.get("query") or default_query)

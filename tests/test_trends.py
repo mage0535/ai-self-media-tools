@@ -127,12 +127,12 @@ class TrendTests(unittest.TestCase):
 
         self.assertEqual(items[0]["source"], "bilibili:web_search")
 
-    def test_zhihu_and_douyin_use_web_search_sources(self):
-        with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "AI tool topic", "source": "zhihu:web_search", "points": 1}]) as search:
+    def test_zhihu_uses_cli_hot_and_douyin_uses_web_search_sources(self):
+        with patch.object(DirectTrendSource, "_zhihu_cli_hot", return_value=[{"title": "AI tool topic", "source": "zhihu", "points": 1}]) as hot:
             items = DirectTrendSource("zhihu", {"limit": 5}).collect()
 
         self.assertEqual(items[0]["title"], "AI tool topic")
-        self.assertTrue(search.called)
+        self.assertTrue(hot.called)
 
         with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "Douyin AI workflow topic", "source": "douyin:web_search", "points": 1}]) as search:
             items = DirectTrendSource("douyin", {"limit": 5}).collect()
@@ -140,9 +140,17 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(items[0]["source"], "douyin:web_search")
         self.assertTrue(search.called)
 
+    def test_zhihu_falls_back_to_web_search_when_cli_fails(self):
+        with patch.object(DirectTrendSource, "_zhihu_cli_hot", side_effect=RuntimeError("cli missing")):
+            with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "AI tool topic", "source": "zhihu:web_search", "points": 1}]):
+                items = DirectTrendSource("zhihu", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "zhihu:web_search")
+
     def test_web_search_source_degrades_with_explicit_unavailable_marker(self):
         source = DirectTrendSource("zhihu", {"limit": 5, "source_fallback_enabled": True})
-        with patch.object(source, "_searxng_search", return_value=[]), \
+        with patch.object(source, "_zhihu_cli_hot", side_effect=RuntimeError("cli missing")), \
+            patch.object(source, "_searxng_search", return_value=[]), \
             patch.object(source, "_duckduckgo_html_search", return_value=[]), \
             patch.object(source, "_bing_html_search", return_value=[]), \
             patch.object(source, "_baidu_html_search", return_value=[]):
