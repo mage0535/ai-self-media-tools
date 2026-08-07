@@ -1,22 +1,23 @@
-"""Zhihu CLI adapter — wraps the `zhihu` binary (pyzhihu-cli) for trend collection
-and short-form publishing (pins/questions) without Playwright.
+"""Zhihu CLI adapter for trend collection and short-form publishing.
 
-Hot/search data feeds trend analysis; pin/ask/delete enable the short-content
-operations ZhihuPublisher (Playwright, article-only) does not cover.
-
-Binary: installed via `uv tool install pyzhihu-cli`, login state at ~/.zhihu-cli/cookies.json
-(0600). Reuses the zhihu_raw.json cookie file through `zhihu login --cookie`.
+The adapter wraps the `zhihu` binary from pyzhihu-cli. Hot/search data feeds
+trend analysis; pin/ask/delete cover short-content operations that the article
+publisher does not handle.
 """
+
+from __future__ import annotations
+
 import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 BINARY = os.environ.get("ZHIHU_CLI_BIN") or shutil.which("zhihu") or str(Path.home() / ".local" / "bin" / "zhihu")
 
 
-def _to_int(value, default=0):
+def _to_int(value: Any, default: int = 0) -> int:
     """Robust int coercion for API values that may be None/str/float."""
     if value is None:
         return default
@@ -37,13 +38,12 @@ class ZhihuCliAdapter:
         self.binary = binary
         self.timeout = timeout
 
-    # ------------------------------------------------------------------ base
-    def _run(self, args):
+    def _run(self, args: list[str]) -> str:
         if not Path(self.binary).is_file():
             raise ZhihuCliError(f"zhihu CLI not found: {self.binary} (install: uv tool install pyzhihu-cli)")
         try:
             proc = subprocess.run(
-                [self.binary] + args,
+                [self.binary, *args],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -58,22 +58,20 @@ class ZhihuCliAdapter:
             raise ZhihuCliError(f"zhihu {args[0]} failed: {msg[:300]}")
         return proc.stdout
 
-    def _run_json(self, args):
+    def _run_json(self, args: list[str]) -> Any:
         stdout = self._run(args)
         if not stdout.strip():
             return {}
         try:
             return json.loads(stdout)
-        except json.JSONDecodeError:
-            # some commands emit rich text on stdout even with --json; salvage
-            raise ZhihuCliError(f"zhihu {args[0]} returned non-JSON: {stdout[:200]}")
+        except json.JSONDecodeError as exc:
+            raise ZhihuCliError(f"zhihu {args[0]} returned non-JSON: {stdout[:200]}") from exc
 
-    # --------------------------------------------------------------- auth
     def login_with_cookie(self, cookie_str: str) -> bool:
-        """Persist a raw cookie string (z_c0=...; _xsrf=...; d_c0=...) to the CLI store.
+        """Persist a raw cookie string to the CLI store.
 
-        NOTE: the cookie travels via argv (zhihu CLI contract), so it is briefly
-        visible in `ps`. Only use on a single-user trusted host.
+        The upstream CLI accepts cookies through argv, so use this only on a
+        trusted single-user machine and never print the cookie.
         """
         self._run(["login", "--cookie", cookie_str])
         return True
@@ -85,26 +83,21 @@ class ZhihuCliAdapter:
         except ZhihuCliError:
             return False
 
-    def whoami(self) -> dict:
-        """Return basic profile of the logged-in account (may be empty dict)."""
+    def whoami(self) -> dict[str, Any]:
+        """Return basic profile of the logged-in account, or an empty dict."""
         try:
-            return self._run_json(["whoami", "--json"])
+            result = self._run_json(["whoami", "--json"])
+            return result if isinstance(result, dict) else {}
         except ZhihuCliError:
             return {}
 
-    # ------------------------------------------------------------- trends
-    def fetch_hot(self, limit: int = 20, with_answers: int = 0) -> list:
-        """Zhihu hot list with per-question heat metrics (new_pv, follows, answers).
-
-        Returns items in the standard trend schema:
-        {title, source:"zhihu", url, points (heat proxy), metric:{...}}
-        """
-        args = ["hot", "--json", "-l", str(limit), "-a", str(with_answers)]
-        payload = self._run_json(args)
+    def fetch_hot(self, limit: int = 20, with_answers: int = 0) -> list[dict[str, Any]]:
+        """Return Zhihu hot-list items in the standard trend schema."""
+        payload = self._run_json(["hot", "--json", "-l", str(limit), "-a", str(with_answers)])
         rows = payload if isinstance(payload, list) else payload.get("data") or payload.get("items") or []
         if not isinstance(rows, list):
             raise ZhihuCliError(f"zhihu hot returned unexpected structure: {type(rows).__name__}")
-        items = []
+        items: list[dict[str, Any]] = []
         for row in rows:
             q = row.get("question") or {}
             title = str(q.get("title") or "").strip()
@@ -113,88 +106,69 @@ class ZhihuCliAdapter:
             reaction = row.get("reaction") or {}
             url = q.get("url") or f"https://www.zhihu.com/question/{q.get('id')}"
             pv = _to_int(reaction.get("new_pv"))
-            items.append({
-                "title": title,
-                "source": "zhihu",
-                "url": url,
-                "points": pv,
-                "metric": {
-                    "new_pv": pv,
-                    "new_pv_7d": _to_int(reaction.get("new_pv_7_days")),
-                    "new_answers": _to_int(reaction.get("new_answer_num")),
-                    "new_follows": _to_int(reaction.get("new_follow_num")),
-                },
-            })
+            items.append(
+                {
+                    "title": title,
+                    "source": "zhihu",
+                    "url": url,
+                    "points": pv,
+                    "metric": {
+                        "new_pv": pv,
+                        "new_pv_7d": _to_int(reaction.get("new_pv_7_days")),
+                        "new_answers": _to_int(reaction.get("new_answer_num")),
+                        "new_follows": _to_int(reaction.get("new_follow_num")),
+                    },
+                }
+            )
         return items[:limit]
 
-    def search(self, query: str, limit: int = 10, scope: str = "general") -> list:
-        """Search zhihu; returns article/answer/question rows with author/votes."""
-        args = ["search", query, "--json", "-l", str(limit), "-t", scope]
-        payload = self._run_json(args)
+    def search(self, query: str, limit: int = 10, scope: str = "general") -> list[dict[str, Any]]:
+        """Search Zhihu and normalize article/answer/question rows."""
+        payload = self._run_json(["search", query, "--json", "-l", str(limit), "-t", scope])
         data = payload.get("data") or []
         if not isinstance(data, list):
             raise ZhihuCliError(f"zhihu search returned unexpected structure: {type(data).__name__}")
-        items = []
+        items: list[dict[str, Any]] = []
         for row in data[:limit]:
             obj = row.get("object") or {}
-            t = obj.get("type", "")
             title = str(obj.get("title") or obj.get("excerpt") or "").strip()
             if not title:
                 continue
-            author = ((obj.get("author") or {}).get("name")) or ""
-            items.append({
-                "title": title[:120],
-                "source": "zhihu",
-                "url": obj.get("url") or "",
-                "points": _to_int(obj.get("voteup_count") or obj.get("follower_count")),
-                "type": t,
-                "author": author,
-                "comment_count": _to_int(obj.get("comment_count")),
-            })
+            items.append(
+                {
+                    "title": title[:120],
+                    "source": "zhihu",
+                    "url": obj.get("url") or "",
+                    "points": _to_int(obj.get("voteup_count") or obj.get("follower_count")),
+                    "type": obj.get("type", ""),
+                    "author": ((obj.get("author") or {}).get("name")) or "",
+                    "comment_count": _to_int(obj.get("comment_count")),
+                }
+            )
         return items
 
-    # ---------------------------------------------------------- publishing
-    def publish_pin(self, title: str, content: str = "", images: list | None = None) -> dict:
-        """Publish a pin (想法). Returns {id, url}."""
+    def publish_pin(self, title: str, content: str = "", images: list[str] | None = None) -> dict[str, Any]:
+        """Publish a Zhihu pin. Returns {id, url, raw}."""
         args = ["pin", title]
         if content:
             args += ["-c", content]
-        for img in (images or []):
+        for img in images or []:
             args += ["-i", str(img)]
         stdout = self._run(args)
-        pin_id = ""
-        url = ""
-        for line in stdout.splitlines():
-            if "ID:" in line:
-                pin_id = line.split("ID:")[-1].strip()
-            if line.strip().startswith("http"):
-                url = line.strip()
-        return {"id": pin_id, "url": url, "raw": stdout.strip()}
+        return _parse_publish_stdout(stdout)
 
-    def publish_ask(self, title: str, detail: str = "", images: list | None = None) -> dict:
-        """Post a new question (提问). Returns {id, url}.
-
-        NOTE: Zhihu requires the question title to end with a question mark
-        (？ or ?). Without it the API returns 400 "您还没有给问题添加问号".
-        """
+    def publish_ask(self, title: str, detail: str = "", images: list[str] | None = None) -> dict[str, Any]:
+        """Post a new Zhihu question. Returns {id, url, raw}."""
         if not title.rstrip().endswith(("？", "?")):
             title = title.rstrip() + "？"
         args = ["ask", title]
         if detail:
             args += ["-d", detail]
-        for img in (images or []):
+        for img in images or []:
             args += ["-i", str(img)]
         stdout = self._run(args)
-        qid = ""
-        url = ""
-        for line in stdout.splitlines():
-            if "ID:" in line:
-                qid = line.split("ID:")[-1].strip()
-            if line.strip().startswith("http"):
-                url = line.strip()
-        return {"id": qid, "url": url, "raw": stdout.strip()}
+        return _parse_publish_stdout(stdout)
 
-    # ------------------------------------------------------------- delete
     def delete_pin(self, pin_id: str) -> bool:
         self._run(["delete-pin", str(pin_id), "-y"])
         return True
@@ -202,3 +176,14 @@ class ZhihuCliAdapter:
     def delete_question(self, qid: str) -> bool:
         self._run(["delete-question", str(qid), "-y"])
         return True
+
+
+def _parse_publish_stdout(stdout: str) -> dict[str, Any]:
+    item_id = ""
+    url = ""
+    for line in stdout.splitlines():
+        if "ID:" in line:
+            item_id = line.split("ID:")[-1].strip()
+        if line.strip().startswith("http"):
+            url = line.strip()
+    return {"id": item_id, "url": url, "raw": stdout.strip()}
