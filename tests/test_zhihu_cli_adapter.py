@@ -99,6 +99,20 @@ class TestZhihuCliAdapter:
             assert adapter.delete_pin("123") is True
         run.assert_called_once_with(["delete-pin", "123", "-y"])
 
+    def test_publish_ask_appends_question_mark_when_missing(self):
+        adapter = ZhihuCliAdapter(binary="/fake/zhihu")
+        stdout = "✓ Question created!  ID: 123\n  https://www.zhihu.com/question/123\n"
+        with patch.object(adapter, "_run", return_value=stdout) as run:
+            adapter.publish_ask("如何学习Python")
+        assert run.call_args[0][0][1] == "如何学习Python？"
+
+    def test_publish_ask_keeps_existing_question_mark(self):
+        adapter = ZhihuCliAdapter(binary="/fake/zhihu")
+        stdout = "✓ Question created!  ID: 123\n  https://www.zhihu.com/question/123\n"
+        with patch.object(adapter, "_run", return_value=stdout) as run:
+            adapter.publish_ask("如何学习Python？")
+        assert run.call_args[0][0][1] == "如何学习Python？"
+
     def test_to_int_handles_variants(self):
         assert _to_int(None) == 0
         assert _to_int("50,595") == 50595
