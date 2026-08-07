@@ -225,13 +225,27 @@ def _has_core_metrics(platform: str, metrics: dict[str, Any]) -> bool:
 
 
 def _is_suspicious_platform_metrics(platform: str, metrics: dict[str, Any]) -> bool:
+    extra = metrics.get("extra_metrics") or {}
+    source = str(extra.get("metric_source") or "").casefold()
+    works = float(extra.get("works", 0) or 0)
+    views = float(metrics.get("views", 0) or 0)
+    likes = float(metrics.get("likes", 0) or 0)
+    comments = float(metrics.get("comments", 0) or 0)
+    shares = float(metrics.get("shares", 0) or 0)
+    saves = float(metrics.get("saves", 0) or 0)
+    engagement = likes + comments + shares + saves
+    if "creator_backend_page" in source:
+        # Browser backend scrapes can accidentally capture page chrome, dates,
+        # or unrelated counters. Treat impossible account-scale combinations as
+        # unusable so growth strategy does not learn from bogus numbers.
+        if platform in {"xiaohongshu", "rednote", "zhihu", "juejin", "kuaishou"} and works > 10000:
+            return True
+        if views >= 1_000_000 and likes < 1000 and comments > max(1000, likes * 20):
+            return True
+        if views and engagement > views * 1.5:
+            return True
     if platform == "tiktok":
-        extra = metrics.get("extra_metrics") or {}
-        works = float(extra.get("works", 0) or 0)
-        views = float(metrics.get("views", 0) or 0)
         follows = float(metrics.get("follows", 0) or 0)
-        likes = float(metrics.get("likes", 0) or 0)
-        engagement = likes + float(metrics.get("comments", 0) or 0) + float(metrics.get("shares", 0) or 0) + float(metrics.get("saves", 0) or 0)
         if views and views == follows == works and engagement <= 50:
             return True
     return False
