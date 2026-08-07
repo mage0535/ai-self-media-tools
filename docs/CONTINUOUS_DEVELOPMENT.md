@@ -2721,3 +2721,44 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Local WeChat recovery regression: `python -m pytest tests/test_wechat_growth_strategy.py tests/test_wechat_toolchain.py tests/test_media_quality.py tests/test_performance_cycle.py tests/test_cli.py -q` => `88 passed`.
 - Local channel rulebook validation: `channel rulebook ok: 19 channels`.
 - Local project audit: `ok: true, issues: []`.
+
+## 2026-08-08 - Douyin Dual Account Operating Boundary
+
+### Fixed
+- Added explicit Douyin account variants in the channel rulebook without turning them into separate platform IDs. The base platform remains `douyin`; daily operations must execute `douyin_pet` and `douyin_ai` as separate account-scoped operating objects.
+- `douyin_pet` is locked to the pet-healing lane and keeps the 2+5 weekly mix: 2 cat knowledge/original works plus 5 TikTok hot localized repost candidates.
+- `douyin_ai` is locked to the AI efficiency/open-source lane and must not inherit pet-healing or TikTok-cat rules.
+- Both accounts require isolated cookie/state/profile, historical feedback, performance metrics, growth strategy key, source matrix, tool analysis, recipes, manifests, handoff package, and output directory.
+- Performance-cycle now refreshes account-scoped strategy snapshots such as `growth_strategy:douyin_pet:latest` and `growth_strategy:douyin_ai:latest` whenever the base Douyin platform is included.
+- Python and PowerShell channel rulebook validators now fail if Douyin account variants are missing, mixed, or under-specified.
+
+### Operational Rule
+- Hermes must never execute Douyin as a single ambiguous account when the daily task includes Douyin. It must run `douyin_pet` and `douyin_ai` separately or mark the missing account as `douyin_account_binding_missing`.
+- Cross-account reuse is forbidden for final video files, template family, BGM, title frame, script structure, and source material unless a current strategy explicitly rebuilds and validates a distinct package.
+
+### Verification
+- Local Douyin account variant regression: `python -m pytest tests/test_douyin_account_variants.py -q` => `2 passed`.
+- Local performance-cycle regression: `python -m pytest tests/test_performance_cycle.py -q` => `20 passed`.
+- Local Python channel rulebook validation: `channel rulebook ok: 19 channels`.
+- Local PowerShell channel rulebook validation: `channel rulebook ok: 19 channels`.
+
+## 2026-08-08 - Content Tool Selection Evidence Gate
+
+### Fixed
+- Added `content_platform.tool_selection` as the shared contract for tool capability analysis and tool-stack selection. The system now records which relevant tool groups were analyzed, which tools were selected, why they were selected, and which tools were not selected.
+- Article, Xiaohongshu mixed-note, and video quality gates now require both `tools_capability_analysis` and `tool_selection_plan` before publish, draft, or handoff evidence can pass.
+- `DraftGenerator` now writes tool-selection evidence into `draft_meta` alongside `tool_invocation_manifest`, so generated article/note packets do not depend on agent memory.
+- `build_video_toolchain_plan()` now outputs tool-selection evidence for video plans, covering visual recipe, source assets, motion effects, voice, subtitles, BGM, audio mix, and render gates.
+- MCP now exposes `build_tool_selection_plan`, and `capability_status` reports it. Hermes can call this before content generation to select the best available tools instead of relying on a fixed template.
+- The global channel rulebook mandatory sequence now includes `analyze_available_tools_and_select_content_stack` before content generation.
+
+### Operational Rule
+- Do not run every tool blindly. Before generation, analyze all relevant tool groups for the platform and content type, choose the best tool stack for the specific topic, record unselected-tool reasons, then verify the actual invocation manifest matches the selection plan.
+- A content package without `tools_capability_analysis`, `tool_selection_plan`, and matching `tool_invocation_manifest` must fail closed.
+- Video packages need a broader tool stack than articles. At minimum, they must prove selection across rendering, visual recipe, motion/composition, voice/subtitles, BGM/audio mix, and quality gates.
+
+### Verification
+- Local media quality regression: `python -m pytest tests/test_media_quality.py -q` => `52 passed`.
+- Local MCP regression: `python -m pytest tests/test_mcp_server.py -q` => `2 passed`.
+- Local content generator regression: `python -m pytest tests/test_content.py -q` => `7 passed`.
+- Local video toolchain regression: `python -m pytest tests/test_video_toolchain.py -q` => `14 passed`.

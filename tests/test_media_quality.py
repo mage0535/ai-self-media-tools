@@ -20,6 +20,7 @@ from content_platform.content_recipe import (
     build_knowledge_card_recipe,
     build_tool_invocation_manifest,
 )
+from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.growth_policy import build_growth_strategy
 from content_platform.preflight_manifest import validate_preflight_manifest
 from content_platform.visual_content_policy import visual_content_policy
@@ -173,13 +174,20 @@ def complete_video_metadata(platform: str = "kuaishou"):
     adaptation = {"required_fields_checked": True}
     if platform == "kuaishou":
         adaptation.update({"topic_tag_count": 2, "description_hashtag_count": 0})
+    tool_manifest = complete_tool_invocation_manifest("video")
     return {
         "platform": platform,
         "preflight_manifest": complete_preflight_manifest(platform, "knowledge_card_video"),
         "visual_content_policy": visual_content_policy([platform], "short_video"),
         "video_plan": complete_video_plan(),
         "visual_recipe": complete_visual_recipe(),
-        "tool_invocation_manifest": complete_tool_invocation_manifest("video"),
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform=platform,
+            content_type="knowledge_card_video",
+            content_goal="increase video retention with matched scenes, motion, voice, subtitles, and BGM",
+            planned_manifest=tool_manifest,
+        ),
         "real_scene_background_plan": complete_real_scene_background_plan(8),
         "bgm_source": {
             "source": "licensed_music_manifest",
@@ -227,6 +235,10 @@ def complete_tool_invocation_manifest(content_type: str = "article"):
         planned = {
             "video_toolchain_runner": "scripts/video_toolchain_runner.py",
             "visual_recipe": "content_platform.video_recipe",
+            "shotcraft_moves": "scripts/shotcraft_moves.py",
+            "cinema_composition": "scripts/cinema_composition.py",
+            "voice_engine": "scripts/voice_engine.py",
+            "lower_third_subtitles": "hermes_tool:lower_third_subtitle_renderer",
             "mix_bgm_with_gate": "scripts/mix_bgm_with_gate.py",
             "visual_gate": "scripts/visual_gate.py",
         }
@@ -240,6 +252,15 @@ def complete_tool_invocation_manifest(content_type: str = "article"):
     return build_tool_invocation_manifest(
         planned_tools=planned,
         invocations={name: {"status": "ok", "output": ref} for name, ref in planned.items()},
+    )
+
+
+def complete_tool_selection_evidence(platform: str = "wechat", content_type: str = "article"):
+    return build_tool_selection_evidence(
+        platform=platform,
+        content_type=content_type,
+        content_goal="increase retention, saves, and follow conversion with topic-matched assets",
+        planned_manifest=complete_tool_invocation_manifest("video" if "video" in content_type else "article"),
     )
 
 
@@ -391,6 +412,7 @@ def complete_wechat_auto_packet():
         "<h2>Limits</h2><p>" + "practical operating paragraph " * 8 + "</p>",
         "<h2>Checklist</h2><p>" + "practical operating paragraph " * 8 + "</p>",
     ])
+    tool_manifest = complete_tool_invocation_manifest("article")
     return {
         "platform": "wechat",
         "preflight_manifest": complete_preflight_manifest("wechat", "long_article"),
@@ -498,7 +520,13 @@ def complete_wechat_auto_packet():
             cards=complete_knowledge_cards("wechat"),
             content_type="long_article",
         ),
-        "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform="wechat",
+            content_type="long_article",
+            content_goal="increase article opens, saves, and follow conversion with matched cards and inline visuals",
+            planned_manifest=tool_manifest,
+        ),
         "cover_design": {
             "visual_subject": "GitHub repository decision board",
             "topic_alignment": "matches the selected project",
@@ -679,6 +707,7 @@ def complete_shipinhao_auto_packet():
 
 
 def complete_xiaohongshu_auto_packet():
+    tool_manifest = complete_tool_invocation_manifest("article")
     return {
         **complete_full_ops_evidence("xiaohongshu"),
         "platform": "xiaohongshu",
@@ -696,7 +725,13 @@ def complete_xiaohongshu_auto_packet():
             cards=complete_knowledge_cards("xiaohongshu"),
             content_type="image_text_knowledge_card_short_video_mix",
         ),
-        "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform="xiaohongshu",
+            content_type="note",
+            content_goal="increase saves and follows with matched note cards, real-scene assets, and manual handoff",
+            planned_manifest=tool_manifest,
+        ),
         "section_image_map": [
             {"section": "hook", "image": "01.png", "purpose": "show the failed publish checkpoint"},
             {"section": "case", "image": "02.png", "purpose": "show the real review process"},
@@ -726,6 +761,7 @@ def complete_xiaohongshu_auto_packet():
 
 
 def test_article_packet_requires_hook_length_template_and_mapped_images():
+    tool_manifest = complete_tool_invocation_manifest("article")
     packet = {
         "platform": "wechat",
         "preflight_manifest": complete_preflight_manifest("wechat", "long_article"),
@@ -776,7 +812,13 @@ def test_article_packet_requires_hook_length_template_and_mapped_images():
             },
         ),
         "knowledge_card_recipe": build_knowledge_card_recipe(platform="wechat", cards=complete_knowledge_cards("article"), content_type="long_article"),
-        "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform="wechat",
+            content_type="long_article",
+            content_goal="increase article completion and saves with case-led structure and matched visuals",
+            planned_manifest=tool_manifest,
+        ),
         "cover_design": {
             "visual_subject": "failed schedule checklist",
             "topic_alignment": "matches the article promise",
@@ -1398,9 +1440,10 @@ def test_video_packet_rejects_silent_static_or_unverified_assets():
         "preflight_manifest",
         "visual_content_policy",
         "duration",
-        "video_plan",
-        "visual_recipe",
-        "tool_invocation_manifest",
+            "video_plan",
+            "visual_recipe",
+            "tool_selection",
+            "tool_invocation_manifest",
         "audio_stream",
         "audio_composition",
         "background_music_source",

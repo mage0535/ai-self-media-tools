@@ -131,8 +131,21 @@ def _tools():
                 "module_count": len(modules or {}),
                 "template_family_count": len(families or {}),
             },
-            "mcp_tools": ["capability_status", "build_content_recipe", "validate_content_package"],
+            "mcp_tools": ["capability_status", "build_content_recipe", "build_tool_selection_plan", "validate_content_package"],
         }
+
+    async def mcp_build_tool_selection_plan(packet: str = "{}", platform: str = "") -> dict:
+        from content_platform.tool_selection import build_tool_selection_evidence
+
+        data = json.loads(packet or "{}")
+        channel = platform or str(data.get("platform") or "")
+        content_type = str(data.get("content_type") or data.get("content_form") or "article")
+        return build_tool_selection_evidence(
+            platform=channel,
+            content_type=content_type,
+            content_goal=str(data.get("content_goal") or data.get("goal") or ""),
+            planned_manifest=data.get("tool_invocation_manifest") or {},
+        )
 
     async def mcp_build_content_recipe(packet: str = "{}", platform: str = "") -> dict:
         from content_platform.content_recipe import build_article_recipe, build_knowledge_card_recipe
@@ -192,6 +205,7 @@ def _tools():
         (mcp_reddit_channel_status, "reddit_channel_status", "Get Reddit trend, draft, binding, and review status", {}),
         (mcp_generate_audio, "generate_audio", "Generate audio narration", {"text": str, "lang": str, "genre": str}),
         (mcp_capability_status, "capability_status", "Report available tools, skills bridge, and video effect registry", {}),
+        (mcp_build_tool_selection_plan, "build_tool_selection_plan", "Build tool capability analysis and selected tool stack evidence for a packet", {"packet": str, "platform": str}),
         (mcp_build_content_recipe, "build_content_recipe", "Build article and knowledge-card recipe evidence for a packet", {"packet": str, "platform": str}),
         (mcp_validate_content_package, "validate_content_package", "Validate article, video, Xiaohongshu, or platform article package gates", {"packet": str, "platform": str}),
     ]

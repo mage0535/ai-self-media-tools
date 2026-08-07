@@ -55,6 +55,24 @@ def test_performance_cycle_persists_metrics_and_growth_strategy():
         assert store.latest_tool_inventory("growth_strategy:youtube:latest")["payload"]["historical_feedback_status"] == "available"
 
 
+def test_performance_cycle_refreshes_douyin_account_variant_strategies():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(Path(tmp) / "state.db")
+        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=FAKE_COLLECTION):
+            report = run_performance_cycle(
+                store,
+                platforms=["douyin"],
+                collector_config={},
+                output_dir=Path(tmp) / "performance",
+                use_hermes_scraper=False,
+            )
+
+        assert "douyin_pet" in report["growth_strategies"]
+        assert "douyin_ai" in report["growth_strategies"]
+        assert store.latest_tool_inventory("growth_strategy:douyin_pet:latest")["payload"]["account_key"] == "douyin_pet"
+        assert store.latest_tool_inventory("growth_strategy:douyin_ai:latest")["payload"]["account_key"] == "douyin_ai"
+
+
 def test_single_platform_cycle_does_not_overwrite_full_cycle_report_file():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")

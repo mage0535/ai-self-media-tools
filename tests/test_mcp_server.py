@@ -74,14 +74,18 @@ class McpServerTests(unittest.TestCase):
             with patch.dict("os.environ", {"CONTENT_PLATFORM_HOME": str(home), "HOME": str(home), "USERPROFILE": str(home)}, clear=True):
                 tools = {name: handler for handler, name, _, _ in mcp_server._tools()}
                 recipe = asyncio.run(tools["build_content_recipe"](json.dumps(packet), "wechat"))
+                tool_selection = asyncio.run(tools["build_tool_selection_plan"](json.dumps(packet), "wechat"))
                 validation = asyncio.run(tools["validate_content_package"](json.dumps(packet), "wechat"))
                 capability = asyncio.run(tools["capability_status"]())
 
         self.assertIn("article_recipe", recipe)
         self.assertIn("knowledge_card_recipe", recipe)
         self.assertIn("preflight_manifest", validation["failed_dimensions"])
+        self.assertIn("tools_capability_analysis", tool_selection)
+        self.assertIn("tool_selection_plan", tool_selection)
         self.assertIn("tools", capability)
         self.assertIn("video_effect_modules", capability)
+        self.assertIn("build_tool_selection_plan", capability["mcp_tools"])
 
 
 if __name__ == "__main__":

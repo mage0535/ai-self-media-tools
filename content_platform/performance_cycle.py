@@ -13,6 +13,9 @@ from .growth_policy import build_growth_strategy
 from .performance_collectors import collect_platform_metrics, collect_with_hermes_platform_scraper
 from .performance_ingest import review_performance
 
+ROOT = Path(__file__).resolve().parents[1]
+RULEBOOK_PATH = ROOT / "config" / "channel_content_rulebook.json"
+
 
 DEFAULT_GROWTH_PLATFORMS = [
     "wechat",
@@ -271,6 +274,7 @@ def _number(value: Any) -> float:
 
 def _refresh_growth_strategies(store: Any, platforms: list[str]) -> dict[str, Any]:
     strategies: dict[str, Any] = {}
+    account_variants = _load_platform_account_variants()
     for platform in platforms:
         historical = store.historical_performance([platform], "")
         content_type = "knowledge_card_video" if platform in {"douyin", "kuaishou", "shipinhao", "bilibili", "youtube"} else "long_article"
@@ -279,7 +283,37 @@ def _refresh_growth_strategies(store: Any, platforms: list[str]) -> dict[str, An
         strategy = build_growth_strategy([platform], content_type, historical)
         strategies[platform] = strategy
         store.save_tool_inventory(f"growth_strategy:{platform}:latest", strategy)
+        for account_key, account in _account_variants_for_platform(account_variants, platform).items():
+            account_history = store.historical_performance([account_key, platform], "")
+            account_strategy = build_growth_strategy([platform], content_type, account_history or historical)
+            account_strategy.update(
+                {
+                    "account_key": account_key,
+                    "base_platform": platform,
+                    "lane": account.get("lane", ""),
+                    "account_direction": account.get("account_direction", ""),
+                    "publish_boundary": account.get("publish_boundary", ""),
+                    "strategy_scope": "platform_account_variant",
+                }
+            )
+            strategies[account_key] = account_strategy
+            store.save_tool_inventory(f"growth_strategy:{account_key}:latest", account_strategy)
     return strategies
+
+
+def _load_platform_account_variants() -> dict[str, Any]:
+    try:
+        rulebook = json.loads(RULEBOOK_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    variants = rulebook.get("platform_account_variants") if isinstance(rulebook, dict) else {}
+    return variants if isinstance(variants, dict) else {}
+
+
+def _account_variants_for_platform(variants: dict[str, Any], platform: str) -> dict[str, Any]:
+    platform_variants = variants.get(platform) if isinstance(variants, dict) else {}
+    accounts = platform_variants.get("accounts") if isinstance(platform_variants, dict) else {}
+    return accounts if isinstance(accounts, dict) else {}
 
 
 def _source_coverage(platforms: list[str], collector_config: dict[str, Any]) -> dict[str, Any]:

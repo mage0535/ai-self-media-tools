@@ -9,6 +9,7 @@ $requiredSequence = @(
   "load_hermes_operating_strategy",
   "check_account_lane_fit",
   "generate_channel_specific_strategy_brief",
+  "analyze_available_tools_and_select_content_stack",
   "run_quality_gate",
   "run_delivery_health_gate",
   "postcheck_platform_state",
@@ -98,8 +99,8 @@ foreach ($tool in @(
 if (-not (Test-Path -LiteralPath (Join-Path $root "scripts/validate_wechat_auto_packet.py"))) {
   throw "wechat validator script is missing"
 }
-if ($wechat.content_channels.daily_github_selection -ne "one_ai_project_plus_one_non_ai_project_per_day") {
-  throw "wechat daily_github_selection must require one AI and one non-AI GitHub project"
+if ($wechat.content_channels.github_selection -ne "weekly_bundle_one_ai_project_plus_one_non_ai_project") {
+  throw "wechat github_selection must require a weekly AI + non-AI GitHub project bundle"
 }
 if (-not $wechat.content_channels.hot_content_generation) {
   throw "wechat hot_content_generation channel is required"
@@ -109,9 +110,9 @@ foreach ($field in @("account_analysis", "same_lane_account_analysis", "cross_pl
     throw "wechat strategy input missing: $field"
   }
 }
-foreach ($field in @("github_ai_projects", "github_non_ai_projects")) {
-  if ($wechat.strategy_requirements.daily_github_selection_required -notcontains $field) {
-    throw "wechat daily github field missing: $field"
+foreach ($field in @("github_ai_projects", "github_non_ai_projects", "weekly_bundle_reason_or_ops_override")) {
+  if ($wechat.strategy_requirements.github_selection_required -notcontains $field) {
+    throw "wechat github selection field missing: $field"
   }
 }
 foreach ($gate in @("account_data_analysis", "same_lane_account_benchmark", "cross_platform_trend_analysis", "content_workflow_inputs", "dual_content_channels")) {
@@ -150,6 +151,87 @@ if ([int]$douyin.weekly_mix.cat_knowledge_or_original -ne 2) {
 }
 if ([int]$douyin.weekly_mix.tiktok_hot_localized_reposts -ne 5) {
   throw "douyin weekly_mix.tiktok_hot_localized_reposts must be 5"
+}
+$douyinVariants = $rulebook.platform_account_variants.douyin
+if (-not $douyinVariants) {
+  throw "douyin account variants are required"
+}
+if ($douyinVariants.base_platform -ne "douyin") {
+  throw "douyin account variants must declare base_platform=douyin"
+}
+if (-not $douyinVariants.required) {
+  throw "douyin account variants must be required"
+}
+$douyinExecutionOrder = @($douyinVariants.execution_order)
+foreach ($accountKey in @("douyin_pet", "douyin_ai")) {
+  if ($douyinExecutionOrder -notcontains $accountKey) {
+    throw "douyin execution_order missing: $accountKey"
+  }
+  if (-not $douyinVariants.accounts.PSObject.Properties.Name.Contains($accountKey)) {
+    throw "douyin account variant missing: $accountKey"
+  }
+}
+foreach ($field in @("cookie_state_profile", "historical_feedback", "performance_metrics", "growth_strategy", "platform_source_matrix", "tools_capability_analysis", "tool_selection_plan", "visual_recipe", "tool_invocation_manifest", "handoff_package", "output_dir")) {
+  if ($douyinVariants.isolation_required -notcontains $field) {
+    throw "douyin account isolation field missing: $field"
+  }
+}
+$douyinForbiddenReuse = [string]::Join(" ", @($douyinVariants.forbidden_cross_account_reuse))
+foreach ($marker in @("final.mp4", "template", "bgm", "title", "script", "source_material")) {
+  if (-not $douyinForbiddenReuse.Contains($marker)) {
+    throw "douyin cross-account reuse marker missing: $marker"
+  }
+}
+if ($douyinVariants.blocked_status -ne "douyin_account_binding_missing") {
+  throw "douyin account binding missing status mismatch"
+}
+$douyinPet = $douyinVariants.accounts.douyin_pet
+$douyinAi = $douyinVariants.accounts.douyin_ai
+foreach ($entry in @(@("douyin_pet", $douyinPet), @("douyin_ai", $douyinAi))) {
+  $key = $entry[0]
+  $account = $entry[1]
+  if ($account.base_platform -ne "douyin") {
+    throw "$key base_platform must be douyin"
+  }
+  if ($account.account_key -ne $key) {
+    throw "$key account_key mismatch"
+  }
+  if ($account.cookie_account -ne $key) {
+    throw "$key cookie_account must match account_key"
+  }
+  if ($account.profile -ne $key) {
+    throw "$key profile must match account_key"
+  }
+  if ($account.growth_strategy_key -ne "growth_strategy:${key}:latest") {
+    throw "$key growth strategy key mismatch"
+  }
+  if ($account.publish_boundary -ne "manual_handoff_only") {
+    throw "$key must be manual handoff only"
+  }
+  if (-not ([string]$account.output_dir_pattern).Contains($key)) {
+    throw "$key output directory must include account key"
+  }
+}
+if ($douyinPet.lane -ne "pet_healing") {
+  throw "douyin_pet lane must be pet_healing"
+}
+if ($douyinAi.lane -ne "ai_efficiency_open_source") {
+  throw "douyin_ai lane must be ai_efficiency_open_source"
+}
+if ([int]$douyinPet.weekly_mix.cat_knowledge_or_original -ne 2) {
+  throw "douyin_pet weekly cat knowledge quota must be 2"
+}
+if ([int]$douyinPet.weekly_mix.tiktok_hot_localized_reposts -ne 5) {
+  throw "douyin_pet weekly TikTok repost quota must be 5"
+}
+if ($douyinPet.required_content_lines -notcontains "tiktok_hot_localized_repost") {
+  throw "douyin_pet must include TikTok localized repost line"
+}
+if ($douyinAi.required_content_lines -notcontains "ai_tool_microcase") {
+  throw "douyin_ai must include AI tool microcase line"
+}
+if ($douyinAi.forbidden_content_lines -notcontains "cat_knowledge_or_original") {
+  throw "douyin_ai must forbid cat knowledge line"
 }
 $tiktokRepost = $douyin.tiktok_repost_strategy_required
 if (-not $tiktokRepost) {

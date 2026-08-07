@@ -15,6 +15,7 @@ REQUIRED_SEQUENCE = {
     "load_hermes_operating_strategy",
     "check_account_lane_fit",
     "generate_channel_specific_strategy_brief",
+    "analyze_available_tools_and_select_content_stack",
     "run_quality_gate",
     "run_delivery_health_gate",
     "postcheck_platform_state",
@@ -110,6 +111,21 @@ GROWTH_METRICS_V2 = {
     "follows",
     "platform_specific_metrics",
 }
+DOUYIN_ACCOUNT_KEYS = {"douyin_pet", "douyin_ai"}
+DOUYIN_ACCOUNT_ISOLATION_FIELDS = {
+    "cookie_state_profile",
+    "historical_feedback",
+    "performance_metrics",
+    "growth_strategy",
+    "platform_source_matrix",
+    "tools_capability_analysis",
+    "tool_selection_plan",
+    "visual_recipe",
+    "tool_invocation_manifest",
+    "handoff_package",
+    "output_dir",
+}
+DOUYIN_FORBIDDEN_REUSE_MARKERS = {"final.mp4", "template", "bgm", "title", "script", "source_material"}
 
 
 def require(condition: bool, message: str) -> None:
@@ -329,6 +345,38 @@ def main() -> None:
     weekly = douyin.get("weekly_mix") or {}
     require(weekly.get("cat_knowledge_or_original") == 2, "douyin weekly_mix.cat_knowledge_or_original must be 2")
     require(weekly.get("tiktok_hot_localized_reposts") == 5, "douyin weekly_mix.tiktok_hot_localized_reposts must be 5")
+    account_variants = (rulebook.get("platform_account_variants") or {}).get("douyin") or {}
+    require(account_variants.get("base_platform") == "douyin", "douyin account variants must declare base_platform=douyin")
+    require(account_variants.get("required") is True, "douyin account variants must be required")
+    require(set(account_variants.get("execution_order") or []) == DOUYIN_ACCOUNT_KEYS, "douyin execution_order must contain douyin_pet and douyin_ai")
+    missing_isolation = DOUYIN_ACCOUNT_ISOLATION_FIELDS - set(account_variants.get("isolation_required") or [])
+    require(not missing_isolation, f"douyin account isolation fields missing: {sorted(missing_isolation)}")
+    reuse_text = " ".join(account_variants.get("forbidden_cross_account_reuse") or [])
+    for marker in DOUYIN_FORBIDDEN_REUSE_MARKERS:
+        require(marker in reuse_text, f"douyin cross-account reuse marker missing: {marker}")
+    require(account_variants.get("blocked_status") == "douyin_account_binding_missing", "douyin account binding missing status mismatch")
+    douyin_accounts = account_variants.get("accounts") or {}
+    require(set(douyin_accounts) == DOUYIN_ACCOUNT_KEYS, "douyin account variants must define douyin_pet and douyin_ai accounts")
+    pet_account = douyin_accounts["douyin_pet"]
+    ai_account = douyin_accounts["douyin_ai"]
+    for key, account in douyin_accounts.items():
+        require(account.get("base_platform") == "douyin", f"{key} base_platform must be douyin")
+        require(account.get("account_key") == key, f"{key} account_key mismatch")
+        require(account.get("cookie_account") == key, f"{key} cookie_account must match account_key")
+        require(account.get("profile") == key, f"{key} profile must match account_key")
+        require(account.get("growth_strategy_key") == f"growth_strategy:{key}:latest", f"{key} growth strategy key mismatch")
+        require(account.get("publish_boundary") == "manual_handoff_only", f"{key} must be manual handoff only")
+        require(key in str(account.get("output_dir_pattern", "")), f"{key} output directory must include account key")
+    require(pet_account.get("lane") == "pet_healing", "douyin_pet lane must be pet_healing")
+    require(ai_account.get("lane") == "ai_efficiency_open_source", "douyin_ai lane must be ai_efficiency_open_source")
+    pet_weekly = pet_account.get("weekly_mix") or {}
+    require(pet_weekly.get("cat_knowledge_or_original") == 2, "douyin_pet weekly cat knowledge quota must be 2")
+    require(pet_weekly.get("tiktok_hot_localized_reposts") == 5, "douyin_pet weekly TikTok repost quota must be 5")
+    require("tiktok_hot_localized_repost" in (pet_account.get("required_content_lines") or []), "douyin_pet must include TikTok localized repost line")
+    require("ai_tool_microcase" in (ai_account.get("required_content_lines") or []), "douyin_ai must include AI tool microcase line")
+    require("cat_knowledge_or_original" in (ai_account.get("forbidden_content_lines") or []), "douyin_ai must forbid cat knowledge line")
+    require("douyin_ai" in (pet_account.get("must_not_use_rules_from") or []), "douyin_pet must not use douyin_ai rules")
+    require("douyin_pet" in (ai_account.get("must_not_use_rules_from") or []), "douyin_ai must not use douyin_pet rules")
     tiktok_repost = douyin.get("tiktok_repost_strategy_required") or {}
     require(tiktok_repost.get("strategy_artifact"), "douyin tiktok repost strategy artifact is required")
     require(tiktok_repost.get("lane") == "pet_healing", "douyin tiktok repost strategy lane must be pet_healing")
