@@ -84,7 +84,7 @@ FULL_OPS_GATES = {
     "asset_mix_plan",
     "humanization_plan",
 }
-GROWTH_CHANNELS = {"douyin", "kuaishou", "wechat", "bilibili", "shipinhao", "xiaohongshu"}
+GROWTH_CHANNELS = {"douyin", "kuaishou", "wechat", "bilibili", "shipinhao", "xiaohongshu", "zhihu", "juejin"}
 GROWTH_REQUIRED_FIELDS = {
     "account_performance_snapshot_or_unavailable_reason",
     "same_lane_hot_content_analysis",
@@ -132,6 +132,13 @@ def main() -> None:
     hard_gates = rulebook.get("global_hard_gates") or {}
     require(hard_gates.get("metrics_review_required") is True, "metrics review must be required")
     require(hard_gates.get("proxy_required_for_hermes_channel_access") is True, "Hermes channel access must require an explicit proxy")
+    require(hard_gates.get("anti_platform_spam_similarity") is True, "anti platform spam similarity gate must be required")
+    anti_spam = rulebook.get("anti_spam_similarity_policy") or {}
+    require(anti_spam.get("policy_id") == "anti_spam_similarity_v1", "anti spam similarity policy id mismatch")
+    require((anti_spam.get("lookback_days_default") or 0) >= 14, "anti spam similarity lookback must be >=14 days")
+    anti_spam_rules = " ".join(anti_spam.get("rules") or [])
+    for marker in ["near_duplicate", "short_form_promotions", "platform_limits_visibility"]:
+        require(marker in anti_spam_rules, f"anti spam similarity policy missing marker: {marker}")
 
     require(GROWTH_POLICY_PATH.is_file(), "growth quality policy config is missing")
     growth_policy = rulebook.get("growth_quality_policy") or {}
@@ -278,6 +285,21 @@ def main() -> None:
         require(not missing_handoff, f"{channel} content workflow handoff missing: {sorted(missing_handoff)}")
         missing_gates = FULL_OPS_GATES - set(rule.get("quality_gates") or [])
         require(not missing_gates, f"{channel} full ops quality gates missing: {sorted(missing_gates)}")
+
+    zhihu = channel_rules["zhihu"]
+    zhihu_short = zhihu.get("short_form_policy") or {}
+    require(zhihu.get("visibility_risk_status", {}).get("recovery_mode") == "zhihu_similarity_recovery", "zhihu similarity recovery mode must be recorded")
+    require(zhihu_short.get("pin_publish_default") == "review_only_unless_validation_passes_and_visible_article_url_exists", "zhihu pin publish default must be review-gated")
+    require(float(zhihu_short.get("max_pin_article_overlap") or 1) <= 0.22, "zhihu pin article overlap threshold too loose")
+    require(float(zhihu_short.get("max_pin_title_overlap") or 1) <= 0.55, "zhihu pin title overlap threshold too loose")
+    require(zhihu_short.get("one_pin_per_article") is True, "zhihu one_pin_per_article must be true")
+    require((zhihu_short.get("min_gap_hours_between_pins") or 0) >= 48, "zhihu pin gap must be >=48 hours")
+    for field in ["new_commentary_angle", "specific_discussion_question", "visible_article_url_when_publishing", "anti_spam_similarity_validation"]:
+        require(field in (zhihu_short.get("must_include") or []), f"zhihu short-form policy missing must_include: {field}")
+    for gate in ["zhihu_pin_anti_spam_similarity", "answer_article_pin_differentiation", "no_article_excerpt_as_pin"]:
+        require(gate in (zhihu.get("quality_gates") or []), f"zhihu quality gate missing: {gate}")
+    for tool in ["scripts/zhihu_pin_promotion.py", "content_platform.zhihu_promotion.validate_pin_payload"]:
+        require(tool in (zhihu.get("must_use_tools") or []), f"zhihu must_use_tools missing: {tool}")
 
     douyin = channel_rules["douyin"]
     weekly = douyin.get("weekly_mix") or {}

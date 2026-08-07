@@ -1,8 +1,17 @@
 {
-  "version": "2026-08-04",
+  "version": "2026-08-08",
   "policy_id": "growth_quality_policy_v1",
   "scope": "real_use_channels",
-  "applies_to": ["douyin", "kuaishou", "wechat", "bilibili", "shipinhao", "xiaohongshu"],
+  "applies_to": [
+    "douyin",
+    "kuaishou",
+    "wechat",
+    "bilibili",
+    "shipinhao",
+    "xiaohongshu",
+    "zhihu",
+    "juejin"
+  ],
   "required_before_generation": [
     "account_performance_snapshot_or_unavailable_reason",
     "same_lane_hot_content_analysis",
@@ -36,7 +45,12 @@
     "platform_specific_metrics"
   ],
   "post_publish_review": {
-    "review_points_hours": [1, 24, 72, 168],
+    "review_points_hours": [
+      1,
+      24,
+      72,
+      168
+    ],
     "diagnosis_dimensions": [
       "click_through_rate",
       "three_second_view_rate",
@@ -50,8 +64,18 @@
     "missing_data_policy": "record_unavailable_reason_and_block_strategy_confidence_boost"
   },
   "platform_rules": {
-    "douyin": ["strong_first_motion", "matched_real_footage", "lower_third_subtitles", "single_best_candidate"],
-    "kuaishou": ["trust_first_microcase", "plainspoken_voice", "series_prompt", "private_domain_reply"],
+    "douyin": [
+      "strong_first_motion",
+      "matched_real_footage",
+      "lower_third_subtitles",
+      "single_best_candidate"
+    ],
+    "kuaishou": [
+      "trust_first_microcase",
+      "plainspoken_voice",
+      "series_prompt",
+      "private_domain_reply"
+    ],
     "wechat": [
       "wechat_editorial_frequency_control",
       "columnized_personal_ip_mix",
@@ -64,9 +88,37 @@
       "cross_platform_follow_funnel",
       "manual_backend_metrics_review_when_api_unavailable"
     ],
-    "bilibili": ["tutorial_or_case_depth", "evidence_before_claim", "danmaku_prompt", "favorite_checkpoint"],
-    "shipinhao": ["wechat_social_context", "shareable_first_screen", "trust_signal", "no_kuaishou_reuse"],
-    "xiaohongshu": ["authentic_cover", "pain_point_title", "use_case_keywords", "early_comment_reply"]
+    "bilibili": [
+      "tutorial_or_case_depth",
+      "evidence_before_claim",
+      "danmaku_prompt",
+      "favorite_checkpoint"
+    ],
+    "shipinhao": [
+      "wechat_social_context",
+      "shareable_first_screen",
+      "trust_signal",
+      "no_kuaishou_reuse"
+    ],
+    "xiaohongshu": [
+      "authentic_cover",
+      "pain_point_title",
+      "use_case_keywords",
+      "early_comment_reply"
+    ],
+    "zhihu": [
+      "reasoned_answer_or_article_first",
+      "pin_not_article_excerpt",
+      "question_specific_context",
+      "anti_spam_similarity_gate",
+      "discussion_prompt_not_marketing_slogan"
+    ],
+    "juejin": [
+      "engineering_implementation_depth",
+      "code_or_architecture_specific_value",
+      "not_duplicate_of_zhihu_or_wechat",
+      "collectable_checklist_or_demo"
+    ]
   },
   "platform_growth_playbooks": {
     "wechat": {
@@ -92,22 +144,48 @@
       },
       "content_mix": {
         "open_source_notes": 0.25,
-        "personal_practice_story": 0.30,
+        "personal_practice_story": 0.3,
         "opinion_or_trend_interpretation": 0.25,
-        "interactive_qa_or_weekly_recap": 0.20
+        "interactive_qa_or_weekly_recap": 0.2
       },
       "columns": [
-        {"name": "马吉克开源笔记", "role": "open_source_notes", "recommended_day": "tuesday"},
-        {"name": "我的 AI 工作台", "role": "personal_practice_story", "recommended_day": "friday"},
-        {"name": "AI 说人话", "role": "opinion_or_trend_interpretation", "recommended_day": "alternate_tuesday"},
-        {"name": "你问我答 / 工具箱回访", "role": "interactive_qa_or_weekly_recap", "recommended_day": "alternate_friday"}
+        {
+          "name": "马吉克开源笔记",
+          "role": "open_source_notes",
+          "recommended_day": "tuesday"
+        },
+        {
+          "name": "我的 AI 工作台",
+          "role": "personal_practice_story",
+          "recommended_day": "friday"
+        },
+        {
+          "name": "AI 说人话",
+          "role": "opinion_or_trend_interpretation",
+          "recommended_day": "alternate_tuesday"
+        },
+        {
+          "name": "你问我答 / 工具箱回访",
+          "role": "interactive_qa_or_weekly_recap",
+          "recommended_day": "alternate_friday"
+        }
       ],
       "recovery_topic_policy": {
         "duration_days": 14,
         "topic_dedup_window_days": 14,
         "title_frame_dedup_window_days": 14,
-        "suspend_topics": ["自动化实测", "办公自动化实测", "重复劳动自动化", "WordPress SEO 自动化"],
-        "fatigue_terms": ["实测", "自动化", "工具", "AI"],
+        "suspend_topics": [
+          "自动化实测",
+          "办公自动化实测",
+          "重复劳动自动化",
+          "WordPress SEO 自动化"
+        ],
+        "fatigue_terms": [
+          "实测",
+          "自动化",
+          "工具",
+          "AI"
+        ],
         "max_fatigue_terms_per_title": 1,
         "same_topic_action": "block_and_reselect_topic",
         "same_title_frame_action": "rewrite_title_or_switch_column"
@@ -122,9 +200,21 @@
         "ideal_chars": "12-22",
         "max_chars": 24,
         "keyword_first_chars": 15,
-        "must_include_one": ["pain", "result", "loss_avoidance", "specific_scenario", "contrast"],
+        "must_include_one": [
+          "pain",
+          "result",
+          "loss_avoidance",
+          "specific_scenario",
+          "contrast"
+        ],
         "template_fatigue_limit": "same_title_frame_not_more_than_once_in_14_days",
-        "avoid_repeated_frames": ["实测", "试了", "值得试试", "自动化", "AI工具"],
+        "avoid_repeated_frames": [
+          "实测",
+          "试了",
+          "值得试试",
+          "自动化",
+          "AI工具"
+        ],
         "prepare_candidates": 3,
         "reject_if_fatigue_terms_exceed": 1
       },
@@ -133,16 +223,45 @@
         "retention_hook_interval_chars": 350,
         "structure_rotation_required": true,
         "avoid_reusing_standard_template_for_14_days": true,
-        "allowed_structures": ["story_driven_case", "contrast_test", "contrarian_opinion", "reader_question_answer", "open_source_project_note"],
-        "must_include": ["real_case", "specific_steps", "failure_or_boundary", "saveable_checklist", "natural_follow_reason"]
+        "allowed_structures": [
+          "story_driven_case",
+          "contrast_test",
+          "contrarian_opinion",
+          "reader_question_answer",
+          "open_source_project_note"
+        ],
+        "must_include": [
+          "real_case",
+          "specific_steps",
+          "failure_or_boundary",
+          "saveable_checklist",
+          "natural_follow_reason"
+        ]
       },
       "seo_geo": {
-        "primary_keywords": ["AI效率工具", "AI工作流", "开源项目", "GitHub精选", "AI实践复盘"],
-        "placement": ["title_first_15_chars", "digest", "first_200_chars", "section_headings"],
+        "primary_keywords": [
+          "AI效率工具",
+          "AI工作流",
+          "开源项目",
+          "GitHub精选",
+          "AI实践复盘"
+        ],
+        "placement": [
+          "title_first_15_chars",
+          "digest",
+          "first_200_chars",
+          "section_headings"
+        ],
         "search_footprint_goal": "improve_wechat_search_and_sogou_discoverability_without_keyword_stuffing"
       },
       "interaction_conversion": {
-        "backend_reply_keywords": ["工具箱", "清单", "GitHub", "开源笔记", "提问"],
+        "backend_reply_keywords": [
+          "工具箱",
+          "清单",
+          "GitHub",
+          "开源笔记",
+          "提问"
+        ],
         "single_primary_cta_only": true,
         "comment_prompt": "ask one concrete experience question tied to the article scenario",
         "share_prompt": "state the colleague or operator who should read it",
@@ -150,9 +269,50 @@
       },
       "post_publish_review": {
         "review_cadence": "weekly",
-        "required_metrics": ["impressions", "open_rate", "finish_read_rate", "share_rate", "save_rate", "comment_rate", "new_follows", "read_to_follow_rate"],
+        "required_metrics": [
+          "impressions",
+          "open_rate",
+          "finish_read_rate",
+          "share_rate",
+          "save_rate",
+          "comment_rate",
+          "new_follows",
+          "read_to_follow_rate"
+        ],
         "api_unavailable_policy": "record_48001_or_backend_unavailable_reason_and_use_manual_export",
         "recovery_exit_condition": "two consecutive weeks with improving open_rate and finish_read_rate"
+      }
+    },
+    "zhihu": {
+      "diagnosis_date": "2026-08-08",
+      "mode": "zhihu_similarity_recovery",
+      "primary_goal": "restore normal visibility by reducing repeated low-value short-form promotion",
+      "publishing_frequency": {
+        "max_articles_per_day": 1,
+        "max_pins_per_day": 1,
+        "min_gap_hours_between_pins": 48,
+        "auto_pin_publish_default": "review_only"
+      },
+      "form_mix": {
+        "article": "deep reasoning and evidence",
+        "answer": "question-specific direct response",
+        "pin": "original commentary and discussion starter only"
+      },
+      "anti_spam_similarity": {
+        "lookback_days": 14,
+        "max_pin_article_overlap": 0.22,
+        "max_pin_title_overlap": 0.55,
+        "block_if_platform_limited_visibility": true
+      }
+    },
+    "juejin": {
+      "diagnosis_date": "2026-08-08",
+      "mode": "engineering_depth_and_dedup",
+      "primary_goal": "increase collection and comment rate with implementation-specific value",
+      "anti_spam_similarity": {
+        "lookback_days": 14,
+        "must_not_reuse_zhihu_or_wechat_body": true,
+        "requires_engineering_specific_rewrite": true
       }
     }
   }

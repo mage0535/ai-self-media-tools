@@ -1,45 +1,94 @@
-"""Tests for zhihu pin promotion text building (no network)."""
-from content_platform.zhihu_promotion import build_pin_text
+"""Tests for Zhihu companion pin generation and validation."""
+
+import pytest
+
+from content_platform.zhihu_promotion import (
+    ZhihuPinValidationError,
+    build_pin_text,
+    publish_article_pin,
+    validate_pin_payload,
+)
 
 
-class TestBuildPinText:
-    def test_builds_title_and_content(self):
-        job = {"title": "我用AI自动写测试30天：从怀疑到离不开", "body": "上个月我把测试全部交给AI。\n\n结果第一周就踩了坑。"}
-        payload = build_pin_text(job, article_url="https://zhuanlan.zhihu.com/p/123")
+def _job():
+    return {
+        "title": "I used AI to write tests for 30 days: four real traps",
+        "topic": "AI test automation",
+        "body": (
+            "# I used AI to write tests for 30 days\n\n"
+            "Thirty days ago I still wrote every unit test by hand. "
+            "After I gave the first draft to AI, the first week failed because "
+            "nobody had written acceptance criteria, review boundaries, or a "
+            "fallback plan for flaky cases."
+        ),
+        "strategy_brief": {
+            "reader_payoff": "a practical checklist for deciding which test work can be automated"
+        },
+    }
 
-        assert payload["title"] == "我用AI自动写测试30天：从怀疑到离不开"
-        assert "上个月我把测试全部交给AI" in payload["content"]
-        assert "完整拆解在专栏文章" in payload["content"]
-        assert "https://zhuanlan.zhihu.com/p/123" in payload["content"]
 
-    def test_handles_empty_body(self):
-        payload = build_pin_text({"title": "标题"}, article_url="https://zhuanlan.zhihu.com/p/1")
-        assert "完整拆解在专栏文章《标题》里" in payload["content"]
-        assert "上个月" not in payload["content"]
+def test_build_pin_text_does_not_copy_article_opening():
+    payload = build_pin_text(_job(), article_url="https://zhuanlan.zhihu.com/p/123")
 
-    def test_appends_extra(self):
-        payload = build_pin_text({"title": "T"}, extra="评论区聊聊你的看法")
-        assert "评论区聊聊你的看法" in payload["content"]
+    assert payload["title"] != _job()["title"]
+    assert "Thirty days ago I still wrote every unit test by hand" not in payload["content"]
+    assert "https://zhuanlan.zhihu.com/p/123" in payload["content"]
+    assert payload["validation"]["passed"] is True
+    assert payload["validation"]["metrics"]["source_overlap"] <= 0.22
 
-    def test_whitespace_normalized(self):
-        job = {"title": " 标题 ", "body": "第一段。\n\n\n第二段。"}
-        payload = build_pin_text(job)
-        assert payload["title"] == "标题"
-        assert "第一段。 第二段。" in payload["content"]
 
-    def test_strips_leading_md_title_from_body(self):
-        job = {"title": "标题", "body": "# 标题\n\n正文从这里开始。"}
-        payload = build_pin_text(job)
-        assert "# 标题" not in payload["content"]
-        assert "正文从这里开始" in payload["content"]
+def test_validate_pin_payload_rejects_article_excerpt():
+    job = _job()
+    payload = {
+        "title": job["title"],
+        "content": (
+            "Thirty days ago I still wrote every unit test by hand. "
+            "After I gave the first draft to AI, the first week failed because nobody had written acceptance criteria."
+        ),
+    }
 
-    def test_hook_clips_at_sentence_boundary(self):
-        long_body = "第一句完。第二句也完。第三句是长句子没有任何标点符号只有内容一直延续超过一百二十字限制因此必须截断处理"
-        job = {"title": "T", "body": long_body}
-        payload = build_pin_text(job)
-        assert "第一句完。" in payload["content"]
+    result = validate_pin_payload(job, payload, article_url="https://zhuanlan.zhihu.com/p/123")
 
-    def test_empty_title_does_not_produce_empty_brackets(self):
-        payload = build_pin_text({"body": "正文内容。", "url": "x"}, article_url="https://zhuanlan.zhihu.com/p/9")
-        assert "《》" not in payload["content"]
-        assert "完整拆解在专栏文章里" in payload["content"]
+    assert result["passed"] is False
+    assert "pin_title_reuses_article_title" in result["failures"]
+    assert "pin_content_too_similar_to_article" in result["failures"]
+    assert "pin_contains_copied_article_fragment" in result["failures"]
+
+
+def test_publish_requires_visible_article_url(monkeypatch):
+    calls = []
+
+    class FakeAdapter:
+        def __init__(self, timeout=60):
+            self.timeout = timeout
+
+        def publish_pin(self, title, content="", images=None):
+            calls.append((title, content, images))
+            return {"id": "p1", "url": "https://www.zhihu.com/pin/p1"}
+
+    monkeypatch.setattr("content_platform.zhihu_promotion.ZhihuCliAdapter", FakeAdapter)
+
+    with pytest.raises(ZhihuPinValidationError):
+        publish_article_pin(_job(), article_url="")
+
+    assert calls == []
+
+
+def test_publish_passes_validation_before_adapter(monkeypatch):
+    calls = []
+
+    class FakeAdapter:
+        def __init__(self, timeout=60):
+            self.timeout = timeout
+
+        def publish_pin(self, title, content="", images=None):
+            calls.append((title, content, images))
+            return {"id": "p1", "url": "https://www.zhihu.com/pin/p1"}
+
+    monkeypatch.setattr("content_platform.zhihu_promotion.ZhihuCliAdapter", FakeAdapter)
+
+    result = publish_article_pin(_job(), article_url="https://zhuanlan.zhihu.com/p/123")
+
+    assert result["id"] == "p1"
+    assert result["validation"]["passed"] is True
+    assert len(calls) == 1

@@ -169,6 +169,51 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
         "rules": ["authentic_cover", "pain_point_title", "use_case_keywords", "early_comment_reply"],
         "target_action": "save_or_comment",
     },
+    "zhihu": {
+        "primary_metric": "normal_visibility_and_save_rate",
+        "secondary_metrics": ["upvote_rate", "comment_rate", "follow_conversion_rate"],
+        "rules": [
+            "reasoned_article_or_answer_first",
+            "pin_not_article_excerpt",
+            "answer_article_pin_differentiation",
+            "anti_spam_similarity_gate",
+            "discussion_prompt_not_marketing_slogan",
+        ],
+        "target_action": "save_or_comment",
+        "zhihu_growth_playbook": {
+            "diagnosis_date": "2026-08-08",
+            "mode": "zhihu_similarity_recovery",
+            "primary_goal": "restore normal visibility by stopping high-similarity short-form promotions",
+            "publishing_frequency": {
+                "max_articles_per_day": 1,
+                "max_pins_per_day": 1,
+                "min_gap_hours_between_pins": 48,
+                "auto_pin_publish_default": "review_only",
+            },
+            "anti_spam_similarity": {
+                "lookback_days": 14,
+                "max_pin_article_overlap": 0.22,
+                "max_pin_title_overlap": 0.55,
+                "block_if_platform_limited_visibility": True,
+            },
+            "form_mix": {
+                "article": "deep reasoning with evidence and tradeoffs",
+                "answer": "question-specific answer with direct answer first",
+                "pin": "short original commentary plus discussion question, never article excerpt",
+            },
+        },
+    },
+    "juejin": {
+        "primary_metric": "collection_rate",
+        "secondary_metrics": ["comment_rate", "follow_conversion_rate", "read_depth"],
+        "rules": [
+            "engineering_implementation_depth",
+            "code_or_architecture_specific_value",
+            "not_duplicate_of_zhihu_or_wechat",
+            "collectable_checklist_or_demo",
+        ],
+        "target_action": "save_or_comment",
+    },
     "rednote": {
         "alias": "xiaohongshu",
     },
@@ -268,6 +313,8 @@ def build_growth_strategy(
     }
     if platform == "wechat" and isinstance(rules.get("wechat_growth_playbook"), dict):
         strategy["wechat_growth_playbook"] = rules["wechat_growth_playbook"]
+    if platform == "zhihu" and isinstance(rules.get("zhihu_growth_playbook"), dict):
+        strategy["zhihu_growth_playbook"] = rules["zhihu_growth_playbook"]
     return strategy
 
 
@@ -309,6 +356,18 @@ def validate_growth_strategy(plan: dict[str, Any], platform: str = "", content_t
             failures.append("wechat_frequency.recovery_weekly_cap_too_high")
         if int(recovery.get("topic_dedup_window_days") or 0) < 14:
             failures.append("wechat_topic_dedup_window.too_short")
+    if _normalized_platform(platform) == "zhihu":
+        playbook = plan.get("zhihu_growth_playbook") if isinstance(plan.get("zhihu_growth_playbook"), dict) else {}
+        anti_spam = playbook.get("anti_spam_similarity") if isinstance(playbook.get("anti_spam_similarity"), dict) else {}
+        frequency = playbook.get("publishing_frequency") if isinstance(playbook.get("publishing_frequency"), dict) else {}
+        if playbook.get("mode") != "zhihu_similarity_recovery":
+            failures.append("zhihu_growth_playbook.similarity_recovery_mode_missing")
+        if int(anti_spam.get("lookback_days") or 0) < 14:
+            failures.append("zhihu_similarity_lookback.too_short")
+        if float(anti_spam.get("max_pin_article_overlap") or 1) > 0.22:
+            failures.append("zhihu_pin_overlap_threshold.too_loose")
+        if str(frequency.get("auto_pin_publish_default") or "") != "review_only":
+            failures.append("zhihu_pin_publish_default.not_review_only")
     return {
         "passed": not failures,
         "failures": failures,
