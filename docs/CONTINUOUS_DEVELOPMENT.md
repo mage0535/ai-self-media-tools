@@ -1,6 +1,14 @@
 # Continuous Development
 
-Last updated: 2026-08-01
+Last updated: 2026-08-08
+
+## 2026-08-08 Zhihu Similarity Recovery And Cross-Platform Anti-Spam Gate
+
+- Zhihu companion pins no longer reuse an article title or opening paragraph. `content_platform.zhihu_promotion` now generates an independent short commentary and validates it for source overlap, title overlap, copied article fragments, content length, discussion question, and visible article URL before publish mode can call the Zhihu CLI.
+- `scripts/zhihu_pin_promotion.py` now prints validation evidence in review mode and fails closed in publish mode when the anti-spam gate rejects the pin. This addresses the platform risk where a pin is limited to self-visible because recent content is highly similar or low-value.
+- The rulebook now has `anti_spam_similarity_policy` for all channels and a Zhihu-specific `short_form_policy`: review-first pins, one pin per article, at least 48 hours between pins, no article excerpt as pin hook, and answer/article/pin differentiation.
+- Growth strategy now covers Zhihu and Juejin. Zhihu carries `zhihu_similarity_recovery`, while Juejin requires engineering-specific value and must not reuse Zhihu or WeChat copy.
+- Verification: Zhihu promotion/growth tests passed, full pytest passed, channel rulebook validation passed, and project audit returned 0 issues.
 
 ## 2026-08-01 Public Release 1.0.0
 

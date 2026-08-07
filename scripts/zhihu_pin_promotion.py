@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Zhihu companion pin tool.
-
-Generate or publish a Zhihu pin that teases an article after it has been
-published. Default mode prints a review draft; `--publish` calls the Zhihu CLI
-adapter.
-"""
+"""Generate or publish a validated Zhihu companion pin."""
 
 from __future__ import annotations
 
@@ -15,7 +10,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from content_platform.zhihu_promotion import build_pin_text, publish_article_pin  # noqa: E402
+from content_platform.zhihu_promotion import (  # noqa: E402
+    ZhihuPinValidationError,
+    build_pin_text,
+    publish_article_pin,
+    validate_pin_payload,
+)
 
 
 def main() -> int:
@@ -30,17 +30,26 @@ def main() -> int:
 
     if not args.publish:
         payload = build_pin_text(job, article_url=args.url, extra=args.extra)
-        print("=== 配套想法（审核稿）===")
-        print(f"标题: {payload['title']}")
+        validation = payload.get("validation") or validate_pin_payload(job, payload, article_url=args.url)
+        print("=== Zhihu companion pin review draft ===")
+        print(f"Title: {payload['title']}")
         print("---")
         print(payload["content"])
         print("---")
-        print("确认后加 --publish 发布")
-        return 0
+        print("Validation:")
+        print(json.dumps(validation, ensure_ascii=False, indent=2))
+        print("Review this draft before adding --publish.")
+        return 0 if validation.get("passed") else 2
 
-    result = publish_article_pin(job, article_url=args.url, extra=args.extra)
+    try:
+        result = publish_article_pin(job, article_url=args.url, extra=args.extra)
+    except ZhihuPinValidationError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     print(f"Pin published! ID: {result.get('id')}")
     print(result.get("url", ""))
+    if result.get("validation"):
+        print(json.dumps(result["validation"], ensure_ascii=False, indent=2))
     return 0
 
 
