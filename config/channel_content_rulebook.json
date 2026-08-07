@@ -107,7 +107,10 @@
       "shipinhao",
       "xiaohongshu",
       "zhihu",
-      "juejin"
+      "juejin",
+      "youtube",
+      "tiktok",
+      "twitter"
     ],
     "required_before_generation": [
       "account_performance_snapshot_or_unavailable_reason",
@@ -1158,21 +1161,47 @@
         "edited_short_video",
         "tutorial_video"
       ],
-      "publish_policy": "draft_or_schedule_after_sau_health_and_postcheck",
+      "publish_policy": "manual_handoff_only_generate_video_package_user_manual_publish",
       "must_use_tools": [
         "hermes_operating_strategy",
         "same_lane_hot_video_analysis",
         "cross_pipeline_v5",
-        "sau_bilibili_uploader"
+        "sau_bilibili_uploader",
+        "manual_publish_package_builder",
+        "video_toolchain_runner",
+        "online_real_instrument_bgm_resolver"
       ],
       "quality_gates": [
         "growth_quality_plan",
         "clear_tutorial_or_case_value",
         "subtitles",
         "voiceover",
-        "scene_to_script_match"
+        "scene_to_script_match",
+        "manual_handoff_only",
+        "platform_render_identity",
+        "media_delivery_contract",
+        "online_real_instrument_bgm_required",
+        "unique_render_not_cross_platform_reuse"
       ],
-      "postcheck": "bilibili_creator_center_state"
+      "postcheck": "local_review_package_ready_user_manual_publish",
+      "handoff_policy": {
+        "status": "handoff_pending_only",
+        "forbidden": [
+          "automatic_upload_without_user_confirmation",
+          "reusing_youtube_or_tiktok_final_video",
+          "claiming_published_without_platform_url_or_user_confirmation"
+        ],
+        "must_include": [
+          "title",
+          "description",
+          "tags",
+          "cover",
+          "video_file",
+          "bgm_source",
+          "subtitle_file",
+          "recommended_publish_time"
+        ]
+      }
     },
     "tiktok": {
       "lane": "international_ai_efficiency",
@@ -1219,9 +1248,33 @@
         "scene_changes_match_script",
         "online_real_instrument_bgm_required",
         "vertical_9_16",
-        "hashtags_3_to_5"
+        "hashtags_3_to_5",
+        "manual_handoff_only",
+        "platform_render_identity",
+        "media_delivery_contract",
+        "unique_render_not_cross_platform_reuse",
+        "anti_spam_similarity_plan"
       ],
-      "postcheck": "local_review_package_ready_user_manual_publish"
+      "postcheck": "local_review_package_ready_user_manual_publish",
+      "handoff_policy": {
+        "status": "handoff_pending_only",
+        "forbidden": [
+          "AiToEarn_publish",
+          "automatic_upload",
+          "cross_platform_final_mp4_reuse",
+          "handoff_marked_published"
+        ],
+        "must_include": [
+          "title",
+          "description",
+          "hashtags",
+          "cover",
+          "video_file",
+          "bgm_source",
+          "subtitle_file",
+          "recommended_publish_time"
+        ]
+      }
     },
     "youtube": {
       "lane": "international_ai_efficiency",
@@ -1269,9 +1322,33 @@
         "lower_third_subtitles_when_short",
         "scene_changes_match_script",
         "online_real_instrument_bgm_required",
-        "hashtags_3_to_5"
+        "hashtags_3_to_5",
+        "manual_handoff_only",
+        "platform_render_identity",
+        "media_delivery_contract",
+        "unique_render_not_cross_platform_reuse",
+        "anti_spam_similarity_plan"
       ],
-      "postcheck": "local_review_package_ready_user_manual_publish"
+      "postcheck": "local_review_package_ready_user_manual_publish",
+      "handoff_policy": {
+        "status": "handoff_pending_only",
+        "forbidden": [
+          "AiToEarn_publish",
+          "automatic_upload",
+          "cross_platform_final_mp4_reuse",
+          "handoff_marked_published"
+        ],
+        "must_include": [
+          "title",
+          "description",
+          "hashtags",
+          "cover",
+          "video_file",
+          "bgm_source",
+          "subtitle_file",
+          "recommended_publish_time"
+        ]
+      }
     },
     "twitter": {
       "lane": "international_ai_efficiency",
@@ -1290,9 +1367,25 @@
       "quality_gates": [
         "concise_hook_under_280",
         "link_or_media_engagement",
-        "hashtag_1_to_2"
+        "hashtag_1_to_2",
+        "anti_spam_similarity_plan",
+        "no_repeated_hook_or_link_dump",
+        "specific_reply_prompt"
       ],
-      "postcheck": "twitter_public_url_username_status_format"
+      "postcheck": "twitter_public_url_username_status_format",
+      "short_form_policy": {
+        "max_posts_per_run": 1,
+        "min_gap_hours_between_similar_posts": 24,
+        "must_include": [
+          "specific_observation",
+          "reply_prompt_or_profile_click_reason"
+        ],
+        "forbidden": [
+          "same_link_dump_repeated_across_platforms",
+          "generic_ai_tool_promo_without_observation",
+          "thread_spam"
+        ]
+      }
     },
     "threads": {
       "lane": "international_ai_efficiency",

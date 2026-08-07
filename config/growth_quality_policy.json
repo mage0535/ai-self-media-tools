@@ -10,7 +10,10 @@
     "shipinhao",
     "xiaohongshu",
     "zhihu",
-    "juejin"
+    "juejin",
+    "youtube",
+    "tiktok",
+    "twitter"
   ],
   "required_before_generation": [
     "account_performance_snapshot_or_unavailable_reason",
@@ -118,6 +121,26 @@
       "code_or_architecture_specific_value",
       "not_duplicate_of_zhihu_or_wechat",
       "collectable_checklist_or_demo"
+    ],
+    "youtube": [
+      "english_first_five_second_payoff",
+      "one_clear_tutorial_or_demo_promise",
+      "retention_chapters_or_pattern_interrupts",
+      "manual_handoff_no_aitoearn",
+      "unique_render_not_cross_platform_final_reuse"
+    ],
+    "tiktok": [
+      "native_english_short_hook",
+      "single_micro_payoff",
+      "platform_native_caption_and_tags",
+      "manual_handoff_no_aitoearn",
+      "unique_render_not_youtube_or_douyin_reuse"
+    ],
+    "twitter": [
+      "one_point_under_280",
+      "specific_observation_not_link_dump",
+      "one_question_or_clear_reply_prompt",
+      "no_thread_spam_or_repeated_hooks"
     ]
   },
   "platform_growth_playbooks": {
@@ -313,6 +336,35 @@
         "lookback_days": 14,
         "must_not_reuse_zhihu_or_wechat_body": true,
         "requires_engineering_specific_rewrite": true
+      }
+    },
+    "youtube": {
+      "diagnosis_date": "2026-08-08",
+      "mode": "youtube_manual_handoff_growth",
+      "primary_goal": "increase retention and subscriber conversion without automatic upload",
+      "publish_boundary": "manual_handoff_only_no_aitoearn",
+      "anti_reuse": {
+        "cross_platform_final_video_reuse_forbidden": true,
+        "lookback_days": 7
+      }
+    },
+    "tiktok": {
+      "diagnosis_date": "2026-08-08",
+      "mode": "tiktok_manual_handoff_growth",
+      "primary_goal": "improve first-three-second retention and follow conversion",
+      "publish_boundary": "manual_handoff_only_no_aitoearn",
+      "anti_reuse": {
+        "youtube_or_douyin_final_video_reuse_forbidden": true,
+        "lookback_days": 7
+      }
+    },
+    "twitter": {
+      "diagnosis_date": "2026-08-08",
+      "mode": "x_specific_observation_growth",
+      "primary_goal": "increase replies and profile clicks with one specific observation per post",
+      "anti_spam_similarity": {
+        "lookback_days": 14,
+        "min_gap_hours_between_similar_posts": 24
       }
     }
   }
