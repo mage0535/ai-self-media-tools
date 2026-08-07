@@ -293,6 +293,63 @@ def test_performance_cycle_does_not_persist_suspicious_tiktok_placeholder_metric
         assert report["persisted"]["items"][0]["status"] == "metrics_suspicious"
 
 
+def test_performance_cycle_does_not_persist_creator_page_chrome_counts():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(Path(tmp) / "state.db")
+        collection = {
+            "status": "ok",
+            "platforms": {
+                "xiaohongshu": {
+                    "status": "backend_signal",
+                    "account_metrics": {
+                        "views": 68,
+                        "followers": 0,
+                        "extra_metrics": {
+                            "works": 307000,
+                            "metric_source": "creator_backend_page",
+                            "metric_confidence": "medium",
+                        },
+                    },
+                }
+            },
+        }
+
+        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+            report = run_performance_cycle(store, platforms=["xiaohongshu"], output_dir=Path(tmp) / "performance")
+
+        assert store.performance() == []
+        assert report["activity"]["metrics_saved"] == 0
+        assert report["persisted"]["items"][0]["status"] == "metrics_suspicious"
+
+
+def test_performance_cycle_does_not_persist_implausible_creator_backend_ratio():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(Path(tmp) / "state.db")
+        collection = {
+            "status": "ok",
+            "platforms": {
+                "juejin": {
+                    "status": "backend_signal",
+                    "account_metrics": {
+                        "views": 2500000,
+                        "likes": 211,
+                        "comments": 22000,
+                        "extra_metrics": {
+                            "metric_source": "creator_backend_page",
+                            "metric_confidence": "medium",
+                        },
+                    },
+                }
+            },
+        }
+
+        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+            report = run_performance_cycle(store, platforms=["juejin"], output_dir=Path(tmp) / "performance")
+
+        assert store.performance() == []
+        assert report["persisted"]["items"][0]["status"] == "metrics_suspicious"
+
+
 def test_performance_cycle_does_not_persist_tiktok_followers_only_metrics():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
