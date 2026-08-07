@@ -68,6 +68,10 @@ class VideoToolchainTests(unittest.TestCase):
             self.assertIn(step, plan["renderer_steps"])
         self.assertIn("cinema_color_css", plan["effect_stack"])
         self.assertIn("shotcraft_motion_css", plan["effect_stack"])
+        self.assertIn("tools_capability_analysis", plan)
+        self.assertIn("tool_selection_plan", plan)
+        self.assertTrue(plan["tools_capability_analysis"]["all_relevant_tool_types_analyzed"])
+        self.assertGreaterEqual(len(plan["tool_selection_plan"]["selected_tools"]), 6)
 
     def test_visual_recipe_splits_core_and_instance_fingerprints(self):
         base = {

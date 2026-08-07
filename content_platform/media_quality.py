@@ -12,6 +12,7 @@ from .growth_policy import validate_growth_strategy
 from .preflight_manifest import validate_preflight_manifest
 from .video_recipe import load_effect_module_registry, validate_visual_recipe
 from .content_recipe import validate_article_recipe, validate_knowledge_card_recipe, validate_tool_invocation_manifest
+from .tool_selection import validate_tool_selection_evidence
 
 TIKTOK_REPOST_LINE = "tiktok_hot_localized_repost"
 ALLOWED_VISUAL_REVIEWS = {"passed", "approved", "verified", "manual_passed"}
@@ -327,6 +328,7 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "article_recipe": validate_article_recipe(packet.get("article_recipe")),
         "knowledge_card_recipe": validate_knowledge_card_recipe(packet.get("knowledge_card_recipe")),
+        "tool_selection": validate_tool_selection_evidence(packet, content_kind="article"),
         "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "embedded_knowledge_cards": {
             "passed": len(embedded_cards) >= 3
@@ -413,6 +415,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "minimum": 3,
         },
         "knowledge_card_recipe": validate_knowledge_card_recipe(packet.get("knowledge_card_recipe")),
+        "tool_selection": validate_tool_selection_evidence(packet, content_kind="article"),
         "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "image_text_mapping": {
             "passed": len(images) >= 3
@@ -501,6 +504,7 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
             ),
         },
         "visual_recipe": validate_visual_recipe(visual_recipe, load_effect_module_registry()),
+        "tool_selection": validate_tool_selection_evidence(packet, content_kind="video"),
         "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "duration": {
             "passed": duration >= 40 and (duration <= 100 or bool(long_reason)),

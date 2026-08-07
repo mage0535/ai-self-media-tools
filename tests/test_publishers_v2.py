@@ -9,6 +9,7 @@ from unittest.mock import patch
 from content_platform.growth_policy import build_growth_strategy
 from content_platform.content_recipe import build_article_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 from content_platform.preflight_manifest import build_preflight_manifest
+from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.publishers import (
     AiToEarnDraftPublisher,
     AiToEarnFlowPublisher,
@@ -131,6 +132,20 @@ class PublisherV2Tests(unittest.TestCase):
             {"section": "method", "card_type": "checklist", "layout": "big_number", "visual_subject": "matched visual 3", "information_value": "explains adjacent point", "self_check": ["readability", "attraction", "information_density", "visual_match"]},
         ]
         visual_selection = {"selected": "case_story_v1", "ranked_scores": [{"template": "case_story_v1", "score": 80}, {"template": "magazine_grid", "score": 70}], "recent_same_platform_templates": [], "penalties": {}}
+        tool_manifest = build_tool_invocation_manifest(
+            planned_tools={
+                "generator_normalize": "content_platform.generator",
+                "preflight_manifest": "content_platform.preflight_manifest",
+                "visual_policy": "content_platform.visual_content_policy",
+                "knowledge_card_designer": "hermes_skill:content/knowledge-card-designer",
+            },
+            invocations={
+                "generator_normalize": {"status": "ok", "output": "packet"},
+                "preflight_manifest": {"status": "ok", "output": "packet.preflight_manifest"},
+                "visual_policy": {"status": "ok", "output": "packet.visual_content_policy"},
+                "knowledge_card_designer": {"status": "planned_internal", "output": "packet.embedded_knowledge_cards"},
+            },
+        )
         return {
             "id": "wechat-job",
             "platform": "wechat",
@@ -204,19 +219,12 @@ class PublisherV2Tests(unittest.TestCase):
                 visual_template_selection=visual_selection,
             ),
             "knowledge_card_recipe": build_knowledge_card_recipe(platform="wechat", cards=embedded_cards, content_type="long_article"),
-            "tool_invocation_manifest": build_tool_invocation_manifest(
-                planned_tools={
-                    "generator_normalize": "content_platform.generator",
-                    "preflight_manifest": "content_platform.preflight_manifest",
-                    "visual_policy": "content_platform.visual_content_policy",
-                    "knowledge_card_designer": "hermes_skill:content/knowledge-card-designer",
-                },
-                invocations={
-                    "generator_normalize": {"status": "ok", "output": "packet"},
-                    "preflight_manifest": {"status": "ok", "output": "packet.preflight_manifest"},
-                    "visual_policy": {"status": "ok", "output": "packet.visual_content_policy"},
-                    "knowledge_card_designer": {"status": "planned_internal", "output": "packet.embedded_knowledge_cards"},
-                },
+            "tool_invocation_manifest": tool_manifest,
+            **build_tool_selection_evidence(
+                platform="wechat",
+                content_type="long_article",
+                content_goal="validate Hermes WeChat adapter packet without bypassing tool selection",
+                planned_manifest=tool_manifest,
             ),
             "cover_design": {"visual_subject": "failed schedule checklist", "topic_alignment": "matches promise", "mobile_readable": True, "visual_hierarchy": "title, warning mark, checklist", "template_family": "casebook"},
             "differentiation_dimensions": ["case-led opening", "checklist structure", "warm warning tone"],

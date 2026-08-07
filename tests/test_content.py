@@ -43,6 +43,22 @@ class ContentTests(unittest.TestCase):
         self.assertIn("quality_scores", draft["draft_meta"])
         self.assertIn("rewrite_notes", draft["draft_meta"])
 
+    def test_article_generator_emits_tool_selection_evidence(self):
+        with patch.dict(os.environ, {}, clear=True):
+            draft = DraftGenerator({"allow_fallback": True}).generate(
+                "AI workflow checklist",
+                {"platforms": ["wechat"], "tone": "clear", "audience": "operators"},
+            )
+        meta = draft["draft_meta"]
+        self.assertIn("tools_capability_analysis", meta)
+        self.assertIn("tool_selection_plan", meta)
+        self.assertTrue(meta["tools_capability_analysis"]["all_relevant_tool_types_analyzed"])
+        self.assertGreaterEqual(len(meta["tool_selection_plan"]["selected_tools"]), 3)
+        self.assertEqual(
+            set(meta["tool_selection_plan"]["selected_tools"]),
+            set(meta["tool_invocation_manifest"]["planned_tools"]),
+        )
+
     def test_generator_reads_named_key_from_configured_env_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / "provider.env"

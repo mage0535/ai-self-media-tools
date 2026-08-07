@@ -9,6 +9,7 @@
     "check_account_lane_fit",
     "dedupe_cross_channel_and_7_day_same_channel",
     "generate_channel_specific_strategy_brief",
+    "analyze_available_tools_and_select_content_stack",
     "generate_channel_specific_content",
     "run_quality_gate",
     "run_delivery_health_gate",
@@ -230,6 +231,99 @@
         "direct_chinese_copy_repost"
       ],
       "adaptation_rule": "rewrite_for_international_context_and_platform_language"
+    }
+  },
+  "platform_account_variants": {
+    "douyin": {
+      "base_platform": "douyin",
+      "execution_order": [
+        "douyin_pet",
+        "douyin_ai"
+      ],
+      "required": true,
+      "selection_rule": "Hermes must execute each account_key as a separate operating object; never treat base platform douyin as a single account when daily ops require Douyin.",
+      "isolation_required": [
+        "cookie_state_profile",
+        "historical_feedback",
+        "performance_metrics",
+        "growth_strategy",
+        "platform_source_matrix",
+        "tools_capability_analysis",
+        "tool_selection_plan",
+        "visual_recipe",
+        "tool_invocation_manifest",
+        "handoff_package",
+        "output_dir"
+      ],
+      "forbidden_cross_account_reuse": [
+        "final.mp4",
+        "template",
+        "bgm",
+        "title",
+        "script",
+        "source_material"
+      ],
+      "cross_account_dedup_required": [
+        "same_base_platform_other_account",
+        "same_topic_recent_cross_platform_content",
+        "same_visual_recipe_core",
+        "same_bgm_fingerprint",
+        "same_source_material"
+      ],
+      "blocked_status": "douyin_account_binding_missing",
+      "accounts": {
+        "douyin_pet": {
+          "base_platform": "douyin",
+          "account_key": "douyin_pet",
+          "cookie_account": "douyin_pet",
+          "profile": "douyin_pet",
+          "state_file_hint": "<social-auto-upload-home>/cookies/douyin_uploader/douyin_pet/main.json",
+          "growth_strategy_key": "growth_strategy:douyin_pet:latest",
+          "performance_key": "performance:douyin_pet",
+          "historical_feedback_scope": "douyin_pet",
+          "lane": "pet_healing",
+          "account_direction": "cat_pet_healing",
+          "publish_boundary": "manual_handoff_only",
+          "weekly_mix": {
+            "cat_knowledge_or_original": 2,
+            "tiktok_hot_localized_reposts": 5
+          },
+          "required_content_lines": [
+            "cat_knowledge_or_original",
+            "tiktok_hot_localized_repost"
+          ],
+          "output_dir_pattern": "data/handoff/douyin_pet/{run_id}",
+          "must_not_use_rules_from": [
+            "douyin_ai"
+          ]
+        },
+        "douyin_ai": {
+          "base_platform": "douyin",
+          "account_key": "douyin_ai",
+          "cookie_account": "douyin_ai",
+          "profile": "douyin_ai",
+          "state_file_hint": "<social-auto-upload-home>/cookies/douyin_uploader/douyin_ai/main.json",
+          "growth_strategy_key": "growth_strategy:douyin_ai:latest",
+          "performance_key": "performance:douyin_ai",
+          "historical_feedback_scope": "douyin_ai",
+          "lane": "ai_efficiency_open_source",
+          "account_direction": "ai_tools_efficiency_open_source",
+          "publish_boundary": "manual_handoff_only",
+          "required_content_lines": [
+            "ai_tool_microcase",
+            "open_source_project_short",
+            "automation_workflow_short"
+          ],
+          "forbidden_content_lines": [
+            "cat_knowledge_or_original",
+            "tiktok_hot_localized_cat_repost"
+          ],
+          "output_dir_pattern": "data/handoff/douyin_ai/{run_id}",
+          "must_not_use_rules_from": [
+            "douyin_pet"
+          ]
+        }
+      }
     }
   },
   "knowledge_card_design_system": {

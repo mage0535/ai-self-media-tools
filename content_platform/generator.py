@@ -11,6 +11,7 @@ from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 from .content_recipe import build_article_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
+from .tool_selection import build_tool_selection_evidence
 
 
 class DraftGenerator:
@@ -297,7 +298,7 @@ class DraftGenerator:
             cards=cards,
             content_type="embedded_knowledge_cards",
         )
-        draft_meta["tool_invocation_manifest"] = build_tool_invocation_manifest(
+        tool_manifest = build_tool_invocation_manifest(
             planned_tools={
                 "generator_normalize": "content_platform.generator",
                 "preflight_manifest": "content_platform.preflight_manifest",
@@ -313,6 +314,14 @@ class DraftGenerator:
                 "knowledge_card_designer": {"status": "planned_internal", "output": "draft_meta.embedded_knowledge_cards"},
             },
         )
+        draft_meta["tool_invocation_manifest"] = tool_manifest
+        selection_content_type = "note" if platform in {"xiaohongshu", "rednote"} else (content_form or "article")
+        draft_meta.update(build_tool_selection_evidence(
+            platform=platform,
+            content_type=selection_content_type,
+            content_goal="increase opens, saves, and follow conversion with platform-matched structure, cards, and visuals",
+            planned_manifest=tool_manifest,
+        ))
 
     @staticmethod
     def _article_sections(body, topic):

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .content_recipe import build_tool_invocation_manifest
+from .tool_selection import build_tool_selection_evidence
 from .video_recipe import build_visual_recipe
 
 
@@ -119,6 +121,18 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
         ],
     }
     plan["visual_recipe"] = build_visual_recipe(plan, title=str(brief.get("topic") or brief.get("title") or ""))
+    planned_tools = {name: plan["tool_refs"].get(name, "video_toolchain_internal") for name in required_tools}
+    tool_manifest = build_tool_invocation_manifest(
+        planned_tools=planned_tools,
+        invocations={name: {"status": "planned_internal", "output": ref} for name, ref in planned_tools.items()},
+    )
+    plan["tool_invocation_manifest"] = tool_manifest
+    plan.update(build_tool_selection_evidence(
+        platform=platforms[0] if platforms else "video",
+        content_type=content_form or "short_video",
+        content_goal="increase retention with matched source assets, motion effects, voice, subtitles, and BGM",
+        planned_manifest=tool_manifest,
+    ))
     return plan
 
 
