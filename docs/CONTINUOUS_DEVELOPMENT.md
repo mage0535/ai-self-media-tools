@@ -10,6 +10,14 @@ Last updated: 2026-08-08
 - Growth strategy now covers Zhihu and Juejin. Zhihu carries `zhihu_similarity_recovery`, while Juejin requires engineering-specific value and must not reuse Zhihu or WeChat copy.
 - Verification: Zhihu promotion/growth tests passed, full pytest passed, channel rulebook validation passed, and project audit returned 0 issues.
 
+## 2026-08-08 Platform Boundary And International Growth Hardening
+
+- Bilibili is now aligned with the operator boundary used by the runtime: generate a complete local handoff package for user publishing, not automatic upload or schedule. The rulebook now requires manual handoff, platform render identity, media delivery evidence, BGM source, and no cross-platform final-video reuse.
+- YouTube and TikTok now have explicit growth rules and remain manual-handoff-only with AiToEarn publishing forbidden. Their packets must carry platform render identity, media delivery contract, unique render evidence, and anti-spam similarity planning.
+- X/Twitter now has short-form growth rules: one specific observation per post, no repeated link dump, a reply/profile-click prompt, max one post per run, and at least 24 hours between similar posts.
+- `content_platform.content_policy` now treats YouTube as a manual-handoff platform, matching the rulebook and preventing future publisher-routing drift.
+- Verification: platform-boundary tests passed, full pytest passed, channel rulebook validation passed, and project audit returned 0 issues.
+
 ## 2026-08-01 Public Release 1.0.0
 
 - Public version unified to `1.0.0` in package metadata, runtime version output, examples, and GitHub-facing docs.

@@ -84,7 +84,7 @@ FULL_OPS_GATES = {
     "asset_mix_plan",
     "humanization_plan",
 }
-GROWTH_CHANNELS = {"douyin", "kuaishou", "wechat", "bilibili", "shipinhao", "xiaohongshu", "zhihu", "juejin"}
+GROWTH_CHANNELS = {"douyin", "kuaishou", "wechat", "bilibili", "shipinhao", "xiaohongshu", "zhihu", "juejin", "youtube", "tiktok", "twitter"}
 GROWTH_REQUIRED_FIELDS = {
     "account_performance_snapshot_or_unavailable_reason",
     "same_lane_hot_content_analysis",
@@ -270,6 +270,29 @@ def main() -> None:
     for gate in ["strategy_before_generation", "kuaishou_trend_evidence", "six_distinct_knowledge_card_layouts", "no_local_soundhelix_or_synthetic_bgm_without_explicit_exception"]:
         require(gate in (kuaishou.get("quality_gates") or []), f"kuaishou quality gate missing: {gate}")
     require(kuaishou.get("postcheck") == "kuaishou_management_pending_list_with_exact_schedule_time", "kuaishou postcheck must require exact schedule management-page evidence")
+
+    bilibili = channel_rules["bilibili"]
+    require(bilibili.get("publish_policy") == "manual_handoff_only_generate_video_package_user_manual_publish", "bilibili must be manual-handoff only")
+    for gate in ["manual_handoff_only", "platform_render_identity", "media_delivery_contract", "unique_render_not_cross_platform_reuse"]:
+        require(gate in (bilibili.get("quality_gates") or []), f"bilibili quality gate missing: {gate}")
+    require(bilibili.get("postcheck") == "local_review_package_ready_user_manual_publish", "bilibili postcheck must be local review package")
+
+    for platform in ["youtube", "tiktok"]:
+        rule = channel_rules[platform]
+        require(rule.get("publish_policy") == "manual_handoff_only_generate_video_package_no_aitoearn", f"{platform} must be manual handoff and no AiToEarn")
+        for gate in ["manual_handoff_only", "platform_render_identity", "media_delivery_contract", "unique_render_not_cross_platform_reuse", "anti_spam_similarity_plan"]:
+            require(gate in (rule.get("quality_gates") or []), f"{platform} quality gate missing: {gate}")
+        handoff = rule.get("handoff_policy") or {}
+        require(handoff.get("status") == "handoff_pending_only", f"{platform} handoff status must remain handoff_pending_only")
+        forbidden = " ".join(handoff.get("forbidden") or [])
+        require("automatic_upload" in forbidden and "cross_platform_final_mp4_reuse" in forbidden, f"{platform} handoff forbidden list incomplete")
+
+    twitter = channel_rules["twitter"]
+    twitter_short = twitter.get("short_form_policy") or {}
+    require((twitter_short.get("max_posts_per_run") or 0) <= 1, "twitter must cap posts per run at 1")
+    require((twitter_short.get("min_gap_hours_between_similar_posts") or 0) >= 24, "twitter similar post gap must be >=24 hours")
+    for gate in ["anti_spam_similarity_plan", "no_repeated_hook_or_link_dump", "specific_reply_prompt"]:
+        require(gate in (twitter.get("quality_gates") or []), f"twitter quality gate missing: {gate}")
 
     for channel in FULL_OPS_CHANNELS:
         rule = channel_rules[channel]

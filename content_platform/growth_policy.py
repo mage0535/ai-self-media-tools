@@ -214,6 +214,44 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
         ],
         "target_action": "save_or_comment",
     },
+    "youtube": {
+        "primary_metric": "average_watch_seconds",
+        "secondary_metrics": ["completion_rate", "comment_rate", "follow_conversion_rate"],
+        "rules": [
+            "english_first_five_second_payoff",
+            "one_clear_tutorial_or_demo_promise",
+            "retention_chapters_or_pattern_interrupts",
+            "manual_handoff_no_aitoearn",
+            "unique_render_not_cross_platform_final_reuse",
+        ],
+        "target_action": "subscribe_or_comment",
+    },
+    "tiktok": {
+        "primary_metric": "three_second_view_rate",
+        "secondary_metrics": ["completion_rate", "comment_rate", "follow_conversion_rate"],
+        "rules": [
+            "native_english_short_hook",
+            "single_micro_payoff",
+            "platform_native_caption_and_tags",
+            "manual_handoff_no_aitoearn",
+            "unique_render_not_youtube_or_douyin_reuse",
+        ],
+        "target_action": "comment_or_follow",
+    },
+    "twitter": {
+        "primary_metric": "engagement_rate",
+        "secondary_metrics": ["reply_rate", "profile_click_rate", "follow_conversion_rate"],
+        "rules": [
+            "one_point_under_280",
+            "specific_observation_not_link_dump",
+            "one_question_or_clear_reply_prompt",
+            "no_thread_spam_or_repeated_hooks",
+        ],
+        "target_action": "reply_or_profile_click",
+    },
+    "x": {
+        "alias": "twitter",
+    },
     "rednote": {
         "alias": "xiaohongshu",
     },
