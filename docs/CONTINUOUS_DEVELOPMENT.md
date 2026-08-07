@@ -2652,3 +2652,25 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 ### Verification
 - Local media and MCP regression: `python -m pytest tests/test_media_quality.py tests/test_mcp_server.py -q` => `54 passed`.
 - Local related regression: `python -m pytest tests/test_content.py tests/test_media_quality.py tests/test_mcp_server.py tests/test_video_toolchain.py tests/test_video_toolchain_runner.py tests/test_image_provider.py tests/test_image_gen_cli.py -q` => `115 passed`.
+
+## 2026-08-07 - Hermes Runtime Video Hardening Absorbed Safely
+
+### Fixed
+- Absorbed Hermes runtime findings into public-safe code instead of copying server-only scripts directly.
+- `scripts/mix_bgm_with_gate.py` now supports explicit `voice_gain`, looped real BGM, stereo 44.1kHz output, head/tail volume probes, BGM silence detection, and a no-synthetic-fallback mix rule.
+- `scripts/kuaishou_render.py` now accepts `--width/--height` and defaults to 1080x1920; `scripts/video_toolchain_runner.py` passes those dimensions to prevent old 720x1280 renders from failing Kuaishou preflight.
+- Added `scripts/check_bgm_uniqueness.py` as a fail-closed BGM gate. Missing `bgm_source.json`, missing fingerprint, silent BGM, or duplicate fingerprint now fails instead of warning and continuing.
+- Added `scripts/check_platform_topic_independence.py` to validate per-platform source matrices before topic generation. It requires at least 5 attempted sources, 3 successful sources, platform-internal evidence or failure reason, and `shared_trend_only=false`.
+- Added `scripts/deliver_media.py` for separate Hermes media delivery without hard-coded chat IDs. The target must come from `HERMES_DELIVERY_TARGET`.
+- Added `scripts/normalize_kuaishou_render_dir.py` for legacy Kuaishou validator compatibility.
+- Added `scripts/build_kuaishou_packet.py` to build Kuaishou packets from render outputs using the unified preflight, visual policy, growth strategy, and tool invocation manifest.
+- Added `scripts/render_landscape_video.py` for Bilibili/YouTube 16:9 knowledge-video handoff packages. It refuses silent BGM fallback and outputs visual recipe/tool invocation evidence.
+- Rewrote `README.md` and `README.en.md` to remove mojibake, document privacy boundaries, current platform scope, recipe gates, BGM gates, and Hermes/Agent execution rules.
+
+### Operational Rule
+- Server runtime discoveries can be absorbed only after removing private absolute paths, chat IDs, cookies, tokens, account data, generated media, and runtime-only directories.
+- New operational scripts must fail closed for missing evidence. A warning is not enough for BGM source, fingerprint, topic source matrix, postcheck, or media delivery target.
+- Public scripts must use repository-relative paths, `CONTENT_PLATFORM_HOME`, or explicit CLI arguments; never hard-code server-private absolute paths or operator-specific identifiers.
+
+### Verification
+- Local script regression: `python -m pytest tests/test_operational_scripts.py tests/test_video_toolchain_runner.py -q` => `29 passed`.
