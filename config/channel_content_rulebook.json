@@ -629,38 +629,78 @@
         "hot_content_generation": "topic_selected_from_wechat_same_lane_and_external_platform_trends"
       },
       "growth_optimization_strategy": {
-        "diagnosis_date": "2026-08-04",
-        "primary_goal": "increase_read_to_follow_rate_without_sacrificing_finish_read_or_save_rate",
+        "diagnosis_date": "2026-08-08",
+        "mode": "wechat_14_day_recovery",
+        "primary_goal": "recover_open_rate_and_finish_read_rate_before_increasing_publish_frequency",
         "publishing_frequency": {
-          "recommended_articles_per_week": "3-4",
+          "recommended_articles_per_week": "2",
+          "max_articles_per_week_recovery": 2,
+          "max_articles_per_week_after_recovery": 3,
           "max_articles_per_day": 1,
+          "min_gap_hours_between_articles": 48,
+          "pause_days_before_next_publish": 2,
+          "avoid_daily_updates": true,
           "avoid_three_articles_per_day_batching": true
         },
         "content_mix": {
+          "open_source_notes": 0.25,
           "personal_practice_story": 0.3,
           "opinion_or_trend_interpretation": 0.25,
-          "github_or_tool_selection": 0.3,
-          "interactive_qa_or_weekly_recap": 0.15
+          "interactive_qa_or_weekly_recap": 0.2
         },
         "columns": [
-          "AI说人话",
-          "我的AI工作台",
-          "GitHub/工具精选",
-          "马吉克周记/你问我答"
+          "马吉克开源笔记",
+          "我的 AI 工作台",
+          "AI 说人话",
+          "你问我答 / 工具箱回访"
         ],
+        "recovery_topic_policy": {
+          "duration_days": 14,
+          "topic_dedup_window_days": 14,
+          "title_frame_dedup_window_days": 14,
+          "suspend_topics": [
+            "自动化实测",
+            "办公自动化实测",
+            "重复劳动自动化",
+            "WordPress SEO 自动化"
+          ],
+          "fatigue_terms": [
+            "实测",
+            "自动化",
+            "工具",
+            "AI"
+          ],
+          "max_fatigue_terms_per_title": 1,
+          "same_topic_action": "block_and_reselect_topic",
+          "same_title_frame_action": "rewrite_title_or_switch_column"
+        },
         "title_rules": {
-          "max_chars": 28,
+          "ideal_chars": "12-22",
+          "max_chars": 24,
           "keyword_first_chars": 15,
-          "template_fatigue_limit_days": 7,
+          "template_fatigue_limit_days": 14,
           "avoid_repeated_frames": [
             "实测",
             "试了",
-            "值得试试"
-          ]
+            "值得试试",
+            "自动化",
+            "AI工具"
+          ],
+          "prepare_candidates": 3,
+          "reject_if_fatigue_terms_exceed": 1
         },
         "article_structure": {
           "first_200_chars": "reader pain plus concrete payoff plus why now",
-          "retention_hook_interval_chars": 300,
+          "retention_hook_interval_chars": 350,
+          "structure_rotation_required": true,
+          "avoid_reusing_standard_template_for_14_days": true,
+          "allowed_structures": [
+            "story_driven_case",
+            "contrast_test",
+            "contrarian_opinion",
+            "reader_question_answer",
+            "open_source_project_note"
+          ],
           "must_include": [
             "real_case",
             "specific_steps",
@@ -672,10 +712,10 @@
         "seo_geo": {
           "primary_keywords": [
             "AI效率工具",
-            "AI自动化",
+            "AI工作流",
             "开源项目",
             "GitHub精选",
-            "AI工作流"
+            "AI实践复盘"
           ],
           "placement": [
             "title_first_15_chars",
@@ -689,8 +729,10 @@
             "工具箱",
             "清单",
             "GitHub",
-            "自动化"
+            "开源笔记",
+            "提问"
           ],
+          "single_primary_cta_only": true,
           "required": [
             "specific_comment_prompt",
             "share_reason",
@@ -762,6 +804,8 @@
         "account_data_analysis",
         "same_lane_account_benchmark",
         "cross_platform_trend_analysis",
+        "wechat_14_day_recovery_frequency_control",
+        "wechat_14_day_topic_dedup",
         "topic_and_article_plan",
         "content_workflow_inputs",
         "dual_content_channels",
@@ -769,7 +813,7 @@
         "wechat_column_mix_plan",
         "wechat_title_fatigue_gate",
         "wechat_first_200_chars_payoff",
-        "wechat_retention_hook_every_300_chars",
+        "wechat_retention_hook_every_350_chars",
         "wechat_comment_backend_reply_cta",
         "wechat_search_seo_layout",
         "wechat_manual_data_review_plan",

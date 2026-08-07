@@ -706,20 +706,31 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "wechat_growth_playbook": {
             "passed": bool(wechat_playbook)
-            and str(frequency.get("recommended_articles_per_week") or "") in {"3-4", "2-4"}
+            and wechat_playbook.get("mode") == "wechat_14_day_recovery"
+            and str(frequency.get("recommended_articles_per_week") or "") == "2"
+            and _safe_int(frequency.get("max_articles_per_week_recovery")) <= 2
+            and _safe_int(frequency.get("min_gap_hours_between_articles")) >= 48
             and _safe_int(frequency.get("max_articles_per_day")) == 1
+            and _safe_int((wechat_playbook.get("recovery_topic_policy") or {}).get("topic_dedup_window_days")) >= 14
             and bool((wechat_playbook.get("content_mix") or {}).get("personal_practice_story"))
             and len(wechat_playbook.get("columns") or []) >= 4
             and _safe_int(title_rules.get("keyword_first_chars")) <= 15
-            and _safe_int(article_structure.get("retention_hook_interval_chars")) <= 300
+            and _safe_int(title_rules.get("max_chars")) <= 24
+            and _safe_int(article_structure.get("retention_hook_interval_chars")) <= 350
             and bool(interaction_conversion.get("backend_reply_keywords"))
             and bool(seo_geo.get("primary_keywords")),
             "required": [
+                "mode=wechat_14_day_recovery",
+                "publishing_frequency.recommended_articles_per_week=2",
+                "publishing_frequency.max_articles_per_week_recovery<=2",
+                "publishing_frequency.min_gap_hours_between_articles>=48",
                 "publishing_frequency.max_articles_per_day=1",
+                "recovery_topic_policy.topic_dedup_window_days>=14",
                 "content_mix",
                 "columns",
                 "title_rules.keyword_first_chars<=15",
-                "article_structure.retention_hook_interval_chars<=300",
+                "title_rules.max_chars<=24",
+                "article_structure.retention_hook_interval_chars<=350",
                 "backend_reply_keywords",
                 "seo_keywords",
             ],

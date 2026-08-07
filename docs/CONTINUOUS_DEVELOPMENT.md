@@ -2674,3 +2674,27 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ### Verification
 - Local script regression: `python -m pytest tests/test_operational_scripts.py tests/test_video_toolchain_runner.py -q` => `29 passed`.
+
+## 2026-08-08 - WeChat Official Account Recovery Growth Strategy
+
+### Fixed
+- Switched the WeChat Official Account growth playbook from normal growth mode to a 14-day recovery mode after recent reading and follow signals dropped.
+- Replaced old mojibake strings in `content_platform/growth_policy.py` with readable Chinese column names, keywords, and CTA rules.
+- Reduced recovery publishing frequency to 2 articles/week, with at least 48 hours between articles and no daily update streaks.
+- Extended WeChat topic and title-frame deduplication from 7 days to 14 days.
+- Suspended repetitive automation-test topics during recovery, including `自动化实测`, `办公自动化实测`, `重复劳动自动化`, and `WordPress SEO 自动化`.
+- Added title fatigue limits: titles should be 12-22 Chinese characters when possible, hard capped at 24, and can include at most one fatigue term from `实测/自动化/工具/AI`.
+- Updated WeChat writing brief generation so WeWrite/Hermes receives the recovery constraints before drafting.
+- Updated channel rulebook and media quality gates so recovery constraints are enforced as code, not just documentation.
+
+### Operational Rule
+- During recovery, WeChat should publish fewer but more differentiated articles. Do not try to repair weak readings by increasing article count.
+- Every WeChat article must choose exactly one column: `马吉克开源笔记`, `我的 AI 工作台`, `AI 说人话`, or `你问我答 / 工具箱回访`.
+- Do not reuse the old `痛点 -> 先说结论 -> 三条路线 -> 踩坑 -> 建议 -> CTA` structure during the 14-day recovery period.
+- End with one primary CTA only, usually a concrete comment question plus one keyword reply action.
+- Recovery exits only after two consecutive weeks of improving open rate and finish-read rate; otherwise keep the 2/week cap.
+
+### Verification
+- Local WeChat recovery regression: `python -m pytest tests/test_wechat_growth_strategy.py tests/test_wechat_toolchain.py tests/test_media_quality.py tests/test_performance_cycle.py tests/test_cli.py -q` => `88 passed`.
+- Local channel rulebook validation: `channel rulebook ok: 19 channels`.
+- Local project audit: `ok: true, issues: []`.

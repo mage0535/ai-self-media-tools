@@ -159,6 +159,7 @@ def _write_brief(path: Path, topic: str, draft: dict[str, Any], job: dict[str, A
     growth = build_growth_strategy(["wechat"], "long_article", (job.get("historical_feedback") or {}))
     playbook = growth.get("wechat_growth_playbook") or {}
     frequency = playbook.get("publishing_frequency") or {}
+    recovery = playbook.get("recovery_topic_policy") or {}
     title_rules = playbook.get("title_rules") or {}
     seo_geo = playbook.get("seo_geo") or {}
     interaction = playbook.get("interaction_conversion") or {}
@@ -174,13 +175,16 @@ def _write_brief(path: Path, topic: str, draft: dict[str, Any], job: dict[str, A
         "Anti-AI: remove slogans, filler transitions, generic advice, and mechanical three-part phrasing.",
         "",
         "## WeChat growth playbook requirements",
-        f"- Publishing rhythm: {frequency.get('recommended_articles_per_week', '3-4')} articles/week, max {frequency.get('max_articles_per_day', 1)} article/day; do not split weak material into multiple same-day pieces.",
-        "- Column mix: AI说人话 / 我的AI工作台 / GitHub/工具精选 / 马吉克周记或你问我答. Pick the one column that best matches the topic and make the article clearly belong to it.",
-        "- GitHub selection: default to one weekly bundled article with one AI project and one non-AI project; only add extra GitHub articles when the ops strategy includes fresh evidence.",
-        f"- Title: <= {title_rules.get('max_chars', 28)} Chinese chars; put the core keyword in the first {title_rules.get('keyword_first_chars', 15)} chars; avoid repeating 实测/试了/值得试试 style frames within 7 days.",
+        f"- Recovery mode: {playbook.get('mode', 'wechat_14_day_recovery')}. During recovery publish no more than {frequency.get('max_articles_per_week_recovery', 2)} articles/week, max {frequency.get('max_articles_per_day', 1)} article/day, and keep at least {frequency.get('min_gap_hours_between_articles', 48)} hours between articles.",
+        f"- Pause before next publish: {frequency.get('pause_days_before_next_publish', 2)} days if recent output was daily or repetitive.",
+        "- Column mix: 马吉克开源笔记 / 我的 AI 工作台 / AI 说人话 / 你问我答或工具箱回访. Pick one column only and make the article clearly belong to it.",
+        "- GitHub selection: write one carefully tested open-source project per issue unless the ops strategy proves a bundle is stronger.",
+        f"- Topic dedup: block topics and title frames similar to the last {recovery.get('topic_dedup_window_days', 14)} days. Do not continue 自动化实测/办公自动化实测/重复劳动自动化 during the recovery window.",
+        f"- Title: ideal {title_rules.get('ideal_chars', '12-22')} Chinese chars, hard max {title_rules.get('max_chars', 24)}; put the core keyword in the first {title_rules.get('keyword_first_chars', 15)} chars; do not use more than {title_rules.get('reject_if_fatigue_terms_exceed', 1)} fatigue term from 实测/自动化/工具/AI.",
         "- First 200 chars: include reader pain, concrete payoff, and why this matters now.",
-        "- Retention: add a new conflict, example, checklist, or decision point about every 300 Chinese chars.",
-        "- Interaction: end with one specific comment question plus a keyword reply CTA, not a generic 评论区聊聊.",
+        f"- Retention: add a new conflict, example, checklist, or decision point about every {playbook.get('article_structure', {}).get('retention_hook_interval_chars', 350)} Chinese chars.",
+        "- Structure: rotate among story-driven case, contrast test, contrarian opinion, reader Q&A, and open-source note; do not reuse the old 痛点-先说结论-三条路线-踩坑-建议 template.",
+        "- Interaction: end with one specific comment question plus one keyword reply CTA; do not stack multiple CTAs.",
         f"- Backend reply keywords to use when natural: {', '.join(interaction.get('backend_reply_keywords') or ['工具箱', '清单', 'GitHub', '自动化'])}.",
         f"- Search intent keywords to weave naturally: {', '.join(seo_geo.get('primary_keywords') or ['AI效率工具', 'AI自动化', '开源项目', 'GitHub精选', 'AI工作流'])}.",
         "- Review fallback: if WeChat data APIs are unavailable, require a manual backend metrics row after publishing.",
