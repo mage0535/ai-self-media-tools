@@ -219,7 +219,7 @@ class DraftGenerator:
                 "topic_selection": {"selected_topic": topic_text, "selection_reason": "ranked trend and channel fit"},
                 "platform_source_matrix": platform_source_matrix,
                 "quantity_plan": {"final_count": 1, "decision_reason": "one channel-specific piece for this run"},
-                "content_generation_brief": {"source_inputs": sources, "asset_mix_plan": {"ai_generated": True, "real_material_retrieval": True, "ai_edit_real_material": True}, "humanization_plan": {"hook": True, "body": True, "voice": "casual"}},
+                "content_generation_brief": {"source_inputs": ["account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection", "quantity_plan", "content_brief"], "asset_mix_plan": {"ai_generated": True, "real_material_retrieval": True, "ai_edit_real_material": True}, "humanization_plan": {"hook": True, "body": True, "voice": "casual"}},
                 "content_workflow_inputs": {"source_inputs": ["account_analysis", "content_brief", "cross_platform_trend_analysis", "quantity_plan", "same_lane_account_analysis", "topic_selection"], **{f"{k}_required": True for k in handoff}},
             })
             draft_meta["platform_source_matrix"] = platform_source_matrix

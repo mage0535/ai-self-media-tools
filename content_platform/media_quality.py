@@ -1115,7 +1115,18 @@ def _full_ops_gates(packet: dict[str, Any], platform: str) -> dict[str, dict[str
     brief = packet.get("content_generation_brief") or strategy.get("content_generation_brief") or {}
     workflow_inputs = packet.get("content_workflow_inputs") or strategy.get("content_workflow_inputs") or {}
     required_sources = set(str(item).casefold() for item in (trends.get("required_sources") or workflow.get("cross_platform_sources") or []))
-    source_inputs = set(str(item).casefold() for item in (brief.get("source_inputs") or workflow_inputs.get("source_inputs") or []))
+    # source_inputs must carry WORKFLOW names (account_analysis, topic_selection, ...),
+    # not platform names (bilibili, wechat, ...). Prefer workflow_inputs; fall back to
+    # brief only when it holds workflow names. Legacy packets may hold platform names
+    # in brief.source_inputs — those must not satisfy MANDATORY_WORKFLOW_INPUTS.
+    _brief_sources = {str(item).casefold() for item in (brief.get("source_inputs") or [])}
+    _wf_sources = {str(item).casefold() for item in (workflow_inputs.get("source_inputs") or [])}
+    if _wf_sources:
+        source_inputs = _wf_sources
+    elif _brief_sources and MANDATORY_WORKFLOW_INPUTS.issubset(_brief_sources):
+        source_inputs = _brief_sources
+    else:
+        source_inputs = _brief_sources
     handoff_fields = {field for field in MANDATORY_CONTENT_HANDOFF_FIELDS if brief.get(field) or workflow_inputs.get(f"{field}_required")}
     asset_mix = brief.get("asset_mix_plan") or packet.get("asset_mix_plan") or {}
     humanization = brief.get("humanization_plan") or packet.get("humanization_plan") or {}
