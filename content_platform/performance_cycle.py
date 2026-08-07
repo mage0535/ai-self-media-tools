@@ -219,7 +219,9 @@ def _flatten_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
 
 def _has_core_metrics(platform: str, metrics: dict[str, Any]) -> bool:
     if platform == "tiktok":
-        return any(float(metrics.get(field, 0) or 0) > 0 for field in ("views", "likes", "comments", "shares", "saves", "completion_rate", "three_second_view_rate", "avg_watch_seconds"))
+        return any(float(metrics.get(field, 0) or 0) > 0 for field in ("views", "likes", "comments", "shares", "completion_rate", "three_second_view_rate", "avg_watch_seconds"))
+    if platform == "bilibili":
+        return any(float(metrics.get(field, 0) or 0) > 0 for field in ("views", "follows", "completion_rate", "avg_watch_seconds"))
     core_fields = ("views", "likes", "comments", "shares", "saves", "follows", "completion_rate", "three_second_view_rate", "avg_watch_seconds")
     return any(float(metrics.get(field, 0) or 0) > 0 for field in core_fields)
 
@@ -240,12 +242,16 @@ def _is_suspicious_platform_metrics(platform: str, metrics: dict[str, Any]) -> b
         # unusable so growth strategy does not learn from bogus numbers.
         if platform in {"xiaohongshu", "rednote", "zhihu", "juejin", "kuaishou"} and works > 10000:
             return True
+        if views >= 1_000_000 and engagement < 1000:
+            return True
         if views >= 1_000_000 and likes < 1000 and comments > max(1000, likes * 20):
             return True
         if views and engagement > views * 1.5:
             return True
     if platform == "tiktok":
         follows = float(metrics.get("follows", 0) or 0)
+        if not views and saves and engagement <= 5:
+            return True
         if views and views == follows == works and engagement <= 50:
             return True
     return False

@@ -24,7 +24,8 @@
     "retention_plan",
     "interaction_plan",
     "packaging_plan",
-    "post_publish_review_plan"
+    "post_publish_review_plan",
+    "data_driven_improvement_plan"
   ],
   "pre_publish_quality_targets": {
     "hook_score_min": 0.78,
@@ -64,7 +65,8 @@
       "share_rate",
       "follow_conversion_rate"
     ],
-    "missing_data_policy": "record_unavailable_reason_and_block_strategy_confidence_boost"
+    "missing_data_policy": "record_unavailable_reason_and_block_strategy_confidence_boost",
+    "strategy_update_rule": "convert_low_engagement_low_save_low_follow_findings_into_data_driven_improvement_plan_before_generation"
   },
   "platform_rules": {
     "douyin": [

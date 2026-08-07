@@ -18,6 +18,13 @@ Last updated: 2026-08-08
 - `content_platform.content_policy` now treats YouTube as a manual-handoff platform, matching the rulebook and preventing future publisher-routing drift.
 - Verification: platform-boundary tests passed, full pytest passed, channel rulebook validation passed, and project audit returned 0 issues.
 
+## 2026-08-08 Data-Driven Growth Response And Metrics Trust Hardening
+
+- Performance-cycle now rejects more creator-backend scrape artifacts before they can update strategy: Bilibili likes without reach, huge Juejin-style view counts with tiny engagement, Xiaohongshu page-chrome work counts, and TikTok zero-view save placeholders.
+- Growth strategy now carries `data_driven_improvement_plan`. Low engagement triggers hook/cover/comment-prompt rebuilding; low saves trigger checklist density and knowledge-card payoff; low follow conversion triggers explicit series promise and profile follow reason; missing metrics require 1h/24h/72h collection before confidence is raised.
+- `config/growth_quality_policy.json` and the rulebook require this improvement plan before generation, so future content work cannot ignore current account performance.
+- Verification: performance-cycle tests passed, full pytest passed, channel rulebook validation passed, and project audit returned 0 issues.
+
 ## 2026-08-01 Public Release 1.0.0
 
 - Public version unified to `1.0.0` in package metadata, runtime version output, examples, and GitHub-facing docs.
