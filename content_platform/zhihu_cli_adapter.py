@@ -172,7 +172,13 @@ class ZhihuCliAdapter:
         return {"id": pin_id, "url": url, "raw": stdout.strip()}
 
     def publish_ask(self, title: str, detail: str = "", images: list | None = None) -> dict:
-        """Post a new question (提问). Returns {id, url}."""
+        """Post a new question (提问). Returns {id, url}.
+
+        NOTE: Zhihu requires the question title to end with a question mark
+        (？ or ?). Without it the API returns 400 "您还没有给问题添加问号".
+        """
+        if not title.rstrip().endswith(("？", "?")):
+            title = title.rstrip() + "？"
         args = ["ask", title]
         if detail:
             args += ["-d", detail]
