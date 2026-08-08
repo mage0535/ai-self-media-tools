@@ -2791,3 +2791,25 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Hermes script/media regression after sync: `95 passed`.
 - Hermes full regression after sync: `548 passed, 2 subtests passed`.
 - Hermes project audit after sync: `ok: true, issues: []`.
+
+## 2026-08-08 - International Short Video Legacy Entry Hardening
+
+### Finding
+- `scripts/intl_short_video_pipeline.py` was a legacy standalone entrypoint for YouTube Shorts and TikTok. Its header and `publish_video()` path still described AiToEarn automatic publishing, which conflicted with the current policy: YouTube, TikTok, Threads, Bilibili, Douyin, Shipinhao, and Xiaohongshu must be manual-handoff unless a separately approved publisher policy exists.
+- The same script wrote a daily manifest, but legacy rows did not include `tool_invocation_manifest`, `tools_capability_analysis`, or `tool_selection_plan`, so a standalone international handoff package could look complete while bypassing the newer evidence contract.
+
+### Fixed
+- The legacy international short-video script is now manual-handoff only for YouTube/YouTube Shorts, TikTok, and Threads. Its publish guard returns without calling AiToEarn for those platforms even when an AiToEarn key is present.
+- Dry-run and generated rows now include `status=handoff_pending`, `publish_boundary=manual_handoff_only_no_aitoearn`, a forbidden-action list, `tool_invocation_manifest`, `tools_capability_analysis`, and `tool_selection_plan`.
+- Regression tests verify both the handoff manifest evidence and the AiToEarn publish guard for YouTube, YouTube Shorts, TikTok, and Threads.
+
+### Operational Rule
+- Do not use international legacy scripts as live publishers. They may only prepare review/handoff packages unless the main Pipeline policy explicitly enables and validates a publisher.
+- Any future standalone package writer must emit the same tool-selection evidence contract as Pipeline output; otherwise the package is incomplete and must be regenerated.
+
+### Verification
+- Local international short-video regression: `python -m pytest tests/test_video_toolchain_runner.py -q` => `26 passed`.
+- Local script/media regression: `python -m pytest tests/test_video_toolchain_runner.py tests/test_media_quality.py tests/test_delivery_health.py tests/test_operational_scripts.py -q` => `99 passed, 2 subtests passed`.
+- Local full regression: `python -m pytest -q` => `550 passed, 2 subtests passed`.
+- Local rulebook validation: `channel rulebook ok: 19 channels`.
+- Local project audit: `ok: true, issues: []`.
