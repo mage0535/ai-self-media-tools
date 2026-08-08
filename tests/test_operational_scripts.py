@@ -73,6 +73,42 @@ class OperationalScriptTests(unittest.TestCase):
         self.assertFalse(bad["passed"])
         self.assertEqual(bad["failures"][0]["failed_dimensions"][0], "analysis_file_missing")
 
+    def test_topic_independence_accepts_markdown_source_matrix(self):
+        from scripts.check_platform_topic_independence import check
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            analysis_dir = root / "data" / "local_ops_gzh"
+            analysis_dir.mkdir(parents=True)
+            (analysis_dir / "analysis_20260809.md").write_text(
+                """
+# WeChat analysis
+
+选题方向：AI 自动化效率幻觉实测复盘
+
+| 来源 | 状态 | 关键发现 |
+| --- | --- | --- |
+| 搜狗微信（平台内） | ✅ 成功 | 公众号同赛道活跃 |
+| 微博 | ✅ 成功 | AI 降本讨论升温 |
+| 抖音 | ✅ 成功 | AI 工具短视频高频 |
+| 知乎 | ✅ 成功 | 工具实测和血泪教训 |
+| B站 | ✅ 成功 | AI 自动化教程活跃 |
+| GitHub | ✅ 成功 | automation 项目上升 |
+| 小红书 | ❌ login_required | 记录失败原因 |
+
+shared_trend_only: false
+""",
+                encoding="utf-8",
+            )
+            result = check("20260809", ["wechat"], root=root)
+
+        self.assertTrue(result["passed"], result)
+        matrix = result["records"]["wechat"]["matrix"]
+        self.assertGreaterEqual(matrix["attempted_count"], 5)
+        self.assertGreaterEqual(matrix["successful_count"], 3)
+        self.assertTrue(matrix["platform_internal_evidence"])
+        self.assertEqual(result["records"]["wechat"]["selected_topic"], "AI 自动化效率幻觉实测复盘")
+
     def test_public_scripts_do_not_embed_private_runtime_paths_or_targets(self):
         checked = [
             "scripts/build_kuaishou_packet.py",

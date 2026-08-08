@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Check that each platform used independent source evidence before topic selection."""
 
 from __future__ import annotations
@@ -35,22 +35,14 @@ PLATFORM_DIRS = {
 def _normalize_topic_domain(text: str) -> str:
     normalized = str(text or "").casefold()
     domains = {
-        "spreadsheet_cleanup": [
-            "整理表格",
-            "整理excel",
-            "表格处理",
-            "表格清洗",
-            "excel清洗",
-            "spreadsheet cleanup",
-            "spreadsheet",
-        ],
-        "prompt_engineering": ["提示词", "prompt engineering", "prompt habits"],
-        "unit_testing": ["单元测试", "写测试", "unit test", "自动写测试"],
-        "code_review": ["代码审查", "审代码", "code review", "修bug"],
-        "slides": ["ppt", "幻灯片", "presentation", "slides"],
-        "agent_workflow": ["智能体", "ai agent", "agent workflow"],
-        "video_creation": ["短视频", "剪辑", "video creation", "shorts"],
-        "workflow_automation": ["工作流自动化", "automation workflow", "content pipeline"],
+        "spreadsheet_cleanup": ["spreadsheet cleanup", "spreadsheet", "excel"],
+        "prompt_engineering": ["prompt engineering", "prompt habits", "prompt"],
+        "unit_testing": ["unit test", "testing", "test automation"],
+        "code_review": ["code review", "bug fix", "lint"],
+        "slides": ["ppt", "presentation", "slides"],
+        "agent_workflow": ["ai agent", "agent workflow", "workflow agent"],
+        "video_creation": ["video creation", "shorts", "editing"],
+        "workflow_automation": ["automation workflow", "content pipeline", "workflow automation"],
     }
     for domain, keywords in domains.items():
         if any(keyword in normalized for keyword in keywords):
@@ -84,13 +76,95 @@ def _load_analysis(platform_dir: Path, date: str) -> dict:
     md = platform_dir / f"analysis_{date}.md"
     if md.is_file():
         text = md.read_text(encoding="utf-8", errors="replace")
-        title = ""
-        match = re.search(r"选题[：:]\s*(?:\*\*)?《?([^》\n*]+)", text)
-        if match:
-            title = match.group(1).strip()
-        return {"path": str(md), "data": {"selected_topic": title, "markdown_only": True, "source_matrix": {}}}
+        return {"path": str(md), "data": _parse_markdown_analysis(text)}
     return {"path": "", "data": {}}
 
+
+def _parse_markdown_analysis(text: str) -> dict:
+    attempted, successful, platform_internal = _extract_markdown_sources(text)
+    return {
+        "selected_topic": _extract_markdown_topic(text),
+        "markdown_only": True,
+        "source_matrix": {
+            "attempted_sources": attempted,
+            "successful_sources": successful,
+            "platform_internal_verified": platform_internal,
+            "shared_trend_only": bool(re.search(r"(shared_trend_only|共享趋势)\s*[:：]\s*(true|yes|是)", text, re.I)),
+        },
+    }
+
+
+def _extract_markdown_topic(text: str) -> str:
+    patterns = [
+        r"(?:^|\n)\s*(?:#+\s*)?(?:选题方向|选题|selected_topic|topic)\s*[:：=]\s*(?:\*\*)?([^*\n#|]+)",
+        r"(?:^|\n)\s*[-*]\s*(?:选题方向|选题|selected_topic|topic)\s*[:：=]\s*(?:\*\*)?([^*\n#|]+)",
+        r"(?:^|\n)\s*(?:#+\s*)?(?:今日选题依据|内容主题)\s*[:：=]\s*(?:\*\*)?([^*\n#|]+)",
+        r"閫夐[锛?]\s*(?:\*\*)?銆?([^銆媆n*]+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            return _clean_cell(match.group(1))
+    return ""
+
+
+def _extract_markdown_sources(text: str) -> tuple[list[str], list[str], bool]:
+    attempted: list[str] = []
+    successful: list[str] = []
+    platform_internal = False
+    ok_status = re.compile(r"(✅|ok|success|成功|可用|passed|true)", re.I)
+    fail_status = re.compile(r"(❌|fail|失败|login_required|unavailable|blocked|error)", re.I)
+    internal_source = re.compile(r"(平台内|站内|搜狗微信|微信|公众号|快手|抖音|视频号|小红书|b站|bilibili|zhihu|juejin|youtube|tiktok|x/twitter|twitter|x\b)", re.I)
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or set(line) <= {"|", "-", ":", " "}:
+            continue
+        cells = [_clean_cell(cell) for cell in line.strip("|").split("|")] if "|" in line else []
+        if cells and len(cells) >= 2:
+            header = " ".join(cells).casefold()
+            if any(word in header for word in ["source", "status", "来源", "数据源", "状态"]) and not (ok_status.search(header) or fail_status.search(header)):
+                continue
+            source = cells[0]
+            status_text = " ".join(cells[1:])
+            if source:
+                attempted.append(source)
+                if ok_status.search(status_text) and not fail_status.search(status_text):
+                    successful.append(source)
+                if internal_source.search(source) and (ok_status.search(status_text) or fail_status.search(status_text)):
+                    platform_internal = True
+            continue
+        bullet = re.match(r"^[-*•]\s*([^:：]+)\s*[:：]\s*(.+)$", line)
+        if bullet:
+            source = _clean_cell(bullet.group(1))
+            status_text = bullet.group(2)
+            if ok_status.search(status_text) or fail_status.search(status_text):
+                attempted.append(source)
+                if ok_status.search(status_text) and not fail_status.search(status_text):
+                    successful.append(source)
+                if internal_source.search(source):
+                    platform_internal = True
+
+    if re.search(r"(platform_internal_verified|平台内验证)\s*[:：]\s*(true|yes|是|✅|ok|成功|失败|login_required|❌)", text, re.I):
+        platform_internal = True
+    attempted = _dedupe(attempted)
+    successful = [item for item in _dedupe(successful) if item in attempted]
+    return attempted, successful, platform_internal
+
+
+def _clean_cell(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().strip("*`：:，,。-"))
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    result = []
+    seen = set()
+    for value in values:
+        key = value.casefold()
+        if value and key not in seen:
+            seen.add(key)
+            result.append(value)
+    return result
 
 def _matrix_result(data: dict) -> dict:
     matrix = data.get("platform_source_matrix") or data.get("source_matrix") or {}
