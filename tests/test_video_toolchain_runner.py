@@ -47,6 +47,11 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertTrue(manifest["visual_recipe_gate"]["passed"])
             self.assertTrue(str(manifest["recipe_fingerprint"]).startswith("sha256:"))
             self.assertGreaterEqual(manifest["toolchain_contract"]["visual_recipe"]["module_count"], 3)
+            self.assertIn("tools_capability_analysis", manifest)
+            self.assertIn("tool_selection_plan", manifest)
+            self.assertIn("tool_invocation_manifest", manifest)
+            self.assertTrue(manifest["tools_capability_analysis"]["all_relevant_tool_types_analyzed"])
+            self.assertGreaterEqual(len(manifest["tool_selection_plan"]["selected_tools"]), 6)
             self.assertTrue(manifest["shotcraft_motion_plan"]["available"])
             self.assertGreaterEqual(manifest["shotcraft_motion_plan"]["registry_count"], 100)
             self.assertTrue(cards[0]["shotcraft"]["available"])
@@ -300,6 +305,9 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(manifest["status"], "rendered")
             self.assertEqual(manifest["repost_source"]["source_type"], "local_source_video")
             self.assertIn("autoclip_adapter.run_autoclip_pipeline", manifest["toolchain_contract"]["planned_tools"])
+            self.assertIn("tools_capability_analysis", manifest)
+            self.assertIn("tool_selection_plan", manifest)
+            self.assertIn("tool_invocation_manifest", manifest)
 
     def test_runner_dry_run_includes_cinema_storyboard_fields(self):
         root = Path(__file__).resolve().parents[1]

@@ -25,6 +25,8 @@ if str(Path(__file__).resolve().parents[1]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.cinema_composition import storyboard
+from content_platform.content_recipe import build_tool_invocation_manifest
+from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.video_recipe import build_visual_recipe, load_effect_module_registry, validate_visual_recipe
 
 try:
@@ -115,6 +117,13 @@ def main(argv: list[str] | None = None) -> int:
     cinema_scenes = storyboard(script_body or title, 8)
     shotcraft_plan = _shotcraft_motion_plan(script_body or title)
     registry = load_effect_module_registry()
+    tool_manifest = _tool_invocation_manifest(plan)
+    tool_selection_evidence = build_tool_selection_evidence(
+        platform=_primary_platform(plan),
+        content_type=str(plan.get("content_form") or "knowledge_card_video"),
+        content_goal="increase retention with selected video modules, matched assets, voice, subtitles, BGM, and quality gates",
+        planned_manifest=tool_manifest,
+    )
     visual_recipe = build_visual_recipe(
         plan,
         script_body=script_body,
@@ -138,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
             "visual_recipe_path": str(recipe_path),
             "visual_recipe_gate": recipe_gate,
             "recipe_reuse_gate": recipe_reuse_gate,
+            "tool_invocation_manifest": tool_manifest,
+            **tool_selection_evidence,
             "status": "visual_recipe_failed" if not recipe_gate.get("passed") else "visual_recipe_reuse_failed",
             "error": "visual_recipe gate failed" if not recipe_gate.get("passed") else "visual_recipe reuse gate failed",
             "dry_run": os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1",
@@ -176,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
         "recipe_reuse_gate": recipe_reuse_gate,
         "recipe_fingerprint": visual_recipe.get("fingerprint"),
         "recipe_core_fingerprint": visual_recipe.get("core_fingerprint"),
+        "tool_invocation_manifest": tool_manifest,
+        **tool_selection_evidence,
     }
     if manifest["dry_run"]:
         fake = output_dir / "dry_run.mp4"
@@ -560,6 +573,7 @@ def _repost_contract(plan: dict) -> dict:
 
 
 def _run_localized_repost(plan: dict, output_dir: Path, title: str) -> int:
+    tool_manifest = _tool_invocation_manifest(plan, repost=True)
     manifest = {
         "ok": False,
         "title": title,
@@ -568,6 +582,13 @@ def _run_localized_repost(plan: dict, output_dir: Path, title: str) -> int:
         "renderer": "localized_repost_video",
         "dry_run": False,
         "toolchain_contract": _repost_contract(plan),
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform=_primary_platform(plan),
+            content_type=str(plan.get("content_form") or "edited_short_video"),
+            content_goal="increase retention with localized repost source matching and quality gates",
+            planned_manifest=tool_manifest,
+        ),
     }
     source_path = Path(str(plan.get("source_video_path") or ""))
     source_url = str(plan.get("source_url") or "").strip()
@@ -633,8 +654,11 @@ def _run_autoclip_repost(plan: dict, output_dir: Path, title: str, source_url: s
 
 
 def _beats(text: str) -> list[str]:
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text or "") if part.strip()]
+    if len(paragraphs) >= 2:
+        return [part[:200] for part in paragraphs][:10]
     parts = [part.strip(" -#\t") for part in re.split(r"\n+|[。.!?；;]", text or "") if part.strip(" -#\t")]
-    return [part[:120] for part in parts if len(part) >= 8][:10]
+    return [part[:200] for part in parts if len(part) >= 8][:10]
 
 
 def _card_title(text: str, index: int) -> str:
@@ -659,6 +683,38 @@ def _tags(plan: dict) -> list[str]:
 
 def _write_manifest(output_dir: Path, manifest: dict) -> None:
     (output_dir / "video_toolchain_runner_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _primary_platform(plan: dict) -> str:
+    platforms = [str(item).casefold() for item in (plan.get("platforms") or []) if str(item).strip()]
+    return platforms[0] if platforms else "video"
+
+
+def _tool_invocation_manifest(plan: dict, repost: bool = False) -> dict:
+    names = REPOST_PLANNED_TOOLS if repost else PLANNED_TOOLS
+    planned = {name: _tool_ref(name) for name in names}
+    return build_tool_invocation_manifest(
+        planned_tools=planned,
+        invocations={name: {"status": "planned_internal", "output": ref} for name, ref in planned.items()},
+    )
+
+
+def _tool_ref(name: str) -> str:
+    if name.endswith(".py --cinema"):
+        return "script:scripts/visual_gate.py --cinema"
+    if "." in name:
+        module = name.split(".", 1)[0]
+        if module in {"cinema_composition", "shotcraft_moves"}:
+            return f"script:scripts/{module}.py"
+        if module == "kuaishou_render":
+            return "script:scripts/kuaishou_render.py"
+        if module == "mix_bgm_with_gate":
+            return "script:scripts/mix_bgm_with_gate.py"
+        if module == "autoclip_adapter":
+            return "script:scripts/autoclip_adapter.py"
+        if module == "ffmpeg":
+            return "tool:ffmpeg"
+    return f"video_toolchain:{name}"
 
 
 if __name__ == "__main__":

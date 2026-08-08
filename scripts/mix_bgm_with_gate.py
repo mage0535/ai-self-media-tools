@@ -84,6 +84,14 @@ def mix_bgm(
     output.parent.mkdir(parents=True, exist_ok=True)
     bgm_weight = max(0.3, min(float(bgm_weight), 1.0))
     voice_gain = max(1.0, min(float(voice_gain), 4.0))
+    bgm_source_volume = _mean_volume(bgm)
+    bgm_pre_gain = 0.0
+    if bgm_source_volume is not None and bgm_source_volume < -25:
+        # Quiet source recordings can become inaudible after narration mixing.
+        bgm_pre_gain = min(12.0, -22.0 - bgm_source_volume)
+    bgm_filter = f"volume={bgm_weight}"
+    if bgm_pre_gain:
+        bgm_filter += f",volume={bgm_pre_gain:.2f}dB"
     command = [
         "ffmpeg",
         "-y",
@@ -96,7 +104,7 @@ def mix_bgm(
         "-filter_complex",
         (
             f"[0:a]aformat=channel_layouts=stereo,volume={voice_gain}[voice];"
-            f"[1:a]atrim=0:{duration:.3f},aformat=channel_layouts=stereo,volume={bgm_weight}[bgm];"
+            f"[1:a]atrim=0:{duration:.3f},aformat=channel_layouts=stereo,{bgm_filter}[bgm];"
             "[voice][bgm]amix=inputs=2:duration=first:normalize=0,"
             "alimiter=limit=0.95[aout]"
         ),
@@ -124,14 +132,14 @@ def mix_bgm(
     mean_volume = _mean_volume(output)
     head_volume = _segment_mean_volume(output, 0.0)
     tail_volume = _segment_mean_volume(output, max(0.0, duration - 6.0))
-    bgm_volume = _mean_volume(bgm)
+    bgm_volume = bgm_source_volume
     tail_gap = None if head_volume is None or tail_volume is None else abs(head_volume - tail_volume)
     ok = (
         channels >= 2
         and mean_volume is not None
         and -24 <= mean_volume <= -6
         and bgm_volume is not None
-        and bgm_volume > -40
+        and bgm_volume > -35
         and (tail_gap is None or tail_gap <= 10)
         and output.stat().st_size > 100_000
     )
@@ -146,6 +154,7 @@ def mix_bgm(
         "head_tail_gap_db": tail_gap,
         "bgm_mean_volume_db": bgm_volume,
         "bgm_weight": bgm_weight,
+        "bgm_pre_gain_db": round(bgm_pre_gain, 2),
         "voice_gain": voice_gain,
         "target_lufs": target_lufs,
         "mix_rule": "voice_gain + looped real BGM + amix normalize=0 + limiter; no synthetic or silent BGM fallback",

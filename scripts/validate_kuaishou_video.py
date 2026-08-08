@@ -116,6 +116,8 @@ def check_bgm_spectrum(d):
     drop = orig - filtered
     if drop >= BGM_LOWPASS_THRESHOLD:
         die(f"BGM may be synthetic/electronic: original={orig}dB lowpass={filtered}dB drop={drop:.1f}dB")
+    if orig < -30:
+        die(f"BGM source too quiet: {orig:.1f}dB < -30dB")
     ok(f"BGM spectrum passed: original={orig}dB lowpass={filtered}dB drop={drop:.1f}dB")
     return
     if not bgm:
@@ -133,6 +135,70 @@ def check_bgm_spectrum(d):
     if drop < BGM_LOWPASS_THRESHOLD:
         die(f"BGM可能电子乐！原始{orig}dB→低通后{filtered}dB，衰减仅{drop:.1f}dB")
     ok(f"BGM频谱通过（原{orig}dB→低通{filtered}dB，衰减{drop:.1f}dB）")
+
+
+def check_bgm_audibility(d):
+    raw = Path(d) / "raw.mp4"
+    final = Path(d) / "final.mp4"
+    if not raw.exists() or not final.exists():
+        return
+
+    def high_freq_mean(path):
+        result = subprocess.run(
+            ["ffmpeg", "-i", str(path), "-af", "highpass=f=2000,volumedetect", "-f", "null", "-"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        match = re.search(r"mean_volume:\s*([-\d.]+)", result.stderr + "\n" + result.stdout)
+        return float(match.group(1)) if match else None
+
+    raw_hf = high_freq_mean(raw)
+    final_hf = high_freq_mean(final)
+    if raw_hf is None or final_hf is None:
+        warn("BGM audibility probe unavailable")
+        return
+    lift = final_hf - raw_hf
+    if lift < 1.0:
+        die(f"BGM inaudible: final high-frequency lift {lift:.1f}dB < 1dB")
+    ok(f"BGM audibility passed: high-frequency lift {lift:.1f}dB")
+
+
+def check_burned_subtitles(final, ass, min_white_ratio=0.002):
+    if not final.exists() or not ass.exists():
+        die("subtitle burn-in probe missing final.mp4 or ASS file")
+    dur = get_duration(final)
+    if dur < 5:
+        die("subtitle burn-in probe cannot read video duration")
+    import tempfile
+
+    probe = Path(tempfile.gettempdir()) / "kuaishou_subtitle_probe.png"
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-ss", f"{dur * 0.6:.2f}", "-i", str(final), "-frames:v", "1", str(probe)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0 or not probe.exists():
+        die("subtitle burn-in probe failed to extract frame")
+    try:
+        from PIL import Image
+    except Exception:
+        warn("PIL unavailable; subtitle burn-in pixel probe skipped")
+        return
+    image = Image.open(probe).convert("RGB")
+    width, height = image.size
+    white = total = 0
+    pixels = image.load()
+    for y in range(int(height * 0.70), int(height * 0.94), 2):
+        for x in range(0, width, 2):
+            r, g, b = pixels[x, y]
+            white += int(r > 200 and g > 200 and b > 200)
+            total += 1
+    ratio = white / total if total else 0
+    if ratio < min_white_ratio:
+        die(f"subtitle burn-in probe failed: lower-third white ratio {ratio:.4f} < {min_white_ratio}")
+    ok(f"subtitle burn-in probe passed: lower-third white ratio {ratio:.4f}")
 
 # ── 黑帧检测 ──
 def check_black_frames(f):
@@ -289,16 +355,20 @@ def run_gates(d):
     ok(f"final.mp4: {dur2:.1f}s, {vol}dB, {final.stat().st_size//1024}KB")
 
     # ASS字幕
+    ass_found = None
     for ass_name in ["subtitles.ass", "subs.ass"]:
         ass = Path(d) / ass_name
         if ass.exists():
             cnt = ass.read_text(encoding="utf-8").count("Dialogue:")
             if cnt >= 6:
                 ok(f"ASS字幕: {cnt}条 ({ass_name})")
+                ass_found = ass
                 break
     else:
         die("ASS字幕文件不存在")
     check_ass_timestamps(d)
+    if ass_found is not None:
+        check_burned_subtitles(final, ass_found)
 
     # 卡片内容OCR检测
     check_card_content(d)
@@ -379,6 +449,7 @@ if __name__ == "__main__":
     if cmd == "check":
         check_resources()
         check_bgm_spectrum(d)
+        check_bgm_audibility(d)
         run_gates(d)
         print(f"\n{'='*50}")
         print("✅ 全部门禁通过！")

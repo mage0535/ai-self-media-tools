@@ -19,11 +19,13 @@ try:
     from content_platform.content_recipe import build_tool_invocation_manifest
     from content_platform.growth_policy import build_growth_strategy
     from content_platform.preflight_manifest import build_preflight_manifest
+    from content_platform.tool_selection import build_tool_selection_evidence
     from content_platform.visual_content_policy import visual_content_policy
 except Exception:  # pragma: no cover
     from content_platform.content_recipe import build_tool_invocation_manifest
     from content_platform.growth_policy import build_growth_strategy
     from content_platform.preflight_manifest import build_preflight_manifest
+    from content_platform.tool_selection import build_tool_selection_evidence
     from content_platform.visual_content_policy import visual_content_policy
 
 
@@ -135,7 +137,14 @@ def build_packet(args: argparse.Namespace) -> dict:
         "mix_bgm_with_gate": "scripts/mix_bgm_with_gate.py",
         "video_toolchain_runner": "scripts/video_toolchain_runner.py",
         "knowledge_card_designer": "hermes_skill:content/knowledge-card-designer",
+        "visual_recipe": "content_platform.video_recipe",
+        "visual_gate": "scripts/visual_gate.py",
+        "check_bgm_uniqueness": "scripts/check_bgm_uniqueness.py",
     }
+    tool_manifest = build_tool_invocation_manifest(
+        planned_tools=tools,
+        invocations={name: {"status": "ok", "output": ref} for name, ref in tools.items()},
+    )
     return {
         "platform": "kuaishou",
         "content_type": "knowledge_card_video",
@@ -163,7 +172,13 @@ def build_packet(args: argparse.Namespace) -> dict:
             "visual_alignment_plan": "each card and background maps to one script beat",
         },
         "visual_recipe": visual_recipe,
-        "tool_invocation_manifest": build_tool_invocation_manifest(planned_tools=tools, invocations={name: {"status": "ok", "output": ref} for name, ref in tools.items()}),
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform="kuaishou",
+            content_type="knowledge_card_video",
+            content_goal="increase Kuaishou completion with matched cards, real-scene backgrounds, voice, BGM, subtitles, and postcheck",
+            planned_manifest=tool_manifest,
+        ),
         "knowledge_card_sequence": cards,
         "source_assets": source_assets,
         "real_scene_background_plan": {
