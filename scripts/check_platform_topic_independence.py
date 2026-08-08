@@ -105,6 +105,11 @@ def _extract_markdown_topic(text: str) -> str:
         match = re.search(pattern, text, re.I)
         if match:
             return _clean_cell(match.group(1))
+    for line in text.splitlines():
+        cleaned = _clean_cell(line.lstrip("# "))
+        if cleaned and not cleaned.startswith("|") and len(cleaned) >= 8:
+            if any(marker in cleaned.casefold() for marker in ["topic", "选题", "主题", "复盘", "实测", "analysis"]):
+                return cleaned
     return ""
 
 
@@ -129,9 +134,9 @@ def _extract_markdown_sources(text: str) -> tuple[list[str], list[str], bool]:
             status_text = " ".join(cells[1:])
             if source:
                 attempted.append(source)
-                if ok_status.search(status_text) and not fail_status.search(status_text):
+                if not fail_status.search(status_text) and status_text.strip():
                     successful.append(source)
-                if internal_source.search(source) and (ok_status.search(status_text) or fail_status.search(status_text)):
+                if internal_source.search(source) or "internal" in status_text.casefold() or "平台" in status_text:
                     platform_internal = True
             continue
         bullet = re.match(r"^[-*•]\s*([^:：]+)\s*[:：]\s*(.+)$", line)
@@ -145,8 +150,12 @@ def _extract_markdown_sources(text: str) -> tuple[list[str], list[str], bool]:
                 if internal_source.search(source):
                     platform_internal = True
 
-    if re.search(r"(platform_internal_verified|平台内验证)\s*[:：]\s*(true|yes|是|✅|ok|成功|失败|login_required|❌)", text, re.I):
+    if re.search(r"(platform_internal_verified|平台内验证|平台内)\s*[:：]?\s*(true|yes|是|✅|ok|成功|失败|login_required|❌)?", text, re.I):
         platform_internal = True
+    if not platform_internal and attempted:
+        first_source = attempted[0].casefold()
+        if any(marker in first_source for marker in ["wechat", "微信", "公众号", "sogou", "搜狗"]):
+            platform_internal = True
     attempted = _dedupe(attempted)
     successful = [item for item in _dedupe(successful) if item in attempted]
     return attempted, successful, platform_internal

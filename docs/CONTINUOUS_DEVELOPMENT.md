@@ -2866,6 +2866,7 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Markdown analysis files now parse selected topic, source tables, bullet source rows, platform-internal evidence, successful/attempted counts, and `shared_trend_only`.
 - JSON remains the preferred and first-read format. Markdown is now a compatible fallback, not a bypass.
 - Topic-domain normalization now uses ASCII-stable keywords to avoid broken string literals after local encoding operations.
+- Markdown table rows now tolerate emoji-free or encoding-degraded success statuses. Non-failure status cells count as successful evidence, while explicit failure markers such as `login_required` remain failures.
 
 ### Operational Rule
 - Hermes may continue by writing `platform_source_matrix_<date>.json` for strict evidence, or use `analysis_<date>.md` if it contains a clear topic plus a source/status table.
@@ -2873,6 +2874,6 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ### Verification
 - Local WeChat Markdown gate probe: `analysis_20260809.md` with 7 attempted sources, 6 successful sources, and platform-internal evidence passed.
-- Local operational script regression: `python -m pytest tests/test_operational_scripts.py -q` => `6 passed`.
-- Local focused regression: `python -m pytest tests/test_operational_scripts.py tests/test_media_quality.py tests/test_content.py tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py -q` => `88 passed, 19 subtests passed`.
+- Local operational script regression: `python -m pytest tests/test_operational_scripts.py -q` => `7 passed`.
+- Local focused regression: `python -m pytest tests/test_operational_scripts.py tests/test_media_quality.py tests/test_content.py tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py -q` => `89 passed, 19 subtests passed`.
 - Local full regression: `python -m pytest -q` => `554 passed, 29 subtests passed`.
