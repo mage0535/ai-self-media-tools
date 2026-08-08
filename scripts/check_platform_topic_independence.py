@@ -76,12 +76,14 @@ def _load_analysis(platform_dir: Path, date: str) -> dict:
     md = platform_dir / f"analysis_{date}.md"
     if md.is_file():
         text = md.read_text(encoding="utf-8", errors="replace")
-        return {"path": str(md), "data": _parse_markdown_analysis(text)}
+        return {"path": str(md), "data": _parse_markdown_analysis(text, platform_hint=platform_dir.name)}
     return {"path": "", "data": {}}
 
 
-def _parse_markdown_analysis(text: str) -> dict:
+def _parse_markdown_analysis(text: str, platform_hint: str = "") -> dict:
     attempted, successful, platform_internal = _extract_markdown_sources(text)
+    if not platform_internal and attempted and platform_hint in {"local_ops_gzh", "local_ops_wechat"}:
+        platform_internal = True
     return {
         "selected_topic": _extract_markdown_topic(text),
         "markdown_only": True,
@@ -108,7 +110,7 @@ def _extract_markdown_topic(text: str) -> str:
     for line in text.splitlines():
         cleaned = _clean_cell(line.lstrip("# "))
         if cleaned and not cleaned.startswith("|") and len(cleaned) >= 8:
-            if any(marker in cleaned.casefold() for marker in ["topic", "选题", "主题", "复盘", "实测", "analysis"]):
+            if any(marker in cleaned.casefold() for marker in ["topic", "选题", "主题", "复盘", "实测", "analysis", "分析"]):
                 return cleaned
     return ""
 

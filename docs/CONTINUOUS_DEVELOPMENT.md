@@ -2874,6 +2874,6 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ### Verification
 - Local WeChat Markdown gate probe: `analysis_20260809.md` with 7 attempted sources, 6 successful sources, and platform-internal evidence passed.
-- Local operational script regression: `python -m pytest tests/test_operational_scripts.py -q` => `7 passed`.
-- Local focused regression: `python -m pytest tests/test_operational_scripts.py tests/test_media_quality.py tests/test_content.py tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py -q` => `89 passed, 19 subtests passed`.
-- Local full regression: `python -m pytest -q` => `554 passed, 29 subtests passed`.
+- Local operational script regression: `python -m pytest tests/test_operational_scripts.py -q` => `8 passed`.
+- Local focused regression: `python -m pytest tests/test_operational_scripts.py tests/test_media_quality.py tests/test_content.py tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py -q` => `90 passed, 19 subtests passed`.
+- Local full regression: `python -m pytest -q` => `556 passed, 29 subtests passed`.
