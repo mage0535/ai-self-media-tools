@@ -2762,3 +2762,32 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Local MCP regression: `python -m pytest tests/test_mcp_server.py -q` => `2 passed`.
 - Local content generator regression: `python -m pytest tests/test_content.py -q` => `7 passed`.
 - Local video toolchain regression: `python -m pytest tests/test_video_toolchain.py -q` => `14 passed`.
+
+## 2026-08-08 - Hermes Ops Supervision Follow-up
+
+### Findings
+- Hermes was synchronized to the latest GitHub commit, and `performance-cycle` had run with full 11-platform activity reports.
+- Several August 8 handoff/script outputs still missed `tools_capability_analysis` and `tool_selection_plan`, especially Bilibili/YouTube/TikTok/Shipinhao/Douyin handoff or runner manifests. This proved that Pipeline gates were correct, but standalone script/handoff paths could still omit the new evidence fields.
+- Hermes runtime had local script patches for paragraph beat preservation, quieter BGM handling, subtitle burn-in probing, and semantic topic similarity. Those fixes were relevant and were absorbed into public-safe repository code before syncing.
+
+### Fixed
+- `scripts/video_toolchain_runner.py` now writes `tool_invocation_manifest`, `tools_capability_analysis`, and `tool_selection_plan` into both standard video manifests and localized repost manifests.
+- `scripts/render_landscape_video.py` now includes the full visual recipe object, visual recipe path, tool invocation manifest, and tool selection evidence in landscape handoff manifests.
+- `scripts/build_kuaishou_packet.py` now attaches tool selection evidence and a broader video tool stack before Kuaishou packet validation.
+- `scripts/mix_bgm_with_gate.py` now pre-amplifies quiet BGM sources before mixing and rejects overly quiet source music instead of silently producing inaudible BGM.
+- `scripts/validate_kuaishou_video.py` now checks BGM audibility against the raw voice track and probes final frames to confirm subtitles are actually burned into the lower-third region.
+- `scripts/check_platform_topic_independence.py` now includes semantic topic-domain normalization, so same-topic wording variants such as spreadsheet/Excel cleanup are treated as duplicates.
+- Video beat extraction now prefers blank-line paragraphs before sentence splitting, preventing long script sections from being truncated into incomplete cards.
+
+### Operational Rule
+- Standalone scripts must emit the same evidence contract as Pipeline packages. A handoff package or runner manifest without tool selection evidence is incomplete, even when media rendering itself succeeded.
+- Existing packages generated before this fix may still miss evidence fields. Treat them as legacy artifacts; regenerate packages if strict gate evidence is required for review or publication.
+
+### Verification
+- Local script/media regression: `python -m pytest tests/test_operational_scripts.py tests/test_video_toolchain_runner.py tests/test_media_quality.py tests/test_video_toolchain.py -q` => `95 passed`.
+- Local full regression: `python -m pytest -q` => `548 passed, 2 subtests passed`.
+- Local rulebook validation: `channel rulebook ok: 19 channels`.
+- Local project audit: `ok: true, issues: []`.
+- Hermes script/media regression after sync: `95 passed`.
+- Hermes full regression after sync: `548 passed, 2 subtests passed`.
+- Hermes project audit after sync: `ok: true, issues: []`.
