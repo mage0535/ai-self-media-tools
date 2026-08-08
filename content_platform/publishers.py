@@ -26,6 +26,7 @@ from .wechat_toolchain import TOOLCHAIN_META_KEYS
 from .zhihu_publisher import ZhihuPublisher
 
 AITOEARN_DISABLED_PLATFORMS = {"youtube", "tiktok", "twitter", "x", "threads"}
+DOUYIN_ACCOUNT_VARIANTS = {"douyin_pet", "douyin_ai"}
 
 
 def read_setting(name, env_file="", explicit=""):
@@ -1255,12 +1256,18 @@ PLATFORM_REGIONS = {
 
 
 def platform_tier(platform):
-    return PLATFORM_TIERS.get(platform.lower(), "c")
+    normalized = platform.lower()
+    if normalized in DOUYIN_ACCOUNT_VARIANTS:
+        normalized = "douyin"
+    return PLATFORM_TIERS.get(normalized, "c")
 
 
 def platform_region(platform):
     """返回平台所属地区: 'domestic' 或 'international'，未知返回 'unknown'"""
-    return PLATFORM_REGIONS.get(platform.lower(), "unknown")
+    normalized = platform.lower()
+    if normalized in DOUYIN_ACCOUNT_VARIANTS:
+        normalized = "douyin"
+    return PLATFORM_REGIONS.get(normalized, "unknown")
 
 
 def domestic_platforms():

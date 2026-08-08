@@ -2833,3 +2833,24 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Local boundary regression: `python -m pytest tests/test_publishers_v2.py tests/test_delivery_health.py tests/test_health_refresh.py tests/test_platform_boundary_and_growth_policy.py tests/test_video_toolchain_runner.py -q` => `81 passed, 12 subtests passed`.
 - Local rulebook validation: `channel rulebook ok: 19 channels`.
 - Local project audit: `ok: true, issues: []`.
+
+## 2026-08-08 - Douyin Account Alias Boundary Completion
+
+### Finding
+- The rulebook correctly defined `douyin_pet` and `douyin_ai` as isolated Douyin operating accounts, but shared policy helpers only recognized the base platform name `douyin`.
+- If a runner mistakenly passed `douyin_pet` or `douyin_ai` as the platform key, the route was safe by default but semantically weak: region, short-video classification, Douyin detection, and manual-handoff policy were not all guaranteed to resolve as Douyin.
+- `delivery_health_decision()` also relied on refreshed health-state data or the manual-only platform set; explicit AiToEarn configs for disabled platforms were not checked at the top of the live health gate.
+
+### Fixed
+- `content_policy` now treats `douyin_pet` and `douyin_ai` as domestic Douyin short-video manual-handoff aliases.
+- Publisher tier/region helpers now normalize `douyin_pet` and `douyin_ai` to the base Douyin platform.
+- Delivery health now recognizes `aitoearn-draft`, `aitoearn-intl`, and `aitoearn-flow` configs for disabled platforms and returns `manual_handoff_only` before any live publishing route can be considered.
+- Regression tests cover Douyin account aliases, manual-handoff health, and AiToEarn disabled-platform health semantics.
+
+### Operational Rule
+- Hermes may use `douyin_pet` and `douyin_ai` as account-scoped execution keys, but any publish, health, or media policy check must resolve them as Douyin manual-handoff channels.
+- A disabled AiToEarn platform should remain `manual_handoff_only`, not `unknown` and not usable.
+
+### Verification
+- Local Douyin alias probe: `douyin_pet` and `douyin_ai` resolved as `domestic`, manual handoff, and `ManualHandoffPublisher`.
+- Local boundary regression: `python -m pytest tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py tests/test_publishers_v2.py tests/test_douyin_account_variants.py tests/test_health_refresh.py -q` => `59 passed, 29 subtests passed`.

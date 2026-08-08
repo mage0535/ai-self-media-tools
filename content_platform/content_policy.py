@@ -37,10 +37,11 @@ INTERNATIONAL_PLATFORMS = {
     "youtube",
 }
 
-SHORT_VIDEO_PLATFORMS = {"bilibili", "douyin", "kuaishou", "shipinhao", "tiktok", "youtube"}
+DOUYIN_ACCOUNT_VARIANTS = {"douyin_pet", "douyin_ai"}
+SHORT_VIDEO_PLATFORMS = {"bilibili", "douyin", "kuaishou", "shipinhao", "tiktok", "youtube", *DOUYIN_ACCOUNT_VARIANTS}
 XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
-DOUYIN_PLATFORMS = {"douyin"}
-MANUAL_HANDOFF_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu", "rednote"}
+DOUYIN_PLATFORMS = {"douyin", *DOUYIN_ACCOUNT_VARIANTS}
+MANUAL_HANDOFF_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu", "rednote", *DOUYIN_ACCOUNT_VARIANTS}
 
 
 def normalize_platform(platform):
@@ -49,6 +50,8 @@ def normalize_platform(platform):
 
 def platform_region(platform):
     normalized = normalize_platform(platform)
+    if normalized in DOUYIN_ACCOUNT_VARIANTS:
+        return "domestic"
     if normalized in DOMESTIC_PLATFORMS:
         return "domestic"
     if normalized in INTERNATIONAL_PLATFORMS:
