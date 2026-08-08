@@ -109,6 +109,41 @@ shared_trend_only: false
         self.assertTrue(matrix["platform_internal_evidence"])
         self.assertEqual(result["records"]["wechat"]["selected_topic"], "AI 自动化效率幻觉实测复盘")
 
+    def test_topic_independence_accepts_markdown_source_matrix_without_emoji_status(self):
+        from scripts.check_platform_topic_independence import check
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            analysis_dir = root / "data" / "local_ops_gzh"
+            analysis_dir.mkdir(parents=True)
+            (analysis_dir / "analysis_20260809.md").write_text(
+                """
+# 公众号运营分析
+
+内容主题：AI 自动化效率幻觉实测复盘
+
+| 来源 | 状态 | 关键发现 |
+| --- | --- | --- |
+| wechat internal | success | 公众号同赛道活跃 |
+| weibo | success | AI 降本讨论升温 |
+| douyin | success | AI 工具短视频高频 |
+| zhihu | success | 工具实测和血泪教训 |
+| bilibili | success | AI 自动化教程活跃 |
+| github | success | automation 项目上升 |
+| xiaohongshu | login_required | 记录失败原因 |
+
+shared_trend_only: false
+""",
+                encoding="utf-8",
+            )
+            result = check("20260809", ["wechat"], root=root)
+
+        self.assertTrue(result["passed"], result)
+        matrix = result["records"]["wechat"]["matrix"]
+        self.assertEqual(matrix["attempted_count"], 7)
+        self.assertEqual(matrix["successful_count"], 6)
+        self.assertTrue(matrix["platform_internal_evidence"])
+
     def test_public_scripts_do_not_embed_private_runtime_paths_or_targets(self):
         checked = [
             "scripts/build_kuaishou_packet.py",
