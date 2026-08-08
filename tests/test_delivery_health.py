@@ -306,7 +306,7 @@ class DeliveryHealthTests(unittest.TestCase):
         self.assertEqual(decision.state, "manual_handoff_only")
 
     def test_douyin_and_shipinhao_are_manual_handoff_only(self):
-        for platform in ["douyin", "shipinhao"]:
+        for platform in ["douyin", "douyin_pet", "douyin_ai", "shipinhao"]:
             with self.subTest(platform=platform):
                 decision = delivery_health_decision(
                     platform,
@@ -316,6 +316,22 @@ class DeliveryHealthTests(unittest.TestCase):
                 self.assertTrue(decision.ok)
                 self.assertEqual(decision.state, "manual_handoff_only")
                 self.assertTrue(decision.require_postcheck)
+
+    def test_aitoearn_disabled_platform_health_blocks_draft_and_flow(self):
+        for platform in ["youtube", "tiktok", "twitter", "x", "threads"]:
+            for kind in ["aitoearn-draft", "aitoearn-intl", "aitoearn-flow"]:
+                with self.subTest(platform=platform, kind=kind):
+                    decision = delivery_health_decision(
+                        platform,
+                        {
+                            "delivery_health": {"enabled": True, "enforce_builtin_risk_policies": True},
+                            "publishers": {"platforms": {platform: {"type": kind, "account_id": "acct", "api_key": "secret"}}},
+                        },
+                    )
+
+                    self.assertTrue(decision.ok)
+                    self.assertEqual(decision.state, "manual_handoff_only")
+                    self.assertIn("AiToEarn is disabled", decision.error())
 
 
 if __name__ == "__main__":

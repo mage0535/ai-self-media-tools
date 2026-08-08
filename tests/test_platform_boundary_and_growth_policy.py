@@ -1,12 +1,20 @@
 """Cross-platform publish-boundary and growth-policy regression tests."""
 
-from content_platform.content_policy import is_manual_handoff_platform
+from content_platform.content_policy import is_douyin_platform, is_manual_handoff_platform, is_short_video_platform, platform_region
 from content_platform.growth_policy import build_growth_strategy, validate_growth_strategy
 
 
 def test_manual_handoff_platforms_include_current_video_handoff_channels():
-    for platform in ["bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu"]:
+    for platform in ["bilibili", "douyin", "douyin_pet", "douyin_ai", "shipinhao", "tiktok", "youtube", "xiaohongshu"]:
         assert is_manual_handoff_platform(platform), platform
+
+
+def test_douyin_account_variants_normalize_to_douyin_boundaries():
+    for platform in ["douyin_pet", "douyin_ai"]:
+        assert platform_region(platform) == "domestic"
+        assert is_short_video_platform(platform)
+        assert is_douyin_platform(platform)
+        assert is_manual_handoff_platform(platform)
 
 
 def test_international_video_growth_rules_are_platform_specific():

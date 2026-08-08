@@ -198,7 +198,7 @@ def classify_platform_health(platform: str, cfg: dict[str, Any]) -> dict[str, An
             return _entry("usable_with_postcheck_required", True, reason, "health_refresh", require_postcheck=True)
         return _entry("auth_required", False, reason, "health_refresh")
 
-    if kind == "aitoearn-flow":
+    if kind in {"aitoearn-draft", "aitoearn-intl", "aitoearn-flow"}:
         if platform.casefold() in AITOEARN_DISABLED_PLATFORMS:
             return _entry(
                 "manual_handoff_only",

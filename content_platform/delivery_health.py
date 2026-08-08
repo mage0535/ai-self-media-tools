@@ -31,6 +31,9 @@ STAGE_ALLOWED_BLOCKING_STATES = {
     "recovery_draft_only",
 }
 
+AITOEARN_DISABLED_PLATFORMS = {"youtube", "tiktok", "twitter", "x", "threads"}
+AITOEARN_PUBLISHER_TYPES = {"aitoearn-draft", "aitoearn-intl", "aitoearn-flow"}
+
 
 @dataclass(frozen=True)
 class DeliveryHealthDecision:
@@ -52,6 +55,10 @@ def delivery_health_decision(platform, config, action="publish"):
     cfg = (config or {}).get("delivery_health", {})
     if cfg.get("enabled") is False:
         return DeliveryHealthDecision(True, normalized, "disabled", "delivery health gate disabled by config")
+
+    disabled_aitoearn = _disabled_aitoearn_decision(normalized, config or {}, normalized_action)
+    if disabled_aitoearn:
+        return disabled_aitoearn
 
     file_entry, source = _load_state_file_entry(normalized, cfg, config or {})
     if file_entry:
@@ -101,6 +108,24 @@ def delivery_health_decision(platform, config, action="publish"):
             )
 
     return DeliveryHealthDecision(True, normalized, "unknown", "no blocking health state found")
+
+
+def _disabled_aitoearn_decision(platform, config, action):
+    publisher_cfg = ((config or {}).get("publishers") or {}).get("platforms") or {}
+    cfg = _platform_entry(publisher_cfg, platform)
+    if not isinstance(cfg, dict):
+        return None
+    kind = normalize_platform(cfg.get("type") or "")
+    if platform not in AITOEARN_DISABLED_PLATFORMS or kind not in AITOEARN_PUBLISHER_TYPES:
+        return None
+    return DeliveryHealthDecision(
+        True,
+        platform,
+        "manual_handoff_only",
+        f"{platform} is configured for cookie/manual route; AiToEarn is disabled by operator policy",
+        "built_in_policy",
+        require_postcheck=action != "stage",
+    )
 
 
 def _proxy_decision(platform, cfg, action):
