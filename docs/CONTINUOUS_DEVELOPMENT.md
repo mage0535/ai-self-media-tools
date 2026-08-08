@@ -2813,3 +2813,23 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Local full regression: `python -m pytest -q` => `550 passed, 2 subtests passed`.
 - Local rulebook validation: `channel rulebook ok: 19 channels`.
 - Local project audit: `ok: true, issues: []`.
+
+## 2026-08-08 - AiToEarn Disabled Platform Guard Completion
+
+### Finding
+- `build_publisher()` already blocked `aitoearn-flow` for YouTube, TikTok, Twitter/X, and Threads, and manual-only platforms were also protected by the earlier manual-handoff override.
+- The adjacent `aitoearn-draft` / `aitoearn-intl` branch did not use the same disabled-platform guard. A mistaken publisher config could therefore route a disabled platform into an AiToEarn draft publisher instead of failing closed to handoff.
+
+### Fixed
+- `aitoearn-draft`, `aitoearn-intl`, and `aitoearn-flow` now share the same disabled-platform guard for YouTube, TikTok, Twitter/X, and Threads.
+- A regression test verifies all three AiToEarn publisher types resolve to `ManualHandoffPublisher` for the disabled platforms.
+
+### Operational Rule
+- YouTube, TikTok, Twitter/X, and Threads must not be routed through AiToEarn by any publisher type. Use the approved cookie/manual route for X where configured; otherwise produce a handoff package.
+
+### Verification
+- Local disabled-platform probe: YouTube/TikTok/Threads/Twitter/X with `aitoearn-draft`, `aitoearn-intl`, and `aitoearn-flow` all resolved to `ManualHandoffPublisher`.
+- Local publisher/health regression: `python -m pytest tests/test_publishers_v2.py tests/test_delivery_health.py tests/test_auth_registry.py -q` => `42 passed, 12 subtests passed`.
+- Local boundary regression: `python -m pytest tests/test_publishers_v2.py tests/test_delivery_health.py tests/test_health_refresh.py tests/test_platform_boundary_and_growth_policy.py tests/test_video_toolchain_runner.py -q` => `81 passed, 12 subtests passed`.
+- Local rulebook validation: `channel rulebook ok: 19 channels`.
+- Local project audit: `ok: true, issues: []`.

@@ -420,6 +420,32 @@ class PublisherV2Tests(unittest.TestCase):
                 self.assertEqual(result.status, "handoff_pending")
                 self.assertIn("manual-only", result.error)
 
+    def test_aitoearn_disabled_platforms_override_draft_and_flow_configs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for kind in ["aitoearn-draft", "aitoearn-flow"]:
+                for platform in ["youtube", "tiktok", "twitter", "x", "threads"]:
+                    with self.subTest(kind=kind, platform=platform):
+                        publisher = build_publisher(
+                            platform,
+                            {
+                                "publishers": {
+                                    "platforms": {
+                                        platform: {
+                                            "type": kind,
+                                            "account_id": "acct",
+                                            "api_key": "secret",
+                                        }
+                                    }
+                                }
+                            },
+                            tmp,
+                        )
+                        result = publisher.deliver({"id": "job7", "title": "T", "body": "B"}, platform)
+
+                        self.assertEqual(publisher.__class__.__name__, "ManualHandoffPublisher")
+                        self.assertEqual(result.status, "handoff_pending")
+                        self.assertTrue("AiToEarn is disabled" in result.error or "manual-only" in result.error)
+
     def test_aitoearn_flow_publisher_returns_handoff_pending(self):
         class FakeClient:
             def get_platform_metadata(self, platform):
