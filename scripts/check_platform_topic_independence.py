@@ -112,6 +112,11 @@ def _extract_markdown_topic(text: str) -> str:
         if cleaned and not cleaned.startswith("|") and len(cleaned) >= 8:
             if any(marker in cleaned.casefold() for marker in ["topic", "选题", "主题", "复盘", "实测", "analysis", "分析"]):
                 return cleaned
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            cleaned = _clean_cell(line.lstrip("# "))
+            if cleaned and len(cleaned) >= 4:
+                return cleaned
     return ""
 
 

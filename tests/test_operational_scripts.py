@@ -173,6 +173,34 @@ shared_trend_only: false
         self.assertTrue(result["records"]["wechat"]["matrix"]["platform_internal_evidence"])
         self.assertEqual(result["records"]["wechat"]["selected_topic"], "WeChat analysis")
 
+    def test_topic_independence_falls_back_to_markdown_heading_for_topic(self):
+        from scripts.check_platform_topic_independence import check
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            analysis_dir = root / "data" / "local_ops_gzh"
+            analysis_dir.mkdir(parents=True)
+            (analysis_dir / "analysis_20260809.md").write_text(
+                """
+# Daily source matrix
+
+| source | status | finding |
+| --- | --- | --- |
+| source_a | success | signal |
+| source_b | success | signal |
+| source_c | success | signal |
+| source_d | success | signal |
+| source_e | success | signal |
+
+shared_trend_only: false
+""",
+                encoding="utf-8",
+            )
+            result = check("20260809", ["wechat"], root=root)
+
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(result["records"]["wechat"]["selected_topic"], "Daily source matrix")
+
     def test_public_scripts_do_not_embed_private_runtime_paths_or_targets(self):
         checked = [
             "scripts/build_kuaishou_packet.py",
