@@ -4,11 +4,61 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import importlib.util
 from pathlib import Path
 from unittest.mock import patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
+    def test_intl_short_video_pipeline_is_manual_handoff_with_tool_evidence(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "intl_short_video_pipeline.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                **os.environ,
+                "CONTENT_PLATFORM_HOME": tmp,
+                "PYTHONPATH": str(root),
+                "PYTHONIOENCODING": "utf-8",
+            }
+            proc = subprocess.run(
+                [sys.executable, str(script), "--dry-run"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            manifest = Path(tmp) / "data" / "intl_video_drafts" / "manifest_"
+            manifests = sorted(manifest.parent.glob("manifest_*.json"))
+            self.assertTrue(manifests, proc.stdout)
+            data = json.loads(manifests[-1].read_text(encoding="utf-8"))
+            rows = data["self_gen"] + data["cross_post"]
+            self.assertTrue(rows)
+            for row in rows:
+                self.assertEqual(row["status"], "handoff_pending")
+                self.assertEqual(row["publish_boundary"], "manual_handoff_only_no_aitoearn")
+                self.assertIn("tool_invocation_manifest", row)
+                self.assertIn("tools_capability_analysis", row)
+                self.assertIn("tool_selection_plan", row)
+                self.assertTrue(row["handoff_policy"]["manual_only"])
+                self.assertIn("aitoearn_publish", row["handoff_policy"]["forbidden"])
+
+    def test_intl_short_video_pipeline_blocks_aitoearn_for_manual_platforms(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "intl_short_video_pipeline.py"
+        spec = importlib.util.spec_from_file_location("intl_short_video_pipeline", script)
+        self.assertIsNotNone(spec)
+        module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(module)
+
+        with patch.dict(os.environ, {"AITOEARN_INTL_API_KEY": "fake-key"}):
+            for platform in ["youtube", "youtube_shorts", "tiktok", "threads"]:
+                self.assertFalse(module.publish_video("/tmp/fake.mp4", "title", platform))
+
     def test_runner_dry_run_materializes_plan_cards_and_output(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-国际短视频管线 v2 — YouTube Shorts + TikTok
-自生成(Screencast+脚本增强) + 搬运(抖音/快手→英文化)
-带去重数据库 + AiToEarn 自动发布
+International short-video handoff pipeline for YouTube Shorts and TikTok.
+
+This legacy entrypoint is intentionally manual-handoff only. YouTube/TikTok
+publishing must go through the main Pipeline policy and cannot use AiToEarn.
 """
 import json, os, random, subprocess, sys, tempfile, urllib.request
 from datetime import datetime, timedelta, timezone
@@ -16,9 +17,17 @@ FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 YOUTUBE_ACCOUNT = "youtube_118204774743233672114"
 TIKTOK_ACCOUNT = "tiktok_-000I1Hcio2yRuKk-SUtaNJ0w0D2XC_Sw0wQ"
 
-sys.path.insert(0, str(Path(__file__).parent))
+ROOT = Path(__file__).resolve().parents[1]
+for candidate in (ROOT, Path(__file__).parent):
+    if str(candidate) not in sys.path:
+        sys.path.insert(0, str(candidate))
+from content_platform.content_recipe import build_tool_invocation_manifest
+from content_platform.tool_selection import build_tool_selection_evidence
 from source_dedup_db import SourceDedupDB
 from script_enhancer import enhance_screencast_call
+
+MANUAL_HANDOFF_ONLY_PLATFORMS = {"youtube", "youtube_shorts", "tiktok", "threads"}
+PUBLISH_BOUNDARY = "manual_handoff_only_no_aitoearn"
 
 SELF_GEN_TOPICS = [
     "5个免费AI工具提升编码效率","用Python自动化Excel报表","AI写作助手对比评测",
@@ -36,6 +45,59 @@ def run_cmd(cmd, timeout=120):
         return r.returncode == 0, (r.stdout or r.stderr)[-300:]
     except subprocess.TimeoutExpired: return False, "timeout"
     except Exception as e: return False, str(e)
+
+
+def _canonical_platform(platform):
+    return "youtube" if "youtube" in str(platform) else str(platform)
+
+
+def _tool_evidence(platform, content_type="knowledge_card_video", *, repost=False):
+    planned_tools = {
+        "intl_short_video_pipeline": "scripts/intl_short_video_pipeline.py",
+        "video_toolchain_runner": "scripts/video_toolchain_runner.py",
+        "visual_recipe": "content_platform.video_recipe",
+        "edge_tts": "edge_tts",
+        "ffmpeg_encode": "tool:ffmpeg",
+        "handoff_package_builder": "manual_handoff_package_builder",
+    }
+    if repost:
+        planned_tools.update(
+            {
+                "yt_dlp_source_download": "tool:yt-dlp",
+                "source_dedup_db": "scripts/source_dedup_db.py",
+                "source_asset_matcher": "content_platform.video_toolchain.source_asset_matcher",
+            }
+        )
+    tool_manifest = build_tool_invocation_manifest(
+        planned_tools=planned_tools,
+        invocations={
+            name: {"status": "planned" if name == "handoff_package_builder" else "ok", "output": ref}
+            for name, ref in planned_tools.items()
+        },
+    )
+    return {
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform=_canonical_platform(platform),
+            content_type=content_type,
+            content_goal="generate a platform-specific manual handoff video package with matched visuals, voice, BGM, subtitles, and evidence",
+            planned_manifest=tool_manifest,
+        ),
+    }
+
+
+def _handoff_item(platform, **payload):
+    return {
+        **payload,
+        "platform": platform,
+        "status": "handoff_pending",
+        "publish_boundary": PUBLISH_BOUNDARY,
+        "handoff_policy": {
+            "manual_only": True,
+            "forbidden": ["automatic_upload", "aitoearn_publish", "cross_platform_final_mp4_reuse"],
+        },
+        **_tool_evidence(platform, repost=bool(payload.get("source_url") or payload.get("keyword"))),
+    }
 
 # ── 选题 ──
 def select_topics():
@@ -172,14 +234,17 @@ def cross_post_video(source_url, output_path, platform="youtube_shorts"):
         return str(output_path)
     return ""
 
-# ── AiToEarn 自动发布 ──
+# ── Publish guard ──
 def publish_video(video_path, title, platform="youtube"):
+    if platform in MANUAL_HANDOFF_ONLY_PLATFORMS:
+        log(f"  manual handoff only for {platform}; AiToEarn publishing is disabled by policy")
+        return False
     if not AITOEARN_KEY:
         log(f"  ⏭ 无 API Key，跳过发布")
         return False
     aid = YOUTUBE_ACCOUNT if platform == "youtube" else TIKTOK_ACCOUNT
-    # 这里需要先 createMedia 上传到 AiToEarn CDN，然后用 createChannelPublishFlow
-    # 目前先输出发布意图，后续可实现完整的 CDN 上传+发布
+    # This function is retained only for non-manual legacy platforms. Do not
+    # extend it to YouTube/TikTok/Threads.
     log(f"  📤 准备发布到 {platform}: {title}")
     log(f"     account_id={aid}")
     log(f"     file={video_path}")
@@ -199,18 +264,18 @@ def run_daily_pipeline(strategy=None, dry_run=False):
         out = DRAFT_DIR / f"sg_{topics['date']}_{i}.mp4"
         if not dry_run:
             p = generate_self_video(topic, out, plat)
-            if p: results["self_gen"].append({"topic":topic,"platform":plat,"file":p})
+            if p: results["self_gen"].append(_handoff_item(plat, topic=topic, file=p))
         else:
-            results["self_gen"].append({"topic":topic,"platform":plat,"dry_run":True})
+            results["self_gen"].append(_handoff_item(plat, topic=topic, dry_run=True))
 
     # 搬运（dry-run 模式下跳过）
     log(f"\n📦 搬运线...")
     for i, kw in enumerate(topics["cross_kw"]):
         plat = "tiktok" if i == 0 else "youtube_shorts"
         log(f"  [{plat}] {kw}")
-        results["cross_post"].append({"keyword":kw,"platform":plat,"dry_run":True})
+        results["cross_post"].append(_handoff_item(plat, keyword=kw, dry_run=True))
 
-    # 自动发布
+    # Manual-handoff boundary: never auto-publish YouTube/TikTok from this script.
     for item in results["self_gen"]:
         if item.get("file"):
             plat = "youtube" if "youtube" in item["platform"] else "tiktok"
