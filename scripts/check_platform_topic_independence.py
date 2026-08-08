@@ -32,7 +32,39 @@ PLATFORM_DIRS = {
 }
 
 
+def _normalize_topic_domain(text: str) -> str:
+    normalized = str(text or "").casefold()
+    domains = {
+        "spreadsheet_cleanup": [
+            "整理表格",
+            "整理excel",
+            "表格处理",
+            "表格清洗",
+            "excel清洗",
+            "spreadsheet cleanup",
+            "spreadsheet",
+        ],
+        "prompt_engineering": ["提示词", "prompt engineering", "prompt habits"],
+        "unit_testing": ["单元测试", "写测试", "unit test", "自动写测试"],
+        "code_review": ["代码审查", "审代码", "code review", "修bug"],
+        "slides": ["ppt", "幻灯片", "presentation", "slides"],
+        "agent_workflow": ["智能体", "ai agent", "agent workflow"],
+        "video_creation": ["短视频", "剪辑", "video creation", "shorts"],
+        "workflow_automation": ["工作流自动化", "automation workflow", "content pipeline"],
+    }
+    for domain, keywords in domains.items():
+        if any(keyword in normalized for keyword in keywords):
+            return domain
+    return ""
+
+
 def _similarity(a: str, b: str) -> float:
+    left_domain = _normalize_topic_domain(a)
+    right_domain = _normalize_topic_domain(b)
+    if left_domain and right_domain:
+        return 1.0 if left_domain == right_domain else 0.0
+    if bool(left_domain) != bool(right_domain):
+        return 0.0
     left = {ch for ch in a.casefold() if ch.isalnum() or "\u4e00" <= ch <= "\u9fff"}
     right = {ch for ch in b.casefold() if ch.isalnum() or "\u4e00" <= ch <= "\u9fff"}
     if not left or not right:
@@ -107,8 +139,14 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
 
     for i, left in enumerate(platforms):
         for right in platforms[i + 1 :]:
-            if topics.get(left) and topics.get(right) and _similarity(topics[left], topics[right]) > 0.72:
-                failures.append({"platforms": [left, right], "failed_dimensions": ["topic_similarity_too_high"]})
+            if topics.get(left) and topics.get(right) and _similarity(topics[left], topics[right]) > 0.5:
+                failures.append({
+                    "platforms": [left, right],
+                    "failed_dimensions": ["topic_similarity_too_high"],
+                    "topic_left": topics[left],
+                    "topic_right": topics[right],
+                    "similarity": round(_similarity(topics[left], topics[right]), 2),
+                })
 
     return {"passed": not failures, "date": date, "platforms": platforms, "records": records, "failures": failures}
 

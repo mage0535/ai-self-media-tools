@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from content_platform.content_recipe import build_tool_invocation_manifest
+from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.video_recipe import build_visual_recipe
 
 
@@ -50,6 +51,9 @@ def _mean_volume(path: Path) -> float | None:
 
 
 def _beats(script: str) -> list[str]:
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", script or "") if part.strip()]
+    if len(paragraphs) >= 2:
+        return [part[:200] for part in paragraphs][:10]
     rows = [line.strip("- 0123456789.、") for line in script.splitlines() if line.strip()]
     return [row for row in rows if row][:10]
 
@@ -274,7 +278,14 @@ def render(args: argparse.Namespace) -> dict:
         "mix_bgm_with_gate": "scripts/mix_bgm_with_gate.py",
         "check_bgm_uniqueness": "scripts/check_bgm_uniqueness.py",
         "visual_recipe": "content_platform.video_recipe",
+        "edge_tts": "edge_tts",
+        "playwright_screenshots": "playwright.chromium",
+        "ffmpeg_encode": "tool:ffmpeg",
     }
+    tool_manifest = build_tool_invocation_manifest(
+        planned_tools=tools,
+        invocations={name: {"status": "ok", "output": ref} for name, ref in tools.items()},
+    )
     manifest = {
         "passed": True,
         "platform": args.platform,
@@ -282,8 +293,15 @@ def render(args: argparse.Namespace) -> dict:
         "cover": str(cover),
         "duration": _duration(final),
         "mean_volume_db": _mean_volume(final),
-        "visual_recipe": str(visual_recipe_path),
-        "tool_invocation_manifest": build_tool_invocation_manifest(planned_tools=tools, invocations={name: {"status": "ok", "output": ref} for name, ref in tools.items()}),
+        "visual_recipe": visual_recipe,
+        "visual_recipe_path": str(visual_recipe_path),
+        "tool_invocation_manifest": tool_manifest,
+        **build_tool_selection_evidence(
+            platform=args.platform,
+            content_type="landscape_explainer_video",
+            content_goal="increase completion and saves with landscape cards, matched backgrounds, voice, BGM, and subtitles",
+            planned_manifest=tool_manifest,
+        ),
         "media_delivery": {"mode": "manual_handoff", "sent_as_separate_message": True, "text_report_separate": True, "abs_paths": [str(final), str(cover)]},
     }
     (out_dir / "landscape_video_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
