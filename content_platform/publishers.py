@@ -1378,6 +1378,11 @@ def build_publisher(platform, config, data_dir):
             live=cfg.get("live", True),
         )
     if kind in {"aitoearn-draft", "aitoearn-intl"}:
+        if platform.casefold() in AITOEARN_DISABLED_PLATFORMS:
+            return ManualHandoffPublisher(
+                cfg.get("outbox", str(Path(data_dir) / "outbox")),
+                f"{platform} is configured for cookie/manual route; AiToEarn is disabled by operator policy",
+            )
         default_base_url = "https://aitoearn.ai/api/unified/mcp" if platform_region(platform) == "international" else "https://aitoearn.cn/api/unified/mcp"
         default_key_env = "AITOEARN_INTL_API_KEY" if platform_region(platform) == "international" else "AITOEARN_API_KEY"
         return AiToEarnDraftPublisher(
