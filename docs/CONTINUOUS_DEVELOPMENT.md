@@ -2854,3 +2854,25 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 ### Verification
 - Local Douyin alias probe: `douyin_pet` and `douyin_ai` resolved as `domestic`, manual handoff, and `ManualHandoffPublisher`.
 - Local boundary regression: `python -m pytest tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py tests/test_publishers_v2.py tests/test_douyin_account_variants.py tests/test_health_refresh.py -q` => `59 passed, 29 subtests passed`.
+
+## 2026-08-09 - Markdown Source Matrix Gate Compatibility
+
+### Finding
+- Hermes generated `analysis_20260809.md` for the WeChat operation analysis with a complete source table, but `scripts/check_platform_topic_independence.py` only treated Markdown as a weak title fallback.
+- The gate could therefore report `analysis_file_missing`, `attempted_sources_lt_5`, `successful_sources_lt_3`, and `platform_internal_verification_missing` even when the Markdown analysis contained enough source evidence.
+- The script also contained mojibake topic-domain keywords that were fragile under Windows encoding rewrites.
+
+### Fixed
+- Markdown analysis files now parse selected topic, source tables, bullet source rows, platform-internal evidence, successful/attempted counts, and `shared_trend_only`.
+- JSON remains the preferred and first-read format. Markdown is now a compatible fallback, not a bypass.
+- Topic-domain normalization now uses ASCII-stable keywords to avoid broken string literals after local encoding operations.
+
+### Operational Rule
+- Hermes may continue by writing `platform_source_matrix_<date>.json` for strict evidence, or use `analysis_<date>.md` if it contains a clear topic plus a source/status table.
+- A Markdown analysis must still prove at least 5 attempted sources, at least 3 successful sources, platform-internal evidence or failure reason, and `shared_trend_only=false`.
+
+### Verification
+- Local WeChat Markdown gate probe: `analysis_20260809.md` with 7 attempted sources, 6 successful sources, and platform-internal evidence passed.
+- Local operational script regression: `python -m pytest tests/test_operational_scripts.py -q` => `6 passed`.
+- Local focused regression: `python -m pytest tests/test_operational_scripts.py tests/test_media_quality.py tests/test_content.py tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py -q` => `88 passed, 19 subtests passed`.
+- Local full regression: `python -m pytest -q` => `554 passed, 29 subtests passed`.
