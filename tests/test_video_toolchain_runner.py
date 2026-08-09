@@ -455,6 +455,26 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertIn("1920", manifest["renderer_command_preview"])
             self.assertEqual(manifest["bgm_style"], contract["bgm_style"])
 
+    def test_cinema_visual_gate_skips_auxiliary_render_layers(self):
+        from scripts import video_toolchain_runner as runner
+
+        self.assertTrue(runner._is_full_card_visual_candidate(Path("card_01.png")))
+        self.assertFalse(runner._is_full_card_visual_candidate(Path("card_01_bg.png")))
+        self.assertFalse(runner._is_full_card_visual_candidate(Path("card_01_text.png")))
+
+    def test_kuaishou_layered_text_filters_are_distinct_motion_paths(self):
+        from scripts import kuaishou_render as renderer
+
+        filters = [renderer._text_layer_filter(1080, 1920, 100, idx) for idx in range(4)]
+        self.assertEqual(len(set(filters)), 4)
+        self.assertTrue(any("iw*1.018" in item for item in filters))
+        self.assertTrue(any("min(24" in item for item in filters))
+        self.assertTrue(any("max(0,24" in item for item in filters))
+        layered = renderer._layered_segment_filter(1080, 1920, 100, 2)
+        self.assertIn("[0:v]", layered)
+        self.assertIn("[1:v]", layered)
+        self.assertIn("overlay=0:0", layered)
+
     def test_runner_dry_run_records_shotcraft_motion_plan(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"

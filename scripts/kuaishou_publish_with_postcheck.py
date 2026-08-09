@@ -51,6 +51,13 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     return data
 
 
+def _thumbnail_path(manifest: dict[str, Any]) -> str:
+    raw = manifest.get("cover_path") or manifest.get("thumbnail_path") or manifest.get("cover") or ""
+    if isinstance(raw, dict):
+        raw = raw.get("path") or raw.get("local_path") or raw.get("file") or ""
+    return str(raw or "").strip()
+
+
 def _run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -129,6 +136,7 @@ def main() -> int:
     description = _strip_hashtags(str(manifest.get("description") or manifest.get("caption") or ""))
     tags = _dedupe_tags(manifest.get("tags") or manifest.get("topics") or [])
     schedule = str(manifest.get("schedule_time") or manifest.get("scheduled_at") or "").strip()
+    thumbnail = _thumbnail_path(manifest)
 
     errors = []
     if not video_file.is_file():
@@ -211,6 +219,8 @@ def main() -> int:
         schedule,
         "--headless",
     ]
+    if thumbnail and Path(thumbnail).is_file():
+        upload_cmd += ["--thumbnail", str(Path(thumbnail).resolve())]
     upload = _run(upload_cmd, cwd=Path(args.sau_dir), env=env, timeout=args.timeout)
     (out_dir / "upload_stdout.log").write_text(upload.stdout, encoding="utf-8")
     (out_dir / "upload_stderr.log").write_text(upload.stderr, encoding="utf-8")

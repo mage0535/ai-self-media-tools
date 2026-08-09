@@ -12,6 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class KuaishouPublishGuardTests(unittest.TestCase):
+    def test_thumbnail_path_accepts_nested_cover_object(self):
+        from scripts import kuaishou_publish_with_postcheck as wrapper
+
+        self.assertEqual(wrapper._thumbnail_path({"cover": {"path": "/tmp/cover.png"}}), "/tmp/cover.png")
+        self.assertEqual(wrapper._thumbnail_path({"thumbnail_path": "/tmp/thumb.png"}), "/tmp/thumb.png")
+
     def test_publish_wrapper_rejects_direct_invocation_without_workflow_context(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

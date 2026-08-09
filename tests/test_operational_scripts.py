@@ -218,6 +218,12 @@ shared_trend_only: false
             self.assertNotIn("5975" + "133381", text, rel)
             self.assertNotIn("PEXELS_API_KEY =", text, rel)
 
+    def test_kuaishou_video_proxy_args_use_configured_cn_proxy(self):
+        from scripts import validate_kuaishou_video as validator
+
+        self.assertEqual(validator._curl_proxy_args("socks5://127.0.0.1:2080"), ["--socks5", "127.0.0.1:2080"])
+        self.assertEqual(validator._curl_proxy_args("socks5h://127.0.0.1:2080"), ["--socks5-hostname", "127.0.0.1:2080"])
+
 
 if __name__ == "__main__":
     unittest.main()

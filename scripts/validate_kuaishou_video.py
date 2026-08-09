@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 # ── 全局常量 ──
-CN_PROXY = "socks5://127.0.0.1:1080"
+CN_PROXY = os.environ.get("CN_PROXY", "socks5://127.0.0.1:1080")
 MIN_CARD_SIZE = 100_000
 MIN_TTS_SIZE = 10_000
 MIN_SEG_SIZE = 1000
@@ -42,14 +42,24 @@ def get_bitrate(f):
     rates = [float(x) for x in r.stdout.strip().split("\n") if x]
     return rates[0] / 1000 if rates else 0  # kbps
 
+def _curl_proxy_args(proxy: str):
+    proxy = str(proxy or "").strip()
+    if not proxy:
+        return []
+    if proxy.startswith("socks5h://"):
+        return ["--socks5-hostname", proxy.removeprefix("socks5h://")]
+    if proxy.startswith("socks5://"):
+        return ["--socks5", proxy.removeprefix("socks5://")]
+    return ["--proxy", proxy]
+
 # ── 资源预检 ──
 def check_resources():
     print("\n📊 资源预检:")
     # CN代理
     try:
-        r = subprocess.run(["curl","-s","--max-time","8","--socks5","127.0.0.1:1080","https://httpbin.org/ip"], capture_output=True, text=True, timeout=12)
-        ip_data = json.loads(r.stdout)
-        ip = ip_data.get("origin", "")
+        r = subprocess.run(["curl","-s","--max-time","8",*_curl_proxy_args(CN_PROXY),"https://myip.ipip.net"], capture_output=True, text=True, timeout=12)
+        ip_match = re.search(r"(\d+\.\d+\.\d+\.\d+)", r.stdout)
+        ip = ip_match.group(1) if ip_match else ""
         expected_ips = [x.strip() for x in os.getenv("KUAISHOU_EXPECTED_CN_PROXY_IPS", "").split(",") if x.strip()]
         if expected_ips and not any(expected in ip for expected in expected_ips):
             die("CN代理IP异常: 当前出口不在 KUAISHOU_EXPECTED_CN_PROXY_IPS 白名单中")
