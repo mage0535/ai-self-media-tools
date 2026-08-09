@@ -790,6 +790,94 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     return _result(gates)
 
 
+def validate_wechat_image_post_packet(packet: dict[str, Any]) -> dict[str, Any]:
+    """Validate a WeChat image-message (newspic) package before draft upload.
+
+    The image-message lane is a companion to the long article lane. It must be
+    treated as a real content product, not as decorative screenshots.
+    """
+    cards = packet.get("cards") or packet.get("image_cards") or []
+    if not isinstance(cards, list):
+        cards = []
+    layouts = [str(card.get("layout") or "").strip() for card in cards if isinstance(card, dict)]
+    palettes = [str(card.get("palette") or "").strip() for card in cards if isinstance(card, dict)]
+    backgrounds = [(card.get("background") or {}) for card in cards if isinstance(card, dict)]
+    postcheck = packet.get("postcheck") or {}
+    publishing = packet.get("publishing_plan") or {}
+    title = str(packet.get("title") or "").strip()
+    gates = {
+        "content_type": {
+            "passed": str(packet.get("content_type") or "").casefold() in {"wechat_image_post", "wechat_newspic", "newspic"},
+        },
+        "card_count": {
+            "passed": 3 <= len(cards) <= 20 and _safe_int(packet.get("card_count"), len(cards)) == len(cards),
+            "count": len(cards),
+            "range": [3, 20],
+        },
+        "cover_and_cta": {
+            "passed": bool(cards)
+            and str((cards[0] if isinstance(cards[0], dict) else {}).get("role") or "").casefold() == "cover"
+            and str((cards[-1] if isinstance(cards[-1], dict) else {}).get("role") or "").casefold() in {"cta", "summary_cta"},
+        },
+        "one_idea_per_card": {
+            "passed": bool(cards)
+            and all(isinstance(card, dict) and card.get("one_idea") is True and _text_length(str(card.get("title") or "")) >= 4 for card in cards),
+        },
+        "image_specs": {
+            "passed": bool(cards)
+            and all(
+                isinstance(card, dict)
+                and _safe_int(card.get("width")) == 1080
+                and _safe_int(card.get("height")) == 1440
+                and _safe_int(card.get("bytes")) >= 30000
+                and _is_abs_media_path(card.get("image_path"))
+                for card in cards
+            ),
+            "required": "1080x1440, absolute image path, non-empty file",
+        },
+        "layout_diversity": {
+            "passed": len({layout for layout in layouts if layout}) >= min(len(cards), 5),
+            "unique_layouts": len({layout for layout in layouts if layout}),
+        },
+        "palette_rotation": {
+            "passed": len({palette for palette in palettes if palette}) >= min(len(cards), 4),
+            "unique_palettes": len({palette for palette in palettes if palette}),
+        },
+        "real_scene_backgrounds": {
+            "passed": bool(backgrounds)
+            and len(backgrounds) == len(cards)
+            and all(_valid_wechat_image_card_background(bg) for bg in backgrounds),
+            "count": len(backgrounds),
+        },
+        "readability": {
+            "passed": bool(cards)
+            and all(_valid_wechat_image_card_typography(card.get("typography") or {}) for card in cards if isinstance(card, dict)),
+        },
+        "engagement_design": {
+            "passed": bool(packet.get("design_strategy"))
+            and all(
+                isinstance(card, dict)
+                and bool((card.get("engagement") or {}).get("hook_or_payoff"))
+                and bool((card.get("engagement") or {}).get("save_reason"))
+                for card in cards
+            ),
+        },
+        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
+        "publishing_contract": {
+            "passed": str(publishing.get("article_type") or "").casefold() == "newspic"
+            and str(publishing.get("publish_mode") or "").casefold() in {"draft", "scheduled_draft"},
+        },
+        "draft_postcheck": {
+            "passed": postcheck.get("required") is True
+            and postcheck.get("batchget_verified") is True
+            and str(postcheck.get("article_type") or "").casefold() == "newspic"
+            and postcheck.get("title_present") is True
+            and postcheck.get("image_count_matched") is True,
+        },
+    }
+    return _result(gates)
+
+
 def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "preflight") -> dict[str, Any]:
     """Validate a Kuaishou auto-workflow packet.
 
@@ -1210,6 +1298,35 @@ def _valid_knowledge_card(card: dict[str, Any]) -> bool:
     return bool(card.get("card_type")) and bool(card.get("layout")) and bool(card.get("visual_subject")) and bool(
         card.get("information_value")
     ) and {"readability", "attraction", "information_density", "visual_match"}.issubset(checks)
+
+
+def _valid_wechat_image_card_background(background: dict[str, Any]) -> bool:
+    if not isinstance(background, dict):
+        return False
+    kind = str(background.get("kind") or background.get("background_kind") or "").casefold()
+    source = str(background.get("source") or "").strip()
+    return (
+        kind not in FORBIDDEN_PRIMARY_BACKGROUNDS
+        and kind in {"real_scene_photo", "licensed_real_scene_photo", "verified_real_photo"}
+        and bool(source)
+        and bool(background.get("source_url") or background.get("asset_id") or background.get("path"))
+        and bool(background.get("license") or background.get("rights_cleared"))
+        and bool(background.get("query") or background.get("topic_keyword"))
+        and bool(background.get("match_reason"))
+        and background.get("not_gradient_fallback") is True
+    )
+
+
+def _valid_wechat_image_card_typography(typography: dict[str, Any]) -> bool:
+    if not isinstance(typography, dict):
+        return False
+    return (
+        _safe_int(typography.get("title_px")) >= 48
+        and _safe_int(typography.get("body_px")) >= 28
+        and float(typography.get("line_height") or 0) >= 1.45
+        and typography.get("safe_area_ok") is True
+        and typography.get("overflow") is False
+    )
 
 
 def _real_scene_background_gate(packet: dict[str, Any], minimum: int = 3) -> dict[str, Any]:

@@ -13,6 +13,7 @@ from content_platform.media_quality import (
     validate_shipinhao_auto_packet,
     validate_video_packet,
     validate_wechat_auto_packet,
+    validate_wechat_image_post_packet,
     validate_xiaohongshu_auto_packet,
 )
 from content_platform.content_recipe import (
@@ -230,6 +231,83 @@ def complete_knowledge_card_plan(platform: str = "wechat"):
     }
 
 
+def complete_wechat_image_post_packet():
+    cards = [
+        {
+            "index": i,
+            "role": role,
+            "title": f"Card {i} clear point",
+            "one_idea": True,
+            "layout": layout,
+            "palette": palette,
+            "image_path": f"/tmp/wechat/cards/card_{i:02d}.png",
+            "width": 1080,
+            "height": 1440,
+            "bytes": 450000 + i,
+            "background": {
+                "kind": "real_scene_photo",
+                "source": "pexels",
+                "source_url": f"https://www.pexels.com/photo/{i}/",
+                "license": "Pexels License",
+                "query": "ai productivity desk",
+                "match_reason": "matches the card's productivity workflow point",
+                "not_gradient_fallback": True,
+            },
+            "typography": {
+                "title_px": 72,
+                "body_px": 38,
+                "line_height": 1.65,
+                "safe_area_ok": True,
+                "overflow": False,
+            },
+            "engagement": {
+                "hook_or_payoff": "shows a concrete benefit",
+                "save_reason": "usable checklist",
+            },
+        }
+        for i, (role, layout, palette) in enumerate(
+            [
+                ("cover", "hero", "cold"),
+                ("content", "split", "warm"),
+                ("content", "side", "minimal"),
+                ("content", "stack", "dark"),
+                ("content", "timeline", "fresh"),
+                ("content", "quote", "cold"),
+                ("content", "checklist", "warm"),
+                ("cta", "summary_cta", "minimal"),
+            ],
+            1,
+        )
+    ]
+    return {
+        "platform": "wechat",
+        "content_type": "wechat_image_post",
+        "title": "我把11个平台交给AI后",
+        "desc": "8张图讲清一个AI自动化真实复盘。",
+        "card_count": len(cards),
+        "cards": cards,
+        "design_strategy": {
+            "story_arc": ["hook", "problem", "turning_point", "method", "mistake", "checklist", "result", "cta"],
+            "visual_consistency": True,
+            "layout_diversity": True,
+            "source_guidance": ["wechat cover practices", "carousel one idea per slide"],
+        },
+        "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
+        "publishing_plan": {
+            "article_type": "newspic",
+            "draft_postcheck": "wechat_image_draft_batchget",
+            "publish_mode": "draft",
+        },
+        "postcheck": {
+            "required": True,
+            "batchget_verified": True,
+            "article_type": "newspic",
+            "title_present": True,
+            "image_count_matched": True,
+        },
+    }
+
+
 def complete_tool_invocation_manifest(content_type: str = "article"):
     if content_type == "video":
         planned = {
@@ -253,6 +331,25 @@ def complete_tool_invocation_manifest(content_type: str = "article"):
         planned_tools=planned,
         invocations={name: {"status": "ok", "output": ref} for name, ref in planned.items()},
     )
+
+
+def test_wechat_image_post_packet_requires_real_scene_cards_and_hard_postcheck():
+    packet = complete_wechat_image_post_packet()
+    result = validate_wechat_image_post_packet(packet)
+    assert result["passed"], result
+
+    bad = json.loads(json.dumps(packet))
+    bad["cards"][1]["background"]["kind"] = "css_gradient"
+    bad["cards"][1]["background"]["not_gradient_fallback"] = False
+    result = validate_wechat_image_post_packet(bad)
+    assert not result["passed"]
+    assert "real_scene_backgrounds" in result["failed_dimensions"]
+
+    bad = json.loads(json.dumps(packet))
+    bad["postcheck"]["batchget_verified"] = False
+    result = validate_wechat_image_post_packet(bad)
+    assert not result["passed"]
+    assert "draft_postcheck" in result["failed_dimensions"]
 
 
 def complete_tool_selection_evidence(platform: str = "wechat", content_type: str = "article"):

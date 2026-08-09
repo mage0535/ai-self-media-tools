@@ -864,8 +864,11 @@
         "hot_article_analysis",
         "wechat_theme_renderer",
         "image_asset_selector",
+        "wechat_image_post_cards",
         "scripts/validate_wechat_auto_packet.py",
+        "scripts/validate_wechat_image_post_packet.py",
         "wechat_draft_api",
+        "wechat_image_draft_api",
         "draft_batchget_postcheck"
       ],
       "strategy_requirements": {
@@ -927,6 +930,11 @@
         "digest_54_chars_or_less",
         "css_inline",
         "real_scene_or_topic_relevant_images",
+        "wechat_image_post_cards_required",
+        "wechat_image_post_real_scene_backgrounds",
+        "wechat_image_post_layout_diversity",
+        "wechat_image_post_readability",
+        "wechat_image_post_newspic_batchget_postcheck",
         "distinct_template_per_slot"
       ],
       "postcheck": "wechat_draft_batchget_or_backend_draft_row"

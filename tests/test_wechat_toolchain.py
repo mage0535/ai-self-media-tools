@@ -50,6 +50,9 @@ def test_prepare_wechat_professional_draft_records_wewrite_evidence(tmp_path):
     assert meta["tool_invocations"]["wewrite"]["run_id"] == "20260729-120000-abcdef"
     assert meta["preflight_manifest"]["channel"] == "wechat"
     assert len(meta["section_image_map"]) == 3
+    assert meta["wechat_image_post_plan"]["required"] is True
+    assert meta["wechat_image_post_plan"]["card_count_range"] == [3, 9]
+    assert meta["wechat_image_post_plan"]["publish_target"] == "wechat_newspic_draft"
     assert meta["visual_content_policy"]["wechat_requirements"]["theme_count_required"] == 109
     assert Path(meta["wechat_toolchain_evidence_path"]).is_file()
 
