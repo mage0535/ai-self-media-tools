@@ -324,7 +324,7 @@ def _probe_video_output(path, size):
 
 
 async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
-    """Render cards with Playwright → base64 bg → quality assert"""
+    """Render complete cards plus separate background/text layers."""
     if async_playwright is None:
         raise RuntimeError("playwright is required for card rendering; install playwright before running render_cards")
     out_dir = Path(video_dir) / "cards"
@@ -352,21 +352,82 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
         html = build_card_html(card, idx, bg_b64s[i], gh_b64, theme_v)
         html_path = Path(video_dir) / f"card_{idx:02d}.html"
         png_path = out_dir / f"card_{idx:02d}.png"
+        bg_path = out_dir / f"card_{idx:02d}_bg.png"
+        text_path = out_dir / f"card_{idx:02d}_text.png"
         html_path.write_text(html, encoding="utf-8")
 
         await page.goto(html_path.resolve().as_uri(), wait_until="networkidle", timeout=30000)
         await page.wait_for_timeout(3000)  # 3s for base64 images to render
         await page.screenshot(path=str(png_path), full_page=True)
+        await page.evaluate("""() => {
+            document.body.querySelectorAll('h1,h2,h3,div,p,span,img').forEach(el => el.style.display='none');
+        }""")
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(bg_path), full_page=True)
+        await page.evaluate("""() => {
+            document.body.querySelectorAll('h1,h2,h3,div,p,span,img').forEach(el => el.style.display='');
+            document.body.style.background = 'transparent';
+            document.body.style.backgroundImage = 'none';
+            document.body.style.backgroundSize = 'auto';
+            document.body.style.backgroundPosition = '0 0';
+        }""")
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(text_path), full_page=True, omit_background=True)
 
         sz = png_path.stat().st_size
         ok, reason = _rendered_card_quality(png_path)
         assert ok, f"card_{idx:02d}.png quality failed ({reason}, {sz//1024}KB)"
-        print(f"  OK card_{idx:02d}.png ({sz//1024}KB, {reason})")
+        assert_output(str(bg_path), 30000, f"card_{idx:02d}_bg.png")
+        assert_output(str(text_path), 10000, f"card_{idx:02d}_text.png")
+        print(f"  OK card_{idx:02d}.png ({sz//1024}KB, {reason}) + bg/text layers")
 
     await browser.close()
     await pw.stop()
     (Path(video_dir) / "cards.done").write_text("ok")
     print(f"  ✅ 卡片完成 ({len(cards)}张)")
+
+def _background_layer_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25) -> str:
+    mode = index % 4
+    if mode == 0:
+        zexpr = f"z='min(1.0+0.12*on/{total_frames},1.22)'"
+        xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
+    elif mode == 1:
+        zexpr = f"z='max(1.22-0.12*on/{total_frames},1.0)'"
+        xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
+    elif mode == 2:
+        zexpr = "z='1.12'"
+        xexpr, yexpr = "x='iw/2-iw/zoom/2+sin(on/45)*30'", "y='ih/2-ih/zoom/2'"
+    else:
+        zexpr = "z='1.12'"
+        xexpr, yexpr = "x='iw/2-iw/zoom/2-cos(on/45)*30'", "y='ih/2-ih/zoom/2'"
+    return (
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,"
+        f"zoompan={zexpr}:{xexpr}:{yexpr}:d={total_frames}:s={width}x{height}:fps={fps}"
+    )
+
+
+def _text_layer_filter(width: int, height: int, total_frames: int, index: int) -> str:
+    """Return distinct RGBA-safe text-layer motion filters for each card."""
+    base = (
+        f"format=rgba,scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
+    )
+    hold = max(total_frames, 1)
+    mode = index % 4
+    if mode == 0:
+        return base + "fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
+    if mode == 1:
+        return base + "scale=iw*1.018:ih*1.018,crop=iw/1.018:ih/1.018,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
+    if mode == 2:
+        return base + f"crop={width}:{height}:x='min(24,on*24/{hold})':y=0,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
+    return base + f"crop={width}:{height}:x='max(0,24-on*24/{hold})':y=0,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
+
+
+def _layered_segment_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25) -> str:
+    bg_vf = _background_layer_filter(width, height, total_frames, index, fps=fps)
+    text_vf = _text_layer_filter(width, height, total_frames, index)
+    return f"[0:v]{bg_vf}[bgv];[1:v]{text_vf}[txv];[bgv][txv]overlay=0:0:format=auto,format=yuv420p[v]"
 
 
 async def gen_tts(video_dir, cards, voice_idx=0):
@@ -406,9 +467,25 @@ def render_segments(video_dir, cards, width=1080, height=1920):
         dur_r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(tts_mp3)],capture_output=True,text=True)
         dur = float(dur_r.stdout.strip() or 6.0) + 0.5
 
-        anim_mode = i % 4
+        bg_png = Path(video_dir) / "cards" / f"card_{idx:02d}_bg.png"
+        text_png = Path(video_dir) / "cards" / f"card_{idx:02d}_text.png"
         fps = 25
         total_frames = max(int(dur * fps), 63)
+        if bg_png.exists() and text_png.exists():
+            subprocess.run(["ffmpeg","-y","-loop","1","-i",str(bg_png),
+                "-loop","1","-i",str(text_png),
+                "-i",str(tts_mp3),
+                "-filter_complex", _layered_segment_filter(width, height, total_frames, i, fps=fps),
+                "-map","[v]","-map","2:a",
+                "-c:v","libx264","-t",str(dur),"-preset","ultrafast","-crf","28",
+                "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
+                "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
+            assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
+            sz = os.path.getsize(str(seg_mp4))
+            print(f"  鉁?seg_{idx:02d}.mp4 ({sz//1024}KB, layered)")
+            continue
+
+        anim_mode = i % 4
         if anim_mode == 0:
             zexpr = f"z='min(1.0+0.5*on/{total_frames},1.4)'"
             xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"

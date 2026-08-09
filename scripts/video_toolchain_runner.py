@@ -324,6 +324,7 @@ def _run_cinema_visual_gate(output_dir: Path) -> dict:
         if root.is_dir():
             for pattern in ("*.png", "*.jpg", "*.jpeg", "*.webp"):
                 candidates.extend(root.glob(pattern))
+    candidates = [path for path in candidates if _is_full_card_visual_candidate(path)]
     candidates = sorted(set(candidates), key=lambda path: path.stat().st_mtime)
     if not candidates:
         return {"passed": False, "error": "no rendered card images found for cinema visual gate", "checked_images": []}
@@ -335,6 +336,11 @@ def _run_cinema_visual_gate(output_dir: Path) -> dict:
         if proc.returncode != 0:
             return {"passed": False, "error": f"cinema visual gate failed for {image.name}", "checked_images": checked}
     return {"passed": True, "checked_images": checked}
+
+
+def _is_full_card_visual_candidate(path: Path) -> bool:
+    """Skip auxiliary render layers; visual_gate expects complete card frames."""
+    return not path.name.endswith(("_bg.png", "_text.png"))
 
 
 def _load_plan() -> dict:
