@@ -1,0 +1,98 @@
+{
+  "version": "image_text_card_modules_v1",
+  "selection_policy": "free_first_content_matched_recipe_selection",
+  "applies_to": [
+    "wechat",
+    "xiaohongshu",
+    "zhihu",
+    "juejin",
+    "bilibili",
+    "douyin_pet",
+    "douyin_ai",
+    "shipinhao",
+    "youtube",
+    "tiktok"
+  ],
+  "module_groups": {
+    "strategy_inputs": [
+      "growth_strategy_latest",
+      "platform_source_matrix",
+      "historical_feedback",
+      "topic_dedup_gate"
+    ],
+    "card_recipe": [
+      "content_platform.content_recipe.build_image_text_card_recipe",
+      "hermes_skill:content/knowledge-card-designer",
+      "scripts/wechat_image_post_cards.py"
+    ],
+    "image_generation_free_first": [
+      "cloudflare_workers_ai_free_tier",
+      "pollinations",
+      "image_gen_engine"
+    ],
+    "image_retrieval": [
+      "pexels",
+      "pixabay",
+      "unsplash"
+    ],
+    "image_editing_and_layout": [
+      "knowledge_card_renderer",
+      "html_css_card_renderer",
+      "playwright_screenshot_renderer",
+      "ai_edit_real_material"
+    ],
+    "optional_external_mcp_candidates": [
+      "paper_design_mcp",
+      "postnitro_mcp",
+      "contentdrips_mcp"
+    ],
+    "quality_gates": [
+      "validate_image_text_card_recipe",
+      "scripts/validate_image_text_card_recipe.py",
+      "validate_wechat_image_post_packet",
+      "visual_gate",
+      "asset_license_gate",
+      "anti_template_gate"
+    ]
+  },
+  "layout_families": [
+    "hero_hook",
+    "split_problem_solution",
+    "timeline_steps",
+    "quote_focus",
+    "checklist_dense",
+    "data_callout",
+    "mistake_vs_fix",
+    "summary_cta"
+  ],
+  "style_families": [
+    "editorial_blue",
+    "warm_field",
+    "minimal_ink",
+    "fresh_green",
+    "dark_focus",
+    "paper_note",
+    "tech_dashboard"
+  ],
+  "hard_gates": [
+    "one_idea_per_card",
+    "first_card_hook_payoff",
+    "final_card_single_cta",
+    "foreground_effects_separate_from_background_effects",
+    "topic_matched_real_or_generated_background",
+    "license_manifest_required",
+    "layout_palette_batch_diversity",
+    "mobile_safe_typography",
+    "no_gradient_or_placeholder_primary_background",
+    "no_random_unmatched_stock_photo"
+  ],
+  "forbidden": [
+    "fixed_template_for_every_topic",
+    "decorative_card_without_information_value",
+    "same_layout_whole_batch",
+    "same_palette_whole_batch",
+    "pure_css_gradient_as_primary_background",
+    "unlicensed_asset",
+    "paid_provider_without_explicit_allowance"
+  ]
+}

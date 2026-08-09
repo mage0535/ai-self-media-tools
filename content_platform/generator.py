@@ -10,7 +10,7 @@ from .paths import style_guide_path
 from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
-from .content_recipe import build_article_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
+from .content_recipe import build_article_recipe, build_image_text_card_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 from .tool_selection import build_tool_selection_evidence
 
 
@@ -298,6 +298,14 @@ class DraftGenerator:
             cards=cards,
             content_type="embedded_knowledge_cards",
         )
+        draft_meta["image_text_card_recipe"] = build_image_text_card_recipe(
+            platform=platform,
+            content_type="image_text_cards",
+            title=topic_text,
+            cards=cards,
+            sections=sections,
+            content_goal="increase opens, saves, shares, comments, and follow conversion with platform-matched visual cards",
+        )
         tool_manifest = build_tool_invocation_manifest(
             planned_tools={
                 "generator_normalize": "content_platform.generator",
@@ -305,6 +313,7 @@ class DraftGenerator:
                 "visual_policy": "content_platform.visual_content_policy",
                 "growth_strategy": "content_platform.growth_policy",
                 "knowledge_card_designer": KNOWLEDGE_CARD_SKILL,
+                "image_text_card_recipe": "content_platform.content_recipe",
             },
             invocations={
                 "generator_normalize": {"status": "ok", "output": "draft_meta"},
@@ -312,6 +321,7 @@ class DraftGenerator:
                 "visual_policy": {"status": "ok", "output": "draft_meta.visual_content_policy"},
                 "growth_strategy": {"status": "ok", "output": "draft_meta.growth_strategy"},
                 "knowledge_card_designer": {"status": "planned_internal", "output": "draft_meta.embedded_knowledge_cards"},
+                "image_text_card_recipe": {"status": "ok", "output": "draft_meta.image_text_card_recipe"},
             },
         )
         draft_meta["tool_invocation_manifest"] = tool_manifest

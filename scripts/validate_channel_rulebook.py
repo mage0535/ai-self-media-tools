@@ -215,11 +215,19 @@ def main() -> None:
         "wechat_same_lane_account_analysis",
         "github_trending_collector",
         "wechat_and_external_hot_trend_analysis",
+        "image_text_card_recipe",
+        "scripts/validate_image_text_card_recipe.py",
         "scripts/validate_wechat_auto_packet.py",
+        "scripts/validate_wechat_image_post_packet.py",
         "draft_batchget_postcheck",
     ]:
         require(tool in wechat_tools, f"wechat must_use_tools missing: {tool}")
     require((ROOT / "scripts" / "validate_wechat_auto_packet.py").is_file(), "wechat validator script is missing")
+    require((ROOT / "scripts" / "validate_wechat_image_post_packet.py").is_file(), "wechat image-post validator script is missing")
+    require((ROOT / "scripts" / "validate_image_text_card_recipe.py").is_file(), "image text card recipe validator script is missing")
+    require((ROOT / "config" / "image_text_card_modules.json").is_file(), "image text card module registry is missing")
+    for gate in ["wechat_image_post_cards_required", "image_text_card_recipe_required", "image_text_card_recipe_cli_gate", "wechat_image_post_real_scene_backgrounds", "wechat_image_post_layout_diversity"]:
+        require(gate in (wechat.get("quality_gates") or []), f"wechat quality gate missing: {gate}")
     wechat_channels = wechat.get("content_channels") or {}
     require(
         wechat_channels.get("github_selection") == "weekly_bundle_one_ai_project_plus_one_non_ai_project",

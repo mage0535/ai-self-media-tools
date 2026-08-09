@@ -148,17 +148,26 @@ def _tools():
         )
 
     async def mcp_build_content_recipe(packet: str = "{}", platform: str = "") -> dict:
-        from content_platform.content_recipe import build_article_recipe, build_knowledge_card_recipe
+        from content_platform.content_recipe import build_article_recipe, build_image_text_card_recipe, build_knowledge_card_recipe
 
         data = json.loads(packet or "{}")
         channel = platform or str(data.get("platform") or "")
         cards = data.get("embedded_knowledge_cards") or data.get("knowledge_card_sequence") or []
+        image_cards = data.get("cards") or data.get("image_cards") or cards
         result = {
             "platform": channel,
             "knowledge_card_recipe": build_knowledge_card_recipe(
                 platform=channel,
                 cards=cards,
                 content_type=str(data.get("content_type") or data.get("content_form") or "knowledge_cards"),
+            ),
+            "image_text_card_recipe": build_image_text_card_recipe(
+                platform=channel,
+                content_type=str(data.get("content_type") or data.get("content_form") or "image_text_cards"),
+                title=str(data.get("title") or ""),
+                cards=image_cards,
+                sections=data.get("sections") or [],
+                content_goal=str(data.get("content_goal") or data.get("goal") or ""),
             ),
         }
         content_type = str(data.get("content_type") or data.get("content_form") or "")

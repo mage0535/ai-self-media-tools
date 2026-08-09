@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from content_platform.image_provider import ImageProviderError, generate_image
-from content_platform.content_recipe import build_tool_invocation_manifest
+from content_platform.content_recipe import build_image_text_card_recipe, build_tool_invocation_manifest
 
 CARD_W, CARD_H = 1080, 1440
 PALETTES = ["cold", "warm", "minimal", "dark", "fresh", "field", "editorial"]
@@ -196,6 +196,14 @@ def build_packet(md_path: Path, title: str, out_dir: Path, max_cards: int, provi
                 "engagement": {"hook_or_payoff": spec["body"][:80], "save_reason": "single-card checklist or decision point"},
             }
         )
+    image_text_card_recipe = build_image_text_card_recipe(
+        platform="wechat",
+        content_type="wechat_image_post",
+        title=title,
+        cards=cards,
+        sections=[{"id": f"section_{idx}", "role": card.get("role") or "content"} for idx, card in enumerate(cards, 1)],
+        content_goal="increase WeChat full-read rate, saves, shares, comments, and follow conversion with image-message cards",
+    )
     return {
         "platform": "wechat",
         "content_type": "wechat_image_post",
@@ -209,15 +217,18 @@ def build_packet(md_path: Path, title: str, out_dir: Path, max_cards: int, provi
             "layout_diversity": True,
             "source_guidance": ["strong cover hook", "one idea per card", "clear CTA"],
         },
+        "image_text_card_recipe": image_text_card_recipe,
         "tool_invocation_manifest": build_tool_invocation_manifest(
             planned_tools={
                 "markdown_section_splitter": "scripts/wechat_image_post_cards.py",
+                "image_text_card_recipe": "content_platform.content_recipe",
                 "image_provider": "content_platform.image_provider",
                 "wechat_image_card_renderer": "scripts/wechat_image_post_cards.py",
                 "wechat_image_post_validator": "scripts/validate_wechat_image_post_packet.py",
             },
             invocations={
                 "markdown_section_splitter": {"status": "ok", "output": str(len(specs))},
+                "image_text_card_recipe": {"status": "ok", "output": "wechat_image_post_packet.image_text_card_recipe"},
                 "image_provider": {"status": "ok", "output": provider},
                 "wechat_image_card_renderer": {"status": "ok", "output": str(out_dir)},
                 "wechat_image_post_validator": {"status": "planned", "output": str(out_dir / "wechat_image_post_packet.json")},
