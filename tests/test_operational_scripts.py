@@ -209,11 +209,14 @@ shared_trend_only: false
             "scripts/deliver_media.py",
             "scripts/normalize_kuaishou_render_dir.py",
             "scripts/render_landscape_video.py",
+            "scripts/validate_wechat_image_post_packet.py",
+            "scripts/wechat_image_post_cards.py",
         ]
         for rel in checked:
             text = Path(rel).read_text(encoding="utf-8")
             self.assertNotIn("/roo" + "t/", text, rel)
             self.assertNotIn("5975" + "133381", text, rel)
+            self.assertNotIn("PEXELS_API_KEY =", text, rel)
 
 
 if __name__ == "__main__":

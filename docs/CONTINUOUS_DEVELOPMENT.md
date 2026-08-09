@@ -2878,3 +2878,37 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Local operational script regression: `python -m pytest tests/test_operational_scripts.py -q` => `9 passed`.
 - Local focused regression: `python -m pytest tests/test_operational_scripts.py tests/test_media_quality.py tests/test_content.py tests/test_platform_boundary_and_growth_policy.py tests/test_delivery_health.py -q` => `91 passed, 19 subtests passed`.
 - Local full regression: `python -m pytest -q` => `557 passed, 29 subtests passed`.
+
+## 2026-08-09 - WeChat Image-Message Card Dual Track
+
+### Finding
+- Hermes had a working private `wechat_image_post_cards.py` script and a `newspic` draft publisher, but the capability was not represented in the public repo workflow or quality gates.
+- The private card script contained a default Pexels API key and allowed a CSS-gradient fallback when real background retrieval failed.
+- The private `publish_image_draft()` path created `article_type=newspic` drafts, but image-message batchget verification could warn and continue, which is not strong enough for production completion.
+
+### Implemented
+- Added `scripts/wechat_image_post_cards.py`, a publish-safe image-message card generator that reads provider credentials only through the existing image-provider secret lookup and does not upload to WeChat.
+- Added `scripts/validate_wechat_image_post_packet.py` and `validate_wechat_image_post_packet()` to gate image-message cards independently from long-form articles.
+- Added `wechat_image_post_plan` to the WeChat professional draft toolchain so every WeChat long article can carry the required companion image-message plan.
+- Updated the channel rulebook so WeChat requires the image-message card generator, image-message validator, newspic draft API, real-scene backgrounds, layout diversity, readability, and batchget postcheck.
+- Added public-script privacy coverage for the new scripts.
+
+### Design Rules
+- Image-message cards use a 3:4 `1080x1440` format with 3-20 cards.
+- Card 1 must be a hook/cover card; the final card must be a CTA card.
+- Each card must carry one idea, one payoff, and a save/comment reason.
+- Batch-level layouts and palettes must rotate; fixed-template repetition is rejected.
+- Real or licensed scene backgrounds are required; CSS gradients, pure colors, procedural backgrounds, and placeholders cannot pass production validation.
+- Production success requires `newspic` batchget confirmation with title present and image count matched.
+
+### External Research Inputs
+- WeChat cover and article guidance: covers materially affect open rate; cover/title are the first visible decision point.
+- Carousel guidance: one idea per slide, clear visual flow, readable typography, strong hook, and one clear CTA improve swipe/read/save behavior.
+- These findings were translated into hard gates rather than stored only as copywriting advice.
+
+### Verification
+- Local focused regression: `python -m pytest tests/test_media_quality.py tests/test_wechat_toolchain.py tests/test_operational_scripts.py tests/test_platform_quality_gate_runtime.py tests/test_hermes_wechat_adapter_script.py -q` => `72 passed`.
+- Local script probe: placeholder background packets are generated but blocked by `real_scene_backgrounds` and `draft_postcheck`.
+- Local rulebook validation: `channel rulebook ok: 19 channels`.
+- Local project audit: `ok: true, issues: []`.
+- Local full regression: `python -m pytest -q` => `558 passed, 29 subtests passed`.

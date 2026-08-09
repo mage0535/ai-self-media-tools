@@ -38,6 +38,7 @@ TOOLCHAIN_META_KEYS = {
     "concrete_case",
     "actionable_checklist",
     "tool_invocations",
+    "wechat_image_post_plan",
 }
 
 
@@ -277,6 +278,30 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         "concrete_case": str(job.get("topic") or title),
         "actionable_checklist": ["remove duplicate tools", "assign a unique tool role", "set admission rules"],
         "tool_invocations": {"wewrite": invocation},
+        "wechat_image_post_plan": _wechat_image_post_plan(title, sections),
+    }
+
+
+def _wechat_image_post_plan(title: str, sections: list[str]) -> dict[str, Any]:
+    return {
+        "required": True,
+        "content_type": "wechat_image_post",
+        "article_type": "newspic",
+        "publish_target": "wechat_newspic_draft",
+        "card_count_range": [3, 9],
+        "recommended_card_count": min(9, max(3, len(sections) + 2)),
+        "source_article_title": title,
+        "structure": ["cover_hook", "one_idea_per_section", "saveable_checklist", "comment_or_keyword_cta"],
+        "visual_rules": {
+            "ratio": "3:4",
+            "size": "1080x1440",
+            "real_scene_background_required": True,
+            "forbid_css_gradient_fallback": True,
+            "layout_batch_repeat_forbidden": True,
+            "readability_required": True,
+        },
+        "quality_gate": "validate_wechat_image_post_packet",
+        "postcheck": "wechat_image_draft_batchget",
     }
 
 
