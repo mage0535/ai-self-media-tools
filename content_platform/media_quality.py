@@ -11,7 +11,7 @@ from .asset_license import validate_asset_licenses
 from .growth_policy import validate_growth_strategy
 from .preflight_manifest import validate_preflight_manifest
 from .video_recipe import load_effect_module_registry, validate_visual_recipe
-from .content_recipe import validate_article_recipe, validate_knowledge_card_recipe, validate_tool_invocation_manifest
+from .content_recipe import validate_article_recipe, validate_image_text_card_recipe, validate_knowledge_card_recipe, validate_tool_invocation_manifest
 from .tool_selection import validate_tool_selection_evidence
 
 TIKTOK_REPOST_LINE = "tiktok_hot_localized_repost"
@@ -862,6 +862,7 @@ def validate_wechat_image_post_packet(packet: dict[str, Any]) -> dict[str, Any]:
                 for card in cards
             ),
         },
+        "image_text_card_recipe": validate_image_text_card_recipe(packet.get("image_text_card_recipe")),
         "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "publishing_contract": {
             "passed": str(publishing.get("article_type") or "").casefold() == "newspic"

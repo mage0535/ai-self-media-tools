@@ -18,8 +18,10 @@ from content_platform.media_quality import (
 )
 from content_platform.content_recipe import (
     build_article_recipe,
+    build_image_text_card_recipe,
     build_knowledge_card_recipe,
     build_tool_invocation_manifest,
+    validate_image_text_card_recipe,
 )
 from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.growth_policy import build_growth_strategy
@@ -292,6 +294,14 @@ def complete_wechat_image_post_packet():
             "layout_diversity": True,
             "source_guidance": ["wechat cover practices", "carousel one idea per slide"],
         },
+        "image_text_card_recipe": build_image_text_card_recipe(
+            platform="wechat",
+            content_type="wechat_image_post",
+            title="Operator checklist",
+            cards=cards,
+            sections=[{"id": f"section_{i}", "role": "content"} for i in range(1, len(cards) + 1)],
+            content_goal="increase full reads, saves, shares, comments, and follow conversion",
+        ),
         "tool_invocation_manifest": complete_tool_invocation_manifest("article"),
         "publishing_plan": {
             "article_type": "newspic",
@@ -350,6 +360,40 @@ def test_wechat_image_post_packet_requires_real_scene_cards_and_hard_postcheck()
     result = validate_wechat_image_post_packet(bad)
     assert not result["passed"]
     assert "draft_postcheck" in result["failed_dimensions"]
+
+
+def test_image_text_card_recipe_requires_style_matrix_and_asset_binding():
+    packet = complete_wechat_image_post_packet()
+    recipe = packet["image_text_card_recipe"]
+    result = validate_image_text_card_recipe(recipe)
+    assert result["passed"], result
+
+    bad = json.loads(json.dumps(recipe))
+    bad["layout_matrix"]["background_effects"] = []
+    result = validate_image_text_card_recipe(bad)
+    assert not result["passed"]
+    assert "content_recipe" in result["failed_dimensions"]
+
+    bad = json.loads(json.dumps(packet))
+    bad.pop("image_text_card_recipe")
+    result = validate_wechat_image_post_packet(bad)
+    assert not result["passed"]
+    assert "image_text_card_recipe" in result["failed_dimensions"]
+
+
+def test_image_text_card_recipe_cli_accepts_full_packet(tmp_path):
+    packet_path = tmp_path / "wechat_image_post_packet.json"
+    packet_path.write_text(json.dumps(complete_wechat_image_post_packet()), encoding="utf-8")
+    root = Path(__file__).resolve().parents[1]
+    completed = subprocess.run(
+        [sys.executable, str(root / "scripts" / "validate_image_text_card_recipe.py"), str(packet_path)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 def complete_tool_selection_evidence(platform: str = "wechat", content_type: str = "article"):

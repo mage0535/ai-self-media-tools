@@ -80,6 +80,7 @@ class McpServerTests(unittest.TestCase):
 
         self.assertIn("article_recipe", recipe)
         self.assertIn("knowledge_card_recipe", recipe)
+        self.assertIn("image_text_card_recipe", recipe)
         self.assertIn("preflight_manifest", validation["failed_dimensions"])
         self.assertIn("tools_capability_analysis", tool_selection)
         self.assertIn("tool_selection_plan", tool_selection)

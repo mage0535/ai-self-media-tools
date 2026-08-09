@@ -16,6 +16,7 @@ ARTICLE_TOOL_GROUPS = {
     "account_data",
     "topic_dedup",
     "article_recipe",
+    "image_text_card_recipe",
     "knowledge_card",
     "image_generation",
     "image_retrieval",
@@ -216,6 +217,7 @@ def _default_candidates(group: str, is_video: bool) -> list[str]:
         "account_data": ["performance_cycle", "historical_feedback"],
         "topic_dedup": ["duplication_policy", "anti_spam_similarity_gate"],
         "article_recipe": ["content_platform.content_recipe"],
+        "image_text_card_recipe": ["content_platform.content_recipe", "wechat_image_post_cards", "carousel_design_patterns"],
         "knowledge_card": ["knowledge-card-designer"],
         "image_generation": ["cloudflare_workers_ai", "pollinations", "image_gen_engine"],
         "image_retrieval": ["pexels", "pixabay", "unsplash"],
@@ -247,7 +249,7 @@ def _fallback_selected_tools(is_video: bool) -> list[str]:
             "mix_bgm_with_gate",
             "visual_gate",
         ]
-    return ["generator_normalize", "preflight_manifest", "visual_policy", "knowledge_card_designer"]
+    return ["generator_normalize", "preflight_manifest", "visual_policy", "knowledge_card_designer", "image_text_card_recipe"]
 
 
 def _group_represented(group: str, selected_tools: list[str]) -> bool:

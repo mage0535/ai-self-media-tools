@@ -16,6 +16,7 @@ from typing import Any
 
 from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
+from .content_recipe import build_image_text_card_recipe
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 
 WECHAT_ALIASES = {"wechat", "weixin", "wechat_official"}
@@ -39,6 +40,7 @@ TOOLCHAIN_META_KEYS = {
     "actionable_checklist",
     "tool_invocations",
     "wechat_image_post_plan",
+    "image_text_card_recipe",
 }
 
 
@@ -272,6 +274,23 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         "real_scene_background_plan": {"required": True, "source_policy": "licensed_or_verified_real_scene_assets", "primary_background_kind": "real_scene_photo", "no_css_gradient_primary": True, "per_slide_backgrounds": backgrounds},
         "knowledge_card_plan": {"skill": KNOWLEDGE_CARD_SKILL, "card_type": "knowledge_summary", "platform": "wechat", "audience": "operators", "visual_scheme": "professional", "typography_hierarchy": "4:2:1", "self_check": ["readability", "attraction", "information_density", "share_or_save_value", "visual_match", "mobile_safe_boundaries"]},
         "embedded_knowledge_cards": [{"section": item["section"], "card_type": "step_tutorial", "layout": "timeline", "visual_subject": item["purpose"], "information_value": "explains adjacent article point", "self_check": ["readability", "attraction", "information_density", "visual_match"]} for item in section_map],
+        "image_text_card_recipe": build_image_text_card_recipe(
+            platform="wechat",
+            content_type="wechat_image_post",
+            title=title,
+            cards=[
+                {"role": "cover", "title": title, "layout": "hero", "palette": "editorial_blue", "visual_subject": title},
+                *[
+                    {"role": "content", "title": item["section"], "layout": layout, "palette": palette, "visual_subject": item["purpose"], "background": backgrounds[idx]}
+                    for idx, (item, layout, palette) in enumerate(
+                        zip(section_map, ["split", "timeline", "checklist"], ["warm_field", "minimal_ink", "fresh_green"])
+                    )
+                ],
+                {"role": "cta", "title": "comment or keyword reply CTA", "layout": "summary_cta", "palette": "dark_focus", "visual_subject": "reader next step"},
+            ],
+            sections=sections,
+            content_goal="increase WeChat open rate, full-read rate, saves, comments, and follow conversion",
+        ),
         "cover_design": {"visual_subject": title[:40], "topic_alignment": "matches article promise", "mobile_readable": True, "visual_hierarchy": "title, pain point, method cue", "template_family": "casebook"},
         "differentiation_dimensions": ["wewrite professional draft", "case-led structure", "inline visual plan"],
         "reader_payoff": "reader can apply the checklist today",

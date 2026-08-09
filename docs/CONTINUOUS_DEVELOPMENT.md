@@ -2912,3 +2912,28 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Local rulebook validation: `channel rulebook ok: 19 channels`.
 - Local project audit: `ok: true, issues: []`.
 - Local full regression: `python -m pytest -q` => `558 passed, 29 subtests passed`.
+
+## 2026-08-09 - Unified Image-Text Card Recipe
+
+### Finding
+- The WeChat image-message lane had strong concrete checks, but the reusable planning layer was still split across article recipes, knowledge-card recipes, and script-local card plans.
+- That made it easy for Hermes to generate attractive-looking screenshots without proving why the layout, background, image source, text rhythm, and CTA fit the topic and platform.
+- External carousel/card practices were useful, but they needed to become a code contract rather than an operator reminder.
+
+### Implemented
+- Added `image_text_card_recipe_v1` in `content_platform.content_recipe` with builder, validator, core fingerprint, instance fingerprint, style matrix, layout matrix, card-to-asset binding, source policy, and engagement contract.
+- Added `config/image_text_card_modules.json` as the free-first capability registry for image-text cards across WeChat, Xiaohongshu, Zhihu, Juejin, Bilibili, Douyin, Shipinhao, YouTube, and TikTok handoff packages.
+- Added `scripts/validate_image_text_card_recipe.py` so Hermes can validate the recipe from either a standalone recipe JSON or a full content packet.
+- WeChat image-message packets now must include `image_text_card_recipe`; `validate_wechat_image_post_packet()` rejects missing or weak recipes.
+- `DraftGenerator`, the WeChat professional toolchain, `wechat_image_post_cards.py`, and MCP `build_content_recipe` now emit the unified recipe.
+- Tool selection now analyzes `image_text_card_recipe` as a first-class article/image-card tool group.
+
+### Operational Rule
+- For any article, carousel, image-message, Xiaohongshu note, or image-card video source pack, Hermes should first build or load `image_text_card_recipe`.
+- The recipe must prove: cover hook, one idea per card, final single CTA, at least 3 layout/palette/text-arrangement variants, foreground and background effects separated, topic-matched real or generated images, source/license tracking, and 7-day fatigue checking.
+- Optional external MCPs such as paper design, PostNitro, and ContentDrips may be considered as design inspiration or future connectors, but they are not mandatory production dependencies.
+- Production card backgrounds cannot be CSS gradients, pure-color placeholders, or random stock photos.
+
+### Verification
+- Local focused regression: `python -m pytest tests/test_media_quality.py tests/test_content.py tests/test_mcp_server.py tests/test_wechat_toolchain.py tests/test_operational_scripts.py -q` => `75 passed`.
+- Local rulebook validation: `channel rulebook ok: 19 channels`.

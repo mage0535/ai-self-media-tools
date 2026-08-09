@@ -52,6 +52,7 @@ class ContentTests(unittest.TestCase):
         meta = draft["draft_meta"]
         self.assertIn("tools_capability_analysis", meta)
         self.assertIn("tool_selection_plan", meta)
+        self.assertIn("image_text_card_recipe", meta)
         self.assertTrue(meta["tools_capability_analysis"]["all_relevant_tool_types_analyzed"])
         self.assertGreaterEqual(len(meta["tool_selection_plan"]["selected_tools"]), 3)
         self.assertEqual(
