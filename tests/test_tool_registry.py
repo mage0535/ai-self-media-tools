@@ -69,6 +69,19 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertTrue(result["zhihu_open_platform"]["available"])
         self.assertTrue(result["zhihu_open_cli"]["available"])
 
+    def test_registry_reports_default_user_zhihu_search_binary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            binary = home / ".local" / "bin" / "zhihu-search"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("# fixture", encoding="utf-8")
+
+            with patch.dict("os.environ", {"HOME": str(home), "USERPROFILE": str(home)}, clear=True):
+                with patch("content_platform.tool_registry.shutil.which", return_value=""):
+                    result = ToolRegistry().probe()
+
+        self.assertTrue(result["zhihu_open_cli"]["available"])
+
 
 if __name__ == "__main__":
     unittest.main()
