@@ -1,6 +1,15 @@
 # Continuous Development
 
-Last updated: 2026-08-08
+Last updated: 2026-08-10
+
+## 2026-08-10 Zhihu Open Platform Skill/MCP Integration
+
+- Root cause: Hermes had installed the Zhihu Open Platform skill and a server-local adapter, but the publishable local/GitHub code did not yet contain the adapter, MCP tools, or explicit capability probes. That made the feature usable on the live server only as a dirty runtime patch.
+- Added `content_platform.zhihu_open_adapter`, a read-only wrapper around the `zhihu-search` CLI. Credentials stay in the CLI-managed runtime config; repository code contains no Access Secret and no server-private path.
+- Zhihu trend collection now tries the official open-platform hot list first, then falls back to the existing cookie-based `zhihu` CLI and the previous web-search fallback. This lets the heat/topic workflow use the new channel automatically without making production depend on it exclusively.
+- MCP now exposes `zhihu_open_search`, `zhihu_open_ask`, `zhihu_open_user_contents`, `zhihu_open_user_followees`, `zhihu_open_user_collections`, `zhihu_open_trending`, and `zhihu_open_quota`. `capability_status` lists the same tools so Hermes lazy discovery/auto-wake can see them before execution.
+- `ToolRegistry.probe()` now reports `zhihu_open_platform`, `zhihu_publisher_skill`, and `zhihu_open_cli`, making it possible to distinguish "Zhihu skill installed" from "Zhihu open-platform CLI callable".
+- Verification targets: `tests/test_zhihu_open_adapter.py`, `McpServerTests.test_zhihu_open_platform_tools_are_exposed_for_mcp_autowake`, and `ToolRegistryTests.test_registry_reports_zhihu_open_platform_skill_and_cli`.
 
 ## 2026-08-10 Operations Evidence Gates And Final-Artifact Verification
 

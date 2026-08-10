@@ -88,6 +88,30 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("video_effect_modules", capability)
         self.assertIn("build_tool_selection_plan", capability["mcp_tools"])
 
+    def test_zhihu_open_platform_tools_are_exposed_for_mcp_autowake(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            data = home / "data"
+            data.mkdir()
+            (home / "config.json").write_text(json.dumps({"data_dir": str(data)}), encoding="utf-8")
+            Store(data / "state.db").init()
+
+            with patch.dict("os.environ", {"CONTENT_PLATFORM_HOME": str(home), "HOME": str(home), "USERPROFILE": str(home)}, clear=True):
+                tools = {name: handler for handler, name, _, _ in mcp_server._tools()}
+                capability = asyncio.run(tools["capability_status"]())
+
+        for name in [
+            "zhihu_open_search",
+            "zhihu_open_ask",
+            "zhihu_open_user_contents",
+            "zhihu_open_user_followees",
+            "zhihu_open_user_collections",
+            "zhihu_open_trending",
+            "zhihu_open_quota",
+        ]:
+            self.assertIn(name, tools)
+            self.assertIn(name, capability["mcp_tools"])
+
 
 if __name__ == "__main__":
     unittest.main()
