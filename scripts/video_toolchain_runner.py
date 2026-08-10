@@ -678,7 +678,8 @@ def _beats(text: str) -> list[str]:
 
 
 def _card_title(text: str, index: int) -> str:
-    # Chinese text has no word separators, so preserve its leading characters as a title.
+    # 2026-08-10: Chinese has no spaces, so split() previously always returned Scene N.
+    # Keep the first 16 Chinese characters; English uses words with a short-text fallback.
     text = str(text or "").strip()
     if not text:
         return f"Scene {index + 1}"
