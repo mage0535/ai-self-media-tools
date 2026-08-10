@@ -10,7 +10,9 @@ Last updated: 2026-08-10
 - MCP now exposes `zhihu_open_search`, `zhihu_open_ask`, `zhihu_open_user_contents`, `zhihu_open_user_followees`, `zhihu_open_user_collections`, `zhihu_open_trending`, and `zhihu_open_quota`. `capability_status` lists the same tools so Hermes lazy discovery/auto-wake can see them before execution.
 - `ToolRegistry.probe()` now reports `zhihu_open_platform`, `zhihu_publisher_skill`, and `zhihu_open_cli`, making it possible to distinguish "Zhihu skill installed" from "Zhihu open-platform CLI callable".
 - Follow-up server validation found `zhihu-search` installed in the default user binary path but not on PATH. `ToolRegistry` now checks `ZHIHU_SEARCH_BIN`, PATH, and the default user binary path so Hermes capability discovery does not falsely report the open-platform CLI as unavailable.
-- Verification targets: `tests/test_zhihu_open_adapter.py`, `McpServerTests.test_zhihu_open_platform_tools_are_exposed_for_mcp_autowake`, and `ToolRegistryTests.test_registry_reports_zhihu_open_platform_skill_and_cli`.
+- Follow-up deep scan found that `python -m content_platform.mcp_server` did not execute `main()`, so Hermes MCP registration could not reliably auto-start the server. The module now has a real CLI entrypoint and a regression test for `--help`.
+- Hermes runtime registration was completed as a stdio MCP named `content-platform`. `hermes mcp test content-platform` discovered 20 tools, including all 7 `zhihu_open_*` tools, confirming that new Hermes sessions can auto-wake this project MCP instead of relying on manual imports.
+- Verification targets: `tests/test_zhihu_open_adapter.py`, `McpServerTests.test_zhihu_open_platform_tools_are_exposed_for_mcp_autowake`, `McpServerTests.test_mcp_server_module_exposes_cli_entrypoint`, and `ToolRegistryTests.test_registry_reports_zhihu_open_platform_skill_and_cli`.
 
 ## 2026-08-10 Hermes Runtime Drift Cleanup For Video And Metrics
 
