@@ -678,11 +678,12 @@ def _beats(text: str) -> list[str]:
 
 
 def _card_title(text: str, index: int) -> str:
-    # 2026-08-10: Chinese has no spaces, so split() previously always returned Scene N.
-    # Keep the first 16 Chinese characters; English uses words with a short-text fallback.
+    # ⚠️ 2026-08-10 修复：中文无空格，split() 整句算一个词 → 恒 <4 → 返回 "Scene N" 占位
+    # 改为按字符数截取（中文 16 字内作卡片标题，英文按词截取兜底）
     text = str(text or "").strip()
     if not text:
         return f"Scene {index + 1}"
+    # 中文为主：直接取前 16 字符
     if re.search(r"[\u4e00-\u9fff]", text):
         return text[:16]
     words = text.split()
