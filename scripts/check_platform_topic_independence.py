@@ -238,6 +238,13 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
                     "similarity": round(_similarity(topics[left], topics[right]), 2),
                 })
 
+    try:
+        from content_platform.ops_run import direction_register_issues
+
+        failures.extend(direction_register_issues(root, date))
+    except Exception:
+        failures.append({"failed_dimensions": ["direction_register_check_failed"]})
+
     return {"passed": not failures, "date": date, "platforms": platforms, "records": records, "failures": failures}
 
 

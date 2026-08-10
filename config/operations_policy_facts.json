@@ -1,0 +1,11 @@
+{
+  "wechat": {
+    "articles_per_week": 2,
+    "newspic_dual_track": true
+  },
+  "video": {
+    "vertical_resolution": "1080x1920",
+    "short_max_seconds": 60,
+    "layered_motion": true
+  }
+}

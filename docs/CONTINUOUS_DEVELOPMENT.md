@@ -2,6 +2,15 @@
 
 Last updated: 2026-08-08
 
+## 2026-08-10 Operations Evidence Gates And Final-Artifact Verification
+
+- Added `content_platform.ops_run` and `scripts/ops_run.py`. A date-scoped manifest now records topic direction choices before generation. Same-direction topics are blocked across platforms even when titles use different wording; a documented follow-up must carry the prior platform, a distinct angle, and a reader-facing reason.
+- `scripts/check_platform_topic_independence.py` now reads the same-date direction register. This closes the old bypass where source-matrix checks passed while multiple platforms selected the same core direction.
+- Added `content_platform.video_artifact` and `scripts/verify_video_artifact.py`. Final-video checks inspect the encoded artifact and render manifest for vertical dimensions, short duration, subtitle dimensions, placeholder titles, and measurable motion. `video_toolchain_runner.py` writes card-title/subtitle evidence and fails the render if the final artifact gate fails.
+- Added an executable operations-policy contract plus `scripts/audit_strategy_skill_conflicts.py`. `validate_channel_rulebook.py` now blocks when declared WeChat cadence, newspic dual-track, vertical subtitle format, short duration, or layered-motion rules drift from the public policy contract.
+- The quality directive now documents the required run order and resolves the old 40-100 second short-video wording: vertical short-video platforms have a hard 60-second maximum, while long-form requires its own plan.
+- Verification: new regression coverage plus existing related suites passed; the final handoff must still run the complete test suite, rulebook validation, and project audit in the target runtime.
+
 ## 2026-08-08 Zhihu Similarity Recovery And Cross-Platform Anti-Spam Gate
 
 - Zhihu companion pins no longer reuse an article title or opening paragraph. `content_platform.zhihu_promotion` now generates an independent short commentary and validates it for source overlap, title overlap, copied article fragments, content length, discussion question, and visible article URL before publish mode can call the Zhihu CLI.
