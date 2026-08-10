@@ -72,7 +72,7 @@ class ToolRegistry:
             "gif_splitter_skill": self._probe_skill_dir("utilities/gif-splitter"),
             "zhihu_open_platform": self._probe_skill_dir("content/zhihu-open-platform"),
             "zhihu_publisher_skill": self._probe_skill_dir("zhihu-publisher"),
-            "zhihu_open_cli": {"available": bool(shutil.which("zhihu-search")), "kind": "zhihu_open_platform"},
+            "zhihu_open_cli": self._probe_zhihu_open_cli(),
             "skills_adapter": self._probe_skills_adapter(),
         }
 
@@ -101,6 +101,15 @@ class ToolRegistry:
 
             count = len(glob.glob(os.path.join(path, "**/SKILL.md"), recursive=True))
         return {"available": count > 0, "skill_count": count, "kind": "content_generation"}
+
+    def _probe_zhihu_open_cli(self):
+        configured = os.environ.get("ZHIHU_SEARCH_BIN")
+        found = shutil.which("zhihu-search")
+        binary = configured or found or str(Path.home() / ".local" / "bin" / "zhihu-search")
+        available = bool(found) if not configured else Path(configured).expanduser().is_file()
+        if not available and not found:
+            available = Path(binary).expanduser().is_file()
+        return {"available": available, "binary": binary, "kind": "zhihu_open_platform"}
 
     def _probe_skills_adapter(self):
         import importlib.util
