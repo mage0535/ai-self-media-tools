@@ -55,6 +55,20 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertIn("autocli", status)
         self.assertFalse(status["autocli"]["available"])
 
+    def test_registry_reports_zhihu_open_platform_skill_and_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            skill = home / ".hermes" / "skills" / "content" / "zhihu-open-platform"
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("# fixture", encoding="utf-8")
+
+            with patch.dict("os.environ", {"HOME": str(home), "USERPROFILE": str(home)}, clear=True):
+                with patch("content_platform.tool_registry.shutil.which", side_effect=lambda name: "/bin/zhihu-search" if name == "zhihu-search" else ""):
+                    result = ToolRegistry().probe()
+
+        self.assertTrue(result["zhihu_open_platform"]["available"])
+        self.assertTrue(result["zhihu_open_cli"]["available"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -131,7 +131,19 @@ def _tools():
                 "module_count": len(modules or {}),
                 "template_family_count": len(families or {}),
             },
-            "mcp_tools": ["capability_status", "build_content_recipe", "build_tool_selection_plan", "validate_content_package"],
+            "mcp_tools": [
+                "capability_status",
+                "build_content_recipe",
+                "build_tool_selection_plan",
+                "validate_content_package",
+                "zhihu_open_search",
+                "zhihu_open_ask",
+                "zhihu_open_user_contents",
+                "zhihu_open_user_followees",
+                "zhihu_open_user_collections",
+                "zhihu_open_trending",
+                "zhihu_open_quota",
+            ],
         }
 
     async def mcp_build_tool_selection_plan(packet: str = "{}", platform: str = "") -> dict:
@@ -203,9 +215,81 @@ def _tools():
             return validate_platform_article_packet(data, channel)
         return validate_article_packet(data)
 
+    async def mcp_zhihu_open_search(query: str = "", limit: int = 10, scope: str = "zhihu") -> dict:
+        if not query:
+            return {"count": 0, "items": [], "error": "query required"}
+        from content_platform.zhihu_open_adapter import ZhihuOpenAdapter
+
+        try:
+            items = ZhihuOpenAdapter().search(query, limit=limit, scope=scope)
+            return {"count": len(items), "items": items}
+        except Exception as exc:
+            return {"count": 0, "items": [], "error": str(exc)[:200]}
+
+    async def mcp_zhihu_open_ask(query: str = "", model: str = "fast") -> dict:
+        if not query:
+            return {"error": "query required"}
+        from content_platform.zhihu_open_adapter import ZhihuOpenAdapter
+
+        try:
+            return ZhihuOpenAdapter().ask(query, model=model)
+        except Exception as exc:
+            return {"error": str(exc)[:200]}
+
+    async def mcp_zhihu_open_user(content_type: str = "all", limit: int = 20) -> dict:
+        from content_platform.zhihu_open_adapter import ZhihuOpenAdapter
+
+        try:
+            items = ZhihuOpenAdapter().user_contents(content_type=content_type, limit=limit)
+            return {"count": len(items), "items": items}
+        except Exception as exc:
+            return {"count": 0, "items": [], "error": str(exc)[:200]}
+
+    async def mcp_zhihu_open_user_followees(limit: int = 20) -> dict:
+        from content_platform.zhihu_open_adapter import ZhihuOpenAdapter
+
+        try:
+            items = ZhihuOpenAdapter().user_followees(limit=limit)
+            return {"count": len(items), "items": items}
+        except Exception as exc:
+            return {"count": 0, "items": [], "error": str(exc)[:200]}
+
+    async def mcp_zhihu_open_user_collections(limit: int = 20) -> dict:
+        from content_platform.zhihu_open_adapter import ZhihuOpenAdapter
+
+        try:
+            items = ZhihuOpenAdapter().user_collections(limit=limit)
+            return {"count": len(items), "items": items}
+        except Exception as exc:
+            return {"count": 0, "items": [], "error": str(exc)[:200]}
+
+    async def mcp_zhihu_open_trending(limit: int = 20) -> dict:
+        from content_platform.zhihu_open_adapter import ZhihuOpenAdapter
+
+        try:
+            items = ZhihuOpenAdapter().trending(limit=limit, retries=1, retry_delay=15)
+            return {"count": len(items), "items": items}
+        except Exception as exc:
+            return {"count": 0, "items": [], "error": str(exc)[:200]}
+
+    async def mcp_zhihu_open_quota() -> dict:
+        from content_platform.zhihu_open_adapter import ZhihuOpenAdapter
+
+        try:
+            return ZhihuOpenAdapter().quota()
+        except Exception as exc:
+            return {"error": str(exc)[:200]}
+
     return [
         (mcp_seo_geo_check, "seo_geo_check", "Run 7-dim GEO quality check on text", {"text": str}),
         (mcp_trends_query, "trends_query", "Get current trending topics", {"limit": int}),
+        (mcp_zhihu_open_search, "zhihu_open_search", "Search Zhihu or web through Zhihu Open Platform", {"query": str, "limit": int, "scope": str}),
+        (mcp_zhihu_open_ask, "zhihu_open_ask", "Ask Zhihu Zhida through Zhihu Open Platform", {"query": str, "model": str}),
+        (mcp_zhihu_open_user, "zhihu_open_user_contents", "Fetch own Zhihu published contents through Zhihu Open Platform", {"content_type": str, "limit": int}),
+        (mcp_zhihu_open_user_followees, "zhihu_open_user_followees", "Fetch own Zhihu followees through Zhihu Open Platform", {"limit": int}),
+        (mcp_zhihu_open_user_collections, "zhihu_open_user_collections", "Fetch own Zhihu collections through Zhihu Open Platform", {"limit": int}),
+        (mcp_zhihu_open_trending, "zhihu_open_trending", "Fetch Zhihu hot list through Zhihu Open Platform", {"limit": int}),
+        (mcp_zhihu_open_quota, "zhihu_open_quota", "Show Zhihu Open Platform quota usage", {}),
         (mcp_create_job, "create_job", "Create a new content generation job", {"topic": str, "platforms": str, "brief": str}),
         (mcp_run_job, "run_job", "Run content generation for a job", {"job_id": str}),
         (mcp_approve_job, "approve_job", "Approve a job for publishing", {"job_id": str, "actor": str}),

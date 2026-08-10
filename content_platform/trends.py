@@ -393,7 +393,16 @@ class DirectTrendSource:
         return items
 
     def _zhihu_cli_hot(self):
-        """Zhihu hot list via the zhihu CLI (pyzhihu-cli) with real heat metrics."""
+        """Zhihu hot list via official open-platform CLI first, then cookie CLI."""
+        try:
+            from .zhihu_open_adapter import ZhihuOpenAdapter
+
+            adapter = ZhihuOpenAdapter(timeout=int(self.config.get("timeout", 15)) + 30)
+            items = adapter.trending(limit=self.limit, retries=1, retry_delay=10)
+            if items:
+                return items
+        except Exception:
+            pass
         from .zhihu_cli_adapter import ZhihuCliAdapter
         adapter = ZhihuCliAdapter(timeout=int(self.config.get("timeout", 15)) + 30)
         return adapter.fetch_hot(limit=self.limit)

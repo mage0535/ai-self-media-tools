@@ -70,6 +70,9 @@ class ToolRegistry:
             "gzh_design_skill": self._probe_skill_dir("creative/gzh-design-skill"),
             "magazine_layout": self._probe_skill_dir("creative/magazine-layout"),
             "gif_splitter_skill": self._probe_skill_dir("utilities/gif-splitter"),
+            "zhihu_open_platform": self._probe_skill_dir("content/zhihu-open-platform"),
+            "zhihu_publisher_skill": self._probe_skill_dir("zhihu-publisher"),
+            "zhihu_open_cli": {"available": bool(shutil.which("zhihu-search")), "kind": "zhihu_open_platform"},
             "skills_adapter": self._probe_skills_adapter(),
         }
 
