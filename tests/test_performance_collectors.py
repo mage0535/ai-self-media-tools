@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from content_platform.performance_collectors import collect_platform_metrics, collect_with_hermes_platform_scraper, _browser_backend_signal, _playwright_state_file
+from content_platform.performance_collectors import _probe_browser_backend_route
 from content_platform.performance_collectors import _extract_public_metrics
 
 
@@ -368,6 +369,60 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(result["status"], "backend_signal")
         self.assertEqual([item[0] for item in calls], ["CN_PROXY", "direct_diagnostic"])
         self.assertTrue(calls[1][2])
+
+    def test_backend_browser_route_normalizes_socks5h_for_playwright(self):
+        launched = {}
+
+        class FakePage:
+            url = "https://example.test"
+
+            def goto(self, *args, **kwargs):
+                return None
+
+            def wait_for_timeout(self, *args, **kwargs):
+                return None
+
+            def locator(self, *args, **kwargs):
+                return self
+
+            def inner_text(self, *args, **kwargs):
+                return "阅读总量 123 点赞总量 4"
+
+            def close(self):
+                return None
+
+        class FakeContext:
+            def new_page(self):
+                return FakePage()
+
+            def close(self):
+                return None
+
+        class FakeBrowser:
+            def new_context(self, **kwargs):
+                return FakeContext()
+
+            def close(self):
+                return None
+
+        class FakeChromium:
+            def launch(self, **kwargs):
+                launched.update(kwargs)
+                return FakeBrowser()
+
+        fake_pw = type("FakePlaywright", (), {"chromium": FakeChromium()})()
+        result = _probe_browser_backend_route(
+            fake_pw,
+            state_file="state.json",
+            target={"urls": ["https://example.test"]},
+            config={"timeout_ms": 1000, "settle_ms": 1},
+            route_name="CN_PROXY",
+            proxy_url="socks5h://127.0.0.1:1080",
+            diagnostic_only=False,
+        )
+
+        self.assertEqual(result["status"], "backend_signal")
+        self.assertEqual(launched["proxy"]["server"], "socks5://127.0.0.1:1080")
 
     def test_metrics_file_collects_shipinhao_eval_rows(self):
         with tempfile.TemporaryDirectory() as tmp:

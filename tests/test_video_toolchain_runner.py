@@ -469,11 +469,22 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertEqual(len(set(filters)), 4)
         self.assertTrue(any("iw*1.018" in item for item in filters))
         self.assertTrue(any("min(24" in item for item in filters))
-        self.assertTrue(any("max(0,24" in item for item in filters))
+        self.assertTrue(any("max(0, 24-n*24" in item or "max(0,24" in item for item in filters))
         layered = renderer._layered_segment_filter(1080, 1920, 100, 2)
         self.assertIn("[0:v]", layered)
         self.assertIn("[1:v]", layered)
-        self.assertIn("overlay=0:0", layered)
+        self.assertIn("overlay=x=", layered)
+        self.assertIn("eval=frame", layered)
+
+    def test_landscape_renderer_uses_separate_background_and_text_layers(self):
+        source = (Path(__file__).resolve().parents[1] / "scripts" / "render_landscape_video.py").read_text(encoding="utf-8")
+
+        self.assertIn("slide_{idx:02d}_bg.html", source)
+        self.assertIn("slide_{idx:02d}_text.html", source)
+        self.assertIn("card_{idx:02d}_bg.png", source)
+        self.assertIn("card_{idx:02d}_text.png", source)
+        self.assertIn("zoompan=", source)
+        self.assertIn("overlay=0:0:format=auto", source)
 
     def test_runner_dry_run_records_shotcraft_motion_plan(self):
         root = Path(__file__).resolve().parents[1]
@@ -677,12 +688,12 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertFalse((root / "bgm_source.json").exists())
 
     def test_bgm_download_replaces_stale_existing_bgm_every_render(self):
-        from scripts.kuaishou_render import download_bgm
+        from scripts.kuaishou_render import download_bgm, REAL_BGM_MIN_BYTES
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             registry = root / "bgm_registry.json"
-            (root / "bgm.mp3").write_bytes(b"old" * 300_000)
+            (root / "bgm.mp3").write_bytes(b"old" * (REAL_BGM_MIN_BYTES // 3))
             (root / "bgm_source.json").write_text(
                 json.dumps({"source": "local_instrument_bgm_library", "license": "operator_provided"}),
                 encoding="utf-8",
@@ -712,6 +723,21 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual((root / "bgm.mp3").read_bytes(), b"new" * 300_000)
             source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
             self.assertEqual(source["source"], "openverse_audio")
+
+    def test_bgm_download_reuses_valid_existing_bgm(self):
+        from scripts.kuaishou_render import download_bgm, REAL_BGM_MIN_BYTES
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "bgm.mp3").write_bytes(b"x" * (REAL_BGM_MIN_BYTES + 1000))
+            (root / "bgm_source.json").write_text(
+                json.dumps({"source": "openverse_audio", "license": "cc0", "title": "valid"}),
+                encoding="utf-8",
+            )
+            with patch("scripts.kuaishou_render._online_bgm_candidates") as mock_online:
+                result = download_bgm(root, "acoustic guitar")
+            mock_online.assert_not_called()
+            self.assertEqual(result, str(root / "bgm.mp3"))
 
     def test_bgm_download_refuses_synthetic_or_no_bgm_fallback(self):
         from scripts.kuaishou_render import download_bgm

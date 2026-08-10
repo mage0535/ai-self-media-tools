@@ -9,7 +9,16 @@ Last updated: 2026-08-10
 - Zhihu trend collection now tries the official open-platform hot list first, then falls back to the existing cookie-based `zhihu` CLI and the previous web-search fallback. This lets the heat/topic workflow use the new channel automatically without making production depend on it exclusively.
 - MCP now exposes `zhihu_open_search`, `zhihu_open_ask`, `zhihu_open_user_contents`, `zhihu_open_user_followees`, `zhihu_open_user_collections`, `zhihu_open_trending`, and `zhihu_open_quota`. `capability_status` lists the same tools so Hermes lazy discovery/auto-wake can see them before execution.
 - `ToolRegistry.probe()` now reports `zhihu_open_platform`, `zhihu_publisher_skill`, and `zhihu_open_cli`, making it possible to distinguish "Zhihu skill installed" from "Zhihu open-platform CLI callable".
+- Follow-up server validation found `zhihu-search` installed in the default user binary path but not on PATH. `ToolRegistry` now checks `ZHIHU_SEARCH_BIN`, PATH, and the default user binary path so Hermes capability discovery does not falsely report the open-platform CLI as unavailable.
 - Verification targets: `tests/test_zhihu_open_adapter.py`, `McpServerTests.test_zhihu_open_platform_tools_are_exposed_for_mcp_autowake`, and `ToolRegistryTests.test_registry_reports_zhihu_open_platform_skill_and_cli`.
+
+## 2026-08-10 Hermes Runtime Drift Cleanup For Video And Metrics
+
+- Resolved the remaining server drift that was not part of the Zhihu adapter itself. The preserved online changes were production fixes, not local-only state, so they were promoted into the publishable code path with regression coverage.
+- `content_platform.performance_collectors` now normalizes `socks5h://` to `socks5://` before launching Playwright. This matches Chromium's supported proxy scheme and prevents creator-backend collection from failing with unsupported-proxy errors.
+- `scripts.kuaishou_render` now reuses a valid existing BGM when `bgm.mp3` and `bgm_source.json` are present and above the quality threshold, lowering the minimum real-BGM size to 500 KB for short licensed clips. The text layer now has continuous overlay motion independent from the background layer.
+- `scripts.render_landscape_video` now renders background and text as separate layers and composes them with `zoompan` background motion. This prevents landscape videos from degenerating into static cards.
+- Verification targets: `PerformanceCollectorTests.test_backend_browser_route_normalizes_socks5h_for_playwright`, `VideoToolchainRunnerTests.test_kuaishou_layered_text_filters_are_distinct_motion_paths`, `VideoToolchainRunnerTests.test_bgm_download_reuses_valid_existing_bgm`, and `VideoToolchainRunnerTests.test_landscape_renderer_uses_separate_background_and_text_layers`.
 
 ## 2026-08-10 Operations Evidence Gates And Final-Artifact Verification
 

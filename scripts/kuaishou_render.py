@@ -40,7 +40,7 @@ PIXABAY_KEY = os.environ.get("PIXABAY_API_KEY", "")
 SUBTITLE_MARGIN_V = 200
 SUBTITLE_MAX_CHARS_PER_LINE = 16
 SUBTITLE_MAX_LINES = 2
-REAL_BGM_MIN_BYTES = 800_000
+REAL_BGM_MIN_BYTES = 500_000
 ONLINE_BGM_TIMEOUT = 20
 REAL_INSTRUMENT_TERMS = {
     "acoustic",
@@ -420,14 +420,21 @@ def _text_layer_filter(width: int, height: int, total_frames: int, index: int) -
     if mode == 1:
         return base + "scale=iw*1.018:ih*1.018,crop=iw/1.018:ih/1.018,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
     if mode == 2:
-        return base + f"crop={width}:{height}:x='min(24,on*24/{hold})':y=0,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
-    return base + f"crop={width}:{height}:x='max(0,24-on*24/{hold})':y=0,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
+        return base + f"crop={width}:{height}:x='min(24, n*24/{hold})':y=0,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
+    return base + f"crop={width}:{height}:x='max(0, 24-n*24/{hold})':y=0,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
 
 
 def _layered_segment_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25) -> str:
     bg_vf = _background_layer_filter(width, height, total_frames, index, fps=fps)
     text_vf = _text_layer_filter(width, height, total_frames, index)
-    return f"[0:v]{bg_vf}[bgv];[1:v]{text_vf}[txv];[bgv][txv]overlay=0:0:format=auto,format=yuv420p[v]"
+    motion_mode = index % 3
+    if motion_mode == 0:
+        ox, oy = "8*sin(n/24)", "5*cos(n/30)"
+    elif motion_mode == 1:
+        ox, oy = "10*cos(n/28)", "4*sin(n/22)"
+    else:
+        ox, oy = "6*sin(n/20+2)", "8*cos(n/26+1)"
+    return f"[0:v]{bg_vf}[bgv];[1:v]{text_vf}[txv];[bgv][txv]overlay=x='{ox}':y='{oy}':eval=frame:format=auto,format=yuv420p[v]"
 
 
 async def gen_tts(video_dir, cards, voice_idx=0):
@@ -533,6 +540,8 @@ def download_bgm(video_dir, style="acoustic guitar"):
     """Resolve a fresh online real-instrument BGM for the current render only."""
     bgm = Path(video_dir) / "bgm.mp3"
     source_meta = Path(video_dir) / "bgm_source.json"
+    if bgm.exists() and source_meta.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
+        return str(bgm)
     for stale in (bgm, source_meta):
         if stale.exists():
             stale.unlink()
