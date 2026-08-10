@@ -23,6 +23,16 @@ Before generating each channel item, record:
 
 Batch generation without this strategy record is not allowed.
 
+## Operations Evidence Gate
+
+Each operating date must begin with `python scripts/ops_run.py <YYYYMMDD> --init`. Before generation, record each platform choice with `--platform`, `--topic`, and a stable `--direction`.
+
+- A direction cannot be reused inside the configured lookback window, even when the title text differs.
+- A follow-up is allowed only when `--follow-up-to`, `--difference-angle`, and `--recap-reason` are all recorded.
+- The existing `check_platform_topic_independence.py` gate also reads the date-scoped direction register and rejects an invalid or manually duplicated register.
+- Before a publisher handoff, run `python scripts/verify_video_artifact.py <final.mp4> --manifest <render_manifest.json> --platform <platform>`. The result must be retained in the render manifest.
+- `python scripts/validate_channel_rulebook.py` now checks the executable operations-policy facts against the public operations policy contract. A mismatch is a release blocker.
+
 ## Promotion Content Rules
 
 - Project promotion must be a small share of channel output by default. Unless a current strategy says otherwise, keep direct GitHub/project promotion at or below 25 percent of a channel's planned content and avoid repeating it within seven days on the same platform.
@@ -56,13 +66,14 @@ These rules apply to covers, inline knowledge cards, carousel cards, image-text 
 
 ## Video Rules
 
-- Short videos must normally be 40-100 seconds. A longer short-video item needs a current channel strategy reason; padding, repeated footage, repeated images, or slowed pacing is not a valid reason.
+- Douyin, Kuaishou, Shipinhao, TikTok, and YouTube Shorts handoffs must be no more than 60 seconds. A longer video belongs to a separately declared long-form plan, not a short-video exception.
 - Every video needs a planning table with theme, target audience, user pain, first-three-second hook, core message, storyboard, voiceover, subtitle plan, music or sound design, ending CTA, duration, and scene-to-content mapping.
 - The first three seconds must establish a clear viewing reason: problem, conflict, result, evidence, or strong curiosity.
 - Every scene must have a purpose and must correspond to the current narration or subtitle. Random scenery, unrelated people, abstract backgrounds, or one image recolored repeatedly are hard failures.
 - Same-batch videos must differ in topic angle, structure, opening, pace, visual type, motion, subtitle style, music, color, or expression. Changing only text, color, title, or background is not enough.
 - Voiceover must have human pacing, pauses, emotion cues, and natural breath intervals. Robotic single-take narration is a quality failure.
 - Subtitles must be readable, within frame, and placed so they do not block the main subject. Lower-third subtitles are the default unless a readable-card video strategy explicitly replaces subtitles.
+- Vertical short-video renders and their subtitle specification must both be 1080x1920. Card titles must be meaningful content, never `Scene N`; final output must include measurable frame movement, not only an animation claim in source code.
 
 ## Douyin Rules
 

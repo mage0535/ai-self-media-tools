@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 RULEBOOK_PATH = ROOT / "config" / "channel_content_rulebook.json"
 GROWTH_POLICY_PATH = ROOT / "config" / "growth_quality_policy.json"
+OPERATIONS_POLICY_PATH = ROOT / "config" / "operations_policy_facts.json"
+OPERATIONS_CONTRACT_PATH = ROOT / "docs" / "OPERATIONS_POLICY_CONTRACT.md"
 
 REQUIRED_SEQUENCE = {
     "load_channel_rulebook",
@@ -131,6 +136,12 @@ DOUYIN_FORBIDDEN_REUSE_MARKERS = {"final.mp4", "template", "bgm", "title", "scri
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(message)
+
+
+def operations_policy_audit() -> dict:
+    from scripts.audit_strategy_skill_conflicts import audit
+
+    return audit(OPERATIONS_POLICY_PATH, [OPERATIONS_CONTRACT_PATH])
 
 
 def main() -> None:
@@ -411,6 +422,8 @@ def main() -> None:
         "dry_voiceover_only",
     ]:
         require(marker in audio_rules, f"douyin tiktok audio adaptation must mention {marker}")
+    operations_audit = operations_policy_audit()
+    require(operations_audit.get("passed") is True, f"operations policy/contract conflict: {operations_audit.get('conflicts')}")
     print(f"channel rulebook ok: {len(channel_rules)} channels")
 
 

@@ -28,6 +28,7 @@ from scripts.cinema_composition import storyboard
 from content_platform.content_recipe import build_tool_invocation_manifest
 from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.video_recipe import build_visual_recipe, load_effect_module_registry, validate_visual_recipe
+from content_platform.video_artifact import verify_artifact
 
 try:
     from scripts.shotcraft_moves import SHOT_CARD_REGISTRY, shot_plan_for_text, shot_sequence
@@ -187,6 +188,8 @@ def main(argv: list[str] | None = None) -> int:
         "recipe_reuse_gate": recipe_reuse_gate,
         "recipe_fingerprint": visual_recipe.get("fingerprint"),
         "recipe_core_fingerprint": visual_recipe.get("core_fingerprint"),
+        "card_titles": [str(card.get("t") or "") for card in cards],
+        "subtitle": {"width": 1080, "height": 1920},
         "tool_invocation_manifest": tool_manifest,
         **tool_selection_evidence,
     }
@@ -211,6 +214,13 @@ def main(argv: list[str] | None = None) -> int:
         manifest["cinema_visual_gate"] = cinema_gate
         if not cinema_gate.get("passed"):
             manifest.update({"ok": False, "output": str(generated[0]), "status": "visual_gate_failed", "error": cinema_gate.get("error") or "cinema visual gate failed"})
+            _write_manifest(output_dir, manifest)
+            print(manifest["error"], file=sys.stderr)
+            return 4
+        artifact_gate = verify_artifact(generated[0], manifest, _primary_platform(plan))
+        manifest["artifact_gate"] = artifact_gate
+        if not artifact_gate.get("passed"):
+            manifest.update({"ok": False, "output": str(generated[0]), "status": "artifact_gate_failed", "error": "final video artifact gate failed"})
             _write_manifest(output_dir, manifest)
             print(manifest["error"], file=sys.stderr)
             return 4
@@ -671,6 +681,9 @@ def _card_title(text: str, index: int) -> str:
     words = text.strip().split()
     if len(words) >= 4:
         return " ".join(words[:6])[:36]
+    compact = re.sub(r"\s+", "", text.strip())
+    if len(compact) >= 4:
+        return compact[:18]
     return f"Scene {index + 1}"
 
 
