@@ -1,5 +1,7 @@
 import asyncio
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -111,6 +113,18 @@ class McpServerTests(unittest.TestCase):
         ]:
             self.assertIn(name, tools)
             self.assertIn(name, capability["mcp_tools"])
+
+    def test_mcp_server_module_exposes_cli_entrypoint(self):
+        proc = subprocess.run(
+            [sys.executable, "-m", "content_platform.mcp_server", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("content-platform MCP server", proc.stdout)
 
 
 if __name__ == "__main__":

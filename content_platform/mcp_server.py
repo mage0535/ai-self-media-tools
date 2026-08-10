@@ -335,3 +335,7 @@ def main():
         serve_sse(args.host, args.port)
     else:
         serve_stdio()
+
+
+if __name__ == "__main__":
+    main()
