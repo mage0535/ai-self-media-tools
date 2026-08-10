@@ -11,6 +11,12 @@ def test_card_title_uses_chinese_text_instead_of_scene_placeholder():
     assert _card_title("中文正文没有空格也应成为卡片标题", 1) != "Scene 2"
 
 
+def test_card_title_uses_short_english_text_instead_of_scene_placeholder():
+    from scripts.video_toolchain_runner import _card_title
+
+    assert _card_title("Ship useful work", 1) == "Ship useful work"
+
+
 def test_video_artifact_rejects_overlong_short_and_placeholder_title(tmp_path: Path):
     from content_platform.video_artifact import verify_artifact
 

@@ -678,13 +678,16 @@ def _beats(text: str) -> list[str]:
 
 
 def _card_title(text: str, index: int) -> str:
-    words = text.strip().split()
+    # Chinese text has no word separators, so preserve its leading characters as a title.
+    text = str(text or "").strip()
+    if not text:
+        return f"Scene {index + 1}"
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return text[:16]
+    words = text.split()
     if len(words) >= 4:
         return " ".join(words[:6])[:36]
-    compact = re.sub(r"\s+", "", text.strip())
-    if len(compact) >= 4:
-        return compact[:18]
-    return f"Scene {index + 1}"
+    return text[:36] or f"Scene {index + 1}"
 
 
 def _summary(text: str) -> str:
