@@ -243,6 +243,8 @@ def _probe_browser_backend_route(
     diagnostic_only: bool,
 ) -> dict[str, Any]:
     errors: list[str] = []
+    if proxy_url and proxy_url.startswith("socks5h://"):
+        proxy_url = "socks5://" + proxy_url[len("socks5h://") :]
     try:
         browser = pw.chromium.launch(
             headless=True,

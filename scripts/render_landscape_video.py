@@ -70,16 +70,20 @@ def _write_slides(render_dir: Path, beats: list[str], bg_dir: Path, theme: dict)
         if not bg:
             raise RuntimeError(f"missing landscape background for beat {idx}: {bg_dir}")
         title = beat[:28]
-        html = f"""<!doctype html><html><head><meta charset='utf-8'><style>
-body{{margin:0;width:1280px;height:720px;overflow:hidden;background:#000;font-family:'Noto Sans CJK SC',sans-serif;}}
-.bg{{position:absolute;inset:0;background:url('{_image_b64(bg)}') center/cover no-repeat;transform:scale(1.06);}}
+        bg_html = f"""<!doctype html><html><head><meta charset='utf-8'><style>
+body{{margin:0;width:1280px;height:720px;overflow:hidden;background:#000;}}
+.bg{{position:absolute;inset:0;background:url('{_image_b64(bg)}') center/cover no-repeat;transform:scale(1.08);}}
 .shade{{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.82),rgba(0,0,0,.55),rgba(0,0,0,.18));}}
+</style></head><body><div class='bg'></div><div class='shade'></div></body></html>"""
+        text_html = f"""<!doctype html><html><head><meta charset='utf-8'><style>
+body{{margin:0;width:1280px;height:720px;overflow:hidden;background:transparent;}}
 .panel{{position:absolute;left:60px;top:185px;width:780px;padding:30px 36px;background:{theme['bg']};border-left:7px solid {theme['accent']};border-radius:16px;box-shadow:0 18px 45px rgba(0,0,0,.35);}}
 .tag{{display:inline-block;background:{theme['accent']};color:white;font-size:20px;font-weight:800;padding:7px 18px;border-radius:999px;margin-bottom:18px;}}
 h1{{margin:0 0 16px 0;color:white;font-size:46px;line-height:1.25;font-weight:900;}}
 p{{margin:0;color:#f3f4f6;font-size:27px;line-height:1.65;font-weight:520;}}
-</style></head><body><div class='bg'></div><div class='shade'></div><div class='panel'><div class='tag'>{theme['label']} · {idx:02d}</div><h1>{title}</h1><p>{beat}</p></div></body></html>"""
-        (slide_dir / f"slide_{idx:02d}.html").write_text(html, encoding="utf-8")
+</style></head><body><div class='panel'><div class='tag'>{theme['label']} · {idx:02d}</div><h1>{title}</h1><p>{beat}</p></div></body></html>"""
+        (slide_dir / f"slide_{idx:02d}_bg.html").write_text(bg_html, encoding="utf-8")
+        (slide_dir / f"slide_{idx:02d}_text.html").write_text(text_html, encoding="utf-8")
 
 
 async def _tts(render_dir: Path, beats: list[str], voice: str) -> None:
@@ -103,8 +107,10 @@ async def _screenshots(render_dir: Path, count: int) -> None:
         browser = await pw.chromium.launch(headless=True)
         page = await browser.new_page(viewport={"width": 1280, "height": 720})
         for idx in range(1, count + 1):
-            await page.goto((render_dir / "slides" / f"slide_{idx:02d}.html").resolve().as_uri(), wait_until="networkidle")
-            await page.screenshot(path=str(out / f"card_{idx:02d}.png"), full_page=True)
+            await page.goto((render_dir / "slides" / f"slide_{idx:02d}_bg.html").resolve().as_uri(), wait_until="networkidle")
+            await page.screenshot(path=str(out / f"card_{idx:02d}_bg.png"), full_page=True)
+            await page.goto((render_dir / "slides" / f"slide_{idx:02d}_text.html").resolve().as_uri(), wait_until="networkidle")
+            await page.screenshot(path=str(out / f"card_{idx:02d}_text.png"), full_page=True, omit_background=True)
         await browser.close()
 
 
@@ -112,34 +118,53 @@ def _segments(render_dir: Path, count: int) -> None:
     seg_dir = render_dir / "segments"
     seg_dir.mkdir(exist_ok=True)
     for idx in range(1, count + 1):
-        img = render_dir / "cards" / f"card_{idx:02d}.png"
+        bg_img = render_dir / "cards" / f"card_{idx:02d}_bg.png"
+        text_img = render_dir / "cards" / f"card_{idx:02d}_text.png"
         tts = render_dir / "tts" / f"tts_{idx:02d}.mp3"
         seg = seg_dir / f"seg_{idx:02d}.mp4"
         duration = _duration(tts) + 0.5
+        fps = 25
+        total_frames = max(int(duration * fps), 63)
+        mode = idx % 3
+        if mode == 0:
+            zexpr = f"z='min(1.0+0.10*on/{total_frames},1.10)'"
+            xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
+        elif mode == 1:
+            zexpr = f"z='max(1.10-0.10*on/{total_frames},1.0)'"
+            xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
+        else:
+            zexpr = "z='1.06'"
+            xexpr, yexpr = "x='iw/2-iw/zoom/2+sin(on/40)*12'", "y='ih/2-ih/zoom/2'"
+        bg_vf = (
+            "scale=1280:720:force_original_aspect_ratio=decrease,"
+            "pad=1280:720:(ow-iw)/2:(oh-ih)/2,"
+            f"zoompan={zexpr}:{xexpr}:{yexpr}:d={total_frames}:s=1280x720:fps={fps}"
+        )
+        text_vf = (
+            "format=rgba,scale=1280:720:force_original_aspect_ratio=decrease,"
+            "format=rgba,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black@0,"
+            "fade=in:st=0:d=0.5:alpha=1,setpts=PTS-STARTPTS"
+        )
         _run(
             [
                 "ffmpeg",
                 "-y",
-                "-loop",
-                "1",
-                "-i",
-                str(img),
-                "-i",
-                str(tts),
-                "-t",
-                f"{duration:.3f}",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "128k",
+                "-loop", "1",
+                "-i", str(bg_img),
+                "-loop", "1",
+                "-i", str(text_img),
+                "-i", str(tts),
+                "-filter_complex",
+                f"[0:v]{bg_vf}[bgv];[1:v]{text_vf}[txv];[bgv][txv]overlay=0:0:format=auto,format=yuv420p[v]",
+                "-map", "[v]",
+                "-map", "2:a",
+                "-t", f"{duration:.3f}",
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "128k",
                 "-shortest",
                 str(seg),
             ],
