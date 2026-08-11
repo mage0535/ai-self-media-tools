@@ -8,6 +8,8 @@
 - `scripts/render_timing.py` records per-stage duration evidence in each render directory so speed work targets measured bottlenecks rather than removing quality checks.
 - `scripts/kuaishou_render.py` now uses the shared subtitle service, runs the pre-render gate, reuses only hash-matching intermediate artifacts, waits for browser fonts/images instead of fixed per-card sleeps, and carries the validated stronger layered background motion. It is also safe for UTF-8 console output on Windows.
 - `scripts/video_toolchain_runner.py` passes the selected platform into the renderer so subtitle safe areas are platform-specific.
+- The common video runner now requires eight distinct narrative beats before a real render and writes `pre_render_gate.json` for every generated card package. It no longer expands short scripts with `Step N` or generic production instructions.
+- Timing evidence now distinguishes a real render from a hash-checkpoint reuse and is written atomically.
 - BGM policy remains strict: a new video selects a new licensed real-instrument track. Metadata, license evidence, and fingerprints may be cached for lookup and collision prevention, but an old BGM or `final.mp4` is never reused for a different video.
 
 Last updated: 2026-08-11

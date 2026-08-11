@@ -36,7 +36,9 @@ def record_stage_timing(video_dir: Path, stage: str, seconds: float, *, cached: 
             "recorded_at": datetime.now(timezone.utc).isoformat(),
         }
     )
-    path.write_text(json.dumps({"events": events[-100:]}, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text(json.dumps({"events": events[-100:]}, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path.replace(path)
     return path
 
 

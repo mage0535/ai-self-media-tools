@@ -10,6 +10,52 @@ from unittest.mock import patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
+    def test_script_structure_gate_requires_distinct_story_beats(self):
+        from scripts.video_toolchain_runner import validate_script_structure
+
+        too_short = validate_script_structure("Only one useful observation.")
+        complete = validate_script_structure("\n".join(f"Distinct practical beat {index}." for index in range(1, 9)))
+
+        self.assertFalse(too_short["passed"])
+        self.assertIn("story_beats_insufficient", too_short["failures"])
+        self.assertTrue(complete["passed"])
+
+    def test_build_cards_does_not_insert_placeholder_copy(self):
+        from scripts.video_toolchain_runner import build_cards
+
+        script = "\n".join(f"Specific narrative beat {index}." for index in range(1, 9))
+        cards = build_cards(script, "Specific title", {"template_family": "knowledge_card_motion_case"})
+        serialized = json.dumps(cards, ensure_ascii=False).casefold()
+
+        self.assertNotIn("keep the visual rhythm", serialized)
+        self.assertNotIn("match visual to narration", serialized)
+        self.assertNotIn("step 1", serialized)
+
+    def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps({"platforms": ["kuaishou"]}), encoding="utf-8")
+            env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+            }
+            proc = subprocess.run(
+                [sys.executable, str(script), "Only one useful observation.", "Useful title"],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 5)
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "script_structure_failed")
+
     def test_intl_short_video_pipeline_is_manual_handoff_with_tool_evidence(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "intl_short_video_pipeline.py"
@@ -94,7 +140,9 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(cards[0]["hook"], "Cat workflow")
             self.assertEqual(manifest["template_family"], "pet_repost_real_behavior")
             self.assertTrue((out / "visual_recipe.json").is_file())
+            self.assertTrue((out / "pre_render_gate.json").is_file())
             self.assertTrue(manifest["visual_recipe_gate"]["passed"])
+            self.assertTrue(manifest["pre_render_gate"]["passed"])
             self.assertTrue(str(manifest["recipe_fingerprint"]).startswith("sha256:"))
             self.assertGreaterEqual(manifest["toolchain_contract"]["visual_recipe"]["module_count"], 3)
             self.assertIn("tools_capability_analysis", manifest)
