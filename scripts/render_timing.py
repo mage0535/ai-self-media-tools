@@ -50,3 +50,11 @@ def load_timing_summary(video_dir: Path) -> dict[str, Any]:
         "total_seconds": round(sum(float(event.get("seconds", 0.0)) for event in events), 3),
         "slowest": slowest[:10],
     }
+
+
+def write_timing_summary(video_dir: Path) -> Path:
+    """Write a compact, human-readable summary beside the raw timing events."""
+    summary = load_timing_summary(video_dir)
+    path = Path(video_dir) / "render_timing_summary.json"
+    path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path

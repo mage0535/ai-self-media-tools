@@ -25,7 +25,7 @@ for _stream in (sys.stdout, sys.stderr):
 from scripts.build_subtitles import load_cards, write_ass_from_cards
 from scripts.pre_render_gate import validate_render_inputs
 from scripts.render_checkpoint import fingerprint_paths, mark_complete, stage_current_or_adopt
-from scripts.render_timing import record_stage_timing
+from scripts.render_timing import record_stage_timing, write_timing_summary
 try:
     from playwright.async_api import async_playwright
 except ModuleNotFoundError:
@@ -173,6 +173,21 @@ def _record_stage_timing(video_dir, stage, started, *, cached=False):
 def final_render_required(checkpoint):
     """A verified final checkpoint is authoritative; legacy markers are not."""
     return not bool((checkpoint or {}).get("current"))
+
+
+def final_encode_settings():
+    """Return an explicit, quality-safe final encoding profile.
+
+    ``fast`` was benchmarked against ``medium`` on Hermes: it reduced final
+    encoding time while retaining a near-identical SSIM result.  Operators can
+    still select a slower profile for a particular platform without allowing an
+    arbitrary ffmpeg argument into the command line.
+    """
+    preset = os.environ.get("VIDEO_FINAL_PRESET", "fast").strip().lower()
+    allowed_presets = {"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower"}
+    if preset not in allowed_presets:
+        raise ValueError(f"Unsupported VIDEO_FINAL_PRESET: {preset}")
+    return {"codec": "libx264", "preset": preset, "crf": 23, "profile": "baseline", "pix_fmt": "yuv420p"}
 
 
 def read_cards(cards_path):
@@ -1242,15 +1257,19 @@ def encode_final(video_dir, add_like_overlay=True):
 
     vf_str = ",".join(vf_parts) if vf_parts else "null"
 
+    settings = final_encode_settings()
     subprocess.run(["ffmpeg","-y","-i",str(mixed),
         "-vf", vf_str,
-        "-c:v","libx264","-preset","medium","-crf","23",
-        "-profile:v","baseline","-pix_fmt","yuv420p","-movflags","+faststart",
-        "-c:a","aac","-b:a","128k",str(final)], capture_output=True)
+        "-c:v",settings["codec"],"-preset",settings["preset"],"-crf",str(settings["crf"]),
+        "-profile:v",settings["profile"],"-pix_fmt",settings["pix_fmt"],"-movflags","+faststart",
+        "-c:a","aac","-b:a","128k",str(final)], capture_output=True, text=True, check=True, timeout=600)
 
     assert_output(str(final), 3000000, "final.mp4")
     sz = final.stat().st_size
-    print(f"  ✅ final.mp4 ({sz//1024}KB)")
+    print(f"  ✅ final.mp4 ({sz//1024}KB, {settings['preset']}/CRF{settings['crf']})")
+    (Path(video_dir) / "final_encode_settings.json").write_text(
+        json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     # Verify
     r = subprocess.run(["ffprobe","-v","error","-select_streams","v:0","-show_entries","stream=profile,pix_fmt","-of","csv=p=0",str(final)],capture_output=True,text=True)
@@ -1406,6 +1425,7 @@ async def main():
         "bgm_style": args.bgm_style,
         "segments": fingerprint_paths(segment_files),
         "cards": cards,
+        "final_encode_settings": final_encode_settings(),
         "renderer_source": fingerprint_paths([Path(__file__), ROOT / "scripts" / "build_subtitles.py", ROOT / "scripts" / "mix_bgm_with_gate.py"]),
     }
     final_checkpoint = stage_current_or_adopt(Path(vd), "final", final_inputs, [final_path], legacy_marker="final.done")
@@ -1449,6 +1469,9 @@ async def main():
     if args.cleanup:
         print("\n=== Step 9: 清理 ===")
         cleanup(vd)
+
+    timing_summary = write_timing_summary(Path(vd))
+    print(f"  ⏱️ 渲染耗时汇总: {timing_summary}")
 
     print(f"\n✅ {os.path.basename(vd)} 全部完成")
 
