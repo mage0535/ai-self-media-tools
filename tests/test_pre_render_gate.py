@@ -177,7 +177,7 @@ class PreRenderGateTests(unittest.TestCase):
             self.assertEqual(load_cards(cards_path)[0]["tts"], "A real subtitle")
 
     def test_render_timing_records_cached_and_rendered_stages(self):
-        from scripts.render_timing import load_timing_summary, record_stage_timing
+        from scripts.render_timing import load_timing_summary, record_stage_timing, write_timing_summary
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -188,6 +188,18 @@ class PreRenderGateTests(unittest.TestCase):
             self.assertEqual(summary["stage_count"], 2)
             self.assertEqual(summary["slowest"][0]["stage"], "cards")
             self.assertTrue(summary["slowest"][1]["cached"])
+            self.assertTrue(write_timing_summary(root).is_file())
+
+    def test_final_encoder_defaults_to_fast_and_rejects_unknown_presets(self):
+        from scripts.kuaishou_render import final_encode_settings
+
+        with patch.dict("os.environ", {}, clear=False):
+            self.assertEqual(final_encode_settings()["preset"], "fast")
+        with patch.dict("os.environ", {"VIDEO_FINAL_PRESET": "medium"}, clear=False):
+            self.assertEqual(final_encode_settings()["preset"], "medium")
+        with patch.dict("os.environ", {"VIDEO_FINAL_PRESET": "not-a-preset"}, clear=False):
+            with self.assertRaises(ValueError):
+                final_encode_settings()
 
     def test_final_render_decision_uses_checkpoint_not_legacy_marker(self):
         from scripts.kuaishou_render import final_render_required
