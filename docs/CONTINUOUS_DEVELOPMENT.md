@@ -1,6 +1,16 @@
 # Continuous Development
 
-Last updated: 2026-08-10
+## 2026-08-11: resumable video rendering without lowering quality gates
+
+- `scripts/pre_render_gate.py` validates card text, placeholders, source paths, required cover/background inputs, and BGM provenance before expensive rendering. A quiet source track is classified for automatic gain handling rather than rejected when it is repairable.
+- `scripts/build_subtitles.py` is the shared ASS subtitle builder for Kuaishou, Douyin, Shipinhao, TikTok, YouTube, and Bilibili. It writes dot-format timestamps, platform-safe lower-third profiles, bounded line wrapping, and accepts UTF-8 BOM card files from Windows.
+- `scripts/render_checkpoint.py` stores input/output hashes for cards, TTS, segments, concat, and final output. Existing legacy `.done` markers are adopted once for backward compatibility; later input changes rerender only affected stages.
+- `scripts/render_timing.py` records per-stage duration evidence in each render directory so speed work targets measured bottlenecks rather than removing quality checks.
+- `scripts/kuaishou_render.py` now uses the shared subtitle service, runs the pre-render gate, reuses only hash-matching intermediate artifacts, waits for browser fonts/images instead of fixed per-card sleeps, and carries the validated stronger layered background motion. It is also safe for UTF-8 console output on Windows.
+- `scripts/video_toolchain_runner.py` passes the selected platform into the renderer so subtitle safe areas are platform-specific.
+- BGM policy remains strict: a new video selects a new licensed real-instrument track. Metadata, license evidence, and fingerprints may be cached for lookup and collision prevention, but an old BGM or `final.mp4` is never reused for a different video.
+
+Last updated: 2026-08-11
 
 ## 2026-08-10 Zhihu Open Platform Skill/MCP Integration
 
@@ -18,7 +28,7 @@ Last updated: 2026-08-10
 
 - Resolved the remaining server drift that was not part of the Zhihu adapter itself. The preserved online changes were production fixes, not local-only state, so they were promoted into the publishable code path with regression coverage.
 - `content_platform.performance_collectors` now normalizes `socks5h://` to `socks5://` before launching Playwright. This matches Chromium's supported proxy scheme and prevents creator-backend collection from failing with unsupported-proxy errors.
-- `scripts.kuaishou_render` now reuses a valid existing BGM when `bgm.mp3` and `bgm_source.json` are present and above the quality threshold, lowering the minimum real-BGM size to 500 KB for short licensed clips. The text layer now has continuous overlay motion independent from the background layer.
+- `scripts.kuaishou_render` accepts a valid existing BGM only while resuming the same hash-identified render package; every newly planned video must select a distinct licensed real-instrument track. The minimum real-BGM size remains 500 KB for short licensed clips. The text layer has continuous overlay motion independent from the background layer.
 - `scripts.render_landscape_video` now renders background and text as separate layers and composes them with `zoompan` background motion. This prevents landscape videos from degenerating into static cards.
 - Verification targets: `PerformanceCollectorTests.test_backend_browser_route_normalizes_socks5h_for_playwright`, `VideoToolchainRunnerTests.test_kuaishou_layered_text_filters_are_distinct_motion_paths`, `VideoToolchainRunnerTests.test_bgm_download_reuses_valid_existing_bgm`, and `VideoToolchainRunnerTests.test_landscape_renderer_uses_separate_background_and_text_layers`.
 

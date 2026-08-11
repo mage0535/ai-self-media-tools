@@ -476,6 +476,33 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertIn("overlay=x=", layered)
         self.assertIn("eval=frame", layered)
 
+    def test_kuaishou_background_motion_meets_artifact_gate_threshold(self):
+        from scripts import kuaishou_render as renderer
+
+        filters = [renderer._background_layer_filter(1080, 1920, 100, idx) for idx in range(4)]
+
+        self.assertIn("0.30*on/100", filters[0])
+        self.assertIn("1.45", filters[0])
+        self.assertIn("0.30*on/100", filters[1])
+        self.assertIn("sin(on/30)*80", filters[2])
+        self.assertIn("cos(on/30)*80", filters[3])
+
+    def test_runner_passes_target_platform_to_shared_subtitle_renderer(self):
+        from scripts.video_toolchain_runner import _renderer_command
+
+        command = _renderer_command(
+            Path("/tmp/renderer.py"),
+            Path("/tmp/out"),
+            "blueprint",
+            "Video title",
+            "A useful script.",
+            {"platforms": ["shipinhao"]},
+            "light piano",
+        )
+
+        self.assertIn("--platform", command)
+        self.assertEqual(command[command.index("--platform") + 1], "shipinhao")
+
     def test_landscape_renderer_uses_separate_background_and_text_layers(self):
         source = (Path(__file__).resolve().parents[1] / "scripts" / "render_landscape_video.py").read_text(encoding="utf-8")
 
