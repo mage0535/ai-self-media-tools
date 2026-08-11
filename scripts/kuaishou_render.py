@@ -16,6 +16,16 @@ Usage:
 """
 import argparse, asyncio, base64, hashlib, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+from scripts.build_subtitles import write_ass_from_cards
+from scripts.pre_render_gate import validate_render_inputs
+from scripts.render_checkpoint import fingerprint_paths, mark_complete, stage_current_or_adopt
+from scripts.render_timing import record_stage_timing
 try:
     from playwright.async_api import async_playwright
 except ModuleNotFoundError:
@@ -144,6 +154,20 @@ def _wrap_subtitle_text(text, max_chars=SUBTITLE_MAX_CHARS_PER_LINE, max_lines=S
     if original_width > shown_width and clipped:
         clipped[-1] = clipped[-1].rstrip("，。,. ") + "..."
     return r"\N".join(part.replace("{", "").replace("}", "") for part in clipped)
+
+
+def run_pre_render_gate(video_dir, cards):
+    """Record cheap input validation before card, TTS, and segment rendering."""
+    result = validate_render_inputs(Path(video_dir), cards, platform="kuaishou")
+    evidence = Path(video_dir) / "pre_render_gate.json"
+    evidence.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not result.get("passed"):
+        raise RuntimeError("pre-render gate failed: " + ", ".join(result.get("failures") or ["unknown"]))
+    return result
+
+
+def _record_stage_timing(video_dir, stage, started):
+    record_stage_timing(Path(video_dir), stage, time.perf_counter() - started, cached=False)
 
 
 def _rendered_card_quality(path):
@@ -323,12 +347,55 @@ def _probe_video_output(path, size):
         return False
 
 
+def _card_checkpoint_inputs(video_dir, card, index, theme_v, bg_dir):
+    background_candidates = [Path(bg_dir) / f"bg_{index:02d}.{extension}" for extension in ("jpg", "jpeg", "png")]
+    return {
+        "renderer": "kuaishou_card_layers_v2",
+        "index": index,
+        "card": card,
+        "theme": theme_v,
+        "background_sources": fingerprint_paths(background_candidates),
+        "github_overlay": str(Path(bg_dir) / "github_og.jpg") if Path(bg_dir, "github_og.jpg").is_file() else "",
+        "renderer_source": fingerprint_paths([Path(__file__)]),
+    }
+
+
+async def _wait_for_card_assets(page):
+    """Wait for the real card prerequisites instead of sleeping per card."""
+    await page.wait_for_function(
+        """async () => {
+            await document.fonts.ready;
+            return Array.from(document.images).every(
+                (image) => image.complete && image.naturalWidth > 0
+            );
+        }""",
+        timeout=5000,
+    )
+
+
 async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
     """Render complete cards plus separate background/text layers."""
     if async_playwright is None:
         raise RuntimeError("playwright is required for card rendering; install playwright before running render_cards")
     out_dir = Path(video_dir) / "cards"
     out_dir.mkdir(exist_ok=True)
+
+    pending = []
+    for i, card in enumerate(cards):
+        idx = i + 1
+        outputs = [
+            out_dir / f"card_{idx:02d}.png",
+            out_dir / f"card_{idx:02d}_bg.png",
+            out_dir / f"card_{idx:02d}_text.png",
+        ]
+        checkpoint_inputs = _card_checkpoint_inputs(video_dir, card, idx, theme_v, bg_dir)
+        checkpoint = stage_current_or_adopt(Path(video_dir), f"card_{idx:02d}", checkpoint_inputs, outputs, legacy_marker="cards.done")
+        if checkpoint.get("current"):
+            print(f"  card_{idx:02d}.png reused ({checkpoint.get('reason')})")
+        else:
+            pending.append((i, card, checkpoint_inputs))
+    if not pending:
+        return
 
     # Load bg images as base64
     bg_b64s = []
@@ -347,7 +414,7 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
     browser = await pw.chromium.launch(headless=True)
     page = await browser.new_page(viewport={"width": 720, "height": 1280})
 
-    for i, card in enumerate(cards):
+    for i, card, checkpoint_inputs in pending:
         idx = i + 1
         html = build_card_html(card, idx, bg_b64s[i], gh_b64, theme_v)
         html_path = Path(video_dir) / f"card_{idx:02d}.html"
@@ -356,13 +423,12 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
         text_path = out_dir / f"card_{idx:02d}_text.png"
         html_path.write_text(html, encoding="utf-8")
 
-        await page.goto(html_path.resolve().as_uri(), wait_until="networkidle", timeout=30000)
-        await page.wait_for_timeout(3000)  # 3s for base64 images to render
+        await page.goto(html_path.resolve().as_uri(), wait_until="load", timeout=30000)
+        await _wait_for_card_assets(page)
         await page.screenshot(path=str(png_path), full_page=True)
         await page.evaluate("""() => {
             document.body.querySelectorAll('h1,h2,h3,div,p,span,img').forEach(el => el.style.display='none');
         }""")
-        await page.wait_for_timeout(300)
         await page.screenshot(path=str(bg_path), full_page=True)
         await page.evaluate("""() => {
             document.body.querySelectorAll('h1,h2,h3,div,p,span,img').forEach(el => el.style.display='');
@@ -371,7 +437,6 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
             document.body.style.backgroundSize = 'auto';
             document.body.style.backgroundPosition = '0 0';
         }""")
-        await page.wait_for_timeout(300)
         await page.screenshot(path=str(text_path), full_page=True, omit_background=True)
 
         sz = png_path.stat().st_size
@@ -379,6 +444,7 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
         assert ok, f"card_{idx:02d}.png quality failed ({reason}, {sz//1024}KB)"
         assert_output(str(bg_path), 30000, f"card_{idx:02d}_bg.png")
         assert_output(str(text_path), 10000, f"card_{idx:02d}_text.png")
+        mark_complete(Path(video_dir), f"card_{idx:02d}", checkpoint_inputs, [png_path, bg_path, text_path])
         print(f"  OK card_{idx:02d}.png ({sz//1024}KB, {reason}) + bg/text layers")
 
     await browser.close()
@@ -389,17 +455,17 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
 def _background_layer_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25) -> str:
     mode = index % 4
     if mode == 0:
-        zexpr = f"z='min(1.0+0.12*on/{total_frames},1.22)'"
+        zexpr = f"z='min(1.0+0.30*on/{total_frames},1.45)'"
         xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
     elif mode == 1:
-        zexpr = f"z='max(1.22-0.12*on/{total_frames},1.0)'"
+        zexpr = f"z='max(1.45-0.30*on/{total_frames},1.0)'"
         xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
     elif mode == 2:
-        zexpr = "z='1.12'"
-        xexpr, yexpr = "x='iw/2-iw/zoom/2+sin(on/45)*30'", "y='ih/2-ih/zoom/2'"
+        zexpr = "z='1.15'"
+        xexpr, yexpr = "x='iw/2-iw/zoom/2+sin(on/30)*80'", "y='ih/2-ih/zoom/2'"
     else:
-        zexpr = "z='1.12'"
-        xexpr, yexpr = "x='iw/2-iw/zoom/2-cos(on/45)*30'", "y='ih/2-ih/zoom/2'"
+        zexpr = "z='1.15'"
+        xexpr, yexpr = "x='iw/2-iw/zoom/2-cos(on/30)*80'", "y='ih/2-ih/zoom/2'"
     return (
         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,"
@@ -437,6 +503,25 @@ def _layered_segment_filter(width: int, height: int, total_frames: int, index: i
     return f"[0:v]{bg_vf}[bgv];[1:v]{text_vf}[txv];[bgv][txv]overlay=x='{ox}':y='{oy}':eval=frame:format=auto,format=yuv420p[v]"
 
 
+def _segment_checkpoint_inputs(video_dir, card, index, width, height):
+    root = Path(video_dir)
+    card_sources = [
+        root / "cards" / f"card_{index:02d}.png",
+        root / "cards" / f"card_{index:02d}_bg.png",
+        root / "cards" / f"card_{index:02d}_text.png",
+        root / "tts" / f"tts_{index:02d}.mp3",
+    ]
+    return {
+        "renderer": "kuaishou_layered_segment_v2",
+        "index": index,
+        "width": width,
+        "height": height,
+        "card": card,
+        "sources": fingerprint_paths(card_sources),
+        "renderer_source": fingerprint_paths([Path(__file__)]),
+    }
+
+
 async def gen_tts(video_dir, cards, voice_idx=0):
     """Generate TTS for all cards"""
     import edge_tts
@@ -450,9 +535,19 @@ async def gen_tts(video_dir, cards, voice_idx=0):
         if not text:
             continue
         out = tts_dir / f"tts_{idx:02d}.mp3"
-        if out.exists() and out.stat().st_size > 10000:
+        checkpoint_inputs = {
+            "renderer": "edge_tts_card_v2",
+            "index": idx,
+            "voice": voice,
+            "text": text,
+            "renderer_source": fingerprint_paths([Path(__file__)]),
+        }
+        checkpoint = stage_current_or_adopt(Path(video_dir), f"tts_{idx:02d}", checkpoint_inputs, [out], legacy_marker="tts.done")
+        if checkpoint.get("current"):
+            print(f"  tts_{idx:02d}.mp3 reused ({checkpoint.get('reason')})")
             continue
         await edge_tts.Communicate(text, voice).save(str(out))
+        mark_complete(Path(video_dir), f"tts_{idx:02d}", checkpoint_inputs, [out])
         dur = float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(out)],capture_output=True,text=True).stdout.strip() or 0)
         print(f"  ✅ tts_{idx:02d}: {out.stat().st_size//1024}KB, {dur:.1f}s ({voice})")
 
@@ -471,6 +566,12 @@ def render_segments(video_dir, cards, width=1080, height=1920):
         tts_mp3 = Path(video_dir) / "tts" / f"tts_{idx:02d}.mp3"
         seg_mp4 = seg_dir / f"seg_{idx:02d}.mp4"
 
+        checkpoint_inputs = _segment_checkpoint_inputs(video_dir, cards[i], idx, width, height)
+        checkpoint = stage_current_or_adopt(Path(video_dir), f"segment_{idx:02d}", checkpoint_inputs, [seg_mp4])
+        if checkpoint.get("current"):
+            print(f"  seg_{idx:02d}.mp4 reused ({checkpoint.get('reason')})")
+            continue
+
         dur_r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(tts_mp3)],capture_output=True,text=True)
         dur = float(dur_r.stdout.strip() or 6.0) + 0.5
 
@@ -488,6 +589,7 @@ def render_segments(video_dir, cards, width=1080, height=1920):
                 "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
                 "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
             assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
+            mark_complete(Path(video_dir), f"segment_{idx:02d}", checkpoint_inputs, [seg_mp4])
             sz = os.path.getsize(str(seg_mp4))
             print(f"  鉁?seg_{idx:02d}.mp4 ({sz//1024}KB, layered)")
             continue
@@ -517,6 +619,7 @@ def render_segments(video_dir, cards, width=1080, height=1920):
             "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
 
         assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
+        mark_complete(Path(video_dir), f"segment_{idx:02d}", checkpoint_inputs, [seg_mp4])
         sz = os.path.getsize(str(seg_mp4))
         print(f"  ✅ seg_{idx:02d}.mp4 ({sz//1024}KB)")
 
@@ -1081,8 +1184,12 @@ def mix_audio(video_dir):
     print(f"  混音门禁: {data.get('audio_channels')}ch, {data.get('mean_volume_db')}dB")
 
 
-def gen_subtitles(video_dir, cards):
+def gen_subtitles(video_dir, cards, platform="kuaishou"):
     """Generate ASS subtitles from TTS durations"""
+    output = write_ass_from_cards(Path(video_dir), cards, platform=platform)
+    print(f"  subtitles: {len(cards)} -> {output}")
+    return str(output)
+
     durations = []
     for i in range(len(cards)):
         idx = i+1
@@ -1229,6 +1336,7 @@ async def main():
     parser.add_argument("--width", type=int, default=1080, help="Output width; Kuaishou preflight requires 1080")
     parser.add_argument("--height", type=int, default=1920, help="Output height; Kuaishou preflight requires 1920")
     parser.add_argument("--bgm-style", default="acoustic guitar", help="BGM style for online real-instrument music search")
+    parser.add_argument("--platform", default="kuaishou", help="Target platform for subtitle safe-area settings")
     parser.add_argument("--skip-cards", action="store_true", help="Skip card rendering if cards.done exists")
     parser.add_argument("--skip-tts", action="store_true", help="Skip TTS if tts.done exists")
     parser.add_argument("--generate-packet", action="store_true", help="Only generate packet from existing final.mp4")
@@ -1254,50 +1362,87 @@ async def main():
 
     theme_v = THEMES[args.theme]
     bg_dir = f"{vd}/backgrounds"
+    run_pre_render_gate(vd, cards)
 
     # ── Step 1: Cards ──
-    if not args.skip_cards and not (Path(vd) / "cards.done").exists():
+    if not args.skip_cards:
         print("\n=== Step 1: 卡片渲染 ===")
+        started = time.perf_counter()
         await render_cards(vd, cards, theme_v, bg_dir, args.gh_repo)
+        _record_stage_timing(vd, "cards", started)
     else:
         print("\n=== Step 1: 卡片 ✅ 跳过 ===")
 
     # ── Step 2: TTS ──
-    if not args.skip_tts and not (Path(vd) / "tts.done").exists():
+    if not args.skip_tts:
         print("\n=== Step 2: TTS ===")
+        started = time.perf_counter()
         await gen_tts(vd, cards, args.voice_idx)
+        _record_stage_timing(vd, "tts", started)
     else:
         print("\n=== Step 2: TTS ✅ 跳过 ===")
 
     # ── Step 3: Segments ──
-    if not (Path(vd) / "segments.done").exists():
+    if cards:
         print("\n=== Step 3: 分段渲染（并行4核）===")
+        started = time.perf_counter()
         render_segments(vd, cards, args.width, args.height)
+        _record_stage_timing(vd, "segments", started)
     else:
         print("\n=== Step 3: 分段 ✅ 跳过 ===")
 
     # ── Step 4: Concat ──
-    if not (Path(vd) / "concat.done").exists():
+    segment_files = [Path(vd) / "segments" / f"seg_{index + 1:02d}.mp4" for index in range(len(cards))]
+    raw_path = Path(vd) / "raw.mp4"
+    concat_inputs = {"renderer": "concat_v2", "segments": fingerprint_paths(segment_files)}
+    concat_checkpoint = stage_current_or_adopt(Path(vd), "concat", concat_inputs, [raw_path], legacy_marker="concat.done")
+    if not concat_checkpoint.get("current"):
         print("\n=== Step 4: 拼接 ===")
+        started = time.perf_counter()
         concat_video(vd, cards)
+        _record_stage_timing(vd, "concat", started)
+        mark_complete(Path(vd), "concat", concat_inputs, [raw_path])
     else:
         print("\n=== Step 4: 拼接 ✅ 跳过 ===")
 
     # ── Step 5: BGM + Mix ──
+    final_path = Path(vd) / "final.mp4"
+    final_inputs = {
+        "renderer": "layered_video_final_v2",
+        "platform": args.platform,
+        "bgm_style": args.bgm_style,
+        "segments": fingerprint_paths(segment_files),
+        "cards": cards,
+        "renderer_source": fingerprint_paths([Path(__file__), ROOT / "scripts" / "build_subtitles.py", ROOT / "scripts" / "mix_bgm_with_gate.py"]),
+    }
+    final_checkpoint = stage_current_or_adopt(Path(vd), "final", final_inputs, [final_path], legacy_marker="final.done")
+    if not final_checkpoint.get("current") and (Path(vd) / "final.done").exists():
+        (Path(vd) / "final.done").unlink()
+        if final_checkpoint.get("reason") == "inputs_changed":
+            for stale in (Path(vd) / "bgm.mp3", Path(vd) / "bgm_source.json", Path(vd) / "mixed.mp4", Path(vd) / "audio_probe.json"):
+                if stale.exists():
+                    stale.unlink()
     if not (Path(vd) / "final.done").exists():
         print("\n=== Step 5: BGM + 混音 ===")
+        started = time.perf_counter()
         download_bgm(vd, args.bgm_style)
         mix_audio(vd)
+        _record_stage_timing(vd, "audio_mix", started)
 
     # ── Step 6: Subtitles ──
     if not (Path(vd) / "final.done").exists():
         print("\n=== Step 6: 字幕 ===")
-        gen_subtitles(vd, cards)
+        started = time.perf_counter()
+        gen_subtitles(vd, cards, platform=args.platform)
+        _record_stage_timing(vd, "subtitles", started)
 
     # ── Step 7: Encode (一步到位) ──
     if not (Path(vd) / "final.done").exists():
         print("\n=== Step 7: 编码（一步到位）===")
+        started = time.perf_counter()
         encode_final(vd)
+        _record_stage_timing(vd, "encode_final", started)
+        mark_complete(Path(vd), "final", final_inputs, [final_path])
 
     # ── Step 8: Packet + Upload ──
     packet_path = Path(vd) / "packet.json"
