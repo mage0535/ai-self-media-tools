@@ -25,6 +25,7 @@ if str(Path(__file__).resolve().parents[1]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.cinema_composition import storyboard
+from scripts.pre_render_gate import validate_render_inputs
 from content_platform.content_recipe import build_tool_invocation_manifest
 from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.video_recipe import build_visual_recipe, load_effect_module_registry, validate_visual_recipe
@@ -113,6 +114,24 @@ def main(argv: list[str] | None = None) -> int:
     plan = _load_plan()
     if str(plan.get("selected_pipeline") or "") == "localized_repost_video" and os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") != "1":
         return _run_localized_repost(plan, output_dir, title)
+    dry_run = os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1"
+    script_structure = validate_script_structure(script_body)
+    # Dry runs retain incomplete-plan evidence for isolated gate tests; real renders fail closed.
+    if not dry_run and not script_structure.get("passed"):
+        manifest = {
+            "ok": False,
+            "title": title,
+            "selected_pipeline": plan.get("selected_pipeline", ""),
+            "template_family": plan.get("template_family", ""),
+            "status": "script_structure_failed",
+            "error": "video script needs eight distinct narrative beats before rendering",
+            "script_structure_gate": script_structure,
+            "dry_run": dry_run,
+            "tool_invocation_manifest": _tool_invocation_manifest(plan),
+        }
+        _write_manifest(output_dir, manifest)
+        print(manifest["error"], file=sys.stderr)
+        return 5
     visual_assets = _load_visual_assets()
     materialized_backgrounds = _materialize_visual_backgrounds(output_dir, visual_assets)
     cinema_scenes = storyboard(script_body or title, 8)
@@ -160,6 +179,32 @@ def main(argv: list[str] | None = None) -> int:
     cards = build_cards(script_body, title, plan, cinema_scenes, shotcraft_plan, visual_assets)
     cards_path = output_dir / "cards.json"
     cards_path.write_text(json.dumps(cards, ensure_ascii=False, indent=2), encoding="utf-8")
+    pre_render_gate = validate_render_inputs(
+        output_dir,
+        cards,
+        platform=_primary_platform(plan),
+        require_backgrounds=False,
+    )
+    pre_render_gate_path = output_dir / "pre_render_gate.json"
+    pre_render_gate_path.write_text(json.dumps(pre_render_gate, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not pre_render_gate.get("passed"):
+        manifest = {
+            "ok": False,
+            "title": title,
+            "selected_pipeline": plan.get("selected_pipeline", ""),
+            "template_family": plan.get("template_family", ""),
+            "status": "pre_render_gate_failed",
+            "error": "generated cards failed pre-render validation",
+            "script_structure_gate": script_structure,
+            "pre_render_gate": pre_render_gate,
+            "pre_render_gate_path": str(pre_render_gate_path),
+            "dry_run": dry_run,
+            "tool_invocation_manifest": tool_manifest,
+            **tool_selection_evidence,
+        }
+        _write_manifest(output_dir, manifest)
+        print(manifest["error"], file=sys.stderr)
+        return 5
     renderer = _renderer_path(plan)
     template_family = str(visual_recipe.get("template_family") or plan.get("template_family") or "")
     style_variants = visual_recipe.get("style_variants") if isinstance(visual_recipe.get("style_variants"), dict) else {}
@@ -178,6 +223,9 @@ def main(argv: list[str] | None = None) -> int:
         "bgm_style": bgm_style,
         "toolchain_contract": toolchain_contract,
         "dry_run": os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1",
+        "script_structure_gate": script_structure,
+        "pre_render_gate": pre_render_gate,
+        "pre_render_gate_path": str(pre_render_gate_path),
         "cinema_storyboard": cinema_scenes,
         "shotcraft_motion_plan": shotcraft_plan,
         "visual_assets": visual_assets,
@@ -243,12 +291,13 @@ def build_cards(
     shotcraft_plan: dict | None = None,
     visual_assets: dict | None = None,
 ) -> list[dict]:
-    beats = _beats(script_body)
+    beats = _story_beats(script_body) or [title]
     shotcraft_timeline = list((shotcraft_plan or {}).get("timeline") or [])
     visual_assignments = list((visual_assets or {}).get("assignments") or [])
     cards = []
     for index in range(8):
-        beat = beats[index] if index < len(beats) else f"Step {index + 1}: keep the visual rhythm aligned with the script."
+        beat = beats[index % len(beats)]
+        next_beat = beats[(index + 1) % len(beats)]
         layout = LAYOUTS[index % len(LAYOUTS)]
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
         card = {
@@ -271,11 +320,11 @@ def build_cards(
         if layout == "cover":
             card.update({"sub": _summary(script_body)[:40], "hook": title[:42], "hook_prefix": "Auto selected video workflow"})
         if layout == "card_stack":
-            card["items"] = [beat, "Match visual to narration", "Keep subtitles in the lower third"]
+            card["items"] = [beat, next_beat, title]
         if layout == "big_number":
             card.update({"num": f"0{index + 1}", "ext": beat})
         if layout == "timeline":
-            card["items"] = [beat, "Add voiceover", "Add licensed music", "Run post-render checks"]
+            card["items"] = [beat, next_beat, title]
         cards.append(card)
     return cards
 
@@ -677,6 +726,22 @@ def _beats(text: str) -> list[str]:
         return [part[:200] for part in paragraphs][:10]
     parts = [part.strip(" -#\t") for part in re.split(r"\n+|[。.!?；;]", text or "") if part.strip(" -#\t")]
     return [part[:200] for part in parts if len(part) >= 8][:10]
+
+
+def _story_beats(text: str) -> list[str]:
+    parts = re.split(r"\n+|[.!?;\u3002\uff01\uff1f\uff1b]", str(text or ""))
+    return [part.strip(" -#\t")[:200] for part in parts if len(part.strip(" -#\t")) >= 8]
+
+
+def validate_script_structure(script_body: str, *, minimum_beats: int = 8) -> dict:
+    beats = _story_beats(script_body)
+    unique = {re.sub(r"\s+", " ", beat).casefold() for beat in beats}
+    failures = []
+    if len(beats) < minimum_beats:
+        failures.append("story_beats_insufficient")
+    if len(unique) < minimum_beats:
+        failures.append("story_beats_not_distinct")
+    return {"passed": not failures, "beat_count": len(beats), "distinct_beat_count": len(unique), "failures": failures}
 
 
 def _card_title(text: str, index: int) -> str:

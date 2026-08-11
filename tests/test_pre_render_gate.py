@@ -108,9 +108,10 @@ class PreRenderGateTests(unittest.TestCase):
             mark_complete(root, "segment_01", _segment_checkpoint_inputs(root, card, 1, 1080, 1920), [segment])
 
             with patch("scripts.kuaishou_render.subprocess.run") as run:
-                render_segments(root, [card], 1080, 1920)
+                result = render_segments(root, [card], 1080, 1920)
 
             run.assert_not_called()
+            self.assertEqual(result, {"rendered": 0, "reused": 1})
 
     def test_checkpoint_adopts_a_shared_legacy_marker_for_per_item_stages(self):
         from scripts.render_checkpoint import stage_current_or_adopt
@@ -142,9 +143,10 @@ class PreRenderGateTests(unittest.TestCase):
             (root / "cards.done").write_text("ok", encoding="utf-8")
 
             with patch("scripts.kuaishou_render.async_playwright") as browser:
-                asyncio.run(render_cards(root, [card], THEMES["blueprint"], backgrounds, None))
+                result = asyncio.run(render_cards(root, [card], THEMES["blueprint"], backgrounds, None))
 
             browser.assert_not_called()
+            self.assertEqual(result, {"rendered": 0, "reused": 1})
 
     def test_card_renderer_waits_for_fonts_and_images_instead_of_fixed_sleep(self):
         from scripts.kuaishou_render import _wait_for_card_assets
@@ -186,3 +188,18 @@ class PreRenderGateTests(unittest.TestCase):
             self.assertEqual(summary["stage_count"], 2)
             self.assertEqual(summary["slowest"][0]["stage"], "cards")
             self.assertTrue(summary["slowest"][1]["cached"])
+
+    def test_final_render_decision_uses_checkpoint_not_legacy_marker(self):
+        from scripts.kuaishou_render import final_render_required
+
+        self.assertFalse(final_render_required({"current": True, "reason": "checkpoint_match"}))
+        self.assertTrue(final_render_required({"current": False, "reason": "inputs_changed"}))
+
+    def test_kuaishou_main_reader_accepts_utf8_bom_cards(self):
+        from scripts.kuaishou_render import read_cards
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cards_path = Path(tmp) / "cards.json"
+            cards_path.write_text('[{"tts":"A real subtitle"}]', encoding="utf-8-sig")
+
+            self.assertEqual(read_cards(cards_path)[0]["tts"], "A real subtitle")
