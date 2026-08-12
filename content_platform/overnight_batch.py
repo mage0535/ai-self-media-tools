@@ -36,6 +36,7 @@ PLATFORM_TOPIC_KEYWORDS = {
     "douyin_pet": ("pet", "cat", "dog", "animal", "宠物", "猫", "狗", "动物"),
     "douyin_ai": ("ai", "agent", "automation", "人工智能", "智能体", "自动化"),
 }
+DEFAULT_AI_TOPIC_KEYWORDS = ("ai", "agent", "automation", "llm", "model", "人工智能", "智能体", "自动化", "大模型")
 
 
 def normalize_delivery_boundary(platform: str, requested_state: str) -> str:
@@ -181,11 +182,12 @@ def topic_keywords_for_slot(platform: str, slot: dict[str, Any], profile: dict[s
     configured = slot.get("topic_keywords")
     if isinstance(configured, list) and configured:
         return [str(word).casefold() for word in configured if str(word).strip()]
-    return [
+    resolved = [
         str(word).casefold()
         for word in PLATFORM_TOPIC_KEYWORDS.get(str(platform).casefold(), profile.get("keywords", []))
         if str(word).strip()
     ]
+    return resolved or list(DEFAULT_AI_TOPIC_KEYWORDS)
 
 
 def candidate_matches_topic_keywords(candidate: dict[str, Any], keywords: list[str]) -> bool:
