@@ -192,6 +192,11 @@ def test_pet_lane_rejects_an_unrelated_general_news_candidate():
     assert candidate_matches_topic_keywords({"title": "Three signs your cat is stressed"}, keywords) is True
 
 
+def test_ai_keyword_does_not_match_a_substring_inside_an_unrelated_word():
+    assert candidate_matches_topic_keywords({"title": "Facebook pays rage-bait creators"}, ["ai"]) is False
+    assert candidate_matches_topic_keywords({"title": "AI agents change workflows"}, ["ai"]) is True
+
+
 def test_english_platform_rejects_a_chinese_headline_even_when_it_mentions_ai():
     assert candidate_matches_platform_language("twitter", {"title": "如何看待 AIGC 工具"}) is False
     assert candidate_matches_platform_language("twitter", {"title": "AI agents change team workflows"}) is True
