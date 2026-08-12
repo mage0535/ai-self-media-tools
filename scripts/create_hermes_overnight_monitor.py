@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 
 PROMPT = """You are the read-only ai-self-media-tools overnight observer.
@@ -21,6 +22,13 @@ summarize only; do not request retries or new tasks. Do not interfere with the
 
 
 def main() -> int:
+    root = Path(__file__).resolve().parents[1]
+    env_file = root / "secrets" / "notifications.env"
+    if env_file.is_file():
+        for raw in env_file.read_text(encoding="utf-8").splitlines():
+            key, separator, value = raw.strip().partition("=")
+            if separator and key == "AI_SELF_MEDIA_TELEGRAM_TARGET" and value.strip():
+                os.environ.setdefault(key, value.strip().strip("'\""))
     target = os.environ.get("AI_SELF_MEDIA_TELEGRAM_TARGET", "").strip()
     if not target:
         raise SystemExit("AI_SELF_MEDIA_TELEGRAM_TARGET is required")
