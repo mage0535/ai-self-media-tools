@@ -381,6 +381,31 @@ def metrics_readiness_report(platforms: list[str], collector_config: dict[str, A
     selected = _normalize_platforms(platforms)
     variants = _load_platform_account_variants()
     accounts: dict[str, Any] = {}
+
+    def source_status(source_config: dict[str, Any]) -> tuple[str, str, bool]:
+        metrics_path = str(source_config.get("metrics_file") or source_config.get("analytics_file") or "").strip()
+        api_configured = bool(source_config.get("api_url") or source_config.get("analytics_api_url"))
+        if api_configured:
+            return "content_metrics_configured", "approved content metrics API is configured", True
+        if not metrics_path:
+            return "account_source_missing", "configure an account-specific metrics export/API", False
+        path = Path(metrics_path)
+        if not path.is_file():
+            return "metrics_file_missing", "configured metrics file is not available at runtime", False
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return "metrics_file_invalid", "configured metrics file is not valid JSON", False
+        rows = payload.get("videos") if isinstance(payload, dict) else payload
+        identifiers = {"job_id", "content_id", "item_id", "video_id", "post_id", "article_id", "work_id", "title", "work_title", "标题"}
+        identified = isinstance(rows, list) and any(
+            isinstance(row, dict) and any(str(row.get(field) or "").strip() for field in identifiers)
+            for row in rows
+        )
+        if not identified:
+            return "content_identity_missing", "metrics export has no title or stable content identifier", False
+        return "content_metrics_configured", "content-level metrics export is configured", True
+
     for platform in selected:
         base_cfg = config.get(platform, {}) if isinstance(config.get(platform), dict) else {}
         variant_accounts = _account_variants_for_platform(variants, platform)
@@ -396,22 +421,22 @@ def metrics_readiness_report(platforms: list[str], collector_config: dict[str, A
             for account_key in variant_accounts:
                 account_cfg = account_cfgs.get(account_key, {})
                 account_cfg = account_cfg if isinstance(account_cfg, dict) else {}
-                has_content_source = bool(account_cfg.get("metrics_file") or account_cfg.get("analytics_file") or account_cfg.get("api_url") or account_cfg.get("analytics_api_url"))
+                status, reason, has_content_source = source_status(account_cfg)
                 has_state = bool(account_cfg.get("state_file") or account_cfg.get("cookie_file"))
                 accounts[account_key] = {
                     "platform": platform,
                     "account_key": account_key,
-                    "status": "content_metrics_configured" if has_content_source else "account_source_missing",
-                    "reason": "account-specific content metrics source is configured" if has_content_source else "configure an account-specific metrics export/API; a shared base-platform state is not sufficient",
+                    "status": status,
+                    "reason": reason if has_content_source else f"{reason}; a shared base-platform state is not sufficient",
                     "state_configured": has_state,
                     "strategy_eligible": has_content_source,
                 }
             continue
-        has_content_source = bool(base_cfg.get("metrics_file") or base_cfg.get("analytics_file") or base_cfg.get("api_url") or base_cfg.get("analytics_api_url"))
+        status, reason, has_content_source = source_status(base_cfg)
         accounts[platform] = {
             "platform": platform,
-            "status": "content_metrics_configured" if has_content_source else "account_snapshot_only",
-            "reason": "content-level metrics source is configured" if has_content_source else "browser/public account snapshots remain audit-only until content-level metrics are available",
+            "status": status if has_content_source or status != "account_source_missing" else "account_snapshot_only",
+            "reason": reason if has_content_source or status != "account_source_missing" else "browser/public account snapshots remain audit-only until content-level metrics are available",
             "strategy_eligible": has_content_source,
         }
     eligible = sum(1 for item in accounts.values() if item.get("strategy_eligible"))

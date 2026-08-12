@@ -3094,3 +3094,4 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ## Verification
 - Added red/green regression coverage for snapshot isolation, legacy-cycle filtering, account history isolation, source readiness, TikTok empty-content responses, and Hermes scraper fallback.
+- Readiness validation also opens configured JSON exports and requires a content identifier; a path alone is not treated as usable evidence.
