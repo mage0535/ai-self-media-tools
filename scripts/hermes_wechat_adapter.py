@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import urllib.parse
@@ -44,6 +45,15 @@ def publish_packet(packet: dict, work_dir: Path) -> dict:
 
     if not os.environ.get("CN_PROXY"):
         return {"ok": False, "status": "blocked", "error": "missing CN_PROXY"}
+    license_result = _run_publish_license_gate(packet, Path(__file__).parent / "gzh_publish_license.py")
+    if not license_result.get("passed"):
+        failures = "; ".join(str(item) for item in license_result.get("failures", [])[:3])
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": f"WeChat publish license blocked: {failures}",
+            "license": license_result,
+        }
     scripts_dir = Path(os.environ.get("HERMES_SCRIPTS_DIR", ""))
     themes_dir = Path(os.environ.get("HERMES_WECHAT_THEMES_DIR", ""))
     if scripts_dir.is_dir():
@@ -317,6 +327,54 @@ def _batchget_confirm(token: str, media_id: str, title: str) -> dict:
         found_title = any(str(article.get("title", "")) == title for article in news)
         return {"passed": found_title, "media_id": media_id, "title_match": found_title}
     return {"passed": False, "media_id": media_id, "error": "media_id not found in draft batchget"}
+
+
+def _run_publish_license_gate(packet: dict, license_script: Path) -> dict:
+    title = str(packet.get("title", "")).strip()
+    if not title:
+        return {"version": "gzh_publish_license_v1", "passed": False, "failures": ["title_missing"]}
+    if not license_script.is_file():
+        return {
+            "version": "gzh_publish_license_v1",
+            "title": title,
+            "passed": False,
+            "failures": ["license_script_missing"],
+        }
+    try:
+        result = subprocess.run(
+            [sys.executable, str(license_script), "--title", title],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception as exc:
+        return {
+            "version": "gzh_publish_license_v1",
+            "title": title,
+            "passed": False,
+            "failures": [f"license_script_error:{str(exc)[:160]}"],
+        }
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {
+            "version": "gzh_publish_license_v1",
+            "title": title,
+            "passed": False,
+            "failures": [f"license_output_invalid:returncode={result.returncode}"],
+            "stderr": result.stderr[-500:],
+        }
+    if not isinstance(payload, dict):
+        return {
+            "version": "gzh_publish_license_v1",
+            "title": title,
+            "passed": False,
+            "failures": ["license_output_not_object"],
+        }
+    if result.returncode != 0 and payload.get("passed") is not False:
+        payload["passed"] = False
+        payload.setdefault("failures", []).append(f"license_returncode_nonzero:{result.returncode}")
+    return payload
 
 
 if __name__ == "__main__":

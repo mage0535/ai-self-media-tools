@@ -1,5 +1,22 @@
 # Continuous Development
 
+## 2026-08-12: WeChat Publish License Gate Acceptance
+
+### Implemented
+- Accepted the Hermes-side WeChat publish-license direction but corrected the integration to fail closed. `scripts/hermes_wechat_adapter.py` now blocks when the license script is missing, returns invalid JSON, exits nonzero without a clear block payload, or receives an empty title.
+- Added `scripts/gzh_publish_license.py` to the publishable repository so the live server no longer depends on an untracked script. The script enforces the WeChat cadence gate before draft push: at most three recent WeChat articles in seven days, no 00:00-06:00 publish window, recent title similarity blocking, and homogeneous title keyword blocking.
+- Kept the private v5 strategy file server-local under ignored `data/`; publishable code contains only generic policy logic and no account-private strategy tables.
+
+### Acceptance Notes
+- Hermes-side change was directionally correct: putting the gate inside `publish_packet()` is the right integration point because it runs before token/theme/draft operations.
+- Original live patch had a P0 bypass: if the license subprocess failed or printed invalid JSON, the adapter defaulted to `passed=True`. That has been replaced with explicit `blocked` results.
+- The server-local `channel-operations-workflow` skill correctly references `data/growth_strategy_20260812.md` and the publish-license reference, but this remains a server skill update rather than public repository code.
+
+### Verification
+- New tests cover missing title, missing script, invalid JSON output, and `publish_packet()` blocking before WeChat API work when the license fails.
+- Focused local regression: `tests/test_hermes_wechat_adapter_script.py tests/test_publishers_v2.py tests/test_wechat_growth_strategy.py tests/test_wechat_toolchain.py` => `34 passed, 10 subtests passed`.
+- Project audit returned `ok: true`.
+
 ## 2026-08-12: Strategy Routing and Recoverable Overnight Execution
 
 ### Implemented
