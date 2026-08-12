@@ -234,6 +234,12 @@ shared_trend_only: false
 
         self.assertLess(text.index("performance-cycle"), text.index("overnight-prepare"))
 
+    def test_overnight_script_runs_the_checked_out_module_not_a_global_console_script(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn("python3 -m content_platform", text)
+        self.assertNotIn('"$bin" --config', text)
+
     def test_overnight_systemd_service_sets_home_and_private_notification_environment(self):
         text = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
 
