@@ -6,10 +6,11 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_BIN=%h/.local/bin/content-platform
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
 # The private slots file selects only channels due tonight. It must not contain
 # credentials and is deliberately separate from the public repository.
-ExecStart=/bin/sh -lc 'set -eu; root=%h/.ai-self-media-tools; day=$$(date +%%F); out=$$root/data/overnight/$$day; slots=$$root/secrets/overnight-slots.json; mkdir -p "$$out"; test -f "$$slots" || { printf "{\"status\":\"no_slots\"}\n" > "$$out/result.json"; exit 0; }; %h/.local/bin/content-platform --config "$$root/config.json" --db "$$root/data/state.db" overnight-prepare --slots "$$slots" --output "$$out/prepared.json" --refresh > "$$out/prepare-result.json"; %h/.local/bin/content-platform --config "$$root/config.json" --db "$$root/data/state.db" overnight-plan --tasks "$$out/prepared.json" --output "$$out/plan.json" --start-minute 0 --deadline-minute 290 --finalization-minutes 10 > "$$out/plan-result.json"; %h/.local/bin/content-platform --config "$$root/config.json" --db "$$root/data/state.db" overnight-run --plan "$$out/plan.json" --state "$$out/state.json" --events "$$out/events.jsonl" > "$$out/result.json"'
+ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/run_overnight_batch.sh
 WorkingDirectory=%h/.ai-self-media-tools
 MemoryMax=768M
 TimeoutStartSec=17400
