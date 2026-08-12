@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from scripts import hermes_wechat_adapter
+from scripts import gzh_publish_license
 
 
 def test_generated_image_helpers_accept_image_gen_engine_output_key(tmp_path, monkeypatch):
@@ -73,3 +74,43 @@ def test_publish_packet_blocks_before_wechat_when_license_fails(tmp_path, monkey
     assert result["ok"] is False
     assert result["status"] == "blocked"
     assert "WeChat publish license blocked" in result["error"]
+
+
+def test_publish_license_does_not_count_bare_wechat_jobs_as_delivered(tmp_path):
+    from content_platform.store import Store
+
+    store = Store(tmp_path / "data" / "state.db")
+    job = store.create_job("Generated but not delivered", ["wechat"], {})
+    with store.connect() as conn:
+        conn.execute("UPDATE jobs SET title=? WHERE id=?", ("Generated but not delivered", job["id"]))
+
+    recent = gzh_publish_license.recent_wechat_titles(tmp_path)
+
+    assert recent == []
+
+
+def test_publish_license_counts_successful_wechat_receipts(tmp_path):
+    from content_platform.store import Store
+
+    store = Store(tmp_path / "data" / "state.db")
+    job = store.create_job("Delivered article", ["wechat"], {})
+    store.save_publish_receipt("cp1", "wechat", {"status": "created", "platform_content_id": "draft-1"}, job_id=job["id"])
+
+    recent = gzh_publish_license.recent_wechat_titles(tmp_path)
+
+    assert recent == [("Delivered article", recent[0][1])]
+
+
+def test_publish_license_ignores_unstructured_markdown_recaps(tmp_path):
+    recap_dir = tmp_path / "data" / "local_ops_gzh"
+    recap_dir.mkdir(parents=True)
+    (recap_dir / "recap_20260807.md").write_text(
+        "# 公众号平台运营复盘 2026-08-07\n\n"
+        "1. 每天重复4小时的工作，我用AI自动化后剩下了什么 → 草稿箱 ✅\n"
+        "media_id=draft-1\n",
+        encoding="utf-8",
+    )
+
+    recent = gzh_publish_license.recent_wechat_titles(tmp_path)
+
+    assert recent == []
