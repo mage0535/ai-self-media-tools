@@ -97,6 +97,7 @@ def build_due_tasks(
     items: list[dict[str, Any]],
     source_report: list[dict[str, Any]],
     rank_for_platform: Any,
+    candidate_filter: Any | None = None,
     growth_strategy_status: dict[str, dict[str, Any]] | None = None,
     weekday: int | None = None,
 ) -> dict[str, Any]:
@@ -119,6 +120,8 @@ def build_due_tasks(
             tasks.append(row)
             continue
         candidates = list(rank_for_platform(platform, items, raw) or [])
+        if candidate_filter is not None:
+            candidates = [candidate for candidate in candidates if candidate_filter(platform, candidate, raw)]
         if not platform:
             row.update({"state": "blocked", "reason": "slot has no platform"})
         elif not candidates:

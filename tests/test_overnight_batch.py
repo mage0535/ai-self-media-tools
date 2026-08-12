@@ -137,6 +137,18 @@ def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_i
     assert prepared["tasks"][1]["reason"] == "no unique cross-platform topic candidate"
 
 
+def test_due_task_builder_applies_a_final_platform_candidate_filter():
+    prepared = build_due_tasks(
+        [{"platform": "wechat"}],
+        items=[],
+        source_report=[],
+        rank_for_platform=lambda *_args: [{"title": "irrelevant", "fingerprint": "irrelevant"}],
+        candidate_filter=lambda *_args: False,
+    )
+
+    assert prepared["tasks"][0]["state"] == "blocked"
+
+
 def test_due_task_builder_blocks_when_growth_strategy_snapshot_is_missing():
     def rank(platform, _items, _slot):
         return [{"title": f"{platform} topic", "source": platform, "score": 3, "fingerprint": platform}]
