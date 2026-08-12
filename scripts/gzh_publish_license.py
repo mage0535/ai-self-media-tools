@@ -43,25 +43,44 @@ def recent_wechat_titles(root: Path, window_days: int = RECENT_WINDOW_DAYS) -> l
             if mtime < cutoff:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
-            title = _extract_recap_title(text)
+            title = _extract_structured_recap_title(text)
             if title:
                 titles.append((title, mtime.strftime("%Y-%m-%d %H:%M")))
-    db = root / "data" / "state.db"
-    if db.is_file():
-        try:
-            with sqlite3.connect(str(db)) as conn:
-                rows = conn.execute(
-                    "SELECT title, created_at FROM jobs "
-                    "WHERE (platforms_json LIKE '%wechat%' OR platforms_json LIKE '%gzh%') "
-                    "AND created_at >= ?",
-                    (cutoff.strftime("%Y-%m-%dT%H:%M:%S"),),
-                ).fetchall()
-            for title, created_at in rows:
-                if title:
-                    titles.append((str(title), str(created_at)[:16]))
-        except sqlite3.Error:
-            pass
+    titles.extend(_recent_delivered_wechat_titles(root, cutoff))
     return _dedupe_titles(titles)
+
+
+def _recent_delivered_wechat_titles(root: Path, cutoff: datetime) -> list[tuple[str, str]]:
+    db = root / "data" / "state.db"
+    if not db.is_file():
+        return []
+    cutoff_text = cutoff.strftime("%Y-%m-%dT%H:%M:%S")
+    titles: list[tuple[str, str]] = []
+    try:
+        with sqlite3.connect(str(db)) as conn:
+            receipt_rows = conn.execute(
+                "SELECT COALESCE(NULLIF(j.title,''), j.topic), r.created_at "
+                "FROM publish_receipts r JOIN jobs j ON j.id = r.job_id "
+                "WHERE r.platform IN ('wechat','gzh','wechat_official') "
+                "AND r.status IN ('created','drafted','published','handoff_pending') "
+                "AND r.created_at >= ?",
+                (cutoff_text,),
+            ).fetchall()
+            queue_rows = conn.execute(
+                "SELECT COALESCE(NULLIF(j.title,''), j.topic), q.updated_at "
+                "FROM delivery_queue q JOIN jobs j ON j.id = q.job_id "
+                "WHERE q.platform IN ('wechat','gzh','wechat_official') "
+                "AND q.state IN ('completed','handoff_ready') "
+                "AND COALESCE(q.error,'') = '' "
+                "AND q.updated_at >= ?",
+                (cutoff_text,),
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    for title, created_at in [*receipt_rows, *queue_rows]:
+        if title:
+            titles.append((str(title), str(created_at)[:16]))
+    return titles
 
 
 def check_license(title: str, *, root: Path | None = None, skip_time: bool = False) -> dict:
@@ -111,22 +130,18 @@ def _normalize(text: str) -> str:
     return " ".join(parts)
 
 
-def _extract_recap_title(text: str) -> str:
+def _extract_structured_recap_title(text: str) -> str:
     try:
         payload = json.loads(text)
-        if isinstance(payload, dict) and payload.get("title"):
+        if not isinstance(payload, dict):
+            return ""
+        if str(payload.get("platform") or "").casefold() not in {"wechat", "gzh", "wechat_official"}:
+            return ""
+        has_delivery_evidence = bool(payload.get("media_id") or payload.get("platform_content_id"))
+        if has_delivery_evidence and payload.get("title"):
             return str(payload["title"])
     except json.JSONDecodeError:
         pass
-    patterns = [
-        r'"title"\s*:\s*"([^"]{4,100})"',
-        r"^title\s*[:：]\s*(.{4,100})$",
-        r"^#\s+(.{4,100})$",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.MULTILINE)
-        if match:
-            return match.group(1).strip()
     return ""
 
 
