@@ -9,6 +9,8 @@
 - Manual channels normalize to `handoff_ready`; overnight execution does not implicitly approve or publicly publish any channel.
 - Added append-only, redacted `events.jsonl` for real-time Hermes reporting that survives an agent-session or process restart.
 - Added unenabled systemd templates for a midnight direct worker. The worker does not use a Hermes conversation as its execution context and exits safely when no private due-channel slots file exists.
+- Follow-up hardening: the systemd entrypoint now rejects a late persistent-timer catch-up outside the 00:00-00:15 admission window, so a reboot cannot shift content work into the 05:00 morning-report window. The service uses an explicit `CONTENT_PLATFORM_BIN` because systemd does not guarantee `HOME`.
+- First dry-run capacity check rebalanced the private weekly rotation so every due-day plan fits the 280-minute work budget; the run created no jobs or publications.
 
 ### Verification
 - Focused regressions for growth recipes, independent auto routing, the resumable batch, CLI, and Pipeline passed.
