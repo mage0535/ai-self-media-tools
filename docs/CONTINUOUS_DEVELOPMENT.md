@@ -3057,3 +3057,19 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Local rulebook validation: `channel rulebook ok: 19 channels`.
 - Local project audit: `ok: true, issues: []`.
 - Local full regression: `python -m pytest -q` => `564 passed, 29 subtests passed`.
+# 2026-08-12 - WeChat Growth Constraint Alignment
+
+## Finding
+- Hermes server strategy v5 capped WeChat at three weekly articles and required direction-level dedupe, but local executable policy still carried the older two-article recovery contract.
+- The existing direction register blocked repeated directions in cross-platform topic gates, but the final WeChat publish-license gate only checked delivered count, publish hour, title similarity, and title fatigue terms.
+- This left a bypass where two different titles could still represent the same WeChat direction at the draft-upload boundary.
+
+## Implemented
+- `scripts/gzh_publish_license.py` now accepts `--direction` and blocks recent same-direction conflicts from the run manifest.
+- `scripts/hermes_wechat_adapter.py` forwards `content_direction`, `topic_direction`, `direction`, or `content_line` from the packet into the WeChat publish-license gate.
+- `content_platform.growth_policy`, `content_platform.media_quality`, and `scripts/validate_channel_rulebook.py` now align with the server v5 contract: WeChat three articles per week, direction-level dedupe required, and weekly manual backend export required when APIs are unavailable.
+- `docs/CONTENT_OPERATIONS_QUALITY_DIRECTIVE.md` now records the operating rule: title-only dedupe is insufficient, WeChat must pass direction dedupe, backend metrics require weekly manual import when automated APIs fail, and Video Channels stays manual-handoff/screencast-first rather than automatic article mirroring.
+
+## Verification
+- Added regression coverage for WeChat same-direction blocking and adapter direction forwarding.
+- Focused red/green verification: new tests failed before implementation and passed after implementation.

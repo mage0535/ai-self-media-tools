@@ -734,8 +734,8 @@
         "mode": "wechat_14_day_recovery",
         "primary_goal": "recover_open_rate_and_finish_read_rate_before_increasing_publish_frequency",
         "publishing_frequency": {
-          "recommended_articles_per_week": "2",
-          "max_articles_per_week_recovery": 2,
+          "recommended_articles_per_week": "3",
+          "max_articles_per_week_recovery": 3,
           "max_articles_per_week_after_recovery": 3,
           "max_articles_per_day": 1,
           "min_gap_hours_between_articles": 48,
@@ -758,6 +758,8 @@
         "recovery_topic_policy": {
           "duration_days": 14,
           "topic_dedup_window_days": 14,
+          "direction_dedup_required": true,
+          "direction_register_key": "data/ops_runs/<YYYYMMDD>/run_manifest.json",
           "title_frame_dedup_window_days": 14,
           "suspend_topics": [
             "自动化实测",

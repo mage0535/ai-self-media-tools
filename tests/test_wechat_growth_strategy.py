@@ -34,10 +34,11 @@ def test_wechat_growth_strategy_contains_recovery_playbook():
     assert "follow_conversion_rate" in strategy["secondary_metrics"]
     assert playbook["mode"] == "wechat_14_day_recovery"
     assert playbook["publishing_frequency"]["max_articles_per_day"] == 1
-    assert playbook["publishing_frequency"]["recommended_articles_per_week"] == "2"
-    assert playbook["publishing_frequency"]["max_articles_per_week_recovery"] == 2
+    assert playbook["publishing_frequency"]["recommended_articles_per_week"] == "3"
+    assert playbook["publishing_frequency"]["max_articles_per_week_recovery"] == 3
     assert playbook["publishing_frequency"]["min_gap_hours_between_articles"] == 48
     assert recovery["topic_dedup_window_days"] == 14
+    assert recovery["direction_dedup_required"] is True
     assert recovery["max_fatigue_terms_per_title"] == 1
     assert "自动化实测" in recovery["suspend_topics"]
     assert playbook["title_rules"]["max_chars"] == 24
@@ -81,7 +82,7 @@ def test_wechat_toolchain_passes_recovery_playbook_to_draft_meta_and_brief(tmp_p
     brief = (tmp_path / "runtime" / "wechat_toolchain" / "j1" / "brief.md").read_text(encoding="utf-8")
 
     assert playbook["mode"] == "wechat_14_day_recovery"
-    assert playbook["publishing_frequency"]["max_articles_per_week_recovery"] == 2
+    assert playbook["publishing_frequency"]["max_articles_per_week_recovery"] == 3
     assert playbook["title_rules"]["keyword_first_chars"] <= 15
     assert "WeChat growth playbook requirements" in brief
     assert "Recovery mode: wechat_14_day_recovery" in brief

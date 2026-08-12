@@ -12,9 +12,13 @@ import json
 import os
 import re
 import sqlite3
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 CST = timezone(timedelta(hours=8))
 MAX_WECHAT_ARTICLES_PER_WEEK = 3
@@ -83,8 +87,8 @@ def _recent_delivered_wechat_titles(root: Path, cutoff: datetime) -> list[tuple[
     return titles
 
 
-def check_license(title: str, *, root: Path | None = None, skip_time: bool = False) -> dict:
-    root = root or project_home()
+def check_license(title: str, *, root: Path | None = None, skip_time: bool = False, direction: str = "") -> dict:
+    root = Path(root) if root else project_home()
     recent = recent_wechat_titles(root)
     failures: list[str] = []
     if len(recent) >= MAX_WECHAT_ARTICLES_PER_WEEK:
@@ -100,6 +104,12 @@ def check_license(title: str, *, root: Path | None = None, skip_time: bool = Fal
         score = title_similarity(previous, title)
         if score >= 0.45:
             failures.append(f"duplicate_title:{when}:similarity={score:.2f}")
+    direction_conflicts = recent_direction_conflicts(root, direction)
+    if direction_conflicts:
+        platforms = ",".join(
+            sorted({str(item.get("platform") or "") for item in direction_conflicts if item.get("platform")})
+        )
+        failures.append(f"duplicate_direction:{direction}:platforms={platforms}")
     hits = [word for word in HOMOGENY_KEYWORDS if word in title]
     if len(hits) >= 2:
         failures.append("homogeneous_title_keywords:" + ",".join(hits))
@@ -111,10 +121,28 @@ def check_license(title: str, *, root: Path | None = None, skip_time: bool = Fal
         "checks": {
             "recent_titles": [f"{item} ({when})" for item, when in recent[-5:]],
             "recent_count": len(recent),
+            "direction": direction,
+            "direction_conflict_count": len(direction_conflicts),
             "max_per_week": MAX_WECHAT_ARTICLES_PER_WEEK,
             "now_cst": datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
         },
     }
+
+
+def recent_direction_conflicts(root: Path, direction: str) -> list[dict]:
+    if not str(direction or "").strip():
+        return []
+    try:
+        from content_platform.ops_run import _normalized_direction, _recent_records
+    except Exception:
+        return []
+    today = datetime.now(CST).strftime("%Y%m%d")
+    normalized = _normalized_direction("", direction)
+    return [
+        item
+        for item in _recent_records(Path(root), today, RECENT_WINDOW_DAYS)
+        if str(item.get("direction") or "") == normalized
+    ]
 
 
 def title_similarity(left: str, right: str) -> float:
@@ -160,10 +188,13 @@ def _dedupe_titles(rows: list[tuple[str, str]]) -> list[tuple[str, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check WeChat Official Account publish license")
     parser.add_argument("--title", required=True)
+    parser.add_argument("--direction", default="")
+    parser.add_argument("--root", default="")
     parser.add_argument("--output", default="")
     parser.add_argument("--skip-time", action="store_true")
     args = parser.parse_args()
-    result = check_license(args.title.strip(), skip_time=args.skip_time)
+    root = Path(args.root).expanduser() if args.root else None
+    result = check_license(args.title.strip(), root=root, direction=args.direction.strip(), skip_time=args.skip_time)
     if args.output:
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)

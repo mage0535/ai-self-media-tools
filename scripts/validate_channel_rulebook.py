@@ -249,8 +249,8 @@ def main() -> None:
     frequency = growth_strategy.get("publishing_frequency") or {}
     recovery_policy = growth_strategy.get("recovery_topic_policy") or {}
     require(growth_strategy.get("mode") == "wechat_14_day_recovery", "wechat must be in 14-day recovery mode")
-    require(str(frequency.get("recommended_articles_per_week") or "") == "2", "wechat recovery frequency must be 2 articles/week")
-    require((frequency.get("max_articles_per_week_recovery") or 99) <= 2, "wechat recovery weekly cap must be <=2")
+    require(str(frequency.get("recommended_articles_per_week") or "") == "3", "wechat recovery frequency must be 3 articles/week")
+    require((frequency.get("max_articles_per_week_recovery") or 99) <= 3, "wechat recovery weekly cap must be <=3")
     require((frequency.get("min_gap_hours_between_articles") or 0) >= 48, "wechat recovery articles must be separated by at least 48 hours")
     require(frequency.get("max_articles_per_day") == 1, "wechat max articles per day must be 1")
     require(frequency.get("avoid_daily_updates") is True, "wechat must forbid daily updates during recovery")
