@@ -8,6 +8,8 @@ from content_platform.overnight_batch import (
     execute_batch,
     growth_strategy_snapshot_status,
     normalize_delivery_boundary,
+    candidate_matches_topic_keywords,
+    topic_keywords_for_slot,
 )
 from content_platform.store import Store
 
@@ -102,6 +104,38 @@ def test_due_task_builder_selects_a_distinct_topic_for_each_due_platform():
     assert prepared["tasks"][1]["action"] == "handoff"
 
 
+def test_due_task_builder_uses_the_next_candidate_when_the_top_topic_is_already_reserved():
+    def rank(_platform, _items, _slot):
+        return [
+            {"title": "Shared topic", "source": "github", "score": 5, "fingerprint": "shared-topic"},
+            {"title": "Distinct topic", "source": "github", "score": 4, "fingerprint": "distinct-topic"},
+        ]
+
+    prepared = build_due_tasks(
+        [{"platform": "wechat"}, {"platform": "kuaishou"}],
+        items=[],
+        source_report=[{"source": "github", "status": "ok"}],
+        rank_for_platform=rank,
+    )
+
+    assert [task["topic"] for task in prepared["tasks"]] == ["Shared topic", "Distinct topic"]
+
+
+def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_it():
+    def rank(_platform, _items, _slot):
+        return [{"title": "Shared topic", "source": "github", "score": 5, "fingerprint": "shared-topic"}]
+
+    prepared = build_due_tasks(
+        [{"platform": "wechat"}, {"platform": "kuaishou"}],
+        items=[],
+        source_report=[{"source": "github", "status": "ok"}],
+        rank_for_platform=rank,
+    )
+
+    assert prepared["tasks"][1]["state"] == "blocked"
+    assert prepared["tasks"][1]["reason"] == "no unique cross-platform topic candidate"
+
+
 def test_due_task_builder_blocks_when_growth_strategy_snapshot_is_missing():
     def rank(platform, _items, _slot):
         return [{"title": f"{platform} topic", "source": platform, "score": 3, "fingerprint": platform}]
@@ -126,6 +160,23 @@ def test_growth_strategy_snapshot_status_reads_store_inventory(tmp_path: Path):
 
     assert status["wechat"]["status"] == "ok"
     assert status["zhihu"] == {"status": "missing", "key": "growth_strategy:zhihu:latest"}
+
+
+def test_growth_strategy_snapshot_status_maps_twitter_to_the_x_strategy_snapshot(tmp_path: Path):
+    store = Store(tmp_path / "state.db")
+    store.save_tool_inventory("growth_strategy:x:latest", {"policy_id": "growth_quality_policy_v1"})
+
+    status = growth_strategy_snapshot_status(store, ["twitter"])
+
+    assert status["twitter"]["status"] == "ok"
+    assert status["twitter"]["key"] == "growth_strategy:x:latest"
+
+
+def test_pet_lane_rejects_an_unrelated_general_news_candidate():
+    keywords = topic_keywords_for_slot("douyin_pet", {}, {"keywords": ["AI"]})
+
+    assert candidate_matches_topic_keywords({"title": "Facebook pays controversial rage-bait creators"}, keywords) is False
+    assert candidate_matches_topic_keywords({"title": "Three signs your cat is stressed"}, keywords) is True
 
 
 def test_execute_batch_runs_each_platform_independently_and_persists_resume_state(tmp_path: Path):

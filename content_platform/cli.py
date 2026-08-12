@@ -141,6 +141,7 @@ def parser():
     overnight_prepare.add_argument("--output", required=True, help="Prepared task JSON path")
     overnight_prepare.add_argument("--refresh", action="store_true")
     overnight_prepare.add_argument("--profile", default="default")
+    overnight_prepare.add_argument("--weekday", type=int, choices=range(7), help="Optional Monday=0 schedule simulation; never used by the timer")
     overnight_run = sub.add_parser("overnight-run", help="Resume a planned overnight batch without implicit live publishing")
     overnight_run.add_argument("--plan", required=True, help="JSON plan created by overnight-plan")
     overnight_run.add_argument("--state", required=True, help="Persistent batch state path")
@@ -542,7 +543,12 @@ def execute(args):
         output.write_text(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         return {"status": plan["status"], "output": str(output), "tasks": len(plan["tasks"])}
     if args.command == "overnight-prepare":
-        from .overnight_batch import build_due_tasks, growth_strategy_snapshot_status
+        from .overnight_batch import (
+            build_due_tasks,
+            candidate_matches_topic_keywords,
+            growth_strategy_snapshot_status,
+            topic_keywords_for_slot,
+        )
         raw_slots = json.loads(Path(args.slots).read_text(encoding="utf-8"))
         slots = raw_slots.get("slots", raw_slots.get("tasks", [])) if isinstance(raw_slots, dict) else raw_slots
         if not isinstance(slots, list):
@@ -555,8 +561,12 @@ def execute(args):
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
         )
 
-        def rank_for_platform(platform, items, _slot):
-            return rank_trends(items, profile, store.used_topics(platform), 1, store.learned_ranking_context(args.profile))
+        def rank_for_platform(platform, items, slot):
+            # Keep a candidate pool so the batch builder can reserve a unique
+            # topic for each channel instead of duplicating the first trend.
+            ranked = rank_trends(items, profile, store.used_topics(platform), 20, store.learned_ranking_context(args.profile))
+            keywords = topic_keywords_for_slot(platform, slot, profile)
+            return [candidate for candidate in ranked if candidate_matches_topic_keywords(candidate, keywords)]
 
         prepared = build_due_tasks(
             slots,
@@ -564,6 +574,7 @@ def execute(args):
             source_report=report.get("sources", []),
             rank_for_platform=rank_for_platform,
             growth_strategy_status=strategy_status,
+            weekday=args.weekday,
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
