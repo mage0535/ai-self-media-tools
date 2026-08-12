@@ -40,7 +40,9 @@ The planning command fails closed when the sum of scheduled estimates would
 cross 04:50. It does not start a task which cannot finish before the 05:00
 morning-report window. It does not terminate an already admitted task merely
 because 04:50 arrives; each task has its own conservative time budget and
-checkpoint.
+checkpoint. The systemd service admits scheduled runs only between 00:00 and
+00:15; a late `Persistent=true` catch-up writes `no_run` and never consumes the
+morning-report window.
 
 ## Execution and Recovery
 
