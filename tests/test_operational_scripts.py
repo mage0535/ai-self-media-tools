@@ -249,6 +249,12 @@ shared_trend_only: false
         self.assertIn("run_wechat_metrics_refresh.sh", wechat)
         self.assertIn("secrets/notifications.env", wechat)
 
+    def test_overnight_monitor_loads_the_private_notification_environment(self):
+        text = Path("scripts/create_hermes_overnight_monitor.py").read_text(encoding="utf-8")
+
+        self.assertIn("notifications.env", text)
+        self.assertIn("AI_SELF_MEDIA_TELEGRAM_TARGET", text)
+
     def test_auto_service_refreshes_growth_strategy_before_auto_run(self):
         text = Path("systemd/hermes-content-platform.service").read_text(encoding="utf-8")
 
