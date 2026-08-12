@@ -326,6 +326,21 @@ class CliTests(unittest.TestCase):
         self.assertEqual(collector_config["youtube"]["channel_url"], "https://youtube.example/channel")
         self.assertTrue(source.endswith("performance-collector.json"))
 
+    def test_metrics_readiness_cli_requires_separate_douyin_account_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            collector = root / "collector.json"
+            collector.write_text(json.dumps({"douyin": {"state_file": "/private/shared.json"}}), encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(
+                    main(["--db", str(root / "state.db"), "--config", "", "metrics-readiness", "--platform", "douyin", "--collector-config", str(collector)]),
+                    0,
+                )
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["summary"]["strategy_eligible_count"], 0)
+        self.assertEqual(result["accounts"]["douyin_pet"]["status"], "account_source_missing")
+
     def test_private_proxy_env_is_loaded_without_overriding_existing_env(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

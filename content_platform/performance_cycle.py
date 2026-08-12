@@ -56,6 +56,7 @@ def run_performance_cycle(
     review = review_performance(store, expected_platforms=selected)
     strategies = _refresh_growth_strategies(store, selected)
     source_coverage = _source_coverage(selected, collector_config or {})
+    metrics_readiness = metrics_readiness_report(selected, collector_config or {})
     full_cycle = _is_full_cycle(selected)
     report = {
         "status": "ok",
@@ -67,6 +68,7 @@ def run_performance_cycle(
         "review": review,
         "growth_strategies": strategies,
         "source_coverage": source_coverage,
+        "metrics_readiness": metrics_readiness,
         "activity": _activity_summary(collected, persisted, review),
     }
     report_path = out_dir / ("performance_cycle_report.json" if full_cycle else f"performance_cycle_{_platform_slug(selected)}.json")
@@ -87,7 +89,20 @@ def _merge_collection_reports(primary: dict[str, Any], fallback: dict[str, Any])
         current_has_metrics = current.get("status") in {"ok", "backend_signal", "public_signal"} and bool(current.get("account_metrics") or current.get("metrics"))
         fallback_has_metrics = item.get("status") in {"ok", "backend_signal", "public_signal"} and bool(item.get("account_metrics") or item.get("metrics"))
         if fallback_has_metrics and not current_has_metrics:
-            merged_platforms[platform] = item
+            fallback_item = dict(item)
+            metric_key = "account_metrics" if isinstance(fallback_item.get("account_metrics"), dict) else "metrics"
+            metrics = dict(fallback_item.get(metric_key) or {})
+            extra = dict(metrics.get("extra_metrics") or {})
+            # A generic Hermes scraper reports an account-page observation,
+            # not a per-content export. Keep it available for audit but never
+            # let it steer ranking or the next content direction.
+            extra.setdefault("metric_source", "hermes_platform_scraper")
+            extra.setdefault("metric_confidence", "low")
+            extra.setdefault("metric_scope", "account_snapshot")
+            extra.setdefault("strategy_eligible", False)
+            metrics["extra_metrics"] = extra
+            fallback_item[metric_key] = metrics
+            merged_platforms[platform] = fallback_item
     merged["platforms"] = merged_platforms
     if primary.get("status") != "ok" and fallback.get("status") == "ok":
         merged["status"] = "ok"
@@ -139,8 +154,16 @@ def _persist_collection(store: Any, collected: dict[str, Any]) -> dict[str, Any]
                 avg_watch_seconds=float(metrics.get("avg_watch_seconds", 0.0)),
                 extra_metrics=metrics.get("extra_metrics", {}),
             )
+            strategy_eligible = metrics.get("extra_metrics", {}).get("strategy_eligible") is not False
             result["saved"] += 1
-            result["items"].append({"platform": platform, "status": "saved", "job_id": job["id"], "metrics": metrics})
+            result["items"].append(
+                {
+                    "platform": platform,
+                    "status": "saved" if strategy_eligible else "saved_snapshot_only",
+                    "job_id": job["id"],
+                    "metrics": metrics,
+                }
+            )
         else:
             result["unavailable"] += 1
             reason = str(item.get("reason") or item.get("next_action") or "")[:300]
@@ -284,8 +307,11 @@ def _refresh_growth_strategies(store: Any, platforms: list[str]) -> dict[str, An
         strategies[platform] = strategy
         store.save_tool_inventory(f"growth_strategy:{platform}:latest", strategy)
         for account_key, account in _account_variants_for_platform(account_variants, platform).items():
-            account_history = store.historical_performance([account_key, platform], "")
-            account_strategy = build_growth_strategy([platform], content_type, account_history or historical)
+            # Account variants must earn their own history. Falling back to a
+            # platform-wide aggregate leaks one account's performance into
+            # another account's lane and creates false optimization signals.
+            account_history = store.historical_performance([account_key], "")
+            account_strategy = build_growth_strategy([platform], content_type, account_history)
             account_strategy.update(
                 {
                     "account_key": account_key,
@@ -341,6 +367,62 @@ def _source_coverage(platforms: list[str], collector_config: dict[str, Any]) -> 
         "missing_source_count": sum(1 for item in items.values() if item["status"] == "missing_source"),
         "backend_only_without_public_fallback_count": sum(1 for item in items.values() if item["status"] == "backend_only"),
         "needs_attention": needs_attention,
+    }
+
+
+def metrics_readiness_report(platforms: list[str], collector_config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Report whether each account has evidence suitable for strategy learning.
+
+    A configured browser state alone proves neither account identity nor
+    content-level metrics. Account variants therefore need their own source;
+    a base-platform source is intentionally audit-only.
+    """
+    config = collector_config or {}
+    selected = _normalize_platforms(platforms)
+    variants = _load_platform_account_variants()
+    accounts: dict[str, Any] = {}
+    for platform in selected:
+        base_cfg = config.get(platform, {}) if isinstance(config.get(platform), dict) else {}
+        variant_accounts = _account_variants_for_platform(variants, platform)
+        if variant_accounts:
+            accounts[platform] = {
+                "platform": platform,
+                "status": "base_platform_not_strategy_eligible",
+                "reason": "base platform metrics cannot be attributed to a required account variant",
+                "strategy_eligible": False,
+            }
+            account_cfgs = config.get(f"{platform}_accounts", {})
+            account_cfgs = account_cfgs if isinstance(account_cfgs, dict) else {}
+            for account_key in variant_accounts:
+                account_cfg = account_cfgs.get(account_key, {})
+                account_cfg = account_cfg if isinstance(account_cfg, dict) else {}
+                has_content_source = bool(account_cfg.get("metrics_file") or account_cfg.get("analytics_file") or account_cfg.get("api_url") or account_cfg.get("analytics_api_url"))
+                has_state = bool(account_cfg.get("state_file") or account_cfg.get("cookie_file"))
+                accounts[account_key] = {
+                    "platform": platform,
+                    "account_key": account_key,
+                    "status": "content_metrics_configured" if has_content_source else "account_source_missing",
+                    "reason": "account-specific content metrics source is configured" if has_content_source else "configure an account-specific metrics export/API; a shared base-platform state is not sufficient",
+                    "state_configured": has_state,
+                    "strategy_eligible": has_content_source,
+                }
+            continue
+        has_content_source = bool(base_cfg.get("metrics_file") or base_cfg.get("analytics_file") or base_cfg.get("api_url") or base_cfg.get("analytics_api_url"))
+        accounts[platform] = {
+            "platform": platform,
+            "status": "content_metrics_configured" if has_content_source else "account_snapshot_only",
+            "reason": "content-level metrics source is configured" if has_content_source else "browser/public account snapshots remain audit-only until content-level metrics are available",
+            "strategy_eligible": has_content_source,
+        }
+    eligible = sum(1 for item in accounts.values() if item.get("strategy_eligible"))
+    return {
+        "status": "ok",
+        "accounts": accounts,
+        "summary": {
+            "account_count": len(accounts),
+            "strategy_eligible_count": eligible,
+            "action_needed_count": len(accounts) - eligible,
+        },
     }
 
 

@@ -3073,3 +3073,24 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 ## Verification
 - Added regression coverage for WeChat same-direction blocking and adapter direction forwarding.
 - Focused red/green verification: new tests failed before implementation and passed after implementation.
+
+# 2026-08-12 - Strategy Evidence Isolation And Account Readiness
+
+## Finding
+- Live collection can obtain useful account snapshots from public pages and creator dashboards, but those totals cannot attribute performance to a title, work, or account variant.
+- Historical `performance_cycle` rows without explicit content evidence could still influence strategy because older records lacked an eligibility flag.
+- The two Douyin accounts were correctly modeled as distinct operating lanes, but a missing account-specific history could fall back to the shared platform history.
+
+## Implemented
+- Added a strict `strategy_eligible` contract. Public pages, generic Hermes scraper fallback, creator-dashboard totals, and metric files without a content identifier are stored as audit-only snapshots.
+- A JSON metrics export is eligible only when at least one row identifies a work by `job_id`, title, or a stable content ID. CSV imports already use `job_id` or title.
+- Old `performance_cycle` rows without an explicit eligible flag are excluded from both feedback summaries and historical ranking context. Data remains in the database for audit.
+- Douyin account strategies now read only their own account history. They cannot borrow a shared `douyin` baseline.
+- Added `metrics-readiness`, which reports missing account-specific content sources without printing private runtime configuration.
+
+## Operational Rule
+- Treat `content_metrics_configured` as configuration readiness, not proof that a source successfully collected data. Use the next cycle report to confirm content evidence was actually recorded.
+- Do not create or copy account cookies automatically. Separate authenticated exports or approved APIs are required for `douyin_pet` and `douyin_ai`.
+
+## Verification
+- Added red/green regression coverage for snapshot isolation, legacy-cycle filtering, account history isolation, source readiness, TikTok empty-content responses, and Hermes scraper fallback.

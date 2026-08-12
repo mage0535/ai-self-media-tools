@@ -46,6 +46,12 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(metrics["shares"], 1)
         self.assertEqual(metrics["followers"], 1)
 
+    def test_browser_backend_snapshot_marks_account_scope_and_requires_content_evidence(self):
+        metrics = _extract_public_metrics("阅读总量 401 赞同总量 3 评论总量 12")
+
+        self.assertEqual(metrics["extra_metrics"]["metric_scope"], "account_snapshot")
+        self.assertFalse(metrics["extra_metrics"]["strategy_eligible"])
+
     def test_public_metric_parser_ignores_unreasonable_page_ids(self):
         text = "浏览 71 点赞 63884588199 收藏 63884588199 评论 1"
 
@@ -74,6 +80,8 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(report["platforms"]["youtube"]["status"], "ok")
         self.assertEqual(report["platforms"]["youtube"]["account_metrics"]["subscribers"], 8)
         self.assertEqual(report["platforms"]["bilibili"]["account_metrics"]["fans"], 12)
+        self.assertFalse(report["platforms"]["youtube"]["account_metrics"]["extra_metrics"]["strategy_eligible"])
+        self.assertFalse(report["platforms"]["bilibili"]["account_metrics"]["extra_metrics"]["strategy_eligible"])
 
     def test_tiktok_metrics_api_adapter_collects_growth_metrics(self):
         def http_json(method, url, *, params=None, data=None, headers=None, timeout=15):
@@ -104,6 +112,17 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(metrics["saves"], 4)
         self.assertEqual(metrics["followers"], 9)
         self.assertEqual(metrics["extra_metrics"]["metric_source"], "tiktok_metrics_api")
+        self.assertTrue(metrics["extra_metrics"]["strategy_eligible"])
+
+    def test_tiktok_empty_content_list_is_not_strategy_eligible(self):
+        report = collect_platform_metrics(
+            ["tiktok"],
+            {"tiktok": {"api_url": "https://metrics.example/tiktok"}},
+            http_json=lambda *args, **kwargs: {"followers": 9, "videos": []},
+        )
+        extra = report["platforms"]["tiktok"]["account_metrics"]["extra_metrics"]
+        self.assertEqual(extra["metric_scope"], "account_snapshot")
+        self.assertFalse(extra["strategy_eligible"])
 
     def test_marks_backend_only_platforms_as_export_required(self):
         report = collect_platform_metrics(["wechat", "kuaishou", "shipinhao", "xiaohongshu", "douyin"], {}, fetcher=lambda *_: "")
@@ -449,6 +468,20 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(metrics["followers"], 4)
         self.assertEqual(metrics["works"], 2)
         self.assertEqual(metrics["extra_metrics"]["metric_source"], "metrics_file")
+        self.assertEqual(metrics["extra_metrics"]["metric_scope"], "account_snapshot")
+        self.assertFalse(metrics["extra_metrics"]["strategy_eligible"])
+
+    def test_metrics_file_with_content_identifiers_is_strategy_eligible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            metrics_file = Path(tmp) / "metrics.json"
+            metrics_file.write_text(
+                json.dumps({"videos": [{"video_id": "v-1", "title": "Example", "views": 10, "likes": 1}]}),
+                encoding="utf-8",
+            )
+            report = collect_platform_metrics(["shipinhao"], {"shipinhao": {"metrics_file": str(metrics_file)}})
+        extra = report["platforms"]["shipinhao"]["account_metrics"]["extra_metrics"]
+        self.assertEqual(extra["metric_scope"], "content_aggregate")
+        self.assertTrue(extra["strategy_eligible"])
 
 
 if __name__ == "__main__":

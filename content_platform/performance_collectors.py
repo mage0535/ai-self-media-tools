@@ -270,6 +270,8 @@ def _probe_browser_backend_route(
                             {
                                 "metric_source": "creator_backend_page",
                                 "metric_confidence": "medium",
+                                "metric_scope": "account_snapshot",
+                                "strategy_eligible": False,
                                 "backend_route": route_name,
                                 "direct_diagnostic_only": bool(diagnostic_only),
                             }
@@ -362,6 +364,10 @@ def _extract_public_metrics(html: str) -> dict[str, Any]:
         metrics["extra_metrics"] = {
             "metric_source": "public_page",
             "metric_confidence": "low",
+            # A page-level total can be useful for account health, but it
+            # cannot prove that a title, hook, or format performed well.
+            "metric_scope": "account_snapshot",
+            "strategy_eligible": False,
         }
     return metrics
 
@@ -452,6 +458,12 @@ def _youtube(channel_url: str, fetcher: Callable[..., str]) -> dict[str, Any]:
             metrics[f"{field}_raw"] = match.group(1)
     if not metrics:
         return {"status": "unavailable", "reason": "youtube public page did not expose account metrics"}
+    metrics["extra_metrics"] = {
+        "metric_source": "public_page",
+        "metric_confidence": "low",
+        "metric_scope": "account_snapshot",
+        "strategy_eligible": False,
+    }
     return {"status": "ok", "account_metrics": metrics}
 
 
@@ -495,6 +507,12 @@ def _bilibili(config: dict[str, Any], fetcher: Callable[..., str]) -> dict[str, 
             "following": int(card.get("attention") or 0),
             "videos": int(data.get("archive_count") or card.get("videos") or 0),
             "likes": int(data.get("like_num") or card.get("likes") or 0),
+            "extra_metrics": {
+                "metric_source": "bilibili_cookie_api" if headers else "public_page",
+                "metric_confidence": "medium" if headers else "low",
+                "metric_scope": "account_snapshot",
+                "strategy_eligible": False,
+            },
         },
     }
 
@@ -515,8 +533,17 @@ def _tiktok_api_metrics(config: dict[str, Any], http_json: Callable[..., dict[st
     metrics = _normalize_tiktok_api_metrics(data)
     if not metrics:
         return {"status": "api_unavailable", "reason": "tiktok metrics API returned no recognized growth metrics"}
+    content_rows = data.get("videos") or data.get("items") or data.get("posts")
+    has_content_rows = isinstance(content_rows, list) and any(isinstance(item, dict) for item in content_rows)
     metrics.setdefault("extra_metrics", {})
-    metrics["extra_metrics"].update({"metric_source": "tiktok_metrics_api", "metric_confidence": "high"})
+    metrics["extra_metrics"].update(
+        {
+            "metric_source": "tiktok_metrics_api",
+            "metric_confidence": "high",
+            "metric_scope": "content_aggregate" if has_content_rows else "account_snapshot",
+            "strategy_eligible": has_content_rows,
+        }
+    )
     return {"status": "ok", "account_metrics": metrics, "source_url": api_url}
 
 
@@ -576,6 +603,14 @@ def _metrics_file_signal(platform: str, config: dict[str, Any]) -> dict[str, Any
     rows = data.get("videos") if isinstance(data, dict) else data
     if not isinstance(rows, list):
         return {"status": "metrics_file_invalid", "reason": "metrics_file must contain a list or videos list"}
+    content_identity_fields = (
+        "content_id", "item_id", "video_id", "post_id", "article_id", "work_id", "title", "work_title", "标题",
+    )
+    content_evidence_count = sum(
+        1 for row in rows
+        if isinstance(row, dict) and any(str(row.get(field) or "").strip() for field in content_identity_fields)
+    )
+    strategy_eligible = content_evidence_count > 0
     metrics = {
         "views": 0,
         "likes": 0,
@@ -584,7 +619,14 @@ def _metrics_file_signal(platform: str, config: dict[str, Any]) -> dict[str, Any
         "saves": 0,
         "followers": 0,
         "works": 0,
-        "extra_metrics": {"metric_source": "metrics_file", "metric_confidence": "medium", "metrics_file": str(path)},
+        "extra_metrics": {
+            "metric_source": "metrics_file",
+            "metric_confidence": "medium",
+            "metric_scope": "content_aggregate" if strategy_eligible else "account_snapshot",
+            "strategy_eligible": strategy_eligible,
+            "metrics_file": str(path),
+            "content_evidence_count": content_evidence_count,
+        },
     }
     for row in rows:
         if not isinstance(row, dict):
@@ -724,7 +766,14 @@ def _wechat_backend_cookie_metrics(config: dict[str, Any]) -> dict[str, Any]:
         }
     record = result["records"][0]
     extra = dict(record.get("metrics") or {})
-    extra.update({"metric_source": "wechat_backend_cookie", "metric_confidence": "medium"})
+    extra.update(
+        {
+            "metric_source": "wechat_backend_cookie",
+            "metric_confidence": "medium",
+            "metric_scope": "account_snapshot",
+            "strategy_eligible": False,
+        }
+    )
     return {
         "status": "backend_signal",
         "confidence": "medium",
