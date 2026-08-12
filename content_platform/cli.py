@@ -592,11 +592,19 @@ def execute(args):
                 and candidate_matches_platform_language(platform, candidate)
             ]
 
+        def candidate_filter(platform, candidate, slot):
+            keywords = topic_keywords_for_slot(platform, slot, profile)
+            return (
+                candidate_matches_topic_keywords(candidate, keywords)
+                and candidate_matches_platform_language(platform, candidate)
+            )
+
         prepared = build_due_tasks(
             slots,
             items=report.get("items", []),
             source_report=report.get("sources", []),
             rank_for_platform=rank_for_platform,
+            candidate_filter=candidate_filter,
             growth_strategy_status=strategy_status,
             weekday=weekday,
         )
