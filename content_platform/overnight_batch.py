@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .risk import redact_secrets
+from .trends import normalize_topic
 
 
 MANUAL_HANDOFF_PLATFORMS = {
@@ -20,6 +21,19 @@ MANUAL_HANDOFF_PLATFORMS = {
     "xiaohongshu",
     "youtube",
     "tiktok",
+}
+
+# Publishing keeps the historical ``twitter`` identifier, while analytics and
+# strategy snapshots use the canonical X key.  Keep the two concerns aligned
+# without changing the publisher-facing platform name.
+STRATEGY_PLATFORM_ALIASES = {"twitter": "x"}
+
+# A source's popularity is not enough to make it a channel topic.  These
+# defaults prevent a general-news item from being turned into an AI or pet
+# account post when a private slot does not provide narrower keywords.
+PLATFORM_TOPIC_KEYWORDS = {
+    "douyin_pet": ("pet", "cat", "dog", "animal", "宠物", "猫", "狗", "动物"),
+    "douyin_ai": ("ai", "agent", "automation", "人工智能", "智能体", "自动化"),
 }
 
 
@@ -87,6 +101,7 @@ def build_due_tasks(
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
+    selected_topics: set[str] = set()
     growth_strategy_status = growth_strategy_status or {}
     weekday = datetime.now().weekday() if weekday is None else int(weekday)
     for raw in slots:
@@ -108,7 +123,22 @@ def build_due_tasks(
         elif not candidates:
             row.update({"state": "blocked", "reason": "no independently ranked topic candidate"})
         else:
-            selected = candidates[0]
+            selected = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if _topic_identity(candidate) not in selected_topics
+                ),
+                None,
+            )
+            if not selected:
+                row.update({
+                    "state": "blocked",
+                    "reason": "no unique cross-platform topic candidate",
+                })
+                tasks.append(row)
+                continue
+            selected_topics.add(_topic_identity(selected))
             matrix = {
                 "platform": platform,
                 "attempted_sources": [
@@ -137,6 +167,31 @@ def build_due_tasks(
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
 
 
+def _topic_identity(candidate: dict[str, Any]) -> str:
+    """Return a stable batch-wide topic identity, even for incomplete feeds."""
+    return str(candidate.get("fingerprint") or normalize_topic(candidate.get("title", ""))).strip()
+
+
+def topic_keywords_for_slot(platform: str, slot: dict[str, Any], profile: dict[str, Any]) -> list[str]:
+    """Resolve explicit slot keywords before safe platform/profile defaults."""
+    configured = slot.get("topic_keywords")
+    if isinstance(configured, list) and configured:
+        return [str(word).casefold() for word in configured if str(word).strip()]
+    return [
+        str(word).casefold()
+        for word in PLATFORM_TOPIC_KEYWORDS.get(str(platform).casefold(), profile.get("keywords", []))
+        if str(word).strip()
+    ]
+
+
+def candidate_matches_topic_keywords(candidate: dict[str, Any], keywords: list[str]) -> bool:
+    """Require topical fit when a channel has an explicit operating lane."""
+    if not keywords:
+        return True
+    text = " ".join(str(candidate.get(key) or "") for key in ("title", "summary", "description", "body")).casefold()
+    return any(word in text for word in keywords)
+
+
 def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age_hours: int = 30) -> dict[str, dict[str, Any]]:
     """Return per-platform strategy freshness for overnight fail-closed checks."""
     result: dict[str, dict[str, Any]] = {}
@@ -144,7 +199,8 @@ def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age
         normalized = str(platform or "").casefold()
         if not normalized:
             continue
-        key = f"growth_strategy:{normalized}:latest"
+        strategy_platform = STRATEGY_PLATFORM_ALIASES.get(normalized, normalized)
+        key = f"growth_strategy:{strategy_platform}:latest"
         row = store.latest_tool_inventory(key)
         if not row:
             result[normalized] = {"status": "missing", "key": key}

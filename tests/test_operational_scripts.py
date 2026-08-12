@@ -255,6 +255,12 @@ shared_trend_only: false
         self.assertIn("notifications.env", text)
         self.assertIn("AI_SELF_MEDIA_TELEGRAM_TARGET", text)
 
+    def test_overnight_monitor_reports_a_stalled_batch_from_durable_state(self):
+        text = Path("scripts/monitor_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn("waiting_for_checkpoint", text)
+        self.assertIn("over nine minutes", text)
+
     def test_overnight_monitor_does_not_register_a_duplicate_named_job(self):
         text = Path("scripts/create_hermes_overnight_monitor.py").read_text(encoding="utf-8")
 

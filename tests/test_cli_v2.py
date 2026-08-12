@@ -79,7 +79,7 @@ class CliV2Tests(unittest.TestCase):
             "summary": {"items": 1},
         }
         with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
-            code, result = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output))
+            code, result = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output), "--weekday", "3")
         self.assertEqual(code, 0)
         self.assertEqual(result["status"], "prepared")
         task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
