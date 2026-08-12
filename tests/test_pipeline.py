@@ -132,6 +132,42 @@ class PipelineTests(unittest.TestCase):
                 self.pipeline.publish(job["id"])
             publisher.assert_not_called()
 
+    def test_enforced_growth_recipe_blocks_tool_demo_without_process_evidence(self):
+        pipeline = Pipeline(
+            self.store,
+            {
+                "data_dir": str(Path(self.tmp.name)),
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
+                "publishers": {"default": {"type": "file"}},
+                "feature_flags": {"channel_auto_workflow_gate": "enforce"},
+                "notifications": {"log_path": str(Path(self.tmp.name) / "notifications.jsonl")},
+            },
+        )
+        job = pipeline.create("Tool demo", ["douyin"], {"audience": "operators"})
+        with patch.object(pipeline.generator, "generate", return_value={
+            "title": "Tool demo",
+            "body": "A concrete tool demonstration with a clear workflow and limitations.",
+            "draft_meta": {
+                "quality_gate": {"passed": True},
+                "strategy": {"primary_platforms": ["douyin"]},
+                "content_form": "tool_demo_video",
+                "growth_recipe": {
+                    "content_form": "tool_demo_video",
+                    "source_matrix": {"attempted_sources": [{"source": "douyin", "status": "success"}]},
+                    "topic_decision": {"score": 0.9, "growth_signals": ["conflict", "user_benefit"]},
+                    "tool_selection_plan": {"selected_tools": ["screencast"]},
+                    "process_evidence": {},
+                    "cta": {},
+                },
+            },
+        }):
+            result = pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        quality = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "run_quality_gate"][-1]
+        self.assertIn("G7_growth_recipe", quality["gate"]["gates"])
+        self.assertIn("process_evidence", quality["gate"]["gates"]["G7_growth_recipe"]["failures"])
+
 
     def test_pre_populated_body_preserves_full_ops_brief_fields(self):
         job = self.pipeline.create(
@@ -262,6 +298,17 @@ class PipelineTests(unittest.TestCase):
         step = [row for row in self.store.workflow_steps(job["id"], "wechat") if row["step_name"] == "publish_or_create_draft"][-1]
         self.assertEqual(step["status"], "FAILED_RETRYABLE")
         self.assertEqual(len(self.store.list_delivery_queue("queued")), 1)
+
+    def test_handoff_delivery_is_not_recorded_as_completed_publish_work(self):
+        job = self.pipeline.create("Practical automation", ["douyin"], {"audience": "operators"})
+        self.pipeline.run(job["id"])
+        self.pipeline.approve(job["id"], "operator", "ready")
+        self.store.enqueue_delivery(job["id"], "douyin", "publish", {"state": "approved"})
+        with patch.object(self.pipeline, "_deliver", return_value=DeliveryResult(True, "handoff_pending", external_id="packet-1")):
+            processed = self.pipeline.process_delivery_queue()
+        self.assertEqual(processed, 1)
+        self.assertEqual(len(self.store.list_delivery_queue("handoff_ready")), 1)
+        self.assertEqual(len(self.store.list_delivery_queue("completed")), 0)
 
     def test_run_skips_local_video_and_audio_generation_by_default_policy(self):
         root = Path(self.tmp.name)

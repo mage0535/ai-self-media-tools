@@ -388,6 +388,24 @@ def _valid_video_manifest(video):
             "timeline": [{"name": "hero-card"}, {"name": "stagger-fade"}, {"name": "scale-bounce"}],
         },
         "cinema_visual_gate": {"passed": True, "checked_images": [{"image": "card_01.png"}]},
+        "motion_evidence": {
+            "passed": True,
+            "duration": 45.0,
+            "unique_frame_count": 3,
+            "frames": [
+                {"offset": 0.25, "sha256": "a", "bytes": 100},
+                {"offset": 22.5, "sha256": "b", "bytes": 100},
+                {"offset": 44.75, "sha256": "c", "bytes": 100},
+            ],
+        },
+        "segment_motion_evidence": {
+            "path": str(video.parent / "segment_motion_evidence.json"),
+            "segments": [
+                {"index": 1, "move_id": "hero-card", "profile": "hero_reveal"},
+                {"index": 2, "move_id": "timeline", "profile": "data_pan"},
+                {"index": 3, "move_id": "typewriter", "profile": "type_focus"},
+            ],
+        },
         "toolchain_contract": {
             "planned_tools": [
                 "cinema_composition.storyboard",

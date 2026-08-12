@@ -180,5 +180,19 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(items[0]["title"], "公众号热点选题")
 
 
+    def test_agent_reach_source_records_real_command_output(self):
+        completed = type("Completed", (), {
+            "returncode": 0,
+            "stdout": json.dumps({"items": [{"title": "Agent Reach topic", "url": "https://example.com/topic", "points": 9}]}),
+            "stderr": "",
+        })()
+        with patch("content_platform.trends.subprocess.run", return_value=completed) as run:
+            items = DirectTrendSource("agent_reach", {"command": "agent-reach trends --json", "limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "agent_reach")
+        self.assertEqual(items[0]["points"], 9)
+        self.assertIn("--json", run.call_args.args[0])
+
+
 if __name__ == "__main__":
     unittest.main()

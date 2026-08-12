@@ -13,6 +13,7 @@ VIDEO_OUTPUT_DIR for MediaBridge to discover.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import shutil
@@ -272,6 +273,29 @@ def main(argv: list[str] | None = None) -> int:
             _write_manifest(output_dir, manifest)
             print(manifest["error"], file=sys.stderr)
             return 4
+        motion_evidence = _render_motion_evidence(generated[0])
+        manifest["motion_evidence"] = motion_evidence
+        if not motion_evidence.get("passed"):
+            manifest.update({"ok": False, "output": str(generated[0]), "status": "motion_gate_failed", "error": "final video has insufficient distinct frame motion"})
+            _write_manifest(output_dir, manifest)
+            print(manifest["error"], file=sys.stderr)
+            return 4
+        segment_motion_path = output_dir / "segment_motion_evidence.json"
+        try:
+            segment_motion = json.loads(segment_motion_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            segment_motion = {}
+        segments = segment_motion.get("segments") if isinstance(segment_motion, dict) else []
+        if not segments or any(not row.get("move_id") or not row.get("profile") for row in segments if isinstance(row, dict)):
+            manifest.update({"ok": False, "output": str(generated[0]), "status": "motion_mapping_missing", "error": "final video is missing per-segment Shotcraft render evidence"})
+            _write_manifest(output_dir, manifest)
+            print(manifest["error"], file=sys.stderr)
+            return 4
+        manifest["segment_motion_evidence"] = {"path": str(segment_motion_path), "segments": segments}
+        for record in (manifest.get("tool_invocation_manifest", {}).get("invocations", {}) or {}).values():
+            if isinstance(record, dict) and record.get("status") == "planned_internal":
+                record["status"] = "ok"
+                record["artifact"] = str(generated[0])
         manifest.update({"ok": True, "output": str(generated[0]), "status": "rendered", "executed_tools": PLANNED_TOOLS})
         _register_visual_recipe_use(visual_recipe, plan, str(generated[0]))
         _write_manifest(output_dir, manifest)
@@ -395,6 +419,31 @@ def _run_cinema_visual_gate(output_dir: Path) -> dict:
         if proc.returncode != 0:
             return {"passed": False, "error": f"cinema visual gate failed for {image.name}", "checked_images": checked}
     return {"passed": True, "checked_images": checked}
+
+
+def _render_motion_evidence(output: Path) -> dict:
+    """Probe real video frames; manifest declarations are not motion evidence."""
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(output)],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        duration = float((probe.stdout or "0").strip() or 0)
+        if duration <= 0:
+            return {"passed": False, "reason": "duration_unavailable", "frames": []}
+        offsets = sorted({0.25, round(duration / 2, 3), max(0.25, round(duration - 0.25, 3))})
+        frames = []
+        for offset in offsets:
+            rendered = subprocess.run(
+                ["ffmpeg", "-v", "error", "-ss", str(offset), "-i", str(output), "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
+                capture_output=True, timeout=30, check=False,
+            )
+            payload = rendered.stdout or b""
+            frames.append({"offset": offset, "sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload)})
+        unique = len({item["sha256"] for item in frames if item["bytes"]})
+        return {"passed": unique >= 2, "duration": duration, "frames": frames, "unique_frame_count": unique}
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return {"passed": False, "reason": f"motion_probe_failed:{type(exc).__name__}", "frames": []}
 
 
 def _is_full_card_visual_candidate(path: Path) -> bool:

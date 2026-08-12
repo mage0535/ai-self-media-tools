@@ -56,6 +56,34 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(result["recovered"], 0)
 
+    def test_overnight_plan_command_writes_a_recoverable_serial_plan(self):
+        tasks = self.root / "tasks.json"
+        output = self.root / "plan.json"
+        tasks.write_text(json.dumps([
+            {"platform": "wechat", "topic": "topic", "stage": "article", "estimate_minutes": 15},
+        ]), encoding="utf-8")
+        code, result = self.call("overnight-plan", "--tasks", str(tasks), "--output", str(output))
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "scheduled")
+        self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["tasks"][0]["platform"], "wechat")
+
+    def test_overnight_prepare_writes_one_independent_task_per_due_slot(self):
+        slots = self.root / "slots.json"
+        output = self.root / "prepared.json"
+        slots.write_text(json.dumps([{"platform": "wechat", "estimate_minutes": 15}]), encoding="utf-8")
+        report = {
+            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "sources": [{"source": "github", "status": "ok", "count": 1}],
+            "summary": {"items": 1},
+        }
+        with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+            code, result = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output))
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "prepared")
+        task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
+        self.assertEqual(task["platform"], "wechat")
+        self.assertEqual(task["topic"], "AI workflow")
+
     def test_task_market_scan_command_returns_summary(self):
         fake_result = {
             "env": "cn",
@@ -134,7 +162,10 @@ class CliV2Tests(unittest.TestCase):
         self.assertIn("scanned_files", result)
 
     def test_task_market_auto_without_key_returns_clean_skip_result(self):
-        code, result = self.call("task-market-auto", "--env", "cn")
+        # Do not let a server-side AiToEarn credential turn this no-key unit
+        # test into a real client path.
+        with patch.dict("os.environ", {}, clear=True):
+            code, result = self.call("task-market-auto", "--env", "cn")
         self.assertEqual(code, 0)
         self.assertEqual(result["accepted"], 0)
         self.assertEqual(result["failed"], 0)

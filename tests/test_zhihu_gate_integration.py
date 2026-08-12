@@ -17,6 +17,17 @@ MANDATORY_WORKFLOW_INPUTS = {
 
 def _zhihu_context():
     return {
+        "platform_source_matrix": {
+            "platform": "zhihu",
+            "platform_internal_verified": True,
+            "attempted_sources": [
+                {"source": "zhihu_hot", "status": "ok", "topic_signal": "AI efficiency"},
+                {"source": "github", "status": "ok", "topic_signal": "AI efficiency"},
+                {"source": "wechat", "status": "ok", "topic_signal": "AI efficiency"},
+                {"source": "bilibili", "status": "degraded", "topic_signal": "AI efficiency"},
+                {"source": "account_history", "status": "ok", "topic_signal": "AI efficiency"},
+            ],
+        },
         "language": "zh",
         "style": {"cta": "cta", "opening_patterns": ["数字开场"]},
         "strategy": {"content_form": "article", "asset_plan": ["cover", "article", "caption"],

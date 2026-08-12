@@ -130,6 +130,21 @@ def parser():
     auto.add_argument("--region", choices=["domestic", "international"], help="按地区选择平台，替代 --platform")
     auto.add_argument("--refresh", action="store_true")
     auto.add_argument("--profile", default="default")
+    overnight_plan = sub.add_parser("overnight-plan", help="Build a serial, recoverable overnight batch plan")
+    overnight_plan.add_argument("--tasks", required=True, help="JSON file containing a task list or {tasks: [...]} object")
+    overnight_plan.add_argument("--output", required=True, help="Output JSON plan path")
+    overnight_plan.add_argument("--start-minute", type=int, default=0)
+    overnight_plan.add_argument("--deadline-minute", type=int, default=280)
+    overnight_plan.add_argument("--finalization-minutes", type=int, default=20)
+    overnight_prepare = sub.add_parser("overnight-prepare", help="Select one source-evidenced topic for each due channel slot")
+    overnight_prepare.add_argument("--slots", required=True, help="Private JSON due-channel slot list")
+    overnight_prepare.add_argument("--output", required=True, help="Prepared task JSON path")
+    overnight_prepare.add_argument("--refresh", action="store_true")
+    overnight_prepare.add_argument("--profile", default="default")
+    overnight_run = sub.add_parser("overnight-run", help="Resume a planned overnight batch without implicit live publishing")
+    overnight_run.add_argument("--plan", required=True, help="JSON plan created by overnight-plan")
+    overnight_run.add_argument("--state", required=True, help="Persistent batch state path")
+    overnight_run.add_argument("--events", required=True, help="Append-only JSONL event path")
     review_token = sub.add_parser("review-token")
     review_token.add_argument("job_id")
     review_token.add_argument("--action", choices=["approve", "reject"], required=True)
@@ -495,6 +510,44 @@ def execute(args):
         if not isinstance(brief, dict):
             raise ValueError("brief must be a JSON object")
         return analyze_niche(args.topic, brief.get("reference_posts", []))
+    if args.command == "overnight-plan":
+        from .overnight_batch import build_batch_plan
+        source = json.loads(Path(args.tasks).read_text(encoding="utf-8"))
+        tasks = source.get("tasks", []) if isinstance(source, dict) else source
+        if not isinstance(tasks, list):
+            raise ValueError("overnight task file must contain a list or a tasks list")
+        plan = build_batch_plan(
+            tasks,
+            start_minute=args.start_minute,
+            deadline_minute=args.deadline_minute,
+            finalization_minutes=args.finalization_minutes,
+        )
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        return {"status": plan["status"], "output": str(output), "tasks": len(plan["tasks"])}
+    if args.command == "overnight-prepare":
+        from .overnight_batch import build_due_tasks
+        raw_slots = json.loads(Path(args.slots).read_text(encoding="utf-8"))
+        slots = raw_slots.get("slots", raw_slots.get("tasks", [])) if isinstance(raw_slots, dict) else raw_slots
+        if not isinstance(slots, list):
+            raise ValueError("overnight slots file must contain a list or slots list")
+        collector = TrendCollector(config.get("trends", {}))
+        report = collector.collect_with_report(args.refresh)
+        profile = resolve_profile(config.get("profiles", {}), args.profile)
+
+        def rank_for_platform(platform, items, _slot):
+            return rank_trends(items, profile, store.used_topics(platform), 1, store.learned_ranking_context(args.profile))
+
+        prepared = build_due_tasks(slots, items=report.get("items", []), source_report=report.get("sources", []), rank_for_platform=rank_for_platform)
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(prepared, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        return {"status": "prepared", "output": str(output), "tasks": len(prepared["tasks"]), "source_summary": report.get("summary", {})}
+    if args.command == "overnight-run":
+        from .overnight_batch import BatchEventJournal, execute_batch
+        plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events))
     if args.command in {"trends", "auto"}:
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
@@ -510,23 +563,48 @@ def execute(args):
                     platforms.append(p)
         if args.command == "auto" and not platforms:
             raise ValueError("must specify --platform or --region")
-        topic_scope = platforms[0] if args.command == "auto" and len(platforms) == 1 else None
-        items = rank_trends(items, profile, store.used_topics(topic_scope), args.limit, store.learned_ranking_context(args.profile))
         if args.command == "trends":
+            items = rank_trends(items, profile, set(), args.limit, store.learned_ranking_context(args.profile))
             if args.diagnostics:
                 return {**report, "ranked": items}
             return items
         jobs = []
-        for item in items:
-            sources = [item["url"]] if item.get("url") else []
-            job = pipeline.create(
-                item["title"], platforms, {"source": item.get("source"), "sources": sources}, args.profile, item["fingerprint"]
+        # A platform is a separate operating decision, not a bulk destination
+        # for one trend.  Keep independent topic history and the raw source
+        # collection result in every generated job.
+        for platform in platforms:
+            ranked = rank_trends(
+                items,
+                profile,
+                store.used_topics(platform),
+                args.limit,
+                store.learned_ranking_context(args.profile),
             )
-            result = pipeline.run(job["id"])
-            if result.get("state") not in {"blocked", "failed", "rejected"}:
-                for platform in platforms:
+            source_matrix = {
+                "platform": platform,
+                "attempted_sources": [
+                    {"source": row.get("source"), "status": row.get("status", "unknown"), **({"error": row["error"]} if row.get("error") else {})}
+                    for row in report.get("sources", [])
+                    if row.get("source")
+                ],
+                "report_path": "runtime:trend_collection_report",
+            }
+            for item in ranked:
+                sources = [item["url"]] if item.get("url") else []
+                brief = {
+                    "source": item.get("source"),
+                    "sources": sources,
+                    "platform_source_matrix": source_matrix,
+                    "topic_decision": {
+                        "score": item.get("score", 0),
+                        "signals": ["timeliness"] if item.get("trend_stage") in {"hot", "viral_candidate"} else ["user_benefit"],
+                    },
+                }
+                job = pipeline.create(item["title"], [platform], brief, args.profile, item["fingerprint"])
+                result = pipeline.run(job["id"])
+                if result.get("state") not in {"blocked", "failed", "rejected"}:
                     store.mark_topic_used(item["fingerprint"], item["title"], item.get("source", ""), job["id"], platform=platform)
-            jobs.append(result)
+                jobs.append(result)
         return jobs
     if args.command == "health":
         with store.connect() as conn:

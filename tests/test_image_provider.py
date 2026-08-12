@@ -370,6 +370,10 @@ def test_cloudflare_generation_writes_direct_image_response(tmp_path, monkeypatc
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
     monkeypatch.setenv("CF_WORKER_URL", "https://example.worker.dev/image")
     monkeypatch.setenv("CF_WORKER_KEY", "worker-key")
+    # A live account token has higher provider priority than the worker key.
+    # Remove it so this test stays a local mocked worker contract.
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_IMAGE_WORKER_URL", raising=False)
     image_bytes = b"\xff\xd8" + b"x" * 3000
 
     class Headers:

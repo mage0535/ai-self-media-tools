@@ -1,0 +1,11 @@
+[Unit]
+Description=Start the Hermes content-platform overnight batch at midnight
+
+[Timer]
+OnCalendar=*-*-* 00:00:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+

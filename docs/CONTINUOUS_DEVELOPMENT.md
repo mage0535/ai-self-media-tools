@@ -1,5 +1,28 @@
 # Continuous Development
 
+## 2026-08-12: Strategy Routing and Recoverable Overnight Execution
+
+### Implemented
+- Added `growth_recipe_v1`, generated before quality evaluation. It records actual source status, topic-growth signals, selected tools, process evidence for tool demonstrations, and a concrete CTA. In enforced mode, incomplete recipes block rather than silently falling back to generic card content.
+- The `auto` command now creates one job per platform with platform-scoped topic history and collection evidence. It no longer creates one multi-platform job and treats a shared trend as independent platform analysis.
+- Added `overnight-plan` and `overnight-run`. Plans reserve the final ten minutes before the 05:00 morning-report window, reject work that cannot fit before admission, run one platform at a time, and atomically checkpoint state after every platform.
+- Manual channels normalize to `handoff_ready`; overnight execution does not implicitly approve or publicly publish any channel.
+- Added append-only, redacted `events.jsonl` for real-time Hermes reporting that survives an agent-session or process restart.
+- Added unenabled systemd templates for a midnight direct worker. The worker does not use a Hermes conversation as its execution context and exits safely when no private due-channel slots file exists.
+
+### Verification
+- Focused regressions for growth recipes, independent auto routing, the resumable batch, CLI, and Pipeline passed.
+- Full local regression: `629 passed, 29 subtests passed`.
+- Compile, whitespace, and project audit passed locally. Target-server synchronization and repeat verification remain required before enabling the new timer.
+
+## 2026-08-11: render evidence and truthful source evidence
+
+- Added a bounded tool catalog: Shotcraft/OpenMontage/KrillinAI are pattern or reuse sources, while Agent-Reach is collection-only and never a publisher.
+- Final original-video acceptance now requires both frame-difference evidence and per-segment Shotcraft-to-FFmpeg evidence. A plan or manifest declaration is not execution proof.
+- Generation no longer marks planned sources as successful collection. Missing channel evidence is represented as unavailable and must be repaired or explicitly degraded before a platform-independent source gate can pass.
+- Manual delivery packets now use `handoff_ready` in the delivery queue rather than `completed`; prepared output is not a public post.
+- Added `docs/ACCEPTANCE_COMMANDS.md` for Hermes read-only verification.
+
 ## 2026-08-11: resumable video rendering without lowering quality gates
 
 - `scripts/pre_render_gate.py` validates card text, placeholders, source paths, required cover/background inputs, and BGM provenance before expensive rendering. A quiet source track is classified for automatic gain handling rather than rejected when it is repairable.

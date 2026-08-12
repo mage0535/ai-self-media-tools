@@ -74,6 +74,38 @@ class CliTests(unittest.TestCase):
             from content_platform.store import Store
             self.assertEqual(Store(root / "state.db").used_topics("devto"), set())
 
+    def test_auto_creates_an_independent_job_and_source_matrix_for_each_platform(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            created = []
+
+            class FakePipeline:
+                def __init__(self, *_args):
+                    pass
+
+                def create(self, topic, platforms, brief, profile, fingerprint):
+                    created.append((topic, platforms, brief))
+                    return {"id": f"job-{len(created)}"}
+
+                def run(self, job_id):
+                    return {"id": job_id, "state": "blocked"}
+
+            report = {
+                "items": [{"title": "AI workflow test", "source": "github", "url": "https://example.test", "points": 20}],
+                "sources": [{"source": "github", "status": "ok", "count": 1}],
+            }
+            with patch("content_platform.cli.Pipeline", FakePipeline), patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = main([
+                        "--db", str(root / "state.db"), "--config", str(root / "missing.json"), "auto", "--limit", "1",
+                        "--platform", "wechat", "--platform", "xiaohongshu",
+                    ])
+            self.assertEqual(code, 0)
+            self.assertEqual([row[1] for row in created], [["wechat"], ["xiaohongshu"]])
+            self.assertEqual(created[0][2]["platform_source_matrix"]["platform"], "wechat")
+            self.assertEqual(created[1][2]["platform_source_matrix"]["platform"], "xiaohongshu")
+
     def test_analyze_topic_returns_strategy_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = str(Path(tmp) / "state.db")
@@ -303,7 +335,9 @@ class CliTests(unittest.TestCase):
             with patch("content_platform.cli.project_home", return_value=root), patch.dict(
                 os.environ,
                 {"CN_PROXY": "socks5://already-set:1080"},
-                clear=False,
+                # The assertion covers precedence for CN_PROXY only. A live
+                # process US_PROXY must not leak into this isolated fixture.
+                clear=True,
             ):
                 source = _load_env_defaults()
                 cn_proxy = os.environ["CN_PROXY"]

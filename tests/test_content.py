@@ -79,7 +79,7 @@ class ContentTests(unittest.TestCase):
         self.assertTrue(any("Return only JSON" in item for item in run.call_args.args[0]))
         self.assertIn("same-track", run.call_args.args[0][2])
 
-    def test_full_ops_article_generator_emits_platform_source_matrix(self):
+    def test_full_ops_article_generator_marks_missing_platform_evidence_degraded(self):
         with patch.dict(os.environ, {}, clear=True):
             draft = DraftGenerator({"allow_fallback": True}).generate(
                 "小红书知识卡片选题",
@@ -92,11 +92,41 @@ class ContentTests(unittest.TestCase):
         meta = draft["draft_meta"]
         matrix = meta["platform_source_matrix"]
         self.assertGreaterEqual(len(matrix["attempted_sources"]), 5)
-        self.assertGreaterEqual(matrix["successful_source_count"], 3)
+        self.assertEqual(matrix["successful_source_count"], 0)
+        self.assertFalse(matrix["platform_internal_verified"])
+        self.assertFalse(matrix["current_platform_specific_topic"])
+        self.assertTrue(matrix["shared_trend_only"])
+        self.assertEqual(meta["strategy_brief"]["platform_source_matrix"], matrix)
+
+    def test_full_ops_article_generator_preserves_real_platform_source_evidence(self):
+        source_matrix = {
+            "platform": "zhihu",
+            "attempted_sources": [
+                {"source": "zhihu", "status": "ok", "topic_signal": "AI workflow"},
+                {"source": "github", "status": "ok", "topic_signal": "AI workflow"},
+            ],
+            "platform_internal_verified": True,
+        }
+        draft = DraftGenerator({"allow_fallback": True}).generate(
+            "AI workflow",
+            {"platforms": ["zhihu"], "platform_source_matrix": source_matrix},
+        )
+        matrix = draft["draft_meta"]["platform_source_matrix"]
+        self.assertEqual(matrix["successful_source_count"], 2)
         self.assertTrue(matrix["platform_internal_verified"])
         self.assertTrue(matrix["current_platform_specific_topic"])
-        self.assertFalse(matrix["shared_trend_only"])
-        self.assertEqual(meta["strategy_brief"]["platform_source_matrix"], matrix)
+
+    def test_generator_preserves_auto_topic_signal_alias_in_growth_recipe(self):
+        draft = DraftGenerator({"allow_fallback": True}).generate(
+            "AI workflow",
+            {
+                "platforms": ["wechat"],
+                "topic_decision": {"score": 1.2, "signals": ["timeliness", "user_benefit"]},
+                "platform_source_matrix": {"attempted_sources": [{"source": "wechat", "status": "ok"}]},
+            },
+        )
+        recipe = draft["draft_meta"]["growth_recipe"]
+        self.assertEqual(recipe["topic_decision"]["growth_signals"], ["timeliness", "user_benefit"])
 
 
 if __name__ == "__main__":
