@@ -213,6 +213,10 @@ def parser():
     perf_source_audit.add_argument("--platform", action="append", required=True)
     perf_source_audit.add_argument("--collector-config", default="", help="Private JSON collector settings")
     perf_source_audit.add_argument("--output", default="", help="Optional JSON source coverage report path")
+    metrics_readiness = sub.add_parser("metrics-readiness")
+    metrics_readiness.add_argument("--platform", action="append", help="Platform to inspect; defaults to growth-policy platforms")
+    metrics_readiness.add_argument("--collector-config", default="", help="Private JSON collector settings")
+    metrics_readiness.add_argument("--output", default="", help="Optional JSON readiness report path")
     sub.add_parser("project-audit")
     sub.add_parser("health")
     admin = sub.add_parser("admin-serve")
@@ -484,6 +488,17 @@ def execute(args):
         _load_env_defaults()
         collector_config, _collector_config_path = _load_collector_config(args.collector_config)
         report = {"status": "ok", "source_coverage": _source_coverage(args.platform, collector_config)}
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            report["output"] = str(output)
+        return report
+    if args.command == "metrics-readiness":
+        from .performance_cycle import DEFAULT_GROWTH_PLATFORMS, metrics_readiness_report
+        _load_env_defaults()
+        collector_config, _collector_config_path = _load_collector_config(args.collector_config)
+        report = metrics_readiness_report(args.platform or DEFAULT_GROWTH_PLATFORMS, collector_config)
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)

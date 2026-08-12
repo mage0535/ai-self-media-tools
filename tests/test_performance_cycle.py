@@ -3,15 +3,15 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from content_platform.performance_cycle import DEFAULT_GROWTH_PLATFORMS, run_performance_cycle
+from content_platform.performance_cycle import DEFAULT_GROWTH_PLATFORMS, metrics_readiness_report, run_performance_cycle
 from content_platform.store import Store
 
 
 FAKE_COLLECTION = {
     "status": "ok",
     "platforms": {
-        "youtube": {"status": "ok", "account_metrics": {"subscribers": 8, "videos": 227, "views": 11016}},
-        "bilibili": {"status": "ok", "account_metrics": {"fans": 12, "videos": 3, "likes": 44}},
+        "youtube": {"status": "ok", "account_metrics": {"subscribers": 8, "videos": 227, "views": 11016, "extra_metrics": {"metric_source": "test_content_export", "metric_scope": "content_aggregate", "strategy_eligible": True}}},
+        "bilibili": {"status": "ok", "account_metrics": {"fans": 12, "videos": 3, "likes": 44, "extra_metrics": {"metric_source": "test_content_export", "metric_scope": "content_aggregate", "strategy_eligible": True}}},
         "douyin": {"status": "login_required", "reason": "state_file missing"},
     },
 }
@@ -71,6 +71,120 @@ def test_performance_cycle_refreshes_douyin_account_variant_strategies():
         assert "douyin_ai" in report["growth_strategies"]
         assert store.latest_tool_inventory("growth_strategy:douyin_pet:latest")["payload"]["account_key"] == "douyin_pet"
         assert store.latest_tool_inventory("growth_strategy:douyin_ai:latest")["payload"]["account_key"] == "douyin_ai"
+
+
+def test_douyin_account_variants_do_not_borrow_base_platform_history():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(Path(tmp) / "state.db")
+        base_job = store.create_job("base Douyin snapshot", ["douyin"], {"source": "test"})
+        store.record_performance(
+            base_job["id"],
+            "douyin",
+            views=1000,
+            likes=80,
+            extra_metrics={"strategy_eligible": True, "metric_scope": "content_aggregate"},
+        )
+        collection = {"status": "ok", "platforms": {"douyin": {"status": "login_required", "reason": "test"}}}
+        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+            report = run_performance_cycle(store, platforms=["douyin"], output_dir=Path(tmp) / "performance")
+
+        for account_key in ("douyin_pet", "douyin_ai"):
+            strategy = report["growth_strategies"][account_key]
+            assert strategy["historical_feedback_status"] == "missing_or_empty"
+            assert strategy["data_driven_improvement_plan"]["status"] == "needs_metrics"
+
+
+def test_unverified_creator_snapshot_is_saved_for_audit_but_excluded_from_strategy():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(Path(tmp) / "state.db")
+        collection = {
+            "status": "ok",
+            "platforms": {
+                "zhihu": {
+                    "status": "backend_signal",
+                    "account_metrics": {
+                        "views": 400,
+                        "likes": 20,
+                        "extra_metrics": {
+                            "metric_source": "creator_backend_page",
+                            "metric_scope": "account_snapshot",
+                            "strategy_eligible": False,
+                        },
+                    },
+                }
+            },
+        }
+        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+            report = run_performance_cycle(store, platforms=["zhihu"], output_dir=Path(tmp) / "performance")
+
+        assert len(store.performance()) == 1
+        assert store.feedback_summary()["platforms"] == {}
+        assert report["persisted"]["items"][0]["status"] == "saved_snapshot_only"
+        assert report["growth_strategies"]["zhihu"]["data_driven_improvement_plan"]["status"] == "needs_metrics"
+
+
+def test_metrics_readiness_requires_separate_douyin_account_sources():
+    report = metrics_readiness_report(
+        ["douyin"],
+        {"douyin": {"state_file": "/private/douyin-main.json"}},
+    )
+
+    assert report["accounts"]["douyin"]["status"] == "base_platform_not_strategy_eligible"
+    assert report["accounts"]["douyin_pet"]["status"] == "account_source_missing"
+    assert report["accounts"]["douyin_ai"]["status"] == "account_source_missing"
+    assert report["summary"]["strategy_eligible_count"] == 0
+
+
+def test_metrics_readiness_accepts_content_aggregate_account_config():
+    report = metrics_readiness_report(
+        ["douyin"],
+        {
+            "douyin_accounts": {
+                "douyin_pet": {"state_file": "/private/pet.json", "metrics_file": "/private/pet-metrics.json"},
+                "douyin_ai": {"state_file": "/private/ai.json", "metrics_file": "/private/ai-metrics.json"},
+            }
+        },
+    )
+
+    assert report["accounts"]["douyin_pet"]["status"] == "content_metrics_configured"
+    assert report["accounts"]["douyin_ai"]["status"] == "content_metrics_configured"
+    assert report["summary"]["strategy_eligible_count"] == 2
+
+
+def test_legacy_creator_page_snapshot_is_excluded_without_strategy_flag():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(Path(tmp) / "state.db")
+        job = store.create_job("legacy creator page", ["juejin"], {"source": "test"})
+        store.record_performance(
+            job["id"],
+            "juejin",
+            views=1_000_000,
+            likes=99,
+            extra_metrics={"metric_source": "creator_backend_page", "works": 2026},
+        )
+
+        assert store.historical_performance(["juejin"], "")["platforms"] == {}
+
+
+def test_legacy_performance_cycle_without_content_evidence_is_excluded():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(Path(tmp) / "state.db")
+        job = store.create_job("performance_snapshot", ["youtube"], {"source": "performance_cycle"})
+        store.record_performance(job["id"], "youtube", views=1000, likes=20)
+        assert store.feedback_summary()["platforms"] == {}
+        assert store.historical_performance(["youtube"], "")["platforms"] == {}
+
+
+def test_hermes_fallback_snapshot_is_saved_for_audit_only():
+    from content_platform.performance_cycle import _merge_collection_reports
+
+    merged = _merge_collection_reports(
+        {"status": "ok", "platforms": {"youtube": {"status": "unavailable"}}},
+        {"status": "ok", "source": "hermes_platform_scraper", "platforms": {"youtube": {"status": "public_signal", "account_metrics": {"views": 100, "likes": 2}}}},
+    )
+    extra = merged["platforms"]["youtube"]["account_metrics"]["extra_metrics"]
+    assert extra["metric_scope"] == "account_snapshot"
+    assert extra["strategy_eligible"] is False
 
 
 def test_single_platform_cycle_does_not_overwrite_full_cycle_report_file():

@@ -3,6 +3,30 @@
 This project treats platform analytics as the input for the next operating strategy.
 If a platform does not expose a stable API, export or copy the backend data into CSV/JSON and import it through the same command.
 
+## Strategy Evidence Contract
+
+The system separates audit observations from evidence that may change the next
+content strategy. Public profile pages, creator-center totals, generic Hermes
+scraper output, and metric files without a work identifier are retained as
+`account_snapshot` records only. They never update a growth strategy.
+
+Strategy-eligible data must contain a per-work `job_id`, `title`, or a stable
+content identifier such as `video_id`, `post_id`, `article_id`, or `content_id`,
+plus at least one measurable outcome. A CSV import with `title` already meets
+this requirement. A JSON `metrics_file` must include one of these identifiers
+on at least one row; an aggregate-only file is audit-only.
+
+For a multi-account platform, each account needs its own backend export/API.
+A shared platform cookie or account total cannot be reused across accounts.
+For example, `douyin_pet` and `douyin_ai` require separate sources.
+
+Check runtime readiness without reading or printing private credentials:
+
+```bash
+python3 -m content_platform.cli metrics-readiness \
+  --collector-config /private/runtime/performance-collector.json
+```
+
 ## CSV Template
 
 ```csv
@@ -98,7 +122,7 @@ Authenticated collectors:
 - If WeChat returns `48001 api unauthorized`, the collector must report `api_permission_blocked`. Recovery is to enable/re-authorize the Official Account statistics API, export backend data manually, or run a private browser collector with screenshot evidence.
 - If Datacube cannot be enabled, use `scripts/wechat_mp_backend_collector.py` as the private browser collector. It stores the mp.weixin browser profile on the machine that runs it, exports only metrics JSON, and imports that JSON through `performance-import --allow-unknown-job`. Do not copy or print cookies.
 - `douyin`, `shipinhao`, `xiaohongshu`, and `tiktok` account metrics require a verified logged-in creator-center session. A cookie file alone is not success evidence: missing file means `login_required`; present file without a working browser scrape means `browser_probe_required`.
-- If a creator-center collector is blocked, configure a public profile URL before giving up. Public signals are not a substitute for completion-rate/open-rate data, but they keep growth strategy updates from running blind.
+- If a creator-center collector is blocked, configure a public profile URL before giving up. Public signals are retained for audit, but never refresh growth strategy; use a backend export/API for that.
 
 TikTok reliable metrics source:
 - Creator Center cookies are treated as a temporary probe only. If they expose only followers or works without views/likes/comments/shares/saves/rates, the cycle must record `metrics_insufficient` and must not refresh `growth_strategy:tiktok:latest` with that weak data.

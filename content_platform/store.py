@@ -19,6 +19,10 @@ def _performance_has_growth_signal(row):
     saves = float(row.get("saves", 0) or 0)
     follows = float(row.get("follows", 0) or 0)
     extra = row.get("extra_metrics") or {}
+    if row.get("job_source") == "performance_cycle" and extra.get("strategy_eligible") is not True:
+        return False
+    if extra.get("strategy_eligible") is False:
+        return False
     if platform == "tiktok" and views and follows == views and float(extra.get("works", 0) or 0) == views and likes + comments + shares + saves <= 50:
         return False
     if platform == "tiktok" and views == 0 and likes + comments + shares + saves == 0:
@@ -802,9 +806,19 @@ class Store:
 
     def performance(self, job_id=None):
         if job_id:
-            rows = self._rows("SELECT * FROM performance WHERE job_id=? ORDER BY platform", (job_id,))
+            rows = self._rows(
+                """SELECT p.*, json_extract(j.brief_json, '$.source') AS job_source
+                FROM performance p LEFT JOIN jobs j ON j.id=p.job_id
+                WHERE p.job_id=? ORDER BY p.platform""",
+                (job_id,),
+            )
         else:
-            rows = self._rows("SELECT * FROM performance ORDER BY recorded_at DESC", ())
+            rows = self._rows(
+                """SELECT p.*, json_extract(j.brief_json, '$.source') AS job_source
+                FROM performance p LEFT JOIN jobs j ON j.id=p.job_id
+                ORDER BY p.recorded_at DESC""",
+                (),
+            )
         for row in rows:
             try:
                 extra_metrics = json.loads(row.pop("extra_metrics_json", "{}") or "{}")
@@ -1019,6 +1033,21 @@ class Store:
             clauses.append(
                 "(p.views > 0 OR p.likes > 0 OR p.comments > 0 OR p.shares > 0 OR p.saves > 0 OR p.follows > 0 OR "
                 "p.completion_rate > 0 OR p.three_second_view_rate > 0 OR p.avg_watch_seconds > 0)"
+            )
+            # Account snapshots are retained for auditability but must never
+            # become evidence for content-level ranking or growth strategy.
+            clauses.append("COALESCE(json_extract(p.extra_metrics_json, '$.strategy_eligible'), 1) != 0")
+            # Older snapshots predate the explicit eligibility field. Their
+            # creator/public page source is still only an account aggregate,
+            # so exclude it until a verified content export replaces it.
+            clauses.append(
+                "(COALESCE(json_extract(p.extra_metrics_json, '$.metric_source'), '') "
+                "NOT IN ('creator_backend_page', 'public_page', 'wechat_backend_cookie') "
+                "OR json_extract(p.extra_metrics_json, '$.strategy_eligible') = 1)"
+            )
+            clauses.append(
+                "(COALESCE(json_extract(j.brief_json, '$.source'), '') != 'performance_cycle' "
+                "OR json_extract(p.extra_metrics_json, '$.strategy_eligible') = 1)"
             )
             clauses.append("NOT (p.platform='tiktok' AND p.views=0 AND (p.likes + p.comments + p.shares + p.saves)=0)")
             if platforms:
