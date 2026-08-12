@@ -241,6 +241,22 @@ class AdapterTests(unittest.TestCase):
         self.assertTrue(result["hermes"])
         self.assertEqual(run.call_args.args[0][:4], ["hermes", "send", "--to", "telegram"])
 
+    def test_notifier_reads_hermes_target_from_named_environment_variable(self):
+        notifier = Notifier(
+            {
+                "log_path": str(self.root / "notifications.jsonl"),
+                "network_enabled": True,
+                "hermes_target_env": "AI_SELF_MEDIA_HERMES_TARGET",
+            }
+        )
+        completed = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with patch.dict("os.environ", {"AI_SELF_MEDIA_HERMES_TARGET": "telegram:ops"}), patch(
+            "content_platform.notify.subprocess.run", return_value=completed
+        ) as run:
+            result = notifier.send("workflow_step_started", {"id": "j1", "title": "Title"})
+        self.assertTrue(result["hermes"])
+        self.assertEqual(run.call_args.args[0][:5], ["hermes", "send", "--to", "telegram:ops", "--quiet"])
+
     def test_notifier_reads_only_named_telegram_values_from_env_file(self):
         env_file = self.root / "hermes.env"
         env_file.write_text("TELEGRAM_BOT_TOKEN=fake-token\nTELEGRAM_HOME_CHANNEL=12345\nUNRELATED=ignore\n", encoding="utf-8")

@@ -41,7 +41,9 @@ class Notifier:
         return result
 
     def _hermes(self, row):
-        target = self.config.get("hermes_target", "")
+        target_env = str(self.config.get("hermes_target_env") or "").strip()
+        target = os.environ.get(target_env, "").strip() if target_env else ""
+        target = target or str(self.config.get("hermes_target") or "").strip()
         if not target:
             return False
         message = self._message(row)
