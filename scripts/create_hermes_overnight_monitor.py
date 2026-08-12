@@ -32,6 +32,9 @@ def main() -> int:
     target = os.environ.get("AI_SELF_MEDIA_TELEGRAM_TARGET", "").strip()
     if not target:
         raise SystemExit("AI_SELF_MEDIA_TELEGRAM_TARGET is required")
+    existing = subprocess.run(["hermes", "cron", "list"], capture_output=True, text=True, check=False)
+    if existing.returncode == 0 and "AI自媒体夜间运行监控" in existing.stdout:
+        return 0
     command = [
         "hermes", "cron", "create", "*/3 0-4 * * *", PROMPT,
         "--name", "AI自媒体夜间运行监控",
