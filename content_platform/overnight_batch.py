@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -186,10 +187,20 @@ def topic_keywords_for_slot(platform: str, slot: dict[str, Any], profile: dict[s
 
 def candidate_matches_topic_keywords(candidate: dict[str, Any], keywords: list[str]) -> bool:
     """Require topical fit when a channel has an explicit operating lane."""
+    if candidate.get("source_unavailable"):
+        return False
     if not keywords:
         return True
-    text = " ".join(str(candidate.get(key) or "") for key in ("title", "summary", "description", "body")).casefold()
+    text = str(candidate.get("title") or "").casefold()
     return any(word in text for word in keywords)
+
+
+def candidate_matches_platform_language(platform: str, candidate: dict[str, Any]) -> bool:
+    """Prevent Chinese domestic headlines from being routed into English lanes."""
+    if str(platform).casefold() not in {"twitter", "youtube", "tiktok"}:
+        return True
+    title = str(candidate.get("title") or "")
+    return bool(re.search(r"[A-Za-z]", title)) and not bool(re.search(r"[\u4e00-\u9fff]", title))
 
 
 def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age_hours: int = 30) -> dict[str, dict[str, Any]]:
