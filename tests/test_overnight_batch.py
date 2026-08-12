@@ -234,3 +234,45 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert state["tasks"][0]["state"] == "staged"
     assert state["tasks"][1]["state"] == "handoff_ready"
+
+
+def test_execute_batch_marks_failed_rows_as_batch_failure_without_rerunning_them(tmp_path: Path):
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            return {"id": "job-1"}
+
+        def run(self, _job_id):
+            raise RuntimeError("provider_auth_failed")
+
+    plan = build_batch_plan([{"platform": "wechat", "topic": "topic", "brief": {}, "estimate_minutes": 10}], deadline_minute=280, finalization_minutes=20)
+    state_path = tmp_path / "state.json"
+    summary = execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["status"] == "failed"
+    assert summary["tasks"][0]["state"] == "failed"
+    assert execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))["status"] == "failed"
+
+
+def test_execute_batch_marks_only_blocked_rows_partial(tmp_path: Path):
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            return {"id": "job-1"}
+
+        def run(self, _job_id):
+            return {"id": "job-1", "state": "review_required"}
+
+        def stage_drafts(self, _job_id):
+            return {"id": "job-1", "state": "partial"}
+
+    plan = build_batch_plan(
+        [
+            {"platform": "wechat", "topic": "topic", "brief": {}, "action": "stage", "estimate_minutes": 10},
+            {"platform": "douyin_pet", "state": "blocked", "reason": "no source", "estimate_minutes": 10},
+        ],
+        deadline_minute=280,
+        finalization_minutes=20,
+    )
+
+    summary = execute_batch(Pipeline(), plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["status"] == "partial"

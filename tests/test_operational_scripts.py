@@ -240,6 +240,12 @@ shared_trend_only: false
         self.assertIn("python3 -m content_platform", text)
         self.assertNotIn('"$bin" --config', text)
 
+    def test_overnight_script_requires_provider_smoke_before_creating_content_jobs(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertLess(text.index("smoke_provider.sh"), text.index("performance-cycle"))
+        self.assertIn("provider_preflight_failed", text)
+
     def test_overnight_systemd_service_sets_home_and_private_notification_environment(self):
         text = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
 

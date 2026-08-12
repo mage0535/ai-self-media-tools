@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from content_platform.generator import DraftGenerator
+from content_platform.generator import DraftGenerator, ProviderAuthError
 from content_platform.risk import RiskFilter, redact_secrets
 
 
@@ -72,12 +72,21 @@ class ContentTests(unittest.TestCase):
 
     def test_generator_can_use_hermes_cli_provider(self):
         completed = type("Result", (), {"returncode": 0, "stdout": '{"title":"Remote title","body":"Remote body"}', "stderr": ""})()
-        generator = DraftGenerator({"provider": "hermes-cli", "allow_fallback": False})
+        generator = DraftGenerator({"provider": "hermes-cli", "allow_fallback": False, "hermes_provider": "opencode-go", "hermes_model": "deepseek-v4-flash"})
         with patch("content_platform.generator.subprocess.run", return_value=completed) as run:
             draft = generator.generate("topic", {"audience": "builders"})
         self.assertEqual(draft["provider"], "hermes-cli")
         self.assertTrue(any("Return only JSON" in item for item in run.call_args.args[0]))
-        self.assertIn("same-track", run.call_args.args[0][2])
+        self.assertIn("same-track", next(item for item in run.call_args.args[0] if "Return only JSON" in item))
+        self.assertIn("--provider", run.call_args.args[0])
+        self.assertIn("opencode-go", run.call_args.args[0])
+
+    def test_generator_classifies_provider_auth_text_instead_of_non_json(self):
+        completed = type("Result", (), {"returncode": 0, "stdout": "HTTP 401: Invalid API key.", "stderr": ""})()
+        generator = DraftGenerator({"provider": "hermes-cli", "allow_fallback": False, "hermes_provider": "opencode-go", "hermes_model": "deepseek-v4-flash"})
+        with patch("content_platform.generator.subprocess.run", return_value=completed):
+            with self.assertRaisesRegex(ProviderAuthError, "provider_auth_failed"):
+                generator.generate("topic", {"audience": "builders"})
 
     def test_full_ops_article_generator_marks_missing_platform_evidence_degraded(self):
         with patch.dict(os.environ, {}, clear=True):

@@ -15,6 +15,10 @@ from .tool_selection import build_tool_selection_evidence
 from .growth_recipe import build_growth_recipe
 
 
+class ProviderAuthError(RuntimeError):
+    """A provider returned an authentication or service-level failure."""
+
+
 class DraftGenerator:
     PROMPT_VERSION = "v4.0"
 
@@ -81,6 +85,18 @@ class DraftGenerator:
                 except json.JSONDecodeError:
                     pass
         raise ValueError("provider returned non-JSON content")
+
+    @staticmethod
+    def _provider_error(content):
+        """Classify transport failures that some CLIs print with exit code 0."""
+        text = str(content or "").strip()
+        import re
+
+        match = re.match(r"^HTTP\s+(401|403|429|5\d{2})\b", text, flags=re.IGNORECASE)
+        if not match:
+            return ""
+        code = match.group(1)
+        return "provider_auth_failed" if code in {"401", "403"} else f"provider_http_{code}"
 
     def _style_guide(self):
         path = Path(self.config.get("style_guide_path", str(style_guide_path())))
@@ -480,8 +496,16 @@ class DraftGenerator:
             f"Style guide:\n{self._style_guide()}\n\n"
             f"Planning context:\n{prompt_brief(topic, brief)}"
         )
+        command = [self.config.get("hermes_command", "hermes")]
+        provider = str(self.config.get("hermes_provider") or "").strip()
+        model = str(self.config.get("hermes_model") or "").strip()
+        if provider:
+            command.extend(["--provider", provider])
+        if model:
+            command.extend(["--model", model])
+        command.extend(["-z", prompt, "--cli"])
         proc = subprocess.run(
-            [self.config.get("hermes_command", "hermes"), "-z", prompt, "--cli"],
+            command,
             capture_output=True,
             text=True,
             timeout=int(self.config.get("timeout", 180)),
@@ -490,6 +514,9 @@ class DraftGenerator:
         if proc.returncode != 0:
             raise RuntimeError("Hermes generation command failed")
         content = proc.stdout.strip()
+        provider_error = self._provider_error(content)
+        if provider_error:
+            raise ProviderAuthError(provider_error)
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
         draft = self._coerce_provider_draft(content, topic)
