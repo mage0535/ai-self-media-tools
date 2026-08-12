@@ -19,6 +19,19 @@ the observer, reporter, and exception handler.
 
 ## Nightly Input
 
+## Provider Preflight
+
+Before any analytics refresh or content job creation, the systemd worker runs
+`scripts/smoke_provider.sh config.json`. The generator configuration must name
+both `hermes_provider` and `hermes_model`; the smoke runs in a minimal
+systemd-like environment and requires a JSON object with `title` and `body`.
+An HTTP authentication, rate-limit, service, or invalid-JSON response blocks
+the batch before it creates jobs.
+
+The production project passes `--provider` and `--model` explicitly. Do not
+rely solely on Hermes' global default provider or alter tracked files with a
+credential. Any Hermes credential-pool repair remains server-local.
+
 The server-local `secrets/overnight-slots.json` contains only channels that are
 due tonight. It is not committed. Every row must have a platform, topic, brief,
 stage, action, and conservative `estimate_minutes`.
