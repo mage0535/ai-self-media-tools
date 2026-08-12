@@ -218,6 +218,25 @@ shared_trend_only: false
             self.assertNotIn("5975" + "133381", text, rel)
             self.assertNotIn("PEXELS_API_KEY =", text, rel)
 
+    def test_growth_cycle_service_uses_default_platform_set_without_omissions(self):
+        from content_platform.performance_cycle import DEFAULT_GROWTH_PLATFORMS
+
+        text = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
+
+        self.assertIn("performance-cycle", text)
+        for platform in DEFAULT_GROWTH_PLATFORMS:
+            self.assertIn(f"--platform {platform}", text)
+
+    def test_overnight_script_refreshes_growth_strategy_before_prepare(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertLess(text.index("performance-cycle"), text.index("overnight-prepare"))
+
+    def test_auto_service_refreshes_growth_strategy_before_auto_run(self):
+        text = Path("systemd/hermes-content-platform.service").read_text(encoding="utf-8")
+
+        self.assertLess(text.index("performance-cycle"), text.index(" auto "))
+
     def test_kuaishou_video_proxy_args_use_configured_cn_proxy(self):
         from scripts import validate_kuaishou_video as validator
 

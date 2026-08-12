@@ -94,6 +94,10 @@ class CliTests(unittest.TestCase):
                 "items": [{"title": "AI workflow test", "source": "github", "url": "https://example.test", "points": 20}],
                 "sources": [{"source": "github", "status": "ok", "count": 1}],
             }
+            from content_platform.store import Store
+            store = Store(root / "state.db")
+            store.save_tool_inventory("growth_strategy:wechat:latest", {"policy_id": "growth_quality_policy_v1"})
+            store.save_tool_inventory("growth_strategy:xiaohongshu:latest", {"policy_id": "growth_quality_policy_v1"})
             with patch("content_platform.cli.Pipeline", FakePipeline), patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
                 output = io.StringIO()
                 with redirect_stdout(output):

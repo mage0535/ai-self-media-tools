@@ -23,6 +23,9 @@ if [[ ! -f "$slots" ]]; then
 fi
 
 "$bin" --config "$root/config.json" --db "$root/data/state.db" \
+  performance-cycle --output-dir "$root/data/performance/daily" \
+  --hermes-platform-scraper > "$out/performance-cycle-result.json"
+"$bin" --config "$root/config.json" --db "$root/data/state.db" \
   overnight-prepare --slots "$slots" --output "$out/prepared.json" --refresh > "$out/prepare-result.json"
 "$bin" --config "$root/config.json" --db "$root/data/state.db" \
   overnight-plan --tasks "$out/prepared.json" --output "$out/plan.json" \

@@ -6,8 +6,10 @@ from content_platform.overnight_batch import (
     build_due_tasks,
     build_batch_plan,
     execute_batch,
+    growth_strategy_snapshot_status,
     normalize_delivery_boundary,
 )
+from content_platform.store import Store
 
 
 def test_batch_plan_schedules_all_due_work_before_morning_window():
@@ -98,6 +100,32 @@ def test_due_task_builder_selects_a_distinct_topic_for_each_due_platform():
     assert [task["topic"] for task in prepared["tasks"]] == ["wechat topic", "youtube topic"]
     assert prepared["tasks"][0]["action"] == "stage"
     assert prepared["tasks"][1]["action"] == "handoff"
+
+
+def test_due_task_builder_blocks_when_growth_strategy_snapshot_is_missing():
+    def rank(platform, _items, _slot):
+        return [{"title": f"{platform} topic", "source": platform, "score": 3, "fingerprint": platform}]
+
+    prepared = build_due_tasks(
+        [{"platform": "zhihu", "estimate_minutes": 20}],
+        items=[],
+        source_report=[{"source": "github", "status": "ok"}],
+        rank_for_platform=rank,
+        growth_strategy_status={"zhihu": {"status": "missing", "key": "growth_strategy:zhihu:latest"}},
+    )
+
+    assert prepared["tasks"][0]["state"] == "blocked"
+    assert prepared["tasks"][0]["reason"] == "growth strategy snapshot missing"
+
+
+def test_growth_strategy_snapshot_status_reads_store_inventory(tmp_path: Path):
+    store = Store(tmp_path / "state.db")
+    store.save_tool_inventory("growth_strategy:wechat:latest", {"policy_id": "growth_quality_policy_v1"})
+
+    status = growth_strategy_snapshot_status(store, ["wechat", "zhihu"])
+
+    assert status["wechat"]["status"] == "ok"
+    assert status["zhihu"] == {"status": "missing", "key": "growth_strategy:zhihu:latest"}
 
 
 def test_execute_batch_runs_each_platform_independently_and_persists_resume_state(tmp_path: Path):
