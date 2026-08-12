@@ -30,8 +30,18 @@ Each operating date must begin with `python scripts/ops_run.py <YYYYMMDD> --init
 - A direction cannot be reused inside the configured lookback window, even when the title text differs.
 - A follow-up is allowed only when `--follow-up-to`, `--difference-angle`, and `--recap-reason` are all recorded.
 - The existing `check_platform_topic_independence.py` gate also reads the date-scoped direction register and rejects an invalid or manually duplicated register.
+- WeChat publish license also consumes the same `direction` field. A WeChat article with a different title but the same recent direction is blocked before draft upload.
 - Before a publisher handoff, run `python scripts/verify_video_artifact.py <final.mp4> --manifest <render_manifest.json> --platform <platform>`. The result must be retained in the render manifest.
 - `python scripts/validate_channel_rulebook.py` now checks the executable operations-policy facts against the public operations policy contract. A mismatch is a release blocker.
+
+## WeChat And Video Channels Growth Constraints
+
+- WeChat is capped at three delivered long articles per rolling seven days. The preferred slots are 07:30-08:00 and 12:00-13:00 CST; 00:00-06:00 is blocked.
+- WeChat weekly mix is one open-source/deep technical note, one proven-hot feedback article only when a short-video signal meets threshold, and one first-person practice review.
+- WeChat topic decisions must include a stable `content_direction` or `topic_direction`; title-only dedupe is insufficient.
+- If the WeChat backend API is unavailable or unauthorized, record the reason and perform a weekly manual backend metrics import instead of treating metrics as zero.
+- Video Channels is manual handoff by default. Do not mechanically mirror every WeChat article into a knowledge-card video.
+- At least one Video Channels item in each test cycle should be a screencast or real operation demo, with knowledge-card output kept only as a control group.
 
 ## Promotion Content Rules
 

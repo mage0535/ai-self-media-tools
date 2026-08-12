@@ -1,4 +1,5 @@
 import sys
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -114,3 +115,84 @@ def test_publish_license_ignores_unstructured_markdown_recaps(tmp_path):
     recent = gzh_publish_license.recent_wechat_titles(tmp_path)
 
     assert recent == []
+
+
+def test_publish_license_blocks_reused_direction_from_run_manifest(tmp_path):
+    from content_platform.ops_run import create_run, record_topic
+
+    create_run(tmp_path, "20260812", lookback_days=7)
+    record_topic(
+        tmp_path,
+        "20260812",
+        "wechat",
+        "How an AI agent runs eleven channels",
+        direction="agent_workflow",
+    )
+
+    result = gzh_publish_license.check_license(
+        "A different title about AI agent operations",
+        root=tmp_path,
+        skip_time=True,
+        direction="agent_workflow",
+    )
+
+    assert result["passed"] is False
+    assert any(item.startswith("duplicate_direction:") for item in result["failures"])
+
+
+def test_adapter_passes_direction_to_publish_license_gate(tmp_path, monkeypatch):
+    observed = {}
+
+    def fake_run(args, **kwargs):
+        observed["args"] = list(args)
+        return SimpleNamespace(returncode=0, stdout='{"passed": true, "failures": []}', stderr="")
+
+    monkeypatch.setattr(hermes_wechat_adapter.subprocess, "run", fake_run)
+
+    result = hermes_wechat_adapter._run_publish_license_gate(
+        {"title": "Distinct title", "strategy_brief": {"content_direction": "agent_workflow"}},
+        tmp_path / "license.py",
+    )
+
+    assert result["passed"] is False
+    assert "license_script_missing" in result["failures"]
+
+    gate = tmp_path / "license.py"
+    gate.write_text("placeholder", encoding="utf-8")
+    result = hermes_wechat_adapter._run_publish_license_gate(
+        {"title": "Distinct title", "strategy_brief": {"content_direction": "agent_workflow"}},
+        gate,
+    )
+
+    assert result["passed"] is True
+    assert "--direction" in observed["args"]
+    assert observed["args"][observed["args"].index("--direction") + 1] == "agent_workflow"
+
+
+def test_publish_license_direction_gate_works_from_arbitrary_cwd(tmp_path):
+    from content_platform.ops_run import create_run, record_topic
+
+    create_run(tmp_path, "20260812", lookback_days=7)
+    record_topic(tmp_path, "20260812", "wechat", "AI agent operations", direction="agent_workflow")
+    script = Path(__file__).resolve().parents[1] / "scripts" / "gzh_publish_license.py"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--title",
+            "Different title",
+            "--direction",
+            "agent_workflow",
+            "--root",
+            str(tmp_path),
+            "--skip-time",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "duplicate_direction:agent_workflow" in result.stdout

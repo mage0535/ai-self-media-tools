@@ -341,8 +341,15 @@ def _run_publish_license_gate(packet: dict, license_script: Path) -> dict:
             "failures": ["license_script_missing"],
         }
     try:
+        cmd = [sys.executable, str(license_script), "--title", title]
+        direction = _content_direction(packet)
+        if direction:
+            cmd.extend(["--direction", direction])
+        content_home = str(os.environ.get("CONTENT_PLATFORM_HOME") or "").strip()
+        if content_home:
+            cmd.extend(["--root", content_home])
         result = subprocess.run(
-            [sys.executable, str(license_script), "--title", title],
+            cmd,
             capture_output=True,
             text=True,
             timeout=30,
@@ -375,6 +382,17 @@ def _run_publish_license_gate(packet: dict, license_script: Path) -> dict:
         payload["passed"] = False
         payload.setdefault("failures", []).append(f"license_returncode_nonzero:{result.returncode}")
     return payload
+
+
+def _content_direction(packet: dict) -> str:
+    for source in (packet.get("strategy_brief"), packet.get("draft_meta"), packet.get("platform_payload"), packet):
+        if not isinstance(source, dict):
+            continue
+        for key in ("content_direction", "topic_direction", "direction", "content_line"):
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value
+    return ""
 
 
 if __name__ == "__main__":

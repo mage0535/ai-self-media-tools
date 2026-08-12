@@ -711,8 +711,8 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "wechat_growth_playbook": {
             "passed": bool(wechat_playbook)
             and wechat_playbook.get("mode") == "wechat_14_day_recovery"
-            and str(frequency.get("recommended_articles_per_week") or "") == "2"
-            and _safe_int(frequency.get("max_articles_per_week_recovery")) <= 2
+            and str(frequency.get("recommended_articles_per_week") or "") == "3"
+            and _safe_int(frequency.get("max_articles_per_week_recovery")) <= 3
             and _safe_int(frequency.get("min_gap_hours_between_articles")) >= 48
             and _safe_int(frequency.get("max_articles_per_day")) == 1
             and _safe_int((wechat_playbook.get("recovery_topic_policy") or {}).get("topic_dedup_window_days")) >= 14
@@ -725,8 +725,8 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             and bool(seo_geo.get("primary_keywords")),
             "required": [
                 "mode=wechat_14_day_recovery",
-                "publishing_frequency.recommended_articles_per_week=2",
-                "publishing_frequency.max_articles_per_week_recovery<=2",
+                "publishing_frequency.recommended_articles_per_week=3",
+                "publishing_frequency.max_articles_per_week_recovery<=3",
                 "publishing_frequency.min_gap_hours_between_articles>=48",
                 "publishing_frequency.max_articles_per_day=1",
                 "recovery_topic_policy.topic_dedup_window_days>=14",

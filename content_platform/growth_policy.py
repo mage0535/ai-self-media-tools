@@ -20,8 +20,8 @@ WECHAT_RECOVERY_PLAYBOOK: dict[str, Any] = {
     },
     "primary_goal": "recover_open_rate_and_finish_read_rate_before_increasing_publish_frequency",
     "publishing_frequency": {
-        "recommended_articles_per_week": "2",
-        "max_articles_per_week_recovery": 2,
+        "recommended_articles_per_week": "3",
+        "max_articles_per_week_recovery": 3,
         "max_articles_per_week_after_recovery": 3,
         "max_articles_per_day": 1,
         "min_gap_hours_between_articles": 48,
@@ -45,6 +45,8 @@ WECHAT_RECOVERY_PLAYBOOK: dict[str, Any] = {
     "recovery_topic_policy": {
         "duration_days": 14,
         "topic_dedup_window_days": 14,
+        "direction_dedup_required": True,
+        "direction_register_key": "data/ops_runs/<YYYYMMDD>/run_manifest.json",
         "title_frame_dedup_window_days": 14,
         "suspend_topics": ["自动化实测", "办公自动化实测", "重复劳动自动化", "WordPress SEO 自动化"],
         "fatigue_terms": ["实测", "自动化", "工具", "AI"],
@@ -102,6 +104,8 @@ WECHAT_RECOVERY_PLAYBOOK: dict[str, Any] = {
     },
     "post_publish_review": {
         "review_cadence": "weekly",
+        "manual_backend_export_required": True,
+        "manual_export_cadence": "weekly",
         "required_metrics": [
             "impressions",
             "open_rate",
@@ -455,10 +459,15 @@ def validate_growth_strategy(plan: dict[str, Any], platform: str = "", content_t
         frequency = playbook.get("publishing_frequency") if isinstance(playbook.get("publishing_frequency"), dict) else {}
         if playbook.get("mode") != "wechat_14_day_recovery":
             failures.append("wechat_growth_playbook.recovery_mode_missing")
-        if int(frequency.get("max_articles_per_week_recovery") or 0) > 2:
+        if int(frequency.get("max_articles_per_week_recovery") or 0) > 3:
             failures.append("wechat_frequency.recovery_weekly_cap_too_high")
         if int(recovery.get("topic_dedup_window_days") or 0) < 14:
             failures.append("wechat_topic_dedup_window.too_short")
+        if recovery.get("direction_dedup_required") is not True:
+            failures.append("wechat_direction_dedup.required")
+        post_review = playbook.get("post_publish_review") if isinstance(playbook.get("post_publish_review"), dict) else {}
+        if post_review.get("manual_backend_export_required") is not True:
+            failures.append("wechat_manual_backend_export.required")
     if _normalized_platform(platform) == "zhihu":
         playbook = plan.get("zhihu_growth_playbook") if isinstance(plan.get("zhihu_growth_playbook"), dict) else {}
         anti_spam = playbook.get("anti_spam_similarity") if isinstance(playbook.get("anti_spam_similarity"), dict) else {}
