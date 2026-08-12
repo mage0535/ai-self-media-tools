@@ -197,7 +197,10 @@ def candidate_matches_topic_keywords(candidate: dict[str, Any], keywords: list[s
     if not keywords:
         return True
     text = str(candidate.get("title") or "").casefold()
-    return any(word in text for word in keywords)
+    return any(
+        re.search(rf"\b{re.escape(word)}\b", text) is not None if word.isascii() and word.isalnum() else word in text
+        for word in keywords
+    )
 
 
 def candidate_matches_platform_language(platform: str, candidate: dict[str, Any]) -> bool:
