@@ -255,6 +255,12 @@ shared_trend_only: false
         self.assertIn("notifications.env", text)
         self.assertIn("AI_SELF_MEDIA_TELEGRAM_TARGET", text)
 
+    def test_overnight_monitor_does_not_register_a_duplicate_named_job(self):
+        text = Path("scripts/create_hermes_overnight_monitor.py").read_text(encoding="utf-8")
+
+        self.assertIn('"hermes", "cron", "list"', text)
+        self.assertIn("AI自媒体夜间运行监控", text)
+
     def test_auto_service_refreshes_growth_strategy_before_auto_run(self):
         text = Path("systemd/hermes-content-platform.service").read_text(encoding="utf-8")
 
