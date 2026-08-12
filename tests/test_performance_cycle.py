@@ -136,19 +136,35 @@ def test_metrics_readiness_requires_separate_douyin_account_sources():
 
 
 def test_metrics_readiness_accepts_content_aggregate_account_config():
-    report = metrics_readiness_report(
-        ["douyin"],
-        {
-            "douyin_accounts": {
-                "douyin_pet": {"state_file": "/private/pet.json", "metrics_file": "/private/pet-metrics.json"},
-                "douyin_ai": {"state_file": "/private/ai.json", "metrics_file": "/private/ai-metrics.json"},
-            }
-        },
-    )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        pet = root / "pet.json"
+        ai = root / "ai.json"
+        pet.write_text(json.dumps({"videos": [{"video_id": "pet-1", "views": 10}]}), encoding="utf-8")
+        ai.write_text(json.dumps({"videos": [{"video_id": "ai-1", "views": 20}]}), encoding="utf-8")
+        report = metrics_readiness_report(
+            ["douyin"],
+            {
+                "douyin_accounts": {
+                    "douyin_pet": {"state_file": "/private/pet.json", "metrics_file": str(pet)},
+                    "douyin_ai": {"state_file": "/private/ai.json", "metrics_file": str(ai)},
+                }
+            },
+        )
 
     assert report["accounts"]["douyin_pet"]["status"] == "content_metrics_configured"
     assert report["accounts"]["douyin_ai"]["status"] == "content_metrics_configured"
     assert report["summary"]["strategy_eligible_count"] == 2
+
+
+def test_metrics_readiness_requires_identified_rows_in_metrics_file():
+    with tempfile.TemporaryDirectory() as tmp:
+        metrics_file = Path(tmp) / "aggregate.json"
+        metrics_file.write_text(json.dumps({"videos": [{"views": 10, "likes": 1}]}), encoding="utf-8")
+        report = metrics_readiness_report(["shipinhao"], {"shipinhao": {"metrics_file": str(metrics_file)}})
+
+    assert report["accounts"]["shipinhao"]["status"] == "content_identity_missing"
+    assert report["accounts"]["shipinhao"]["strategy_eligible"] is False
 
 
 def test_legacy_creator_page_snapshot_is_excluded_without_strategy_flag():

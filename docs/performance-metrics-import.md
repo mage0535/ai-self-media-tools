@@ -27,6 +27,10 @@ python3 -m content_platform.cli metrics-readiness \
   --collector-config /private/runtime/performance-collector.json
 ```
 
+The readiness result validates a configured JSON export at runtime: a missing,
+invalid, or aggregate-only file is reported as not strategy-eligible rather
+than as a successful source configuration.
+
 ## CSV Template
 
 ```csv
