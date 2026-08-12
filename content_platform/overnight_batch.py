@@ -319,8 +319,18 @@ def execute_batch(
         finally:
             _write_state(state_file, state)
 
-    unfinished = [task for task in state.get("tasks", []) if task.get("state") not in TERMINAL_TASK_STATES]
-    state["status"] = "completed" if not unfinished else "partial"
+    tasks = state.get("tasks", [])
+    failed = [task for task in tasks if task.get("state") == "failed"]
+    unfinished = [task for task in tasks if task.get("state") not in TERMINAL_TASK_STATES]
+    blocked = [task for task in tasks if task.get("state") == "blocked"]
+    # Failed rows remain terminal so a resumed batch cannot silently rerun
+    # them. Aggregate status still exposes failure to systemd and Hermes.
+    if failed:
+        state["status"] = "failed"
+    elif unfinished or blocked:
+        state["status"] = "partial"
+    else:
+        state["status"] = "completed"
     _write_state(state_file, state)
     return state
 

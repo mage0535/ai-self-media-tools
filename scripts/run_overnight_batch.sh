@@ -34,6 +34,13 @@ run_platform() {
   PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" python3 -m content_platform "$@"
 }
 
+if ! "$root/scripts/smoke_provider.sh" "$root/config.json"; then
+  printf '%s\n' '{"status":"blocked","reason":"provider_preflight_failed"}' > "$out/result.json"
+  notify "failed" "provider_preflight_failed"
+  exit 1
+fi
+notify "progress" "provider_smoke_complete"
+
 # Run the checked-out module, not a stale globally installed console script.
 # The timer must execute exactly the Git revision that was audited and deployed.
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
@@ -49,4 +56,31 @@ run_platform --config "$root/config.json" --db "$root/data/state.db" \
 notify "progress" "overnight_plan_complete"
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-run --plan "$out/plan.json" --state "$out/state.json" --events "$out/events.jsonl" > "$out/result.json"
-notify "completed" "batch_complete"
+batch_status="$(python3 - "$out/result.json" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+print(payload.get("status", "failed"))
+PY
+)"
+case "$batch_status" in
+  completed)
+    notify "completed" "batch_complete"
+    ;;
+  partial)
+    notify "partial" "batch_has_expected_blocked_tasks"
+    ;;
+  *)
+    failed_count="$(python3 - "$out/result.json" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+print(sum(1 for task in payload.get("tasks", []) if task.get("state") == "failed"))
+PY
+)"
+    notify "failed" "${failed_count}_tasks_failed"
+    exit 1
+    ;;
+esac
