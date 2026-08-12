@@ -527,7 +527,7 @@ def execute(args):
         output.write_text(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         return {"status": plan["status"], "output": str(output), "tasks": len(plan["tasks"])}
     if args.command == "overnight-prepare":
-        from .overnight_batch import build_due_tasks
+        from .overnight_batch import build_due_tasks, growth_strategy_snapshot_status
         raw_slots = json.loads(Path(args.slots).read_text(encoding="utf-8"))
         slots = raw_slots.get("slots", raw_slots.get("tasks", [])) if isinstance(raw_slots, dict) else raw_slots
         if not isinstance(slots, list):
@@ -535,15 +535,31 @@ def execute(args):
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
         profile = resolve_profile(config.get("profiles", {}), args.profile)
+        strategy_status = growth_strategy_snapshot_status(
+            store,
+            [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
+        )
 
         def rank_for_platform(platform, items, _slot):
             return rank_trends(items, profile, store.used_topics(platform), 1, store.learned_ranking_context(args.profile))
 
-        prepared = build_due_tasks(slots, items=report.get("items", []), source_report=report.get("sources", []), rank_for_platform=rank_for_platform)
+        prepared = build_due_tasks(
+            slots,
+            items=report.get("items", []),
+            source_report=report.get("sources", []),
+            rank_for_platform=rank_for_platform,
+            growth_strategy_status=strategy_status,
+        )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(prepared, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        return {"status": "prepared", "output": str(output), "tasks": len(prepared["tasks"]), "source_summary": report.get("summary", {})}
+        return {
+            "status": "prepared",
+            "output": str(output),
+            "tasks": len(prepared["tasks"]),
+            "source_summary": report.get("summary", {}),
+            "growth_strategy_status": strategy_status,
+        }
     if args.command == "overnight-run":
         from .overnight_batch import BatchEventJournal, execute_batch
         plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
@@ -568,11 +584,24 @@ def execute(args):
             if args.diagnostics:
                 return {**report, "ranked": items}
             return items
+        from .overnight_batch import growth_strategy_snapshot_status
+        strategy_status = growth_strategy_snapshot_status(store, platforms)
         jobs = []
         # A platform is a separate operating decision, not a bulk destination
         # for one trend.  Keep independent topic history and the raw source
         # collection result in every generated job.
         for platform in platforms:
+            strategy = strategy_status.get(str(platform).casefold()) or {}
+            if strategy.get("status") in {"missing", "stale"}:
+                jobs.append(
+                    {
+                        "platform": platform,
+                        "state": "blocked",
+                        "last_error": f"growth strategy snapshot {strategy['status']}",
+                        "growth_strategy_key": strategy.get("key", ""),
+                    }
+                )
+                continue
             ranked = rank_trends(
                 items,
                 profile,

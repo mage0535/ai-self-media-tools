@@ -82,17 +82,24 @@ def build_due_tasks(
     items: list[dict[str, Any]],
     source_report: list[dict[str, Any]],
     rank_for_platform: Any,
+    growth_strategy_status: dict[str, dict[str, Any]] | None = None,
     weekday: int | None = None,
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
+    growth_strategy_status = growth_strategy_status or {}
     weekday = datetime.now().weekday() if weekday is None else int(weekday)
     for raw in slots:
         platform = str(raw.get("platform") or "").casefold()
         row = {**raw, "platform": platform}
+        strategy = growth_strategy_status.get(platform) or {}
         due_days = raw.get("weekdays")
         if isinstance(due_days, list) and due_days and weekday not in {int(day) for day in due_days}:
             row.update({"state": "deferred", "reason": "not scheduled for this weekday"})
+            tasks.append(row)
+            continue
+        if strategy.get("status") in {"missing", "stale"}:
+            row.update({"state": "blocked", "reason": f"growth strategy snapshot {strategy['status']}", "growth_strategy_key": strategy.get("key", "")})
             tasks.append(row)
             continue
         candidates = list(rank_for_platform(platform, items, raw) or [])
@@ -128,6 +135,38 @@ def build_due_tasks(
             })
         tasks.append(row)
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
+
+
+def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age_hours: int = 30) -> dict[str, dict[str, Any]]:
+    """Return per-platform strategy freshness for overnight fail-closed checks."""
+    result: dict[str, dict[str, Any]] = {}
+    for platform in platforms:
+        normalized = str(platform or "").casefold()
+        if not normalized:
+            continue
+        key = f"growth_strategy:{normalized}:latest"
+        row = store.latest_tool_inventory(key)
+        if not row:
+            result[normalized] = {"status": "missing", "key": key}
+            continue
+        age_hours = _age_hours(row.get("created_at"))
+        if age_hours is not None and age_hours > max_age_hours:
+            result[normalized] = {"status": "stale", "key": key, "age_hours": round(age_hours, 2)}
+        else:
+            result[normalized] = {"status": "ok", "key": key, "age_hours": round(age_hours, 2) if age_hours is not None else None}
+    return result
+
+
+def _age_hours(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        created = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600
 
 
 TERMINAL_TASK_STATES = {"staged", "handoff_ready", "published", "blocked", "failed", "deferred"}

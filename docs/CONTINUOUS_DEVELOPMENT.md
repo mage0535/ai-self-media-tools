@@ -3,6 +3,11 @@
 ## 2026-08-12: Strategy Routing and Recoverable Overnight Execution
 
 ### Implemented
+- Background-resource hardening: content-generating background tasks now fail closed when the required account growth strategy snapshot is missing or stale. `overnight-prepare` records `growth_strategy_status` and blocks only the affected platform row instead of silently selecting a topic.
+- `scripts/run_overnight_batch.sh` now runs `performance-cycle` before `overnight-prepare`, so midnight batches refresh analytics and `growth_strategy:<platform>:latest` before topic selection.
+- The legacy `auto` command now checks the same growth-strategy snapshot status before creating jobs. Missing/stale strategy returns a blocked platform result and does not run Pipeline generation.
+- `hermes-content-platform.service` now refreshes growth strategy before its `auto` run. `hermes-content-platform-growth-cycle.service` now covers the full default platform set: WeChat, Kuaishou, Bilibili, Zhihu, Juejin, Douyin, Shipinhao, Xiaohongshu, YouTube, TikTok, and X.
+- Background task boundary after audit: growth-cycle refreshes strategy only; overnight and auto refresh then consume strategy; health-refresh refreshes delivery health; metrics/metrics-server expose status; maintenance prunes runtime data; task-market accepts external task-market jobs and remains separate from account-growth strategy routing.
 - Added `growth_recipe_v1`, generated before quality evaluation. It records actual source status, topic-growth signals, selected tools, process evidence for tool demonstrations, and a concrete CTA. In enforced mode, incomplete recipes block rather than silently falling back to generic card content.
 - The `auto` command now creates one job per platform with platform-scoped topic history and collection evidence. It no longer creates one multi-platform job and treats a shared trend as independent platform analysis.
 - Added `overnight-plan` and `overnight-run`. Plans reserve the final ten minutes before the 05:00 morning-report window, reject work that cannot fit before admission, run one platform at a time, and atomically checkpoint state after every platform.
@@ -13,6 +18,7 @@
 - First dry-run capacity check rebalanced the private weekly rotation so every due-day plan fits the 280-minute work budget; the run created no jobs or publications.
 
 ### Verification
+- Added regressions for missing growth-strategy snapshots in `overnight-prepare`, core due-task building, the legacy `auto` command, and systemd/script ordering.
 - Focused regressions for growth recipes, independent auto routing, the resumable batch, CLI, and Pipeline passed.
 - Full local regression: `629 passed, 29 subtests passed`.
 - Compile, whitespace, and project audit passed locally. Target-server synchronization and repeat verification remain required before enabling the new timer.

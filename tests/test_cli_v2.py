@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from content_platform.cli import main
+from content_platform.store import Store
 
 
 class CliV2Tests(unittest.TestCase):
@@ -71,6 +72,7 @@ class CliV2Tests(unittest.TestCase):
         slots = self.root / "slots.json"
         output = self.root / "prepared.json"
         slots.write_text(json.dumps([{"platform": "wechat", "estimate_minutes": 15}]), encoding="utf-8")
+        Store(self.db).save_tool_inventory("growth_strategy:wechat:latest", {"policy_id": "growth_quality_policy_v1"})
         report = {
             "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
             "sources": [{"source": "github", "status": "ok", "count": 1}],
@@ -83,6 +85,23 @@ class CliV2Tests(unittest.TestCase):
         task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
         self.assertEqual(task["platform"], "wechat")
         self.assertEqual(task["topic"], "AI workflow")
+
+    def test_overnight_prepare_blocks_due_slot_without_growth_strategy_snapshot(self):
+        slots = self.root / "slots.json"
+        output = self.root / "prepared.json"
+        slots.write_text(json.dumps([{"platform": "zhihu", "estimate_minutes": 15}]), encoding="utf-8")
+        report = {
+            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "sources": [{"source": "github", "status": "ok", "count": 1}],
+            "summary": {"items": 1},
+        }
+        with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+            code, result = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output))
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "prepared")
+        task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
+        self.assertEqual(task["state"], "blocked")
+        self.assertEqual(task["reason"], "growth strategy snapshot missing")
 
     def test_task_market_scan_command_returns_summary(self):
         fake_result = {
@@ -101,6 +120,18 @@ class CliV2Tests(unittest.TestCase):
             code, result = self.call("task-market-auto", "--env", "cn")
         self.assertEqual(code, 0)
         self.assertEqual(result["completed"], 1)
+
+    def test_auto_command_blocks_platform_without_growth_strategy_snapshot(self):
+        report = {
+            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "sources": [{"source": "github", "status": "ok", "count": 1}],
+            "summary": {"items": 1},
+        }
+        with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+            code, result = self.call("auto", "--platform", "zhihu", "--limit", "1")
+        self.assertEqual(code, 0)
+        self.assertEqual(result[0]["state"], "blocked")
+        self.assertEqual(result[0]["last_error"], "growth strategy snapshot missing")
 
     def test_delivery_readiness_command_returns_tool_summary(self):
         fake_result = {"publishers": {"wechat": {"type": "wechat-draft"}}, "tools": {"social_auto_upload": {"project_dir_exists": True}}}
