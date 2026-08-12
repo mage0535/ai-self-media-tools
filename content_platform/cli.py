@@ -584,7 +584,10 @@ def execute(args):
             # topic for each channel instead of duplicating the first trend.
             keywords = topic_keywords_for_slot(platform, slot, profile)
             lane_profile = {**profile, "keywords": keywords, "source_weights": {**profile.get("source_weights", {}), "douyin:web_search": 2}}
-            ranked = rank_trends(items, lane_profile, store.used_topics(platform), 20, store.learned_ranking_context(args.profile))
+            # Filter after ranking against the full bounded collection.  A
+            # small pre-filter pool can be filled by irrelevant high-score
+            # headlines and hide valid lane-specific candidates.
+            ranked = rank_trends(items, lane_profile, store.used_topics(platform), 200, store.learned_ranking_context(args.profile))
             return [
                 candidate
                 for candidate in ranked
