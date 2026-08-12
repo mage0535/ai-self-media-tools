@@ -3095,3 +3095,17 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 ## Verification
 - Added red/green regression coverage for snapshot isolation, legacy-cycle filtering, account history isolation, source readiness, TikTok empty-content responses, and Hermes scraper fallback.
 - Readiness validation also opens configured JSON exports and requires a content identifier; a path alone is not treated as usable evidence.
+
+# 2026-08-12 - Scheduled Operations And Hermes Progress Recovery
+
+## Finding
+- The midnight worker was enabled but systemd did not define `HOME`, so the entrypoint could fail before producing a batch result.
+- The growth cycle had no progress message wrapper. The WeChat refresh reported an expected creator-login expiry as a failed systemd service.
+- Workflow events were locally durable, but no private Hermes notification target or overnight observer had been configured.
+
+## Implemented
+- Systemd templates now set `HOME`, load an optional untracked `secrets/notifications.env`, and execute notification-aware wrappers.
+- The wrappers emit bounded start/progress/completed/blocked/failed events through Hermes only when `AI_SELF_MEDIA_HERMES_TARGET` is configured. Delivery failure never interrupts the worker.
+- The midnight wrapper reports error exits, preserves atomic checkpoints, and still exits cleanly for no-slot or missed-window cases.
+- The WeChat wrapper treats an expired creator login as an actionable blocked data-source condition, writes its report, sends a notification, and lets the timer remain healthy for the next recovery attempt.
+- `create_hermes_overnight_monitor.py` remains the read-only three-minute progress observer; its target is server-private and not committed.

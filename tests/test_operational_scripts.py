@@ -221,8 +221,10 @@ shared_trend_only: false
     def test_growth_cycle_service_uses_default_platform_set_without_omissions(self):
         from content_platform.performance_cycle import DEFAULT_GROWTH_PLATFORMS
 
-        text = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
+        service = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
+        text = Path("scripts/run_growth_cycle.sh").read_text(encoding="utf-8")
 
+        self.assertIn("run_growth_cycle.sh", service)
         self.assertIn("performance-cycle", text)
         for platform in DEFAULT_GROWTH_PLATFORMS:
             self.assertIn(f"--platform {platform}", text)
@@ -231,6 +233,21 @@ shared_trend_only: false
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
 
         self.assertLess(text.index("performance-cycle"), text.index("overnight-prepare"))
+
+    def test_overnight_systemd_service_sets_home_and_private_notification_environment(self):
+        text = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
+
+        self.assertIn("Environment=HOME=%h", text)
+        self.assertIn("secrets/notifications.env", text)
+
+    def test_background_systemd_services_use_notification_wrappers(self):
+        growth = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
+        wechat = Path("systemd/ai-self-media-wechat-metrics.service").read_text(encoding="utf-8")
+
+        self.assertIn("run_growth_cycle.sh", growth)
+        self.assertIn("secrets/notifications.env", growth)
+        self.assertIn("run_wechat_metrics_refresh.sh", wechat)
+        self.assertIn("secrets/notifications.env", wechat)
 
     def test_auto_service_refreshes_growth_strategy_before_auto_run(self):
         text = Path("systemd/hermes-content-platform.service").read_text(encoding="utf-8")

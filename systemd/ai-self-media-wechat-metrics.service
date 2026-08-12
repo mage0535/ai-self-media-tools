@@ -1,0 +1,14 @@
+[Unit]
+Description=ai-self-media-tools WeChat MP metrics refresh
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.ai-self-media-tools
+Environment=HOME=%h
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=PYTHONPATH=%h/.ai-self-media-tools
+EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
+ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/run_wechat_metrics_refresh.sh
+Nice=10

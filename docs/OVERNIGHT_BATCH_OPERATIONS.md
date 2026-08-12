@@ -74,6 +74,26 @@ morning-report service uses its own worker and does not share a Hermes workdir
 lock. Do not enable the timer until a read-only dry run has produced a
 capacity-safe plan.
 
+## Hermes Progress Reporting
+
+The systemd units load an optional server-local
+`secrets/notifications.env`. It is never committed. Set only a preconfigured
+Hermes delivery target, for example:
+
+```bash
+AI_SELF_MEDIA_HERMES_TARGET=telegram
+AI_SELF_MEDIA_TELEGRAM_TARGET=telegram
+```
+
+The batch wrapper emits start, strategy-refresh, preparation, plan, completion,
+skip, and failure events. `scripts/create_hermes_overnight_monitor.py` registers
+a read-only three-minute observer which reads `events.jsonl` and `state.json`.
+It must use `AI_SELF_MEDIA_TELEGRAM_TARGET`; the observer reports progress but
+never retries, approves, publishes, or modifies a task.
+
+If notifications cannot be delivered, the worker continues and its local
+event/checkpoint files remain authoritative for recovery.
+
 ## Acceptance
 
 - Plan status is `scheduled`; no row exceeds the 04:50 work deadline.
