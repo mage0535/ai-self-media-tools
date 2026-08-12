@@ -9,6 +9,7 @@ from content_platform.overnight_batch import (
     growth_strategy_snapshot_status,
     normalize_delivery_boundary,
     candidate_matches_topic_keywords,
+    candidate_matches_platform_language,
     topic_keywords_for_slot,
 )
 from content_platform.store import Store
@@ -177,6 +178,11 @@ def test_pet_lane_rejects_an_unrelated_general_news_candidate():
 
     assert candidate_matches_topic_keywords({"title": "Facebook pays controversial rage-bait creators"}, keywords) is False
     assert candidate_matches_topic_keywords({"title": "Three signs your cat is stressed"}, keywords) is True
+
+
+def test_english_platform_rejects_a_chinese_headline_even_when_it_mentions_ai():
+    assert candidate_matches_platform_language("twitter", {"title": "如何看待 AIGC 工具"}) is False
+    assert candidate_matches_platform_language("twitter", {"title": "AI agents change team workflows"}) is True
 
 
 def test_execute_batch_runs_each_platform_independently_and_persists_resume_state(tmp_path: Path):

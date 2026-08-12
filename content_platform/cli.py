@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from . import __version__
@@ -19,7 +20,7 @@ from .readiness import inspect_delivery_readiness
 from .skills_adapter import fetch_hot_data, generate_content, get_status as skills_status
 from .store import Store
 from .task_market import TaskMarketRunner
-from .trends import TrendCollector, rank_trends
+from .trends import DirectTrendSource, TrendCollector, rank_trends
 
 
 def _load_env_defaults(path: str | Path | None = None) -> str:
@@ -546,6 +547,7 @@ def execute(args):
         from .overnight_batch import (
             build_due_tasks,
             candidate_matches_topic_keywords,
+            candidate_matches_platform_language,
             growth_strategy_snapshot_status,
             topic_keywords_for_slot,
         )
@@ -556,6 +558,22 @@ def execute(args):
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
         profile = resolve_profile(config.get("profiles", {}), args.profile)
+        weekday = datetime.now().weekday() if args.weekday is None else args.weekday
+        # Pet transport requires its own verified source.  A generic AI trend
+        # feed must never be repurposed into a pet-account assignment.
+        for slot in slots:
+            platform = str(slot.get("platform") or "").casefold() if isinstance(slot, dict) else ""
+            due_days = slot.get("weekdays") if isinstance(slot, dict) else None
+            if platform != "douyin_pet" or (isinstance(due_days, list) and due_days and weekday not in {int(day) for day in due_days}):
+                continue
+            started = datetime.now()
+            try:
+                targeted = DirectTrendSource("douyin", {"enabled": True, "limit": 12, "timeout": 8, "query": "抖音 宠物 猫 狗 热门 短视频"}).collect()
+                report.setdefault("items", []).extend(targeted)
+                status = "ok" if targeted and not all(item.get("source_unavailable") for item in targeted) else "unavailable"
+                report.setdefault("sources", []).append({"source": "douyin_pet_targeted", "status": status, "count": len(targeted), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
+            except Exception as exc:  # Preserve failed evidence; selection remains fail-closed.
+                report.setdefault("sources", []).append({"source": "douyin_pet_targeted", "status": "failed", "count": 0, "error": str(exc)[:240]})
         strategy_status = growth_strategy_snapshot_status(
             store,
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
@@ -564,9 +582,15 @@ def execute(args):
         def rank_for_platform(platform, items, slot):
             # Keep a candidate pool so the batch builder can reserve a unique
             # topic for each channel instead of duplicating the first trend.
-            ranked = rank_trends(items, profile, store.used_topics(platform), 20, store.learned_ranking_context(args.profile))
             keywords = topic_keywords_for_slot(platform, slot, profile)
-            return [candidate for candidate in ranked if candidate_matches_topic_keywords(candidate, keywords)]
+            lane_profile = {**profile, "keywords": keywords, "source_weights": {**profile.get("source_weights", {}), "douyin:web_search": 2}}
+            ranked = rank_trends(items, lane_profile, store.used_topics(platform), 20, store.learned_ranking_context(args.profile))
+            return [
+                candidate
+                for candidate in ranked
+                if candidate_matches_topic_keywords(candidate, keywords)
+                and candidate_matches_platform_language(platform, candidate)
+            ]
 
         prepared = build_due_tasks(
             slots,
@@ -574,7 +598,7 @@ def execute(args):
             source_report=report.get("sources", []),
             rank_for_platform=rank_for_platform,
             growth_strategy_status=strategy_status,
-            weekday=args.weekday,
+            weekday=weekday,
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
