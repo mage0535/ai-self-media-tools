@@ -12,6 +12,7 @@ from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 from .content_recipe import build_article_recipe, build_image_text_card_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 from .tool_selection import build_tool_selection_evidence
+from .growth_recipe import build_growth_recipe
 
 
 class DraftGenerator:
@@ -125,6 +126,7 @@ class DraftGenerator:
             "cornerstone_mode": context.get("cornerstone_mode", False),
         }
         self._attach_article_packet_evidence(topic, brief, body, context, draft_meta)
+        self._attach_growth_recipe(brief, context, draft_meta)
         return {
             "title": str(draft["title"]),
             "body": body,
@@ -132,6 +134,58 @@ class DraftGenerator:
             "prompt_version": self.PROMPT_VERSION,
             "draft_meta": draft_meta,
         }
+
+    @staticmethod
+    def _attach_growth_recipe(brief, context, draft_meta):
+        """Persist source and selection evidence without inventing collection success."""
+        strategy = draft_meta.get("strategy") or {}
+        platforms = list(strategy.get("primary_platforms") or brief.get("platforms") or [])
+        platform = str(platforms[0] if platforms else brief.get("platform") or "").casefold()
+        source_matrix = draft_meta.get("platform_source_matrix") or brief.get("platform_source_matrix") or brief.get("source_matrix") or {}
+        if not source_matrix:
+            supplied_sources = [str(item) for item in (brief.get("sources") or []) if str(item).strip()]
+            source_name = str(brief.get("source") or "").strip()
+            source_matrix = {
+                "attempted_sources": [
+                    {"source": source_name or url, "status": "success", "url": url}
+                    for url in supplied_sources
+                ]
+            }
+            if not source_matrix["attempted_sources"] and source_name:
+                source_matrix["attempted_sources"].append({"source": source_name, "status": "success"})
+            if not source_matrix["attempted_sources"]:
+                source_matrix["attempted_sources"].append(
+                    {"source": "generation_input", "status": "unavailable", "error": "no collection evidence supplied"}
+                )
+        score = draft_meta.get("viral_score") or {}
+        dimensions = score.get("dimensions") if isinstance(score, dict) else {}
+        signals = []
+        if float((dimensions or {}).get("utility") or 0) >= 0.5:
+            signals.append("user_benefit")
+        if float((dimensions or {}).get("visual_promise") or 0) >= 0.5:
+            signals.append("result_contrast")
+        if str(draft_meta.get("trend_stage") or "").casefold() in {"emerging", "hot", "viral"}:
+            signals.append("timeliness")
+        topic_decision = dict(brief.get("topic_decision") or {})
+        topic_decision.setdefault("score", float(score.get("total_score") or 0.01) if isinstance(score, dict) else 0.01)
+        topic_decision.setdefault("growth_signals", topic_decision.get("signals") or signals)
+        content_form = str(draft_meta.get("content_form") or strategy.get("content_form") or "article")
+        if not draft_meta.get("tool_selection_plan"):
+            draft_meta.update(build_tool_selection_evidence(
+                platform=platform,
+                content_type=content_form,
+                content_goal="select a platform-matched format and tool stack from verified available capabilities",
+                planned_manifest=draft_meta.get("tool_invocation_manifest") or {},
+            ))
+        draft_meta["growth_recipe"] = build_growth_recipe(
+            platform=platform,
+            content_form=content_form,
+            source_matrix=source_matrix,
+            topic_decision=topic_decision,
+            tool_selection_plan=draft_meta.get("tool_selection_plan"),
+            process_evidence=brief.get("process_evidence") or {},
+            cta=brief.get("cta_evidence") or {},
+        )
 
 
 
@@ -211,7 +265,7 @@ class DraftGenerator:
         if platform in {"juejin", "zhihu", "xiaohongshu", "rednote"}:
             sources = ["account_history", "same_lane_accounts", "bilibili", "wechat", "xiaohongshu", "youtube", "external_hot_platforms"]
             handoff = ["copy_plan", "script_plan", "seo_geo_plan", "topic_tags", "asset_mix_plan", "humanization_plan"]
-            platform_source_matrix = self._platform_source_matrix(platform, sources, topic_text)
+            platform_source_matrix = self._platform_source_matrix(platform, sources, topic_text, {**context, **brief})
             strategy_brief.update({
                 "full_ops_workflow": {"required": True, "platforms": [platform], "cross_platform_sources": sources},
                 "account_analysis": {"source": "pipeline_history", "account_lane": platform, "current_content_data": "latest available performance and queue state", "audience_profile": brief.get("audience") or "builders"},
@@ -364,19 +418,48 @@ class DraftGenerator:
         return "problem-cause-solution"
 
     @staticmethod
-    def _platform_source_matrix(platform, sources, topic):
-        attempted = [
-            {"source": source, "status": "ok", "topic_signal": topic}
-            for source in sources
-        ]
+    def _platform_source_matrix(platform, sources, topic, brief=None):
+        """Preserve collection evidence instead of treating planned sources as collected."""
+        brief = brief or {}
+        supplied = brief.get("platform_source_matrix") or brief.get("source_matrix") or {}
+        raw_attempted = supplied.get("attempted_sources") if isinstance(supplied, dict) else []
+        attempted = []
+        for row in raw_attempted if isinstance(raw_attempted, list) else []:
+            if isinstance(row, str):
+                row = {"source": row}
+            if not isinstance(row, dict) or not str(row.get("source") or "").strip():
+                continue
+            attempted.append({
+                "source": str(row["source"]),
+                "status": str(row.get("status") or "unknown"),
+                "topic_signal": str(row.get("topic_signal") or topic),
+                **({"error": str(row["error"])} if row.get("error") else {}),
+            })
+        if not attempted:
+            attempted = [
+                {
+                    "source": source,
+                    "status": "unavailable",
+                    "topic_signal": topic,
+                    "error": "collection evidence was not supplied to the generation brief",
+                }
+                for source in sources
+            ]
+        successful = [row for row in attempted if row.get("status") == "ok"]
+        platform_aliases = {str(platform).casefold(), "rednote" if platform == "xiaohongshu" else ""}
+        platform_evidence = any(
+            row.get("status") == "ok" and any(alias and alias in str(row.get("source") or "").casefold() for alias in platform_aliases)
+            for row in attempted
+        )
+        internally_verified = bool(supplied.get("platform_internal_verified")) and platform_evidence
         return {
             "platform": platform,
             "attempted_sources": attempted,
-            "successful_source_count": len(attempted),
-            "platform_internal_verified": True,
-            "current_platform_specific_topic": True,
-            "shared_trend_only": False,
-            "report_path": "runtime:strategy_brief.platform_source_matrix",
+            "successful_source_count": len(successful),
+            "platform_internal_verified": internally_verified,
+            "current_platform_specific_topic": platform_evidence,
+            "shared_trend_only": not platform_evidence,
+            "report_path": str(supplied.get("report_path") or "runtime:strategy_brief.platform_source_matrix"),
         }
 
     def _hermes(self, topic, brief, context):

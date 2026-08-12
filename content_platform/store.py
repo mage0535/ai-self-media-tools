@@ -1242,7 +1242,7 @@ class Store:
                 """INSERT INTO delivery_queue(job_id,platform,action,state,payload_json,created_at,updated_at)
                 VALUES(?,?,?,?,?,?,?)
                 ON CONFLICT(job_id,platform,action) DO UPDATE SET
-                state=CASE WHEN delivery_queue.state='completed' THEN delivery_queue.state ELSE 'queued' END,
+                state=CASE WHEN delivery_queue.state IN ('completed', 'handoff_ready') THEN delivery_queue.state ELSE 'queued' END,
                 payload_json=excluded.payload_json,
                 updated_at=excluded.updated_at""",
                 (job_id, platform, action, "queued", json.dumps(payload or {}, ensure_ascii=False), now, now),
@@ -1280,7 +1280,7 @@ class Store:
             return result
 
     def complete_delivery(self, queue_id, owner, state, error=""):
-        if state not in {"completed", "failed", "queued"}:
+        if state not in {"completed", "failed", "queued", "handoff_ready"}:
             raise ValueError("invalid delivery queue state")
         with self.connect() as conn:
             cursor = conn.execute(

@@ -108,9 +108,17 @@ class MediaBridge:
             title = job.get("title", job.get("topic", ""))
             draft_meta = job.get("draft_meta", {})
 
-            # Pick theme from config or auto-detect from content form
+            # Route only through renderer-backed themes; never activate an
+            # unverified template simply because it exists in a skill folder.
             cfg = self.config.get("wechat_format", {})
-            theme = cfg.get("default_theme", "摸鱼绿")
+            from .theme_registry import resolve_wechat_theme, select_theme
+            selection = select_theme(
+                "wechat",
+                title + " " + body,
+                str(draft_meta.get("content_form") or "article"),
+                draft_meta.get("recent_theme_ids") or [],
+            )
+            theme = cfg.get("default_theme") or resolve_wechat_theme(selection)
 
             result = format_for_wechat(
                 markdown=f"# {title}\n\n{body}",
@@ -126,6 +134,7 @@ class MediaBridge:
                 "html": result["html"],
                 "html_path": result.get("html_path", ""),
                 "theme": result.get("theme", theme),
+                "theme_selection": selection,
                 "validated": result.get("validation", {}).get("ok", False),
             }
         except ImportError:
@@ -457,6 +466,13 @@ class MediaBridge:
             raise RuntimeError("required video shotcraft_motion_plan missing or incomplete")
         if not (manifest.get("cinema_visual_gate") or {}).get("passed"):
             raise RuntimeError("required video cinema visual gate did not pass")
+        motion_evidence = manifest.get("motion_evidence") or {}
+        if not motion_evidence.get("passed") or int(motion_evidence.get("unique_frame_count") or 0) < 2:
+            raise RuntimeError("required video final motion evidence is missing or insufficient")
+        segment_motion = manifest.get("segment_motion_evidence") or {}
+        segments = segment_motion.get("segments") if isinstance(segment_motion, dict) else []
+        if len(segments) < 3 or any(not row.get("move_id") or not row.get("profile") for row in segments if isinstance(row, dict)):
+            raise RuntimeError("required video Shotcraft segment render evidence is missing or incomplete")
         output = Path(str(manifest.get("output") or ""))
         if not output.is_file() or output_dir not in output.parents:
             raise RuntimeError("required video manifest output is missing or outside output_dir")

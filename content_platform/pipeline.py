@@ -31,6 +31,7 @@ from .publishers import build_publisher
 from .resource import ResourceGuard
 from .review import ReviewTokens
 from .risk import RiskFilter, redact_secrets
+from .growth_recipe import validate_growth_recipe
 from .seo import geo_check
 from .wechat_toolchain import prepare_wechat_professional_draft, requires_wechat_toolchain
 from .workflow_runtime import (
@@ -385,7 +386,7 @@ class Pipeline:
                     runner.succeeded("generate_platform_report", report, depends_on=["publish_or_create_draft"])
                     self._send_platform_report(job, platform, report)
                     runner.succeeded("send_completion_report", {"report_path": report["path"]}, depends_on=["generate_platform_report"])
-                    self.store.complete_delivery(item["id"], owner, "completed")
+                    self.store.complete_delivery(item["id"], owner, "handoff_ready" if prior["status"] == "handoff_pending" else "completed")
                     processed += 1
                     continue
                 delivery_job = dict(job)
@@ -426,7 +427,12 @@ class Pipeline:
                     self._save_delivery_result(item["job_id"], platform, result)
                     runner.succeeded("verify_publish_result", {"status": result.status, "requires_postcheck": result.status in {"drafted", "handoff_pending"}}, depends_on=["publish_or_create_draft"])
                     runner.succeeded("record_publish_receipt", {"status": result.status}, depends_on=["verify_publish_result"])
-                    queue_state = "completed" if result.ok or result.status in {"blocked", "drafted", "published", "handoff_pending"} else "queued"
+                    if result.status == "handoff_pending":
+                        queue_state = "handoff_ready"
+                    elif result.ok or result.status in {"blocked", "drafted", "published"}:
+                        queue_state = "completed"
+                    else:
+                        queue_state = "queued"
                     report_status = "published" if result.status == "published" else ("blocked" if result.status == "blocked" else "partial")
                     report = write_platform_report(self.store, self.data_dir, f"wf_{item['job_id']}", job, platform, report_status, result.__dict__, result.error)
                     runner.succeeded("generate_platform_report", report, depends_on=["record_publish_receipt"])
@@ -674,6 +680,8 @@ class Pipeline:
         platforms = dm.get("strategy", {}).get("primary_platforms", [])
         g5 = len(platforms) > 0
         gate["gates"]["G5_format"] = {"passed": g5, "platforms": platforms}
+        growth = validate_growth_recipe(dm.get("growth_recipe"))
+        gate["gates"]["G7_growth_recipe"] = growth
         platform_quality = self._generation_platform_quality_gate(job_id, draft, list(platforms))
         if platform_quality:
             gate["gates"]["G6_platform_quality"] = platform_quality

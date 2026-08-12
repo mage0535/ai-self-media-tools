@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .tool_catalog import catalog_snapshot
+
 
 ARTICLE_TOOL_GROUPS = {
     "ops_strategy",
@@ -81,6 +83,7 @@ def build_tools_capability_analysis(
         "candidate_tool_count": candidate_count,
         "selection_policy": "choose the combination that best fits platform, topic, audience, assets, quality gates, free availability, and reliability; do not use default-only paths",
         "all_relevant_tool_types_analyzed": True,
+        "tool_catalog": catalog_snapshot(),
     }
 
 

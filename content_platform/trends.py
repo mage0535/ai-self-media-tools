@@ -2,6 +2,7 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -177,6 +178,9 @@ class TrendCollector:
             "zhihu": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:zhihu.com"},
             "douyin": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891 \u6296\u97f3"},
             "wewrite_hotspots": {"enabled": False, "limit": 20, "timeout": 8},
+            # Optional local adapter. It is never treated as a publisher and is
+            # disabled until an operator explicitly configures the command.
+            "agent_reach": {"enabled": False, "limit": 20, "timeout": 20},
         }
         if isinstance(configured, dict):
             for name, value in configured.items():
@@ -283,6 +287,8 @@ class DirectTrendSource:
             return self._web_search_source("douyin", "AI 工具 效率 短视频 抖音")
         if self.name == "wewrite_hotspots":
             return self._wewrite_hotspots()
+        if self.name == "agent_reach":
+            return self._agent_reach()
         raise ValueError(f"unknown direct trend source: {self.name}")
 
     def _request_json(self, url, headers=None):
@@ -342,6 +348,51 @@ class DirectTrendSource:
                 "title": title,
                 "source": row.get("source", "wewrite_hotspots"),
                 "url": row.get("url", ""),
+                "points": int(row.get("points") or row.get("score") or row.get("heat") or 0),
+            })
+        return items
+
+    def _agent_reach(self):
+        """Read Agent-Reach trend output through an explicit local command.
+
+        Agent-Reach is a collection fallback only. A missing binary or invalid
+        output fails the source and remains visible in the trend report.
+        """
+        command = self.config.get("command") or self.config.get("agent_reach_command")
+        if isinstance(command, str):
+            command = shlex.split(command)
+        if not isinstance(command, list) or not command:
+            raise RuntimeError("agent_reach command is not configured")
+        proc = subprocess.run(
+            [str(part) for part in command],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=self.timeout,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stderr or proc.stdout or "agent_reach command failed")[:240])
+        try:
+            payload = json.loads(proc.stdout or "[]")
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"agent_reach returned invalid JSON: {exc.msg}") from exc
+        rows = payload if isinstance(payload, list) else payload.get("items", payload.get("results", []))
+        items = []
+        for row in rows[: self.limit]:
+            if isinstance(row, str):
+                row = {"title": row}
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or row.get("topic") or row.get("name") or "").strip()
+            if not title:
+                continue
+            items.append({
+                **row,
+                "title": title,
+                "source": str(row.get("source") or "agent_reach"),
+                "url": str(row.get("url") or ""),
                 "points": int(row.get("points") or row.get("score") or row.get("heat") or 0),
             })
         return items

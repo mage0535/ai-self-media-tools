@@ -35,6 +35,10 @@ try:
 except ModuleNotFoundError:
     Image = None
     ImageStat = None
+try:
+    from scripts.shotcraft_moves import SHOT_CARD_REGISTRY
+except Exception:
+    SHOT_CARD_REGISTRY = {}
 
 # ── TTS voices (轮换) ──
 TTS_VOICES = ["zh-CN-YunxiNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-YunjianNeural"]
@@ -226,9 +230,34 @@ def _bg_is_light(bg_hex):
         return False
 
 
-def build_card_html(card, idx, bg_b64, gh_b64, t):
+def _shotcraft_css(card):
+    """Inject the selected Shotcraft recipe into the rendered card."""
+    shot = card.get("shotcraft") or {}
+    name = str(shot.get("name") or "").strip()
+    meta = SHOT_CARD_REGISTRY.get(name) if name else None
+    if not meta:
+        return "", ""
+    keyframes = meta.get("keyframes") or {}
+    css_parts = []
+    for frame_name, frames in keyframes.items():
+        css_parts.append(f"@keyframes {frame_name} {{")
+        for frame in frames:
+            offset = float(frame.get("offset", 0)) * 100
+            props = "; ".join(f"{k}: {v}" for k, v in frame.items() if k != "offset")
+            css_parts.append(f"{offset:.0f}% {{{props}}}")
+        css_parts.append("}")
+    selectors = meta.get("css") or {}
+    for selector, rules in selectors.items():
+        css_parts.append(f"{selector} {{" + "; ".join(f"{k}: {v}" for k, v in rules.items()) + "}")
+    return "\n".join(css_parts), name
+
+
+def build_card_html(card, idx, bg_b64, gh_b64, t, motion_plan=None):
     """Card HTML with charset + base64 bg + theme colors. All templates verified fixed 2026-07-24."""
     css = card.get("css") or {}
+    motion_css, motion_name = _shotcraft_css({**card, "shotcraft": motion_plan or card.get("shotcraft")})
+    motion_style = f"<style>{motion_css}</style>" if motion_css else ""
+    motion_attr = f' data-shotcraft="{motion_name}"' if motion_name else ""
     if css:
         t = {
             **t,
@@ -260,11 +289,11 @@ def build_card_html(card, idx, bg_b64, gh_b64, t):
     if l == "cover":
         # 钩子模式 vs 项目封面模式（2026-07-26 新增）
         if card.get("hook"):
-            return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;text-align:center;padding:60px">
+            return f'''<!DOCTYPE html><html><head><meta charset="utf-8">{motion_style}</head><body{motion_attr} style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;text-align:center;padding:60px">
 <div style="font-size:20px;opacity:0.6;margin-bottom:20px;color:{t['accent']};letter-spacing:2px">{card.get('hook_prefix','你是否也有这个问题？')}</div>
 <h1 style="font-size:46px;font-weight:900;margin-bottom:18px;line-height:1.3;color:#fff;text-shadow:0 0 20px {t['accent']}40">{card.get('hook','')}</h1>
 <div style="font-size:22px;opacity:0.85;line-height:1.5;color:{t['text']}">{card.get('sub','')}</div></body></html>'''
-        return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;text-align:center;padding:60px">
+        return f'''<!DOCTYPE html><html><head><meta charset="utf-8">{motion_style}</head><body{motion_attr} style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;text-align:center;padding:60px">
 <div style="background:{t['badge_bg']};border:1px solid {t['accent']}40;border-radius:20px;padding:6px 22px;font-size:14px;margin-bottom:32px;color:{t['accent']};letter-spacing:1px">✦ {card.get('theme_label','GitHub')}</div>
 <h1 style="font-size:56px;font-weight:900;margin-bottom:16px;letter-spacing:2px;color:#fff;text-shadow:0 0 30px {t['accent']}60">{card.get('t','')}</h1>
 <div style="font-size:28px;font-weight:600;opacity:0.95;line-height:1.4;margin-bottom:40px;color:rgba(255,255,255,0.9)">{card.get('sub','').replace(chr(10),'<br>')}</div>
@@ -440,7 +469,12 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
 
     for i, card, checkpoint_inputs in pending:
         idx = i + 1
-        html = build_card_html(card, idx, bg_b64s[i], gh_b64, theme_v)
+        html = build_card_html(card, idx, bg_b64s[i], gh_b64, theme_v, card.get("shotcraft"))
+        motion_css, motion_name = _shotcraft_css(card)
+        if motion_css and "</head>" in html:
+            html = html.replace("</head>", f"<style>{motion_css}</style></head>", 1)
+        if motion_name and "<body" in html:
+            html = html.replace("<body", f'<body data-shotcraft="{motion_name}"', 1)
         html_path = Path(video_dir) / f"card_{idx:02d}.html"
         png_path = out_dir / f"card_{idx:02d}.png"
         bg_path = out_dir / f"card_{idx:02d}_bg.png"
@@ -480,8 +514,32 @@ async def render_cards(video_dir, cards, theme_v, bg_dir, gh_repo):
     return result
 
 
-def _background_layer_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25) -> str:
-    mode = index % 4
+def _shotcraft_motion_profile(shotcraft) -> str:
+    """Map a selected Shotcraft move to a safe FFmpeg motion profile."""
+    name = str((shotcraft or {}).get("name") or "").casefold()
+    if any(token in name for token in ("hero", "crane", "tilt", "dolly", "zoom", "reveal")):
+        return "hero_reveal"
+    if any(token in name for token in ("timeline", "chart", "odometer", "before-after", "data")):
+        return "data_pan"
+    if any(token in name for token in ("type", "text", "marker", "split-flap", "underline")):
+        return "type_focus"
+    if any(token in name for token in ("glide", "space", "fly", "wipe", "page", "card-flip")):
+        return "lateral_move"
+    return "gentle_focus"
+
+
+def _background_layer_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25, shotcraft=None) -> str:
+    profile = _shotcraft_motion_profile(shotcraft)
+    if profile == "hero_reveal":
+        mode = 0
+    elif profile == "data_pan":
+        mode = 2
+    elif profile == "type_focus":
+        mode = 1
+    elif profile == "lateral_move":
+        mode = 3
+    else:
+        mode = index % 4
     if mode == 0:
         zexpr = f"z='min(1.0+0.30*on/{total_frames},1.45)'"
         xexpr, yexpr = "x='iw/2-iw/zoom/2'", "y='ih/2-ih/zoom/2'"
@@ -501,14 +559,20 @@ def _background_layer_filter(width: int, height: int, total_frames: int, index: 
     )
 
 
-def _text_layer_filter(width: int, height: int, total_frames: int, index: int) -> str:
+def _text_layer_filter(width: int, height: int, total_frames: int, index: int, shotcraft=None) -> str:
     """Return distinct RGBA-safe text-layer motion filters for each card."""
     base = (
         f"format=rgba,scale={width}:{height}:force_original_aspect_ratio=decrease,"
         f"format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
     )
     hold = max(total_frames, 1)
-    mode = index % 4
+    profile = _shotcraft_motion_profile(shotcraft)
+    mode = {
+        "hero_reveal": 0,
+        "data_pan": 2,
+        "type_focus": 1,
+        "lateral_move": 3,
+    }.get(profile, index % 4)
     if mode == 0:
         return base + "fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
     if mode == 1:
@@ -518,10 +582,11 @@ def _text_layer_filter(width: int, height: int, total_frames: int, index: int) -
     return base + f"crop={width}:{height}:x='max(0, 24-n*24/{hold})':y=0,fade=in:st=0:d=0.6:alpha=1,setpts=PTS-STARTPTS"
 
 
-def _layered_segment_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25) -> str:
-    bg_vf = _background_layer_filter(width, height, total_frames, index, fps=fps)
-    text_vf = _text_layer_filter(width, height, total_frames, index)
-    motion_mode = index % 3
+def _layered_segment_filter(width: int, height: int, total_frames: int, index: int, fps: int = 25, shotcraft=None) -> str:
+    bg_vf = _background_layer_filter(width, height, total_frames, index, fps=fps, shotcraft=shotcraft)
+    text_vf = _text_layer_filter(width, height, total_frames, index, shotcraft=shotcraft)
+    profile = _shotcraft_motion_profile(shotcraft)
+    motion_mode = {"hero_reveal": 0, "data_pan": 1, "type_focus": 2, "lateral_move": 1}.get(profile, index % 3)
     if motion_mode == 0:
         ox, oy = "8*sin(n/24)", "5*cos(n/30)"
     elif motion_mode == 1:
@@ -545,6 +610,7 @@ def _segment_checkpoint_inputs(video_dir, card, index, width, height):
         "width": width,
         "height": height,
         "card": card,
+        "shotcraft_profile": _shotcraft_motion_profile(card.get("shotcraft")),
         "sources": fingerprint_paths(card_sources),
         "renderer_source": fingerprint_paths([Path(__file__)]),
     }
@@ -596,6 +662,7 @@ def render_segments(video_dir, cards, width=1080, height=1920):
     seg_dir.mkdir(exist_ok=True)
     rendered = 0
     reused = 0
+    motion_segments = []
 
     for i in range(len(cards)):
         idx = i + 1
@@ -604,10 +671,13 @@ def render_segments(video_dir, cards, width=1080, height=1920):
         seg_mp4 = seg_dir / f"seg_{idx:02d}.mp4"
 
         checkpoint_inputs = _segment_checkpoint_inputs(video_dir, cards[i], idx, width, height)
+        shotcraft = cards[i].get("shotcraft") or {}
+        profile = _shotcraft_motion_profile(shotcraft)
         checkpoint = stage_current_or_adopt(Path(video_dir), f"segment_{idx:02d}", checkpoint_inputs, [seg_mp4])
         if checkpoint.get("current"):
             print(f"  seg_{idx:02d}.mp4 reused ({checkpoint.get('reason')})")
             reused += 1
+            motion_segments.append({"index": idx, "move_id": str(shotcraft.get("name") or ""), "profile": profile, "rendered": False, "reused": True})
             continue
 
         dur_r = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(tts_mp3)],capture_output=True,text=True)
@@ -621,7 +691,7 @@ def render_segments(video_dir, cards, width=1080, height=1920):
             subprocess.run(["ffmpeg","-y","-loop","1","-i",str(bg_png),
                 "-loop","1","-i",str(text_png),
                 "-i",str(tts_mp3),
-                "-filter_complex", _layered_segment_filter(width, height, total_frames, i, fps=fps),
+                "-filter_complex", _layered_segment_filter(width, height, total_frames, i, fps=fps, shotcraft=shotcraft),
                 "-map","[v]","-map","2:a",
                 "-c:v","libx264","-t",str(dur),"-preset","ultrafast","-crf","28",
                 "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
@@ -629,6 +699,7 @@ def render_segments(video_dir, cards, width=1080, height=1920):
             assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
             mark_complete(Path(video_dir), f"segment_{idx:02d}", checkpoint_inputs, [seg_mp4])
             rendered += 1
+            motion_segments.append({"index": idx, "move_id": str(shotcraft.get("name") or ""), "profile": profile, "rendered": True, "reused": False, "renderer": "layered_ffmpeg"})
             sz = os.path.getsize(str(seg_mp4))
             print(f"  鉁?seg_{idx:02d}.mp4 ({sz//1024}KB, layered)")
             continue
@@ -660,13 +731,20 @@ def render_segments(video_dir, cards, width=1080, height=1920):
         assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
         mark_complete(Path(video_dir), f"segment_{idx:02d}", checkpoint_inputs, [seg_mp4])
         rendered += 1
+        motion_segments.append({"index": idx, "move_id": str(shotcraft.get("name") or ""), "profile": profile, "rendered": True, "reused": False, "renderer": "single_layer_ffmpeg"})
         sz = os.path.getsize(str(seg_mp4))
         print(f"  ✅ seg_{idx:02d}.mp4 ({sz//1024}KB)")
 
     (Path(video_dir) / "segments.done").write_text("ok")
+    (Path(video_dir) / "segment_motion_evidence.json").write_text(
+        json.dumps({"version": "shotcraft_render_evidence_v1", "segments": motion_segments}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     print(f"  ✅ 段渲染完成 ({len(cards)}段, 串行)")
 
 
+    # Keep the historical return contract; per-segment evidence is persisted in
+    # segment_motion_evidence.json for the final manifest and audit path.
     return {"rendered": rendered, "reused": reused}
 
 
