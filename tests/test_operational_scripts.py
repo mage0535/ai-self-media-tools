@@ -246,6 +246,12 @@ shared_trend_only: false
         self.assertLess(text.index("smoke_provider.sh"), text.index("performance-cycle"))
         self.assertIn("provider_preflight_failed", text)
 
+    def test_overnight_script_reports_non_admitted_capacity_without_claiming_completion(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn("capacity_blocked|blocked", text)
+        self.assertIn("batch_not_admitted_", text)
+
     def test_overnight_systemd_service_sets_home_and_private_notification_environment(self):
         text = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
 

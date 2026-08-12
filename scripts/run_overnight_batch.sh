@@ -71,6 +71,10 @@ case "$batch_status" in
   partial)
     notify "partial" "batch_has_expected_blocked_tasks"
     ;;
+  capacity_blocked|blocked)
+    notify "failed" "batch_not_admitted_${batch_status}"
+    exit 1
+    ;;
   *)
     failed_count="$(python3 - "$out/result.json" <<'PY'
 import json
@@ -80,7 +84,7 @@ payload = json.load(open(sys.argv[1], encoding="utf-8"))
 print(sum(1 for task in payload.get("tasks", []) if task.get("state") == "failed"))
 PY
 )"
-    notify "failed" "${failed_count}_tasks_failed"
+    notify "failed" "${failed_count}_tasks_failed_${batch_status}"
     exit 1
     ;;
 esac
