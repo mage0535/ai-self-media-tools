@@ -3147,3 +3147,17 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 ## Verification
 - Regression tests cover fallback activation, retained WeWrite behavior, fallback evidence acceptance, and missing-evidence blocking.
 - Deployment validation must use draft generation only; it must not upload or publish while verifying the fallback.
+
+# 2026-08-13 - Fallback-Test And Private-Env Audit Alignment
+
+## Finding
+- A legacy no-writer regression inherited the production `HERMES_WECHAT_WRITER_FALLBACK` environment variable, so it exercised the successful fallback path instead of its intended no-fallback block.
+- The public repository audit treated an ignored, owner-only runtime `.env.local` as an active public-tree file because it did not consult Git ignore rules.
+
+## Implemented
+- The no-writer regression now explicitly disables `hermes_writer_fallback`, preserving the original fail-closed assertion regardless of the process environment.
+- Repository audit recognizes a runtime `.env` or `.env.*` file only when all conditions hold: it is Git-ignored, owner-only on POSIX, and never scanned for content. Any unignored or group/world-readable env file remains a blocking audit finding.
+
+## Verification
+- Added positive and negative audit tests for secure ignored runtime env files.
+- Production validation: `708 passed, 29 subtests passed`; project audit reports `ok: true`.
