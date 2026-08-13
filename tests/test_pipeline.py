@@ -208,7 +208,12 @@ class PipelineTests(unittest.TestCase):
                 "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
                 "publishers": {"default": {"type": "file"}},
                 "feature_flags": {"channel_auto_workflow_gate": "enforce"},
-                "wechat_toolchain": {"wewrite_bin": str(Path(self.tmp.name) / "missing_wewrite")},
+                "wechat_toolchain": {
+                    "wewrite_bin": str(Path(self.tmp.name) / "missing_wewrite"),
+                    # The production service enables Hermes fallback. This
+                    # regression specifically verifies the no-fallback block.
+                    "hermes_writer_fallback": False,
+                },
                 "notifications": {"log_path": str(Path(self.tmp.name) / "notifications.jsonl")},
             },
         )

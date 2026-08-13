@@ -1,6 +1,9 @@
 import unittest
 import tempfile
 from pathlib import Path
+import os
+import subprocess
+from unittest.mock import patch
 
 from content_platform.project_audit import audit_project
 
@@ -43,6 +46,33 @@ class ProjectAuditTests(unittest.TestCase):
             package = root / "content_platform"
             package.mkdir()
             (package / "publishers.py.bak.v3").write_text("legacy publisher copy", encoding="utf-8")
+
+            result = audit_project(root)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["issues"][0]["reason"], "forbidden_filename_pattern")
+
+    def test_ignores_secure_gitignored_runtime_env_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / ".gitignore").write_text(".env.*\n", encoding="utf-8")
+            runtime_env = root / ".env.local"
+            runtime_env.write_text("WRITER_API_KEY=private-value", encoding="utf-8")
+            os.chmod(runtime_env, 0o600)
+
+            with patch("content_platform.project_audit._owner_only_permissions", return_value=True):
+                result = audit_project(root)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["issues"], [])
+
+    def test_flags_env_file_when_not_gitignored_or_not_private(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime_env = root / ".env.local"
+            runtime_env.write_text("WRITER_API_KEY=private-value", encoding="utf-8")
+            os.chmod(runtime_env, 0o644)
 
             result = audit_project(root)
 
