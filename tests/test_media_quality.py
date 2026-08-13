@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from content_platform.media_quality import (
+    _platform_source_matrix_gate,
     validate_article_packet,
     validate_delivery_result,
     validate_douyin_tiktok_repost_packet,
@@ -1491,6 +1492,27 @@ def test_xiaohongshu_auto_packet_rejects_shared_trend_only_source_matrix():
 
     assert result["passed"] is False
     assert "platform_independent_source_matrix" in result["failed_dimensions"]
+
+
+def test_platform_source_gate_accepts_fresh_platform_strategy_evidence():
+    matrix = {
+        "platform": "twitter",
+        "attempted_sources": [
+            {"source": "hackernews", "status": "ok"},
+            {"source": "zhihu", "status": "ok"},
+            {"source": "bilibili", "status": "ok"},
+            {"source": "wewrite_hotspots", "status": "ok"},
+            {"source": "twitter:fresh_growth_strategy", "status": "ok"},
+        ],
+        "successful_source_count": 5,
+        "platform_internal_verified": True,
+        "current_platform_specific_topic": False,
+        "platform_strategy_verified": True,
+        "shared_trend_only": False,
+        "report_path": "runtime:trend_snapshot",
+    }
+
+    assert _platform_source_matrix_gate(matrix, "twitter")["passed"] is True
 
 
 def test_pre_onboarding_article_platforms_use_explicit_article_gate():

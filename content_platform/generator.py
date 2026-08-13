@@ -449,6 +449,7 @@ class DraftGenerator:
                 "source": str(row["source"]),
                 "status": str(row.get("status") or "unknown"),
                 "topic_signal": str(row.get("topic_signal") or topic),
+                **({"evidence_kind": str(row["evidence_kind"])} if row.get("evidence_kind") else {}),
                 **({"error": str(row["error"])} if row.get("error") else {}),
             })
         if not attempted:
@@ -463,18 +464,26 @@ class DraftGenerator:
             ]
         successful = [row for row in attempted if row.get("status") == "ok"]
         platform_aliases = {str(platform).casefold(), "rednote" if platform == "xiaohongshu" else ""}
-        platform_evidence = any(
-            row.get("status") == "ok" and any(alias and alias in str(row.get("source") or "").casefold() for alias in platform_aliases)
+        strategy_evidence = any(
+            row.get("status") == "ok" and str(row.get("evidence_kind") or "") == "fresh_account_performance_strategy"
             for row in attempted
         )
-        internally_verified = bool(supplied.get("platform_internal_verified")) and platform_evidence
+        platform_evidence = any(
+            row.get("status") == "ok"
+            and str(row.get("evidence_kind") or "") != "fresh_account_performance_strategy"
+            and any(alias and alias in str(row.get("source") or "").casefold() for alias in platform_aliases)
+            for row in attempted
+        )
+        strategy_verified = bool(supplied.get("platform_strategy_verified")) and strategy_evidence
+        internally_verified = bool(supplied.get("platform_internal_verified")) and (platform_evidence or strategy_verified)
         return {
             "platform": platform,
             "attempted_sources": attempted,
             "successful_source_count": len(successful),
             "platform_internal_verified": internally_verified,
             "current_platform_specific_topic": platform_evidence,
-            "shared_trend_only": not platform_evidence,
+            "platform_strategy_verified": strategy_verified,
+            "shared_trend_only": not internally_verified,
             "report_path": str(supplied.get("report_path") or "runtime:strategy_brief.platform_source_matrix"),
         }
 

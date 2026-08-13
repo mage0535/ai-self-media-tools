@@ -74,6 +74,31 @@ def test_platform_matrix_preserves_failures_and_platform_reason():
     assert matrix["attempted_sources"][2]["status"] == "failed"
 
 
+def test_platform_matrix_uses_fresh_account_strategy_as_explicit_platform_evidence():
+    snapshot = {
+        "items": [{"title": "Agent workflow guide", "source": "hackernews", "points": 16}],
+        "sources": [
+            {"source": "hackernews", "status": "ok", "count": 1},
+            {"source": "zhihu", "status": "ok", "count": 1},
+            {"source": "bilibili", "status": "ok", "count": 1},
+        ],
+    }
+
+    matrix = build_platform_matrix(
+        "twitter",
+        snapshot,
+        snapshot["items"][0],
+        platform_keywords=["agent", "workflow"],
+        strategy_status={"status": "ok", "key": "growth_strategy:twitter:latest", "age_hours": 0.2},
+    )
+
+    assert matrix["platform_internal_verified"] is True
+    assert matrix["platform_strategy_verified"] is True
+    assert matrix["current_platform_specific_topic"] is False
+    assert matrix["shared_trend_only"] is False
+    assert any(row["source"] == "twitter:fresh_growth_strategy" and row["status"] == "ok" for row in matrix["attempted_sources"])
+
+
 def test_calibrate_candidates_rewards_proven_history_without_hiding_missing_history():
     ranked = calibrate_candidates(
         [
@@ -145,6 +170,6 @@ def test_overnight_prepare_uses_snapshot_and_platform_specific_matrix(tmp_path, 
     matrix = prepared["tasks"][0]["brief"]["platform_source_matrix"]
     assert matrix["platform"] == "zhihu"
     assert matrix["platform_internal_verified"] is True
-    assert matrix["sources_succeeded"] == 5
+    assert matrix["sources_succeeded"] == 6
     assert matrix["platform_fit_reason"]
     assert "trend_snapshot_" in matrix["report_path"]
