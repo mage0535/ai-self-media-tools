@@ -147,6 +147,10 @@ def parser():
     overnight_run.add_argument("--plan", required=True, help="JSON plan created by overnight-plan")
     overnight_run.add_argument("--state", required=True, help="Persistent batch state path")
     overnight_run.add_argument("--events", required=True, help="Append-only JSONL event path")
+    overnight_acceptance = sub.add_parser("overnight-acceptance", help="Validate overnight result and real artifacts")
+    overnight_acceptance.add_argument("--result", required=True, help="Batch result JSON path")
+    overnight_acceptance.add_argument("--state", required=True, help="Persistent batch state JSON path")
+    overnight_acceptance.add_argument("--output", required=True, help="Acceptance report JSON path")
     review_token = sub.add_parser("review-token")
     review_token.add_argument("job_id")
     review_token.add_argument("--action", choices=["approve", "reject"], required=True)
@@ -625,6 +629,15 @@ def execute(args):
         from .overnight_batch import BatchEventJournal, execute_batch
         plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
         return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events))
+    if args.command == "overnight-acceptance":
+        from .overnight_acceptance import validate_overnight_result
+        report = validate_overnight_result(args.result, args.state)
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if not report["passed"]:
+            raise ValueError(json.dumps(report, ensure_ascii=False))
+        return report
     if args.command in {"trends", "auto"}:
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
