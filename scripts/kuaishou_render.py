@@ -56,6 +56,8 @@ SUBTITLE_MAX_CHARS_PER_LINE = 16
 SUBTITLE_MAX_LINES = 2
 REAL_BGM_MIN_BYTES = 500_000
 ONLINE_BGM_TIMEOUT = 20
+DEFAULT_BGM_RESOLUTION_MAX_SECONDS = 90
+_ACTIVE_BGM_DEADLINE = None
 REAL_INSTRUMENT_TERMS = {
     "acoustic",
     "piano",
@@ -762,6 +764,7 @@ def concat_video(video_dir, cards):
 
 def download_bgm(video_dir, style="acoustic guitar"):
     """Resolve a fresh online real-instrument BGM for the current render only."""
+    global _ACTIVE_BGM_DEADLINE
     bgm = Path(video_dir) / "bgm.mp3"
     source_meta = Path(video_dir) / "bgm_source.json"
     if bgm.exists() and source_meta.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
@@ -770,19 +773,31 @@ def download_bgm(video_dir, style="acoustic guitar"):
         if stale.exists():
             stale.unlink()
 
+    budget = max(1, int(os.environ.get("BGM_RESOLUTION_MAX_SECONDS", str(DEFAULT_BGM_RESOLUTION_MAX_SECONDS))))
+    previous_deadline = _ACTIVE_BGM_DEADLINE
+    _ACTIVE_BGM_DEADLINE = time.monotonic() + budget
     errors = []
-    for candidate in _online_bgm_candidates(style):
-        if not _bgm_candidate_allowed(candidate):
-            continue
-        try:
-            _download_candidate_bgm(candidate, bgm)
-            if bgm.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
-                _write_bgm_source(video_dir, candidate, style)
-                return str(bgm)
-        except Exception as exc:  # noqa: BLE001 - try next licensed source.
-            errors.append(f"{candidate.get('provider')}:{str(exc)[:120]}")
-            if bgm.exists():
-                bgm.unlink()
+    timed_out = False
+    try:
+        for candidate in _online_bgm_candidates(style):
+            if _bgm_deadline_reached():
+                timed_out = True
+                break
+            if not _bgm_candidate_allowed(candidate):
+                continue
+            try:
+                _download_candidate_bgm(candidate, bgm)
+                if bgm.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
+                    _write_bgm_source(video_dir, candidate, style)
+                    return str(bgm)
+            except Exception as exc:  # noqa: BLE001 - try next licensed source.
+                errors.append(f"{candidate.get('provider')}:{str(exc)[:120]}")
+                if bgm.exists():
+                    bgm.unlink()
+    finally:
+        _ACTIVE_BGM_DEADLINE = previous_deadline
+    if timed_out:
+        raise RuntimeError("online real-instrument BGM resolution budget exhausted")
     raise RuntimeError(
         "online real-instrument BGM unavailable; checked network music providers; "
         + ("; ".join(errors[-5:]) if errors else "no licensed real-instrument candidates")
@@ -884,10 +899,23 @@ def _online_bgm_candidates(style):
     ]
     for query in _bgm_queries(style):
         for provider in providers:
+            if _bgm_deadline_reached():
+                return
             try:
                 yield from provider(query)
             except Exception:
                 continue
+
+
+def _bgm_deadline_reached():
+    return _ACTIVE_BGM_DEADLINE is not None and time.monotonic() >= _ACTIVE_BGM_DEADLINE
+
+
+def _bgm_request_timeout(timeout=ONLINE_BGM_TIMEOUT):
+    if _ACTIVE_BGM_DEADLINE is None:
+        return timeout
+    remaining = _ACTIVE_BGM_DEADLINE - time.monotonic()
+    return max(0.1, min(float(timeout), remaining))
 
 
 def _request_json(url, headers=None, timeout=ONLINE_BGM_TIMEOUT):
@@ -899,13 +927,13 @@ def _request_json(url, headers=None, timeout=ONLINE_BGM_TIMEOUT):
             **(headers or {}),
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=_bgm_request_timeout(timeout)) as response:
         return json.loads(response.read())
 
 
 def _request_text(url, timeout=ONLINE_BGM_TIMEOUT):
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools online-bgm-resolver"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=_bgm_request_timeout(timeout)) as response:
         return response.read().decode("utf-8", errors="ignore")
 
 
@@ -1228,7 +1256,7 @@ def _download_candidate_bgm(candidate, bgm):
     url = str(candidate.get("download_url") or "")
     tmp = Path(str(bgm) + ".download")
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools online-bgm-resolver"})
-    with urllib.request.urlopen(request, timeout=ONLINE_BGM_TIMEOUT) as response:
+    with urllib.request.urlopen(request, timeout=_bgm_request_timeout(ONLINE_BGM_TIMEOUT)) as response:
         tmp.write_bytes(response.read())
     if tmp.stat().st_size <= REAL_BGM_MIN_BYTES:
         tmp.unlink(missing_ok=True)
