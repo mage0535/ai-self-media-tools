@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -37,17 +38,41 @@ def _probe_video(video: Path) -> dict:
     }
 
 
+def _motion_probe(video: Path) -> dict:
+    probe = _probe_video(video)
+    duration = float(probe.get("duration_seconds") or 0)
+    if duration <= 0:
+        return {"passed": False, "reason": "duration unavailable", "frames": []}
+    offsets = sorted({0.25, round(duration / 2, 3), max(0.25, round(duration - 0.25, 3))})
+    frames = []
+    for offset in offsets:
+        rendered = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(offset), "-i", str(video), "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        data = rendered.stdout or b""
+        frames.append({"offset": offset, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+    unique = len({item["sha256"] for item in frames if item["bytes"]})
+    return {"passed": unique >= 2, "frames": frames, "unique_frame_count": unique}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", required=True)
     parser.add_argument("--scene-manifest", required=True)
     parser.add_argument("--bgm-source", required=True)
+    parser.add_argument("--motion-evidence", default="")
+    parser.add_argument("--subtitle-evidence", default="")
     parser.add_argument("--output", default="")
     args = parser.parse_args()
     video = Path(args.video)
     scene_manifest = json.loads(Path(args.scene_manifest).read_text(encoding="utf-8-sig"))
     bgm_source = json.loads(Path(args.bgm_source).read_text(encoding="utf-8-sig"))
-    result = validate_cinema_delivery(scene_manifest, _probe_video(video), bgm_source)
+    motion_evidence = json.loads(Path(args.motion_evidence).read_text(encoding="utf-8-sig")) if args.motion_evidence else _motion_probe(video)
+    subtitle_evidence = json.loads(Path(args.subtitle_evidence).read_text(encoding="utf-8-sig")) if args.subtitle_evidence else {}
+    result = validate_cinema_delivery(scene_manifest, _probe_video(video), bgm_source, motion_evidence, subtitle_evidence)
     result["video"] = str(video)
     if args.output:
         Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
