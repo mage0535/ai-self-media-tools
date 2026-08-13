@@ -137,6 +137,38 @@ def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_i
     assert prepared["tasks"][1]["reason"] == "no unique cross-platform topic candidate"
 
 
+def test_due_task_builder_allows_natural_overlap_only_with_independent_platform_evidence():
+    def rank(platform, _items, _slot):
+        return [
+            {
+                "title": "Shared topic",
+                "source": f"{platform}_hot",
+                "score": 5,
+                "fingerprint": "shared-topic",
+                "platform_source_matrix": {
+                    "platform": platform,
+                    "attempted_sources": [{"source": f"{platform}_hot", "status": "ok"}] * 5,
+                    "successful_source_count": 5,
+                    "platform_internal_verified": True,
+                    "current_platform_specific_topic": True,
+                    "shared_trend_only": False,
+                    "platform_fit_reason": f"{platform} audience needs a distinct treatment",
+                },
+            }
+        ]
+
+    prepared = build_due_tasks(
+        [{"platform": "zhihu"}, {"platform": "juejin"}],
+        items=[],
+        source_report=[],
+        rank_for_platform=rank,
+    )
+
+    assert [task["state"] for task in prepared["tasks"]] == ["ready_for_plan", "ready_for_plan"]
+    assert prepared["tasks"][1]["brief"]["topic_decision"]["natural_trend_overlap"] is True
+    assert prepared["tasks"][1]["brief"]["topic_decision"]["overlap_with_platforms"] == ["zhihu"]
+
+
 def test_due_task_builder_applies_a_final_platform_candidate_filter():
     prepared = build_due_tasks(
         [{"platform": "wechat"}],

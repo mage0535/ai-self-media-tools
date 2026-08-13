@@ -20,12 +20,13 @@ def collect_daily_snapshot(
     cache_dir: str | Path,
     now: datetime | None = None,
     max_age_hours: float = 18,
+    force_refresh: bool = False,
 ) -> dict[str, Any]:
     """Collect once per freshness window and keep source failures observable."""
     now = _utc_now(now)
     path = Path(cache_dir) / f"trend_snapshot_{now.date().isoformat()}.json"
     cached = _load_snapshot(path)
-    if cached and _is_fresh(cached, now, max_age_hours):
+    if cached and not force_refresh and _is_fresh(cached, now, max_age_hours):
         return {**cached, "snapshot_path": str(path), "cache_status": "reused"}
 
     report = collect() or {}

@@ -35,6 +35,21 @@ def test_collect_daily_snapshot_reuses_a_fresh_cache(tmp_path):
     assert first["items"] == second["items"]
 
 
+def test_collect_daily_snapshot_honors_force_refresh(tmp_path):
+    calls = []
+
+    def collect():
+        calls.append(True)
+        return {"items": [{"title": f"Agent workflow {len(calls)}", "source": "github"}], "sources": []}
+
+    collect_daily_snapshot(collect, cache_dir=tmp_path, now=FIXED_NOW)
+    refreshed = collect_daily_snapshot(collect, cache_dir=tmp_path, now=FIXED_NOW, force_refresh=True)
+
+    assert len(calls) == 2
+    assert refreshed["cache_status"] == "refreshed"
+    assert refreshed["items"][0]["title"] == "Agent workflow 2"
+
+
 def test_platform_matrix_preserves_failures_and_platform_reason():
     snapshot = {
         "items": [{"title": "Agent workflow guide", "source": "zhihu_hot", "points": 16}],

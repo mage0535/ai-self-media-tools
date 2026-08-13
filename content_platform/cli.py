@@ -560,6 +560,7 @@ def execute(args):
         snapshot = collect_daily_snapshot(
             lambda: collector.collect_with_report(args.refresh),
             cache_dir=trend_cache_dir(),
+            force_refresh=bool(args.refresh),
         )
         previous_snapshot = load_previous_snapshot(trend_cache_dir(), current_path=snapshot["snapshot_path"])
         report = {**snapshot, "items": detect_breakouts(snapshot, previous_snapshot)}
