@@ -16,6 +16,7 @@ def build_content_depth_plan(
     evidence: list[str] | None = None,
     actions: list[str] | None = None,
     series_plan: dict[str, Any] | None = None,
+    platform: str = "",
 ) -> dict[str, Any]:
     """Describe actionable value without inventing research or a sequel."""
     lines = [line.strip() for line in str(body or "").splitlines() if line.strip()]
@@ -35,6 +36,15 @@ def build_content_depth_plan(
         },
         "actions": action_steps,
         "evidence": evidence_rows,
+        "core_question": str(title or "").strip(),
+        "user_pain": lines[0] if lines else "",
+        "knowledge_points": action_steps[:3],
+        "case_or_demo": evidence_rows[0] if evidence_rows else "",
+        "steps": action_steps,
+        "counterexample": "Avoid publishing a generic claim without a measurable example.",
+        "takeaway": action_steps[-1] if action_steps else "",
+        "interaction_prompt": "Which step would you test first?",
+        "platform_style": _platform_style(platform),
         "continuation_claimed": continuation_claimed,
         "series_plan": dict(series_plan or {}),
     }
@@ -53,8 +63,25 @@ def validate_content_depth_plan(plan: dict[str, Any] | None) -> dict[str, Any]:
             failures.append("action_steps_insufficient")
         if len(plan.get("evidence") or []) < 1:
             failures.append("evidence_insufficient")
+        if len(plan.get("knowledge_points") or []) < 3:
+            failures.append("knowledge_points_insufficient")
+        for field in ("case_or_demo", "steps", "counterexample", "takeaway", "interaction_prompt"):
+            if not plan.get(field):
+                failures.append(f"{field}_missing")
         if plan.get("continuation_claimed"):
             series = plan.get("series_plan") if isinstance(plan.get("series_plan"), dict) else {}
             if not str(series.get("next_topic") or "").strip() or not str(series.get("delivery_window") or "").strip():
                 failures.append("continuation_without_series_plan")
     return {"passed": not failures, "failures": failures, "failed_dimensions": ["content_depth"] if failures else []}
+
+
+def _platform_style(platform: str) -> str:
+    key = str(platform or "").casefold()
+    return {
+        "zhihu": "argument_with_evidence",
+        "juejin": "implementation_with_examples",
+        "wechat": "experience_synthesis",
+        "kuaishou": "fast_hook_then_payoff",
+        "douyin": "fast_hook_then_payoff",
+        "x": "compact_point_of_view",
+    }.get(key, "platform_adapted_practical_explanation")

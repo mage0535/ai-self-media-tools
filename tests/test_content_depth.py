@@ -31,13 +31,30 @@ def test_depth_plan_accepts_actionable_content_with_a_real_series_plan():
     assert result["passed"] is True
 
 
+def test_depth_plan_requires_knowledge_case_steps_counterexample_and_takeaway():
+    plan = build_content_depth_plan(
+        "Practical workflow",
+        "Start with a baseline. Measure the result. Keep the review checklist.",
+        evidence=["measured before/after"],
+        actions=["create a baseline", "run the checklist", "record the result"],
+    )
+    plan["knowledge_points"] = ["only one"]
+    plan["case_or_demo"] = ""
+
+    result = validate_content_depth_plan(plan)
+
+    assert result["passed"] is False
+    assert "knowledge_points_insufficient" in result["failures"]
+    assert "case_or_demo_missing" in result["failures"]
+
+
 def test_content_quality_gate_exposes_the_depth_contract_cli(tmp_path: Path):
     root = Path(__file__).resolve().parents[1]
     plan = build_content_depth_plan(
         "Practical workflow",
         "Start with a baseline. Measure the result. Keep the review checklist. Then record the next decision.",
         evidence=["measured before/after"],
-        actions=["create a baseline", "run the checklist"],
+        actions=["create a baseline", "run the checklist", "record the result"],
     )
     payload = tmp_path / "depth.json"
     payload.write_text(json.dumps(plan), encoding="utf-8")

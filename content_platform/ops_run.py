@@ -85,8 +85,12 @@ def _independent_evidence(record: dict) -> bool:
     successful = evidence.get("successful_sources") or 0
     if isinstance(successful, list):
         successful = len(successful)
+    attempted = evidence.get("attempted_sources") or 0
+    if isinstance(attempted, list):
+        attempted = len(attempted)
     return (
         bool(str(evidence.get("source_matrix_id") or "").strip())
+        and int(attempted) >= 8
         and int(successful) >= 5
         and evidence.get("platform_internal_verified") is True
         and len(str(evidence.get("platform_signal") or "").strip()) >= 8

@@ -11,6 +11,7 @@ from typing import Any
 
 from .risk import redact_secrets
 from .trends import normalize_topic
+from .trend_candidate import build_trend_candidate, validate_trend_candidate
 
 
 MANUAL_HANDOFF_PLATFORMS = {
@@ -101,6 +102,7 @@ def build_due_tasks(
     candidate_filter: Any | None = None,
     growth_strategy_status: dict[str, dict[str, Any]] | None = None,
     weekday: int | None = None,
+    strict_trend_evidence: bool = False,
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
@@ -144,6 +146,20 @@ def build_due_tasks(
                 tasks.append(row)
                 continue
             selected_topics.add(_topic_identity(selected))
+            adaptation = str(raw.get("platform_adaptation_reason") or f"adapt {selected['title']} to {platform} with a platform-specific format and CTA")
+            signal = str(raw.get("platform_signal") or f"{platform} source matrix contains current platform and cross-platform evidence")
+            trend_candidate = build_trend_candidate(
+                platform=platform,
+                topic=selected["title"],
+                direction=str(selected.get("direction") or raw.get("direction") or normalize_topic(selected["title"])),
+                source_report=source_report,
+                platform_signal=signal,
+                platform_adaptation_reason=adaptation,
+                heat_score=float(selected.get("score") or 0),
+                freshness_score=float(selected.get("freshness_score") or 0),
+                platform_fit_score=float(selected.get("platform_fit_score") or selected.get("score") or 0),
+            )
+            trend_gate = validate_trend_candidate(trend_candidate)
             matrix = {
                 "platform": platform,
                 "attempted_sources": [
@@ -164,10 +180,15 @@ def build_due_tasks(
                         "score": selected.get("score", 0),
                         "growth_signals": ["timeliness", "user_benefit"],
                     },
+                    "trend_candidate": trend_candidate,
                 },
+                "trend_candidate": trend_candidate,
+                "trend_candidate_gate": trend_gate,
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
                 "state": "ready_for_plan",
             })
+            if strict_trend_evidence and not trend_gate.get("passed"):
+                row.update({"state": "blocked", "reason": "trend candidate evidence below 8-attempt/5-success threshold"})
         tasks.append(row)
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
 

@@ -610,6 +610,7 @@ def execute(args):
             candidate_filter=candidate_filter,
             growth_strategy_status=strategy_status,
             weekday=weekday,
+            strict_trend_evidence=True,
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)

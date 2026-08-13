@@ -75,6 +75,14 @@ def validate_render_inputs(
         scene_manifest = video_dir / "scene_manifest.json"
         if not scene_manifest.is_file():
             failures.append("scene_manifest_missing")
+        else:
+            try:
+                scenes = json.loads(scene_manifest.read_text(encoding="utf-8")).get("scenes") or []
+            except (OSError, json.JSONDecodeError):
+                scenes = []
+            required = {"scene_id", "start", "end", "narration", "subtitle", "visual_claim", "asset_path", "asset_source", "motion", "evidence"}
+            if len(scenes) < 6 or any(not isinstance(scene, dict) or not required.issubset(scene) or not isinstance(scene.get("motion"), dict) or not {"background", "subject", "text", "transition"}.issubset(scene["motion"]) for scene in scenes):
+                failures.append("scene_manifest_invalid")
 
     bgm = video_dir / "bgm.mp3"
     bgm_source = video_dir / "bgm_source.json"

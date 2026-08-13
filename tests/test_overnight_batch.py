@@ -149,6 +149,20 @@ def test_due_task_builder_applies_a_final_platform_candidate_filter():
     assert prepared["tasks"][0]["state"] == "blocked"
 
 
+def test_due_task_builder_blocks_when_strict_trend_evidence_is_incomplete():
+    prepared = build_due_tasks(
+        [{"platform": "zhihu"}],
+        items=[],
+        source_report=[{"source": "github", "status": "ok"}],
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "fingerprint": "ai-workflow", "score": 1.0}],
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "blocked"
+    assert task["trend_candidate"]["sources_attempted"] == 1
+
+
 def test_due_task_builder_blocks_when_growth_strategy_snapshot_is_missing():
     def rank(platform, _items, _slot):
         return [{"title": f"{platform} topic", "source": platform, "score": 3, "fingerprint": platform}]

@@ -3120,10 +3120,10 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Video planning had `visual_recipe` and `segment_motion_evidence`, but no explicit per-scene narration/subtitle/asset/motion binding. Content depth was also not exposed as a reusable gate, so a thin draft could promise a future installment without proving a real series plan.
 
 ### Implemented
-- `record_topic()` and `check_platform_topic_independence.py` now allow same-direction overlap only when every package has a distinct source-matrix identity, at least five successful sources, platform-internal verification, a platform signal, and a platform-specific adaptation reason. Documented follow-ups continue to work; unexplained reuse remains blocked.
-- Added `content_depth_plan_v1` and `scripts/content_quality_gate.py --check-depth`. The contract requires title, evidence, at least two concrete actions, and a `series_plan` whenever the copy promises a next episode or follow-up.
+- `record_topic()` and `check_platform_topic_independence.py` now allow same-direction overlap only when every package has a distinct source-matrix identity, at least eight attempted and five successful sources, platform-internal verification, a platform signal, and a platform-specific adaptation reason. Documented follow-ups continue to work; unexplained reuse remains blocked.
+- Added `content_depth_plan_v1` and `scripts/content_quality_gate.py --check-depth`. The contract requires three knowledge points, a case or demo, executable steps, a counterexample, a takeaway, an interaction prompt, and a `series_plan` whenever the copy promises a next episode or follow-up.
 - `DraftGenerator` emits a depth plan for generated article packets so the new validation is available to downstream gates without changing publishers.
-- `visual_recipe` now owns `scene_manifest_v1`. It projects existing `scene_asset_match` into narration, subtitle, asset-match reason, and motion records, and `video_toolchain_runner.py` writes `scene_manifest.json` before the pre-render gate.
+- `visual_recipe` now owns `scene_manifest_v1`. It expands existing `scene_asset_match` into at least six narration/subtitle/asset/evidence records with separate background, subject, text, and transition motion, and `video_toolchain_runner.py` writes `scene_manifest.json` before the pre-render gate.
 - The pre-render gate can require the scene manifest. The normal video toolchain uses that requirement, so a render cannot proceed with only a generic recipe.
 - Added a metadata-only BGM candidate catalog. It preserves source, license, fingerprint, and mood to avoid repeated remote discovery; it deliberately strips local audio paths and never serves reusable audio. Existing fingerprint gates remain authoritative.
 - Video ResourceGuard now defaults to 1200MB available memory, warns at 84% disk use, and remains fail-closed at 88%. Existing video lock and render checkpoints remain the concurrency/caching mechanism.
@@ -3132,7 +3132,7 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Do not introduce a hard no-overlap topic rule. Natural overlap is valid only with independent evidence, a platform-specific signal, and a documented adaptation reason.
 - A BGM catalog is discovery metadata, not a music library. Every render still downloads a fresh licensed real-instrument track and must pass the existing fingerprint gate.
 - `scene_manifest.json` is derived from `visual_recipe`; do not maintain a second scene plan.
-- Use existing Edge-TTS segment controls for real-time voice delivery. Offline TTS/VQA experiments belong to bounded night-time A/B work, never a permanent worker on the constrained Hermes host.
+- Edge-TTS receives a deterministic per-segment delivery plan (hook, explanation, proof, CTA) with bounded rate, pitch, and pause controls. Offline TTS/VQA experiments belong to bounded night-time A/B work, never a permanent worker on the constrained Hermes host.
 
 ### Verification
 - TDD red/green checks covered independent natural-overlap approval, unexplained duplicate rejection, continuation-promise rejection, depth CLI validation, scene-manifest enforcement, metadata-only BGM catalog behavior, and higher video headroom.

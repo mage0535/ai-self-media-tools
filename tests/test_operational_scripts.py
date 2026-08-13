@@ -56,8 +56,8 @@ class OperationalScriptTests(unittest.TestCase):
                     {
                         "selected_topic": "独立选题",
                         "platform_source_matrix": {
-                            "attempted_sources": ["a", "b", "c", "d", "e"],
-                            "successful_sources": ["a", "b", "c"],
+                            "attempted_sources": ["a", "b", "c", "d", "e", "f", "g", "h"],
+                            "successful_sources": ["a", "b", "c", "d", "e"],
                             "platform_internal_verified": True,
                             "shared_trend_only": False,
                         },
@@ -96,6 +96,8 @@ class OperationalScriptTests(unittest.TestCase):
 | GitHub | ✅ 成功 | automation 项目上升 |
 | 小红书 | ❌ login_required | 记录失败原因 |
 
+| harken | success | additional trend evidence |
+
 shared_trend_only: false
 """,
                 encoding="utf-8",
@@ -104,8 +106,8 @@ shared_trend_only: false
 
         self.assertTrue(result["passed"], result)
         matrix = result["records"]["wechat"]["matrix"]
-        self.assertGreaterEqual(matrix["attempted_count"], 5)
-        self.assertGreaterEqual(matrix["successful_count"], 3)
+        self.assertGreaterEqual(matrix["attempted_count"], 8)
+        self.assertGreaterEqual(matrix["successful_count"], 5)
         self.assertTrue(matrix["platform_internal_evidence"])
         self.assertEqual(result["records"]["wechat"]["selected_topic"], "AI 自动化效率幻觉实测复盘")
 
