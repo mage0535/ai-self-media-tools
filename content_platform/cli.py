@@ -605,6 +605,7 @@ def execute(args):
                         report,
                         candidate,
                         platform_keywords=keywords,
+                        strategy_status=strategy_status.get(platform),
                     ),
                 }
                 for candidate in ranked

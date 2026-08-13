@@ -199,7 +199,9 @@ def _allows_natural_overlap(platform: str, candidate: dict[str, Any], prior: lis
         return False
     if len(attempted) < 5 or max(successful, int(matrix.get("successful_source_count") or 0)) < 3:
         return False
-    if not matrix.get("platform_internal_verified") or not matrix.get("current_platform_specific_topic"):
+    if not matrix.get("platform_internal_verified"):
+        return False
+    if not (matrix.get("current_platform_specific_topic") or matrix.get("platform_strategy_verified")):
         return False
     if matrix.get("shared_trend_only") or not str(matrix.get("platform_fit_reason") or "").strip():
         return False

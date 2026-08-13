@@ -3142,3 +3142,17 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ## Verification
 - Added red/green regressions for evidence-qualified natural overlap, duplicate-only blocking, and force-refresh behavior.
+
+# 2026-08-13 - Platform Strategy Evidence Completion
+
+## Finding
+- The production rehearsal showed that `overnight-prepare` could mark a generic multi-source trend ready for a channel without a platform-specific evidence path, while another channel was blocked by the same shared-trend rule.
+- A fresh `performance-cycle` already produces a per-platform growth strategy from verified account metrics, but the trend matrix did not expose that evidence. This made the handoff between analytics, selection, generation, and media gates inconsistent.
+
+## Implemented
+- `platform_source_matrix_v2` now records a successful `<platform>:fresh_growth_strategy` row only when the current platform strategy snapshot is fresh. The row is explicitly typed as `fresh_account_performance_strategy`; it is not presented as a platform hot-topic result.
+- The matrix distinguishes `current_platform_specific_topic` from `platform_strategy_verified`. A natural cross-platform overlap is allowed only with a qualified multi-source matrix, fresh platform strategy evidence or a true platform-topic signal, and an explicit platform-fit reason.
+- The draft generator preserves this typed evidence, and the media quality gate accepts either a true platform-topic signal or fresh platform-strategy evidence. Missing, stale, or shared-only evidence remains blocked.
+
+## Verification
+- Added red/green regressions for typed strategy evidence in the trend matrix, overnight overlap selection, draft generation, and final media-quality gate.

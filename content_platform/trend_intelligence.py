@@ -122,16 +122,30 @@ def build_platform_matrix(
     candidate: dict[str, Any],
     *,
     platform_keywords: list[str] | None = None,
+    strategy_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the existing matrix contract from live source outcomes for one platform."""
     normalized = str(platform or "").casefold()
     sources = _copy_dict_rows(snapshot.get("sources"))
-    successful = [row for row in sources if str(row.get("status") or "").casefold() in SUCCESS_STATUSES]
     aliases = _platform_aliases(normalized)
     source_name = str(candidate.get("source") or "").casefold()
-    platform_evidence = any(any(alias in str(row.get("source") or "").casefold() for alias in aliases) for row in successful)
+    platform_evidence = any(any(alias in str(row.get("source") or "").casefold() for alias in aliases) for row in sources if str(row.get("status") or "").casefold() in SUCCESS_STATUSES)
     candidate_platform_evidence = any(alias in source_name for alias in aliases)
-    verified = platform_evidence or candidate_platform_evidence
+    strategy_status = strategy_status or {}
+    strategy_verified = str(strategy_status.get("status") or "").casefold() == "ok"
+    if strategy_verified:
+        sources.append(
+            {
+                "source": f"{normalized}:fresh_growth_strategy",
+                "status": "ok",
+                "evidence_kind": "fresh_account_performance_strategy",
+                "strategy_key": str(strategy_status.get("key") or ""),
+                "age_hours": strategy_status.get("age_hours"),
+            }
+        )
+    successful = [row for row in sources if str(row.get("status") or "").casefold() in SUCCESS_STATUSES]
+    topic_verified = platform_evidence or candidate_platform_evidence
+    verified = topic_verified or strategy_verified
     return {
         "version": "platform_source_matrix_v2",
         "platform": normalized,
@@ -140,7 +154,8 @@ def build_platform_matrix(
         "sources_succeeded": len(successful),
         "successful_source_count": len(successful),
         "platform_internal_verified": verified,
-        "current_platform_specific_topic": verified,
+        "current_platform_specific_topic": topic_verified,
+        "platform_strategy_verified": strategy_verified,
         "shared_trend_only": not verified,
         "platform_fit_reason": _platform_fit_reason(normalized, candidate, platform_keywords or []),
         "candidate_source": str(candidate.get("source") or ""),
