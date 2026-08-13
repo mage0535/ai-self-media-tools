@@ -10,6 +10,22 @@ from content_platform.video_recipe import build_visual_recipe
 
 
 class VideoToolchainTests(unittest.TestCase):
+    def test_cinema_plan_requires_scene_manifest_as_the_single_render_contract(self):
+        from content_platform.video_toolchain import build_video_toolchain_plan
+
+        plan = build_video_toolchain_plan(
+            {
+                "content_form": "article_explainer_video",
+                "primary_platforms": ["douyin"],
+                "asset_plan": ["article", "human_voiceover", "background_music"],
+            },
+            {"topic": "A concrete workflow"},
+        )
+
+        self.assertIn("scene_manifest", plan["quality_gates"])
+        self.assertIn("scene_manifest", plan["tool_refs"])
+        self.assertIn("scene_manifest", plan["renderer_steps"])
+
     def test_strategy_router_adds_auto_video_toolchain_plan_for_short_video_platform(self):
         strategy = choose_content_strategy(
             "Cat behavior warning signs",
