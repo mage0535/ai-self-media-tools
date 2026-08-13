@@ -181,6 +181,12 @@ python -m content_platform.cli project-audit
 python scripts/validate_channel_rulebook.py
 ```
 
+## Trend Intelligence Cache
+
+`overnight-prepare` stores one public-metadata trend snapshot per freshness window and reuses it for later platform selection. The snapshot preserves every source status, including failures and degradation; a cache never turns an unavailable source into a verified signal.
+
+Each candidate now carries a platform-scoped `platform_source_matrix`, a historical-fit calibration score, and an optional breakout marker calculated against the previous snapshot. Downstream quality gates still decide whether evidence is sufficient to generate or publish. The intelligence layer collects and ranks only; it never changes login state or publishes content.
+
 ## License
 
 请根据各平台规则和素材授权自行合规使用。本项目不会替你授权第三方素材、音乐、账号或平台接口。

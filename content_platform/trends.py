@@ -27,6 +27,10 @@ def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     preferred_clusters = learned.get("preferred_clusters", [])
     unique = {}
     for item in items:
+        # Fallback hypotheses document a failed source; they are not evidence
+        # and must never be promoted into an automatic topic candidate.
+        if item.get("source_unavailable"):
+            continue
         title = str(item.get("title", "")).strip()
         normalized = normalize_topic(title)
         if not normalized or normalized in used or any(word in title.casefold() for word in banned):

@@ -3111,3 +3111,20 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - The midnight wrapper reports error exits, preserves atomic checkpoints, and still exits cleanly for no-slot or missed-window cases.
 - The WeChat wrapper treats an expired creator login as an actionable blocked data-source condition, writes its report, sends a notification, and lets the timer remain healthy for the next recovery attempt.
 - `create_hermes_overnight_monitor.py` remains the read-only three-minute progress observer; its target is server-private and not committed.
+
+# 2026-08-13 - Trend Intelligence Snapshot And Evidence Layer
+
+## Finding
+- Existing trend collection had direct-source probes and ranking, but the overnight workflow did not persist a reusable daily snapshot, compare score movement, or pass candidate-specific evidence through to the task builder.
+
+## Implemented
+- Added `content_platform.trend_intelligence` as a lightweight layer over the existing `TrendCollector`; it creates a bounded JSON snapshot, preserves source failure/degradation evidence, and reuses a fresh snapshot instead of repeatedly crawling during one operating window.
+- `overnight-prepare` now detects source-score breakouts against the previous snapshot, applies the existing account-history ranking context as an explicit calibration field, and attaches a candidate-specific `platform_source_matrix` with a platform-fit reason.
+- Snapshot data is public trend metadata only. No account cookies, keys, browser state, private backend responses, or publishing actions are stored by this layer.
+
+## Operational Rule
+- A cached or cross-platform trend is an input, not platform verification. A platform source matrix remains fail-closed when its own successful platform evidence is absent.
+- Source failures must remain visible in `attempted_sources`; do not convert unavailable sources into synthetic successes merely to pass a source-count threshold.
+
+## Verification
+- Added test-first coverage for cache reuse, failed-source preservation, historical calibration, breakout detection, and end-to-end `overnight-prepare` matrix generation.
