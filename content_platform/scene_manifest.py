@@ -114,6 +114,21 @@ def validate_rendered_duration(manifest: dict[str, Any], duration_seconds: float
     }
 
 
+def update_audio_timing(manifest: dict[str, Any], durations: list[float]) -> dict[str, Any]:
+    scenes = manifest.get("scenes") if isinstance(manifest, dict) else None
+    if not isinstance(scenes, list) or len(scenes) != len(durations):
+        raise ValueError("audio durations must match scene count")
+    cursor = 0.0
+    for scene, raw_duration in zip(scenes, durations):
+        duration = max(0.0, float(raw_duration))
+        scene["start"] = round(cursor, 6)
+        scene["end"] = round(cursor + duration, 6)
+        scene["audio"] = {"start_seconds": round(cursor, 6), "end_seconds": round(cursor + duration, 6), "duration_seconds": round(duration, 6)}
+        cursor += duration
+    manifest["audio_timing"] = {"source": "measured_tts_segment_durations", "total_duration_seconds": round(cursor, 6)}
+    return manifest
+
+
 def _platform(plan: dict[str, Any]) -> str:
     platforms = plan.get("platforms") if isinstance(plan.get("platforms"), list) else []
     return str(platforms[0] if platforms else plan.get("platform") or "unknown").strip().casefold()
