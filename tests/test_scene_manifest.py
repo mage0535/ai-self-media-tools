@@ -127,3 +127,27 @@ def test_cinema_delivery_requires_rendered_motion_and_subtitle_evidence():
     assert result["passed"] is False
     assert "motion evidence failed" in result["failures"]
     assert "subtitle evidence failed" in result["failures"]
+
+
+def test_scene_manifest_records_real_audio_timing_per_scene():
+    from content_platform.scene_manifest import build_scene_manifest, update_audio_timing
+
+    manifest = build_scene_manifest(_cards(), _recipe(), {"platforms": ["douyin"]}, "Useful video")
+    updated = update_audio_timing(manifest, [1.25, 2.0, 0.75])
+
+    assert updated["audio_timing"]["total_duration_seconds"] == 4.0
+    assert updated["scenes"][0]["audio"]["start_seconds"] == 0.0
+    assert updated["scenes"][1]["audio"]["start_seconds"] == 1.25
+    assert updated["scenes"][2]["audio"]["end_seconds"] == 4.0
+
+
+def test_scene_manifest_rejects_tts_scene_count_mismatch():
+    from content_platform.scene_manifest import build_scene_manifest, update_audio_timing
+
+    manifest = build_scene_manifest(_cards(), _recipe(), {"platforms": ["douyin"]}, "Useful video")
+    try:
+        update_audio_timing(manifest, [1.0])
+    except ValueError as exc:
+        assert "match scene count" in str(exc)
+    else:
+        raise AssertionError("scene count mismatch must fail closed")
