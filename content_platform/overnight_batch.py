@@ -144,7 +144,7 @@ def build_due_tasks(
                 tasks.append(row)
                 continue
             selected_topics.add(_topic_identity(selected))
-            matrix = {
+            matrix = dict(selected.get("platform_source_matrix") or selected.get("source_matrix") or {
                 "platform": platform,
                 "attempted_sources": [
                     {"source": item.get("source"), "status": item.get("status", "unknown"), **({"error": item["error"]} if item.get("error") else {})}
@@ -152,7 +152,8 @@ def build_due_tasks(
                     if item.get("source")
                 ],
                 "report_path": "runtime:overnight_trend_collection",
-            }
+            })
+            matrix.setdefault("platform", platform)
             row.update({
                 "topic": selected["title"],
                 "topic_fingerprint": selected.get("fingerprint", ""),

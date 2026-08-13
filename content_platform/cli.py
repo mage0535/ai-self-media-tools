@@ -12,7 +12,7 @@ from .intelligence import build_generation_context
 from .niche_analysis import analyze_niche
 from .metrics import render_metrics
 from .seo import search as _seo_search, analyze as _seo_analyze, geo_checklist
-from .paths import project_home
+from .paths import project_home, trend_cache_dir
 from .pipeline import Pipeline
 from .project_audit import audit_project
 from .profiles import resolve_profile
@@ -20,6 +20,7 @@ from .readiness import inspect_delivery_readiness
 from .skills_adapter import fetch_hot_data, generate_content, get_status as skills_status
 from .store import Store
 from .task_market import TaskMarketRunner
+from .trend_intelligence import build_platform_matrix, calibrate_candidates, collect_daily_snapshot, detect_breakouts, load_previous_snapshot
 from .trends import DirectTrendSource, TrendCollector, rank_trends
 
 
@@ -556,7 +557,12 @@ def execute(args):
         if not isinstance(slots, list):
             raise ValueError("overnight slots file must contain a list or slots list")
         collector = TrendCollector(config.get("trends", {}))
-        report = collector.collect_with_report(args.refresh)
+        snapshot = collect_daily_snapshot(
+            lambda: collector.collect_with_report(args.refresh),
+            cache_dir=trend_cache_dir(),
+        )
+        previous_snapshot = load_previous_snapshot(trend_cache_dir(), current_path=snapshot["snapshot_path"])
+        report = {**snapshot, "items": detect_breakouts(snapshot, previous_snapshot)}
         profile = resolve_profile(config.get("profiles", {}), args.profile)
         weekday = datetime.now().weekday() if args.weekday is None else args.weekday
         # Pet transport requires its own verified source.  A generic AI trend
@@ -587,9 +593,19 @@ def execute(args):
             # Filter after ranking against the full bounded collection.  A
             # small pre-filter pool can be filled by irrelevant high-score
             # headlines and hide valid lane-specific candidates.
-            ranked = rank_trends(items, lane_profile, store.used_topics(platform), 200, store.learned_ranking_context(args.profile))
+            learned = store.learned_ranking_context(args.profile)
+            ranked = rank_trends(items, lane_profile, store.used_topics(platform), 200, learned)
+            ranked = calibrate_candidates(ranked, learned)
             return [
-                candidate
+                {
+                    **candidate,
+                    "platform_source_matrix": build_platform_matrix(
+                        platform,
+                        report,
+                        candidate,
+                        platform_keywords=keywords,
+                    ),
+                }
                 for candidate in ranked
                 if candidate_matches_topic_keywords(candidate, keywords)
                 and candidate_matches_platform_language(platform, candidate)
