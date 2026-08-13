@@ -1,5 +1,20 @@
 # Continuous Development
 
+## 2026-08-14: Fail-Closed Overnight Acceptance
+
+### Implemented
+- Added `content_platform.overnight_acceptance` and the `overnight-acceptance` CLI command. It validates the durable batch result and state instead of trusting Hermes notification text.
+- Allowed result statuses are explicitly limited to `completed`, `partial`, `blocked`, and `no_run`. Empty, malformed, unknown, or missing results fail acceptance.
+- Video tasks in `staged` or `handoff_ready` require real video, cover, and publish-info artifacts plus `scene_manifest.json` and `tts_config.json` in the artifact directory. The gate writes `acceptance_report.json` and fails closed when evidence is incomplete.
+- Replaced the overnight entrypoint's 15-minute hard cutoff with a bounded `OVERNIGHT_ADMISSION_WINDOW_MINUTES` catch-up window, defaulting to 60 minutes. Late starts are still recorded as `no_run`.
+- Added `docs/OVERNIGHT_ACCEPTANCE.md` and regression coverage for the acceptance contract and entrypoint integration.
+
+### Verification
+- Local full suite: `698 passed, 29 subtests passed`.
+- Production deployment includes only the acceptance-related files; existing server-local dirty changes were preserved.
+- The interrupted 2026-08-14 run was truthfully closed as `blocked` after a stalled Kuaishou render; no platform was published. Production acceptance report returned `passed: true` for contract validity with `status: blocked`.
+- The next scheduled run remains controlled by the enabled systemd timer; Hermes notifications are progress signals only, while `result.json` and `acceptance_report.json` are authoritative.
+
 ## 2026-08-12: WeChat Publish License Gate Acceptance
 
 ### Implemented
