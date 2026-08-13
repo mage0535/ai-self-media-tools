@@ -104,7 +104,7 @@ def build_due_tasks(
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
-    selected_topics: set[str] = set()
+    selected_topics: dict[str, list[dict[str, Any]]] = {}
     growth_strategy_status = growth_strategy_status or {}
     weekday = datetime.now().weekday() if weekday is None else int(weekday)
     for raw in slots:
@@ -133,6 +133,7 @@ def build_due_tasks(
                     candidate
                     for candidate in candidates
                     if _topic_identity(candidate) not in selected_topics
+                    or _allows_natural_overlap(platform, candidate, selected_topics[_topic_identity(candidate)])
                 ),
                 None,
             )
@@ -143,7 +144,6 @@ def build_due_tasks(
                 })
                 tasks.append(row)
                 continue
-            selected_topics.add(_topic_identity(selected))
             matrix = dict(selected.get("platform_source_matrix") or selected.get("source_matrix") or {
                 "platform": platform,
                 "attempted_sources": [
@@ -154,6 +154,9 @@ def build_due_tasks(
                 "report_path": "runtime:overnight_trend_collection",
             })
             matrix.setdefault("platform", platform)
+            identity = _topic_identity(selected)
+            overlap_with = [str(row.get("platform") or "") for row in selected_topics.get(identity, [])]
+            selected_topics.setdefault(identity, []).append({"platform": platform, "matrix": matrix})
             row.update({
                 "topic": selected["title"],
                 "topic_fingerprint": selected.get("fingerprint", ""),
@@ -164,6 +167,9 @@ def build_due_tasks(
                     "topic_decision": {
                         "score": selected.get("score", 0),
                         "growth_signals": ["timeliness", "user_benefit"],
+                        "natural_trend_overlap": bool(overlap_with),
+                        "overlap_with_platforms": overlap_with,
+                        "platform_fit_reason": str(matrix.get("platform_fit_reason") or ""),
                     },
                 },
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
@@ -176,6 +182,28 @@ def build_due_tasks(
 def _topic_identity(candidate: dict[str, Any]) -> str:
     """Return a stable batch-wide topic identity, even for incomplete feeds."""
     return str(candidate.get("fingerprint") or normalize_topic(candidate.get("title", ""))).strip()
+
+
+def _allows_natural_overlap(platform: str, candidate: dict[str, Any], prior: list[dict[str, Any]]) -> bool:
+    """Allow one shared signal only when every platform has independent evidence."""
+    matrix = candidate.get("platform_source_matrix") or candidate.get("source_matrix") or {}
+    attempted = matrix.get("attempted_sources") if isinstance(matrix, dict) else []
+    if not isinstance(attempted, list):
+        attempted = []
+    successful = sum(
+        1
+        for row in attempted
+        if isinstance(row, dict) and str(row.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+    )
+    if not isinstance(matrix, dict) or str(matrix.get("platform") or "").casefold() != str(platform).casefold():
+        return False
+    if len(attempted) < 5 or max(successful, int(matrix.get("successful_source_count") or 0)) < 3:
+        return False
+    if not matrix.get("platform_internal_verified") or not matrix.get("current_platform_specific_topic"):
+        return False
+    if matrix.get("shared_trend_only") or not str(matrix.get("platform_fit_reason") or "").strip():
+        return False
+    return all(str(row.get("platform") or "").casefold() != str(platform).casefold() for row in prior)
 
 
 def topic_keywords_for_slot(platform: str, slot: dict[str, Any], profile: dict[str, Any]) -> list[str]:

@@ -3128,3 +3128,17 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ## Verification
 - Added test-first coverage for cache reuse, failed-source preservation, historical calibration, breakout detection, and end-to-end `overnight-prepare` matrix generation.
+
+# 2026-08-13 - Overnight Preparation Completion Fixes
+
+## Finding
+- A production-safe preparation rehearsal found that the absolute cross-platform topic-identity rule could block otherwise valid scheduled channels when a natural shared trend was the only available candidate.
+- `run_overnight_batch.sh` passes `--refresh`, but the initial snapshot cache implementation did not expose a force-refresh path, so an operator retry on the same day could unintentionally reuse an earlier snapshot.
+
+## Implemented
+- Natural trend overlap is now admitted only when every participating platform has its own matrix with at least five attempted sources, three successful sources, platform verification, a platform-specific topic signal, and a non-empty platform-fit reason. The task records `natural_trend_overlap` and the earlier platforms; content and media remain platform-specific downstream.
+- Duplicate-only candidates without this evidence remain blocked.
+- `collect_daily_snapshot(..., force_refresh=True)` now bypasses a fresh cache, and `overnight-prepare --refresh` passes that flag through.
+
+## Verification
+- Added red/green regressions for evidence-qualified natural overlap, duplicate-only blocking, and force-refresh behavior.
