@@ -67,9 +67,11 @@ content-platform overnight-run --plan data/overnight/DATE/plan.json \
 ```
 
 `state.json` is atomically written after every platform. Restarting the command
-continues unfinished rows and never recreates rows already marked `staged`,
-`handoff_ready`, `published`, `blocked`, or `failed`. `events.jsonl` is an
-append-only event stream for real-time reporting.
+continues queued rows and never recreates rows already marked `staged`,
+`handoff_ready`, `published`, `blocked`, or `failed`. A row left `running` by an
+interrupted worker is converted to `blocked` with an explicit recovery reason;
+its prior external effects are not guessed. `events.jsonl` is an append-only
+event stream for real-time reporting.
 
 ## Reporting Contract
 

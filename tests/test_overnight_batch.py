@@ -137,6 +137,38 @@ def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_i
     assert prepared["tasks"][1]["reason"] == "no unique cross-platform topic candidate"
 
 
+def test_due_task_builder_allows_natural_overlap_only_with_independent_platform_evidence():
+    def rank(platform, _items, _slot):
+        return [
+            {
+                "title": "Shared topic",
+                "source": f"{platform}_hot",
+                "score": 5,
+                "fingerprint": "shared-topic",
+                "platform_source_matrix": {
+                    "platform": platform,
+                    "attempted_sources": [{"source": f"{platform}_hot", "status": "ok"}] * 5,
+                    "successful_source_count": 5,
+                    "platform_internal_verified": True,
+                    "current_platform_specific_topic": True,
+                    "shared_trend_only": False,
+                    "platform_fit_reason": f"{platform} audience needs a distinct treatment",
+                },
+            }
+        ]
+
+    prepared = build_due_tasks(
+        [{"platform": "zhihu"}, {"platform": "juejin"}],
+        items=[],
+        source_report=[],
+        rank_for_platform=rank,
+    )
+
+    assert [task["state"] for task in prepared["tasks"]] == ["ready_for_plan", "ready_for_plan"]
+    assert prepared["tasks"][1]["brief"]["topic_decision"]["natural_trend_overlap"] is True
+    assert prepared["tasks"][1]["brief"]["topic_decision"]["overlap_with_platforms"] == ["zhihu"]
+
+
 def test_due_task_builder_applies_a_final_platform_candidate_filter():
     prepared = build_due_tasks(
         [{"platform": "wechat"}],
@@ -212,6 +244,16 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
             return {"id": f"job-{len(self.created)}"}
 
         def run(self, job_id):
+            if job_id == "job-2":
+                video = tmp_path / "final.mp4"
+                cover = tmp_path / "cover.png"
+                video.write_bytes(b"video")
+                cover.write_bytes(b"cover")
+                return {
+                    "id": job_id,
+                    "state": "review_required",
+                    "artifacts": [{"kind": "video", "path": str(video)}, {"kind": "cover", "path": str(cover)}],
+                }
             return {"id": job_id, "state": "review_required"}
 
         def stage_drafts(self, job_id):
@@ -236,6 +278,27 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
     assert state["tasks"][1]["state"] == "handoff_ready"
 
 
+def test_execute_batch_blocks_manual_handoff_without_real_media(tmp_path: Path):
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            return {"id": "job-1"}
+
+        def run(self, _job_id):
+            return {"id": "job-1", "state": "review_required", "artifacts": []}
+
+    plan = build_batch_plan(
+        [{"platform": "bilibili", "topic": "topic", "brief": {}, "stage": "handoff_video", "estimate_minutes": 10}],
+        deadline_minute=280,
+        finalization_minutes=20,
+    )
+
+    summary = execute_batch(Pipeline(), plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["status"] == "partial"
+    assert summary["tasks"][0]["state"] == "blocked"
+    assert summary["tasks"][0]["reason"] == "handoff_media_missing"
+
+
 def test_execute_batch_marks_failed_rows_as_batch_failure_without_rerunning_them(tmp_path: Path):
     class Pipeline:
         def create(self, *_args, **_kwargs):
@@ -251,6 +314,23 @@ def test_execute_batch_marks_failed_rows_as_batch_failure_without_rerunning_them
     assert summary["status"] == "failed"
     assert summary["tasks"][0]["state"] == "failed"
     assert execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))["status"] == "failed"
+
+
+def test_execute_batch_marks_interrupted_running_rows_blocked_instead_of_recreating_them(tmp_path: Path):
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            raise AssertionError("interrupted task must not be recreated automatically")
+
+    plan = build_batch_plan([{"platform": "wechat", "topic": "topic", "brief": {}, "estimate_minutes": 10}], deadline_minute=280, finalization_minutes=20)
+    state_path = tmp_path / "state.json"
+    interrupted = {**plan, "status": "running", "tasks": [{**plan["tasks"][0], "state": "running", "job_id": "existing-job"}]}
+    state_path.write_text(json.dumps(interrupted), encoding="utf-8")
+
+    summary = execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["status"] == "partial"
+    assert summary["tasks"][0]["state"] == "blocked"
+    assert summary["tasks"][0]["reason"] == "interrupted_batch_requires_recovery"
 
 
 def test_execute_batch_marks_only_blocked_rows_partial(tmp_path: Path):

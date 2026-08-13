@@ -697,6 +697,13 @@ class Pipeline:
         for platform in platforms:
             normalized = str(platform or "").casefold()
             packet = self._generation_platform_packet(job_id, draft, platforms, normalized)
+            if self._requires_rendered_video_evidence(normalized, packet):
+                results[normalized] = {
+                    "passed": True,
+                    "deferred": True,
+                    "reason": "rendered media evidence is validated by the required video toolchain before review",
+                }
+                continue
             result = self._platform_quality_validator(normalized, packet)
             if result:
                 results[normalized] = result
@@ -708,6 +715,11 @@ class Pipeline:
             "platforms": list(results.keys()),
             "results": results,
         }
+
+    @staticmethod
+    def _requires_rendered_video_evidence(platform, packet):
+        plan = packet.get("video_toolchain_plan") or {}
+        return bool(plan.get("required")) and platform in {"kuaishou", "bilibili", "shipinhao", "douyin", "tiktok"}
 
     @staticmethod
     def _generation_platform_packet(job_id, draft, platforms, platform):

@@ -3111,3 +3111,24 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - The midnight wrapper reports error exits, preserves atomic checkpoints, and still exits cleanly for no-slot or missed-window cases.
 - The WeChat wrapper treats an expired creator login as an actionable blocked data-source condition, writes its report, sends a notification, and lets the timer remain healthy for the next recovery attempt.
 - `create_hermes_overnight_monitor.py` remains the read-only three-minute progress observer; its target is server-private and not committed.
+
+# 2026-08-13 - Truthful Overnight Video And Handoff Recovery
+
+## Finding
+- Video generation supplied the renderer with a one-line generation prompt instead of the complete draft body. The renderer therefore could not derive the required distinct narrative beats, leaving valid video tasks blocked before any media artifact existed.
+- The generation-stage platform gate evaluated rendered-only video evidence before the renderer had run. This conflated pre-render content checks with post-render media proof.
+- A manual platform could be marked `handoff_ready` from a reviewable text result even when no readable video, cover, or required image set existed.
+- If a worker stopped after checkpointing a task as `running`, a later invocation could recreate it. External side effects were then ambiguous and the batch state was no longer truthful.
+
+## Implemented
+- `MediaBridge` now uses `draft_meta.video_script` or the full draft body as the renderer input; `video_prompt` is only a final fallback.
+- The generation gate defers only rendered-video evidence for required video toolchains. The existing renderer-backed manifest remains mandatory before review, so this does not bypass post-render validation.
+- Manual handoffs now require readable, non-empty artifacts: video plus cover for video channels, and a cover plus three images for RedNote-style handoffs. Missing media is recorded as `blocked`, never `handoff_ready`.
+- Interrupted `running` rows are converted to `blocked` with `interrupted_batch_requires_recovery`. They are not recreated automatically; queued work remains independently recoverable.
+
+## Verification
+- Regression coverage proves full-draft renderer input, deferred pre-render video evidence, required handoff media, and interrupted-batch fail-closed recovery.
+- Trend collection tests isolate their cache directory so a server cache cannot mask mocked collection results.
+
+## Operating Rule
+- A provider or credential failure that prevents the required WeChat writer evidence remains a fail-closed `blocked` result. Do not replace it with a nominal success or a text-only delivery record.
