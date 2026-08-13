@@ -73,6 +73,19 @@ interrupted worker is converted to `blocked` with an explicit recovery reason;
 its prior external effects are not guessed. `events.jsonl` is an append-only
 event stream for real-time reporting.
 
+## WeChat Writer Resilience
+
+WeWrite is the preferred WeChat article writer. Set
+`HERMES_WECHAT_WRITER_FALLBACK=true` in the overnight service environment only
+when Hermes CLI has a verified working model route. If WeWrite fails, the
+toolchain records a separate Hermes writer invocation and the publish gate
+accepts it only when a real article was generated. Neither route permits a
+text-only or unverified publication result.
+
+The default one-hour writer-failure cooldown avoids repeatedly waiting for a
+known unavailable WeWrite provider during one overnight window. The cooldown
+does not disable WeWrite permanently; the next eligible run retries it.
+
 ## Reporting Contract
 
 Hermes follows `events.jsonl` and the Pipeline notification log, reports each
