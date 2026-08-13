@@ -78,8 +78,9 @@ class CliV2Tests(unittest.TestCase):
             "sources": [{"source": "github", "status": "ok", "count": 1}],
             "summary": {"items": 1},
         }
-        with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
-            code, result = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output), "--weekday", "3")
+        with patch.dict("os.environ", {"CONTENT_PLATFORM_TREND_CACHE_DIR": str(self.root / "trend-cache")}):
+            with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+                code, result = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output), "--weekday", "3")
         self.assertEqual(code, 0)
         self.assertEqual(result["status"], "prepared")
         task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]

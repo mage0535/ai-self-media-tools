@@ -295,7 +295,9 @@ class MediaBridge:
         if not provider:
             raise FileNotFoundError("video script not configured")
         visual_assets = self._prepare_video_visual_assets(job, output_dir, plan)
-        script_body = job.get("draft_meta", {}).get("video_prompt") or job["body"][:1200]
+        # ``video_prompt`` is generation guidance, not a narratable script.
+        # The renderer needs the full structured draft to derive distinct beats.
+        script_body = job.get("draft_meta", {}).get("video_script") or job.get("body") or job.get("draft_meta", {}).get("video_prompt", "")
         env = os.environ.copy()
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
         platforms = [str(item).lower() for item in job.get("platforms", [])]
