@@ -48,6 +48,22 @@ subtitle sampling evidence; printing those checks to stdout is not proof.
 
 ## Migration Rule
 
-`visual_recipe.json` remains the visual-design source of truth and
-`segment_motion_evidence.json` remains post-render proof. `scene_manifest.json`
-links them for delivery. Do not create a second independent planning format.
+`scene_manifest.json` is the delivery timeline source of truth. It is derived
+from the existing visual design and motion planning inputs, while
+`visual_recipe.json` remains a compatibility artifact for older tools and
+`segment_motion_evidence.json` remains post-render proof. Do not create a
+second independent timeline format.
+
+## TTS Contract
+
+`display_text` remains the source for subtitles and publish copy. Before any
+provider call, `scripts/voice_engine.py` compiles it into provider-safe
+`tts_text` using `config/pronunciation_dictionary.json`. The output records the
+rules used, provider, voice, duration, and unhandled Latin tokens in
+`tts_config.json` and `tts_normalization_report.json`.
+
+When `scene_manifest.json` exists in the same output directory, measured TTS
+segment durations are written back to each scene's `start`, `end`, and `audio`
+fields. A scene-count mismatch fails closed. This keeps the manifest as the
+only timeline source; `visual_recipe.json` remains a derived compatibility
+artifact.
