@@ -339,12 +339,15 @@ class HermesWechatAdapter:
         for key in ["seo_geo_intent", "selected_theme_reason"]:
             if not strategy.get(key):
                 return f"WeChat strategy brief missing {key}"
-        wewrite = (job.get("tool_invocations") or {}).get("wewrite") or {}
-        if wewrite.get("status") != "used":
-            return "WeChat packet requires successful WeWrite llm-write tool invocation evidence"
-        commands = [item.get("name") for item in wewrite.get("commands", []) if isinstance(item, dict)]
-        if "llm-write" not in commands:
-            return "WeChat packet missing WeWrite llm-write command evidence"
+        invocations = job.get("tool_invocations") or {}
+        wewrite = invocations.get("wewrite") or {}
+        wewrite_commands = [item.get("name") for item in wewrite.get("commands", []) if isinstance(item, dict)]
+        hermes_writer = invocations.get("hermes_writer") or {}
+        hermes_commands = [item.get("name") for item in hermes_writer.get("commands", []) if isinstance(item, dict)]
+        wewrite_used = wewrite.get("status") == "used" and "llm-write" in wewrite_commands
+        hermes_used = hermes_writer.get("status") == "used" and "hermes --cli" in hermes_commands
+        if not (wewrite_used or hermes_used):
+            return "WeChat packet requires successful WeWrite llm-write or Hermes writer invocation evidence"
         return ""
 
 

@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -73,8 +74,10 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
     topic = str(job.get("topic") or draft.get("title") or "WeChat article")
     body = str(draft.get("body") or "")
     _write_brief(brief_path, topic, draft, job)
-    invocation = _invoke_wewrite(cfg, brief_path, article_path, topic)
+    circuit_path = run_dir.parent / "wewrite_failure_circuit.json"
+    invocation = _invoke_wewrite(cfg, brief_path, article_path, topic, circuit_path)
     invocation["evidence_path"] = str(evidence_path)
+    meta.setdefault("tool_invocations", {})["wewrite"] = invocation
     if invocation.get("status") == "used" and article_path.is_file():
         title, article_body = _split_article(article_path.read_text(encoding="utf-8", errors="ignore"))
         if title:
@@ -82,11 +85,25 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
         if article_body:
             draft["body"] = article_body
             body = article_body
+    elif _hermes_writer_fallback_enabled(cfg):
+        fallback = _invoke_hermes_writer(cfg, brief_path, article_path)
+        fallback["evidence_path"] = str(evidence_path)
+        meta["tool_invocations"]["hermes_writer"] = fallback
+        if fallback.get("status") == "used" and article_path.is_file():
+            title, article_body = _split_article(article_path.read_text(encoding="utf-8", errors="ignore"))
+            if title:
+                draft["title"] = title[:80]
+            if article_body:
+                draft["body"] = article_body
+                body = article_body
+        elif required:
+            evidence_path.write_text(json.dumps({"tool_invocations": meta.get("tool_invocations", {})}, ensure_ascii=False, indent=2), encoding="utf-8")
+            return draft
     elif required:
-        meta.setdefault("tool_invocations", {})["wewrite"] = invocation
         evidence_path.write_text(json.dumps({"tool_invocations": meta.get("tool_invocations", {})}, ensure_ascii=False, indent=2), encoding="utf-8")
         return draft
     packet = _build_packet_fields(job, draft, body, invocation, run_dir)
+    packet["tool_invocations"] = meta["tool_invocations"]
     for key, value in packet.items():
         if value not in (None, "", [], {}):
             meta[key] = value
@@ -95,12 +112,15 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
     return draft
 
 
-def _invoke_wewrite(cfg: dict[str, Any], brief_path: Path, article_path: Path, topic: str) -> dict[str, Any]:
+def _invoke_wewrite(cfg: dict[str, Any], brief_path: Path, article_path: Path, topic: str, circuit_path: Path | None = None) -> dict[str, Any]:
     wewrite_bin = os.path.expanduser(str(cfg.get("wewrite_bin") or "~/.local/bin/wewrite"))
     timeout = int(cfg.get("timeout", 180))
     env = os.environ.copy()
     _load_env_file(env, cfg.get("env_file", ""))
     base = {"tool": "wewrite", "bin": wewrite_bin, "status": "failed", "commands": []}
+    cooldown = int(cfg.get("writer_failure_cooldown_seconds", 3600))
+    if circuit_path and _writer_circuit_open(circuit_path, cooldown):
+        return {**base, "status": "skipped", "reason": "recent_writer_provider_failure"}
     if not Path(wewrite_bin).is_file():
         return {**base, "error": "wewrite CLI not found"}
     command_prefix = [sys.executable, wewrite_bin] if wewrite_bin.endswith(".py") else [wewrite_bin]
@@ -138,11 +158,84 @@ def _invoke_wewrite(cfg: dict[str, Any], brief_path: Path, article_path: Path, t
                 summary = {}
             return {**base, "status": "used", "summary": {k: summary.get(k) for k in ["chars", "model", "tokens_in", "tokens_out"] if k in summary}}
         err = (write.stderr or write.stdout or start.stderr or start.stdout or "wewrite llm-write produced no article")[:500]
-        return {**base, "error": err}
+        failed = {**base, "error": err}
+        _record_writer_failure(circuit_path, failed)
+        return failed
     except subprocess.TimeoutExpired:
-        return {**base, "error": "wewrite command timed out"}
+        failed = {**base, "error": "wewrite command timed out"}
+        _record_writer_failure(circuit_path, failed)
+        return failed
     except Exception as exc:
-        return {**base, "error": f"wewrite invocation failed: {type(exc).__name__}: {str(exc)[:240]}"}
+        failed = {**base, "error": f"wewrite invocation failed: {type(exc).__name__}: {str(exc)[:240]}"}
+        _record_writer_failure(circuit_path, failed)
+        return failed
+
+
+def _writer_circuit_open(path: Path, cooldown_seconds: int) -> bool:
+    if cooldown_seconds <= 0 or not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return time.time() - float(payload.get("failed_at", 0)) < cooldown_seconds
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+
+
+def _record_writer_failure(path: Path | None, invocation: dict[str, Any]) -> None:
+    if not path:
+        return
+    try:
+        path.write_text(
+            json.dumps({"failed_at": time.time(), "returncodes": [item.get("returncode") for item in invocation.get("commands", [])]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def _invoke_hermes_writer(cfg: dict[str, Any], brief_path: Path, article_path: Path) -> dict[str, Any]:
+    """Generate a draft through Hermes when the configured WeWrite model fails.
+
+    This is an explicit alternative evidence path, never a relabelled WeWrite
+    success. The publisher checks the recorded tool and command independently.
+    """
+    hermes_bin = os.path.expanduser(str(cfg.get("hermes_bin") or "hermes"))
+    timeout = int(cfg.get("hermes_timeout") or cfg.get("timeout") or 180)
+    base = {"tool": "hermes_writer", "bin": hermes_bin, "status": "failed", "commands": []}
+    prompt = (
+        "请严格依据以下公众号写作简报生成完整 Markdown 正文。只输出文章，不要解释过程；"
+        "保留标题和二级标题，避免虚构事实或数据。\n\n"
+        + brief_path.read_text(encoding="utf-8", errors="ignore")
+    )
+    try:
+        command_prefix = [sys.executable, hermes_bin] if hermes_bin.endswith(".py") else [hermes_bin]
+        completed = subprocess.run(
+            [*command_prefix, "--cli", "-z", prompt],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+        )
+        base["commands"].append({"name": "hermes --cli", "returncode": completed.returncode})
+        article = (completed.stdout or "").strip()
+        if completed.returncode == 0 and len(article) > 1000:
+            article_path.write_text(article + "\n", encoding="utf-8")
+            return {**base, "status": "used", "article_path": str(article_path), "summary": {"chars": len(article)}}
+        error = (completed.stderr or article or "hermes writer produced no article")[:500]
+        return {**base, "error": error}
+    except subprocess.TimeoutExpired:
+        return {**base, "error": "hermes writer timed out"}
+    except OSError as exc:
+        return {**base, "error": f"hermes writer unavailable: {type(exc).__name__}: {str(exc)[:240]}"}
+
+
+def _hermes_writer_fallback_enabled(cfg: dict[str, Any]) -> bool:
+    value = cfg.get("hermes_writer_fallback")
+    if value is None:
+        value = os.environ.get("HERMES_WECHAT_WRITER_FALLBACK", "")
+    return str(value).strip().casefold() in {"1", "true", "yes", "on"}
 
 
 def _load_env_file(env: dict[str, str], env_file: str) -> None:

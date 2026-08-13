@@ -220,6 +220,17 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(toolchain["status"], "BLOCKED")
         self.assertEqual(toolchain["reason_code"], "wechat_toolchain_unavailable")
 
+    def test_hermes_writer_evidence_satisfies_wechat_writer_contract(self):
+        self.assertTrue(
+            Pipeline._has_wechat_writer_evidence(
+                {
+                    "wewrite": {"status": "failed", "commands": [{"name": "llm-write", "returncode": 4}]},
+                    "hermes_writer": {"status": "used", "commands": [{"name": "hermes --cli", "returncode": 0}]},
+                }
+            )
+        )
+        self.assertFalse(Pipeline._has_wechat_writer_evidence({"hermes_writer": {"status": "used", "commands": []}}))
+
     def test_required_image_gate_blocks_when_artifact_missing(self):
         pipeline = Pipeline(
             self.store,

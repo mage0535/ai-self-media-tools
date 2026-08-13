@@ -3132,3 +3132,18 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 
 ## Operating Rule
 - A provider or credential failure that prevents the required WeChat writer evidence remains a fail-closed `blocked` result. Do not replace it with a nominal success or a text-only delivery record.
+
+# 2026-08-13 - WeChat Writer Fallback Evidence
+
+## Finding
+- WeChat publication credentials and the publisher adapter can be healthy while the separate WeWrite language-model provider is unavailable. Treating this as a publication-permission failure obscures the real recovery path.
+
+## Implemented
+- WeWrite remains the preferred writer. When it fails and `HERMES_WECHAT_WRITER_FALLBACK=true` is explicitly configured, the toolchain invokes Hermes CLI with the same writing brief.
+- The fallback saves the generated Markdown article and records a separate `hermes_writer` invocation with command result and character count. It is never represented as WeWrite success.
+- The WeChat publish gate accepts either successful WeWrite `llm-write` evidence or successful Hermes writer evidence. It still blocks if neither path produced a verified article.
+- A failed WeWrite provider opens a one-hour local cooldown by default. During that bounded window the toolchain records WeWrite as skipped and immediately uses Hermes; after the window it probes WeWrite again automatically.
+
+## Verification
+- Regression tests cover fallback activation, retained WeWrite behavior, fallback evidence acceptance, and missing-evidence blocking.
+- Deployment validation must use draft generation only; it must not upload or publish while verifying the fallback.

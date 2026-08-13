@@ -169,13 +169,13 @@ class Pipeline:
                         depends_on=["generate_content"],
                         require_output=True,
                     )
-                    wewrite_status = ((draft.get("draft_meta") or {}).get("tool_invocations") or {}).get("wewrite", {}).get("status")
-                    if wewrite_status != "used":
+                    invocations = (draft.get("draft_meta") or {}).get("tool_invocations") or {}
+                    if not self._has_wechat_writer_evidence(invocations):
                         runner.block(
                             "prepare_wechat_professional_toolchain",
                             "wechat_toolchain_unavailable",
-                            "WeChat production workflow requires successful WeWrite llm-write evidence",
-                            ((draft.get("draft_meta") or {}).get("tool_invocations") or {}).get("wewrite", {}),
+                            "WeChat production workflow requires successful WeWrite llm-write or Hermes writer evidence",
+                            invocations,
                             depends_on=["generate_content"],
                         )
                 self._validate_draft_structure(draft)
@@ -720,6 +720,18 @@ class Pipeline:
     def _requires_rendered_video_evidence(platform, packet):
         plan = packet.get("video_toolchain_plan") or {}
         return bool(plan.get("required")) and platform in {"kuaishou", "bilibili", "shipinhao", "douyin", "tiktok"}
+
+    @staticmethod
+    def _has_wechat_writer_evidence(invocations):
+        if not isinstance(invocations, dict):
+            return False
+        wewrite = invocations.get("wewrite") or {}
+        wewrite_commands = [item.get("name") for item in wewrite.get("commands", []) if isinstance(item, dict)]
+        if wewrite.get("status") == "used" and "llm-write" in wewrite_commands:
+            return True
+        hermes_writer = invocations.get("hermes_writer") or {}
+        hermes_commands = [item.get("name") for item in hermes_writer.get("commands", []) if isinstance(item, dict)]
+        return hermes_writer.get("status") == "used" and "hermes --cli" in hermes_commands
 
     @staticmethod
     def _generation_platform_packet(job_id, draft, platforms, platform):

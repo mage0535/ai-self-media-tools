@@ -103,6 +103,25 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertEqual(result.status, "blocked")
         self.assertIn("WeWrite llm-write", result.error)
 
+    def test_hermes_wechat_adapter_accepts_explicit_hermes_writer_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = Path(tmp) / "runner.py"
+            runner.write_text(
+                "import argparse,json\n"
+                "p=argparse.ArgumentParser();p.add_argument('--input');p.add_argument('--output');a=p.parse_args()\n"
+                "json.dump({'ok': False, 'status': 'handoff_pending', 'media_id': 'draft-1', 'postcheck': {'passed': False}}, open(a.output,'w'))\n",
+                encoding="utf-8",
+            )
+            packet = self._complete_wechat_packet()
+            packet["tool_invocations"] = {
+                "wewrite": {"status": "failed", "commands": [{"name": "llm-write", "returncode": 4}]},
+                "hermes_writer": {"status": "used", "commands": [{"name": "hermes --cli", "returncode": 0}]},
+            }
+            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner), require_cn_proxy=False)
+            result = publisher.deliver(packet, "wechat")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "handoff_pending")
+
     def test_hermes_wechat_adapter_returns_handoff_when_postcheck_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             runner = Path(tmp) / "runner.py"
