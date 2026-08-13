@@ -11,6 +11,8 @@ def validate_cinema_delivery(
     scene_manifest: dict[str, Any],
     video_probe: dict[str, Any],
     bgm_source: dict[str, Any],
+    motion_evidence: dict[str, Any] | None = None,
+    subtitle_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Reject externally rendered media that lacks the same delivery proof as the main pipeline."""
     failures: list[str] = []
@@ -34,10 +36,16 @@ def validate_cinema_delivery(
         failures.append("bgm fingerprint missing")
     if not str(bgm_source.get("fit_reason") or "").strip():
         failures.append("bgm fit reason missing")
+    if not isinstance(motion_evidence, dict) or not motion_evidence.get("passed"):
+        failures.append("motion evidence failed")
+    if not isinstance(subtitle_evidence, dict) or not subtitle_evidence.get("passed"):
+        failures.append("subtitle evidence failed")
     return {
         "passed": not failures,
         "failures": failures,
         "scene_manifest_gate": scene_gate,
         "duration_gate": duration_gate,
         "video_probe": video_probe,
+        "motion_evidence": motion_evidence or {},
+        "subtitle_evidence": subtitle_evidence or {},
     }

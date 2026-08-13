@@ -43,7 +43,8 @@ python scripts/verify_cinema_delivery.py \
 
 The BGM metadata requires source, license, fingerprint, and a content-fit
 reason. A fixed music URL or a reused track cannot be treated as a valid
-delivery path.
+delivery path. External renderers must also supply stored motion evidence and
+subtitle sampling evidence; printing those checks to stdout is not proof.
 
 ## Migration Rule
 

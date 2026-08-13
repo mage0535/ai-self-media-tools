@@ -103,10 +103,27 @@ def test_cinema_delivery_rejects_untracked_bgm_and_accepts_an_evidenced_final_ar
     probe = {"duration_seconds": 42.0, "width": 1080, "height": 1920, "audio_streams": 1}
     good_bgm = {"source": "licensed_provider", "license": "CC BY 4.0", "sha256": "abc123", "fit_reason": "calm instructional pacing"}
 
-    assert validate_cinema_delivery(scene_manifest, probe, good_bgm)["passed"] is True
+    motion = {"passed": True, "unique_frame_count": 3}
+    subtitles = {"passed": True, "sample_count": 6}
+    assert validate_cinema_delivery(scene_manifest, probe, good_bgm, motion, subtitles)["passed"] is True
 
     bad_bgm = dict(good_bgm)
     bad_bgm.pop("sha256")
-    result = validate_cinema_delivery(scene_manifest, probe, bad_bgm)
+    result = validate_cinema_delivery(scene_manifest, probe, bad_bgm, motion, subtitles)
     assert result["passed"] is False
     assert "bgm fingerprint missing" in result["failures"]
+
+
+def test_cinema_delivery_requires_rendered_motion_and_subtitle_evidence():
+    from content_platform.cinema_delivery import validate_cinema_delivery
+    from content_platform.scene_manifest import build_scene_manifest
+
+    scene_manifest = build_scene_manifest(_cards(), _recipe(), {"platforms": ["douyin"]}, "Useful video")
+    probe = {"duration_seconds": 42.0, "width": 1080, "height": 1920, "audio_streams": 1}
+    bgm = {"source": "licensed_provider", "license": "CC BY 4.0", "sha256": "abc123", "fit_reason": "calm instructional pacing"}
+
+    result = validate_cinema_delivery(scene_manifest, probe, bgm, {"passed": False}, {"passed": False})
+
+    assert result["passed"] is False
+    assert "motion evidence failed" in result["failures"]
+    assert "subtitle evidence failed" in result["failures"]
