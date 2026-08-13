@@ -54,6 +54,21 @@ class PreRenderGateTests(unittest.TestCase):
             self.assertFalse(result["passed"])
             self.assertIn("scene_manifest_missing", result["failures"])
 
+    def test_gate_rejects_scene_manifest_without_six_layered_scenes(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "backgrounds").mkdir()
+            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            (root / "scene_manifest.json").write_text('{"scenes":[{}]}', encoding="utf-8")
+            cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
+
+            result = validate_render_inputs(root, cards, require_scene_manifest=True)
+
+            self.assertFalse(result["passed"])
+            self.assertIn("scene_manifest_invalid", result["failures"])
+
     def test_subtitle_builder_uses_dot_timestamps_and_safe_wrapping(self):
         from scripts.build_subtitles import build_ass
 

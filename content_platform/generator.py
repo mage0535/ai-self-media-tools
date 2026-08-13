@@ -382,6 +382,7 @@ class DraftGenerator:
             body,
             evidence=["platform source matrix", "same-lane pattern analysis"],
             actions=[section["title"] for section in sections[:3]],
+            platform=platform,
         )
         tool_manifest = build_tool_invocation_manifest(
             planned_tools={

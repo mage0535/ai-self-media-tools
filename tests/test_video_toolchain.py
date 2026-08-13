@@ -101,6 +101,8 @@ class VideoToolchainTests(unittest.TestCase):
 
         self.assertEqual(recipe["scene_manifest"]["source_contract"], "visual_recipe")
         self.assertEqual(len(recipe["scene_manifest"]["scenes"]), len(recipe["scene_asset_match"]))
+        self.assertGreaterEqual(len(recipe["scene_manifest"]["scenes"]), 6)
+        self.assertTrue(all(isinstance(scene["motion"], dict) for scene in recipe["scene_manifest"]["scenes"]))
         self.assertTrue(validate_visual_recipe(recipe)["passed"])
 
     def test_visual_recipe_core_keeps_explicit_style_differences(self):

@@ -198,18 +198,18 @@ def _matrix_result(data: dict) -> dict:
     }
 
 
-def _natural_overlap_evidence(data: dict, matrix: dict) -> dict:
+def _natural_overlap_evidence(data: dict, matrix: dict, *, strict: bool = False) -> dict:
     selection = data.get("topic_selection") if isinstance(data.get("topic_selection"), dict) else {}
     adaptation = str(selection.get("platform_adaptation_reason") or data.get("platform_adaptation_reason") or "").strip()
     signal = str(selection.get("platform_signal") or data.get("platform_signal") or "").strip()
     return {
-        "passed": matrix["successful_count"] >= 5 and matrix["platform_internal_evidence"] and len(adaptation) >= 8 and len(signal) >= 8,
+        "passed": matrix["attempted_count"] >= (8 if strict else 5) and matrix["successful_count"] >= (5 if strict else 3) and matrix["platform_internal_evidence"] and len(adaptation) >= 8 and len(signal) >= 8,
         "platform_adaptation_reason": adaptation,
         "platform_signal": signal,
     }
 
 
-def check(date: str, platforms: list[str] | None = None, root: Path | None = None) -> dict:
+def check(date: str, platforms: list[str] | None = None, root: Path | None = None, *, strict: bool = False) -> dict:
     root = root or project_home()
     platforms = platforms or list(PLATFORM_DIRS)
     records = {}
@@ -223,10 +223,11 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
         platform_failures = []
         if not loaded["path"]:
             platform_failures.append("analysis_file_missing")
-        if matrix["attempted_count"] < 5:
-            platform_failures.append("attempted_sources_lt_5")
-        if matrix["successful_count"] < 3:
-            platform_failures.append("successful_sources_lt_3")
+        min_attempted, min_successful = (8, 5) if strict else (5, 3)
+        if matrix["attempted_count"] < min_attempted:
+            platform_failures.append(f"attempted_sources_lt_{min_attempted}")
+        if matrix["successful_count"] < min_successful:
+            platform_failures.append(f"successful_sources_lt_{min_successful}")
         if not matrix["platform_internal_evidence"]:
             platform_failures.append("platform_internal_verification_missing")
         if matrix["shared_trend_only"]:
@@ -235,7 +236,7 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
             platform_failures.append("selected_topic_missing")
         if platform_failures:
             failures.append({"platform": platform, "failed_dimensions": platform_failures})
-        records[platform] = {"analysis_path": loaded["path"], "selected_topic": selected, "matrix": matrix, "natural_overlap_evidence": _natural_overlap_evidence(data, matrix), "failed_dimensions": platform_failures}
+        records[platform] = {"analysis_path": loaded["path"], "selected_topic": selected, "matrix": matrix, "natural_overlap_evidence": _natural_overlap_evidence(data, matrix, strict=strict), "failed_dimensions": platform_failures}
         topics[platform] = selected
 
     for i, left in enumerate(platforms):
@@ -257,17 +258,20 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
     except Exception:
         failures.append({"failed_dimensions": ["direction_register_check_failed"]})
 
-    return {"passed": not failures, "date": date, "platforms": platforms, "records": records, "failures": failures}
+    return {"passed": not failures, "date": date, "platforms": platforms, "strict": strict, "records": records, "failures": failures}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate per-platform topic/source independence.")
-    parser.add_argument("date")
+    parser.add_argument("date", nargs="?", default="")
+    parser.add_argument("--lookback-days", type=int, default=0, help="Compatibility flag; selection evidence remains date-scoped.")
+    parser.add_argument("--strict", action="store_true", help="Require the current 8-attempt/5-success quality contract.")
     parser.add_argument("--platforms", default="")
     parser.add_argument("--root", default="")
     args = parser.parse_args()
     platforms = [item.strip() for item in args.platforms.split(",") if item.strip()] or None
-    result = check(args.date, platforms, Path(args.root) if args.root else None)
+    date = args.date or __import__("datetime").datetime.now().strftime("%Y%m%d")
+    result = check(date, platforms, Path(args.root) if args.root else None, strict=args.strict)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("passed") else 2
 

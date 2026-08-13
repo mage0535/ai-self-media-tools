@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
+from content_platform.voice_plan import build_voice_plan
+
 # ────────────────────────────────────────────────────────────────
 # 语言检测
 # ────────────────────────────────────────────────────────────────
@@ -614,10 +616,12 @@ class VoiceEngine:
         audio_files, all_timings, segment_texts, all_durations = [], [], [], []
         total_dur = 0.0
 
-        for seg in segments:
+        voice_plan = build_voice_plan([seg.text for seg in segments])
+        for index, seg in enumerate(segments):
             voice = speaker_voices.get(seg.speaker, genre_cfg["single"])
             out = self.temp_dir / f"seg_{uuid.uuid4().hex[:8]}.mp3"
-            timing = await provider.synthesize_with_timing(seg.text, out, voice)
+            controls = voice_plan[index]
+            timing = await provider.synthesize_with_timing(seg.text, out, voice, rate=controls["rate"], pitch=controls["pitch"])
             dur = EdgeTTSProvider._get_duration(str(out))
             if out.exists() and dur > 0:
                 audio_files.append(out)
@@ -656,6 +660,7 @@ class VoiceEngine:
         return {
             "audio": str(final_audio), "subtitle": str(srt_path),
             "duration": total_dur, "genre": genre, "language": lang,
+            "voice_plan": voice_plan,
         }
 
     def _concat(self, files: list[Path]) -> Path:

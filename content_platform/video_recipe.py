@@ -53,7 +53,7 @@ def build_visual_recipe(
         effect_stack = [str(item) for item in (plan.get("effect_stack") or []) if str(item).strip()]
         if not effect_stack:
             effect_stack = _default_modules(selected_pipeline, template_family, registry)
-        scene_count = max(3, min(8, len(cinema_scenes or []) or len(_beats(script_body)) or 3))
+        scene_count = max(6, min(8, len(cinema_scenes or []) or len(_beats(script_body)) or 6))
         has_visual_assets = bool((visual_assets or {}).get("assignments"))
         recipe = {
             "version": "visual_recipe_v1",
@@ -269,11 +269,23 @@ def _scene_manifest(scene_matches: list[dict[str, Any]], cinema_scenes: list[dic
         cinema = cinema_scenes[(index - 1) % len(cinema_scenes)] if cinema_scenes else {}
         scenes.append({
             "scene": index,
+            "scene_id": f"s{index:02d}",
+            "start": round((index - 1) * 3.0, 2),
+            "end": round(index * 3.0, 2),
             "narration": str(match.get("script_beat") or ""),
             "subtitle": str(match.get("script_beat") or ""),
+            "visual_claim": str(match.get("match_reason") or ""),
             "visual_source": str(match.get("visual_source") or ""),
+            "asset_path": str(match.get("visual_source") or ""),
+            "asset_source": "verified_visual_assets_or_resolved_stock",
             "asset_match_reason": str(match.get("match_reason") or ""),
-            "motion": str((motion or {}).get("name") or (motion or {}).get("move_id") or (cinema or {}).get("motion") or "planned_scene_motion"),
+            "motion": {
+                "background": str((cinema or {}).get("background_motion") or "slow_depth_drift"),
+                "subject": str((motion or {}).get("name") or (motion or {}).get("move_id") or "subject_emphasis"),
+                "text": "subtitle_reveal",
+                "transition": "cut_or_crossfade",
+            },
+            "evidence": [str(match.get("match_reason") or "")],
         })
     return {"version": "scene_manifest_v1", "source_contract": "visual_recipe", "scenes": scenes}
 

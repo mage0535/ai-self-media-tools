@@ -55,6 +55,7 @@ def test_direction_register_allows_natural_overlap_with_independent_platform_evi
 
     evidence = {
         "source_matrix_id": "platform-local-matrix",
+        "attempted_sources": 8,
         "successful_sources": 5,
         "platform_internal_verified": True,
         "platform_signal": "recent saves on this platform favour a checklist",
@@ -90,7 +91,7 @@ def test_legacy_topic_gate_rejects_invalid_direction_register(tmp_path: Path):
         directory = tmp_path / "data" / ("local_ops_gzh" if platform == "wechat" else f"local_ops_{platform}")
         directory.mkdir(parents=True)
         (directory / "platform_source_matrix_20260810.json").write_text(
-            json.dumps({"selected_topic": topic, "source_matrix": {"attempted_sources": ["a", "b", "c", "d", "e"], "successful_sources": ["a", "b", "c"], "platform_internal_verified": True}}),
+            json.dumps({"selected_topic": topic, "source_matrix": {"attempted_sources": ["a", "b", "c", "d", "e", "f", "g", "h"], "successful_sources": ["a", "b", "c", "d", "e"], "platform_internal_verified": True}}),
             encoding="utf-8",
         )
     manifest = tmp_path / "data" / "ops_runs" / "20260810" / "run_manifest.json"
@@ -120,7 +121,7 @@ def test_topic_gate_allows_same_direction_when_each_platform_has_own_evidence(tm
                 {
                     "selected_topic": "AI code review workflow",
                     "platform_source_matrix": {
-                        "attempted_sources": ["a", "b", "c", "d", "e"],
+                        "attempted_sources": ["a", "b", "c", "d", "e", "f", "g", "h"],
                         "successful_sources": ["a", "b", "c", "d", "e"],
                         "platform_internal_verified": True,
                     },
@@ -136,6 +137,32 @@ def test_topic_gate_allows_same_direction_when_each_platform_has_own_evidence(tm
     result = check("20260810", ["zhihu", "juejin"], root=tmp_path)
 
     assert result["passed"] is True
+
+
+def test_topic_gate_strict_mode_requires_eight_attempted_sources(tmp_path: Path):
+    from scripts.check_platform_topic_independence import check
+
+    directory = tmp_path / "data" / "local_ops_zhihu"
+    directory.mkdir(parents=True)
+    (directory / "platform_source_matrix_20260810.json").write_text(
+        json.dumps(
+            {
+                "selected_topic": "AI workflow evidence",
+                "platform_source_matrix": {
+                    "attempted_sources": ["a", "b", "c", "d", "e"],
+                    "successful_sources": ["a", "b", "c", "d", "e"],
+                    "platform_internal_verified": True,
+                    "shared_trend_only": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = check("20260810", ["zhihu"], root=tmp_path, strict=True)
+
+    assert result["passed"] is False
+    assert "attempted_sources_lt_8" in result["failures"][0]["failed_dimensions"]
 
 
 def test_ops_run_cli_runs_as_a_direct_script():
