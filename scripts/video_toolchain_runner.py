@@ -158,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
     recipe_reuse_gate = _recipe_reuse_gate(visual_recipe, plan)
     recipe_path = output_dir / "visual_recipe.json"
     recipe_path.write_text(json.dumps(visual_recipe, ensure_ascii=False, indent=2), encoding="utf-8")
+    scene_manifest_path = output_dir / "scene_manifest.json"
+    scene_manifest_path.write_text(json.dumps(visual_recipe.get("scene_manifest") or {}, ensure_ascii=False, indent=2), encoding="utf-8")
     if not recipe_gate.get("passed") or not recipe_reuse_gate.get("passed"):
         manifest = {
             "ok": False,
@@ -185,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         cards,
         platform=_primary_platform(plan),
         require_backgrounds=False,
+        require_scene_manifest=True,
     )
     pre_render_gate_path = output_dir / "pre_render_gate.json"
     pre_render_gate_path.write_text(json.dumps(pre_render_gate, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -227,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
         "script_structure_gate": script_structure,
         "pre_render_gate": pre_render_gate,
         "pre_render_gate_path": str(pre_render_gate_path),
+        "scene_manifest_path": str(scene_manifest_path),
         "cinema_storyboard": cinema_scenes,
         "shotcraft_motion_plan": shotcraft_plan,
         "visual_assets": visual_assets,

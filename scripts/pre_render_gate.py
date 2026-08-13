@@ -41,6 +41,7 @@ def validate_render_inputs(
     bgm_mean_volume_db: float | None = None,
     require_backgrounds: bool = True,
     require_cover_contract: bool = True,
+    require_scene_manifest: bool = False,
 ) -> dict[str, Any]:
     """Validate cheap input contracts without rendering or downloading assets."""
     video_dir = Path(video_dir)
@@ -69,6 +70,11 @@ def validate_render_inputs(
     backgrounds = _background_files(video_dir)
     if require_backgrounds and len(backgrounds) < len(cards):
         failures.append(f"background_assets_incomplete:{len(backgrounds)}/{len(cards)}")
+
+    if require_scene_manifest:
+        scene_manifest = video_dir / "scene_manifest.json"
+        if not scene_manifest.is_file():
+            failures.append("scene_manifest_missing")
 
     bgm = video_dir / "bgm.mp3"
     bgm_source = video_dir / "bgm_source.json"
@@ -112,6 +118,7 @@ def main() -> int:
     parser.add_argument("--cards", default="")
     parser.add_argument("--platform", default="kuaishou")
     parser.add_argument("--bgm-mean-volume-db", type=float, default=None)
+    parser.add_argument("--require-scene-manifest", action="store_true")
     parser.add_argument("--out", default="")
     args = parser.parse_args()
     video_dir = Path(args.video_dir)
@@ -121,7 +128,7 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         result = {"passed": False, "platform": args.platform, "failures": [f"cards_read_failed:{type(exc).__name__}"], "warnings": []}
     else:
-        result = validate_render_inputs(video_dir, cards, platform=args.platform, bgm_mean_volume_db=args.bgm_mean_volume_db)
+        result = validate_render_inputs(video_dir, cards, platform=args.platform, bgm_mean_volume_db=args.bgm_mean_volume_db, require_scene_manifest=args.require_scene_manifest)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -20,6 +20,14 @@ class ResourceTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             guard.check("video")
 
+    def test_video_uses_the_higher_default_headroom_and_emits_disk_warning(self):
+        guard = ResourceGuard(self.root, {}, probe=lambda: {"available_mb": 1100, "disk_used_percent": 84.5})
+        with self.assertRaisesRegex(RuntimeError, "1200MB"):
+            guard.check("video")
+
+        safe = ResourceGuard(self.root, {}, probe=lambda: {"available_mb": 1400, "disk_used_percent": 84.5}).check("video")
+        self.assertIn("disk_usage_warning", safe["warnings"])
+
     def test_video_lock_is_exclusive(self):
         guard = ResourceGuard(self.root, {}, probe=lambda: {"available_mb": 4096, "disk_used_percent": 20})
         with guard.video_lock():
@@ -44,4 +52,3 @@ class ResourceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

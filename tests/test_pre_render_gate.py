@@ -40,6 +40,20 @@ class PreRenderGateTests(unittest.TestCase):
             self.assertTrue(result["passed"])
             self.assertIn("bgm_requires_auto_gain", result["warnings"])
 
+    def test_gate_requires_scene_manifest_when_requested(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "backgrounds").mkdir()
+            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
+
+            result = validate_render_inputs(root, cards, require_scene_manifest=True)
+
+            self.assertFalse(result["passed"])
+            self.assertIn("scene_manifest_missing", result["failures"])
+
     def test_subtitle_builder_uses_dot_timestamps_and_safe_wrapping(self):
         from scripts.build_subtitles import build_ass
 

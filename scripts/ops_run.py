@@ -27,6 +27,7 @@ def main() -> int:
     parser.add_argument("--follow-up-to", default="")
     parser.add_argument("--difference-angle", default="")
     parser.add_argument("--recap-reason", default="")
+    parser.add_argument("--source-evidence", default="", help="JSON evidence for an independently justified natural overlap")
     args = parser.parse_args()
     root = Path(args.root) if args.root else project_home()
     if args.init:
@@ -34,7 +35,11 @@ def main() -> int:
         return 0
     if not args.platform or not args.topic:
         parser.error("--platform and --topic are required unless --init is used")
-    result = record_topic(root, args.date, args.platform, args.topic, direction=args.direction, follow_up_to=args.follow_up_to, difference_angle=args.difference_angle, recap_reason=args.recap_reason)
+    try:
+        source_evidence = json.loads(args.source_evidence) if args.source_evidence else {}
+    except json.JSONDecodeError as exc:
+        parser.error(f"--source-evidence must be JSON: {exc.msg}")
+    result = record_topic(root, args.date, args.platform, args.topic, direction=args.direction, follow_up_to=args.follow_up_to, difference_angle=args.difference_angle, recap_reason=args.recap_reason, source_evidence=source_evidence)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["accepted"] else 2
 

@@ -77,6 +77,32 @@ def _recent_records(root: Path, date: str, lookback_days: int) -> list[dict]:
     return records
 
 
+def _independent_evidence(record: dict) -> bool:
+    """Require a platform-specific evidence chain before allowing natural overlap."""
+    evidence = record.get("source_evidence") if isinstance(record, dict) else {}
+    if not isinstance(evidence, dict):
+        return False
+    successful = evidence.get("successful_sources") or 0
+    if isinstance(successful, list):
+        successful = len(successful)
+    return (
+        bool(str(evidence.get("source_matrix_id") or "").strip())
+        and int(successful) >= 5
+        and evidence.get("platform_internal_verified") is True
+        and len(str(evidence.get("platform_signal") or "").strip()) >= 8
+        and len(str(evidence.get("platform_adaptation_reason") or "").strip()) >= 8
+    )
+
+
+def _independent_overlap(records: list[dict]) -> bool:
+    source_ids = {
+        str((record.get("source_evidence") or {}).get("source_matrix_id") or "").strip()
+        for record in records
+        if isinstance(record, dict)
+    }
+    return len(records) >= 2 and len(source_ids) == len(records) and all(_independent_evidence(record) for record in records)
+
+
 def record_topic(
     root: Path,
     date: str,
@@ -87,8 +113,9 @@ def record_topic(
     follow_up_to: str = "",
     difference_angle: str = "",
     recap_reason: str = "",
+    source_evidence: dict | None = None,
 ) -> dict:
-    """Record one choice, blocking same-direction reuse unless it is documented."""
+    """Record a topic direction while allowing evidence-backed natural overlap."""
     root = Path(root)
     manifest = create_run(root, date)
     normalized = _normalized_direction(topic, direction)
@@ -98,7 +125,6 @@ def record_topic(
         if str(item.get("direction") or "") == normalized
     ]
     documented_follow_up = bool(follow_up_to and difference_angle and recap_reason)
-    failed_dimensions = [] if not conflicts or documented_follow_up else ["direction_already_selected"]
     record = {
         "platform": str(platform),
         "topic": str(topic),
@@ -106,7 +132,11 @@ def record_topic(
         "follow_up_to": str(follow_up_to),
         "difference_angle": str(difference_angle),
         "recap_reason": str(recap_reason),
+        "source_evidence": dict(source_evidence or {}),
     }
+    independent_overlap = bool(conflicts) and _independent_overlap([*conflicts, record])
+    failed_dimensions = [] if not conflicts or documented_follow_up or independent_overlap else ["direction_already_selected"]
+    record["overlap_mode"] = "independent_evidence" if independent_overlap else ("documented_follow_up" if documented_follow_up else "distinct_direction")
     accepted = not failed_dimensions
     if accepted:
         manifest["direction_register"].append(record)
@@ -136,6 +166,8 @@ def direction_register_issues(root: Path, date: str) -> list[dict]:
             grouped.setdefault(str(record["direction"]), []).append(record)
     issues = []
     for direction, entries in grouped.items():
+        if _independent_overlap(entries):
+            continue
         unresolved = [item for item in entries[1:] if not (item.get("follow_up_to") and item.get("difference_angle") and item.get("recap_reason"))]
         if unresolved:
             issues.append(

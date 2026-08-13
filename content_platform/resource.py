@@ -28,13 +28,16 @@ class ResourceGuard:
 
     def check(self, kind):
         snapshot = self.probe()
-        min_memory = int(self.config.get("min_available_mb", 768 if kind == "video" else 256))
+        min_memory = int(self.config.get("min_available_mb", 1200 if kind == "video" else 256))
         max_disk = float(self.config.get("max_disk_used_percent", 88))
+        warning_disk = float(self.config.get("warning_disk_used_percent", 84))
         if snapshot["available_mb"] < min_memory:
             raise RuntimeError(f"resource_guard: available memory {snapshot['available_mb']}MB below {min_memory}MB")
         if snapshot["disk_used_percent"] >= max_disk:
             raise RuntimeError(f"resource_guard: disk usage {snapshot['disk_used_percent']}% reached {max_disk}%")
-        return snapshot
+        result = dict(snapshot)
+        result["warnings"] = ["disk_usage_warning"] if snapshot["disk_used_percent"] >= warning_disk else []
+        return result
 
     @contextmanager
     def video_lock(self):
@@ -66,4 +69,3 @@ class ResourceGuard:
                 path.unlink()
                 removed += 1
         return {"removed": removed, "bytes_removed": bytes_removed}
-
