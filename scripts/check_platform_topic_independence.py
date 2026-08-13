@@ -198,6 +198,17 @@ def _matrix_result(data: dict) -> dict:
     }
 
 
+def _natural_overlap_evidence(data: dict, matrix: dict) -> dict:
+    selection = data.get("topic_selection") if isinstance(data.get("topic_selection"), dict) else {}
+    adaptation = str(selection.get("platform_adaptation_reason") or data.get("platform_adaptation_reason") or "").strip()
+    signal = str(selection.get("platform_signal") or data.get("platform_signal") or "").strip()
+    return {
+        "passed": matrix["successful_count"] >= 5 and matrix["platform_internal_evidence"] and len(adaptation) >= 8 and len(signal) >= 8,
+        "platform_adaptation_reason": adaptation,
+        "platform_signal": signal,
+    }
+
+
 def check(date: str, platforms: list[str] | None = None, root: Path | None = None) -> dict:
     root = root or project_home()
     platforms = platforms or list(PLATFORM_DIRS)
@@ -224,12 +235,13 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
             platform_failures.append("selected_topic_missing")
         if platform_failures:
             failures.append({"platform": platform, "failed_dimensions": platform_failures})
-        records[platform] = {"analysis_path": loaded["path"], "selected_topic": selected, "matrix": matrix, "failed_dimensions": platform_failures}
+        records[platform] = {"analysis_path": loaded["path"], "selected_topic": selected, "matrix": matrix, "natural_overlap_evidence": _natural_overlap_evidence(data, matrix), "failed_dimensions": platform_failures}
         topics[platform] = selected
 
     for i, left in enumerate(platforms):
         for right in platforms[i + 1 :]:
-            if topics.get(left) and topics.get(right) and _similarity(topics[left], topics[right]) > 0.5:
+            overlap_allowed = bool(records[left]["natural_overlap_evidence"]["passed"] and records[right]["natural_overlap_evidence"]["passed"])
+            if topics.get(left) and topics.get(right) and _similarity(topics[left], topics[right]) > 0.5 and not overlap_allowed:
                 failures.append({
                     "platforms": [left, right],
                     "failed_dimensions": ["topic_similarity_too_high"],

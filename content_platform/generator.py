@@ -13,6 +13,7 @@ from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 from .content_recipe import build_article_recipe, build_image_text_card_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 from .tool_selection import build_tool_selection_evidence
 from .growth_recipe import build_growth_recipe
+from .content_depth import build_content_depth_plan
 
 
 class ProviderAuthError(RuntimeError):
@@ -375,6 +376,12 @@ class DraftGenerator:
             cards=cards,
             sections=sections,
             content_goal="increase opens, saves, shares, comments, and follow conversion with platform-matched visual cards",
+        )
+        draft_meta["content_depth_plan"] = build_content_depth_plan(
+            topic_text,
+            body,
+            evidence=["platform source matrix", "same-lane pattern analysis"],
+            actions=[section["title"] for section in sections[:3]],
         )
         tool_manifest = build_tool_invocation_manifest(
             planned_tools={

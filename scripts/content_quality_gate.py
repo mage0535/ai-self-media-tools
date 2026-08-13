@@ -6,6 +6,12 @@ Reuses promo_pipeline.py quality_review patterns.
 import json
 import os
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from content_platform.content_depth import validate_content_depth_plan
 
 
 def audit_autoclip(result):
@@ -54,6 +60,7 @@ GATES = {
     "video_autoclip": audit_autoclip,
     "github_star": audit_github_star,
     "collected_data": audit_collected_data,
+    "content_depth": validate_content_depth_plan,
 }
 
 
@@ -67,11 +74,16 @@ def run_quality_gate(content_type, content_data):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Unified Content Quality Gate")
-    parser.add_argument("--type", required=True, choices=list(GATES.keys()), help="Content type to audit")
+    parser.add_argument("--type", choices=list(GATES.keys()), help="Content type to audit")
+    parser.add_argument("--check-depth", action="store_true", help="Validate a content_depth_plan directly")
     parser.add_argument("--data", default="{}", help="JSON content data")
     args = parser.parse_args()
 
+    if not args.type and not args.check_depth:
+        parser.error("--type or --check-depth is required")
     data = json.loads(args.data)
-    result = run_quality_gate(args.type, data)
+    result = run_quality_gate("content_depth" if args.check_depth else args.type, data)
+    if args.check_depth:
+        result = {"pass": bool(result.get("passed")), **result}
     print(json.dumps(result, indent=2, ensure_ascii=False))
     sys.exit(0 if result["pass"] else 1)

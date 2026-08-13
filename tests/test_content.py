@@ -60,6 +60,17 @@ class ContentTests(unittest.TestCase):
             set(meta["tool_invocation_manifest"]["planned_tools"]),
         )
 
+    def test_article_generator_emits_a_valid_content_depth_plan(self):
+        from content_platform.content_depth import validate_content_depth_plan
+
+        with patch.dict(os.environ, {}, clear=True):
+            draft = DraftGenerator({"allow_fallback": True}).generate(
+                "AI workflow checklist",
+                {"platforms": ["wechat"], "tone": "clear", "audience": "operators"},
+            )
+
+        self.assertTrue(validate_content_depth_plan(draft["draft_meta"]["content_depth_plan"])["passed"])
+
     def test_generator_reads_named_key_from_configured_env_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / "provider.env"

@@ -87,6 +87,7 @@ def build_visual_recipe(
     recipe.setdefault("style_variants", _style_variants(cinema_scenes or [], plan, title, script_body))
     recipe.setdefault("asset_strategy", {"primary": "verified_visual_assets", "fallback": "html_css_knowledge_card_fallback", "forbidden": ["random_unmatched_background"]})
     recipe.setdefault("avoid", ["same_recipe_fingerprint", "same_bgm_fingerprint"])
+    recipe["scene_manifest"] = _scene_manifest(recipe.get("scene_asset_match") or [], cinema_scenes or [], shotcraft_plan or {})
     recipe["core_fingerprint"] = recipe_core_fingerprint(recipe)
     recipe["fingerprint"] = recipe_instance_fingerprint(recipe)
     return recipe
@@ -116,6 +117,14 @@ def validate_visual_recipe(recipe: dict[str, Any] | None, registry: dict[str, An
             if not isinstance(item, dict) or not item.get("script_beat") or not item.get("visual_source") or not item.get("match_reason"):
                 failures.append(f"scene_asset_match[{index}] incomplete")
                 break
+    scene_manifest = recipe.get("scene_manifest")
+    if scene_manifest is not None:
+        manifest = scene_manifest if isinstance(scene_manifest, dict) else {}
+        scenes = manifest.get("scenes") if isinstance(manifest.get("scenes"), list) else []
+        if manifest.get("source_contract") != "visual_recipe" or len(scenes) != len(scene_matches):
+            failures.append("scene_manifest must extend visual_recipe scene_asset_match")
+        elif any(not isinstance(scene, dict) or not scene.get("narration") or not scene.get("subtitle") or not scene.get("visual_source") or not scene.get("motion") for scene in scenes):
+            failures.append("scene_manifest scenes incomplete")
     style = recipe.get("style_variants") if isinstance(recipe.get("style_variants"), dict) else {}
     if not all(style.get(key) for key in ["color_mood", "motion_density", "text_layout", "scene_change_interval_sec"]):
         failures.append("style_variants must include color_mood, motion_density, text_layout, scene_change_interval_sec")
@@ -249,6 +258,24 @@ def _scene_asset_match(count: int, visual_assets: dict[str, Any]) -> list[dict[s
             }
         )
     return rows
+
+
+def _scene_manifest(scene_matches: list[dict[str, Any]], cinema_scenes: list[dict[str, Any]], shotcraft_plan: dict[str, Any]) -> dict[str, Any]:
+    timeline = shotcraft_plan.get("timeline") if isinstance(shotcraft_plan, dict) else []
+    timeline = timeline if isinstance(timeline, list) else []
+    scenes = []
+    for index, match in enumerate(scene_matches, 1):
+        motion = timeline[(index - 1) % len(timeline)] if timeline else {}
+        cinema = cinema_scenes[(index - 1) % len(cinema_scenes)] if cinema_scenes else {}
+        scenes.append({
+            "scene": index,
+            "narration": str(match.get("script_beat") or ""),
+            "subtitle": str(match.get("script_beat") or ""),
+            "visual_source": str(match.get("visual_source") or ""),
+            "asset_match_reason": str(match.get("match_reason") or ""),
+            "motion": str((motion or {}).get("name") or (motion or {}).get("move_id") or (cinema or {}).get("motion") or "planned_scene_motion"),
+        })
+    return {"version": "scene_manifest_v1", "source_contract": "visual_recipe", "scenes": scenes}
 
 
 def _selection_reason(selected_pipeline: str, template_family: str, title: str) -> str:

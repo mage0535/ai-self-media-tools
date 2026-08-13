@@ -9,6 +9,20 @@ python3 -m compileall -q content_platform scripts
 python3 -m content_platform.cli project-audit
 ```
 
+For the quality-orchestration contracts, use the real CLI entries rather than
+an inferred flag name:
+
+```bash
+python3 scripts/check_platform_topic_independence.py 20260813 --platforms zhihu,juejin
+python3 scripts/content_quality_gate.py --check-depth --data '{"version":"content_depth_plan_v1","title":"Example","actions":["do one","do two"],"evidence":["measured example"],"continuation_claimed":false,"series_plan":{}}'
+python3 scripts/pre_render_gate.py --video-dir <render-output> --require-scene-manifest
+```
+
+The topic gate permits a naturally overlapping direction only when both
+platform packages show five successful sources, platform-internal evidence, a
+platform signal, and a platform-specific adaptation reason. It does not permit
+copying a shared topic merely because the titles differ.
+
 For a rendered original-video package, inspect the manifest rather than a
 planned tool list. Acceptance requires all of the following:
 
@@ -29,5 +43,7 @@ PY
 
 The package passes only when `status` is `rendered`, `motion_frames` is at
 least 2, and every segment evidence item contains both `move_id` and `profile`.
+It must also include `<render-output>/scene_manifest.json`; that file is a
+projection of `visual_recipe.scene_asset_match`, not a separate plan.
 Manual-handoff deliveries must remain `handoff_ready`; they are not evidence
 of a completed public post.
