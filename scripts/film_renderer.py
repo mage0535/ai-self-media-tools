@@ -306,6 +306,21 @@ def main() -> int:
         raw = script_file.read_text(encoding="utf-8")
         script_segments = [seg.strip() for seg in re.split(r"\n\s*\n", raw) if seg.strip()]
         print(f"TTS 脚本: {script_file} ({len(script_segments)} 段)")
+        # 08-14 短视频脚本质量门禁：PASS 才渲染（防"太AI不吸引人"复发）
+        try:
+            import subprocess as _sp
+            gate_lang = "zh" if re.search(r"[\u4e00-\u9fff]", raw) else "en"
+            gate = _sp.run(
+                [sys.executable, str(ROOT / "scripts" / "video_script_gate.py"), str(script_file),
+                 "--lang", gate_lang, "--json"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if gate.returncode == 0:
+                print(f"脚本质量门禁: PASS ({gate_lang})")
+            else:
+                print(f"⚠️ 脚本质量门禁: FAIL ({gate_lang})——渲染继续但需人工复核（{gate.stdout[:200]}）", file=sys.stderr)
+        except Exception as e:
+            print(f"门禁检查跳过: {e}", file=sys.stderr)
 
     # TTS 生产默认 = Edge TTS 逐段独立合成（08-14 用户 8 条规则）。
     # ⚠️ 不经 voice_engine 的 DeAI 后处理（呼吸音/停顿/变速会引入间隔性杂音——08-14 实测）。
