@@ -3219,3 +3219,6 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   outcome (status and artifact kinds only), acceptance/blocking, and staging.
   The observer remains read-only and can report those real stage changes every
   three minutes without exposing content bodies or credentials.
+- Historic state reconciliation also repairs legacy `handoff_ready` rows when
+  their retained reason proves the handoff media was missing. Old work is not
+  replayed or published during this repair.
