@@ -103,6 +103,18 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(task["state"], "blocked")
         self.assertEqual(task["reason"], "growth strategy snapshot missing")
 
+    def test_overnight_sync_state_reconciles_existing_job_without_replaying_work(self):
+        job = Store(self.db).create_job("topic", ["wechat"])
+        state = self.root / "state.json"
+        state.write_text(json.dumps({"status": "partial", "tasks": [{"platform": "wechat", "job_id": job["id"], "state": "failed"}]}), encoding="utf-8")
+        output = self.root / "acceptance_summary.json"
+
+        code, result = self.call("overnight-sync-state", "--state", str(state), "--output", str(output))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(result["platforms"][0]["state"], "created")
+        self.assertTrue(output.is_file())
+
     def test_task_market_scan_command_returns_summary(self):
         fake_result = {
             "env": "cn",

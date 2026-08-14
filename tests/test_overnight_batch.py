@@ -134,7 +134,28 @@ def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_i
     )
 
     assert prepared["tasks"][1]["state"] == "blocked"
-    assert prepared["tasks"][1]["reason"] == "no unique cross-platform topic candidate"
+    assert prepared["tasks"][1]["reason"] == "no independently evidenced cross-platform topic candidate"
+
+
+def test_due_task_builder_allows_evidenced_natural_overlap_with_distinct_execution_angles():
+    def rank(platform, _items, _slot):
+        return [{"title": "Shared topic", "source": platform, "score": 5, "fingerprint": "shared-topic"}]
+
+    report = [{"source": source, "status": "ok"} for source in ("wechat", "zhihu", "github", "hackernews", "bilibili", "weibo", "x", "juejin")]
+    prepared = build_due_tasks(
+        [
+            {"platform": "wechat", "platform_adaptation_reason": "personal field guide", "platform_signal": "wechat reader questions"},
+            {"platform": "zhihu", "platform_adaptation_reason": "evidence-led answer", "platform_signal": "zhihu question demand"},
+        ],
+        items=[],
+        source_report=report,
+        rank_for_platform=rank,
+        growth_strategy_status={"wechat": {"status": "ok"}, "zhihu": {"status": "ok"}},
+        strict_trend_evidence=True,
+    )
+
+    assert [task["state"] for task in prepared["tasks"]] == ["ready_for_plan", "ready_for_plan"]
+    assert prepared["tasks"][1]["brief"]["platform_source_matrix"]["platform_internal_verified"] is True
 
 
 def test_due_task_builder_applies_a_final_platform_candidate_filter():
@@ -161,6 +182,69 @@ def test_due_task_builder_blocks_when_strict_trend_evidence_is_incomplete():
     task = prepared["tasks"][0]
     assert task["state"] == "blocked"
     assert task["trend_candidate"]["sources_attempted"] == 1
+
+
+def test_due_task_builder_does_not_fabricate_platform_evidence_from_generic_sources():
+    report = [{"source": f"generic-{index}", "status": "ok"} for index in range(8)]
+    prepared = build_due_tasks(
+        [{"platform": "zhihu"}],
+        items=[],
+        source_report=report,
+        rank_for_platform=lambda *_args: [{"title": "Agent workflow", "fingerprint": "agent-workflow", "score": 1.0}],
+        growth_strategy_status={"zhihu": {"status": "ok", "key": "growth_strategy:zhihu:latest"}},
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    matrix = task["brief"]["platform_source_matrix"]
+    assert task["state"] == "blocked"
+    assert matrix["platform_internal_verified"] is False
+    assert task["reason"] == "platform-specific trend evidence missing"
+
+
+def test_sync_batch_state_records_actual_job_and_delivery_state(tmp_path: Path):
+    from content_platform.overnight_batch import sync_batch_state
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("topic", ["kuaishou"])
+    store.save_delivery(job["id"], "kuaishou", "drafted", "remote-draft")
+    state = {"status": "partial", "tasks": [{"platform": "kuaishou", "job_id": job["id"], "state": "failed"}]}
+
+    report = sync_batch_state(state, store, summary_path=tmp_path / "acceptance_summary.json")
+
+    task = state["tasks"][0]
+    assert task["state"] == "drafted"
+    assert task["job_state"] == "created"
+    assert task["delivery_states"] == ["drafted"]
+    assert report["platforms"][0]["state"] == "drafted"
+    assert (tmp_path / "acceptance_summary.json").is_file()
+
+
+def test_sync_batch_state_keeps_failed_acceptance_blocked(tmp_path: Path):
+    from content_platform.overnight_batch import sync_batch_state
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("topic", ["wechat"])
+    store.save_workflow_acceptance(job["id"], {"passed": False, "failures": ["long_form_cta_missing"]})
+    state = {"status": "partial", "tasks": [{"platform": "wechat", "job_id": job["id"], "state": "review_required"}]}
+
+    sync_batch_state(state, store)
+
+    assert state["tasks"][0]["state"] == "blocked"
+
+
+def test_sync_batch_state_marks_parent_partial_when_a_job_is_blocked(tmp_path: Path):
+    from content_platform.overnight_batch import sync_batch_state
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("topic", ["wechat"])
+    store.save_workflow_acceptance(job["id"], {"passed": False, "failures": ["long_form_too_short"]})
+    state = {"status": "completed", "tasks": [{"platform": "wechat", "job_id": job["id"], "state": "drafted"}]}
+
+    report = sync_batch_state(state, store)
+
+    assert state["status"] == "partial"
+    assert report["batch_status"] == "partial"
 
 
 def test_due_task_builder_blocks_when_growth_strategy_snapshot_is_missing():
@@ -290,3 +374,33 @@ def test_execute_batch_marks_only_blocked_rows_partial(tmp_path: Path):
     summary = execute_batch(Pipeline(), plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(tmp_path / "events.jsonl"))
 
     assert summary["status"] == "partial"
+
+
+def test_interrupted_running_task_is_blocked_without_being_recreated(tmp_path: Path):
+    plan = build_batch_plan([{"platform": "wechat", "topic": "topic", "brief": {}, "estimate_minutes": 10}], deadline_minute=280, finalization_minutes=20)
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"status": "running", "tasks": [{"platform": "wechat", "state": "running", "topic": "topic"}]}), encoding="utf-8")
+
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            raise AssertionError("interrupted work must not be recreated")
+
+    summary = execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["status"] == "partial"
+    assert summary["tasks"][0]["state"] == "blocked"
+    assert summary["tasks"][0]["reason"] == "interrupted_batch_requires_recovery"
+
+
+def test_review_required_task_is_terminal_on_resume(tmp_path: Path):
+    plan = build_batch_plan([{"platform": "wechat", "topic": "topic", "brief": {}, "estimate_minutes": 10}], deadline_minute=280, finalization_minutes=20)
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"status": "partial", "tasks": [{"platform": "wechat", "state": "review_required", "topic": "topic"}]}), encoding="utf-8")
+
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            raise AssertionError("review-required work must not be recreated")
+
+    summary = execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["tasks"][0]["state"] == "review_required"

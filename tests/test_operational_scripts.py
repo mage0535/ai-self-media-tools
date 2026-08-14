@@ -248,6 +248,18 @@ shared_trend_only: false
         self.assertLess(text.index("smoke_provider.sh"), text.index("performance-cycle"))
         self.assertIn("provider_preflight_failed", text)
 
+    def test_overnight_script_writes_acceptance_summary_after_batch_execution(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn("overnight-sync-state", text)
+        self.assertIn("acceptance_summary.json", text)
+
+    def test_overnight_script_has_a_bounded_configurable_catchup_window(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn('OVERNIGHT_ADMISSION_WINDOW_MINUTES:-60', text)
+        self.assertIn('missed_overnight_admission_window', text)
+
     def test_overnight_script_reports_non_admitted_capacity_without_claiming_completion(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
 

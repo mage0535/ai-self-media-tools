@@ -285,6 +285,8 @@ class Pipeline:
 
     def publish(self, job_id):
         job = self._hydrate(self.store.get_job(job_id))
+        if self.config.get("workflow", {}).get("require_unified_acceptance") and not bool(job.get("acceptance", {}).get("passed")):
+            raise PermissionError("job has no passing unified workflow acceptance")
         if job["state"] == "published":
             return job
         if job["state"] not in {"approved", "partial"}:

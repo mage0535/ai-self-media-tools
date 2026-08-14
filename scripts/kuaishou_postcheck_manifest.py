@@ -49,13 +49,24 @@ def _classify_management_postcheck(manifest: dict[str, Any], body: str) -> dict[
     title_found = bool(expected["title"] and expected["title"] in body)
     description_found = bool(description_snippet and description_snippet in body)
     schedule_found = bool(expected["schedule_time"] and expected["schedule_time"] in body)
+    # An "under review" page can contain unrelated descriptions. Require both
+    # expected title and description before attributing the row to this run.
+    work_found = title_found and description_found
     if login_like:
         status = "login_required"
+    elif under_review and work_found:
+        status = "success_under_review"
     elif under_review:
         status = "under_review"
     else:
         status = "management_postcheck_found" if title_found and (not expected["schedule_time"] or schedule_found) else "management_postcheck_not_found"
-    passed = title_found and (not expected["schedule_time"] or schedule_found) and not login_like and not under_review
+    passed = (
+        not login_like
+        and (
+            (under_review and work_found)
+            or (title_found and (not expected["schedule_time"] or schedule_found))
+        )
+    )
     return {
         "passed": passed,
         "status": status,
@@ -66,6 +77,7 @@ def _classify_management_postcheck(manifest: dict[str, Any], body: str) -> dict[
         "expected_title": expected["title"],
         "expected_description_snippet": description_snippet,
         "expected_schedule_time": expected["schedule_time"],
+        "delivery_state": "under_review" if status == "success_under_review" else "scheduled" if passed else "unverified",
     }
 
 

@@ -147,6 +147,9 @@ def parser():
     overnight_run.add_argument("--plan", required=True, help="JSON plan created by overnight-plan")
     overnight_run.add_argument("--state", required=True, help="Persistent batch state path")
     overnight_run.add_argument("--events", required=True, help="Append-only JSONL event path")
+    overnight_sync = sub.add_parser("overnight-sync-state", help="Reconcile a batch checkpoint from existing job records")
+    overnight_sync.add_argument("--state", required=True, help="Batch state JSON path")
+    overnight_sync.add_argument("--output", required=True, help="Acceptance summary JSON path")
     review_token = sub.add_parser("review-token")
     review_token.add_argument("job_id")
     review_token.add_argument("--action", choices=["approve", "reject"], required=True)
@@ -625,7 +628,14 @@ def execute(args):
     if args.command == "overnight-run":
         from .overnight_batch import BatchEventJournal, execute_batch
         plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
-        return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events))
+        return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events), store=store, require_acceptance=True)
+    if args.command == "overnight-sync-state":
+        from .overnight_batch import sync_batch_state
+        state_path = Path(args.state)
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        report = sync_batch_state(state, store, summary_path=args.output)
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        return report
     if args.command in {"trends", "auto"}:
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
