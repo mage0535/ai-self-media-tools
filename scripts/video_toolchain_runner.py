@@ -31,6 +31,7 @@ from content_platform.content_recipe import build_tool_invocation_manifest
 from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.video_recipe import build_visual_recipe, load_effect_module_registry, validate_visual_recipe
 from content_platform.video_artifact import verify_artifact
+from content_platform.scene_manifest import build_scene_manifest, validate_rendered_duration, validate_scene_manifest
 
 try:
     from scripts.shotcraft_moves import SHOT_CARD_REGISTRY, shot_plan_for_text, shot_sequence
@@ -182,6 +183,28 @@ def main(argv: list[str] | None = None) -> int:
     cards = build_cards(script_body, title, plan, cinema_scenes, shotcraft_plan, visual_assets)
     cards_path = output_dir / "cards.json"
     cards_path.write_text(json.dumps(cards, ensure_ascii=False, indent=2), encoding="utf-8")
+    scene_manifest = build_scene_manifest(cards, visual_recipe, plan, title)
+    scene_manifest_gate = validate_scene_manifest(scene_manifest)
+    scene_manifest_path = output_dir / "scene_manifest.json"
+    scene_manifest_path.write_text(json.dumps(scene_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not scene_manifest_gate.get("passed"):
+        manifest = {
+            "ok": False,
+            "title": title,
+            "selected_pipeline": plan.get("selected_pipeline", ""),
+            "template_family": plan.get("template_family", ""),
+            "status": "scene_manifest_failed",
+            "error": "scene manifest failed validation",
+            "scene_manifest": scene_manifest,
+            "scene_manifest_path": str(scene_manifest_path),
+            "scene_manifest_gate": scene_manifest_gate,
+            "dry_run": dry_run,
+            "tool_invocation_manifest": tool_manifest,
+            **tool_selection_evidence,
+        }
+        _write_manifest(output_dir, manifest)
+        print(manifest["error"], file=sys.stderr)
+        return 5
     pre_render_gate = validate_render_inputs(
         output_dir,
         cards,
@@ -202,6 +225,9 @@ def main(argv: list[str] | None = None) -> int:
             "script_structure_gate": script_structure,
             "pre_render_gate": pre_render_gate,
             "pre_render_gate_path": str(pre_render_gate_path),
+            "scene_manifest": scene_manifest,
+            "scene_manifest_path": str(scene_manifest_path),
+            "scene_manifest_gate": scene_manifest_gate,
             "dry_run": dry_run,
             "tool_invocation_manifest": tool_manifest,
             **tool_selection_evidence,
@@ -239,6 +265,9 @@ def main(argv: list[str] | None = None) -> int:
         "visual_recipe_path": str(recipe_path),
         "visual_recipe_gate": recipe_gate,
         "recipe_reuse_gate": recipe_reuse_gate,
+        "scene_manifest": scene_manifest,
+        "scene_manifest_path": str(scene_manifest_path),
+        "scene_manifest_gate": scene_manifest_gate,
         "recipe_fingerprint": visual_recipe.get("fingerprint"),
         "recipe_core_fingerprint": visual_recipe.get("core_fingerprint"),
         "card_titles": [str(card.get("t") or "") for card in cards],
@@ -274,6 +303,13 @@ def main(argv: list[str] | None = None) -> int:
         manifest["artifact_gate"] = artifact_gate
         if not artifact_gate.get("passed"):
             manifest.update({"ok": False, "output": str(generated[0]), "status": "artifact_gate_failed", "error": "final video artifact gate failed"})
+            _write_manifest(output_dir, manifest)
+            print(manifest["error"], file=sys.stderr)
+            return 4
+        scene_duration_gate = validate_rendered_duration(scene_manifest, _video_duration(generated[0]))
+        manifest["scene_duration_gate"] = scene_duration_gate
+        if not scene_duration_gate.get("passed"):
+            manifest.update({"ok": False, "output": str(generated[0]), "status": "scene_duration_failed", "error": scene_duration_gate.get("failure") or "scene duration gate failed"})
             _write_manifest(output_dir, manifest)
             print(manifest["error"], file=sys.stderr)
             return 4
@@ -448,6 +484,20 @@ def _render_motion_evidence(output: Path) -> dict:
         return {"passed": unique >= 2, "duration": duration, "frames": frames, "unique_frame_count": unique}
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return {"passed": False, "reason": f"motion_probe_failed:{type(exc).__name__}", "frames": []}
+
+
+def _video_duration(output: Path) -> float:
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(output)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    try:
+        return float((probe.stdout or "0").strip() or 0)
+    except ValueError:
+        return 0.0
 
 
 def _is_full_card_visual_candidate(path: Path) -> bool:

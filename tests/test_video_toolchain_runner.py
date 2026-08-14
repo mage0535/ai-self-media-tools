@@ -825,6 +825,25 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "online real-instrument BGM unavailable"):
                     download_bgm(root, "lo-fi")
 
+    def test_bgm_download_stops_when_the_global_resolution_budget_is_exhausted(self):
+        from scripts.kuaishou_render import download_bgm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = {
+                "provider": "pixabay_music",
+                "download_url": "https://cdn.example/acoustic.mp3",
+                "source_url": "https://pixabay.example/acoustic",
+                "title": "Acoustic guitar instrumental",
+                "license": "Pixabay Content License",
+                "tags": "acoustic guitar instrumental",
+            }
+            with patch.dict(os.environ, {"BGM_RESOLUTION_MAX_SECONDS": "1"}, clear=False):
+                with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
+                    with patch("scripts.kuaishou_render.time.monotonic", side_effect=[0.0, 2.0]):
+                        with self.assertRaisesRegex(RuntimeError, "resolution budget exhausted"):
+                            download_bgm(root, "acoustic guitar")
+
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm
 
