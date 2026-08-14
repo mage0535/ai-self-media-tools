@@ -106,7 +106,7 @@ def build_due_tasks(
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
-    selected_topics: set[str] = set()
+    selected_topics: dict[str, dict[str, str]] = {}
     growth_strategy_status = growth_strategy_status or {}
     weekday = datetime.now().weekday() if weekday is None else int(weekday)
     for raw in slots:
@@ -130,22 +130,20 @@ def build_due_tasks(
         elif not candidates:
             row.update({"state": "blocked", "reason": "no independently ranked topic candidate"})
         else:
-            selected = next(
-                (
-                    candidate
-                    for candidate in candidates
-                    if _topic_identity(candidate) not in selected_topics
-                ),
-                None,
-            )
+            selected = None
+            for candidate in candidates:
+                identity = _topic_identity(candidate)
+                previous = selected_topics.get(identity)
+                if previous is None or _allows_evidenced_overlap(platform, candidate, raw, previous, source_report, strategy):
+                    selected = candidate
+                    break
             if not selected:
                 row.update({
                     "state": "blocked",
-                    "reason": "no unique cross-platform topic candidate",
+                    "reason": "no independently evidenced cross-platform topic candidate",
                 })
                 tasks.append(row)
                 continue
-            selected_topics.add(_topic_identity(selected))
             adaptation = str(raw.get("platform_adaptation_reason") or f"adapt {selected['title']} to {platform} with a platform-specific format and CTA")
             signal = str(raw.get("platform_signal") or f"{platform} source matrix contains current platform and cross-platform evidence")
             trend_candidate = build_trend_candidate(
@@ -160,15 +158,11 @@ def build_due_tasks(
                 platform_fit_score=float(selected.get("platform_fit_score") or selected.get("score") or 0),
             )
             trend_gate = validate_trend_candidate(trend_candidate)
-            matrix = {
-                "platform": platform,
-                "attempted_sources": [
-                    {"source": item.get("source"), "status": item.get("status", "unknown"), **({"error": item["error"]} if item.get("error") else {})}
-                    for item in source_report
-                    if item.get("source")
-                ],
-                "report_path": "runtime:overnight_trend_collection",
-            }
+            matrix = _platform_evidence_matrix(platform, selected, source_report, strategy)
+            selected_topics.setdefault(
+                _topic_identity(selected),
+                {"platform": platform, "adaptation": adaptation, "signal": signal},
+            )
             row.update({
                 "topic": selected["title"],
                 "topic_fingerprint": selected.get("fingerprint", ""),
@@ -189,8 +183,108 @@ def build_due_tasks(
             })
             if strict_trend_evidence and not trend_gate.get("passed"):
                 row.update({"state": "blocked", "reason": "trend candidate evidence below 8-attempt/5-success threshold"})
+            elif strict_trend_evidence and not matrix["platform_internal_verified"]:
+                row.update({"state": "blocked", "reason": "platform-specific trend evidence missing"})
         tasks.append(row)
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
+
+
+def _allows_evidenced_overlap(
+    platform: str,
+    candidate: dict[str, Any],
+    slot: dict[str, Any],
+    previous: dict[str, str],
+    source_report: list[dict[str, Any]],
+    strategy: dict[str, Any],
+) -> bool:
+    """Allow natural resonance only when both platform executions are evidenced."""
+    adaptation = str(slot.get("platform_adaptation_reason") or "").strip()
+    signal = str(slot.get("platform_signal") or "").strip()
+    matrix = _platform_evidence_matrix(platform, candidate, source_report, strategy)
+    return bool(
+        adaptation
+        and signal
+        and adaptation != previous.get("adaptation")
+        and platform != previous.get("platform")
+        and matrix["platform_internal_verified"]
+        and matrix["sources_attempted"] >= 8
+        and matrix["sources_succeeded"] >= 5
+    )
+
+
+def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_report: list[dict[str, Any]], strategy: dict[str, Any]) -> dict[str, Any]:
+    attempted = [
+        {"source": item.get("source"), "status": item.get("status", "unknown"), **({"error": item["error"]} if item.get("error") else {})}
+        for item in source_report
+        if item.get("source")
+    ]
+    aliases = {platform, "twitter" if platform == "x" else platform}
+    if platform.startswith("douyin"):
+        aliases.add("douyin")
+    candidate_source = str(candidate.get("source") or "").casefold()
+    platform_source_ok = any(
+        str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+        and any(alias in str(item.get("source") or "").casefold() for alias in aliases)
+        for item in attempted
+    )
+    candidate_source_ok = any(alias in candidate_source for alias in aliases)
+    strategy_ok = str(strategy.get("status") or "").casefold() == "ok"
+    # A fresh strategy is required context, but it does not prove that this
+    # particular topic was observed on the platform. Keep those facts apart.
+    verified = platform_source_ok or candidate_source_ok
+    return {
+        "platform": platform,
+        "attempted_sources": attempted,
+        "sources_attempted": len(attempted),
+        "sources_succeeded": sum(str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"} for item in attempted),
+        "platform_internal_verified": verified,
+        "current_platform_specific_topic": platform_source_ok or candidate_source_ok,
+        "platform_strategy_verified": strategy_ok,
+        "shared_trend_only": not verified,
+        "candidate_source": str(candidate.get("source") or ""),
+        "platform_fit_reason": str(candidate.get("platform_fit_reason") or "") if verified else "",
+        "report_path": "runtime:overnight_trend_collection",
+    }
+
+
+def sync_batch_state(state: dict[str, Any], store: Any, *, summary_path: str | Path = "") -> dict[str, Any]:
+    """Reconcile batch rows with the job and delivery records without inventing a publish state."""
+    platforms = []
+    for task in state.get("tasks") or []:
+        job_id = str(task.get("job_id") or "")
+        if not job_id:
+            continue
+        try:
+            job = store.get_job(job_id)
+        except KeyError:
+            task["state"] = "blocked"
+            task["reason"] = "job_record_missing"
+            continue
+        deliveries = store.deliveries(job_id)
+        delivery_states = [str(row.get("status") or "") for row in deliveries]
+        acceptance = dict(job.get("acceptance") or {})
+        observed = "blocked" if acceptance and not acceptance.get("passed") else "published" if "published" in delivery_states else "handoff_ready" if "handoff_pending" in delivery_states else "drafted" if "drafted" in delivery_states else str(job.get("state") or "blocked")
+        task.update({
+            "state": observed,
+            "job_state": str(job.get("state") or ""),
+            "delivery_states": delivery_states,
+            "acceptance": acceptance,
+            "synced_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        })
+        platforms.append({"platform": task.get("platform", ""), "job_id": job_id, "state": observed, "acceptance": task["acceptance"]})
+    observed_states = {str(task.get("state") or "") for task in state.get("tasks") or []}
+    if "failed" in observed_states:
+        state["status"] = "failed"
+    elif observed_states & {"blocked", "deferred"}:
+        state["status"] = "partial"
+    elif observed_states and observed_states <= {"published", "drafted", "handoff_ready", "staged"}:
+        state["status"] = "completed"
+    report = {"version": "overnight_acceptance_summary_v1", "batch_status": state.get("status", ""), "platforms": platforms}
+    if summary_path:
+        path = Path(summary_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(_redact(report), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return report
 
 
 def _topic_identity(candidate: dict[str, Any]) -> str:
@@ -265,7 +359,7 @@ def _age_hours(value: str | None) -> float | None:
     return (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600
 
 
-TERMINAL_TASK_STATES = {"staged", "handoff_ready", "published", "blocked", "failed", "deferred"}
+TERMINAL_TASK_STATES = {"staged", "handoff_ready", "published", "blocked", "failed", "deferred", "review_required"}
 
 
 def execute_batch(
@@ -274,6 +368,8 @@ def execute_batch(
     *,
     state_path: str | Path,
     journal: "BatchEventJournal",
+    store: Any | None = None,
+    require_acceptance: bool = False,
 ) -> dict[str, Any]:
     """Run one planned platform at a time and checkpoint after every result.
 
@@ -311,6 +407,17 @@ def execute_batch(
             result = pipeline.run(task["job_id"])
             result_state = str(result.get("state") or "failed")
             task["pipeline_state"] = result_state
+
+            if require_acceptance and result_state not in {"blocked", "failed", "rejected"}:
+                from .workflow_acceptance import evaluate_job_acceptance
+
+                acceptance = evaluate_job_acceptance(store, task["job_id"], platform)
+                task["acceptance"] = acceptance
+                if not acceptance["passed"]:
+                    task["state"] = "blocked"
+                    task["reason"] = "workflow acceptance failed: " + ",".join(acceptance["failures"])
+                    journal.append("platform_blocked", platform, {"job_id": task["job_id"], "reason": task["reason"]})
+                    continue
 
             if result_state in {"blocked", "failed", "rejected"}:
                 task["state"] = result_state
@@ -353,13 +460,26 @@ def execute_batch(
     else:
         state["status"] = "completed"
     _write_state(state_file, state)
+    if store is not None:
+        sync_batch_state(state, store, summary_path=state_file.parent / "acceptance_summary.json")
+        _write_state(state_file, state)
     return state
 
 
 def _load_state(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
     if path.is_file():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            state = json.loads(path.read_text(encoding="utf-8"))
+            if state.get("status") == "running":
+                interrupted = False
+                for task in state.get("tasks") or []:
+                    if task.get("state") == "running":
+                        task["state"] = "blocked"
+                        task["reason"] = "interrupted_batch_requires_recovery"
+                        interrupted = True
+                if interrupted:
+                    state["status"] = "partial"
+            return state
         except (OSError, json.JSONDecodeError):
             pass
     return copy.deepcopy(plan)

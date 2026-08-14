@@ -36,7 +36,7 @@
 - Manual channels normalize to `handoff_ready`; overnight execution does not implicitly approve or publicly publish any channel.
 - Added append-only, redacted `events.jsonl` for real-time Hermes reporting that survives an agent-session or process restart.
 - Added unenabled systemd templates for a midnight direct worker. The worker does not use a Hermes conversation as its execution context and exits safely when no private due-channel slots file exists.
-- Follow-up hardening: the systemd entrypoint now rejects a late persistent-timer catch-up outside the 00:00-00:15 admission window, so a reboot cannot shift content work into the 05:00 morning-report window. The service uses an explicit `CONTENT_PLATFORM_BIN` because systemd does not guarantee `HOME`.
+- Follow-up hardening: the systemd entrypoint now rejects a late persistent-timer catch-up outside its bounded 60-minute admission window, so a reboot cannot shift content work into the 05:00 morning-report window. The service uses an explicit `CONTENT_PLATFORM_BIN` because systemd does not guarantee `HOME`.
 - First dry-run capacity check rebalanced the private weekly rotation so every due-day plan fits the 280-minute work budget; the run created no jobs or publications.
 
 ### Verification
@@ -3111,6 +3111,42 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - The midnight wrapper reports error exits, preserves atomic checkpoints, and still exits cleanly for no-slot or missed-window cases.
 - The WeChat wrapper treats an expired creator login as an actionable blocked data-source condition, writes its report, sends a notification, and lets the timer remain healthy for the next recovery attempt.
 - `create_hermes_overnight_monitor.py` remains the read-only three-minute progress observer; its target is server-private and not committed.
+
+## 2026-08-14 - Overnight State And Acceptance Integrity
+
+### Finding
+- The overnight batch could leave `state.json` inconsistent with durable
+  jobs/deliveries, and an acceptance result was printed without becoming a
+  release-blocking record.
+- A server-only helper wrote generic placeholder trend matrices. That made an
+  evidence-shaped artifact look like platform-specific research even when no
+  such evidence existed.
+- Kuaishou management pages show valid submissions as `under_review`; this
+  must be distinct from both failed verification and publication.
+
+### Implemented
+- Added persisted `jobs.acceptance_json`, `workflow_acceptance_v1`, and an
+  `overnight-sync-state` command. The batch writes `acceptance_summary.json`
+  and reconciles actual job/delivery state after every run.
+- Publishing fails closed when configured unified acceptance has not passed.
+  Failed acceptance changes the task to `blocked`; wrapper success cannot
+  create a draft or publish claim.
+- Strict planning requires a real platform-specific source outcome. A fresh
+  strategy snapshot remains context, not proof that a topic appeared on that
+  platform. Placeholder evidence generation is removed.
+- Kuaishou postcheck accepts `under_review` only with matching title and
+  description and records that state as `under_review`, never `published`.
+- A recovered `running` row becomes an explicit blocked recovery task and
+  `review_required` is terminal. The timer has a bounded configurable 60-minute
+  admission window instead of a 15-minute-only window.
+- Added conservative runtime-artifact archival tooling. It moves only old,
+  rebuildable intermediates during disk pressure; final media, covers,
+  manifests, reports, and recent files remain untouched.
+
+### Verification
+- TDD red/green coverage covers generic-evidence rejection, durable state
+  reconciliation, failed acceptance blocking, Kuaishou review state, recovery
+  safety, timer admission, CLI sync, and bounded cleanup.
 
 ## 2026-08-13 - Quality Orchestration Hardening
 

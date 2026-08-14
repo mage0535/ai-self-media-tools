@@ -13,12 +13,14 @@ notify() {
 }
 trap 'status=$?; notify "failed" "batch_exit_${status}"' ERR
 
-# Persistent timers may fire after a reboot. Do not turn a missed midnight run
-# into morning contention; only the planned midnight admission window is valid.
+# Persistent timers may fire after a reboot. Permit one bounded catch-up hour,
+# then leave the morning window to interactive work and reporting.
+admission_window_minutes="${OVERNIGHT_ADMISSION_WINDOW_MINUTES:-60}"
 hhmm="$(date +%H%M)"
-if (( 10#$hhmm > 15 )); then
-  printf '%s\n' '{"status":"no_run","reason":"missed midnight start window"}' > "$out/result.json"
-  notify "skipped" "missed_midnight_admission_window"
+minutes_since_midnight=$((10#$hhmm / 100 * 60 + 10#$hhmm % 100))
+if (( minutes_since_midnight > admission_window_minutes )); then
+  printf '%s\n' '{"status":"no_run","reason":"missed overnight admission window"}' > "$out/result.json"
+  notify "skipped" "missed_overnight_admission_window"
   exit 0
 fi
 
@@ -56,6 +58,9 @@ run_platform --config "$root/config.json" --db "$root/data/state.db" \
 notify "progress" "overnight_plan_complete"
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-run --plan "$out/plan.json" --state "$out/state.json" --events "$out/events.jsonl" > "$out/result.json"
+run_platform --config "$root/config.json" --db "$root/data/state.db" \
+  overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/sync-state-result.json"
+notify "progress" "overnight_acceptance_summary_complete"
 batch_status="$(python3 - "$out/result.json" <<'PY'
 import json
 import sys

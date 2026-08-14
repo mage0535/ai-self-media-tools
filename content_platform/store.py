@@ -337,6 +337,7 @@ class Store:
                 "attempts": "INTEGER NOT NULL DEFAULT 0",
                 "last_error": "TEXT NOT NULL DEFAULT ''",
                 "topic_fingerprint": "TEXT NOT NULL DEFAULT ''",
+                "acceptance_json": "TEXT NOT NULL DEFAULT '{}'",
             }.items():
                 self._ensure_column(conn, "jobs", name, definition)
             for name, definition in {
@@ -452,6 +453,17 @@ class Store:
                 (job_id, title, body, risk_level, json.dumps(draft_meta or {}, ensure_ascii=False), utc_now()),
             )
             self._event(conn, job_id, "draft_saved", {"risk_level": risk_level})
+
+    def save_workflow_acceptance(self, job_id, acceptance):
+        """Persist the exact quality decision consumed by delivery gates."""
+        payload = dict(acceptance or {})
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE jobs SET acceptance_json=?,updated_at=? WHERE id=?",
+                (json.dumps(payload, ensure_ascii=False), utc_now(), job_id),
+            )
+            self._event(conn, job_id, "workflow_acceptance_saved", {"passed": bool(payload.get("passed")), "failures": payload.get("failures", [])})
+        return self.get_job(job_id)
 
     def transition(self, job_id, expected, new_state, event, detail=None):
         expected = tuple(set(expected))
@@ -1422,4 +1434,5 @@ class Store:
         result["platforms"] = json.loads(result.pop("platforms_json"))
         result["risk"] = json.loads(result.pop("risk_json"))
         result["draft_meta"] = json.loads(result.pop("draft_meta_json", "{}"))
+        result["acceptance"] = json.loads(result.pop("acceptance_json", "{}"))
         return result
