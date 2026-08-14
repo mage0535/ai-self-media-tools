@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from content_platform.scene_manifest import validate_scene_manifest
+
 
 _PLACEHOLDER = re.compile(r"(?:\bstep\s+\d+\b|\bscene\s+\d+\b|keep the visual rhythm|match visual to narration)", re.IGNORECASE)
 _PATH_LIKE = re.compile(r"(?:[A-Za-z]:[\\/]|/(?:tmp|root|home|data)/|\.\.?[\\/])")
@@ -77,11 +79,11 @@ def validate_render_inputs(
             failures.append("scene_manifest_missing")
         else:
             try:
-                scenes = json.loads(scene_manifest.read_text(encoding="utf-8")).get("scenes") or []
+                manifest = json.loads(scene_manifest.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
-                scenes = []
-            required = {"scene_id", "start", "end", "narration", "subtitle", "visual_claim", "asset_path", "asset_source", "motion", "evidence"}
-            if len(scenes) < 6 or any(not isinstance(scene, dict) or not required.issubset(scene) or not isinstance(scene.get("motion"), dict) or not {"background", "subject", "text", "transition"}.issubset(scene["motion"]) for scene in scenes):
+                manifest = None
+            scene_gate = validate_scene_manifest(manifest)
+            if not scene_gate.get("passed"):
                 failures.append("scene_manifest_invalid")
 
     bgm = video_dir / "bgm.mp3"

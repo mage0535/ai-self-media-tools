@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 import asyncio
@@ -49,7 +50,7 @@ class PreRenderGateTests(unittest.TestCase):
             (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
             cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
 
-            result = validate_render_inputs(root, cards, require_scene_manifest=True)
+            result = validate_render_inputs(root, cards, require_scene_manifest=True, require_backgrounds=False)
 
             self.assertFalse(result["passed"])
             self.assertIn("scene_manifest_missing", result["failures"])
@@ -68,6 +69,30 @@ class PreRenderGateTests(unittest.TestCase):
 
             self.assertFalse(result["passed"])
             self.assertIn("scene_manifest_invalid", result["failures"])
+
+    def test_gate_accepts_the_canonical_scene_manifest_contract(self):
+        from scripts.pre_render_gate import validate_render_inputs
+        from content_platform.scene_manifest import build_scene_manifest
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cards = [
+                {"layout": "cover" if index == 0 else "card", "t": f"Title {index}", "txt": f"A real script beat {index}", "tts": f"A real script beat {index}"}
+                for index in range(6)
+            ]
+            recipe = {
+                "fingerprint": "recipe-1",
+                "scene_asset_match": [
+                    {"visual_source": f"planned_asset_{index}", "match_reason": f"matches beat {index}"}
+                    for index in range(6)
+                ],
+            }
+            manifest = build_scene_manifest(cards, recipe, {"platforms": ["douyin"]}, "Useful title")
+            (root / "scene_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = validate_render_inputs(root, cards, require_scene_manifest=True, require_backgrounds=False)
+
+            self.assertTrue(result["passed"])
 
     def test_subtitle_builder_uses_dot_timestamps_and_safe_wrapping(self):
         from scripts.build_subtitles import build_ass
