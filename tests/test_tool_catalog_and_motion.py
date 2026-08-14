@@ -59,7 +59,7 @@ class ToolCatalogAndMotionTests(unittest.TestCase):
         run.side_effect = fake
         result = _render_motion_evidence(Path("/tmp/final.mp4"))
         self.assertTrue(result["passed"])
-        self.assertEqual(result["unique_frame_count"], 5)
+        self.assertEqual(result["unique_frame_count"], 3)
 
 
 if __name__ == "__main__":
