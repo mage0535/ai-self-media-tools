@@ -424,8 +424,14 @@ def execute_batch(
                 task["reason"] = str(result.get("last_error") or "pipeline did not produce a reviewable artifact")
                 journal.append("platform_blocked", platform, {"job_id": task["job_id"], "state": result_state, "reason": task["reason"]})
             elif platform.casefold() in MANUAL_HANDOFF_PLATFORMS:
-                task["state"] = "handoff_ready"
-                journal.append("handoff_ready", platform, {"job_id": task["job_id"], "pipeline_state": result_state})
+                handoff_problem = _handoff_media_problem(platform, result)
+                if handoff_problem:
+                    task["state"] = "blocked"
+                    task["reason"] = handoff_problem
+                    journal.append("platform_blocked", platform, {"job_id": task["job_id"], "reason": handoff_problem})
+                else:
+                    task["state"] = "handoff_ready"
+                    journal.append("handoff_ready", platform, {"job_id": task["job_id"], "pipeline_state": result_state})
             elif str(task.get("action") or "stage") == "stage":
                 staged = pipeline.stage_drafts(task["job_id"])
                 task["pipeline_state"] = str(staged.get("state") or result_state)
@@ -464,6 +470,28 @@ def execute_batch(
         sync_batch_state(state, store, summary_path=state_file.parent / "acceptance_summary.json")
         _write_state(state_file, state)
     return state
+
+
+def _handoff_media_problem(platform: str, result: dict[str, Any]) -> str:
+    """Reject text-only manual handoffs; delivery evidence must be usable."""
+    readable: list[tuple[str, Path]] = []
+    for artifact in result.get("artifacts") or []:
+        if not isinstance(artifact, dict):
+            continue
+        path = Path(str(artifact.get("path") or ""))
+        if path.is_file() and path.stat().st_size > 0:
+            readable.append((str(artifact.get("kind") or "").casefold(), path))
+    normalized = str(platform or "").casefold()
+    videos = [path for kind, path in readable if kind == "video"]
+    cover = any(kind == "cover" or path.stem.casefold().startswith("cover") for kind, path in readable)
+    if normalized in {"xiaohongshu", "rednote"}:
+        images = [path for kind, _path in readable if kind in {"image", "cover"}]
+        if not cover:
+            return "handoff_cover_missing"
+        return "" if len(images) >= 3 else "handoff_image_set_missing"
+    if not videos:
+        return "handoff_media_missing"
+    return "" if cover else "handoff_cover_missing"
 
 
 def _load_state(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
