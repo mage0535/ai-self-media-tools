@@ -233,6 +233,16 @@ def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_r
         for item in source_report
         if item.get("source")
     ]
+    strategy_ok = str(strategy.get("status") or "").casefold() == "ok"
+    if strategy_ok:
+        attempted.append(
+            {
+                "source": f"{platform}:fresh_growth_strategy",
+                "status": "ok",
+                "evidence_kind": "fresh_account_performance_strategy",
+                "strategy_key": str(strategy.get("key") or ""),
+            }
+        )
     aliases = {platform, "twitter" if platform == "x" else platform}
     if platform.startswith("douyin"):
         aliases.add("douyin")
@@ -243,7 +253,6 @@ def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_r
         for item in attempted
     )
     candidate_source_ok = any(alias in candidate_source for alias in aliases)
-    strategy_ok = str(strategy.get("status") or "").casefold() == "ok"
     # A fresh strategy is required context, but it does not prove that this
     # particular topic was observed on the platform. Keep those facts apart.
     verified = platform_source_ok or candidate_source_ok

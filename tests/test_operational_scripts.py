@@ -253,6 +253,8 @@ shared_trend_only: false
 
         self.assertIn("overnight-sync-state", text)
         self.assertIn("acceptance_summary.json", text)
+        self.assertIn("overnight-acceptance --result", text)
+        self.assertIn("acceptance_report.json", text)
 
     def test_overnight_script_has_a_bounded_configurable_catchup_window(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
