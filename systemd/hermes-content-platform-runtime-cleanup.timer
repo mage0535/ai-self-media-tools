@@ -1,0 +1,10 @@
+[Unit]
+Description=Run content-platform runtime artifact cleanup weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 05:10:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
