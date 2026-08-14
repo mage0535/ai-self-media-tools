@@ -249,6 +249,7 @@ def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_r
     candidate_source = str(candidate.get("source") or "").casefold()
     platform_source_ok = any(
         str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+        and item.get("evidence_kind") != "fresh_account_performance_strategy"
         and any(alias in str(item.get("source") or "").casefold() for alias in aliases)
         for item in attempted
     )
