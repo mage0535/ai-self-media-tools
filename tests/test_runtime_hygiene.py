@@ -37,3 +37,9 @@ def test_runtime_cleanup_refuses_to_run_when_disk_is_not_over_threshold(tmp_path
 
     assert result["archived"] == []
     assert result["reason"] == "disk_below_cleanup_threshold"
+
+
+def test_runtime_cleanup_cli_offers_an_explicit_dry_run_flag():
+    text = Path("scripts/cleanup_runtime_artifacts.py").read_text(encoding="utf-8")
+
+    assert 'parser.add_argument("--dry-run"' in text
