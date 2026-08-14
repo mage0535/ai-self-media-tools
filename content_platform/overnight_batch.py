@@ -81,6 +81,9 @@ def build_batch_plan(
             cursor += estimate
         rows.append(row)
     queued_count = sum(1 for row in rows if row.get("state") == "queued")
+    platform_fit_reason = str(candidate.get("platform_fit_reason") or "").strip()
+    if verified and not platform_fit_reason:
+        platform_fit_reason = f"candidate source {candidate.get('source') or platform} matches the {platform} evidence lane"
     return {
         "version": "overnight_batch_plan_v1",
         "status": "partial_capacity" if blocked and queued_count else "capacity_blocked" if blocked else "scheduled",
@@ -267,7 +270,7 @@ def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_r
         "platform_strategy_verified": strategy_ok,
         "shared_trend_only": not verified,
         "candidate_source": str(candidate.get("source") or ""),
-        "platform_fit_reason": str(candidate.get("platform_fit_reason") or "") if verified else "",
+        "platform_fit_reason": platform_fit_reason,
         "report_path": "runtime:overnight_trend_collection",
     }
 
