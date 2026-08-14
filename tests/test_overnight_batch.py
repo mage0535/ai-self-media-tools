@@ -301,6 +301,11 @@ def test_english_platform_rejects_a_chinese_headline_even_when_it_mentions_ai():
 
 
 def test_execute_batch_runs_each_platform_independently_and_persists_resume_state(tmp_path: Path):
+    final = tmp_path / "final.mp4"
+    cover = tmp_path / "cover.png"
+    final.write_bytes(b"video")
+    cover.write_bytes(b"cover")
+
     class Pipeline:
         def __init__(self):
             self.created = []
@@ -310,7 +315,14 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
             return {"id": f"job-{len(self.created)}"}
 
         def run(self, job_id):
-            return {"id": job_id, "state": "review_required"}
+            return {
+                "id": job_id,
+                "state": "review_required",
+                "artifacts": [
+                    {"kind": "video", "path": str(final)},
+                    {"kind": "cover", "path": str(cover)},
+                ],
+            }
 
         def stage_drafts(self, job_id):
             return {"id": job_id, "state": "partial"}
