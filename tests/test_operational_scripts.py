@@ -38,7 +38,7 @@ class OperationalScriptTests(unittest.TestCase):
     def test_media_delivery_requires_configured_target(self):
         from scripts.deliver_media import deliver
 
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"HERMES_DELIVERY_ENV_FILE": str(Path(tempfile.gettempdir()) / "missing-notifications.env")}, clear=True):
             result = deliver("video", ["missing.mp4"])
 
         self.assertFalse(result["passed"])

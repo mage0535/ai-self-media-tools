@@ -47,7 +47,10 @@ def _stage_for_hermes(path: Path, platform: str) -> Path:
 
 
 def _send(target: str, message: str) -> tuple[bool, str]:
-    result = subprocess.run(["hermes", "send", "-t", target], input=message, capture_output=True, text=True, timeout=180)
+    try:
+        result = subprocess.run(["hermes", "send", "-t", target], input=message, capture_output=True, text=True, timeout=180)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)[-200:]
     output = (result.stdout + result.stderr).strip()
     return result.returncode == 0, output[-200:]
 
