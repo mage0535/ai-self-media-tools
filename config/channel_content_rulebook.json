@@ -613,7 +613,7 @@
       "postcheck": "kuaishou_management_pending_list_with_exact_schedule_time"
     },
     "shipinhao": {
-      "lane": "ai_efficiency_workflow_system",
+      "lane": "ai_efficiency_open_source",
       "primary_types": [
         "edited_short_video",
         "microcase_video"
@@ -952,7 +952,7 @@
       "postcheck": "wechat_draft_batchget_or_backend_draft_row"
     },
     "xiaohongshu": {
-      "lane": "ai_efficiency_open_source",
+      "lane": "ai_efficiency_workflow_system",
       "primary_types": [
         "image_text_note",
         "knowledge_card_block",
