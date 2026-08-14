@@ -122,6 +122,46 @@ WECHAT_RECOVERY_PLAYBOOK: dict[str, Any] = {
 }
 
 
+XIAOHONGSHU_RECOVERY_PLAYBOOK: dict[str, Any] = {
+    "diagnosis_date": "2026-08-14",
+    "mode": "xiaohongshu_manual_recovery",
+    "primary_goal": "restore stable distribution and save-driven follow conversion without automated publishing",
+    "publish_boundary": "manual_handoff_only_hard_gate_no_automation_ever",
+    "publishing_frequency": {
+        "max_posts_first_7_days": 4,
+        "min_gap_hours_between_posts": 36,
+        "increase_cadence_only_after": "three completed 1h_24h_72h reviews without an account-health warning",
+    },
+    "content_lane": {
+        "primary": "ai_efficiency_workflow_system",
+        "formats": ["six_page_carousel", "checklist_note", "workflow_case"],
+        "must_include": [
+            "specific first-image payoff",
+            "concrete example",
+            "saveable checklist",
+            "one natural discussion question",
+        ],
+        "forbidden": [
+            "generic tool roundup",
+            "pure decorative AI image as primary visual",
+            "external traffic diversion",
+        ],
+    },
+    "manual_post_publish_review": {
+        "review_points_hours": [1, 24, 72],
+        "metrics": [
+            "impressions",
+            "cover_click_through_rate",
+            "average_view_seconds",
+            "save_rate",
+            "comment_rate",
+            "profile_to_follow_conversion",
+        ],
+        "missing_data_policy": "record_unavailable_reason_and_do_not_increase_cadence",
+    },
+}
+
+
 PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
     "douyin": {
         "primary_metric": "completion_rate",
@@ -170,8 +210,18 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
     "xiaohongshu": {
         "primary_metric": "click_through_rate",
         "secondary_metrics": ["save_rate", "comment_rate", "follow_conversion_rate"],
-        "rules": ["authentic_cover", "pain_point_title", "use_case_keywords", "early_comment_reply"],
+        "rules": [
+            "authentic_cover",
+            "pain_point_title",
+            "use_case_keywords",
+            "early_comment_reply",
+            "manual_handoff_only_hard_gate",
+            "first_image_specific_payoff",
+            "saveable_checklist_required",
+            "manual_1h_24h_72h_review",
+        ],
         "target_action": "save_or_comment",
+        "xiaohongshu_growth_playbook": XIAOHONGSHU_RECOVERY_PLAYBOOK,
     },
     "zhihu": {
         "primary_metric": "normal_visibility_and_save_rate",
@@ -420,6 +470,8 @@ def build_growth_strategy(
     }
     if platform == "wechat" and isinstance(rules.get("wechat_growth_playbook"), dict):
         strategy["wechat_growth_playbook"] = rules["wechat_growth_playbook"]
+    if platform == "xiaohongshu" and isinstance(rules.get("xiaohongshu_growth_playbook"), dict):
+        strategy["xiaohongshu_growth_playbook"] = rules["xiaohongshu_growth_playbook"]
     if platform == "zhihu" and isinstance(rules.get("zhihu_growth_playbook"), dict):
         strategy["zhihu_growth_playbook"] = rules["zhihu_growth_playbook"]
     return strategy
@@ -480,6 +532,20 @@ def validate_growth_strategy(plan: dict[str, Any], platform: str = "", content_t
             failures.append("zhihu_pin_overlap_threshold.too_loose")
         if str(frequency.get("auto_pin_publish_default") or "") != "review_only":
             failures.append("zhihu_pin_publish_default.not_review_only")
+    if _normalized_platform(platform) == "xiaohongshu":
+        playbook = plan.get("xiaohongshu_growth_playbook") if isinstance(plan.get("xiaohongshu_growth_playbook"), dict) else {}
+        frequency = playbook.get("publishing_frequency") if isinstance(playbook.get("publishing_frequency"), dict) else {}
+        review = playbook.get("manual_post_publish_review") if isinstance(playbook.get("manual_post_publish_review"), dict) else {}
+        if playbook.get("mode") != "xiaohongshu_manual_recovery":
+            failures.append("xiaohongshu_growth_playbook.recovery_mode_missing")
+        if playbook.get("publish_boundary") != "manual_handoff_only_hard_gate_no_automation_ever":
+            failures.append("xiaohongshu_publish_boundary.not_manual_handoff_only")
+        if int(frequency.get("max_posts_first_7_days") or 0) > 4:
+            failures.append("xiaohongshu_frequency.recovery_cap_too_high")
+        if int(frequency.get("min_gap_hours_between_posts") or 0) < 36:
+            failures.append("xiaohongshu_frequency.min_gap_too_short")
+        if review.get("review_points_hours") != [1, 24, 72]:
+            failures.append("xiaohongshu_review_schedule.invalid")
     return {
         "passed": not failures,
         "failures": failures,

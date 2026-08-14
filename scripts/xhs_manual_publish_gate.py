@@ -8,6 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+from content_platform.xiaohongshu_policy import validate_recovery_strategy
+
 
 GATE_VERSION = "xhs_manual_publish_gate_v2"
 ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -65,6 +67,9 @@ def check_handoff_package(path: str) -> dict:
         return _result(False, "topics_missing_or_exceed_6")
     if len(str(package.get("manual_publish_guide") or "")) < 20:
         return _result(False, "manual_publish_guide_too_short")
+    strategy_failures = validate_recovery_strategy(package.get("growth_strategy"))
+    if strategy_failures:
+        return _result(False, *strategy_failures)
     return _result(True)
 
 

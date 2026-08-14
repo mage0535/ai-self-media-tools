@@ -29,3 +29,16 @@ records the post-publication confirmation.
 - Publish conservatively after account recovery. Review saves, comments,
   profile-to-follow conversion, and cover click-through at 1, 24, and 72 hours
   before increasing cadence.
+
+## Executable recovery contract
+
+Every handoff package contains `growth_strategy` and is rejected unless it
+identifies the recovery lane, a first-image payoff, a save value, a minimum
+36-hour interval, and the 1/24/72-hour review schedule. This is checked by
+`scripts/xhs_manual_publish_gate.py` before delivery. It does not publish or
+schedule anything: the owner remains the only person who can publish.
+
+Start with no more than four posts in the first seven days. Do not increase
+cadence until three post-publication reviews are complete and no account-health
+warning is present. The delivery package is a pre-publication checklist, not a
+claim that those later metrics already exist.
