@@ -68,6 +68,11 @@ class ResourceGuard:
             pid = int(lock.read_text(encoding="utf-8").strip())
             if pid <= 0:
                 return False
+            # Windows does not provide POSIX-equivalent os.kill(pid, 0)
+            # behavior consistently. A lock written by this worker is always
+            # live and must never be reclaimed by a nested render attempt.
+            if pid == os.getpid():
+                return True
             os.kill(pid, 0)
         except (OSError, ValueError):
             return False
