@@ -35,6 +35,15 @@ class ResourceTests(unittest.TestCase):
                 with guard.video_lock():
                     pass
 
+    def test_video_lock_reclaims_a_dead_owner(self):
+        guard = ResourceGuard(self.root, {}, probe=lambda: {"available_mb": 4096, "disk_used_percent": 20})
+        lock = self.root / "locks" / "video.lock"
+        lock.parent.mkdir(parents=True)
+        lock.write_text("999999", encoding="utf-8")
+
+        with guard.video_lock():
+            self.assertTrue(lock.exists())
+
     def test_cleanup_removes_only_unprotected_old_files(self):
         old = self.root / "artifacts" / "old.bin"
         kept = self.root / "artifacts" / "kept.bin"

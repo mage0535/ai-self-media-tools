@@ -3207,3 +3207,15 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Hermes full suite after deployment: `743 passed, 29 subtests passed`.
 - Hermes overnight and cleanup timers are `enabled` and `active`; cleanup dry
   run completed outside the project working directory.
+
+## 2026-08-14 - Overnight Recovery And Live Progress Closure
+
+- A dead renderer PID recorded in `data/locks/video.lock` is now reclaimed;
+  a live owner remains exclusive. This prevents a killed render from failing a
+  later serial overnight task.
+- Batch reconciliation preserves a blocked handoff with its evidence failure
+  instead of upgrading it to `handoff_ready` from queue metadata.
+- The append-only overnight journal now records job creation, generation
+  outcome (status and artifact kinds only), acceptance/blocking, and staging.
+  The observer remains read-only and can report those real stage changes every
+  three minutes without exposing content bodies or credentials.

@@ -253,6 +253,23 @@ def test_sync_batch_state_keeps_failed_acceptance_blocked(tmp_path: Path):
     assert state["tasks"][0]["state"] == "blocked"
 
 
+def test_sync_batch_state_does_not_upgrade_a_blocked_manual_handoff(tmp_path: Path):
+    from content_platform.overnight_batch import sync_batch_state
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("topic", ["douyin_ai"])
+    store.save_delivery(job["id"], "douyin_ai", "handoff_pending", "packet")
+    state = {
+        "status": "partial",
+        "tasks": [{"platform": "douyin_ai", "job_id": job["id"], "state": "blocked", "reason": "handoff_media_missing"}],
+    }
+
+    sync_batch_state(state, store)
+
+    assert state["tasks"][0]["state"] == "blocked"
+    assert state["tasks"][0]["reason"] == "handoff_media_missing"
+
+
 def test_sync_batch_state_marks_parent_partial_when_a_job_is_blocked(tmp_path: Path):
     from content_platform.overnight_batch import sync_batch_state
 
@@ -364,6 +381,10 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert state["tasks"][0]["state"] == "staged"
     assert state["tasks"][1]["state"] == "handoff_ready"
+    events = [json.loads(line)["event"] for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert "platform_job_created" in events
+    assert "platform_generation_complete" in events
+    assert "platform_staging_started" in events
 
 
 def test_execute_batch_marks_failed_rows_as_batch_failure_without_rerunning_them(tmp_path: Path):
