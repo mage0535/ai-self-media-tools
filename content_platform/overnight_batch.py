@@ -201,7 +201,9 @@ def _allows_evidenced_overlap(
     adaptation = str(slot.get("platform_adaptation_reason") or "").strip()
     signal = str(slot.get("platform_signal") or "").strip()
     matrix = _platform_evidence_matrix(platform, candidate, source_report, strategy)
-    if _stage_group(str(slot.get("stage") or "")) == _stage_group(str(previous.get("stage") or "")):
+    current_stage = str(slot.get("stage") or "").strip()
+    previous_stage = str(previous.get("stage") or "").strip()
+    if current_stage and previous_stage and _stage_group(current_stage) == _stage_group(previous_stage):
         return False
     return bool(
         adaptation
