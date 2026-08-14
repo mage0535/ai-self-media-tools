@@ -820,13 +820,9 @@ class VoiceEngine:
                     timing = self._even_timing(compiled.tts_text, dur)
                 except Exception as exc:
                     event.update({"provider": "edge-tts", "fallback_used": True, "fallback_reason": str(exc)[:160]})
-                    timing = await edge_provider.synthesize_with_timing(
-                        compiled.tts_text, out, voice, rate=controls["rate"], pitch=controls["pitch"]
-                    )
+                    timing = await self._synthesize_edge(edge_provider, compiled.tts_text, out, voice, controls)
             else:
-                timing = await edge_provider.synthesize_with_timing(
-                    compiled.tts_text, out, voice, rate=controls["rate"], pitch=controls["pitch"]
-                )
+                timing = await self._synthesize_edge(edge_provider, compiled.tts_text, out, voice, controls)
             dur = EdgeTTSProvider._get_duration(str(out))
             if out.exists() and dur > 0:
                 audio_files.append(out)
@@ -903,6 +899,24 @@ class VoiceEngine:
             "voice_manifest": str(manifest_path), "tts_provider": manifest["provider"],
             "fallback_used": manifest["fallback_used"],
         }
+
+    @staticmethod
+    async def _synthesize_edge(
+        provider: EdgeTTSProvider,
+        text: str,
+        output: Path,
+        voice: str,
+        controls: dict,
+    ) -> list[dict]:
+        """Use expressive controls while retaining compatibility with legacy adapters."""
+        try:
+            return await provider.synthesize_with_timing(
+                text, output, voice, rate=controls["rate"], pitch=controls["pitch"]
+            )
+        except TypeError as exc:
+            if "unexpected keyword argument" not in str(exc):
+                raise
+            return await provider.synthesize_with_timing(text, output, voice)
 
     @staticmethod
     def _qwen_language(lang: str) -> str:
