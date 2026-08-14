@@ -81,9 +81,6 @@ def build_batch_plan(
             cursor += estimate
         rows.append(row)
     queued_count = sum(1 for row in rows if row.get("state") == "queued")
-    platform_fit_reason = str(candidate.get("platform_fit_reason") or "").strip()
-    if verified and not platform_fit_reason:
-        platform_fit_reason = f"candidate source {candidate.get('source') or platform} matches the {platform} evidence lane"
     return {
         "version": "overnight_batch_plan_v1",
         "status": "partial_capacity" if blocked and queued_count else "capacity_blocked" if blocked else "scheduled",
@@ -260,6 +257,9 @@ def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_r
     # A fresh strategy is required context, but it does not prove that this
     # particular topic was observed on the platform. Keep those facts apart.
     verified = platform_source_ok or candidate_source_ok
+    platform_fit_reason = str(candidate.get("platform_fit_reason") or "").strip()
+    if verified and not platform_fit_reason:
+        platform_fit_reason = f"candidate source {candidate.get('source') or platform} matches the {platform} evidence lane"
     return {
         "platform": platform,
         "attempted_sources": attempted,
