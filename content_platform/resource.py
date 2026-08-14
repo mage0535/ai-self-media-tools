@@ -43,16 +43,35 @@ class ResourceGuard:
     def video_lock(self):
         lock = self.data_dir / "locks" / "video.lock"
         lock.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError as exc:
-            raise RuntimeError("another video worker holds the lock") from exc
+        fd = None
+        for _attempt in range(2):
+            try:
+                fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                break
+            except FileExistsError as exc:
+                if self._video_lock_owner_running(lock):
+                    raise RuntimeError("another video worker holds the lock") from exc
+                # A killed renderer must not block the following nightly batch.
+                lock.unlink(missing_ok=True)
+        if fd is None:
+            raise RuntimeError("unable to acquire video lock after stale-lock recovery")
         try:
             os.write(fd, str(os.getpid()).encode())
             os.close(fd)
             yield
         finally:
             lock.unlink(missing_ok=True)
+
+    @staticmethod
+    def _video_lock_owner_running(lock: Path) -> bool:
+        try:
+            pid = int(lock.read_text(encoding="utf-8").strip())
+            if pid <= 0:
+                return False
+            os.kill(pid, 0)
+        except (OSError, ValueError):
+            return False
+        return True
 
     def cleanup(self, protected_paths, retention_days=14):
         cutoff = time.time() - int(retention_days) * 86400

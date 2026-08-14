@@ -299,7 +299,23 @@ def sync_batch_state(state: dict[str, Any], store: Any, *, summary_path: str | P
         deliveries = store.deliveries(job_id)
         delivery_states = [str(row.get("status") or "") for row in deliveries]
         acceptance = dict(job.get("acceptance") or {})
-        observed = "blocked" if acceptance and not acceptance.get("passed") else "published" if "published" in delivery_states else "handoff_ready" if "handoff_pending" in delivery_states else "drafted" if "drafted" in delivery_states else str(job.get("state") or "blocked")
+        prior_state = str(task.get("state") or "")
+        # A manual handoff can have a queued delivery while its actual media
+        # package failed validation. Preserve that failure rather than turning
+        # queue bookkeeping into a false handoff-ready claim.
+        observed = (
+            "blocked"
+            if prior_state == "blocked"
+            else "blocked"
+            if acceptance and not acceptance.get("passed")
+            else "published"
+            if "published" in delivery_states
+            else "handoff_ready"
+            if "handoff_pending" in delivery_states
+            else "drafted"
+            if "drafted" in delivery_states
+            else str(job.get("state") or "blocked")
+        )
         task.update({
             "state": observed,
             "job_state": str(job.get("state") or ""),
@@ -440,9 +456,26 @@ def execute_batch(
                 str(task.get("profile") or "default"),
             )
             task["job_id"] = str(job["id"])
+            journal.append(
+                "platform_job_created",
+                platform,
+                {"job_id": task["job_id"], "stage": task.get("stage"), "action": task.get("action", "handoff")},
+            )
             result = pipeline.run(task["job_id"])
             result_state = str(result.get("state") or "failed")
             task["pipeline_state"] = result_state
+            artifact_kinds = sorted(
+                {
+                    str(artifact.get("kind") or "")
+                    for artifact in (result.get("artifacts") or [])
+                    if isinstance(artifact, dict) and str(artifact.get("kind") or "")
+                }
+            )
+            journal.append(
+                "platform_generation_complete",
+                platform,
+                {"job_id": task["job_id"], "pipeline_state": result_state, "artifact_kinds": artifact_kinds},
+            )
 
             if require_acceptance and result_state not in {"blocked", "failed", "rejected"}:
                 from .workflow_acceptance import evaluate_job_acceptance
@@ -469,6 +502,7 @@ def execute_batch(
                     task["state"] = "handoff_ready"
                     journal.append("handoff_ready", platform, {"job_id": task["job_id"], "pipeline_state": result_state})
             elif str(task.get("action") or "stage") == "stage":
+                journal.append("platform_staging_started", platform, {"job_id": task["job_id"]})
                 staged = pipeline.stage_drafts(task["job_id"])
                 task["pipeline_state"] = str(staged.get("state") or result_state)
                 # ``partial`` is Pipeline's aggregate delivery result.  In a
