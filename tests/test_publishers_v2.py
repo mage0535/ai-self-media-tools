@@ -416,9 +416,14 @@ class PublisherV2Tests(unittest.TestCase):
                 )
                 result = publisher.deliver({"id": "job7", "title": "T", "body": "B"}, platform)
 
-                self.assertEqual(publisher.__class__.__name__, "ManualHandoffPublisher")
-                self.assertEqual(result.status, "handoff_pending")
-                self.assertIn("manual-only", result.error)
+                if platform == "xiaohongshu":
+                    self.assertEqual(publisher.__class__.__name__, "XiaohongshuManualHandoffPublisher")
+                    self.assertEqual(result.status, "blocked")
+                    self.assertIn("handoff gate", result.error)
+                else:
+                    self.assertEqual(publisher.__class__.__name__, "ManualHandoffPublisher")
+                    self.assertEqual(result.status, "handoff_pending")
+                    self.assertIn("manual-only", result.error)
 
     def test_aitoearn_disabled_platforms_override_draft_and_flow_configs(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -3222,3 +3222,37 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Historic state reconciliation also repairs legacy `handoff_ready` rows when
   their retained reason proves the handoff media was missing. Old work is not
   replayed or published during this repair.
+
+## 2026-08-14 - Xiaohongshu Recovery Boundary And Operator Handoff
+
+### Finding
+- The restored Xiaohongshu account needs a stricter boundary than ordinary
+  manual channels: any automated upload, scheduled upload, or platform draft
+  risks account enforcement.
+- Existing routing selected a local handoff publisher, but a delivery-health
+  configuration could disable that policy and the package did not prove that
+  its text and media had reached the operator.
+
+### Implemented
+- `xiaohongshu` and `rednote` are now strict manual-handoff platforms in core
+  policy. Delivery health returns `manual_handoff_only` before inspecting any
+  runtime config, so routing defaults cannot restore an uploader.
+- `XiaohongshuManualHandoffPublisher` has no automatic fallback. It requires
+  an explicit `manual` mode, a cover, at least three readable images, a title,
+  body, topics, and a manual publishing guide. `xhs_manual_publish_gate.py`
+  fails closed for every incomplete package.
+- A handoff reaches `handoff_pending` only after `deliver_media.py` has sent
+  the full text and each staged media file to the configured Hermes target.
+  The target can be read from the private notification environment file; its
+  value is never written to a package, log, or public repository.
+- Direct `SocialAutoUploadPublisher` use for Xiaohongshu is also blocked,
+  which protects callers that bypass normal publisher selection.
+
+### Verification
+- TDD coverage verifies missing manual mode, missing images, configuration
+  disable attempts, direct auto-uploader calls, successful operator receipts,
+  and failed delivery receipts.
+- Focused regression: `python -m pytest tests/test_xhs_manual_handoff.py
+  tests/test_delivery_health.py tests/test_publishers_v2.py
+  tests/test_operational_scripts.py tests/test_pipeline.py
+  tests/test_overnight_batch.py -q`.

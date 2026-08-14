@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .aitoearn import AitoEarnClient
 from .auth_registry import resolve_cookie_file
-from .content_policy import default_publisher_config, is_manual_handoff_platform, platform_region
+from .content_policy import default_publisher_config, is_manual_handoff_platform, is_xiaohongshu_platform, platform_region
 from .formatters import format_for_platform
 from .juejin_publisher import JuejinPublisher
 from .media_quality import validate_article_packet
@@ -24,6 +24,7 @@ from .paths import project_home, social_auto_upload_home
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, packet_uses_current_policy
 from .wechat_toolchain import TOOLCHAIN_META_KEYS
 from .zhihu_publisher import ZhihuPublisher
+from scripts.deliver_media import deliver_xiaohongshu_package
 
 AITOEARN_DISABLED_PLATFORMS = {"youtube", "tiktok", "twitter", "x", "threads"}
 DOUYIN_ACCOUNT_VARIANTS = {"douyin_pet", "douyin_ai"}
@@ -87,6 +88,72 @@ class ManualHandoffPublisher:
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return DeliveryResult(True, "handoff_pending", str(path), error=self.reason)
+
+
+class XiaohongshuManualHandoffPublisher:
+    """Create and deliver a verified user-only Xiaohongshu handoff package.
+
+    This publisher deliberately has no uploader fallback.  A package is not
+    handoff-ready until the full text and every image have been sent through
+    the configured Hermes delivery target.
+    """
+
+    def __init__(self, outbox):
+        self.outbox = Path(outbox)
+
+    @staticmethod
+    def _images(job):
+        paths = []
+        for artifact in job.get("artifacts", []):
+            if not isinstance(artifact, dict) or artifact.get("kind") not in {"image", "cover"}:
+                continue
+            path = Path(str(artifact.get("path") or "")).expanduser()
+            if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+                resolved = str(path.resolve())
+                if resolved not in paths:
+                    paths.append(resolved)
+        return paths
+
+    @staticmethod
+    def _guide():
+        return (
+            "请在小红书 App 或创作者中心手动上传以下图片，按给定顺序填写标题、正文和话题；"
+            "核对图片、敏感词和排版后，仅由账号所有者点击发布。发布后再手动确认数据。"
+        )
+
+    def deliver(self, job, platform):
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        images = self._images(job)
+        payload = {
+            "job_id": job["id"],
+            "platform": "xiaohongshu",
+            "status": "handoff_pending",
+            "publish_mode": "manual",
+            "live_publish": False,
+            "title": str(formatted.get("title") or job.get("title") or "")[:20],
+            "body": str(formatted.get("text") or job.get("body") or ""),
+            "topics": list(formatted.get("hashtags") or [])[:6],
+            "cover": images[0] if images else "",
+            "images": images,
+            "manual_publish_guide": self._guide(),
+            "postcheck": "user_manual_publish_confirmation",
+        }
+        directory = self.outbox / "xiaohongshu"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{job['id']}.json"
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        from scripts.xhs_manual_publish_gate import check_handoff_package
+
+        gate = check_handoff_package(str(path))
+        if not gate.get("passed"):
+            return DeliveryResult(False, "blocked", str(path), error="xiaohongshu handoff gate failed: " + ",".join(gate.get("failures", [])))
+        receipt = deliver_xiaohongshu_package(path)
+        payload["operator_delivery"] = receipt
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if not receipt.get("passed"):
+            return DeliveryResult(False, "blocked", str(path), error="xiaohongshu operator delivery failed: " + str(receipt.get("error") or "unknown"))
+        return DeliveryResult(True, "handoff_pending", str(path), error="Xiaohongshu manual publish required")
 
 
 class RedditDraftPublisher:
@@ -339,12 +406,15 @@ class HermesWechatAdapter:
         for key in ["seo_geo_intent", "selected_theme_reason"]:
             if not strategy.get(key):
                 return f"WeChat strategy brief missing {key}"
-        wewrite = (job.get("tool_invocations") or {}).get("wewrite") or {}
-        if wewrite.get("status") != "used":
-            return "WeChat packet requires successful WeWrite llm-write tool invocation evidence"
-        commands = [item.get("name") for item in wewrite.get("commands", []) if isinstance(item, dict)]
-        if "llm-write" not in commands:
-            return "WeChat packet missing WeWrite llm-write command evidence"
+        invocations = job.get("tool_invocations") or {}
+        wewrite = invocations.get("wewrite") or {}
+        hermes_writer = invocations.get("hermes_writer") or {}
+        wewrite_commands = [item.get("name") for item in wewrite.get("commands", []) if isinstance(item, dict)]
+        hermes_commands = [item.get("name") for item in hermes_writer.get("commands", []) if isinstance(item, dict)]
+        wewrite_used = wewrite.get("status") == "used" and "llm-write" in wewrite_commands
+        hermes_used = hermes_writer.get("status") == "used" and "hermes --cli" in hermes_commands
+        if not (wewrite_used or hermes_used):
+            return "WeChat packet requires successful WeWrite llm-write or Hermes writer invocation evidence"
         return ""
 
 
@@ -394,6 +464,12 @@ class SocialAutoUploadPublisher:
         return files
 
     def deliver(self, job, platform):
+        if self.platform_name.casefold() in {"xiaohongshu", "xhs", "rednote"}:
+            return DeliveryResult(
+                False,
+                "blocked",
+                error="xiaohongshu manual publish only: automatic uploader routes are permanently disabled",
+            )
         check = self._run(["check", "--account", self.account_name])
         if check.returncode != 0:
             return DeliveryResult(False, "blocked", error=f"social-auto-upload check failed for {self.platform_name}: {check.stderr[:200] or check.stdout[:200]}")
@@ -1285,6 +1361,8 @@ def build_publisher(platform, config, data_dir):
     platform_cfg = publishers.get("platforms", {}).get(platform)
     cfg = platform_cfg or default_publisher_config(platform, publishers.get("routing_defaults", {})) or publishers.get("default", {"type": "file"})
     kind = cfg.get("type", "file")
+    if is_xiaohongshu_platform(platform):
+        return XiaohongshuManualHandoffPublisher(cfg.get("outbox", str(Path(data_dir) / "outbox")))
     if is_manual_handoff_platform(platform):
         return ManualHandoffPublisher(
             cfg.get("outbox", str(Path(data_dir) / "outbox")),
