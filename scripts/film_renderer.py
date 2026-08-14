@@ -27,23 +27,38 @@ sys.path.insert(0, str(ROOT))
 W, H = 1080, 1920
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 XFADE_DUR = 0.5
-TRANSITIONS = ["fade", "circleopen", "slideleft", "wipeleft"]
+# 转场类型（08-14 用户反馈「切换闪白光」→ 移除 xfade "fade"（fade 到白场）。
+# 08-14 增强「真实可观性」：按镜头类型差异化过渡——A→A 黑场/smooth（建立感），
+# B→B 方向性 wipe/slide（节奏推进），A→B circle（段落转折），机械轮换 → 语义映射。
+TRANSITIONS = ["fadeblack", "smoothleft", "circleopen", "slideleft", "wipeleft", "smoothup", "circleright", "fadegrays"]
+# 转场时长：段内镜头间紧凑(0.35s)，段落间强调(0.6s) —— 差异化节奏，非统一 0.5s
+XFADE_DUR_SHORT = 0.35
+XFADE_DUR_LONG = 0.6
 
-# 镜头A 背景运动（建立镜头）：慢推，方向按段轮换
+# 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
+# 08-14 增强：从 4 种微动升级为 8 种电影运镜，增加视觉层次
 KB_A = [
-    ("scale(1.00) translate(0px,0px)", "scale(1.08) translate(0px,-20px)"),
-    ("scale(1.00) translate(0px,0px)", "scale(1.07) translate(-20px,0px)"),
-    ("scale(1.00) translate(0px,0px)", "scale(1.09) translate(0px,20px)"),
-    ("scale(1.00) translate(0px,0px)", "scale(1.06) translate(20px,0px)"),
+    ("scale(1.00) translate(0px,0px)", "scale(1.10) translate(0px,-24px)"),   # 推入+上移
+    ("scale(1.00) translate(0px,0px)", "scale(1.08) translate(-28px,0px)"),   # 推入+左摇
+    ("scale(1.10) translate(0px,0px)", "scale(1.00) translate(0px,18px)"),    # 拉出+下移
+    ("scale(1.00) translate(0px,0px)", "scale(1.09) translate(26px,0px)"),    # 推入+右摇
+    ("scale(1.00) translate(0px,-22px)", "scale(1.07) translate(0px,22px)"),  # 垂直呼吸
+    ("scale(1.00) translate(-24px,0px)", "scale(1.09) translate(24px,0px)"),  # 水平呼吸
+    ("scale(1.00) translate(0px,0px)", "scale(1.11) translate(-18px,-18px)"), # 斜推左上
+    ("scale(1.00) translate(0px,0px)", "scale(1.08) translate(18px,-20px)"),  # 斜推右上
 ]
-# 镜头B 背景运动（要点镜头）：反向 pan
+# 镜头B 背景运动（要点镜头）：反向运镜 + 特写 zoom（08-14 增强）
 KB_B = [
-    ("scale(1.08) translate(0px,-20px)", "scale(1.00) translate(0px,0px)"),
-    ("scale(1.07) translate(-20px,0px)", "scale(1.00) translate(0px,0px)"),
-    ("scale(1.09) translate(0px,20px)", "scale(1.00) translate(0px,0px)"),
-    ("scale(1.06) translate(20px,0px)", "scale(1.00) translate(0px,0px)"),
+    ("scale(1.10) translate(0px,-24px)", "scale(1.00) translate(0px,0px)"),
+    ("scale(1.08) translate(-28px,0px)", "scale(1.00) translate(0px,0px)"),
+    ("scale(1.00) translate(0px,18px)", "scale(1.10) translate(0px,0px)"),
+    ("scale(1.09) translate(26px,0px)", "scale(1.00) translate(0px,0px)"),
+    ("scale(1.07) translate(0px,22px)", "scale(1.00) translate(0px,-22px)"),
+    ("scale(1.09) translate(24px,0px)", "scale(1.00) translate(-24px,0px)"),
+    ("scale(1.11) translate(-18px,-18px)", "scale(1.00) translate(0px,0px)"),
+    ("scale(1.08) translate(18px,-20px)", "scale(1.00) translate(0px,0px)"),
 ]
-# 镜头B 模块动效轮换
+# 镜头B 模块动效轮换（08-14 增强 4 种）
 MODULE_ANIMS = [
     ("staggerUp", ["translateY(30px)", "translateY(0px)"]),
     ("fadeSlideL", ["translateX(30px)", "translateX(0px)"]),
@@ -96,6 +111,11 @@ def _modules_from_card(card: dict) -> list[str]:
 def build_shot_a(idx: int, title: str, stat: str, bg_path: str, kicker: str, stat_label: str = "关键数字") -> str:
     kb = KB_A[idx % 4]
     b64 = _b64img(bg_path)
+    # 08-14 真实可观性增强：kicker/title/stat 入场动效按镜头轮换（非统一 fadeUp，机械感）
+    anim_pool = ["fadeUp", "scaleIn", "slideLeft", "rotateIn"]
+    kicker_anim = anim_pool[idx % 4]
+    title_anim = anim_pool[(idx + 1) % 4]
+    stat_anim = anim_pool[(idx + 2) % 4]
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; }}
@@ -105,14 +125,17 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 .overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.92) 100%); }}
 .content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:130px 90px; }}
 .kicker {{ font-size:32px; color:#ffd60a; font-weight:800; letter-spacing:5px; margin-bottom:40px;
-  animation: fadeUp 0.9s ease-out both; }}
+  animation: {kicker_anim} 0.9s ease-out both; }}
 .title {{ font-size:80px; line-height:1.28; font-weight:900; color:#fff; text-shadow:0 6px 26px rgba(0,0,0,0.8);
-  animation: fadeUp 1.1s ease-out 0.15s both; }}
+  animation: {title_anim} 1.1s ease-out 0.15s both; }}
 .stat {{ margin-top:64px; display:inline-block; background:rgba(255,255,255,0.12); border:2px solid rgba(255,255,255,0.35);
-  border-radius:44px; padding:22px 48px; animation: fadeUp 1.1s ease-out 0.5s both; }}
+  border-radius:44px; padding:22px 48px; animation: {stat_anim} 1.1s ease-out 0.5s both; }}
 .stat .n {{ font-size:64px; font-weight:900; color:#7ee787; }}
 .stat .l {{ font-size:30px; color:#d0d0d0; margin-left:16px; }}
 @keyframes fadeUp {{ from {{ opacity:0; transform:translateY(26px); }} to {{ opacity:1; transform:translateY(0); }} }}
+@keyframes scaleIn {{ from {{ opacity:0; transform:scale(0.85); }} to {{ opacity:1; transform:scale(1); }} }}
+@keyframes slideLeft {{ from {{ opacity:0; transform:translateX(40px); }} to {{ opacity:1; transform:translateX(0); }} }}
+@keyframes rotateIn {{ from {{ opacity:0; transform:rotate(-4deg) scale(0.92); }} to {{ opacity:1; transform:rotate(0) scale(1); }} }}
 .idx {{ position:absolute; top:64px; right:64px; font-size:110px; font-weight:900; color:rgba(255,255,255,0.13); z-index:2; }}
 </style></head><body>
 <div class="bg"></div><div class="overlay"></div>
@@ -483,11 +506,23 @@ def main() -> int:
         prev = "0:v"
         offset_acc = 0.0
         for i in range(1, len(names)):
-            offset_acc += durs_map[names[i - 1]] - XFADE_DUR
+            # 镜头类型：A=建立镜头(偶数 index)，B=要点镜头(奇数 index)
+            cur_type = "B" if names[i].endswith("B") else "A"
+            prev_type = "B" if names[i - 1].endswith("B") else "A"
+            # 差异化转场：A→A 黑场/smooth（段落建立），B→B 方向性（节奏推进），A→B/B→A circle（转折）
+            if prev_type == cur_type == "A":
+                trans = TRANSITIONS[(gi * 2 + i) % 4]  # fadeblack/smoothleft/circleopen/slideleft
+                xdur = XFADE_DUR_LONG
+            elif prev_type == cur_type == "B":
+                trans = TRANSITIONS[4 + (gi * 2 + i) % 4]  # wipeleft/smoothup/circleright/fadegrays
+                xdur = XFADE_DUR_SHORT
+            else:
+                trans = "circleopen" if i % 2 else "smoothleft"
+                xdur = XFADE_DUR_LONG
+            offset_acc += durs_map[names[i - 1]] - xdur
             offset_acc = max(0.05, offset_acc - 0.05)
             label = f"g{gi}x{i}"
-            trans = TRANSITIONS[(gi * 3 + i - 1) % 4]
-            fc_parts.append(f"[{prev}][{i}:v]xfade=transition={trans}:duration={XFADE_DUR}:offset={offset_acc:.3f}[{label}]")
+            fc_parts.append(f"[{prev}][{i}:v]xfade=transition={trans}:duration={xdur}:offset={offset_acc:.3f}[{label}]")
             prev = label
         fc = ";".join(fc_parts) + f";[{prev}]format=yuv420p[v]"
         gout = out / f"group_{gi}.mp4"
