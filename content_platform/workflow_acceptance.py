@@ -27,7 +27,7 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     if normalized in LONG_FORM_PLATFORMS:
         _check_long_form(body, failures)
     if normalized in VIDEO_PLATFORMS:
-        _check_video_artifacts(artifacts, failures)
+        _check_video_artifacts(artifacts, store.artifacts(job_id), failures)
     result = {
         "version": "workflow_acceptance_v1",
         "job_id": str(job_id),
@@ -70,12 +70,18 @@ def _check_long_form(body: str, failures: list[str]) -> None:
         failures.append("long_form_evidence_missing")
 
 
-def _check_video_artifacts(directory: Path, failures: list[str]) -> None:
-    if not (directory / "final.mp4").is_file():
+def _check_video_artifacts(directory: Path, artifacts: list[dict[str, Any]], failures: list[str]) -> None:
+    paths = [Path(str(item.get("path") or "")) for item in artifacts if isinstance(item, dict)]
+    video_exists = (directory / "final.mp4").is_file() or any(path.is_file() and path.suffix.casefold() == ".mp4" for path in paths)
+    cover_exists = (directory / "cover.png").is_file() or any(
+        path.is_file() and (str(item.get("kind") or "").casefold() == "cover" or path.stem.casefold().startswith("cover"))
+        for item, path in zip(artifacts, paths)
+    )
+    if not video_exists:
         failures.append("video_missing")
     if not (directory / "scene_manifest.json").is_file():
         failures.append("scene_manifest_missing")
     if not (directory / "tts_config.json").is_file():
         failures.append("tts_config_missing")
-    if not (directory / "cover.png").is_file():
+    if not cover_exists:
         failures.append("cover_missing")
