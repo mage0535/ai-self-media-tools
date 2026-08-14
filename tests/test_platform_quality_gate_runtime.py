@@ -75,6 +75,26 @@ class PlatformQualityGateRuntimeTests(unittest.TestCase):
             with self.assertRaises(WorkflowBlocked):
                 pipeline._generate_optional_media(job["id"], "video", runner, ["validate_image_requirements"])
 
+    def test_generation_gate_defers_render_only_video_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            pipeline = Pipeline(store, {"data_dir": tmp, "feature_flags": {"channel_auto_workflow_gate": "enforce"}})
+            draft = {
+                "title": "Bilibili AI automation walkthrough",
+                "body": "A real walkthrough script with steps and evidence.",
+                "draft_meta": {
+                    "strategy": {"primary_platforms": ["bilibili"]},
+                    "content_form": "short_video",
+                    "video_toolchain_plan": {"required": True, "selected_pipeline": "tutorial_video"},
+                },
+            }
+
+            gate = pipeline._generation_platform_quality_gate("job-1", draft, ["bilibili"])
+
+            self.assertTrue(gate["passed"])
+            self.assertTrue(gate["results"]["bilibili"]["deferred"])
+
     def test_media_bridge_rejects_video_toolchain_dry_run_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
