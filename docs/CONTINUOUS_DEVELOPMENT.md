@@ -3173,3 +3173,37 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 ### Verification
 - TDD red/green checks covered independent natural-overlap approval, unexplained duplicate rejection, continuation-promise rejection, depth CLI validation, scene-manifest enforcement, metadata-only BGM catalog behavior, and higher video headroom.
 - Focused regression: `python -m pytest tests/test_content.py tests/test_ops_run.py tests/test_content_depth.py tests/test_bgm_catalog.py tests/test_pre_render_gate.py tests/test_resource.py tests/test_video_toolchain.py tests/test_video_toolchain_runner.py -q`.
+
+## 2026-08-14 - Canonical Scene Contract And Runtime Closure
+
+### Finding
+- The new `scene_manifest_v1` and the legacy pre-render gate described the
+  same artifact with incompatible fields. A valid manifest could therefore be
+  rejected before rendering.
+- A generation-stage platform gate attempted to require evidence that exists
+  only after a video render. Motion evidence also sampled too few frames for
+  the operating quality contract.
+- Runtime-artifact cleanup worked from the project directory but failed when a
+  scheduler invoked the script by absolute path; no cleanup timer was enabled.
+
+### Implemented
+- The pre-render gate now delegates to the canonical scene-manifest validator.
+  `scene_manifest` remains the single source of truth; visual recipe output is
+  compatibility data, not a parallel timeline.
+- TTS keeps display text and compiled speech text separate, preserves measured
+  segment timing, supports Qwen with Edge fallback, and retains bounded
+  per-segment expression controls. Legacy Edge adapters without rate/pitch
+  kwargs fall back safely.
+- Video-only evidence is explicitly deferred until the renderer can produce
+  it; post-render validation remains fail-closed. Motion probes now sample five
+  positions across the final artifact.
+- Added a portable cleanup entrypoint and
+  `hermes-content-platform-runtime-cleanup.timer`. It archives only old
+  reconstructable intermediates and never final media, covers, manifests,
+  reports, or handoff evidence.
+
+### Verification
+- Local full suite: `732 passed, 29 subtests passed`.
+- Hermes full suite after deployment: `743 passed, 29 subtests passed`.
+- Hermes overnight and cleanup timers are `enabled` and `active`; cleanup dry
+  run completed outside the project working directory.
