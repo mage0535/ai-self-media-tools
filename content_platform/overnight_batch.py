@@ -103,6 +103,7 @@ def build_due_tasks(
     growth_strategy_status: dict[str, dict[str, Any]] | None = None,
     weekday: int | None = None,
     strict_trend_evidence: bool = False,
+    report_path: str = "runtime:overnight_trend_collection",
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
@@ -158,7 +159,7 @@ def build_due_tasks(
                 platform_fit_score=float(selected.get("platform_fit_score") or selected.get("score") or 0),
             )
             trend_gate = validate_trend_candidate(trend_candidate)
-            matrix = _platform_evidence_matrix(platform, selected, source_report, strategy)
+            matrix = _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
             selected_topics.setdefault(
                 _topic_identity(selected),
                 {"platform": platform, "adaptation": adaptation, "signal": signal, "stage": str(raw.get("stage") or "")},
@@ -227,7 +228,14 @@ def _stage_group(stage: str) -> str:
     return normalized or "unknown"
 
 
-def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_report: list[dict[str, Any]], strategy: dict[str, Any]) -> dict[str, Any]:
+def _platform_evidence_matrix(
+    platform: str,
+    candidate: dict[str, Any],
+    source_report: list[dict[str, Any]],
+    strategy: dict[str, Any],
+    *,
+    report_path: str = "runtime:overnight_trend_collection",
+) -> dict[str, Any]:
     attempted = [
         {"source": item.get("source"), "status": item.get("status", "unknown"), **({"error": item["error"]} if item.get("error") else {})}
         for item in source_report
@@ -271,7 +279,7 @@ def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_r
         "shared_trend_only": not verified,
         "candidate_source": str(candidate.get("source") or ""),
         "platform_fit_reason": platform_fit_reason,
-        "report_path": "runtime:overnight_trend_collection",
+        "report_path": str(report_path),
     }
 
 

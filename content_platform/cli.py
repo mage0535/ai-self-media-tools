@@ -12,7 +12,7 @@ from .intelligence import build_generation_context
 from .niche_analysis import analyze_niche
 from .metrics import render_metrics
 from .seo import search as _seo_search, analyze as _seo_analyze, geo_checklist
-from .paths import project_home
+from .paths import project_home, trend_cache_dir
 from .pipeline import Pipeline
 from .project_audit import audit_project
 from .profiles import resolve_profile
@@ -560,6 +560,9 @@ def execute(args):
             raise ValueError("overnight slots file must contain a list or slots list")
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
+        snapshot_path = trend_cache_dir() / f"trend_snapshot_{datetime.now().date().isoformat()}.json"
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         profile = resolve_profile(config.get("profiles", {}), args.profile)
         weekday = datetime.now().weekday() if args.weekday is None else args.weekday
         # Pet transport requires its own verified source.  A generic AI trend
@@ -614,6 +617,7 @@ def execute(args):
             growth_strategy_status=strategy_status,
             weekday=weekday,
             strict_trend_evidence=True,
+            report_path=str(snapshot_path),
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
