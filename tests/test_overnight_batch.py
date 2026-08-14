@@ -404,3 +404,19 @@ def test_review_required_task_is_terminal_on_resume(tmp_path: Path):
     summary = execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
 
     assert summary["tasks"][0]["state"] == "review_required"
+
+
+def test_manual_video_handoff_is_blocked_when_the_pipeline_returns_no_video_or_cover(tmp_path: Path):
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            return {"id": "job-video"}
+
+        def run(self, _job_id):
+            return {"id": "job-video", "state": "review_required", "artifacts": []}
+
+    plan = build_batch_plan([{"platform": "douyin_ai", "topic": "topic", "brief": {}, "estimate_minutes": 10}], deadline_minute=280, finalization_minutes=20)
+    summary = execute_batch(Pipeline(), plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["status"] == "partial"
+    assert summary["tasks"][0]["state"] == "blocked"
+    assert summary["tasks"][0]["reason"] == "handoff_media_missing"
