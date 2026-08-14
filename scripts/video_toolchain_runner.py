@@ -471,7 +471,15 @@ def _render_motion_evidence(output: Path) -> dict:
         duration = float((probe.stdout or "0").strip() or 0)
         if duration <= 0:
             return {"passed": False, "reason": "duration_unavailable", "frames": []}
-        offsets = sorted({0.25, round(duration / 2, 3), max(0.25, round(duration - 0.25, 3))})
+        offsets = sorted(
+            {
+                0.25,
+                round(duration * 0.25, 3),
+                round(duration * 0.5, 3),
+                round(duration * 0.75, 3),
+                max(0.25, round(duration - 0.25, 3)),
+            }
+        )
         frames = []
         for offset in offsets:
             rendered = subprocess.run(

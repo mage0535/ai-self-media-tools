@@ -699,7 +699,14 @@ class Pipeline:
         for platform in platforms:
             normalized = str(platform or "").casefold()
             packet = self._generation_platform_packet(job_id, draft, platforms, normalized)
-            result = self._platform_quality_validator(normalized, packet)
+            if self._defers_render_only_video_evidence(packet):
+                result = {
+                    "passed": True,
+                    "deferred": True,
+                    "reason": "render_only_video_evidence_checked_after_render",
+                }
+            else:
+                result = self._platform_quality_validator(normalized, packet)
             if result:
                 results[normalized] = result
         if not results:
@@ -709,6 +716,20 @@ class Pipeline:
             "mode": "enforce",
             "platforms": list(results.keys()),
             "results": results,
+        }
+
+    @staticmethod
+    def _defers_render_only_video_evidence(packet):
+        """Generation cannot prove media evidence that only a renderer can emit."""
+        plan = packet.get("video_toolchain_plan") if isinstance(packet, dict) else {}
+        if not isinstance(plan, dict) or not plan.get("required"):
+            return False
+        if packet.get("scene_visual_alignment") or packet.get("final_video") or packet.get("video_path"):
+            return False
+        return str(packet.get("content_form") or packet.get("content_type") or "").casefold() in {
+            "short_video",
+            "video",
+            "tutorial_video",
         }
 
     @staticmethod
