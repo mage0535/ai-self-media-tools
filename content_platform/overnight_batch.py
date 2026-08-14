@@ -303,9 +303,13 @@ def sync_batch_state(state: dict[str, Any], store: Any, *, summary_path: str | P
         # A manual handoff can have a queued delivery while its actual media
         # package failed validation. Preserve that failure rather than turning
         # queue bookkeeping into a false handoff-ready claim.
+        manual_handoff_evidence_failed = (
+            str(task.get("platform") or "").casefold() in MANUAL_HANDOFF_PLATFORMS
+            and str(task.get("reason") or "").startswith("handoff_")
+        )
         observed = (
             "blocked"
-            if prior_state == "blocked"
+            if prior_state == "blocked" or manual_handoff_evidence_failed
             else "blocked"
             if acceptance and not acceptance.get("passed")
             else "published"
