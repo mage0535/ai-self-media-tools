@@ -60,7 +60,11 @@ run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-run --plan "$out/plan.json" --state "$out/state.json" --events "$out/events.jsonl" > "$out/result.json"
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/sync-state-result.json"
-notify "progress" "overnight_acceptance_summary_complete"
+if ! run_platform overnight-acceptance --result "$out/result.json" --state "$out/state.json" --output "$out/acceptance_report.json" > "$out/acceptance-result.json"; then
+  notify "failed" "overnight_acceptance_failed"
+  exit 1
+fi
+notify "progress" "overnight_acceptance_complete"
 batch_status="$(python3 - "$out/result.json" <<'PY'
 import json
 import sys
