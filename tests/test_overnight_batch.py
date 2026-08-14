@@ -261,7 +261,7 @@ def test_sync_batch_state_does_not_upgrade_a_blocked_manual_handoff(tmp_path: Pa
     store.save_delivery(job["id"], "douyin_ai", "handoff_pending", "packet")
     state = {
         "status": "partial",
-        "tasks": [{"platform": "douyin_ai", "job_id": job["id"], "state": "blocked", "reason": "handoff_media_missing"}],
+        "tasks": [{"platform": "douyin_ai", "job_id": job["id"], "state": "handoff_ready", "reason": "handoff_media_missing"}],
     }
 
     sync_batch_state(state, store)
