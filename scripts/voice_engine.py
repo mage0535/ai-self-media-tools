@@ -17,6 +17,7 @@ import json
 import os
 import random
 import re
+import time
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
+import requests
+from content_platform.tts_text_compiler import TTSTextCompiler
 from content_platform.voice_plan import build_voice_plan
 
 # ────────────────────────────────────────────────────────────────
@@ -317,6 +320,173 @@ class KokoroProvider:
             return output
         raise RuntimeError("Kokoro generated no audio")
 
+class QwenTTSProvider:
+    """Qwen3-TTS over DashScope API. Keeps model memory off the Hermes host."""
+
+    DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/api/v1"
+    ENDPOINT = "/services/aigc/multimodal-generation/generation"
+    AUDIO_ENDPOINT = "/services/audio/tts/SpeechSynthesizer"
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        timeout: int | None = None,
+    ):
+        self.api_key = api_key or os.environ.get("QWEN_TTS_API_KEY") or os.environ.get("DASHSCOPE_API_KEY")
+        self.model = model or os.environ.get("QWEN_TTS_MODEL_CHAIN") or os.environ.get("QWEN_TTS_MODEL", "qwen3-tts-flash")
+        self.base_url = (base_url or os.environ.get("QWEN_TTS_BASE_URL") or self.DEFAULT_BASE_URL).rstrip("/")
+        self.timeout = int(timeout or os.environ.get("QWEN_TTS_TIMEOUT", "25"))
+
+    @property
+    def available(self) -> bool:
+        return bool(self.api_key)
+
+    def synthesize(
+        self,
+        text: str,
+        output: Path,
+        *,
+        voice: str = "Cherry",
+        language: str = "Auto",
+        instructions: str | None = None,
+    ) -> dict:
+        if not self.api_key:
+            raise RuntimeError("qwen_tts_api_key_missing")
+        started = time.time()
+        attempts = []
+        last_error = "qwen_tts_failed"
+        for model_name in self._model_chain():
+            try:
+                payload = self._call_model(model_name, text, voice, language, instructions)
+                audio = ((payload.get("output") or {}).get("audio") or {})
+                self._write_audio(audio, output)
+                if not output.exists() or output.stat().st_size < 128:
+                    raise RuntimeError("qwen_tts_audio_invalid")
+                attempts.append({"model": model_name, "ok": True})
+                return {
+                    "provider": "qwen3-tts",
+                    "model": model_name,
+                    "model_attempts": attempts,
+                    "request_id": payload.get("request_id"),
+                    "usage": payload.get("usage", {}),
+                    "audio_id": audio.get("id"),
+                    "latency_ms": int((time.time() - started) * 1000),
+                }
+            except Exception as exc:
+                last_error = str(exc)[:160]
+                attempts.append({"model": model_name, "ok": False, "error": last_error})
+                output.unlink(missing_ok=True)
+        raise RuntimeError(last_error)
+
+    def _model_chain(self) -> list[str]:
+        return [item.strip() for item in str(self.model).split(",") if item.strip()]
+
+    def _call_model(
+        self,
+        model_name: str,
+        text: str,
+        voice: str,
+        language: str,
+        instructions: str | None,
+    ) -> dict:
+        if self._uses_audio_tts_endpoint(model_name):
+            return self._call_audio_tts_model(model_name, text, language, instructions)
+        body = {
+            "model": model_name,
+            "input": {
+                "text": text,
+                "voice": voice or os.environ.get("QWEN_TTS_VOICE", "Cherry"),
+                "language_type": language or "Auto",
+            },
+        }
+        if instructions and "instruct" in model_name:
+            body["input"]["instructions"] = instructions
+            body["input"]["optimize_instructions"] = True
+        response = requests.post(
+            f"{self.base_url}{self.ENDPOINT}",
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            json=body,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if int(payload.get("status_code", response.status_code) or 0) >= 400:
+            raise RuntimeError(str(payload.get("message") or payload.get("code") or "qwen_tts_failed"))
+        return payload
+
+    def _call_audio_tts_model(
+        self,
+        model_name: str,
+        text: str,
+        language: str,
+        instructions: str | None,
+    ) -> dict:
+        body = {
+            "model": model_name,
+            "input": {
+                "text": self._apply_audio_instruction_tags(text, instructions),
+                "voice": os.environ.get("QWEN_AUDIO_TTS_VOICE") or "longanhuan_v3.6",
+                "format": os.environ.get("QWEN_AUDIO_TTS_FORMAT", "mp3"),
+                "sample_rate": int(os.environ.get("QWEN_AUDIO_TTS_SAMPLE_RATE", "24000")),
+            },
+        }
+        language_hint = self._audio_language_hint(language)
+        if language_hint:
+            body["input"]["language_hints"] = [language_hint]
+        if instructions:
+            body["input"]["instruction"] = instructions
+        response = requests.post(
+            f"{self.base_url}{self.AUDIO_ENDPOINT}",
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            json=body,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if int(payload.get("status_code", response.status_code) or 0) >= 400:
+            raise RuntimeError(str(payload.get("message") or payload.get("code") or "qwen_audio_tts_failed"))
+        return payload
+
+    @staticmethod
+    def _uses_audio_tts_endpoint(model_name: str) -> bool:
+        return model_name.startswith("qwen-audio-") or model_name.startswith("cosyvoice-")
+
+    @staticmethod
+    def _audio_language_hint(language: str) -> str | None:
+        return {
+            "Chinese": "zh",
+            "English": "en",
+            "German": "de",
+            "Italian": "it",
+            "Portuguese": "pt",
+            "Spanish": "es",
+            "Japanese": "ja",
+            "Korean": "ko",
+            "French": "fr",
+            "Russian": "ru",
+        }.get(language)
+
+    @staticmethod
+    def _apply_audio_instruction_tags(text: str, instructions: str | None) -> str:
+        return text
+
+    def _write_audio(self, audio: dict, output: Path) -> None:
+        audio_url = audio.get("url")
+        audio_data = audio.get("data")
+        if audio_url:
+            download = requests.get(audio_url, timeout=self.timeout)
+            download.raise_for_status()
+            output.write_bytes(download.content)
+        elif audio_data:
+            import base64
+
+            output.write_bytes(base64.b64decode(audio_data))
+        else:
+            raise RuntimeError("qwen_tts_audio_missing")
+
+
 class EdgeTTSProvider:
     """edge-tts 多语言语音合成封装"""
 
@@ -582,11 +752,13 @@ class VoiceEngine:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
     def synthesize(self, script_text: str, lang: str = "auto",
-                   genre: str = "auto", mode: str = "auto") -> dict:
+                   genre: str = "auto", mode: str = "auto",
+                   provider: str | None = None) -> dict:
         """主入口：文案 → 配音 + 字幕"""
-        return asyncio.run(self._run(script_text, lang, genre, mode))
+        return asyncio.run(self._run(script_text, lang, genre, mode, provider))
 
-    async def _run(self, script_text: str, lang: str, genre: str, mode: str) -> dict:
+    async def _run(self, script_text: str, lang: str, genre: str, mode: str,
+                   provider_name: str | None = None) -> dict:
         segments = parse_script(script_text)
         if not segments:
             raise ValueError("配音文本为空")
@@ -612,8 +784,19 @@ class VoiceEngine:
                 v = genre_cfg["female"] if i % 2 == 0 else genre_cfg["male"]
                 speaker_voices[spk] = v
 
-        provider = EdgeTTSProvider()
+        edge_provider = EdgeTTSProvider()
+        qwen_provider = QwenTTSProvider()
+        dictionary_path = os.environ.get("PRONUNCIATION_DICTIONARY")
+        default_dictionary = Path(__file__).resolve().parents[1] / "config" / "pronunciation_dictionary.json"
+        dictionary = Path(dictionary_path) if dictionary_path else default_dictionary
+        compiler = TTSTextCompiler.from_file(dictionary) if dictionary.is_file() else TTSTextCompiler([])
+        platform = os.environ.get("TTS_PLATFORM", "")
+        selected_provider = (provider_name or os.environ.get("VOICE_TTS_PROVIDER", "edge")).strip().lower()
+        if selected_provider == "auto":
+            selected_provider = "qwen" if qwen_provider.available and lang in {"zh", "en"} else "edge"
         audio_files, all_timings, segment_texts, all_durations = [], [], [], []
+        provider_events = []
+        tts_records = []
         total_dur = 0.0
 
         voice_plan = build_voice_plan([seg.text for seg in segments])
@@ -621,13 +804,38 @@ class VoiceEngine:
             voice = speaker_voices.get(seg.speaker, genre_cfg["single"])
             out = self.temp_dir / f"seg_{uuid.uuid4().hex[:8]}.mp3"
             controls = voice_plan[index]
-            timing = await provider.synthesize_with_timing(seg.text, out, voice, rate=controls["rate"], pitch=controls["pitch"])
+            compiled = compiler.compile(seg.text, context=genre, platform=platform)
+            event = {"requested_provider": selected_provider, "provider": "edge-tts", "fallback_used": False}
+            if selected_provider == "qwen":
+                try:
+                    qwen_result = qwen_provider.synthesize(
+                        compiled.tts_text,
+                        out,
+                        voice=os.environ.get("QWEN_TTS_VOICE", "Cherry"),
+                        language=self._qwen_language(lang),
+                        instructions=self._qwen_instructions(genre),
+                    )
+                    event.update(qwen_result)
+                    dur = EdgeTTSProvider._get_duration(str(out))
+                    timing = self._even_timing(compiled.tts_text, dur)
+                except Exception as exc:
+                    event.update({"provider": "edge-tts", "fallback_used": True, "fallback_reason": str(exc)[:160]})
+                    timing = await edge_provider.synthesize_with_timing(
+                        compiled.tts_text, out, voice, rate=controls["rate"], pitch=controls["pitch"]
+                    )
+            else:
+                timing = await edge_provider.synthesize_with_timing(
+                    compiled.tts_text, out, voice, rate=controls["rate"], pitch=controls["pitch"]
+                )
             dur = EdgeTTSProvider._get_duration(str(out))
             if out.exists() and dur > 0:
                 audio_files.append(out)
                 all_timings.append(timing)
                 segment_texts.append(seg.text)
                 all_durations.append(dur)
+                event["audio_duration"] = dur
+                provider_events.append(event)
+                tts_records.append({"display_text": compiled.display_text, "tts_text": compiled.tts_text, "applied_rules": compiled.applied_rules, "unhandled_latin_tokens": compiled.unhandled_latin_tokens, "provider": event.get("provider"), "voice": voice, "duration_seconds": dur})
                 total_dur += dur
 
         if not audio_files:
@@ -635,14 +843,16 @@ class VoiceEngine:
 
         # 去AI化
         deai_out = self.output_dir / "narration_deai.wav"
-        DeAIProcessor.apply(self._concat(audio_files), deai_out, all_durations, lang)
+        processed_audio = DeAIProcessor.apply(self._concat(audio_files), deai_out, all_durations, lang)
 
         # → MP3
         final_audio = self.output_dir / "narration.mp3"
         subprocess.run(
-            ["ffmpeg", "-y", "-i", str(deai_out), "-b:a", "128k", str(final_audio)],
+            ["ffmpeg", "-y", "-i", str(processed_audio), "-b:a", "128k", str(final_audio)],
             capture_output=True, check=False, timeout=30
         )
+        if not final_audio.exists() or final_audio.stat().st_size < 128:
+            raise RuntimeError("voice_engine_final_audio_missing")
 
         # 字幕
         srt_path = self.output_dir / "narration.srt"
@@ -652,8 +862,37 @@ class VoiceEngine:
         else:
             SubtitleGenerator.simple(script_text, total_dur, srt_path)
 
+        (self.output_dir / "tts_config.json").write_text(json.dumps({"language": lang, "genre": genre, "segments": tts_records}, ensure_ascii=False, indent=2), encoding="utf-8")
+        (self.output_dir / "tts_normalization_report.json").write_text(json.dumps({"segments": len(tts_records), "unhandled_latin_tokens": sorted({token for row in tts_records for token in row["unhandled_latin_tokens"]}), "passed": not any(row["unhandled_latin_tokens"] for row in tts_records)}, ensure_ascii=False, indent=2), encoding="utf-8")
+        scene_manifest_path = self.output_dir / "scene_manifest.json"
+        if scene_manifest_path.is_file():
+            from content_platform.scene_manifest import update_audio_timing
+            scene_manifest = json.loads(scene_manifest_path.read_text(encoding="utf-8"))
+            if len(scene_manifest.get("scenes", [])) != len(all_durations):
+                raise RuntimeError("scene_manifest scene count does not match measured TTS segments")
+            scene_manifest_path.write_text(json.dumps(update_audio_timing(scene_manifest, all_durations), ensure_ascii=False, indent=2), encoding="utf-8")
+
+        manifest = {
+            "provider": provider_events[0]["provider"] if provider_events else selected_provider,
+            "requested_provider": selected_provider,
+            "model": provider_events[0].get("model") if provider_events else None,
+            "fallback_used": any(event.get("fallback_used") for event in provider_events),
+            "events": provider_events,
+            "duration": total_dur,
+            "language": lang,
+            "genre": genre,
+            "audio": str(final_audio),
+            "subtitle": str(srt_path),
+            "tts_segments": tts_records,
+        }
+        manifest_path = self.output_dir / "voice_manifest.json"
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
         # 清理
-        for f in audio_files + [deai_out]:
+        cleanup_files = list(audio_files)
+        if Path(deai_out) != Path(processed_audio):
+            cleanup_files.append(deai_out)
+        for f in cleanup_files:
             try: f.unlink(missing_ok=True)
             except Exception: pass
 
@@ -661,7 +900,47 @@ class VoiceEngine:
             "audio": str(final_audio), "subtitle": str(srt_path),
             "duration": total_dur, "genre": genre, "language": lang,
             "voice_plan": voice_plan,
+            "voice_manifest": str(manifest_path), "tts_provider": manifest["provider"],
+            "fallback_used": manifest["fallback_used"],
         }
+
+    @staticmethod
+    def _qwen_language(lang: str) -> str:
+        return {
+            "zh": "Chinese",
+            "en": "English",
+            "de": "German",
+            "it": "Italian",
+            "pt": "Portuguese",
+            "es": "Spanish",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "fr": "French",
+            "ru": "Russian",
+        }.get(lang, "Auto")
+
+    @staticmethod
+    def _qwen_instructions(genre: str) -> str | None:
+        if os.environ.get("QWEN_TTS_INSTRUCTIONS"):
+            return os.environ["QWEN_TTS_INSTRUCTIONS"]
+        if "instruct" not in os.environ.get("QWEN_TTS_MODEL", ""):
+            return None
+        mapping = {
+            "tech": "清晰、可信、略带兴奋感，重点词略作停顿。",
+            "finance": "沉稳、克制、专业，避免夸张情绪。",
+            "pets": "温暖、轻快、有亲和力。",
+            "emotion": "自然、柔和、有故事感。",
+            "science": "清晰、好奇、带解释感。",
+        }
+        return mapping.get(genre, "自然、有层次，避免机械朗读。")
+
+    @staticmethod
+    def _even_timing(text: str, duration: float) -> list[dict]:
+        units = list(text) or [" "]
+        if duration <= 0:
+            duration = max(1.0, len(units) * 0.15)
+        step = duration / len(units)
+        return [{"word": unit, "start": idx * step, "end": (idx + 1) * step} for idx, unit in enumerate(units)]
 
     def _concat(self, files: list[Path]) -> Path:
         out = self.temp_dir / f"concat_{uuid.uuid4().hex[:8]}.wav"
@@ -682,11 +961,11 @@ class VoiceEngine:
 # ────────────────────────────────────────────────────────────────
 def run_voice_pipeline(script_text: str, output_dir: str = None,
                        lang: str = "auto", genre: str = "auto",
-                       mode: str = "auto") -> dict:
+                       mode: str = "auto", provider: str | None = None) -> dict:
     """CLI入口：输入文案，输出配音+字幕"""
     out = Path(output_dir or os.environ.get("VOICE_OUTPUT_DIR",
              str(Path.home() / ".hermes" / "data" / "voice_output")))
-    return VoiceEngine(out).synthesize(script_text, lang=lang, genre=genre, mode=mode)
+    return VoiceEngine(out).synthesize(script_text, lang=lang, genre=genre, mode=mode, provider=provider)
 
 
 if __name__ == "__main__":
@@ -700,6 +979,8 @@ if __name__ == "__main__":
                     choices=["auto","tech","pets","finance","emotion","science","default"])
     ap.add_argument("--mode", "-m", default="auto",
                     choices=["auto","single","dialogue"])
+    ap.add_argument("--provider", default=None, choices=["auto", "edge", "qwen"],
+                    help="TTS provider override; defaults to VOICE_TTS_PROVIDER or edge")
     args = ap.parse_args()
 
     sp = Path(args.script)
@@ -708,5 +989,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     text = sp.read_text(encoding="utf-8")
-    result = run_voice_pipeline(text, args.output, args.lang, args.genre, args.mode)
+    result = run_voice_pipeline(text, args.output, args.lang, args.genre, args.mode, args.provider)
     print(json.dumps(result, ensure_ascii=False, indent=2))
