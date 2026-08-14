@@ -23,6 +23,7 @@ from .models import DeliveryResult
 from .paths import project_home, social_auto_upload_home
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, packet_uses_current_policy
 from .wechat_toolchain import TOOLCHAIN_META_KEYS
+from .xiaohongshu_policy import build_recovery_strategy
 from .zhihu_publisher import ZhihuPublisher
 from scripts.deliver_media import deliver_xiaohongshu_package
 
@@ -137,6 +138,7 @@ class XiaohongshuManualHandoffPublisher:
             "images": images,
             "manual_publish_guide": self._guide(),
             "postcheck": "user_manual_publish_confirmation",
+            "growth_strategy": build_recovery_strategy(job, formatted),
         }
         directory = self.outbox / "xiaohongshu"
         directory.mkdir(parents=True, exist_ok=True)

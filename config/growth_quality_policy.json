@@ -332,6 +332,28 @@
         "block_if_platform_limited_visibility": true
       }
     },
+    "xiaohongshu": {
+      "diagnosis_date": "2026-08-14",
+      "mode": "xiaohongshu_manual_recovery",
+      "primary_goal": "restore stable distribution and save-driven follow conversion without automated publishing",
+      "publish_boundary": "manual_handoff_only_hard_gate_no_automation_ever",
+      "publishing_frequency": {
+        "max_posts_first_7_days": 4,
+        "min_gap_hours_between_posts": 36,
+        "increase_cadence_only_after": "three completed 1h_24h_72h reviews without an account-health warning"
+      },
+      "content_lane": {
+        "primary": "ai_efficiency_workflow_system",
+        "formats": ["six_page_carousel", "checklist_note", "workflow_case"],
+        "must_include": ["specific first-image payoff", "concrete example", "saveable checklist", "one natural discussion question"],
+        "forbidden": ["generic tool roundup", "pure decorative AI image as primary visual", "external traffic diversion"]
+      },
+      "manual_post_publish_review": {
+        "review_points_hours": [1, 24, 72],
+        "metrics": ["impressions", "cover_click_through_rate", "average_view_seconds", "save_rate", "comment_rate", "profile_to_follow_conversion"],
+        "missing_data_policy": "record_unavailable_reason_and_do_not_increase_cadence"
+      }
+    },
     "juejin": {
       "diagnosis_date": "2026-08-08",
       "mode": "engineering_depth_and_dedup",

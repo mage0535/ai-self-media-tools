@@ -24,6 +24,15 @@ class XiaohongshuManualHandoffTests(unittest.TestCase):
             "cover": images[0],
             "images": images,
             "manual_publish_guide": "在小红书 App 中手动上传图片，核对标题、正文和话题后，由账号所有者点击发布。",
+            "growth_strategy": {
+                "strategy_id": "xiaohongshu_recovery_v1",
+                "content_pillar": "ai_efficiency_workflow_system",
+                "first_image_promise": "三步把 AI 工作流变成可复用清单",
+                "save_value": "包含可保存的步骤清单和一个具体示例。",
+                "min_publish_interval_hours": 36,
+                "post_publish_review_hours": [1, 24, 72],
+                "publish_boundary": "manual_handoff_only",
+            },
         }
         path = Path(root) / "handoff_package.json"
         path.write_text(json.dumps(package, ensure_ascii=False), encoding="utf-8")
@@ -41,6 +50,19 @@ class XiaohongshuManualHandoffTests(unittest.TestCase):
 
             path, package = self._package(tmp, publish_mode="manual", image_count=3)
             self.assertTrue(check_handoff_package(str(path))["passed"])
+
+    def test_gate_requires_recovery_strategy_evidence(self):
+        from scripts.xhs_manual_publish_gate import check_handoff_package
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path, package = self._package(tmp)
+            package.pop("growth_strategy")
+            path.write_text(json.dumps(package, ensure_ascii=False), encoding="utf-8")
+
+            result = check_handoff_package(str(path))
+
+        self.assertFalse(result["passed"])
+        self.assertIn("growth_strategy_missing", result["failures"])
 
     def test_health_gate_stays_manual_when_config_is_disabled(self):
         decision = delivery_health_decision("xiaohongshu", {"delivery_health": {"enabled": False}}, action="publish")
@@ -75,7 +97,7 @@ class XiaohongshuManualHandoffTests(unittest.TestCase):
                 image = root / f"card-{index}.png"
                 image.write_bytes(b"png")
                 images.append({"kind": "image", "path": str(image)})
-            job = {"id": "xhs-job", "title": "AI 工作流清单", "body": "这是一份足够详细的小红书正文，用于验证人工交接包在发送失败时不能被标记为就绪。" * 2, "artifacts": images}
+            job = {"id": "xhs-job", "title": "AI 工作流清单", "body": "这是一份足够详细的小红书正文，用于验证人工交接包在发送失败时不能被标记为就绪。" * 2, "artifacts": images, "draft_meta": {"content_depth_plan": {"takeaway": "保存这份三步清单，按步骤完成并在每一步核对结果。"}}}
             publisher = XiaohongshuManualHandoffPublisher(root)
             with patch("content_platform.publishers.deliver_xiaohongshu_package", return_value={"passed": False, "error": "target_missing"}):
                 result = publisher.deliver(job, "xiaohongshu")
@@ -92,7 +114,7 @@ class XiaohongshuManualHandoffTests(unittest.TestCase):
                 image = root / f"card-{index}.png"
                 image.write_bytes(b"png")
                 images.append({"kind": "image", "path": str(image)})
-            job = {"id": "xhs-job", "title": "AI 工作流清单", "body": "这是一份足够详细的小红书正文，用于验证全部文本和图片发送成功后才能进入人工交接状态。" * 2, "artifacts": images}
+            job = {"id": "xhs-job", "title": "AI 工作流清单", "body": "这是一份足够详细的小红书正文，用于验证全部文本和图片发送成功后才能进入人工交接状态。" * 2, "artifacts": images, "draft_meta": {"content_depth_plan": {"takeaway": "保存这份三步清单，按步骤完成并在每一步核对结果。"}}}
             publisher = XiaohongshuManualHandoffPublisher(root)
             receipt = {"passed": True, "text_sent": True, "sent": ["one", "two", "three"]}
             with patch("content_platform.publishers.deliver_xiaohongshu_package", return_value=receipt):
@@ -102,6 +124,8 @@ class XiaohongshuManualHandoffTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.status, "handoff_pending")
         self.assertEqual(package["operator_delivery"], receipt)
+        self.assertEqual(package["growth_strategy"]["strategy_id"], "xiaohongshu_recovery_v1")
+        self.assertEqual(package["growth_strategy"]["post_publish_review_hours"], [1, 24, 72])
 
 
 class DeliveryMediaTests(unittest.TestCase):

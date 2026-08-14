@@ -1017,7 +1017,16 @@
           "short_video",
           "ai_assisted_disclosure",
           "manual_publish_package"
-        ]
+        ],
+        "recovery_strategy_contract": {
+          "strategy_id": "xiaohongshu_recovery_v1",
+          "content_pillar": "ai_efficiency_workflow_system",
+          "first_image_must_state_a_specific_result_or_checklist": true,
+          "save_value_required": true,
+          "min_publish_interval_hours": 36,
+          "post_publish_review_hours": [1, 24, 72],
+          "increase_cadence_only_after": "three completed reviews without an account-health warning"
+        }
       },
       "quality_gates": [
         "growth_quality_plan",
@@ -1037,6 +1046,7 @@
         "first_image_carries_information",
         "save_oriented_checklist_density",
         "xiaohongshu_manual_publish_gate",
+        "xiaohongshu_recovery_strategy_gate",
         "operator_delivery_receipt",
         "short_video_present_when_strategy_requires",
         "ai_assisted_disclosure_when_required"
