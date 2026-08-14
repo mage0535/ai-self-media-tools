@@ -161,7 +161,7 @@ def build_due_tasks(
             matrix = _platform_evidence_matrix(platform, selected, source_report, strategy)
             selected_topics.setdefault(
                 _topic_identity(selected),
-                {"platform": platform, "adaptation": adaptation, "signal": signal},
+                {"platform": platform, "adaptation": adaptation, "signal": signal, "stage": str(raw.get("stage") or "")},
             )
             row.update({
                 "topic": selected["title"],
@@ -201,6 +201,8 @@ def _allows_evidenced_overlap(
     adaptation = str(slot.get("platform_adaptation_reason") or "").strip()
     signal = str(slot.get("platform_signal") or "").strip()
     matrix = _platform_evidence_matrix(platform, candidate, source_report, strategy)
+    if _stage_group(str(slot.get("stage") or "")) == _stage_group(str(previous.get("stage") or "")):
+        return False
     return bool(
         adaptation
         and signal
@@ -210,6 +212,17 @@ def _allows_evidenced_overlap(
         and matrix["sources_attempted"] >= 8
         and matrix["sources_succeeded"] >= 5
     )
+
+
+def _stage_group(stage: str) -> str:
+    normalized = str(stage or "").casefold().strip()
+    if normalized in {"video", "handoff_video"}:
+        return "video"
+    if normalized in {"article", "handoff_article"}:
+        return "article"
+    if normalized in {"card", "handoff_card"}:
+        return "card"
+    return normalized or "unknown"
 
 
 def _platform_evidence_matrix(platform: str, candidate: dict[str, Any], source_report: list[dict[str, Any]], strategy: dict[str, Any]) -> dict[str, Any]:
