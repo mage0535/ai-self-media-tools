@@ -91,6 +91,10 @@ morning-report service uses its own worker and does not share a Hermes workdir
 lock. Do not enable the timer until a read-only dry run has produced a
 capacity-safe plan.
 
+Enable `hermes-content-platform-runtime-cleanup.timer` as well. It archives
+only rebuildable media intermediates older than 14 days; final media,
+handoff files, acceptance reports, and manifests are never cleanup targets.
+
 ## Hermes Progress Reporting
 
 The systemd units load an optional server-local
