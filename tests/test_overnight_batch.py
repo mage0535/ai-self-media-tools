@@ -158,6 +158,26 @@ def test_due_task_builder_allows_evidenced_natural_overlap_with_distinct_executi
     assert prepared["tasks"][1]["brief"]["platform_source_matrix"]["platform_internal_verified"] is True
 
 
+def test_due_task_builder_blocks_same_topic_for_two_video_lanes_even_with_evidence():
+    def rank(platform, _items, _slot):
+        return [{"title": "Shared topic", "source": platform, "score": 5, "fingerprint": "shared-topic"}]
+
+    report = [{"source": source, "status": "ok"} for source in ("kuaishou", "douyin", "github", "hackernews", "bilibili", "weibo", "x", "juejin")]
+    prepared = build_due_tasks(
+        [
+            {"platform": "kuaishou", "stage": "video", "platform_adaptation_reason": "short practical hook", "platform_signal": "kuaishou signal"},
+            {"platform": "douyin_ai", "stage": "handoff_video", "platform_adaptation_reason": "AI demo story", "platform_signal": "douyin signal"},
+        ],
+        items=[],
+        source_report=report,
+        rank_for_platform=rank,
+        growth_strategy_status={"kuaishou": {"status": "ok"}, "douyin_ai": {"status": "ok"}},
+        strict_trend_evidence=True,
+    )
+
+    assert prepared["tasks"][1]["state"] == "blocked"
+
+
 def test_due_task_builder_applies_a_final_platform_candidate_filter():
     prepared = build_due_tasks(
         [{"platform": "wechat"}],
