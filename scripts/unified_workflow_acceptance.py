@@ -204,7 +204,7 @@ def main():
     args = ap.parse_args()
 
     platform = args.platform.casefold()
-    artifacts_dir = Path(args.artifacts_dir or f"data/artifacts") 
+    artifacts_dir = Path(args.artifacts_dir or "data/artifacts")
     # resolve real artifact dir: find latest by mtime under data/artifacts
     if not artifacts_dir.exists() or args.artifacts_dir == "":
         candidates = sorted((ROOT / "data/artifacts").glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
