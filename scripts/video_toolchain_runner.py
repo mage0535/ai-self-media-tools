@@ -32,6 +32,7 @@ from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.video_recipe import build_visual_recipe, load_effect_module_registry, validate_visual_recipe
 from content_platform.video_artifact import verify_artifact
 from content_platform.scene_manifest import build_scene_manifest, validate_rendered_duration, validate_scene_manifest
+from content_platform.paths import agent_scripts_dir
 
 try:
     from scripts.shotcraft_moves import SHOT_CARD_REGISTRY, shot_plan_for_text, shot_sequence
@@ -136,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
         return 5
     visual_assets = _load_visual_assets()
     materialized_backgrounds = _materialize_visual_backgrounds(output_dir, visual_assets)
+    # diagram-design 补图通道：结构化主题且背景不足时，自动生成杂志级 diagram 背景
+    materialized_backgrounds = _diagram_background_fill(output_dir, script_body or title, materialized_backgrounds)
     cinema_scenes = storyboard(script_body or title, 8)
     shotcraft_plan = _shotcraft_motion_plan(script_body or title)
     registry = load_effect_module_registry()
@@ -159,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     recipe_reuse_gate = _recipe_reuse_gate(visual_recipe, plan)
     recipe_path = output_dir / "visual_recipe.json"
     recipe_path.write_text(json.dumps(visual_recipe, ensure_ascii=False, indent=2), encoding="utf-8")
+    scene_manifest_path = output_dir / "scene_manifest.json"
+    scene_manifest_path.write_text(json.dumps(visual_recipe.get("scene_manifest") or {}, ensure_ascii=False, indent=2), encoding="utf-8")
     if not recipe_gate.get("passed") or not recipe_reuse_gate.get("passed"):
         manifest = {
             "ok": False,
@@ -208,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         cards,
         platform=_primary_platform(plan),
         require_backgrounds=False,
+        require_scene_manifest=True,
     )
     pre_render_gate_path = output_dir / "pre_render_gate.json"
     pre_render_gate_path.write_text(json.dumps(pre_render_gate, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -232,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         _write_manifest(output_dir, manifest)
         print(manifest["error"], file=sys.stderr)
         return 5
-    renderer = _renderer_path(plan)
+    renderer, plan = _content_driven_renderer(plan, script_body, title, output_dir)
     template_family = str(visual_recipe.get("template_family") or plan.get("template_family") or "")
     style_variants = visual_recipe.get("style_variants") if isinstance(visual_recipe.get("style_variants"), dict) else {}
     theme = str(style_variants.get("theme") or THEME_BY_TEMPLATE.get(template_family, "cyber-neon"))
@@ -253,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
         "script_structure_gate": script_structure,
         "pre_render_gate": pre_render_gate,
         "pre_render_gate_path": str(pre_render_gate_path),
+        "scene_manifest_path": str(scene_manifest_path),
         "cinema_storyboard": cinema_scenes,
         "shotcraft_motion_plan": shotcraft_plan,
         "visual_assets": visual_assets,
@@ -467,7 +474,15 @@ def _render_motion_evidence(output: Path) -> dict:
         duration = float((probe.stdout or "0").strip() or 0)
         if duration <= 0:
             return {"passed": False, "reason": "duration_unavailable", "frames": []}
-        offsets = sorted({0.25, round(duration / 2, 3), max(0.25, round(duration - 0.25, 3))})
+        offsets = sorted(
+            {
+                0.25,
+                round(duration * 0.25, 3),
+                round(duration * 0.5, 3),
+                round(duration * 0.75, 3),
+                max(0.25, round(duration - 0.25, 3)),
+            }
+        )
         frames = []
         for offset in offsets:
             rendered = subprocess.run(
@@ -562,9 +577,95 @@ def _materialize_visual_backgrounds(output_dir: Path, visual_assets: dict) -> li
     return copied
 
 
+def _diagram_background_fill(output_dir: Path, text: str, existing: list[dict]) -> list[dict]:
+    """diagram-design 背景补图通道（visual-router 视频侧集成）。
+
+    当脚本/标题是结构化主题（流程/架构/对比等）且已有背景图不足时，
+    自动调用 visual_router 判断 → diagram_route 生成杂志级 diagram 图，混入背景池。
+    失败静默——不影响主渲染流程。
+
+    关联: 可配置的 agent scripts visual_router.py（全生态路由层，本函数是其视频媒介执行器）
+    """
+    try:
+        if len(existing) >= 8:
+            return existing
+        sys.path.insert(0, str(agent_scripts_dir()))
+        from diagram_route import detect_diagram_type, build_diagram_html  # type: ignore
+
+        dtype = detect_diagram_type(text)
+        if not dtype:
+            return existing
+
+        from diagram_html2png import render_html_to_png  # type: ignore
+        bg_dir = output_dir / "backgrounds"
+        bg_dir.mkdir(parents=True, exist_ok=True)
+        start = len(existing) + 1
+        html_path = bg_dir / f"diagram-{dtype}.html"
+        html_path.write_text(build_diagram_html(text, dtype, text[:60]), encoding="utf-8")
+        for i in range(start, 9):  # 补齐到 8 张（上限）
+            png = bg_dir / f"bg_{i:02d}.jpg"
+            ok = render_html_to_png(html_path, png, width=1080, height=1920)
+            if not ok:
+                break
+            existing.append(
+                {
+                    "scene": i,
+                    "source": str(html_path),
+                    "path": str(png),
+                    "rights_cleared": True,
+                    "real_scene": False,
+                    "diagram": dtype,
+                }
+            )
+    except Exception as e:
+        print(f"[diagram-fill] skipped: {e}", file=sys.stderr)
+    return existing
+
+
 def _renderer_path(plan: dict) -> Path:
     env_key = "VIDEO_RENDERER_" + re.sub(r"[^A-Z0-9]+", "_", str(plan.get("selected_pipeline") or "").upper())
     return Path(os.environ.get(env_key) or os.environ.get("VIDEO_TOOLCHAIN_RENDERER") or DEFAULT_RENDERER)
+
+
+def _content_driven_renderer(plan: dict, script_body: str, title: str, output_dir: Path) -> tuple[Path, dict]:
+    """内容驱动渲染器选择（2026-08-15 固化 — 用户要求工作流自动识别动效，不依赖人工指定）。
+
+    脚本文案命中卡内元素级动效结构（流程/对比/数字）→ 自动切换到 film_renderer
+    （图块激活/数字跳变/流程点亮），否则维持 plan 默认渲染器。
+
+    同步写 script.md（film_renderer 的 TTS 分段/门禁依赖），并回写 plan.selected_pipeline
+    让 manifest / 门禁证据链一致。
+    """
+    new_plan = dict(plan)
+    # 文案来源：script_body 或 title（title 也是内容信号）
+    # ⚠️ 对齐 film_renderer 内部逻辑：只检测偶数段（i%2==0 才启用动效镜头），
+    # 避免"切了 film_renderer 但实际无动效"的白切
+    text = f"{script_body}\n{title}"
+    wants_element_motion = False
+    try:
+        from scripts.film_renderer import detect_element_shot
+        segs = [s for s in re.split(r"\n\s*\n", text) if s.strip()]
+        for idx, seg in enumerate(segs, 1):
+            if idx % 2 == 0 and detect_element_shot(seg):
+                wants_element_motion = True
+                break
+        # 偶数段都不命中时，再查 title 本身（标题也可能是动效信号，且 title 会进 film_renderer 的 seg_title）
+        if not wants_element_motion and title and detect_element_shot(title):
+            wants_element_motion = True
+    except Exception as exc:  # pragma: no cover - film_renderer 不可用时静默回退默认
+        print(f"[content-driven-renderer] film_renderer import 失败，回退默认: {exc}", file=sys.stderr)
+    if wants_element_motion:
+        new_plan["selected_pipeline"] = "cinema_multishot_video"
+        renderer = ROOT / "scripts" / "film_renderer.py"
+        # script.md：film_renderer 依赖完整段落做 TTS（空行分隔），cards.json 的 tts 字段会被 runner 截断
+        script_md = output_dir / "script.md"
+        if script_body.strip():
+            script_md.write_text(script_body.strip(), encoding="utf-8")
+        print(f"[content-driven-renderer] 命中动效内容结构 → film_renderer（{renderer.name}）", file=sys.stderr)
+    else:
+        renderer = _renderer_path(new_plan)
+        print(f"[content-driven-renderer] 未命中动效结构 → 默认渲染器（{renderer.name}）", file=sys.stderr)
+    return renderer, new_plan
 
 
 def _renderer_command(renderer: Path, output_dir: Path, theme: str, title: str, script_body: str, plan: dict, bgm_style: str) -> list[str]:
@@ -828,6 +929,12 @@ def _beats(text: str) -> list[str]:
 
 
 def _story_beats(text: str) -> list[str]:
+    # 2026-08-15 修复：优先按空行段落切分（与 _beats 一致），
+    # 8 段脚本 = 8 卡一一对应，避免段内句号把 CTA 挤掉。
+    # 无空行分段时回退到按句号切分（兼容单段落脚本）。
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", str(text or "")) if part.strip()]
+    if len(paragraphs) >= 2:
+        return [part[:200] for part in paragraphs][:10]
     parts = re.split(r"\n+|[.!?;\u3002\uff01\uff1f\uff1b]", str(text or ""))
     return [part.strip(" -#\t")[:200] for part in parts if len(part.strip(" -#\t")) >= 8]
 

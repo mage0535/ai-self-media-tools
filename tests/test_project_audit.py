@@ -1,11 +1,29 @@
 import unittest
 import tempfile
 from pathlib import Path
+import os
+import subprocess
+from unittest.mock import patch
 
 from content_platform.project_audit import audit_project
 
 
 class ProjectAuditTests(unittest.TestCase):
+    def test_runtime_integrations_do_not_embed_a_private_host_root(self):
+        root = Path(__file__).resolve().parents[1]
+        private_root = "/" + "root/"
+        public_files = [
+            root / "content_platform" / "article_illustrator.py",
+            root / "content_platform" / "media.py",
+            root / "content_platform" / "trends.py",
+            root / "scripts" / "film_renderer.py",
+            root / "scripts" / "regression_overnight_quality.py",
+            root / "scripts" / "video_toolchain_runner.py",
+        ]
+
+        for path in public_files:
+            self.assertNotIn(private_root, path.read_text(encoding="utf-8"), path.name)
+
     def test_ignores_local_runtime_mirrors(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -43,6 +61,33 @@ class ProjectAuditTests(unittest.TestCase):
             package = root / "content_platform"
             package.mkdir()
             (package / "publishers.py.bak.v3").write_text("legacy publisher copy", encoding="utf-8")
+
+            result = audit_project(root)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["issues"][0]["reason"], "forbidden_filename_pattern")
+
+    def test_ignores_secure_gitignored_runtime_env_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / ".gitignore").write_text(".env.*\n", encoding="utf-8")
+            runtime_env = root / ".env.local"
+            runtime_env.write_text("WRITER_API_KEY=private-value", encoding="utf-8")
+            os.chmod(runtime_env, 0o600)
+
+            with patch("content_platform.project_audit._owner_only_permissions", return_value=True):
+                result = audit_project(root)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["issues"], [])
+
+    def test_flags_env_file_when_not_gitignored_or_not_private(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime_env = root / ".env.local"
+            runtime_env.write_text("WRITER_API_KEY=private-value", encoding="utf-8")
+            os.chmod(runtime_env, 0o644)
 
             result = audit_project(root)
 

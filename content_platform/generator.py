@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .humanize import naturalize_copy
@@ -74,17 +75,174 @@ class DraftGenerator:
         text = str(content or "").strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        # Prefer a strict parse first (clean providers).
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            start = text.find("{")
-            end = text.rfind("}")
-            if start != -1 and end > start:
-                try:
-                    return json.loads(text[start : end + 1])
-                except json.JSONDecodeError:
-                    pass
-        raise ValueError("provider returned non-JSON content")
+            pass
+        # Tolerate raw control characters inside string values (strict=False).
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            candidate = text[start : end + 1]
+            try:
+                return json.loads(candidate, strict=False)
+            except json.JSONDecodeError:
+                pass
+        # Field-level fallback: many providers emit one well-formed top-level
+        # object whose string values contain raw newlines, an unescaped lone
+        # backslash, or a duplicated nested copy of the same object. Extract
+        # each known string field by scanning the value span, then unescape
+        # JSON escapes manually so we never lose the article body.
+        return DraftGenerator._extract_fields_tolerant(text)
+
+    @staticmethod
+    def _unescape_json_string(value):
+        """Decode a JSON string body that may contain raw control characters
+        and lone backslashes. Falls back to a manual unescape so provider
+        output that is almost-JSON still yields usable text."""
+        try:
+            return json.loads('"' + value.replace("\n", "\\n").replace("\r", "\\r") + '"', strict=False)
+        except json.JSONDecodeError:
+            out = []
+            i = 0
+            n = len(value)
+            while i < n:
+                ch = value[i]
+                if ch == "\\" and i + 1 < n:
+                    nxt = value[i + 1]
+                    if nxt == "n":
+                        out.append("\n"); i += 2; continue
+                    if nxt == "t":
+                        out.append("\t"); i += 2; continue
+                    if nxt == "r":
+                        out.append("\r"); i += 2; continue
+                    if nxt in ('"', "\\", "/"):
+                        out.append(nxt); i += 2; continue
+                    # unknown escape: keep both chars verbatim
+                    out.append(ch); out.append(nxt); i += 2; continue
+                out.append(ch)
+                i += 1
+            return "".join(out)
+
+    @staticmethod
+    def _scan_balanced_value(text, start):
+        """Return text[start:end] for a balanced {..} / [..] value, tolerating
+        raw newlines and escaping inside string members."""
+        stack = []
+        i = start
+        n = len(text)
+        in_string = False
+        while i < n:
+            ch = text[i]
+            if in_string:
+                if ch == "\\" and i + 1 < n:
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                i += 1
+                continue
+            if ch == '"':
+                in_string = True
+                i += 1
+                continue
+            if ch in "{[":
+                stack.append(ch)
+            elif ch in "}]":
+                if not stack:
+                    break
+                stack.pop()
+                if not stack:
+                    return text[start : i + 1]
+            i += 1
+        return text[start:]
+
+    @staticmethod
+    def _extract_field_value(text, field):
+        """Return the raw span of a JSON field value, tolerant of raw
+        newlines and duplicated nested objects. When a provider repeats the
+        object (first copy truncated by an unescaped backslash), the LAST
+        occurrence is usually the complete one, so we scan the last match.
+        Returns None if absent."""
+        import re as _re
+
+        pattern = _re.compile(r'"%s"\s*:\s*(?:"|\{|\[)' % _re.escape(field))
+        matches = list(pattern.finditer(text))
+        if not matches:
+            return None
+        match = matches[-1]
+        i = match.end()
+        # If the value starts with an object/array (e.g. body: {"chars": N,
+        # "excerpt": "..."}), scan a balanced structure instead of a string.
+        if i <= len(text) and text[i - 1] in "{[":
+            return DraftGenerator._scan_balanced_value(text, i - 1)
+        out = []
+        n = len(text)
+        while i < n:
+            ch = text[i]
+            if ch == "\\":
+                if i + 1 < n and text[i + 1] in ('"', "\\", "/", "n", "t", "r", "u"):
+                    out.append(ch)
+                    out.append(text[i + 1])
+                    i += 2
+                    continue
+                # lone backslash before a structural char: treat as literal
+                out.append(ch)
+                i += 1
+                continue
+            if ch == '"':
+                # End of string only when followed by a structural char
+                # (comma/brace) or end of the outer object; otherwise it is a
+                # stray quote inside the value and we keep it.
+                j = i + 1
+                while j < n and text[j] in " \t\r\n":
+                    j += 1
+                if j >= n or text[j] in ",}]":
+                    break
+                out.append(ch)
+                i += 1
+                continue
+            if ch in "\r\n":
+                # raw newline inside a string value: encode as \n
+                out.append("\\n")
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
+    @classmethod
+    def _extract_fields_tolerant(cls, text):
+        fields = {}
+        for field in ("title", "hook", "body", "cta"):
+            raw = cls._extract_field_value(text, field)
+            if raw is not None:
+                fields[field] = cls._unescape_json_string(cls._unwrap_field_value(raw))
+        hashtags = []
+        import re as _re
+
+        ht_match = _re.search(r'"hashtags"\s*:\s*\[(.*?)\]', text, flags=_re.S)
+        if ht_match:
+            hashtags = _re.findall(r'"([^"]+)"', ht_match.group(1))
+        if not fields.get("title") or not fields.get("body"):
+            raise ValueError("provider returned non-JSON content")
+        if hashtags:
+            fields["hashtags"] = hashtags
+        return fields
+
+    @staticmethod
+    def _unwrap_field_value(raw):
+        """Some providers wrap long bodies as ``{"chars": N, "excerpt": "..."}``
+        instead of a plain string. Recover the excerpt when that shape appears."""
+        value = str(raw or "").strip()
+        if value.startswith("{") and '"excerpt"' in value:
+            import re as _re
+
+            excerpt = _re.search(r'"excerpt"\s*:\s*"((?:[^"\\]|\\.)*)"', value)
+            if excerpt:
+                return excerpt.group(1)
+        return value
 
     @staticmethod
     def _provider_error(content):
@@ -202,6 +360,25 @@ class DraftGenerator:
             process_evidence=brief.get("process_evidence") or {},
             cta=brief.get("cta_evidence") or {},
         )
+        # Kuaishou's publish gate requires concrete samples, not a planned
+        # source list. Preserve only already-successful collection evidence.
+        if platform == "kuaishou":
+            successful = [
+                row for row in (source_matrix.get("attempted_sources") or [])
+                if isinstance(row, dict) and str(row.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+            ]
+            draft_meta["trend_evidence"] = {
+                "source": str(successful[0].get("source") or "") if successful else "",
+                "collected_at": datetime.now(timezone.utc).isoformat(timespec="seconds") if successful else "",
+                "samples": [
+                    {
+                        "source": str(row.get("source") or ""),
+                        "topic_signal": str(row.get("topic_signal") or ""),
+                        **({"url": str(row["url"])} if row.get("url") else {}),
+                    }
+                    for row in successful[:5]
+                ],
+            }
 
 
 
@@ -449,6 +626,7 @@ class DraftGenerator:
                 "source": str(row["source"]),
                 "status": str(row.get("status") or "unknown"),
                 "topic_signal": str(row.get("topic_signal") or topic),
+                **({"evidence_kind": str(row["evidence_kind"])} if row.get("evidence_kind") else {}),
                 **({"error": str(row["error"])} if row.get("error") else {}),
             })
         if not attempted:
@@ -463,18 +641,26 @@ class DraftGenerator:
             ]
         successful = [row for row in attempted if row.get("status") == "ok"]
         platform_aliases = {str(platform).casefold(), "rednote" if platform == "xiaohongshu" else ""}
-        platform_evidence = any(
-            row.get("status") == "ok" and any(alias and alias in str(row.get("source") or "").casefold() for alias in platform_aliases)
+        strategy_evidence = any(
+            row.get("status") == "ok" and str(row.get("evidence_kind") or "") == "fresh_account_performance_strategy"
             for row in attempted
         )
-        internally_verified = bool(supplied.get("platform_internal_verified")) and platform_evidence
+        platform_evidence = any(
+            row.get("status") == "ok"
+            and str(row.get("evidence_kind") or "") != "fresh_account_performance_strategy"
+            and any(alias and alias in str(row.get("source") or "").casefold() for alias in platform_aliases)
+            for row in attempted
+        )
+        strategy_verified = bool(supplied.get("platform_strategy_verified")) and strategy_evidence
+        internally_verified = bool(supplied.get("platform_internal_verified")) and (platform_evidence or strategy_verified)
         return {
             "platform": platform,
             "attempted_sources": attempted,
             "successful_source_count": len(successful),
             "platform_internal_verified": internally_verified,
             "current_platform_specific_topic": platform_evidence,
-            "shared_trend_only": not platform_evidence,
+            "platform_strategy_verified": strategy_verified,
+            "shared_trend_only": not internally_verified,
             "report_path": str(supplied.get("report_path") or "runtime:strategy_brief.platform_source_matrix"),
         }
 
@@ -490,6 +676,11 @@ class DraftGenerator:
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
             f"Target language: {language}. {language_instruction} "
             "Write a factual, high-retention draft. First learn from same-track references, then generate. "
+            "Open with a concrete hook in the first 2 sentences: a striking number, a rhetorical question "
+            "(为什么/难道/是不是/有没有, or for English: 'Why do...', 'What if...', 'Still using...?'), "
+            "a direct pain point (坑/误区/翻车/浪费, or for English: mistake, trap, waste, broken, no one tells you), "
+            "or a first-person conflict. Example English hook: 'Most teams still trust AI agents blindly — until one silently deletes production data.' "
+            "The hook must read like a real person grabbing attention, not like a headline. "
             "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
             "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting. "
             "Body must be 1200-2200 Chinese characters for Chinese articles or 900-1600 English words for English articles.\n"

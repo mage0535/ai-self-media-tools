@@ -10,7 +10,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from .paths import project_home, trend_cache_dir
+from .paths import agent_home, project_home, trend_cache_dir
 
 
 def normalize_topic(title):
@@ -27,6 +27,10 @@ def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     preferred_clusters = learned.get("preferred_clusters", [])
     unique = {}
     for item in items:
+        # Fallback hypotheses document a failed source; they are not evidence
+        # and must never be promoted into an automatic topic candidate.
+        if item.get("source_unavailable"):
+            continue
         title = str(item.get("title", "")).strip()
         normalized = normalize_topic(title)
         if not normalized or normalized in used or any(word in title.casefold() for word in banned):
@@ -178,6 +182,9 @@ class TrendCollector:
             "zhihu": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:zhihu.com"},
             "douyin": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891 \u6296\u97f3"},
             "wewrite_hotspots": {"enabled": False, "limit": 20, "timeout": 8},
+            "kuaishou": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u5feb\u624b \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891"},
+            "juejin": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:juejin.cn"},
+            "shipinhao": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u89c6\u9891\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387"},
             # Optional local adapter. It is never treated as a publisher and is
             # disabled until an operator explicitly configures the command.
             "agent_reach": {"enabled": False, "limit": 20, "timeout": 20},
@@ -188,6 +195,13 @@ class TrendCollector:
                     defaults[name] = {**defaults.get(name, {}), **value}
                 else:
                     defaults[name] = {"enabled": bool(value)}
+        # Inject the shared SearXNG endpoint into every web-search source so a
+        # single config key revives all search-backed collectors.
+        searxng_url = str(self.config.get("searxng_url") or os.environ.get("SEARXNG_URL") or os.environ.get("SEARXNG_BASE_URL") or "").rstrip("/")
+        if searxng_url:
+            for cfg in defaults.values():
+                if isinstance(cfg, dict):
+                    cfg["searxng_url"] = searxng_url
         return {name: cfg for name, cfg in defaults.items() if cfg.get("enabled", True)}
 
     @staticmethod
@@ -271,6 +285,10 @@ class DirectTrendSource:
             return self._hackernews()
         if self.name == "github":
             return self._github()
+        if self.name in ("twitter", "x"):
+            return self._web_search_source("twitter", "AI tools workflow automation developer productivity")
+        if self.name in ("kuaishou", "juejin", "shipinhao"):
+            return self._web_search_source(self.name, f"{self.name} \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387")
         if self.name == "bilibili":
             return self._bilibili()
         if self.name == "zhihu":
@@ -406,7 +424,10 @@ class DirectTrendSource:
             "order": "desc",
             "per_page": min(self.limit, 50),
         })
-        payload = self._request_json(f"https://api.github.com/search/repositories?{q}")
+        try:
+            payload = self._request_json(f"https://api.github.com/search/repositories?{q}")
+        except Exception:
+            payload = {}
         items = []
         for row in payload.get("items", [])[: self.limit]:
             name = str(row.get("full_name") or row.get("name") or "").strip()
@@ -420,6 +441,56 @@ class DirectTrendSource:
                 "points": int(row.get("stargazers_count") or 0),
                 "language": row.get("language"),
             })
+        if items:
+            return items
+        # API 限流/失败时回退到本地 github_trending 缓存（防抖）
+        return self._github_local_cache()
+
+    def _github_local_cache(self):
+        """Fallback: read the locally cached GitHub trending snapshot (Hermes)."""
+        candidates = [
+            Path(os.environ.get("HERMES_DATA_DIR", str(agent_home() / "data"))) / "github_trending.json",
+            agent_home() / "data" / "github_trending.json",
+        ]
+        items = []
+        for path in candidates:
+            if not path.is_file():
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            rows = payload.get("ranked") if isinstance(payload.get("ranked"), list) else None
+            if rows is None and isinstance(payload.get("projects"), dict):
+                rows = list(payload["projects"].values())[: self.limit]
+            projects_map = payload.get("projects") if isinstance(payload.get("projects"), dict) else {}
+            for row in (rows or [])[: self.limit]:
+                if isinstance(row, str):
+                    repo = row.strip()
+                    detail = projects_map.get(repo, {}) if isinstance(detail := projects_map.get(repo), dict) else {}
+                    title = str(detail.get("title") or repo or "").strip()
+                    if not title:
+                        continue
+                    items.append({
+                        "title": title,
+                        "source": "github",
+                        "url": detail.get("url") or detail.get("html_url") or f"https://github.com/{repo}",
+                        "points": int(detail.get("stars") or detail.get("stargazers_count") or detail.get("points") or 0),
+                        "language": detail.get("language", ""),
+                    })
+                    continue
+                title = str(row.get("title") or row.get("name") or row.get("full_name") or "").strip()
+                if not title:
+                    continue
+                items.append({
+                    "title": title,
+                    "source": "github",
+                    "url": row.get("url") or row.get("html_url") or f"https://github.com/{row.get('full_name') or row.get('name')}",
+                    "points": int(row.get("stars") or row.get("stargazers_count") or row.get("points") or 0),
+                    "language": row.get("language", ""),
+                })
+            if items:
+                break
         return items
 
     def _bilibili(self):

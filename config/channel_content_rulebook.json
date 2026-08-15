@@ -38,7 +38,13 @@
       "draft_list_or_detail_postcheck"
     ],
     "metrics_review_required": true,
-    "anti_platform_spam_similarity": true
+    "anti_platform_spam_similarity": true,
+    "xiaohongshu_manual_publish_only": {
+      "enforced": true,
+      "fail_closed": true,
+      "override": "not configurable",
+      "rule": "Never upload, schedule, or create a Xiaohongshu draft. Generate a validated package and send its text and images to the operator for manual publication only."
+    }
   },
   "proxy_policy": {
     "scope": "all_hermes_browser_or_http_channel_access",
@@ -946,14 +952,14 @@
       "postcheck": "wechat_draft_batchget_or_backend_draft_row"
     },
     "xiaohongshu": {
-      "lane": "ai_efficiency_open_source",
+      "lane": "ai_efficiency_workflow_system",
       "primary_types": [
         "image_text_note",
         "knowledge_card_block",
         "short_video",
         "carousel"
       ],
-      "publish_policy": "semi_automatic_hermes_generates_local_review_package_user_manual_publish_only",
+      "publish_policy": "manual_handoff_only_hard_gate_no_automation_ever",
       "must_use_tools": [
         "hermes_operating_strategy",
         "account_data_analysis",
@@ -1011,7 +1017,16 @@
           "short_video",
           "ai_assisted_disclosure",
           "manual_publish_package"
-        ]
+        ],
+        "recovery_strategy_contract": {
+          "strategy_id": "xiaohongshu_recovery_v1",
+          "content_pillar": "ai_efficiency_workflow_system",
+          "first_image_must_state_a_specific_result_or_checklist": true,
+          "save_value_required": true,
+          "min_publish_interval_hours": 36,
+          "post_publish_review_hours": [1, 24, 72],
+          "increase_cadence_only_after": "three completed reviews without an account-health warning"
+        }
       },
       "quality_gates": [
         "growth_quality_plan",
@@ -1028,10 +1043,23 @@
         "oral_copy",
         "image_text_match",
         "knowledge_card_readability",
+        "first_image_carries_information",
+        "save_oriented_checklist_density",
+        "xiaohongshu_manual_publish_gate",
+        "xiaohongshu_recovery_strategy_gate",
+        "operator_delivery_receipt",
         "short_video_present_when_strategy_requires",
         "ai_assisted_disclosure_when_required"
       ],
-      "postcheck": "local_review_package_ready_user_manual_publish"
+      "postcheck": "user_manual_publish_confirmation",
+      "manual_handoff_contract": {
+        "publish_mode": "manual",
+        "minimum_images": 3,
+        "cover_required": true,
+        "title_max_chars": 20,
+        "topic_max_count": 6,
+        "operator_delivery_required": true
+      }
     },
     "juejin": {
       "lane": "ai_efficiency_open_source",

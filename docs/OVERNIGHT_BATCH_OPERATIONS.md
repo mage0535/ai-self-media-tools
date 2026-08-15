@@ -53,9 +53,10 @@ The planning command fails closed when the sum of scheduled estimates would
 cross 04:50. It does not start a task which cannot finish before the 05:00
 morning-report window. It does not terminate an already admitted task merely
 because 04:50 arrives; each task has its own conservative time budget and
-checkpoint. The systemd service admits scheduled runs only between 00:00 and
-00:15; a late `Persistent=true` catch-up writes `no_run` and never consumes the
-morning-report window.
+checkpoint. The systemd service admits scheduled runs between 00:00 and 01:00
+by default. Set server-local `OVERNIGHT_ADMISSION_WINDOW_MINUTES` only when a
+narrower window is required. A later `Persistent=true` catch-up writes
+`no_run` and never consumes the morning-report window.
 
 ## Execution and Recovery
 
@@ -68,8 +69,17 @@ content-platform overnight-run --plan data/overnight/DATE/plan.json \
 
 `state.json` is atomically written after every platform. Restarting the command
 continues unfinished rows and never recreates rows already marked `staged`,
-`handoff_ready`, `published`, `blocked`, or `failed`. `events.jsonl` is an
+`handoff_ready`, `published`, `review_required`, `blocked`, or `failed`. A row
+found as `running` after process interruption becomes
+`blocked: interrupted_batch_requires_recovery`; it is never replayed
+implicitly. `events.jsonl` is an
 append-only event stream for real-time reporting.
+
+Transient infrastructure failures are retried once inside the same batch only
+for timeouts, temporary connections, rate limits, locks, and resource-busy
+errors. Authentication failures, quality-gate failures, missing trend evidence,
+and any publish or manual-review boundary remain blocked or failed without
+automatic replay.
 
 ## Reporting Contract
 
@@ -86,6 +96,10 @@ enable `hermes-content-platform-overnight.timer`, then verify that the 05:00
 morning-report service uses its own worker and does not share a Hermes workdir
 lock. Do not enable the timer until a read-only dry run has produced a
 capacity-safe plan.
+
+Enable `hermes-content-platform-runtime-cleanup.timer` as well. It archives
+only rebuildable media intermediates older than 14 days; final media,
+handoff files, acceptance reports, and manifests are never cleanup targets.
 
 ## Hermes Progress Reporting
 
@@ -106,6 +120,22 @@ never retries, approves, publishes, or modifies a task.
 
 If notifications cannot be delivered, the worker continues and its local
 event/checkpoint files remain authoritative for recovery.
+
+## Persisted Acceptance And Reconciliation
+
+The pipeline records acceptance for every batch job in SQLite and the batch
+writes `acceptance_summary.json` after execution. The summary reconciles the
+durable job/delivery state with `state.json`; it never infers `published` from
+a successful wrapper or uploader response.
+
+- A failed content or artifact acceptance is `blocked` and changes the batch
+  status to `partial`.
+- `handoff_pending` is represented only as `handoff_ready`.
+- Kuaishou `under_review` is a successful submission verification only when
+  the management page also proves the matching title and description. It is
+  never reported as published.
+- Source evidence is created by collection and ranking stages. The batch must
+  not create placeholder matrices or treat generic sources as platform proof.
 
 ## Acceptance
 

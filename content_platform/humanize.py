@@ -31,6 +31,30 @@ HEDGE_PATTERNS = [
     (r"\bIn some cases,\b", "Sometimes"),
 ]
 
+# Web-page residue that LLMs sometimes copy verbatim from source articles:
+# cookie-banner JS stubs, HTML/JS tags, asset filenames, tracking strings.
+WEB_RESIDUE_PATTERNS = [
+    re.compile(r"function\s+\w+\(\)\s*\{[^}]{0,300}\}", re.I),
+    re.compile(r"OptanonWrapper|OneTrust|CookieSettings|__NEXT_DATA__|window\.\w+\s*=|document\.\w+\s*=", re.I),
+    re.compile(r"</?(?:script|style|div|span|section|article|p|h[1-6]|a|img)[^>]*>", re.I),
+    re.compile(r"\.(?:js|css|png|jpg|jpeg|webp|svg)(?:\?[^\s)\]]*)?", re.I),
+    re.compile(r"\{:entity\}|&nbsp;|&amp;|&lt;|&gt;", re.I),
+    re.compile(r"(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|co|dev)(?::\d+)?/[a-z0-9][\w./\-]*\.(?:js|css|png|jpg|jpeg|webp|svg)", re.I),
+    re.compile(r":root\s*\{[^}]{0,200}\}|--[\w-]+\s*:\s*[^;}]{1,80};", re.I),
+    re.compile(r"@media[^{]+\{[^}]{0,200}\}|\.(?:css|scss|less)[^{]*\{[^}]{0,120}\}", re.I),
+]
+
+
+def _strip_web_residue(text: str) -> str:
+    """Remove obvious webpage scaffolding the model may have copied into prose."""
+    updated = str(text or "")
+    for pattern in WEB_RESIDUE_PATTERNS:
+        updated = pattern.sub("", updated)
+    # Collapse the doubled separators that residue removal often leaves behind.
+    updated = re.sub(r"\n{3,}", "\n\n", updated)
+    updated = re.sub(r"[ \t]{2,}", " ", updated)
+    return updated.strip()
+
 QUALITY_TARGETS = {
     "clarity": 0.65,
     "authenticity": 0.62,
@@ -83,7 +107,7 @@ def _score(body, context):
         if english_hook_signals >= 2:
             hook_strength = max(hook_strength, 0.72)
         elif english_hook_signals == 1:
-            hook_strength = max(hook_strength, 0.60)
+            hook_strength = max(hook_strength, 0.65)
     # Chinese-specific hook signals (independent of opening_patterns)
     first_200 = text[:200]
     cn_hook_signals = 0
@@ -177,6 +201,12 @@ def naturalize_copy(body, context):
     updated = str(body or "")
     notes = []
     locked = _lock_terms(body)
+    # Strip web-page residue that LLMs sometimes copy from source articles:
+    # JS function stubs, cookie-banner wrappers, HTML tags, and asset URLs.
+    before_strip = updated
+    updated = _strip_web_residue(updated)
+    if updated != before_strip:
+        notes.append("stripped web page residue")
     for phrase in GENERIC_PHRASES:
         if phrase in updated.casefold():
             notes.append(f"removed generic: {phrase}")

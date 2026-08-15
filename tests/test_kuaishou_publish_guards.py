@@ -109,6 +109,28 @@ class KuaishouPostcheckSemanticsTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertEqual(result["status"], "under_review")
 
+    def test_under_review_with_matching_work_is_a_submitted_review_state(self):
+        from scripts import kuaishou_postcheck_manifest as postcheck
+
+        result = postcheck._classify_management_postcheck(
+            {
+                "title": "Expected title",
+                "description": "Expected description body",
+                "schedule_time": "2026-07-29 12:30",
+            },
+            "审核中 Expected title Expected description body",
+        )
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["status"], "success_under_review")
+        self.assertEqual(result["delivery_state"], "under_review")
+
+    def test_publish_wrapper_accepts_a_passing_under_review_postcheck(self):
+        from scripts import kuaishou_publish_with_postcheck as wrapper
+
+        self.assertTrue(wrapper._postcheck_passed({"passed": True, "status": "success_under_review"}))
+        self.assertFalse(wrapper._postcheck_passed({"passed": True, "status": "under_review"}))
+
     def test_scheduled_postcheck_requires_title_and_schedule_match(self):
         from scripts import kuaishou_postcheck_manifest as postcheck
 

@@ -1,4 +1,7 @@
 import re
+import os
+import stat
+import subprocess
 from pathlib import Path
 
 
@@ -30,7 +33,7 @@ IGNORED_EXACT = {
 
 FORBIDDEN_NAME_PATTERNS = [
     r"\.bak",
-    r"\.env$",
+    r"\.env(?:\..+)?$",
     r"\.key$",
     r"\.pem$",
     r"\.p12$",
@@ -67,6 +70,8 @@ def audit_project(root):
             continue
         if path.name in IGNORED_EXACT:
             continue
+        if _is_secure_gitignored_runtime_env(root, path, relative):
+            continue
         if path.name == "project_audit.py":
             continue
         scanned += 1
@@ -89,3 +94,32 @@ def audit_project(root):
                 issues.append({"path": relative_text, "reason": f"forbidden_content_pattern:{pattern}"})
                 break
     return {"ok": not issues, "scanned_files": scanned, "issues": issues}
+
+
+def _is_secure_gitignored_runtime_env(root: Path, path: Path, relative: Path) -> bool:
+    """Ignore only private runtime env files that Git will never publish.
+
+    A broad `.env*` allow-list would hide accidental secrets. All three checks
+    are required: env filename, active Git ignore rule, and owner-only mode.
+    """
+    if not (path.name == ".env" or path.name.startswith(".env.")):
+        return False
+    try:
+        if not _owner_only_permissions(path):
+            return False
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", "--", relative.as_posix()],
+            cwd=root,
+            capture_output=True,
+            check=False,
+            timeout=3,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _owner_only_permissions(path: Path) -> bool:
+    # POSIX mode bits are authoritative on the production host. Windows ACLs
+    # need a dedicated ACL check, so fail closed rather than infer from mode.
+    return os.name != "nt" and not (stat.S_IMODE(path.stat().st_mode) & 0o077)

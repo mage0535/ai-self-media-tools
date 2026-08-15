@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 import asyncio
@@ -39,6 +40,59 @@ class PreRenderGateTests(unittest.TestCase):
 
             self.assertTrue(result["passed"])
             self.assertIn("bgm_requires_auto_gain", result["warnings"])
+
+    def test_gate_requires_scene_manifest_when_requested(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "backgrounds").mkdir()
+            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
+
+            result = validate_render_inputs(root, cards, require_scene_manifest=True, require_backgrounds=False)
+
+            self.assertFalse(result["passed"])
+            self.assertIn("scene_manifest_missing", result["failures"])
+
+    def test_gate_rejects_scene_manifest_without_six_layered_scenes(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "backgrounds").mkdir()
+            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            (root / "scene_manifest.json").write_text('{"scenes":[{}]}', encoding="utf-8")
+            cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
+
+            result = validate_render_inputs(root, cards, require_scene_manifest=True)
+
+            self.assertFalse(result["passed"])
+            self.assertIn("scene_manifest_invalid", result["failures"])
+
+    def test_gate_accepts_the_canonical_scene_manifest_contract(self):
+        from scripts.pre_render_gate import validate_render_inputs
+        from content_platform.scene_manifest import build_scene_manifest
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cards = [
+                {"layout": "cover" if index == 0 else "card", "t": f"Title {index}", "txt": f"A real script beat {index}", "tts": f"A real script beat {index}"}
+                for index in range(6)
+            ]
+            recipe = {
+                "fingerprint": "recipe-1",
+                "scene_asset_match": [
+                    {"visual_source": f"planned_asset_{index}", "match_reason": f"matches beat {index}"}
+                    for index in range(6)
+                ],
+            }
+            manifest = build_scene_manifest(cards, recipe, {"platforms": ["douyin"]}, "Useful title")
+            (root / "scene_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = validate_render_inputs(root, cards, require_scene_manifest=True, require_backgrounds=False)
+
+            self.assertTrue(result["passed"])
 
     def test_subtitle_builder_uses_dot_timestamps_and_safe_wrapping(self):
         from scripts.build_subtitles import build_ass

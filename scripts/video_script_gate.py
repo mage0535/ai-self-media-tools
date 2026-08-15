@@ -26,10 +26,10 @@ AI_CLICHES = [
 ]
 # 钩子类型关键词（开头 3 秒应命中至少 1 类）
 HOOK_PATTERNS = {
-    "悬念": [r"为什么", r"怎么办", r"如何", r"竟然", r"居然", r"没想到", r"秘密", r"真相", r"后悔没", r"[?？]"],
+    "悬念": [r"为什么", r"怎么办", r"如何", r"竟然", r"居然", r"没想到", r"秘密", r"真相", r"后悔没", r"不会告诉你", r"结果它", r"结果居然", r"[?？]"],
     "利益": [r"赚", r"省", r"免费", r"学会", r"月入", r"涨", r"提升", r"技巧", r"攻略", r"\d+分钟学会", r"\d+秒"],
-    "反常识": [r"别", r"千万别", r"都错了", r"一直", r"原来", r"错了", r"误区", r"别再做"],
-    "共鸣": [r"有没有人", r"是不是", r"你也", r"都一样", r"打工", r"打工人", r"头疼", r"崩溃", r"烦"],
+    "反常识": [r"别", r"千万别", r"都错了", r"一直", r"原来", r"错了", r"误区", r"别再做", r"浪费时间", r"反而", r"更差", r"根本", r"第一步就", r"\d+%的人", r"90%", r"别再", r"stop\b", r"wrong", r"mistake", r"worse", r"don't use", r"overrated", r"waste of time"],
+    "共鸣": [r"有没有人", r"是不是", r"你也", r"都一样", r"打工", r"打工人", r"头疼", r"崩溃", r"烦", r"想放弃", r"坚持不下去", r"emo"],
 }
 # 情绪词（真实感信号）
 EMOTION_WORDS = ["气死", "离谱", "太爽", "崩溃", "后悔", "惊喜", "意外", "心疼", "绝了", "真香", "emo", "难受", "炸裂", "跪了", "离谱", "离谱"]
@@ -41,7 +41,7 @@ def check_hook(text: str) -> dict:
     head = text[:120]
     hits = {}
     for name, pats in HOOK_PATTERNS.items():
-        matched = [p for p in pats if re.search(p, head)]
+        matched = [p for p in pats if re.search(p, head, re.IGNORECASE)]
         if matched:
             hits[name] = matched
     return {"passed": len(hits) >= 1, "hook_types": list(hits.keys()), "matched": hits}

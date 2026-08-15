@@ -30,6 +30,7 @@ from typing import Optional
 
 import requests
 from content_platform.tts_text_compiler import TTSTextCompiler
+from content_platform.voice_plan import build_voice_plan
 
 # ────────────────────────────────────────────────────────────────
 # 语言检测
@@ -798,9 +799,11 @@ class VoiceEngine:
         tts_records = []
         total_dur = 0.0
 
-        for seg in segments:
+        voice_plan = build_voice_plan([seg.text for seg in segments])
+        for index, seg in enumerate(segments):
             voice = speaker_voices.get(seg.speaker, genre_cfg["single"])
             out = self.temp_dir / f"seg_{uuid.uuid4().hex[:8]}.mp3"
+            controls = voice_plan[index]
             compiled = compiler.compile(seg.text, context=genre, platform=platform)
             event = {"requested_provider": selected_provider, "provider": "edge-tts", "fallback_used": False}
             if selected_provider == "qwen":
@@ -817,9 +820,9 @@ class VoiceEngine:
                     timing = self._even_timing(compiled.tts_text, dur)
                 except Exception as exc:
                     event.update({"provider": "edge-tts", "fallback_used": True, "fallback_reason": str(exc)[:160]})
-                    timing = await edge_provider.synthesize_with_timing(compiled.tts_text, out, voice)
+                    timing = await self._synthesize_edge(edge_provider, compiled.tts_text, out, voice, controls)
             else:
-                timing = await edge_provider.synthesize_with_timing(compiled.tts_text, out, voice)
+                timing = await self._synthesize_edge(edge_provider, compiled.tts_text, out, voice, controls)
             dur = EdgeTTSProvider._get_duration(str(out))
             if out.exists() and dur > 0:
                 audio_files.append(out)
@@ -892,9 +895,28 @@ class VoiceEngine:
         return {
             "audio": str(final_audio), "subtitle": str(srt_path),
             "duration": total_dur, "genre": genre, "language": lang,
+            "voice_plan": voice_plan,
             "voice_manifest": str(manifest_path), "tts_provider": manifest["provider"],
             "fallback_used": manifest["fallback_used"],
         }
+
+    @staticmethod
+    async def _synthesize_edge(
+        provider: EdgeTTSProvider,
+        text: str,
+        output: Path,
+        voice: str,
+        controls: dict,
+    ) -> list[dict]:
+        """Use expressive controls while retaining compatibility with legacy adapters."""
+        try:
+            return await provider.synthesize_with_timing(
+                text, output, voice, rate=controls["rate"], pitch=controls["pitch"]
+            )
+        except TypeError as exc:
+            if "unexpected keyword argument" not in str(exc):
+                raise
+            return await provider.synthesize_with_timing(text, output, voice)
 
     @staticmethod
     def _qwen_language(lang: str) -> str:

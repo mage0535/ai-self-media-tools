@@ -40,6 +40,10 @@ INTERNATIONAL_PLATFORMS = {
 DOUYIN_ACCOUNT_VARIANTS = {"douyin_pet", "douyin_ai"}
 SHORT_VIDEO_PLATFORMS = {"bilibili", "douyin", "kuaishou", "shipinhao", "tiktok", "youtube", *DOUYIN_ACCOUNT_VARIANTS}
 XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
+# This is intentionally separate from the broader manual-handoff set.  The
+# account recovery policy makes Xiaohongshu a permanent fail-closed boundary:
+# config, routing defaults, and health data must never re-enable an uploader.
+STRICT_MANUAL_HANDOFF_PLATFORMS = frozenset(XIAOHONGSHU_PLATFORMS)
 DOUYIN_PLATFORMS = {"douyin", *DOUYIN_ACCOUNT_VARIANTS}
 MANUAL_HANDOFF_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu", "rednote", *DOUYIN_ACCOUNT_VARIANTS}
 
@@ -67,6 +71,10 @@ def is_short_video_platform(platform):
 
 def is_xiaohongshu_platform(platform):
     return normalize_platform(platform) in XIAOHONGSHU_PLATFORMS
+
+
+def is_strict_manual_handoff_platform(platform):
+    return normalize_platform(platform) in STRICT_MANUAL_HANDOFF_PLATFORMS
 
 
 def is_douyin_platform(platform):
