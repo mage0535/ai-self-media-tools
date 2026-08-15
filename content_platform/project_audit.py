@@ -66,7 +66,7 @@ def audit_project(root):
         if not path.is_file():
             continue
         relative = path.relative_to(root)
-        if any(part in IGNORED_PARTS for part in relative.parts):
+        if _is_ignored_runtime_path(relative):
             continue
         if path.name in IGNORED_EXACT:
             continue
@@ -94,6 +94,14 @@ def audit_project(root):
                 issues.append({"path": relative_text, "reason": f"forbidden_content_pattern:{pattern}"})
                 break
     return {"ok": not issues, "scanned_files": scanned, "issues": issues}
+
+
+def _is_ignored_runtime_path(relative: Path) -> bool:
+    """Exclude server-only evidence directories that are never publishable."""
+    return any(
+        part in IGNORED_PARTS or part == "refs" or part.startswith("local_ops_")
+        for part in relative.parts
+    )
 
 
 def _is_secure_gitignored_runtime_env(root: Path, path: Path, relative: Path) -> bool:

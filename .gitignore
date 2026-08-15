@@ -27,6 +27,7 @@ local-ops-lab/
 local_ops_*/
 backups/
 .codex-backups/
+refs/
 installation-report.json
 config.json
 social-auto-upload/
