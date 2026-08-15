@@ -36,7 +36,7 @@
 - Manual channels normalize to `handoff_ready`; overnight execution does not implicitly approve or publicly publish any channel.
 - Added append-only, redacted `events.jsonl` for real-time Hermes reporting that survives an agent-session or process restart.
 - Added unenabled systemd templates for a midnight direct worker. The worker does not use a Hermes conversation as its execution context and exits safely when no private due-channel slots file exists.
-- Follow-up hardening: the systemd entrypoint now rejects a late persistent-timer catch-up outside the 00:00-00:15 admission window, so a reboot cannot shift content work into the 05:00 morning-report window. The service uses an explicit `CONTENT_PLATFORM_BIN` because systemd does not guarantee `HOME`.
+- Follow-up hardening: the systemd entrypoint now rejects a late persistent-timer catch-up outside its bounded 60-minute admission window, so a reboot cannot shift content work into the 05:00 morning-report window. The service uses an explicit `CONTENT_PLATFORM_BIN` because systemd does not guarantee `HOME`.
 - First dry-run capacity check rebalanced the private weekly rotation so every due-day plan fits the 280-minute work budget; the run created no jobs or publications.
 
 ### Verification
@@ -3111,3 +3111,148 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - The midnight wrapper reports error exits, preserves atomic checkpoints, and still exits cleanly for no-slot or missed-window cases.
 - The WeChat wrapper treats an expired creator login as an actionable blocked data-source condition, writes its report, sends a notification, and lets the timer remain healthy for the next recovery attempt.
 - `create_hermes_overnight_monitor.py` remains the read-only three-minute progress observer; its target is server-private and not committed.
+
+## 2026-08-14 - Overnight State And Acceptance Integrity
+
+### Finding
+- The overnight batch could leave `state.json` inconsistent with durable
+  jobs/deliveries, and an acceptance result was printed without becoming a
+  release-blocking record.
+- A server-only helper wrote generic placeholder trend matrices. That made an
+  evidence-shaped artifact look like platform-specific research even when no
+  such evidence existed.
+- Kuaishou management pages show valid submissions as `under_review`; this
+  must be distinct from both failed verification and publication.
+
+### Implemented
+- Added persisted `jobs.acceptance_json`, `workflow_acceptance_v1`, and an
+  `overnight-sync-state` command. The batch writes `acceptance_summary.json`
+  and reconciles actual job/delivery state after every run.
+- Publishing fails closed when configured unified acceptance has not passed.
+  Failed acceptance changes the task to `blocked`; wrapper success cannot
+  create a draft or publish claim.
+- Strict planning requires a real platform-specific source outcome. A fresh
+  strategy snapshot remains context, not proof that a topic appeared on that
+  platform. Placeholder evidence generation is removed.
+- Kuaishou postcheck accepts `under_review` only with matching title and
+  description and records that state as `under_review`, never `published`.
+- A recovered `running` row becomes an explicit blocked recovery task and
+  `review_required` is terminal. The timer has a bounded configurable 60-minute
+  admission window instead of a 15-minute-only window.
+- Added conservative runtime-artifact archival tooling. It moves only old,
+  rebuildable intermediates during disk pressure; final media, covers,
+  manifests, reports, and recent files remain untouched.
+
+### Verification
+- TDD red/green coverage covers generic-evidence rejection, durable state
+  reconciliation, failed acceptance blocking, Kuaishou review state, recovery
+  safety, timer admission, CLI sync, and bounded cleanup.
+
+## 2026-08-13 - Quality Orchestration Hardening
+
+### Finding
+- Independent platform source collection, direction registration, visual recipes, BGM fingerprints, and checkpoints already existed, but their contracts did not fully express the operating rules.
+- Direction registration treated every same-direction topic as a conflict. That incorrectly rejected legitimate cross-platform resonance even when each platform had independent evidence and a distinct execution angle.
+- Video planning had `visual_recipe` and `segment_motion_evidence`, but no explicit per-scene narration/subtitle/asset/motion binding. Content depth was also not exposed as a reusable gate, so a thin draft could promise a future installment without proving a real series plan.
+
+### Implemented
+- `record_topic()` and `check_platform_topic_independence.py` now allow same-direction overlap only when every package has a distinct source-matrix identity, at least eight attempted and five successful sources, platform-internal verification, a platform signal, and a platform-specific adaptation reason. Documented follow-ups continue to work; unexplained reuse remains blocked.
+- Added `content_depth_plan_v1` and `scripts/content_quality_gate.py --check-depth`. The contract requires three knowledge points, a case or demo, executable steps, a counterexample, a takeaway, an interaction prompt, and a `series_plan` whenever the copy promises a next episode or follow-up.
+- `DraftGenerator` emits a depth plan for generated article packets so the new validation is available to downstream gates without changing publishers.
+- `visual_recipe` now owns `scene_manifest_v1`. It expands existing `scene_asset_match` into at least six narration/subtitle/asset/evidence records with separate background, subject, text, and transition motion, and `video_toolchain_runner.py` writes `scene_manifest.json` before the pre-render gate.
+- The pre-render gate can require the scene manifest. The normal video toolchain uses that requirement, so a render cannot proceed with only a generic recipe.
+- Added a metadata-only BGM candidate catalog. It preserves source, license, fingerprint, and mood to avoid repeated remote discovery; it deliberately strips local audio paths and never serves reusable audio. Existing fingerprint gates remain authoritative.
+- Video ResourceGuard now defaults to 1200MB available memory, warns at 84% disk use, and remains fail-closed at 88%. Existing video lock and render checkpoints remain the concurrency/caching mechanism.
+
+### Operating Rules
+- Do not introduce a hard no-overlap topic rule. Natural overlap is valid only with independent evidence, a platform-specific signal, and a documented adaptation reason.
+- A BGM catalog is discovery metadata, not a music library. Every render still downloads a fresh licensed real-instrument track and must pass the existing fingerprint gate.
+- `scene_manifest.json` is derived from `visual_recipe`; do not maintain a second scene plan.
+- Edge-TTS receives a deterministic per-segment delivery plan (hook, explanation, proof, CTA) with bounded rate, pitch, and pause controls. Offline TTS/VQA experiments belong to bounded night-time A/B work, never a permanent worker on the constrained Hermes host.
+
+### Verification
+- TDD red/green checks covered independent natural-overlap approval, unexplained duplicate rejection, continuation-promise rejection, depth CLI validation, scene-manifest enforcement, metadata-only BGM catalog behavior, and higher video headroom.
+- Focused regression: `python -m pytest tests/test_content.py tests/test_ops_run.py tests/test_content_depth.py tests/test_bgm_catalog.py tests/test_pre_render_gate.py tests/test_resource.py tests/test_video_toolchain.py tests/test_video_toolchain_runner.py -q`.
+
+## 2026-08-14 - Canonical Scene Contract And Runtime Closure
+
+### Finding
+- The new `scene_manifest_v1` and the legacy pre-render gate described the
+  same artifact with incompatible fields. A valid manifest could therefore be
+  rejected before rendering.
+- A generation-stage platform gate attempted to require evidence that exists
+  only after a video render. Motion evidence also sampled too few frames for
+  the operating quality contract.
+- Runtime-artifact cleanup worked from the project directory but failed when a
+  scheduler invoked the script by absolute path; no cleanup timer was enabled.
+
+### Implemented
+- The pre-render gate now delegates to the canonical scene-manifest validator.
+  `scene_manifest` remains the single source of truth; visual recipe output is
+  compatibility data, not a parallel timeline.
+- TTS keeps display text and compiled speech text separate, preserves measured
+  segment timing, supports Qwen with Edge fallback, and retains bounded
+  per-segment expression controls. Legacy Edge adapters without rate/pitch
+  kwargs fall back safely.
+- Video-only evidence is explicitly deferred until the renderer can produce
+  it; post-render validation remains fail-closed. Motion probes now sample five
+  positions across the final artifact.
+- Added a portable cleanup entrypoint and
+  `hermes-content-platform-runtime-cleanup.timer`. It archives only old
+  reconstructable intermediates and never final media, covers, manifests,
+  reports, or handoff evidence.
+
+### Verification
+- Local full suite: `732 passed, 29 subtests passed`.
+- Hermes full suite after deployment: `743 passed, 29 subtests passed`.
+- Hermes overnight and cleanup timers are `enabled` and `active`; cleanup dry
+  run completed outside the project working directory.
+
+## 2026-08-14 - Overnight Recovery And Live Progress Closure
+
+- A dead renderer PID recorded in `data/locks/video.lock` is now reclaimed;
+  a live owner remains exclusive. This prevents a killed render from failing a
+  later serial overnight task.
+- Batch reconciliation preserves a blocked handoff with its evidence failure
+  instead of upgrading it to `handoff_ready` from queue metadata.
+- The append-only overnight journal now records job creation, generation
+  outcome (status and artifact kinds only), acceptance/blocking, and staging.
+  The observer remains read-only and can report those real stage changes every
+  three minutes without exposing content bodies or credentials.
+- Historic state reconciliation also repairs legacy `handoff_ready` rows when
+  their retained reason proves the handoff media was missing. Old work is not
+  replayed or published during this repair.
+
+## 2026-08-16 - Overnight Execution And Video Evidence Closure
+
+### Fixed
+- Registered `overnight-acceptance` in the production CLI. The systemd wrapper
+  now executes the same checked-out command it invokes at the end of a batch,
+  rather than failing after work has finished because the parser lacks a bridge.
+- Video platforms defer video-only checks during text generation, then run a
+  separate fail-closed rendered-media gate. This covers `article_explainer_video`
+  as well as short-video labels, preventing Kuaishou from being rejected before
+  the renderer has had a chance to create its required artifacts.
+- The rendered gate consumes manifest, motion, audio, subtitle, background and
+  licensed-BGM evidence written by the renderer. A playable MP4 alone is not a
+  delivery success.
+- Kuaishou receives concrete trend samples copied from successful collection
+  evidence. Planned sources are never converted into fabricated samples.
+- A bounded one-time retry handles only transient timeouts, connection resets,
+  rate limits, locks and resource-busy failures. It never retries authentication,
+  policy, content-quality, publish, or manual-review failures.
+
+### Portability And Safety
+- Host-agent integrations now resolve through `AGENT_HOME` or
+  `CONTENT_PLATFORM_AGENT_SCRIPTS_DIR`; public source no longer embeds a private
+  host path. The legacy cinema adapter is treated as an unverified preview until
+  it writes the standard renderer manifest and packet, then safely falls back to
+  the verified toolchain.
+- Runtime backups and local operation outputs are ignored by Git. They remain on
+  the host but cannot enter a public release.
+
+### Verification
+- TDD red/green coverage added for CLI acceptance, Kuaishou video deferral,
+  rendered evidence, portable adapters, retry classification, and concrete
+  Kuaishou trend evidence.
+- `project-audit` reports no private paths or credentials in the release tree.

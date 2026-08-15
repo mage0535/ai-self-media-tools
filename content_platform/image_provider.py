@@ -7,6 +7,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import shutil
 import time
 import urllib.parse
@@ -378,10 +379,133 @@ def _stock_query(prompt: str) -> str:
         "小红书": "lifestyle workspace",
         "猫": "cat pet",
     }
+    # Cover prompts embed "Topic context: <topic>". Prefer topic-specific
+    # English keywords so two covers never collapse to the same photo.
+    # NOTE: section prompts also embed "Topic context:" — they must skip this
+    # branch or every section collapses to the same cover query (2026-08-15 fix).
+    cover_topic = ""
+    if "topic context:" in lower and "section illustration for:" not in lower:
+        marker_idx = lower.find("topic context:")
+        if marker_idx != -1:
+            cover_topic = text[marker_idx + len("topic context:"):].split(". clear subject", 1)[0].strip()
+    if cover_topic:
+        # 2026-08-15 优化：先匹配主题关键词（cn_map），再退回英文词，
+        # 避免 cover 查询落到模板残留词（如 "Concrete visual metaphor"）。
+        cn_map = {
+            "记忆": "memory brain knowledge",
+            "模型": "artificial intelligence model",
+            "智能体": "artificial intelligence agent robot",
+            "效率": "productivity workspace",
+            "工具": "technology workspace",
+            "自动化": "automation workflow",
+            "编程": "programming developer",
+            "代码": "programming developer",
+            "商业": "business meeting",
+            "实验": "research laboratory",
+            "研究": "research laboratory",
+            "数据": "data analytics",
+            "安全": "cybersecurity lock",
+            "成本": "finance calculator",
+            "价格": "finance calculator",
+            "工作": "office workspace",
+            "团队": "team collaboration",
+            "用户": "person using smartphone",
+            "视频": "video production camera",
+            "内容": "content creation desk",
+            "写作": "writing desk notebook",
+            "翻译": "translation language",
+            "会议": "business meeting",
+            "笔记": "notebook study",
+            "办公": "office workspace",
+            "开源": "open source code",
+            "软件": "software development",
+            "测试": "software testing",
+            "对比": "comparison charts",
+            "选型": "choosing technology options",
+            "养宠": "pet cat dog care",
+            "宠物": "pet cat dog",
+            "猫咪": "cute cat",
+            "狗狗": "cute dog",
+        }
+        for marker, query in cn_map.items():
+            if marker in cover_topic:
+                return query
+    # Section illustrations embed their own section title (e.g.
+    # "Section illustration for: AI Agent 最大的短板..."); extract that
+    # section text so every image gets a distinct query instead of all
+    # collapsing to the same topic_map hit.
+    section_text = ""
+    if "section illustration for:" in lower:
+        marker_idx = lower.find("section illustration for:")
+        if marker_idx != -1:
+            section_text = text[marker_idx + len("section illustration for:"):].split("Topic context:", 1)[0].strip()
+            if "topic context:" in section_text.casefold():
+                section_text = section_text.split("topic context:", 1)[0].strip()
+    if section_text:
+        words = [
+            part.strip(".,:;!?()[]{}\"'")
+            for part in section_text.split(" ")
+            if len(part.strip(".,:;!?()[]{}\"'")) >= 3
+        ]
+        ascii_words = [w for w in words if w.isascii()]
+        if ascii_words:
+            return " ".join(ascii_words[:5])
+        cn_map = {
+            "记忆": "memory brain knowledge",
+            "失忆": "memory brain knowledge",
+            "模型": "artificial intelligence model",
+            "智能体": "artificial intelligence agent robot",
+            "效率": "productivity workspace",
+            "工具": "technology workspace",
+            "自动化": "automation workflow",
+            "编程": "programming developer",
+            "代码": "programming developer",
+            "商业": "business meeting",
+            "实验": "research laboratory",
+            "研究": "research laboratory",
+            "数据": "data analytics",
+            "安全": "cybersecurity lock",
+            "成本": "finance calculator",
+            "价格": "finance calculator",
+            "工作": "office workspace",
+            "团队": "team collaboration",
+            "用户": "person using smartphone",
+            "视频": "video production camera",
+            "内容": "content creation desk",
+            "写作": "writing desk notebook",
+            "翻译": "translation language",
+            "会议": "business meeting",
+            "笔记": "notebook study",
+            "办公": "office workspace",
+            "选型": "choosing technology options",
+            "踩坑": "problem solving debug",
+            "效果": "results comparison charts",
+            "对比": "comparison charts",
+            "架构": "system architecture blueprint",
+            "设计": "design blueprint workspace",
+            "方案": "solution planning whiteboard",
+            "复盘": "review analysis report",
+            "边界": "boundary limitations discussion",
+            "适合": "target audience personas",
+            "流程": "workflow diagram process",
+            "调度": "automation scheduler pipeline",
+            "发布": "publishing content online",
+            "选题": "topic selection research",
+            "流水线": "automation workflow pipeline",
+        }
+        for marker, query in cn_map.items():
+            if marker in section_text:
+                return query
     for marker, query in topic_map.items():
         if marker in lower:
             return query
-    words = [part.strip(".,:;!?()[]{}\"'") for part in text.split(" ") if len(part.strip(".,:;!?()[]{}\"'")) >= 3]
+    # 中文 section 兜底：用文本中的汉字生成差异化查询，禁止全部落到同一默认词
+    zh_segment = re.findall(r"[\u4e00-\u9fff]+", text)
+    if zh_segment:
+        joined = "".join(zh_segment)
+        kw = joined[:6]
+        return f"editorial illustration {kw}"
+    words = [part.strip(".,:;!?()[]{}\\\"'") for part in text.split(" ") if len(part.strip(".,:;!?()[]{}\\\"'\"")) >= 3]
     ascii_words = [w for w in words if w.isascii()]
     if ascii_words:
         return " ".join(ascii_words[:5])

@@ -125,6 +125,29 @@ class ContentTests(unittest.TestCase):
         self.assertTrue(matrix["platform_internal_verified"])
         self.assertTrue(matrix["current_platform_specific_topic"])
 
+    def test_full_ops_article_generator_preserves_fresh_platform_strategy_evidence(self):
+        source_matrix = {
+            "platform": "zhihu",
+            "attempted_sources": [
+                {"source": "hackernews", "status": "ok"},
+                {"source": "zhihu:fresh_growth_strategy", "status": "ok", "evidence_kind": "fresh_account_performance_strategy"},
+            ],
+            "platform_internal_verified": True,
+            "platform_strategy_verified": True,
+            "current_platform_specific_topic": False,
+            "shared_trend_only": False,
+        }
+        draft = DraftGenerator({"allow_fallback": True}).generate(
+            "AI workflow",
+            {"platforms": ["zhihu"], "platform_source_matrix": source_matrix},
+        )
+
+        matrix = draft["draft_meta"]["platform_source_matrix"]
+        self.assertTrue(matrix["platform_internal_verified"])
+        self.assertTrue(matrix["platform_strategy_verified"])
+        self.assertFalse(matrix["current_platform_specific_topic"])
+        self.assertFalse(matrix["shared_trend_only"])
+
     def test_generator_preserves_auto_topic_signal_alias_in_growth_recipe(self):
         draft = DraftGenerator({"allow_fallback": True}).generate(
             "AI workflow",

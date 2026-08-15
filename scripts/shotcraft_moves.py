@@ -532,15 +532,17 @@ def shot_plan_for_text(text, num_shots=4):
     plan = []
     # 开场
     plan.append(("hero-card", 90, {"target": "title"}))
-    # 内容段落 - 交替使用不同镜头
+    # 内容段落 - 交替使用不同镜头（8卡需≥6种，避免同批循环重复）
     paragraphs = [p.strip() for p in text.replace("\r\n", "\n").split("\n\n") if len(p.strip()) > 10]
-    shot_cycle = ["stagger-fade", "fly-in-left", "depth-layer", "tilt-reveal"]
-
+    shot_cycle = [
+        "stagger-fade", "fly-in-left", "depth-layer", "tilt-reveal",
+        "dolly-in", "typewriter", "card-flip-reveal", "wipe-up",
+        "crane-rise-reveal", "spotlight-sweep-moves", "kinetic-type", "split-flap-title",
+    ]
     mid_count = min(num_shots - 2, max(1, len(paragraphs)))
     for i in range(mid_count):
         shot = shot_cycle[i % len(shot_cycle)]
         plan.append((shot, 60, {"count": random.randint(3, 6)}))
-
     # 结尾
     plan.append(("scale-bounce", 50, {"target": "cta"}))
     return plan

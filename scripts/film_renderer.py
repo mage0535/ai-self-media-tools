@@ -21,7 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path("/root/.ai-self-media-tools")
+ROOT = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path(__file__).resolve().parents[1])))
 sys.path.insert(0, str(ROOT))
 
 W, H = 1080, 1920
@@ -70,6 +70,12 @@ MODULE_ANIMS = [
 def _b64img(path: str) -> str:
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
+
+
+def esc(s: str) -> str:
+    """HTML 转义（动效镜头标题/文案注入安全）"""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;"))
 
 
 def _duration(path: str) -> float:
@@ -217,6 +223,298 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 </body></html>"""
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 动效镜头 3 件套（2026-08-15 固化，源自抖音卡片视频拆解）
+# 卡内元素级独立动效：图块激活 / 数字跳变 / 流程点亮
+# 渲染方式 = JS 逐帧驱动（renderFrame(t)）→ Playwright 截图 → FFmpeg 合成
+# 背景：JS 驱动正弦轨迹微动（Ken Burns 呼吸感）
+# ═══════════════════════════════════════════════════════════════════
+
+def _pick_actives(items: list[str], n: int) -> list[str]:
+    """从模块文案取 n 个有效条目（不够补空）；截断 14 字防 40px 溢出"""
+    parts = [str(x).strip()[:14] for x in items if str(x).strip()]
+    return (parts + ["", "", "", ""])[:n]
+
+
+def _extract_number_unit(text: str) -> list[str]:
+    """从文案提取「数字+单位」完整串（如 12倍/3.2秒/99%），用于 digit_roll 真实数据展示"""
+    pairs = re.findall(r"(\d{1,3}(?:\.\d+)?)\s*(倍|%|秒|毫秒|分钟|小时|个|元|GB|MB|次|s|ms|万|亿)?", text)
+    out = []
+    for num, unit in pairs:
+        if not unit and len(num) < 2 and "." not in num:
+            continue  # 纯一位数（如"1个"中的1）跳过，防量词误报
+        out.append(f"{num}{unit}")
+        if len(out) >= 3:
+            break
+    return out
+
+def build_shot_tile_activate(idx: int, title: str, items: list[str], bg_path: str,
+                             kicker: str, badges: list[str] | None = None) -> str:
+    """图块激活：多卡片轮流点亮（变色+阴影位移+前置放大），突出当前焦点"""
+    tiles = _pick_actives(items, 3)
+    badges = badges or ["A", "B", "C"]
+    tile_html = ""
+    for i, t in enumerate(tiles):
+        tile_html += (
+            f'<div class="tile" data-state="idle" data-t="{i}">'
+            f'<span class="badge">{esc(badges[i % len(badges)])}</span>'
+            f'<span class="nm">{esc(t) if t else "·"}</span>'
+            f'<div class="ds">第 {i + 1} 个要点，点亮看重点</div></div>'
+        )
+    b64 = _b64img(bg_path)
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; }}
+.bg {{ position:absolute; inset:-40px; background:url(data:image/jpeg;base64,{b64}) center/cover;
+  transform:scale(1.12); will-change:transform; }}
+.shade {{ position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,0.25) 0%,rgba(0,0,0,0.55) 45%,rgba(0,0,0,0.9) 100%); }}
+.idx {{ position:absolute; top:64px; right:64px; font-size:110px; font-weight:900; color:rgba(255,255,255,0.16); z-index:2; }}
+.head {{ position:absolute; top:120px; left:0; right:0; text-align:center; z-index:5; }}
+.head .k {{ font-size:30px; color:#7dd3fc; font-weight:700; letter-spacing:8px; }}
+.head .t {{ font-size:66px; color:#fff; font-weight:900; margin-top:16px; text-shadow:0 6px 24px rgba(0,0,0,.7); }}
+.tiles {{ position:absolute; top:430px; left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:36px; z-index:4; }}
+.tile {{ width:820px; padding:44px 52px; border-radius:28px; transition:all .18s ease-out; will-change:transform,background,box-shadow; }}
+.tile .nm {{ font-size:40px; font-weight:800; }}
+.tile .ds {{ font-size:28px; margin-top:10px; line-height:1.5; }}
+.tile[data-state="idle"] {{ background:rgba(255,255,255,0.10); border:3px solid rgba(255,255,255,0.28); transform:translateX(0) scale(0.94); box-shadow:0 10px 30px rgba(0,0,0,0.25); }}
+.tile[data-state="idle"] .nm {{ color:#e2e8f0; }}
+.tile[data-state="idle"] .ds {{ color:#94a3b8; }}
+.tile[data-state="active"] {{ background:linear-gradient(135deg,#0ea5e9,#2563eb); border:3px solid #38bdf8; transform:translateX(36px) scale(1.0); box-shadow:0 30px 70px rgba(37,99,235,0.55), 0 0 0 6px rgba(56,189,248,0.15); }}
+.tile[data-state="active"] .nm {{ color:#ffffff; }}
+.tile[data-state="active"] .ds {{ color:#dbeafe; }}
+.badge {{ display:inline-block; font-size:24px; font-weight:800; padding:6px 20px; border-radius:999px; margin-right:14px; }}
+.tile[data-state="active"] .badge {{ background:#facc15; color:#1e293b; }}
+.tile[data-state="idle"] .badge {{ background:rgba(255,255,255,0.16); color:#cbd5e1; }}
+</style></head><body>
+<div class="bg" id="bg"></div><div class="shade"></div>
+<div class="idx">{idx:02d}T</div>
+<div class="head"><div class="k">{esc(kicker)}</div><div class="t">{esc(title)}</div></div>
+<div class="tiles">{tile_html}</div>
+<script>
+function renderFrame(t){{
+  var active = Math.floor(t / 1.2) % 3;
+  document.querySelectorAll('.tile').forEach(function(el){{
+    el.setAttribute('data-state', parseInt(el.dataset.t) === active ? 'active' : 'idle');
+  }});
+  var p = (t % 4) / 4;
+  document.getElementById('bg').style.transform = 'scale(1.14) translate(' + (Math.sin(p*6.28)*12) + 'px,' + (Math.cos(p*6.28)*8) + 'px)';
+}}
+</script></body></html>"""
+
+
+def build_shot_digit_roll(idx: int, title: str, items: list[str], bg_path: str,
+                          kicker: str, numbers: list[str] | None = None) -> str:
+    """数字跳变：圆圈内数字滚动到目标值 + 雷达脉冲环（数据/性能强调）
+
+    数据真实性铁律：数字必须来自文案提取（_extract_number_unit），
+    不足 3 个就只显示实际数量（不补假数字）；无数字时调用方不应进入本镜头。
+    numbers 格式：["12倍","3.2秒","99%"]（数字+单位完整串）
+    """
+    labs = _pick_actives(items, 3)
+    if numbers is None:
+        numbers = _extract_number_unit(" ".join(labs))
+    if not numbers:
+        # 无真实数字 → 防御性降级：展示文案要点本身（数字位显示"—"）
+        numbers = ["—", "—", "—"]
+    n_rows = len(numbers)
+    while len(numbers) < 3:
+        numbers.append("—")
+    # 拆分数字与单位：数字部分滚动，单位部分静态
+    stat_html = ""
+    for i, lab in enumerate(labs[:n_rows]):
+        stat_html += (
+            f'<div class="stat"><div class="dot" id="dot{i}" data-hot="0">'
+            f'<span class="num" id="n{i}">0</span><span class="unit" id="u{i}"></span>'
+            f'<span class="ping"></span></div>'
+            f'<div class="sinfo"><div class="lab">{esc(lab) if lab else "指标"}</div>'
+            f'<div class="desc">数据自己会说话</div></div></div>'
+        )
+    b64 = _b64img(bg_path)
+    # "—" 防御值：targets 置 0（不滚动），unit 置空，JS 直接静态显示 "—"
+    targets_js = ",".join("0" if str(x) == "—" else (re.sub(r"[^0-9.]", "", str(x)) or "0") for x in numbers)
+    # ⚠️ units 必须加引号（裸词会被 JS 当变量名 → undefined）
+    units_js = ",".join("'" + ("" if str(x) == "—" else re.sub(r"[0-9.]", "", str(x))).replace("'", "\\'") + "'" for x in numbers)
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; }}
+.bg {{ position:absolute; inset:-40px; background:url(data:image/jpeg;base64,{b64}) center/cover;
+  transform:scale(1.12); will-change:transform; }}
+.shade {{ position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,0.3) 0%,rgba(0,0,0,0.6) 45%,rgba(0,0,0,0.92) 100%); }}
+.idx {{ position:absolute; top:64px; right:64px; font-size:110px; font-weight:900; color:rgba(255,255,255,0.16); z-index:2; }}
+.head {{ position:absolute; top:130px; left:0; right:0; text-align:center; z-index:5; }}
+.head .k {{ font-size:30px; color:#fca5a5; font-weight:700; letter-spacing:8px; }}
+.head .t {{ font-size:66px; color:#fff; font-weight:900; margin-top:16px; text-shadow:0 6px 24px rgba(0,0,0,.7); }}
+.stats {{ position:absolute; top:{520 - (3 - n_rows) * 40}px; left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:44px; z-index:4; }}
+.stat {{ display:flex; align-items:center; gap:36px; width:820px; background:rgba(255,255,255,0.10); backdrop-filter:blur(8px); border-radius:28px; padding:36px 44px; border:2px solid rgba(255,255,255,0.2); }}
+.dot {{ width:120px; height:120px; border-radius:50%; background:rgba(239,68,68,0.16); border:4px solid #ef4444; display:flex; align-items:center; justify-content:center; position:relative; }}
+.dot .num {{ font-size:52px; font-weight:900; color:#fca5a5; font-variant-numeric:tabular-nums; }}
+.dot .unit {{ font-size:26px; font-weight:700; color:#fca5a5; margin-left:2px; }}
+.dot .ping {{ position:absolute; inset:-6px; border-radius:50%; border:2px solid rgba(239,68,68,0.6); opacity:0; }}
+.dot[data-hot="1"] .ping {{ animation:ping 0.8s ease-out infinite; }}
+@keyframes ping {{ 0% {{ transform:scale(0.7); opacity:0.9; }} 100% {{ transform:scale(1.5); opacity:0; }} }}
+.sinfo .lab {{ font-size:30px; color:#e2e8f0; font-weight:700; }}
+.sinfo .desc {{ font-size:26px; color:#94a3b8; margin-top:8px; }}
+</style></head><body>
+<div class="bg" id="bg"></div><div class="shade"></div>
+<div class="idx">{idx:02d}D</div>
+<div class="head"><div class="k">{esc(kicker)}</div><div class="t">{esc(title)}</div></div>
+<div class="stats">{stat_html}</div>
+<script>
+var targets = [{targets_js}];
+var units = [{units_js}];
+function easeOut(t){{ return 1 - Math.pow(1-t, 3); }}
+function renderFrame(t){{
+  for (var i=0; i<{n_rows}; i++){{
+    var start = i * 0.8;
+    var p = (t - start) / 1.4;
+    document.getElementById('dot'+i).setAttribute('data-hot', (p > 0 && p < 1.3) ? 1 : 0);
+    document.getElementById('u'+i).textContent = units[i];
+    var v = 0;
+    if (p > 0) {{ v = Math.round(parseFloat(targets[i]) * Math.min(1, easeOut(Math.min(1, p)))); }}
+    // 防御值（unit 为空 = 无真实数字）→ 静态显示 "—"
+    document.getElementById('n'+i).textContent = units[i] === '' ? '—' : v;
+  }}
+  var p2 = (t % 4) / 4;
+  document.getElementById('bg').style.transform = 'scale(1.15) translate(' + (Math.cos(p2*6.28)*10) + 'px,' + (Math.sin(p2*6.28)*8) + 'px)';
+}}
+</script></body></html>"""
+
+
+def build_shot_step_light(idx: int, title: str, items: list[str], bg_path: str,
+                          kicker: str) -> str:
+    """流程点亮：步骤逐个点亮（完成=深色保持、当前=亮色高亮放大、未到=灰暗）+ 进度条
+    步骤数 = 实际有效 items 数（2-4），不生成空占位步骤"""
+    steps = [str(x).strip()[:14] for x in items if str(x).strip()]
+    if len(steps) < 2:
+        steps = (steps + ["步骤一", "步骤二", "步骤三", "步骤四"])[:2]
+    steps = steps[:4]
+    n_steps = len(steps)
+    step_html = ""
+    for i, s in enumerate(steps):
+        step_html += (
+            f'<div class="step" data-idx="{i}" data-state="idle">'
+            f'<div class="sn">{i + 1:02d}</div>'
+            f'<div class="sc"><div class="st">{esc(s)}</div>'
+            f'<div class="sd">第 {i + 1} 步</div></div><div class="arr">▼</div></div>'
+        )
+    # 步骤越少，位置越高、间隙越小
+    top_offset = 470 - (4 - n_steps) * 50
+    gap = 34 - (4 - n_steps) * 4
+    b64 = _b64img(bg_path)
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; }}
+.bg {{ position:absolute; inset:-40px; background:url(data:image/jpeg;base64,{b64}) center/cover;
+  transform:scale(1.12); will-change:transform; }}
+.shade {{ position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,0.28) 0%,rgba(0,0,0,0.58) 45%,rgba(0,0,0,0.9) 100%); }}
+.idx {{ position:absolute; top:64px; right:64px; font-size:110px; font-weight:900; color:rgba(255,255,255,0.16); z-index:2; }}
+.head {{ position:absolute; top:130px; left:0; right:0; text-align:center; z-index:5; }}
+.head .k {{ font-size:30px; color:#6ee7b7; font-weight:700; letter-spacing:8px; }}
+.head .t {{ font-size:66px; color:#fff; font-weight:900; margin-top:16px; text-shadow:0 6px 24px rgba(0,0,0,.7); }}
+.steps {{ position:absolute; top:{top_offset}px; left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:{gap}px; z-index:4; }}
+.step {{ width:820px; display:flex; align-items:center; gap:34px; padding:38px 44px; border-radius:24px; transition:all .22s ease-out; }}
+.step .sn {{ font-size:52px; font-weight:900; width:110px; text-align:center; font-variant-numeric:tabular-nums; }}
+.step .st {{ font-size:40px; font-weight:800; }}
+.step .sd {{ font-size:26px; margin-top:6px; }}
+.step .arr {{ font-size:30px; margin-left:auto; opacity:0; }}
+.step[data-state="done"] {{ background:rgba(255,255,255,0.13); border:3px solid rgba(16,185,129,0.7); transform:translateX(10px); }}
+.step[data-state="done"] .sn {{ color:#34d399; }}
+.step[data-state="done"] .st {{ color:#fff; }}
+.step[data-state="done"] .sd {{ color:#a7f3d0; }}
+.step[data-state="hot"] {{ background:linear-gradient(135deg,#059669,#0d9488); border:3px solid #34d399; transform:translateX(26px) scale(1.03); box-shadow:0 26px 60px rgba(5,150,105,0.5); }}
+.step[data-state="hot"] .sn {{ color:#fff; }}
+.step[data-state="hot"] .st {{ color:#fff; }}
+.step[data-state="hot"] .sd {{ color:#d1fae5; }}
+.step[data-state="hot"] .arr {{ opacity:1; color:#facc15; }}
+.step[data-state="idle"] {{ background:rgba(255,255,255,0.06); border:3px solid rgba(255,255,255,0.16); transform:translateX(0) scale(0.95); }}
+.step[data-state="idle"] .sn {{ color:#64748b; }}
+.step[data-state="idle"] .st {{ color:#94a3b8; }}
+.step[data-state="idle"] .sd {{ color:#64748b; }}
+.progress {{ position:absolute; bottom:170px; left:130px; right:130px; height:10px; background:rgba(255,255,255,0.15); border-radius:999px; z-index:4; overflow:hidden; }}
+.progress i {{ display:block; height:100%; width:0%; background:linear-gradient(90deg,#34d399,#facc15); border-radius:999px; transition:width .2s; }}
+</style></head><body>
+<div class="bg" id="bg"></div><div class="shade"></div>
+<div class="idx">{idx:02d}S</div>
+<div class="head"><div class="k">{esc(kicker)}</div><div class="t">{esc(title)}</div></div>
+<div class="steps">{step_html}</div>
+<div class="progress"><i id="prog"></i></div>
+<script>
+var TOTAL_STEPS = {n_steps};
+function renderFrame(t){{
+  var stepCount = Math.min(TOTAL_STEPS, Math.floor(t / 0.8) + 1);
+  document.getElementById('prog').style.width = Math.min(100, Math.round((t / (TOTAL_STEPS * 0.8)) * 100)) + '%';
+  document.querySelectorAll('.step').forEach(function(el){{
+    var idx = parseInt(el.dataset.idx);
+    var state = idx < stepCount - 1 ? 'done' : (idx === stepCount - 1 ? 'hot' : 'idle');
+    el.setAttribute('data-state', state);
+  }});
+  var p = (t % 4) / 4;
+  document.getElementById('bg').style.transform = 'scale(1.13) translate(' + (Math.sin(p*6.28)*10) + 'px,' + (Math.cos(p*6.28)*8) + 'px)';
+}}
+</script></body></html>"""
+
+
+def detect_element_shot(seg_text: str, title: str = "") -> str:
+    """按内容结构自动选动效镜头类型（内容驱动视觉原则）"""
+    text = f"{title} {seg_text}"
+    # 流程/步骤：成词检测（第一步/然后/接着/流程/步骤/工作流），拒绝单字"先/再/最后"
+    if re.search(r"(流程|步骤|工作流|第一步|第二步|第三步|第四步|然后|接着|再来|最终)", text):
+        return "step_light"
+    # 对比/选型：强信号（对比/哪个/怎么选/相比/PK/vs），
+    # 拒绝宽泛名词（"方案/选择/推荐"独立出现常见：解决方案/推荐阅读→误报）
+    if re.search(r"(对比|哪个|怎么选|怎么挑|挑选|相比|PK|vs|VS|A/B|还是.*好|哪个.*合适)", text):
+        return "tile_activate"
+    # 数字信号：必须同时有 ≥2位数字 + 单位（"12倍"/"3.2秒"），杜绝无数字兜底假数据
+    if re.search(r"\d{2,}(?:\.\d+)?\s*(倍|%|秒|毫秒|分钟|小时|个|元|GB|MB|次|s|ms|万|亿)", text):
+        return "digit_roll"
+    return ""
+
+
+async def _record_shot_frames(name: str, html_path: str, dur: float, out: Path) -> str | None:
+    """JS 逐帧驱动渲染：renderFrame(t) 每帧推进 → 截图 → FFmpeg 合成 mp4。
+    用于卡内元素级动效（静态截图拍不到 CSS 动画，record_video 只捕入场）"""
+    from playwright.async_api import async_playwright
+    fps = 25
+    total = max(1, int(dur * fps))
+    frames_dir = out / "frames" / name
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        async with async_playwright() as p:
+            b = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+            pg = await b.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+            await pg.goto(f"file://{html_path}", wait_until="load", timeout=30000)
+            await pg.wait_for_timeout(200)
+            for i in range(total):
+                t = i / fps
+                await pg.evaluate(f"renderFrame({t})")
+                await pg.screenshot(path=str(frames_dir / f"f_{i:04d}.png"), animations="disabled")
+            await b.close()
+    except Exception as e:
+        print(f"{name} 逐帧渲染失败: {e}", file=sys.stderr)
+        return None
+    mp4 = out / "shots" / f"{name}.mp4"
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-v", "quiet", "-framerate", str(fps),
+         "-i", str(frames_dir / "f_%04d.png"),
+         "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+         "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an",
+         str(mp4)], timeout=180)
+    if r.returncode != 0 or not mp4.is_file():
+        print(f"{name} ffmpeg 合成失败", file=sys.stderr)
+        return None
+    # 合成后时长校验：帧数不足 = 中断/损坏，必须重来（防残废产物）
+    actual_dur = _duration(str(mp4))
+    expected = total / fps
+    if actual_dur < expected - 0.35:
+        print(f"{name} 合成时长异常 ({actual_dur:.2f}s vs 预期 {expected:.2f}s)，删除重渲染", file=sys.stderr)
+        try:
+            mp4.unlink()
+        except OSError:
+            pass
+        return None
+    return str(mp4)
+
+
 async def _record_shot(name: str, html_path: str, dur: float, out: Path) -> str | None:
     from playwright.async_api import async_playwright
     async with async_playwright() as p:
@@ -321,6 +619,26 @@ def main() -> int:
                 print(f"⚠️ 脚本质量门禁: FAIL ({gate_lang})——渲染继续但需人工复核（{gate.stdout[:200]}）", file=sys.stderr)
         except Exception as e:
             print(f"门禁检查跳过: {e}", file=sys.stderr)
+        # 08-14 敏感词过滤（用户复盘要求）：脚本即 TTS/字幕文案源，阻断式检查
+        try:
+            import importlib.util as _ilu
+            _sw_path = ROOT / "scripts" / "sensitive_word_filter.py"
+            if _sw_path.is_file():
+                _spec = _ilu.spec_from_file_location("sensitive_word_filter", _sw_path)
+                if _spec is None or _spec.loader is None:
+                    raise RuntimeError("sensitive_word_filter spec 加载失败")
+                _sw = _ilu.module_from_spec(_spec)
+                _spec.loader.exec_module(_sw)
+                _res = _sw.check_content(raw, context="script")
+                if _res["ok"]:
+                    print("敏感词过滤: PASS (script)")
+                else:
+                    print(f"⛔ 敏感词过滤: FAIL——{len(_res['hits'])} 个敏感词: "
+                          f"{[h['word'] for h in _res['hits']]}", file=sys.stderr)
+                    # 阻断：敏感词必须修复后重渲染，不产出违规成品
+                    return 3
+        except Exception as e:
+            print(f"敏感词检查跳过: {e}", file=sys.stderr)
 
     # TTS 生产默认 = Edge TTS 逐段独立合成（08-14 用户 8 条规则）。
     # ⚠️ 不经 voice_engine 的 DeAI 后处理（呼吸音/停顿/变速会引入间隔性杂音——08-14 实测）。
@@ -460,6 +778,8 @@ def main() -> int:
     print(f"截图素材: {len(screenshot_files)} 张")
 
     shot_durs = []
+    # 08-15 内容驱动动效：每段检测内容结构，B 镜头可切换为 图块激活/数字跳变/流程点亮
+    shot_types = {}  # seg_idx -> "tile_activate" | "digit_roll" | "step_light" | ""
     for i in range(1, 9):
         card = cards[i - 1]
         title = seg_title(i)
@@ -467,6 +787,15 @@ def main() -> int:
         modules = seg_modules(i)
         bg = str(bg_paths[i - 1])
         stat_label = "关键数字" if tts_lang == "zh" else "KEY NUMBER"
+        # 内容结构检测 → 动效镜头（8 段最多 4 段启用，保证镜头多样性 + 渲染时长可控）
+        seg_txt = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
+            else str(card.get("tts") or card.get("txt") or "")
+        # 截图卡优先（真实素材规则）；动效镜头用于无截图素材的偶数段
+        if screenshot_files and i in (2, 6):
+            elem_shot = ""
+        else:
+            elem_shot = detect_element_shot(seg_txt, title) if i % 2 == 0 else ""
+        shot_types[i] = elem_shot
         html_a = build_shot_a(i, title, stat, bg, kicker, stat_label=stat_label)
         # 截图卡：段2（介绍后细节）与段6（数据/进展）优先用真实截图
         shot_path = None
@@ -474,14 +803,32 @@ def main() -> int:
         if screenshot_files and i in (2, 6):
             si = 0 if i == 2 else (1 if len(screenshot_files) > 1 else 0)
             shot_path = str(screenshot_files[si])
-            # 截图卡不加 caption 标注（用户 08-14：标注信息不需要，截图本身即内容）
             caption = ""
-        html_b = build_shot_b(i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption)
+        if elem_shot == "tile_activate":
+            html_b = build_shot_tile_activate(i, title, modules, bg, kicker)
+        elif elem_shot == "digit_roll":
+            # 数据真实性铁律：无真实数字时降级普通镜头，禁止编造数据
+            if _extract_number_unit(" ".join(modules)) or _extract_number_unit(seg_txt):
+                html_b = build_shot_digit_roll(i, title, modules, bg, kicker)
+            else:
+                shot_types[i] = ""
+                html_b = build_shot_b(i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption)
+        elif elem_shot == "step_light":
+            html_b = build_shot_step_light(i, title, modules, bg, kicker)
+        else:
+            html_b = build_shot_b(i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption)
         (out / "html" / f"shot_{i:02d}A.html").write_text(html_a, encoding="utf-8")
         (out / "html" / f"shot_{i:02d}B.html").write_text(html_b, encoding="utf-8")
         d = durs[i - 1]
         a_dur = min(2.8, d * 0.30)
         b_dur = max(1.0, d - a_dur + 0.15)
+        # 动效镜头时长保障：完整展示需要 ≥3.2s（tile 3×1.2 / step 4×0.8 / digit 3×0.8+1.4），
+        # TTS 段过短时压缩 A 镜头时间补给 B（视觉段比语音短是安全的，voice 有 adelay+atrim 对齐）
+        if shot_types.get(i) and b_dur < 3.2:
+            shortfall = 3.2 - b_dur
+            a_dur_new = max(0.6, a_dur - shortfall)
+            b_dur = d - a_dur_new + 0.15
+            a_dur = min(a_dur, a_dur_new)
         shot_durs.append((f"shot_{i:02d}A", a_dur))
         shot_durs.append((f"shot_{i:02d}B", b_dur))
 
@@ -489,8 +836,26 @@ def main() -> int:
         for name, sd in shot_durs:
             hp = out / "html" / f"{name}.html"
             target = out / "shots" / f"{name}.mp4"
+            # 复用校验：文件存在 + 大小达标 + **时长接近目标**（防 timeout 中断的残废产物被复用）
             if target.is_file() and target.stat().st_size > 50_000:
-                print(f"{name}: 复用已有镜头")
+                existing_dur = _duration(str(target))
+                if existing_dur >= sd - 0.35:
+                    print(f"{name}: 复用已有镜头 ({existing_dur:.2f}s)")
+                    continue
+                print(f"{name}: 已有镜头时长异常 ({existing_dur:.2f}s vs 目标 {sd:.2f}s)，重渲染", file=sys.stderr)
+            # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → record_video
+            seg_i = int(name[5:7])
+            is_elem = name.endswith("B") and shot_types.get(seg_i)
+            if is_elem:
+                mp4 = await _record_shot_frames(name, str(hp), sd, out)
+                if not mp4:
+                    print(f"{name} 逐帧动效渲染失败，回退 record_video", file=sys.stderr)
+                    webm = await _record_shot(name, str(hp), sd + 0.5, out)
+                    if webm:
+                        subprocess.run(["ffmpeg", "-y", "-v", "quiet", "-i", webm,
+                                        "-t", f"{sd:.3f}", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+                                        "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an",
+                                        str(target)], timeout=120)
                 continue
             webm = await _record_shot(name, str(hp), sd + 0.5, out)
             if not webm:
@@ -673,13 +1038,22 @@ def main() -> int:
     seg_evidence = {"segments": []}
     for i in range(1, 9):
         shot = (cards[i - 1].get("shotcraft") or {})
+        et = shot_types.get(i, "")
+        if et:
+            move_id = et
+            profile = f"element_motion_{et}_{i}"
+            renderer_note = "film_renderer_frames"
+        else:
+            move_id = str(shot.get("name") or f"cinema_multishot_{i}")
+            profile = f"establish_then_detail_{i}"
+            renderer_note = "film_renderer"
         seg_evidence["segments"].append({
             "index": i,
-            "move_id": str(shot.get("name") or f"cinema_multishot_{i}"),
-            "profile": f"establish_then_detail_{i}",
+            "move_id": move_id,
+            "profile": profile,
             "rendered": True,
             "reused": False,
-            "renderer": "film_renderer",
+            "renderer": renderer_note,
         })
     (out / "segment_motion_evidence.json").write_text(json.dumps(seg_evidence, ensure_ascii=False, indent=2), encoding="utf-8")
 

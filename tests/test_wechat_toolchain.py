@@ -24,6 +24,31 @@ def _fake_wewrite(path: Path) -> Path:
     return script
 
 
+def _failing_wewrite(path: Path) -> Path:
+    script = path / "failing_wewrite.py"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "if sys.argv[1:3] == ['run', 'start']:\n"
+        "    print('{\\\"run_id\\\": \\\"failed-run\\\"}'); sys.exit(0)\n"
+        "print('writer unavailable', file=sys.stderr); sys.exit(4)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script
+
+
+def _fake_hermes_writer(path: Path) -> Path:
+    script = path / "fake_hermes.py"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "print('# Hermes Writer Title\\n\\n' + ('## Practical section\\nConcrete operational guidance with a usable example. ' * 80))\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script
+
+
 def test_requires_wechat_toolchain_only_for_enforced_wechat():
     assert requires_wechat_toolchain({"feature_flags": {"channel_auto_workflow_gate": "enforce"}}, ["wechat"])
     assert not requires_wechat_toolchain({"feature_flags": {"channel_auto_workflow_gate": "enforce"}}, ["devto"])
@@ -72,3 +97,53 @@ def test_prepare_wechat_professional_draft_records_failure_when_required(tmp_pat
 
     assert result["draft_meta"]["tool_invocations"]["wewrite"]["status"] == "failed"
     assert "not found" in result["draft_meta"]["tool_invocations"]["wewrite"]["error"]
+
+
+def test_prepare_wechat_draft_uses_explicit_hermes_writer_fallback(tmp_path):
+    draft = {"title": "Old", "body": "short seed", "draft_meta": {}}
+    job = {"id": "j1", "topic": "AI tool overload", "platforms": ["wechat"], "brief": {}}
+
+    result = prepare_wechat_professional_draft(
+        "j1",
+        job,
+        draft,
+        {
+            "feature_flags": {"channel_auto_workflow_gate": "enforce"},
+            "wechat_toolchain": {
+                "wewrite_bin": str(_failing_wewrite(tmp_path)),
+                "hermes_writer_fallback": True,
+                "hermes_bin": str(_fake_hermes_writer(tmp_path)),
+                "timeout": 10,
+            },
+        },
+        tmp_path,
+    )
+
+    meta = result["draft_meta"]
+    assert meta["tool_invocations"]["wewrite"]["status"] == "failed"
+    assert meta["tool_invocations"]["hermes_writer"]["status"] == "used"
+    assert meta["tool_invocations"]["hermes_writer"]["commands"][0]["name"] == "hermes --cli"
+    assert result["title"] == "Hermes Writer Title"
+    assert "Concrete operational guidance" in result["body"]
+
+
+def test_wechat_writer_failure_cooldown_skips_known_failed_primary(tmp_path):
+    cfg = {
+        "feature_flags": {"channel_auto_workflow_gate": "enforce"},
+        "wechat_toolchain": {
+            "wewrite_bin": str(_failing_wewrite(tmp_path)),
+            "hermes_writer_fallback": True,
+            "hermes_bin": str(_fake_hermes_writer(tmp_path)),
+            "writer_failure_cooldown_seconds": 3600,
+            "timeout": 10,
+        },
+    }
+    job = {"id": "j1", "topic": "AI tool overload", "platforms": ["wechat"], "brief": {}}
+    prepare_wechat_professional_draft("j1", job, {"title": "Old", "body": "short", "draft_meta": {}}, cfg, tmp_path)
+
+    second = prepare_wechat_professional_draft("j2", {**job, "id": "j2"}, {"title": "Old", "body": "short", "draft_meta": {}}, cfg, tmp_path)
+
+    wewrite = second["draft_meta"]["tool_invocations"]["wewrite"]
+    assert wewrite["status"] == "skipped"
+    assert wewrite["reason"] == "recent_writer_provider_failure"
+    assert second["draft_meta"]["tool_invocations"]["hermes_writer"]["status"] == "used"

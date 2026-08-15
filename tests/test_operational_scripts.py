@@ -38,7 +38,7 @@ class OperationalScriptTests(unittest.TestCase):
     def test_media_delivery_requires_configured_target(self):
         from scripts.deliver_media import deliver
 
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"HERMES_DELIVERY_ENV_FILE": str(Path(tempfile.gettempdir()) / "missing-notifications.env")}, clear=True):
             result = deliver("video", ["missing.mp4"])
 
         self.assertFalse(result["passed"])
@@ -56,8 +56,8 @@ class OperationalScriptTests(unittest.TestCase):
                     {
                         "selected_topic": "独立选题",
                         "platform_source_matrix": {
-                            "attempted_sources": ["a", "b", "c", "d", "e"],
-                            "successful_sources": ["a", "b", "c"],
+                            "attempted_sources": ["a", "b", "c", "d", "e", "f", "g", "h"],
+                            "successful_sources": ["a", "b", "c", "d", "e"],
                             "platform_internal_verified": True,
                             "shared_trend_only": False,
                         },
@@ -96,6 +96,8 @@ class OperationalScriptTests(unittest.TestCase):
 | GitHub | ✅ 成功 | automation 项目上升 |
 | 小红书 | ❌ login_required | 记录失败原因 |
 
+| harken | success | additional trend evidence |
+
 shared_trend_only: false
 """,
                 encoding="utf-8",
@@ -104,8 +106,8 @@ shared_trend_only: false
 
         self.assertTrue(result["passed"], result)
         matrix = result["records"]["wechat"]["matrix"]
-        self.assertGreaterEqual(matrix["attempted_count"], 5)
-        self.assertGreaterEqual(matrix["successful_count"], 3)
+        self.assertGreaterEqual(matrix["attempted_count"], 8)
+        self.assertGreaterEqual(matrix["successful_count"], 5)
         self.assertTrue(matrix["platform_internal_evidence"])
         self.assertEqual(result["records"]["wechat"]["selected_topic"], "AI 自动化效率幻觉实测复盘")
 
@@ -245,6 +247,20 @@ shared_trend_only: false
 
         self.assertLess(text.index("smoke_provider.sh"), text.index("performance-cycle"))
         self.assertIn("provider_preflight_failed", text)
+
+    def test_overnight_script_writes_acceptance_summary_after_batch_execution(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn("overnight-sync-state", text)
+        self.assertIn("acceptance_summary.json", text)
+        self.assertIn("overnight-acceptance --result", text)
+        self.assertIn("acceptance_report.json", text)
+
+    def test_overnight_script_has_a_bounded_configurable_catchup_window(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn('OVERNIGHT_ADMISSION_WINDOW_MINUTES:-60', text)
+        self.assertIn('missed_overnight_admission_window', text)
 
     def test_overnight_script_reports_non_admitted_capacity_without_claiming_completion(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")

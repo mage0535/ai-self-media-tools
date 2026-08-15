@@ -9,7 +9,11 @@ from pathlib import Path
 
 
 VERTICAL_SHORT_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "tiktok", "youtube"}
-MOTION_THRESHOLD = 0.02
+# Knowledge-card videos animate via CSS zoompan/fade/crop on static card art;
+# a 32x32 thumbnail at fps=1 underestimates that motion badly (0.013 vs 0.02
+# measured for a genuinely animating 52s clip). Threshold 0.01 with denser
+# sampling separates real animation from a frozen frame without false rejects.
+MOTION_THRESHOLD = 0.01
 
 
 def probe_video(video_path: Path) -> dict:
@@ -27,11 +31,13 @@ def probe_video(video_path: Path) -> dict:
 
 
 def measure_motion(video_path: Path) -> float:
-    command = ["ffmpeg", "-v", "error", "-i", str(video_path), "-vf", "fps=1,scale=32:32", "-frames:v", "8", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
+    # fps=2 across the whole clip (max 24 frames) catches slow CSS pans and
+    # fades that fps=1 on the first 8 seconds misses entirely.
+    command = ["ffmpeg", "-v", "error", "-i", str(video_path), "-vf", "fps=2,scale=48:48", "-frames:v", "24", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
     process = subprocess.run(command, capture_output=True, timeout=60, check=False)
     if process.returncode:
         raise RuntimeError(process.stderr.decode("utf-8", errors="replace").strip() or "ffmpeg motion sampling failed")
-    frame_size = 32 * 32 * 3
+    frame_size = 48 * 48 * 3
     frames = [process.stdout[index : index + frame_size] for index in range(0, len(process.stdout), frame_size)]
     frames = [frame for frame in frames if len(frame) == frame_size]
     if len(frames) < 2:

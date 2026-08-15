@@ -28,6 +28,17 @@ CHANNEL_RULES = {
         "schedule_hours_min": 2.05,  # 快手定时≥2h
         "codec_blacklist": ["mpeg4", "mpeg"],
     },
+    "xiaohongshu": {
+        # 🔴 HARD GATE：小红书禁止自动发帖（会识别封号）— 只允许 handoff 手动发布
+        "manual_publish_only": True,
+        "publish_policy": "manual_handoff_only_hard_gate_no_automation_ever",
+        "title_max": 20,       # 小红书标题 ≤20 字
+        "topics_max": 6,       # 话题 ≤6 个
+        "body_max": 950,       # 正文 ≤950 字
+        "image_required": True,  # handoff 包必须含实际图片
+        "image_max_kb": 512,     # 单张 ≤512KB
+        "gate_script": "scripts/xhs_manual_publish_gate.py",  # fail-closed 门禁
+    },
 }
 
 def validate_article(path: str, channel: str) -> dict:

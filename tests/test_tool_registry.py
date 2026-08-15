@@ -82,6 +82,31 @@ class ToolRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["zhihu_open_cli"]["available"])
 
+    def test_registry_reports_qwen_tts_only_when_api_key_is_configured(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"HOME": tmp, "USERPROFILE": tmp}, clear=True):
+                result = ToolRegistry().probe()
+            self.assertFalse(result["tts_engines"]["qwen3-tts"]["available"])
+
+            with patch.dict("os.environ", {"HOME": tmp, "USERPROFILE": tmp, "DASHSCOPE_API_KEY": "test-key"}, clear=True):
+                result = ToolRegistry().probe()
+        self.assertTrue(result["tts_engines"]["qwen3-tts"]["available"])
+        self.assertEqual(result["tts_engines"]["qwen3-tts"]["model"], "qwen3-tts-flash")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(
+                "os.environ",
+                {
+                    "HOME": tmp,
+                    "USERPROFILE": tmp,
+                    "DASHSCOPE_API_KEY": "test-key",
+                    "QWEN_TTS_MODEL": "qwen-audio-3.0-tts-flash",
+                },
+                clear=True,
+            ):
+                result = ToolRegistry().probe()
+        self.assertEqual(result["tts_engines"]["qwen3-tts"]["model"], "qwen-audio-3.0-tts-flash")
+
 
 if __name__ == "__main__":
     unittest.main()

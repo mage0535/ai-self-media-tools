@@ -155,6 +155,12 @@ class ToolRegistry:
             except ImportError:
                 engines[name] = False
         engines["piper"] = shutil.which("piper") is not None
+        qwen_key = os.environ.get("QWEN_TTS_API_KEY") or os.environ.get("DASHSCOPE_API_KEY")
+        engines["qwen3-tts"] = {
+            "available": bool(qwen_key),
+            "model": os.environ.get("QWEN_TTS_MODEL_CHAIN") or os.environ.get("QWEN_TTS_MODEL", "qwen3-tts-flash"),
+            "kind": "cloud_tts",
+        }
         return engines
 
     def choose_provider(self, kind):

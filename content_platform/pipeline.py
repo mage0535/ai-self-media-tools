@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .compliance import ComplianceChecker
 from .content_hygiene import audit_topic
-from .content_policy import generated_media_kinds_for_job
+from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
 from .generator import DraftGenerator
@@ -193,7 +193,7 @@ class Pipeline:
                     risk["level"] = "review"
                 if risk["level"] == "block":
                     runner.block("run_safety_gate", "safety_gate_blocked", "content safety gate blocked this job", risk)
-                gate = self._quality_gate(job_id, draft, risk, geo)
+                gate = self._quality_gate(job_id, draft, risk, geo, phase="generation")
                 draft["draft_meta"]["geo_score"] = geo["score"]
                 draft["draft_meta"]["geo_details"] = geo
                 draft["draft_meta"]["quality_gate"] = gate
@@ -237,8 +237,26 @@ class Pipeline:
                     self._generate_optional_media(job_id, "magazine_format", runner, ["collect_or_prepare_materials"])
                 generated_image = self._generate_optional_media(job_id, "image", runner, ["collect_or_prepare_materials"], step_name="generate_or_collect_images")
                 self._validate_image_requirements(job_id, runner, generated_image)
-                for kind in generated_media_kinds_for_job(self.store.get_job(job_id), self.config):
-                    self._generate_optional_media(job_id, kind, runner, ["validate_image_requirements"])
+                generated_kinds = set(generated_media_kinds_for_job(self.store.get_job(job_id), self.config))
+                generated_kinds.discard("image")
+                for kind in generated_kinds:
+                    artifact = self._generate_optional_media(job_id, kind, runner, ["validate_image_requirements"])
+                    if kind == "video" and artifact:
+                        self._attach_video_render_evidence(draft, artifact)
+                final_gate = self._quality_gate(job_id, draft, risk, geo, phase="rendered")
+                draft["draft_meta"]["quality_gate"] = final_gate
+                if self.require_gate_pass and not final_gate.get("passed", True):
+                    runner.block(
+                        "run_final_platform_quality_gate",
+                        "final_platform_quality_gate_failed",
+                        "rendered media did not satisfy required platform quality gate",
+                        final_gate,
+                        depends_on=["validate_image_requirements"],
+                    )
+                runner.succeeded("run_final_platform_quality_gate", final_gate, depends_on=["validate_image_requirements"])
+                self.store.save_draft(
+                    job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
+                )
                 reviewed = self.store.release_claim(job_id, owner, "review_required", "review_requested", detail={"risk": risk["level"]})
                 if self.config.get("delivery", {}).get("auto_stage_review_required"):
                     reviewed = self.stage_drafts(job_id, owner=owner, already_locked=True)
@@ -285,6 +303,8 @@ class Pipeline:
 
     def publish(self, job_id):
         job = self._hydrate(self.store.get_job(job_id))
+        if self.config.get("workflow", {}).get("require_unified_acceptance") and not bool(job.get("acceptance", {}).get("passed")):
+            raise PermissionError("job has no passing unified workflow acceptance")
         if job["state"] == "published":
             return job
         if job["state"] not in {"approved", "partial"}:
@@ -664,7 +684,7 @@ class Pipeline:
             runner.block("validate_image_requirements", "image_gate_failed", "required image validation failed", gate, depends_on=["generate_or_collect_images"])
         runner.succeeded("validate_image_requirements", gate, depends_on=["generate_or_collect_images"])
 
-    def _quality_gate(self, job_id, draft, risk, geo):
+    def _quality_gate(self, job_id, draft, risk, geo, *, phase="rendered"):
         dm = draft.get("draft_meta", {})
         gate = {"passed": True, "gates": {}}
         g1 = risk.get("level", "pass") != "block"
@@ -682,7 +702,7 @@ class Pipeline:
         gate["gates"]["G5_format"] = {"passed": g5, "platforms": platforms}
         growth = validate_growth_recipe(dm.get("growth_recipe"))
         gate["gates"]["G7_growth_recipe"] = growth
-        platform_quality = self._generation_platform_quality_gate(job_id, draft, list(platforms))
+        platform_quality = self._generation_platform_quality_gate(job_id, draft, list(platforms), phase=phase)
         if platform_quality:
             gate["gates"]["G6_platform_quality"] = platform_quality
         gate["passed"] = all(g["passed"] for g in gate["gates"].values())
@@ -690,14 +710,25 @@ class Pipeline:
         gate["total"] = len(gate["gates"])
         return gate
 
-    def _generation_platform_quality_gate(self, job_id, draft, platforms):
+    def _generation_platform_quality_gate(self, job_id, draft, platforms, *, phase="generation"):
         if not self.require_gate_pass:
             return None
         results = {}
         for platform in platforms:
             normalized = str(platform or "").casefold()
             packet = self._generation_platform_packet(job_id, draft, platforms, normalized)
-            result = self._platform_quality_validator(normalized, packet)
+            plan = packet.get("video_toolchain_plan") or {}
+            needs_rendered_video = normalized in SHORT_VIDEO_PLATFORMS and bool(plan.get("required"))
+            if phase == "generation" and self._defers_render_only_video_evidence(packet):
+                result = {
+                    "passed": True,
+                    "deferred": True,
+                    "reason": "render_only_video_evidence_checked_after_render",
+                }
+            elif phase == "rendered" and needs_rendered_video:
+                result = self._rendered_video_platform_gate(packet, normalized)
+            else:
+                result = self._platform_quality_validator(normalized, packet)
             if result:
                 results[normalized] = result
         if not results:
@@ -707,6 +738,84 @@ class Pipeline:
             "mode": "enforce",
             "platforms": list(results.keys()),
             "results": results,
+        }
+
+    @staticmethod
+    def _defers_render_only_video_evidence(packet):
+        """Generation cannot prove media evidence that only a renderer can emit."""
+        plan = packet.get("video_toolchain_plan") if isinstance(packet, dict) else {}
+        if not isinstance(plan, dict) or not plan.get("required"):
+            return False
+        if packet.get("scene_visual_alignment") or packet.get("final_video") or packet.get("video_path"):
+            return False
+        return str(packet.get("platform") or "").casefold() in SHORT_VIDEO_PLATFORMS
+
+    @staticmethod
+    def _rendered_video_platform_gate(packet, platform):
+        """Accept only measured renderer output after a required video render."""
+        meta = packet if isinstance(packet, dict) else {}
+        artifact = meta.get("video_artifact") or {}
+        manifest = meta.get("render_manifest") or {}
+        output = Path(str(artifact.get("path") or manifest.get("output") or ""))
+        plan = meta.get("video_toolchain_plan") or {}
+        contract = manifest.get("toolchain_contract") or {}
+        planned = set(contract.get("planned_tools") or [])
+        motion = manifest.get("motion_evidence") or {}
+        segments = (manifest.get("segment_motion_evidence") or {}).get("segments") or []
+        audio = meta.get("audio_probe") or {}
+        bgm = meta.get("bgm_source") or meta.get("bgm") or {}
+        captions = meta.get("burned_captions") or {}
+        subtitle = meta.get("subtitle") or {}
+        backgrounds = meta.get("background_assets") or []
+        required_tools = {
+            "cinema_composition.storyboard",
+            "shotcraft_moves.shot_plan_for_text",
+            "kuaishou_render.render_cards",
+            "kuaishou_render.download_bgm",
+            "kuaishou_render.gen_subtitles",
+            "kuaishou_render.encode_final",
+        }
+        forbidden_bgm = {"synthetic", "procedural", "generated_tone", "midi", "generated_synthetic_bgm"}
+        gates = {
+            "rendered_output": {"passed": output.is_file() and output.stat().st_size > 0 and str(manifest.get("output") or "") == str(output)},
+            "renderer_manifest": {"passed": manifest.get("ok") is True and manifest.get("status") == "rendered" and bool(plan.get("required"))},
+            "required_tool_contract": {"passed": required_tools.issubset(planned)},
+            "motion_evidence": {"passed": motion.get("passed") is True and int(motion.get("unique_frame_count") or 0) >= 2},
+            "segment_motion_evidence": {"passed": len(segments) >= 3 and all(isinstance(row, dict) and row.get("move_id") and row.get("profile") for row in segments)},
+            "audio_stream": {"passed": int(audio.get("stream_count") or 0) >= 1 and float(audio.get("duration") or 0) >= 40},
+            "real_instrument_bgm": {
+                "passed": isinstance(bgm, dict) and str(bgm.get("source") or "").casefold() not in forbidden_bgm
+                and bool(bgm.get("source_url")) and bool(bgm.get("license") or bgm.get("license_type"))
+                and bool(bgm.get("fit_reason")) and not bool(bgm.get("fallback_used")),
+            },
+            "subtitle_safety": {
+                "passed": int(subtitle.get("cue_count") or 0) >= 8 and captions.get("position") == "lower_third"
+                and captions.get("burned_in") is True and int(captions.get("font_size") or 0) >= 44
+                and int(captions.get("max_chars_per_line") or 99) <= 18 and int(captions.get("max_lines") or 99) <= 2
+                and int(captions.get("margin_v") or 0) >= 180,
+            },
+            "visual_backgrounds": {"passed": isinstance(backgrounds, list) and len(backgrounds) >= 4},
+            "platform_binding": {"passed": str(platform).casefold() in {str(item).casefold() for item in plan.get("platforms") or []}},
+        }
+        failures = [name for name, value in gates.items() if not value["passed"]]
+        return {"passed": not failures, "phase": "rendered", "gates": gates, "failed_dimensions": failures}
+
+    @staticmethod
+    def _attach_video_render_evidence(draft, artifact):
+        """Merge renderer-written measurements into the final quality packet."""
+        meta = draft.setdefault("draft_meta", {})
+        manifest = artifact.get("render_manifest")
+        if isinstance(manifest, dict):
+            meta["render_manifest"] = manifest
+        renderer_packet = artifact.get("render_packet")
+        if isinstance(renderer_packet, dict):
+            for key in ("audio_probe", "subtitle", "burned_captions", "background_assets", "bgm", "bgm_source"):
+                if key in renderer_packet:
+                    meta[key] = renderer_packet[key]
+        meta["video_artifact"] = {
+            "path": artifact.get("path", ""),
+            "checksum": artifact.get("checksum", ""),
+            "selected_pipeline": artifact.get("selected_pipeline", ""),
         }
 
     @staticmethod

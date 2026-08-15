@@ -75,6 +75,104 @@ class PlatformQualityGateRuntimeTests(unittest.TestCase):
             with self.assertRaises(WorkflowBlocked):
                 pipeline._generate_optional_media(job["id"], "video", runner, ["validate_image_requirements"])
 
+    def test_generation_gate_defers_render_only_video_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            pipeline = Pipeline(store, {"data_dir": tmp, "feature_flags": {"channel_auto_workflow_gate": "enforce"}})
+            draft = {
+                "title": "Bilibili AI automation walkthrough",
+                "body": "A real walkthrough script with steps and evidence.",
+                "draft_meta": {
+                    "strategy": {"primary_platforms": ["bilibili"]},
+                    "content_form": "short_video",
+                    "video_toolchain_plan": {"required": True, "selected_pipeline": "tutorial_video"},
+                },
+            }
+
+            gate = pipeline._generation_platform_quality_gate("job-1", draft, ["bilibili"])
+
+            self.assertTrue(gate["passed"])
+            self.assertTrue(gate["results"]["bilibili"]["deferred"])
+
+    def test_generation_gate_defers_article_explainer_video_for_kuaishou(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            pipeline = Pipeline(store, {"data_dir": tmp, "feature_flags": {"channel_auto_workflow_gate": "enforce"}})
+            draft = {
+                "title": "Kuaishou automation walkthrough",
+                "body": "A real walkthrough script with steps and evidence.",
+                "draft_meta": {
+                    "strategy": {"primary_platforms": ["kuaishou"]},
+                    "content_form": "article_explainer_video",
+                    "video_toolchain_plan": {"required": True, "selected_pipeline": "article_explainer_video"},
+                },
+            }
+
+            gate = pipeline._generation_platform_quality_gate("job-1", draft, ["kuaishou"])
+
+            self.assertTrue(gate["passed"])
+            self.assertTrue(gate["results"]["kuaishou"]["deferred"])
+
+    def test_rendered_video_gate_rejects_missing_renderer_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "final.mp4"
+            output.write_bytes(b"video")
+
+            gate = Pipeline._rendered_video_platform_gate(
+                {
+                    "video_toolchain_plan": {"required": True, "platforms": ["kuaishou"]},
+                    "video_artifact": {"path": str(output)},
+                },
+                "kuaishou",
+            )
+
+            self.assertFalse(gate["passed"])
+            self.assertIn("renderer_manifest", gate["failed_dimensions"])
+
+    def test_rendered_video_gate_accepts_complete_measured_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "final.mp4"
+            output.write_bytes(b"video")
+            planned_tools = [
+                "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text",
+                "kuaishou_render.render_cards", "kuaishou_render.download_bgm",
+                "kuaishou_render.gen_subtitles", "kuaishou_render.encode_final",
+            ]
+            gate = Pipeline._rendered_video_platform_gate(
+                {
+                    "video_toolchain_plan": {"required": True, "platforms": ["kuaishou"]},
+                    "video_artifact": {"path": str(output)},
+                    "render_manifest": {
+                        "ok": True, "status": "rendered", "output": str(output),
+                        "toolchain_contract": {"planned_tools": planned_tools},
+                        "motion_evidence": {"passed": True, "unique_frame_count": 3},
+                        "segment_motion_evidence": {"segments": [
+                            {"move_id": "one", "profile": "hero"},
+                            {"move_id": "two", "profile": "demo"},
+                            {"move_id": "three", "profile": "cta"},
+                        ]},
+                    },
+                    "audio_probe": {"stream_count": 1, "duration": 45},
+                    "bgm_source": {"source": "licensed_piano", "source_url": "https://example.test/bgm", "license": "CC-BY", "fit_reason": "calm tutorial"},
+                    "subtitle": {"cue_count": 8},
+                    "burned_captions": {"position": "lower_third", "burned_in": True, "font_size": 48, "max_chars_per_line": 18, "max_lines": 2, "margin_v": 200},
+                    "background_assets": [{"path": f"bg-{index}.png"} for index in range(4)],
+                },
+                "kuaishou",
+            )
+
+            self.assertTrue(gate["passed"])
+
+    def test_media_bridge_reads_renderer_packet_for_final_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            packet = {"audio_probe": {"stream_count": 1, "duration": 45}}
+            (output_dir / "packet.json").write_text(json.dumps(packet), encoding="utf-8")
+
+            self.assertEqual(MediaBridge._renderer_packet(output_dir), packet)
+
     def test_media_bridge_rejects_video_toolchain_dry_run_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

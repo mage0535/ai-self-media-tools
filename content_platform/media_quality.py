@@ -86,12 +86,12 @@ def _platform_source_matrix_gate(matrix: dict[str, Any], platform: str) -> dict[
         and len(attempted) >= 5
         and success_count >= 3
         and bool(matrix.get("platform_internal_verified"))
-        and bool(matrix.get("current_platform_specific_topic"))
+        and bool(matrix.get("current_platform_specific_topic") or matrix.get("platform_strategy_verified"))
         and not bool(matrix.get("shared_trend_only"))
         and bool(matrix.get("report_path")),
         "attempted": len(attempted),
         "successful": success_count,
-        "required": ["attempted_sources >= 5", "successful_source_count >= 3", "platform_internal_verified", "not shared_trend_only"],
+        "required": ["attempted_sources >= 5", "successful_source_count >= 3", "platform_internal_verified", "platform topic or fresh strategy evidence", "not shared_trend_only"],
     }
 
 

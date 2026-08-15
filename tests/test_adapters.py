@@ -38,6 +38,46 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bridge.generate("podcast", {"id": "j1", "topic": "Topic", "body": "Body"})
 
+    def test_cinema_route_falls_back_without_renderer_evidence(self):
+        cinema_script = self.root / "agent-scripts" / "cinema_video_pipeline.py"
+        cinema_script.parent.mkdir(parents=True)
+        cinema_script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge(
+            {"video": {"enabled": True, "script": str(cinema_script)}},
+            self.root,
+        )
+        job = {
+            "id": "cinema-job",
+            "topic": "Topic",
+            "title": "Title",
+            "body": "Body",
+            "visual_route": {"auto": True, "route_order": ["cinema-video"]},
+        }
+
+        def fake_run(command, **kwargs):
+            if "--out-dir" in command:
+                cinema_dir = Path(command[command.index("--out-dir") + 1])
+                cinema_dir.mkdir(parents=True, exist_ok=True)
+                (cinema_dir / "cinema_final.mp4").write_bytes(b"video")
+            else:
+                output_dir = Path(kwargs["env"]["VIDEO_OUTPUT_DIR"])
+                output_dir.mkdir(parents=True, exist_ok=True)
+                video = output_dir / "verified.mp4"
+                video.write_bytes(b"video")
+                (output_dir / "video_toolchain_runner_manifest.json").write_text(
+                    json.dumps({"ok": True, "status": "rendered", "output": str(video)}), encoding="utf-8"
+                )
+            return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        with patch.dict("os.environ", {"CONTENT_PLATFORM_AGENT_SCRIPTS_DIR": str(cinema_script.parent)}), \
+             patch.object(MediaBridge, "_video_duration", return_value=42.0), \
+             patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
+            artifact = bridge._generate_video(job, self.root / "artifacts" / job["id"])
+
+        self.assertNotIn("auto_route", artifact)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0].args[0][1], str(cinema_script))
+
     def test_media_bridge_can_run_ocr_transcription_and_analysis_providers(self):
         script = self.root / "tool.py"
         script.write_text("# fixture", encoding="utf-8")

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .content_policy import is_manual_handoff_platform, normalize_platform, platform_region
+from .content_policy import is_manual_handoff_platform, is_strict_manual_handoff_platform, normalize_platform, platform_region
 
 
 BLOCKING_STATES = {
@@ -52,6 +52,15 @@ class DeliveryHealthDecision:
 def delivery_health_decision(platform, config, action="publish"):
     normalized = normalize_platform(platform)
     normalized_action = normalize_platform(action or "publish")
+    if is_strict_manual_handoff_platform(normalized):
+        return DeliveryHealthDecision(
+            True,
+            normalized,
+            "manual_handoff_only",
+            "Xiaohongshu recovery policy forbids every automatic upload or draft route; only an operator-delivered manual handoff package is allowed",
+            "strict_operator_policy",
+            require_postcheck=normalized_action != "stage",
+        )
     cfg = (config or {}).get("delivery_health", {})
     if cfg.get("enabled") is False:
         return DeliveryHealthDecision(True, normalized, "disabled", "delivery health gate disabled by config")

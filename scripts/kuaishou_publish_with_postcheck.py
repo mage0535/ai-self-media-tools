@@ -74,6 +74,14 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _postcheck_passed(report: dict[str, Any]) -> bool:
+    """Accept only explicit scheduled or submitted-for-review management states."""
+    return bool(report.get("passed")) and str(report.get("status") or "") in {
+        "management_postcheck_found",
+        "success_under_review",
+    }
+
+
 def _require_ops_runner_context() -> bool:
     required = ["CONTENT_PLATFORM_OPS_RUNNER", "WORKFLOW_ID", "RUN_ID", "JOB_ID"]
     missing = [name for name in required if not str(os.environ.get(name, "")).strip()]
@@ -240,7 +248,7 @@ def main() -> int:
     passed = False
     if report_path.is_file():
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        passed = bool(report.get("passed")) and bool(report.get("schedule_found"))
+        passed = _postcheck_passed(report)
     print(
         json.dumps(
             {

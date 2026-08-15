@@ -100,6 +100,24 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(self.store.workflow_reports(job["id"], "wechat"))
         self.assertIn("send_completion_report", [row["step_name"] for row in self.store.workflow_steps(job["id"], "wechat")])
 
+    def test_required_unified_acceptance_blocks_publish(self):
+        pipeline = Pipeline(
+            self.store,
+            {
+                "data_dir": str(Path(self.tmp.name)),
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
+                "publishers": {"default": {"type": "file"}},
+                "workflow": {"require_unified_acceptance": True},
+            },
+        )
+        job = pipeline.create("Practical automation", ["wechat"])
+        pipeline.run(job["id"])
+        pipeline.approve(job["id"], "operator", "ready")
+        self.store.save_workflow_acceptance(job["id"], {"passed": False, "failures": ["long_form_cta_missing"]})
+
+        with self.assertRaises(PermissionError):
+            pipeline.publish(job["id"])
+
     def test_required_quality_gate_blocks_before_publish(self):
         pipeline = Pipeline(
             self.store,

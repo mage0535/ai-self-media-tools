@@ -19,6 +19,8 @@ import hashlib
 from pathlib import Path
 from typing import Optional
 
+from .paths import agent_scripts_dir
+
 # ── 认知锚点类型 ──────────────────────────────────────────────
 ANCHOR_TYPES = {
     "核心判断": {"keywords": ["本质", "关键", "核心", "一句话", "结论", "不是", "而是"],
@@ -223,6 +225,7 @@ def analyze_article(title: str, body: str, max_shots: int = 6) -> dict:
 
     return {
         "title": title,
+        "body": body,  # 供 diagram 路由判断完整语义
         "total_shots": len(shots),
         "shots": shots,
         "section_image_map": _build_section_image_map(shots),
@@ -249,6 +252,32 @@ def generate_images(shot_list: dict, output_dir: Path) -> list[str]:
     """Call image_gen.py for each shot. Returns list of generated image paths."""
     output_dir.mkdir(parents=True, exist_ok=True)
     image_paths = []
+
+    # ── diagram-design 优先路由：结构化文章先尝试杂志级图 ──
+    # 用 title + 完整原文判断（shot topic 可能被截断），避免漏判
+    article_text = " ".join(s.get("topic", "") for s in shot_list.get("shots", []))
+    raw_body = shot_list.get("raw_body") or shot_list.get("body") or ""
+    if raw_body:
+        article_text = f"{shot_list.get('title', '')} {raw_body} {article_text}"
+    diagram_route = None
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        sys.path.insert(0, str(agent_scripts_dir()))
+        from diagram_route import route_and_render  # type: ignore
+        dout = output_dir / "diagram"
+        diagram_route = route_and_render(article_text, dout, title=shot_list.get("title", ""))
+    except Exception as e:
+        diagram_route = None  # diagram 路由失败静默降级到 AI 生图
+
+    if diagram_route and diagram_route.get("status") == "ok":
+        image_paths.append(diagram_route["png_path"])
+        # 标记第一张配图走 diagram（后续 shots 仍走 AI 生图兜底）
+        for s in shot_list.get("shots", []):
+            if s["status"] != "generated":
+                s["status"] = "generated"
+                s["image_path"] = diagram_route["png_path"]
+                s["diagram"] = True
+                break
 
     for s in shot_list.get("shots", []):
         if s["status"] == "generated":

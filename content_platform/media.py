@@ -9,6 +9,7 @@ from pathlib import Path
 from .resource import ResourceGuard
 from .tool_adapters import ScriptVideoProvider
 from .tool_registry import ToolRegistry
+from .paths import agent_scripts_dir
 
 
 class MediaBridge:
@@ -57,6 +58,30 @@ class MediaBridge:
         if target_platforms and target_platforms.isdisjoint(job.get("platforms", [])):
             return None
         self.guard.check(kind)
+        # ── visual-router 自动适配层：生成前自动判断内容类型 → 注入路由建议 ──
+        # 内容驱动: 结构化→内容驱动卡/电影级视频, 情感→AI生图, 知识→知识图块
+        # 用户零指定，管线自动选择最佳视觉效果
+        try:
+            sys.path.insert(0, str(agent_scripts_dir()))
+            from visual_router import classify, route
+            text = " ".join([
+                str(job.get("title", "")),
+                str(job.get("topic", "")),
+                str((job.get("draft_meta") or {}).get("summary", "")),
+                str(job.get("body", ""))[:800],
+            ])
+            media_kind = "video" if kind == "video" else ("card" if kind == "image" else "article")
+            cls = classify(text)
+            route_order = route(text, media_kind)
+            job["visual_route"] = {
+                "content_type": cls["type"],
+                "signals": {k: v for k, v in cls.items() if k != "type"},
+                "media_kind": media_kind,
+                "route_order": route_order,
+                "auto": True,
+            }
+        except Exception as e:
+            job["visual_route"] = {"auto": False, "error": str(e)[:100]}
         output_dir = self.data_dir / "artifacts" / job["id"]
         output_dir.mkdir(parents=True, exist_ok=True)
         if kind == "audio":
@@ -169,6 +194,52 @@ class MediaBridge:
             raise RuntimeError(f"magazine formatting failed: {exc}")
 
     def _generate_image(self, job, output_dir, cfg):
+        # ── visual-router 自动适配：结构化/知识内容 → 内容驱动知识图块系列 ──
+        # 仅对图文平台（非视频8场景）生效，且路由首选 content-driven-cards 时
+        vr = job.get("visual_route") or {}
+        platforms = {str(item).lower() for item in job.get("platforms", [])}
+        video_platforms = platforms.intersection(
+            {"kuaishou", "douyin", "douyin_ai", "tiktok", "shipinhao", "youtube", "youtube_shorts", "bilibili"}
+        )
+        if (not video_platforms and vr.get("auto") and vr.get("route_order")
+                and vr["route_order"][0] == "content-driven-cards"):
+            try:
+                scripts_dir = agent_scripts_dir()
+                sys.path.insert(0, str(scripts_dir))
+                import subprocess as _sp
+                card_dir = output_dir / "cards"
+                card_dir.mkdir(parents=True, exist_ok=True)
+                # 用内容驱动卡片生成器（8 卡系列，每卡按内容选视觉）
+                title = job.get("title") or job.get("topic") or "AI"
+                body = str(job.get("body") or "")[:2000]
+                _sp.run([sys.executable, str(scripts_dir / "diagram_knowledge_cards_v2.py"),
+                         str(card_dir), title, body],
+                        capture_output=True, text=True, timeout=120)
+                # 脚本产出 HTML → 渲染 PNG（diagram_html2png）
+                htmls = sorted(card_dir.glob("dcard_*.html"))
+                for hidx, hp in enumerate(htmls, 1):
+                    png_path = card_dir / f"card_{hidx:02d}.png"
+                    _sp.run([sys.executable, str(scripts_dir / "diagram_html2png.py"),
+                             str(hp), str(png_path), "--width", "1080", "--height", "1920"],
+                            capture_output=True, text=True, timeout=90)
+                pngs = sorted(card_dir.glob("*.png"))
+                if pngs:
+                    images = []
+                    for idx, png in enumerate(pngs):
+                        images.append({
+                            "kind": "image",
+                            "role": "cover" if idx == 0 else "section",
+                            "section": "",
+                            "purpose": f"内容驱动知识图块卡 {idx+1}",
+                            "path": str(png),
+                            "checksum": hashlib.sha256(png.read_bytes()).hexdigest(),
+                        })
+                    return {"kind": "image", "path": str(pngs[0]),
+                            "checksum": images[0]["checksum"],
+                            "images": images, "section_image_map": [], "auto_route": "content-driven-cards"}
+            except Exception as e:
+                # 内容驱动卡失败 → 静默降级到 AI 生图
+                pass
         provider = self.registry.choose_provider("image")
         if not provider:
             raise FileNotFoundError("image script not configured")
@@ -226,9 +297,17 @@ class MediaBridge:
             return max(1, int(cfg.get("min_count", 1)))
         platforms = {str(item).lower() for item in job.get("platforms", [])}
         body_length = len(str(job.get("body") or ""))
+        video_platforms = platforms.intersection(
+            {"kuaishou", "douyin", "douyin_ai", "tiktok", "shipinhao", "youtube", "youtube_shorts", "bilibili"}
+        )
+        # Short-video knowledge cards need one distinct real-scene background
+        # per scene (8 scenes), never 1-3 reused images. Same-batch videos
+        # must also differ, handled upstream by per-topic queries + md5 gate.
+        if video_platforms:
+            return 8
         if "xiaohongshu" in platforms:
             return 6
-        if platforms.intersection({"wechat", "zhihu", "juejin", "bilibili"}) or body_length >= 1000:
+        if platforms.intersection({"wechat", "zhihu", "juejin"}) or body_length >= 1000:
             return 3
         return 1
 
@@ -289,13 +368,62 @@ class MediaBridge:
         parts = [part.strip().replace("\n", " ") for part in body.split("\n\n") if len(part.strip()) > 40]
         return [part[:80] for part in parts[:6]]
 
+    @staticmethod
+    def _video_duration(path):
+        try:
+            import subprocess as _sp
+            d = _sp.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                         "-of", "csv=p=0", str(path)], capture_output=True, text=True, timeout=30)
+            return round(float(d.stdout.strip()), 1)
+        except Exception:
+            return 0.0
+
     def _generate_video(self, job, output_dir):
+        # ── visual-router 自动适配：结构化/知识内容 → 电影级视频管线 ──
+        vr = job.get("visual_route") or {}
+        if vr.get("auto") and vr.get("route_order") and vr["route_order"][0] == "cinema-video":
+            try:
+                import subprocess as _sp
+                cinema_dir = output_dir / "cinema"
+                cinema_dir.mkdir(parents=True, exist_ok=True)
+                title = job.get("title") or job.get("topic") or "AI"
+                body = (job.get("draft_meta", {}).get("video_script")
+                        or job.get("body") or job.get("draft_meta", {}).get("video_prompt", ""))
+                cinema_script = agent_scripts_dir() / "cinema_video_pipeline.py"
+                if not cinema_script.is_file():
+                    raise FileNotFoundError("cinema video adapter is not configured")
+                r = _sp.run([sys.executable, str(cinema_script),
+                             "--title", str(title)[:60], "--body", str(body)[:2000],
+                             "--out-dir", str(cinema_dir)],
+                            capture_output=True, text=True, timeout=1800)
+                final = cinema_dir / "cinema_final.mp4"
+                manifest = self._video_toolchain_manifest(cinema_dir)
+                packet = self._renderer_packet(cinema_dir)
+                # A legacy cinematic renderer may produce a playable file but
+                # still omit the evidence required by the publish gate. Treat
+                # that output as an unverified preview and use the checked
+                # toolchain instead of letting it reach delivery.
+                if final.exists() and manifest and packet:
+                    return {
+                        "kind": "video",
+                        "path": str(final),
+                        "checksum": hashlib.sha256(final.read_bytes()).hexdigest(),
+                        "auto_route": "cinema-video",
+                        "duration": self._video_duration(final),
+                        "render_manifest": manifest,
+                        "render_packet": packet,
+                    }
+            except Exception as e:
+                # 电影级管线失败 → 静默降级到原 video_toolchain 管线
+                pass
         plan = job.get("draft_meta", {}).get("video_toolchain_plan") or {}
         provider = self._choose_video_provider(plan)
         if not provider:
             raise FileNotFoundError("video script not configured")
         visual_assets = self._prepare_video_visual_assets(job, output_dir, plan)
-        script_body = job.get("draft_meta", {}).get("video_prompt") or job["body"][:1200]
+        # ``video_prompt`` is generation guidance, not a narratable script.
+        # The renderer needs the full structured draft to derive distinct beats.
+        script_body = job.get("draft_meta", {}).get("video_script") or job.get("body") or job.get("draft_meta", {}).get("video_prompt", "")
         env = os.environ.copy()
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
         platforms = [str(item).lower() for item in job.get("platforms", [])]
@@ -331,7 +459,13 @@ class MediaBridge:
         if output.name == "dry_run.mp4" or output_bytes == b"video-toolchain-dry-run":
             raise RuntimeError("video toolchain dry-run output is not publishable")
         checksum = hashlib.sha256(output_bytes).hexdigest()
-        artifact = {"kind": "video", "path": str(output), "checksum": checksum}
+        artifact = {
+            "kind": "video",
+            "path": str(output),
+            "checksum": checksum,
+            "render_manifest": manifest,
+            "render_packet": self._renderer_packet(output_dir),
+        }
         if plan:
             artifact["toolchain_plan"] = str(output_dir / "video_toolchain_plan.json")
             artifact["selected_pipeline"] = str(plan.get("selected_pipeline", ""))
@@ -339,6 +473,18 @@ class MediaBridge:
         if visual_assets:
             artifact["visual_assets"] = str(output_dir / "video_visual_assets.json")
         return artifact
+
+    @staticmethod
+    def _renderer_packet(output_dir):
+        """Load measurements written by the renderer for the final gate."""
+        path = Path(output_dir) / "packet.json"
+        if not path.is_file():
+            return {}
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
 
     def _prepare_video_visual_assets(self, job, output_dir, plan):
         selected_pipeline = str((plan or {}).get("selected_pipeline") or "")
@@ -536,6 +682,11 @@ class MediaBridge:
         narration = job.get("draft_meta", {}).get("narration_script")
         if not narration:
             narration = f"# {job['title']}\n\n{job['body']}"
+        # Voice narration must never carry webpage scaffolding the model
+        # copied from a source article (JS stubs, cookie banners, CSS vars).
+        from .humanize import _strip_web_residue
+
+        narration = _strip_web_residue(narration)
         genre = job.get("draft_meta", {}).get("genre", "auto")
         mode = cfg.get("mode", "auto")
         engine = VoiceEngine(output_dir)

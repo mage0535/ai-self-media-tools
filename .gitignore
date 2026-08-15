@@ -24,6 +24,9 @@ artifacts/
 outbox/
 tmp/
 local-ops-lab/
+local_ops_*/
+backups/
+.codex-backups/
 installation-report.json
 config.json
 social-auto-upload/

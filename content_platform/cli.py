@@ -12,7 +12,7 @@ from .intelligence import build_generation_context
 from .niche_analysis import analyze_niche
 from .metrics import render_metrics
 from .seo import search as _seo_search, analyze as _seo_analyze, geo_checklist
-from .paths import project_home
+from .paths import project_home, trend_cache_dir
 from .pipeline import Pipeline
 from .project_audit import audit_project
 from .profiles import resolve_profile
@@ -147,6 +147,13 @@ def parser():
     overnight_run.add_argument("--plan", required=True, help="JSON plan created by overnight-plan")
     overnight_run.add_argument("--state", required=True, help="Persistent batch state path")
     overnight_run.add_argument("--events", required=True, help="Append-only JSONL event path")
+    overnight_sync = sub.add_parser("overnight-sync-state", help="Reconcile a batch checkpoint from existing job records")
+    overnight_sync.add_argument("--state", required=True, help="Batch state JSON path")
+    overnight_sync.add_argument("--output", required=True, help="Acceptance summary JSON path")
+    overnight_acceptance = sub.add_parser("overnight-acceptance", help="Validate overnight result artifacts before reporting completion")
+    overnight_acceptance.add_argument("--result", required=True, help="Batch result JSON path")
+    overnight_acceptance.add_argument("--state", required=True, help="Batch state JSON path")
+    overnight_acceptance.add_argument("--output", required=True, help="Acceptance report JSON path")
     review_token = sub.add_parser("review-token")
     review_token.add_argument("job_id")
     review_token.add_argument("--action", choices=["approve", "reject"], required=True)
@@ -557,6 +564,9 @@ def execute(args):
             raise ValueError("overnight slots file must contain a list or slots list")
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
+        snapshot_path = trend_cache_dir() / f"trend_snapshot_{datetime.now().date().isoformat()}.json"
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         profile = resolve_profile(config.get("profiles", {}), args.profile)
         weekday = datetime.now().weekday() if args.weekday is None else args.weekday
         # Pet transport requires its own verified source.  A generic AI trend
@@ -568,7 +578,23 @@ def execute(args):
                 continue
             started = datetime.now()
             try:
-                targeted = DirectTrendSource("douyin", {"enabled": True, "limit": 12, "timeout": 8, "query": "抖音 宠物 猫 狗 热门 短视频"}).collect()
+                targeted = []
+                pet_queries = [
+                    str((slot.get("pet_query") or "") if isinstance(slot, dict) else "") or "宠物 猫 狗 萌宠 治愈 热门 短视频",
+                    "猫咪 狗狗 宠物 热门 治愈",
+                    "萌宠 猫咪 可爱 短视频 热门",
+                ]
+                for pet_query in pet_queries:
+                    pet_cfg = {"enabled": True, "limit": 12, "timeout": 8, "query": pet_query}
+                    pet_cfg["searxng_url"] = (
+                        str((config.get("trends") or {}).get("searxng_url") or "")
+                        or os.environ.get("SEARXNG_URL")
+                        or os.environ.get("SEARXNG_BASE_URL")
+                        or ""
+                    ).rstrip("/")
+                    targeted = DirectTrendSource("douyin", pet_cfg).collect()
+                    if targeted and not all(item.get("source_unavailable") for item in targeted):
+                        break
                 report.setdefault("items", []).extend(targeted)
                 status = "ok" if targeted and not all(item.get("source_unavailable") for item in targeted) else "unavailable"
                 report.setdefault("sources", []).append({"source": "douyin_pet_targeted", "status": status, "count": len(targeted), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
@@ -610,6 +636,8 @@ def execute(args):
             candidate_filter=candidate_filter,
             growth_strategy_status=strategy_status,
             weekday=weekday,
+            strict_trend_evidence=True,
+            report_path=str(snapshot_path),
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -624,7 +652,23 @@ def execute(args):
     if args.command == "overnight-run":
         from .overnight_batch import BatchEventJournal, execute_batch
         plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
-        return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events))
+        return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events), store=store, require_acceptance=True)
+    if args.command == "overnight-sync-state":
+        from .overnight_batch import sync_batch_state
+        state_path = Path(args.state)
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        report = sync_batch_state(state, store, summary_path=args.output)
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        return report
+    if args.command == "overnight-acceptance":
+        from .overnight_acceptance import validate_overnight_result
+        report = validate_overnight_result(args.result, args.state)
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if not report["passed"]:
+            raise RuntimeError("overnight acceptance failed: " + ", ".join(report["failures"]))
+        return report
     if args.command in {"trends", "auto"}:
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
