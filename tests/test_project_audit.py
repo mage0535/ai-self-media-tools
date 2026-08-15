@@ -45,6 +45,23 @@ class ProjectAuditTests(unittest.TestCase):
         self.assertEqual(result["issues"], [])
         self.assertEqual(result["scanned_files"], 1)
 
+    def test_ignores_runtime_refs_and_local_ops_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            refs = root / "refs"
+            local_ops = root / "local_ops_douyin_ai" / "latest"
+            refs.mkdir()
+            local_ops.mkdir(parents=True)
+            private_path = "/" + "root/" + ".agent/private"
+            (refs / "handoff.md").write_text(private_path, encoding="utf-8")
+            (local_ops / "visual_recipe.json").write_text(private_path, encoding="utf-8")
+            (root / "README.md").write_text("public docs", encoding="utf-8")
+
+            result = audit_project(root)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["scanned_files"], 1)
+
     def test_flags_root_level_media_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
