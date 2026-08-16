@@ -3339,3 +3339,6 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   optional upstream source, so public-account evidence stays traceable.
 - The public-account lane also has a dedicated `wechat` real-search source;
   a broad cross-platform item cannot substitute for it in enforce mode.
+- Runtime enforcement must report a missing or off-topic native collection as
+  an explicit `blocked` reason. It must not fall back to a generic trend just
+  to keep a scheduled slot producing output.
