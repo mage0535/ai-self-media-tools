@@ -3393,6 +3393,10 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   a 150 ms narration margin. The subsequent probe remains authoritative, but
   a nominally matching script duration can no longer lose roughly 450 ms at
   every A-to-B transition before that probe runs.
+- Full-timeline motion remains a measured high-quality gate. Main shot
+  templates use continuous six-second linear background camera movement rather
+  than an eleven-second ease-in/out cycle, increasing persistent visual change
+  without relaxing the active-motion threshold or introducing visual jitter.
 
 ## 2026-08-16 - Real Trend Evidence Transport Compatibility
 
