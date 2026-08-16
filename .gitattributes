@@ -6,3 +6,4 @@
 *.json text eol=lf
 *.service text eol=lf
 *.timer text eol=lf
+bin/content-platform text eol=lf

@@ -3,6 +3,7 @@
 ## 2026-08-16: bounded video narration and renderer budget guard
 
 ### Implemented
+- Pinned `bin/content-platform` to LF in `.gitattributes`. A server checkout with CRLF made Bash append `\r` to CLI subcommands, which made `project-audit` and other commands fail despite the Python module being healthy.
 - `MediaBridge` now compiles a separate `video_script_v1` before any cinema or standard video renderer runs. It preserves the article body for publishing, converts narration into at most eight paragraph-separated beats, and caps each beat at 40 characters.
 - Every video artifact directory now contains `video_script_manifest.json` with the source, input/output character counts, beat count, and exact narration passed to the provider. This is the audit source for proving that a video did not narrate an entire long article.
 - `film_renderer.py` now rejects invalid TTS timing before launching browser or FFmpeg work: a segment over 20 seconds or total narration over 100 seconds fails closed. Limits are configurable only through `FILM_RENDERER_MAX_SEGMENT_SECONDS` and `FILM_RENDERER_MAX_TOTAL_SECONDS` for a separately declared long-form plan.
