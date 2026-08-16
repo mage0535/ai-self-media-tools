@@ -77,3 +77,34 @@ def test_bgm_download_fails_before_opening_network_when_budget_is_exhausted(tmp_
     else:  # pragma: no cover - makes a deadline regression explicit
         raise AssertionError("expired BGM budget must fail closed")
     assert calls == []
+
+
+def test_bgm_download_limits_each_candidate_without_consuming_global_budget(tmp_path, monkeypatch):
+    candidate = {
+        "provider": "pixabay_music",
+        "download_url": "https://cdn.example/acoustic-guitar.mp3",
+        "source_url": "https://pixabay.example/acoustic-guitar",
+        "title": "Acoustic guitar instrumental",
+        "artist": "artist",
+        "license": "Pixabay Content License",
+        "tags": "acoustic guitar instrumental",
+        "license_verified": True,
+    }
+    candidate_deadlines = []
+
+    def fake_download(_candidate, output):
+        candidate_deadlines.append(kuaishou_render._ACTIVE_BGM_CANDIDATE_DEADLINE)
+        output.write_bytes(b"audio" * 200_000)
+
+    started = time.monotonic()
+    monkeypatch.setenv("BGM_RESOLUTION_MAX_SECONDS", "90")
+    monkeypatch.setenv("BGM_CANDIDATE_MAX_SECONDS", "3")
+    monkeypatch.setenv("BGM_FINGERPRINT_REGISTRY", str(tmp_path / "bgm_registry.json"))
+    monkeypatch.setattr(kuaishou_render, "_online_bgm_candidates", lambda _style: [candidate])
+    monkeypatch.setattr(kuaishou_render, "_download_candidate_bgm", fake_download)
+
+    kuaishou_render.download_bgm(tmp_path, "acoustic guitar")
+
+    assert len(candidate_deadlines) == 1
+    assert candidate_deadlines[0] is not None
+    assert 0 < candidate_deadlines[0] - started <= 3.5
