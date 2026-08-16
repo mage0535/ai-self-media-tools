@@ -19,7 +19,7 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     artifacts = Path(artifacts_dir) if artifacts_dir else _default_artifacts_dir(store, job_id)
     failures: list[str] = []
     matrix = (job.get("brief") or {}).get("platform_source_matrix") or {}
-    if not bool(matrix.get("platform_internal_verified")):
+    if not bool(matrix.get("real_platform_collection_verified")):
         failures.append("platform_evidence_missing")
     gate = (job.get("draft_meta") or {}).get("quality_gate") or {}
     if gate and not bool(gate.get("passed", True)):

@@ -3256,3 +3256,41 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   rendered evidence, portable adapters, retry classification, and concrete
   Kuaishou trend evidence.
 - `project-audit` reports no private paths or credentials in the release tree.
+
+## 2026-08-16 - Runtime Consistency Layer
+
+### Finding
+- The overnight workflow had valid generation and rendering gates, but manual
+  publication, scheduled planning, delivery verification, and monitoring did
+  not share a durable cross-job state model. This allowed a manually published
+  topic to be selected again by a new scheduled job.
+- `review_required` represented unrelated lifecycle meanings, while a stale
+  delivery-health snapshot was detected only at the final publish boundary.
+- The existing monitor was intentionally read-only, so a stalled batch had no
+  independent heartbeat observer or durable reconciliation path.
+
+### Implemented
+- Added a global seven-day topic ledger used by `auto` and `overnight-prepare`.
+  `record-manual-publication` creates a normal job, delivery receipt, and topic
+  reservation from a platform/topic/fingerprint instead of relying on an
+  unrelated future job ID.
+- Added real-platform trend evidence rollout modes. `shadow` records a failed
+  evidence gate without changing current production admission; `enforce`
+  blocks candidates that lack a timestamped successful platform source and a
+  matching candidate sample. Strategy snapshots are context only.
+- Added explicit `awaiting_review` and `published_pending_verification` batch
+  states, with legacy `review_required` migration. Acceptance summaries now
+  list action-required platform rows instead of implying publication.
+- The timer refreshes delivery health before planning and reports `partial` as
+  a follow-up condition. A separate five-minute systemd supervisor reads the
+  heartbeat, recovers only stale leases, reconciles durable facts, and never
+  starts a new batch or republishes content.
+
+### Rollout
+- Keep `real_platform_trend_evidence_mode=shadow` for one observed batch. Read
+  every `trend_evidence_gate` result, repair unavailable collection lanes, then
+  switch the private runtime config to `enforce` only when every due platform
+  has real collection evidence.
+- Every manual publication must be recorded immediately with
+  `record-manual-publication`; direct database delivery inserts are unsupported
+  because they cannot reserve the topic safely.

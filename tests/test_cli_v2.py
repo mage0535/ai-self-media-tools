@@ -57,6 +57,19 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(result["recovered"], 0)
 
+    def test_record_manual_publication_creates_global_topic_receipt(self):
+        code, receipt = self.call(
+            "record-manual-publication",
+            "--platform", "kuaishou",
+            "--topic", "A practical AI workflow",
+            "--topic-fingerprint", "ai-workflow-practical",
+            "--external-id", "platform:123",
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(receipt["status"], "published")
+        self.assertIn("ai-workflow-practical", Store(self.db).used_topics(lookback_days=7))
+
     def test_overnight_plan_command_writes_a_recoverable_serial_plan(self):
         tasks = self.root / "tasks.json"
         output = self.root / "plan.json"
@@ -102,6 +115,28 @@ class CliV2Tests(unittest.TestCase):
         task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
         self.assertEqual(task["state"], "blocked")
         self.assertEqual(task["reason"], "growth strategy snapshot missing")
+
+    def test_overnight_prepare_shadows_missing_real_platform_evidence_before_enforcement(self):
+        slots = self.root / "slots.json"
+        output = self.root / "prepared.json"
+        config = self.root / "config.json"
+        slots.write_text(json.dumps([{"platform": "zhihu", "estimate_minutes": 15}]), encoding="utf-8")
+        config.write_text(json.dumps({"feature_flags": {"real_platform_trend_evidence_mode": "shadow"}}), encoding="utf-8")
+        Store(self.db).save_tool_inventory("growth_strategy:zhihu:latest", {"policy_id": "growth_quality_policy_v1"})
+        report = {
+            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "sources": [{"source": "github", "status": "ok", "count": 1}],
+            "summary": {"items": 1},
+        }
+        self.config = str(config)
+        with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+            code, _ = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output))
+
+        self.assertEqual(code, 0)
+        task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
+        self.assertEqual(task["state"], "ready_for_plan")
+        self.assertEqual(task["trend_evidence_gate"]["mode"], "shadow")
+        self.assertFalse(task["trend_evidence_gate"]["passed"])
 
     def test_overnight_sync_state_reconciles_existing_job_without_replaying_work(self):
         job = Store(self.db).create_job("topic", ["wechat"])

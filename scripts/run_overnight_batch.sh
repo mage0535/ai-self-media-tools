@@ -55,6 +55,9 @@ run_platform --config "$root/config.json" --db "$root/data/state.db" \
   --hermes-platform-scraper > "$out/performance-cycle-result.json"
 notify "progress" "performance_cycle_complete"
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
+  health-refresh --output "$root/data/delivery_health_state.json" > "$out/delivery-health-result.json"
+notify "progress" "delivery_health_refreshed"
+run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-prepare --slots "$slots" --output "$out/prepared.json" --refresh > "$out/prepare-result.json"
 notify "progress" "overnight_prepare_complete"
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
@@ -83,7 +86,7 @@ case "$batch_status" in
     notify "completed" "batch_complete"
     ;;
   partial)
-    notify "partial" "batch_has_expected_blocked_tasks"
+    notify "partial" "batch_partial_requires_follow_up"
     ;;
   capacity_blocked|blocked)
     notify "failed" "batch_not_admitted_${batch_status}"

@@ -236,6 +236,12 @@ shared_trend_only: false
 
         self.assertLess(text.index("performance-cycle"), text.index("overnight-prepare"))
 
+    def test_overnight_script_refreshes_delivery_health_before_prepare_and_reports_partial_precisely(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertLess(text.index("health-refresh"), text.index("overnight-prepare"))
+        self.assertIn("batch_partial_requires_follow_up", text)
+
     def test_overnight_script_runs_the_checked_out_module_not_a_global_console_script(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
 
@@ -273,6 +279,17 @@ shared_trend_only: false
 
         self.assertIn("Environment=HOME=%h", text)
         self.assertIn("secrets/notifications.env", text)
+
+    def test_overnight_supervisor_is_independent_and_never_republishes(self):
+        script = Path("scripts/run_overnight_supervisor.sh").read_text(encoding="utf-8")
+        service = Path("systemd/hermes-content-platform-overnight-supervisor.service").read_text(encoding="utf-8")
+        timer = Path("systemd/hermes-content-platform-overnight-supervisor.timer").read_text(encoding="utf-8")
+
+        self.assertIn("overnight-supervise", script)
+        self.assertIn("overnight-sync-state", script)
+        self.assertNotIn("overnight-run", script)
+        self.assertIn("run_overnight_supervisor.sh", service)
+        self.assertIn("*:0/5", timer)
 
     def test_background_systemd_services_use_notification_wrappers(self):
         growth = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")

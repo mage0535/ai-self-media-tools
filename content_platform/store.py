@@ -1345,17 +1345,18 @@ class Store:
             row["payload"] = json.loads(row.pop("payload_json", "{}"))
         return rows
 
-    def used_topics(self, platform=None):
+    def used_topics(self, platform=None, lookback_days=None):
+        clauses, args = [], []
+        if platform:
+            clauses.append("platform IN (?, '')")
+            args.append(str(platform))
+        if lookback_days is not None:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=max(0, int(lookback_days)))).isoformat(timespec="seconds")
+            clauses.append("datetime(used_at) >= datetime(?)")
+            args.append(cutoff)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         with self.connect() as conn:
-            if platform:
-                return {
-                    row[0]
-                    for row in conn.execute(
-                        "SELECT fingerprint FROM topic_history WHERE platform IN (?, '')",
-                        (str(platform),),
-                    )
-                }
-            return {row[0] for row in conn.execute("SELECT fingerprint FROM topic_history")}
+            return {row[0] for row in conn.execute("SELECT fingerprint FROM topic_history" + where, tuple(args))}
 
     def mark_topic_used(self, fingerprint, title, source, job_id, platform=""):
         if not fingerprint:
@@ -1365,6 +1366,25 @@ class Store:
                 "INSERT OR REPLACE INTO topic_history(fingerprint,platform,title,source,job_id,used_at) VALUES(?,?,?,?,?,?)",
                 (fingerprint, str(platform or ""), title, source or "", job_id, utc_now()),
             )
+
+    def record_manual_publication(self, platform, topic, *, topic_fingerprint="", external_id="", source="manual_publish"):
+        """Create a first-class receipt so manual work participates in deduplication."""
+        normalized_platform = str(platform or "").strip()
+        normalized_topic = str(topic or "").strip()
+        fingerprint = str(topic_fingerprint or normalized_topic.casefold()).strip()
+        if not normalized_platform or not normalized_topic or not fingerprint:
+            raise ValueError("manual publication requires platform, topic, and topic fingerprint")
+        job = self.create_job(
+            normalized_topic,
+            [normalized_platform],
+            {"source": source, "manual_publication": True, "platform": normalized_platform},
+            profile="manual",
+            topic_fingerprint=fingerprint,
+        )
+        self.transition(job["id"], {"created"}, "published", "manual_publication_recorded", {"source": source})
+        self.save_delivery(job["id"], normalized_platform, "published", external_id, "manual publication recorded")
+        self.mark_topic_used(fingerprint, normalized_topic, source, job["id"], platform=normalized_platform)
+        return {"job_id": job["id"], "platform": normalized_platform, "status": "published", "topic_fingerprint": fingerprint}
 
     def protected_paths(self):
         with self.connect() as conn:

@@ -137,11 +137,28 @@ def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_i
     assert prepared["tasks"][1]["reason"] == "no independently evidenced cross-platform topic candidate"
 
 
+def test_due_task_builder_blocks_a_topic_reserved_by_a_prior_manual_publication():
+    prepared = build_due_tasks(
+        [{"platform": "kuaishou"}],
+        items=[],
+        source_report=[{"source": "kuaishou", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}],
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "kuaishou", "fingerprint": "ai-workflow", "score": 1.0}],
+        reserved_topic_fingerprints={"ai-workflow"},
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "blocked"
+    assert task["reason"] == "topic already reserved by recent delivery"
+
+
 def test_due_task_builder_allows_evidenced_natural_overlap_with_distinct_execution_angles():
     def rank(platform, _items, _slot):
         return [{"title": "Shared topic", "source": platform, "score": 5, "fingerprint": "shared-topic"}]
 
-    report = [{"source": source, "status": "ok"} for source in ("wechat", "zhihu", "github", "hackernews", "bilibili", "weibo", "x", "juejin")]
+    report = [
+        {"source": source, "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
+        for source in ("wechat", "zhihu", "github", "hackernews", "bilibili", "weibo", "x", "juejin")
+    ]
     prepared = build_due_tasks(
         [
             {"platform": "wechat", "platform_adaptation_reason": "personal field guide", "platform_signal": "wechat reader questions"},
@@ -219,7 +236,26 @@ def test_due_task_builder_does_not_fabricate_platform_evidence_from_generic_sour
     matrix = task["brief"]["platform_source_matrix"]
     assert task["state"] == "blocked"
     assert matrix["platform_internal_verified"] is False
-    assert task["reason"] == "platform-specific trend evidence missing"
+    assert task["reason"] == "platform-specific real trend collection missing"
+
+
+def test_due_task_builder_rejects_a_platform_named_candidate_without_real_collection_evidence():
+    report = [
+        {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
+        for index in range(8)
+    ]
+    prepared = build_due_tasks(
+        [{"platform": "zhihu"}],
+        items=[],
+        source_report=report,
+        rank_for_platform=lambda *_args: [{"title": "Agent workflow", "source": "zhihu_hot", "fingerprint": "agent-workflow", "score": 1.0}],
+        growth_strategy_status={"zhihu": {"status": "ok", "key": "growth_strategy:zhihu:latest"}},
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "blocked"
+    assert task["reason"] == "platform-specific real trend collection missing"
 
 
 def test_sync_batch_state_records_actual_job_and_delivery_state(tmp_path: Path):
@@ -251,6 +287,32 @@ def test_sync_batch_state_keeps_failed_acceptance_blocked(tmp_path: Path):
     sync_batch_state(state, store)
 
     assert state["tasks"][0]["state"] == "blocked"
+
+
+def test_sync_batch_state_maps_legacy_review_required_to_awaiting_review(tmp_path: Path):
+    from content_platform.overnight_batch import sync_batch_state
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("topic", ["twitter"])
+    store.transition(job["id"], {"created"}, "review_required", "review_requested")
+    state = {"status": "partial", "tasks": [{"platform": "twitter", "job_id": job["id"], "state": "review_required"}]}
+
+    sync_batch_state(state, store)
+
+    assert state["tasks"][0]["state"] == "awaiting_review"
+
+
+def test_sync_batch_state_marks_legacy_published_delivery_pending_verification(tmp_path: Path):
+    from content_platform.overnight_batch import sync_batch_state
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("topic", ["twitter"])
+    store.save_delivery(job["id"], "twitter", "published", "remote:123")
+    state = {"status": "partial", "tasks": [{"platform": "twitter", "job_id": job["id"], "state": "published"}]}
+
+    sync_batch_state(state, store)
+
+    assert state["tasks"][0]["state"] == "published_pending_verification"
 
 
 def test_sync_batch_state_does_not_upgrade_a_blocked_manual_handoff(tmp_path: Path):
@@ -387,6 +449,31 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
     assert "platform_staging_started" in events
 
 
+def test_execute_batch_records_a_completed_topic_in_the_global_ledger(tmp_path: Path):
+    store = Store(tmp_path / "state.db")
+
+    class Pipeline:
+        def create(self, topic, platforms, brief, profile="default"):
+            return store.create_job(topic, platforms, brief, profile, "ai-workflow")
+
+        def run(self, _job_id):
+            return {"id": "job-1", "state": "review_required", "artifacts": []}
+
+        def stage_drafts(self, _job_id):
+            store.save_delivery(_job_id, "twitter", "drafted", "draft:demo")
+            return {"state": "drafted"}
+
+    plan = {
+        "status": "scheduled",
+        "tasks": [{"platform": "twitter", "topic": "AI workflow", "topic_fingerprint": "ai-workflow", "brief": {"source": "twitter"}, "action": "stage", "state": "ready_for_plan"}],
+    }
+
+    result = execute_batch(Pipeline(), plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(tmp_path / "events.jsonl"), store=store)
+
+    assert result["tasks"][0]["state"] == "drafted"
+    assert "ai-workflow" in store.used_topics(lookback_days=7)
+
+
 def test_execute_batch_marks_failed_rows_as_batch_failure_without_rerunning_them(tmp_path: Path):
     class Pipeline:
         def create(self, *_args, **_kwargs):
@@ -486,7 +573,7 @@ def test_review_required_task_is_terminal_on_resume(tmp_path: Path):
 
     summary = execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
 
-    assert summary["tasks"][0]["state"] == "review_required"
+    assert summary["tasks"][0]["state"] == "awaiting_review"
 
 
 def test_manual_video_handoff_is_blocked_when_the_pipeline_returns_no_video_or_cover(tmp_path: Path):

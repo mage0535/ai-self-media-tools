@@ -103,11 +103,15 @@ def build_due_tasks(
     growth_strategy_status: dict[str, dict[str, Any]] | None = None,
     weekday: int | None = None,
     strict_trend_evidence: bool = False,
+    trend_evidence_mode: str = "",
     report_path: str = "runtime:overnight_trend_collection",
+    reserved_topic_fingerprints: set[str] | None = None,
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
     selected_topics: dict[str, dict[str, str]] = {}
+    reserved_topic_fingerprints = {str(value).strip() for value in (reserved_topic_fingerprints or set()) if str(value).strip()}
+    trend_evidence_mode = str(trend_evidence_mode or ("enforce" if strict_trend_evidence else "off")).casefold()
     growth_strategy_status = growth_strategy_status or {}
     weekday = datetime.now().weekday() if weekday is None else int(weekday)
     for raw in slots:
@@ -134,6 +138,8 @@ def build_due_tasks(
             selected = None
             for candidate in candidates:
                 identity = _topic_identity(candidate)
+                if identity in reserved_topic_fingerprints:
+                    continue
                 previous = selected_topics.get(identity)
                 if previous is None or _allows_evidenced_overlap(platform, candidate, raw, previous, source_report, strategy):
                     selected = candidate
@@ -141,7 +147,7 @@ def build_due_tasks(
             if not selected:
                 row.update({
                     "state": "blocked",
-                    "reason": "no independently evidenced cross-platform topic candidate",
+                    "reason": "topic already reserved by recent delivery" if any(_topic_identity(candidate) in reserved_topic_fingerprints for candidate in candidates) else "no independently evidenced cross-platform topic candidate",
                 })
                 tasks.append(row)
                 continue
@@ -182,10 +188,17 @@ def build_due_tasks(
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
                 "state": "ready_for_plan",
             })
-            if strict_trend_evidence and not trend_gate.get("passed"):
-                row.update({"state": "blocked", "reason": "trend candidate evidence below 8-attempt/5-success threshold"})
-            elif strict_trend_evidence and not matrix["platform_internal_verified"]:
-                row.update({"state": "blocked", "reason": "platform-specific trend evidence missing"})
+            evidence_failure = ""
+            if not trend_gate.get("passed"):
+                evidence_failure = "trend candidate evidence below 8-attempt/5-success threshold"
+            elif not matrix["real_platform_collection_verified"]:
+                evidence_failure = "platform-specific real trend collection missing"
+            if evidence_failure and trend_evidence_mode in {"shadow", "enforce"}:
+                row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": False, "reason": evidence_failure}
+                if trend_evidence_mode == "enforce":
+                    row.update({"state": "blocked", "reason": evidence_failure})
+            else:
+                row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": not bool(evidence_failure)}
         tasks.append(row)
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
 
@@ -237,34 +250,41 @@ def _platform_evidence_matrix(
     report_path: str = "runtime:overnight_trend_collection",
 ) -> dict[str, Any]:
     attempted = [
-        {"source": item.get("source"), "status": item.get("status", "unknown"), **({"error": item["error"]} if item.get("error") else {})}
+        {
+            "source": item.get("source"),
+            "status": item.get("status", "unknown"),
+            **({"collected_at": item["collected_at"]} if item.get("collected_at") else {}),
+            **({"count": item["count"]} if item.get("count") is not None else {}),
+            **({"error": item["error"]} if item.get("error") else {}),
+        }
         for item in source_report
         if item.get("source")
     ]
     strategy_ok = str(strategy.get("status") or "").casefold() == "ok"
-    if strategy_ok:
-        attempted.append(
-            {
-                "source": f"{platform}:fresh_growth_strategy",
-                "status": "ok",
-                "evidence_kind": "fresh_account_performance_strategy",
-                "strategy_key": str(strategy.get("key") or ""),
-            }
-        )
-    aliases = {platform, "twitter" if platform == "x" else platform}
+    aliases = {platform, "twitter" if platform == "x" else platform, "rednote" if platform == "xiaohongshu" else platform}
     if platform.startswith("douyin"):
         aliases.add("douyin")
     candidate_source = str(candidate.get("source") or "").casefold()
-    platform_source_ok = any(
-        str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
-        and item.get("evidence_kind") != "fresh_account_performance_strategy"
-        and any(alias in str(item.get("source") or "").casefold() for alias in aliases)
+    successful_platform_sources = [
+        item
         for item in attempted
-    )
-    candidate_source_ok = any(alias in candidate_source for alias in aliases)
-    # A fresh strategy is required context, but it does not prove that this
-    # particular topic was observed on the platform. Keep those facts apart.
-    verified = platform_source_ok or candidate_source_ok
+        if str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+        and bool(item.get("collected_at"))
+        and any(alias in str(item.get("source") or "").casefold() for alias in aliases)
+    ]
+    candidate_source_ok = any(str(item.get("source") or "").casefold() == candidate_source for item in successful_platform_sources)
+    samples = []
+    if candidate_source_ok and str(candidate.get("title") or "").strip():
+        samples.append(
+            {
+                "source": str(candidate.get("source") or ""),
+                "title": str(candidate["title"]),
+                **({"url": str(candidate["url"])} if candidate.get("url") else {}),
+            }
+        )
+    # Strategy snapshots remain useful context but never substitute for a
+    # successful platform collection with a timestamp and actual sample.
+    verified = bool(successful_platform_sources and samples)
     platform_fit_reason = str(candidate.get("platform_fit_reason") or "").strip()
     if verified and not platform_fit_reason:
         platform_fit_reason = f"candidate source {candidate.get('source') or platform} matches the {platform} evidence lane"
@@ -274,12 +294,18 @@ def _platform_evidence_matrix(
         "sources_attempted": len(attempted),
         "sources_succeeded": sum(str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"} for item in attempted),
         "platform_internal_verified": verified,
-        "current_platform_specific_topic": platform_source_ok or candidate_source_ok,
+        "real_platform_collection_verified": verified,
+        "current_platform_specific_topic": verified,
         "platform_strategy_verified": strategy_ok,
         "shared_trend_only": not verified,
         "candidate_source": str(candidate.get("source") or ""),
         "platform_fit_reason": platform_fit_reason,
         "report_path": str(report_path),
+        "trend_evidence": {
+            "source": str(candidate.get("source") or "") if verified else "",
+            "collected_at": str(successful_platform_sources[0].get("collected_at") or "") if verified else "",
+            "samples": samples,
+        },
     }
 
 
@@ -312,12 +338,16 @@ def sync_batch_state(state: dict[str, Any], store: Any, *, summary_path: str | P
             if prior_state == "blocked" or manual_handoff_evidence_failed
             else "blocked"
             if acceptance and not acceptance.get("passed")
-            else "published"
+            else "published_verified"
+            if "published_verified" in delivery_states
+            else "published_pending_verification"
             if "published" in delivery_states
             else "handoff_ready"
             if "handoff_pending" in delivery_states
             else "drafted"
             if "drafted" in delivery_states
+            else "awaiting_review"
+            if str(job.get("state") or "") == "review_required"
             else str(job.get("state") or "blocked")
         )
         task.update({
@@ -333,9 +363,14 @@ def sync_batch_state(state: dict[str, Any], store: Any, *, summary_path: str | P
         state["status"] = "failed"
     elif observed_states & {"blocked", "deferred"}:
         state["status"] = "partial"
-    elif observed_states and observed_states <= {"published", "drafted", "handoff_ready", "staged"}:
+    elif observed_states and observed_states <= {"published_verified", "published_pending_verification", "drafted", "handoff_ready", "staged", "awaiting_review"}:
         state["status"] = "completed"
-    report = {"version": "overnight_acceptance_summary_v1", "batch_status": state.get("status", ""), "platforms": platforms}
+    report = {
+        "version": "overnight_acceptance_summary_v1",
+        "batch_status": state.get("status", ""),
+        "platforms": platforms,
+        "action_required": [row for row in platforms if row["state"] in {"awaiting_review", "published_pending_verification"}],
+    }
     if summary_path:
         path = Path(summary_path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -415,7 +450,7 @@ def _age_hours(value: str | None) -> float | None:
     return (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600
 
 
-TERMINAL_TASK_STATES = {"staged", "handoff_ready", "published", "blocked", "failed", "deferred", "review_required"}
+TERMINAL_TASK_STATES = {"staged", "handoff_ready", "published", "published_verified", "published_pending_verification", "blocked", "failed", "deferred", "review_required", "awaiting_review"}
 TRANSIENT_FAILURE_MARKERS = ("timeout", "temporar", "connection reset", "connection aborted", "rate limit", "locked", "resource busy")
 
 
@@ -525,9 +560,15 @@ def execute_batch(
                 journal.append("platform_finished", platform, {"job_id": task["job_id"], "state": task["state"]})
             else:
                 # Approval and live publication are separate, auditable actions.
-                task["state"] = "review_required"
+                task["state"] = "awaiting_review"
                 task["reason"] = "live publication requires an explicit approved workflow"
-                journal.append("platform_review_required", platform, {"job_id": task["job_id"], "state": result_state})
+                journal.append("platform_awaiting_review", platform, {"job_id": task["job_id"], "state": result_state})
+            if store is not None and task.get("state") in {"staged", "handoff_ready", "awaiting_review"}:
+                fingerprint = str(task.get("topic_fingerprint") or _topic_identity({"title": task.get("topic", "")})).strip()
+                if fingerprint:
+                    brief = dict(task.get("brief") or {})
+                    store.mark_topic_used(fingerprint, str(task.get("topic") or ""), str(brief.get("source") or ""), task["job_id"], platform=platform)
+                    journal.append("topic_reserved", platform, {"job_id": task["job_id"], "topic_fingerprint": fingerprint})
         except Exception as exc:  # Keep unrelated channels recoverable.
             task["reason"] = redact_secrets(str(exc))
             if not _retry_pass and _is_transient_failure(exc):
@@ -597,6 +638,10 @@ def _load_state(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
     if path.is_file():
         try:
             state = json.loads(path.read_text(encoding="utf-8"))
+            for task in state.get("tasks") or []:
+                if task.get("state") == "review_required":
+                    task["state"] = "awaiting_review"
+                    task.setdefault("legacy_state", "review_required")
             if state.get("status") == "running":
                 interrupted = False
                 for task in state.get("tasks") or []:
@@ -625,6 +670,7 @@ class BatchEventJournal:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.heartbeat_path = self.path.with_name("heartbeat.json")
 
     def append(self, event: str, platform: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
         row = {
@@ -635,6 +681,9 @@ class BatchEventJournal:
         }
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        temporary = self.heartbeat_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(row, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        temporary.replace(self.heartbeat_path)
         return row
 
     def latest_by_platform(self) -> dict[str, dict[str, Any]]:
