@@ -93,7 +93,10 @@ def test_motion_evidence_requires_sustained_actual_frame_changes():
 
     animated = motion_evidence_from_deltas([0.03, 0.04, 0.01, 0.05, 0.02, 0.04])
     static = motion_evidence_from_deltas([0.001, 0.002, 0.001, 0.003, 0.001])
+    smooth_cinematic = motion_evidence_from_deltas([0.012] * 9 + [0.03] * 3)
 
     assert animated["passed"] is True
     assert animated["active_ratio"] >= 0.8
     assert static["passed"] is False
+    assert smooth_cinematic["passed"] is True
+    assert smooth_cinematic["sustained_motion_ratio"] >= 0.85
