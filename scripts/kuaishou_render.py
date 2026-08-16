@@ -939,10 +939,12 @@ def _register_bgm_fingerprint(meta):
 
 def _bgm_queries(style):
     base = re.sub(r"\s+", " ", str(style or "acoustic guitar").strip())
-    queries = [base]
+    # A proven broad real-instrument search prevents a narrow mood phrase from
+    # exhausting the resolver before any licensed track can be downloaded.
+    queries = ["acoustic guitar instrumental", "piano instrumental", base]
     if not any(term in base.casefold() for term in REAL_INSTRUMENT_TERMS):
         queries.append(base + " acoustic instrumental")
-    queries.extend(["acoustic guitar instrumental", "piano instrumental", "orchestral strings instrumental"])
+    queries.extend(["orchestral strings instrumental"])
     result = []
     for query in queries:
         if query not in result:

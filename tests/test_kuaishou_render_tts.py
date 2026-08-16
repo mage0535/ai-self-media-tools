@@ -108,3 +108,10 @@ def test_bgm_download_limits_each_candidate_without_consuming_global_budget(tmp_
     assert len(candidate_deadlines) == 1
     assert candidate_deadlines[0] is not None
     assert 0 < candidate_deadlines[0] - started <= 3.5
+
+
+def test_bgm_queries_try_verified_instrumental_baseline_before_narrow_style():
+    queries = kuaishou_render._bgm_queries("muted percussion and low strings")
+
+    assert queries[0] == "acoustic guitar instrumental"
+    assert "muted percussion and low strings" in queries
