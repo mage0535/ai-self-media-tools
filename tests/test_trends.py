@@ -127,18 +127,21 @@ class TrendTests(unittest.TestCase):
 
         self.assertEqual(items[0]["source"], "bilibili:web_search")
 
-    def test_zhihu_uses_cli_hot_and_douyin_uses_web_search_sources(self):
+    def test_zhihu_uses_cli_hot_and_douyin_uses_native_hot_board(self):
         with patch.object(DirectTrendSource, "_zhihu_cli_hot", return_value=[{"title": "AI tool topic", "source": "zhihu", "points": 1}]) as hot:
             items = DirectTrendSource("zhihu", {"limit": 5}).collect()
 
         self.assertEqual(items[0]["title"], "AI tool topic")
         self.assertTrue(hot.called)
 
-        with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "Douyin AI workflow topic", "source": "douyin:web_search", "points": 1}]) as search:
+        payload = {"data": {"word_list": [{"word": "AI 工作流", "hot_value": 123456, "sentence_id": "42", "position": 1}]}}
+        with patch.object(DirectTrendSource, "_request_json", return_value=payload) as request:
             items = DirectTrendSource("douyin", {"limit": 5}).collect()
 
-        self.assertEqual(items[0]["source"], "douyin:web_search")
-        self.assertTrue(search.called)
+        self.assertEqual(items[0]["source"], "douyin")
+        self.assertEqual(items[0]["points"], 123456)
+        self.assertIn("douyin.com/search/", items[0]["url"])
+        self.assertTrue(request.called)
 
     def test_manual_handoff_platforms_collect_real_search_evidence(self):
         for platform in ("wechat", "xiaohongshu", "youtube", "tiktok"):

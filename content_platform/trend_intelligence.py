@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from .trends import normalize_topic
 
@@ -144,8 +145,9 @@ def build_platform_matrix(
         _source_matches(source_name, str(row.get("source") or ""))
         for row in platform_sources
     )
+    candidate_source_url_native = _candidate_source_url_is_native(normalized, candidate)
     samples = []
-    if candidate_platform_evidence and str(candidate.get("title") or "").strip():
+    if candidate_platform_evidence and candidate_source_url_native and str(candidate.get("title") or "").strip():
         samples.append(
             {
                 "source": str(candidate.get("source") or ""),
@@ -171,6 +173,7 @@ def build_platform_matrix(
         "shared_trend_only": not verified,
         "platform_fit_reason": _platform_fit_reason(normalized, candidate, platform_keywords or []),
         "candidate_source": str(candidate.get("source") or ""),
+        "candidate_source_url_native": candidate_source_url_native,
         "candidate_breakout": bool(candidate.get("breakout")),
         "report_path": str(snapshot.get("snapshot_path") or "runtime:trend_snapshot"),
         "trend_evidence": {
@@ -214,6 +217,28 @@ def _source_matches(candidate_source: str, collected_source: str) -> bool:
     candidate = str(candidate_source or "").casefold()
     collected = str(collected_source or "").casefold()
     return bool(candidate and collected and (candidate == collected or candidate.startswith(collected + ":")))
+
+
+def _candidate_source_url_is_native(platform: str, candidate: dict[str, Any]) -> bool:
+    """A web-search transport qualifies only when its result URL is native."""
+    source = str(candidate.get("source") or "").casefold()
+    if not source.endswith(":web_search"):
+        return True
+    host = (urlparse(str(candidate.get("url") or "")).hostname or "").casefold()
+    roots = {
+        "douyin": ("douyin.com", "iesdouyin.com"),
+        "tiktok": ("tiktok.com",),
+        "youtube": ("youtube.com", "youtu.be"),
+        "xiaohongshu": ("xiaohongshu.com", "xhslink.com"),
+        "zhihu": ("zhihu.com",),
+        "juejin": ("juejin.cn",),
+        "bilibili": ("bilibili.com", "b23.tv"),
+        "kuaishou": ("kuaishou.com", "gifshow.com"),
+        "shipinhao": ("weixin.qq.com", "channels.weixin.qq.com"),
+        "twitter": ("x.com", "twitter.com"),
+    }
+    target = "douyin" if platform.startswith("douyin_") else platform
+    return any(host == root or host.endswith("." + root) for root in roots.get(target, ()))
 
 
 def _platform_fit_reason(platform: str, candidate: dict[str, Any], keywords: list[str]) -> str:

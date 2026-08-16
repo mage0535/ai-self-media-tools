@@ -734,6 +734,7 @@ def execute(args):
             return items
         from .overnight_batch import growth_strategy_snapshot_status
         from .trend_intelligence import build_platform_matrix
+        from .growth_recipe import derive_topic_growth_signals
         strategy_status = growth_strategy_snapshot_status(store, platforms)
         jobs = []
         # A platform is a separate operating decision, not a bulk destination
@@ -777,7 +778,7 @@ def execute(args):
                     "platform_source_matrix": source_matrix,
                     "topic_decision": {
                         "score": item.get("score", 0),
-                        "signals": ["timeliness"] if item.get("trend_stage") in {"hot", "viral_candidate"} else ["user_benefit"],
+                        "signals": derive_topic_growth_signals(item),
                     },
                 }
                 job = pipeline.create(item["title"], [platform], brief, args.profile, item["fingerprint"])

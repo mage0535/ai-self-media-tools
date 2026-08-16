@@ -3,9 +3,25 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 
 TOOL_DEMO_FORMS = {"tool_demo_video", "tool_test_video", "screencast", "tool_review"}
+
+
+def derive_topic_growth_signals(candidate: dict[str, Any] | None) -> list[str]:
+    """Return only evidence-backed growth signals available before generation."""
+    candidate = candidate or {}
+    signals: list[str] = []
+    if float(candidate.get("points") or 0) > 0:
+        signals.append("observed_engagement")
+    if str(candidate.get("trend_stage") or "").casefold() in {"emerging", "hot", "viral", "viral_candidate"}:
+        signals.append("timeliness")
+    source = str(candidate.get("source") or "").strip()
+    host = urlparse(str(candidate.get("url") or "")).hostname or ""
+    if source and host:
+        signals.append("source_provenance")
+    return list(dict.fromkeys(signals))
 
 
 def build_growth_recipe(
