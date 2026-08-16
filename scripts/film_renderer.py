@@ -40,7 +40,7 @@ XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
-RENDERER_VERSION = "cinematic-v6"
+RENDERER_VERSION = "cinematic-v7"
 ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS = 90
 
 
@@ -319,7 +319,7 @@ def build_shot_a(idx: int, title: str, stat: str, bg_path: str, kicker: str, sta
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; }}
 .bg {{ position:absolute; inset:0; background:url(data:image/jpeg;base64,{b64}) center/cover;
-  animation: kb 11s ease-in-out infinite alternate; }}
+  animation: kb 6s linear infinite alternate; }}
 @keyframes kb {{ 0% {{ transform:{kb[0]}; }} 100% {{ transform:{kb[1]}; }} }}
 .overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.92) 100%); }}
 .content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:130px 90px; }}
@@ -360,7 +360,7 @@ def build_shot_b(idx: int, title: str, modules: list[str], bg_path: str,
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; background:#000; }}
 .bg {{ position:absolute; inset:0; background:url(data:image/jpeg;base64,{b64}) center/cover;
-  animation: kb 11s ease-in-out infinite alternate; }}
+  animation: kb 6s linear infinite alternate; }}
 @keyframes kb {{ 0% {{ transform:{kb[0]}; }} 100% {{ transform:{kb[1]}; }} }}
 .overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.72) 55%, rgba(0,0,0,0.94) 100%); }}
 .content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; align-items:center; padding:140px 80px; }}
@@ -395,7 +395,7 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; }}
 .bg {{ position:absolute; inset:0; background:url(data:image/jpeg;base64,{b64}) center/cover;
-  animation: kb 11s ease-in-out infinite alternate; }}
+  animation: kb 6s linear infinite alternate; }}
 @keyframes kb {{ 0% {{ transform:{kb[0]}; }} 100% {{ transform:{kb[1]}; }} }}
 .overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.40) 0%, rgba(0,0,0,0.62) 45%, rgba(0,0,0,0.90) 100%); }}
 .content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:130px 90px; }}
