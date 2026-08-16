@@ -278,6 +278,24 @@ def test_due_task_builder_rejects_a_platform_named_candidate_without_real_collec
     assert task["reason"] == "platform-specific real trend collection missing"
 
 
+def test_due_task_builder_accepts_a_verified_platform_web_search_candidate():
+    report = [
+        {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
+        for index in range(7)
+    ] + [{"source": "douyin", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}]
+    prepared = build_due_tasks(
+        [{"platform": "douyin_ai"}],
+        items=[],
+        source_report=report,
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "douyin:web_search", "fingerprint": "ai-workflow", "score": 1.0}],
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is True
+
+
 def test_sync_batch_state_records_actual_job_and_delivery_state(tmp_path: Path):
     from content_platform.overnight_batch import sync_batch_state
 
