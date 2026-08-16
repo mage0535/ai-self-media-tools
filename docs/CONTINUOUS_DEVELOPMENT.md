@@ -3335,3 +3335,5 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Source transport suffixes such as `douyin:web_search` are now correctly
   associated with the verified `douyin` collection lane; this does not broaden
   collection provenance beyond the named platform source.
+- WeWrite hotspot rows preserve both the `wewrite_hotspots` transport and an
+  optional upstream source, so public-account evidence stays traceable.
