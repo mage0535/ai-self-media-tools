@@ -14,6 +14,10 @@ VERTICAL_SHORT_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "tiktok", "youtub
 # measured for a genuinely animating 52s clip). Threshold 0.01 with denser
 # sampling separates real animation from a frozen frame without false rejects.
 MOTION_THRESHOLD = 0.01
+HIGH_QUALITY_MEAN_MOTION_THRESHOLD = 0.015
+HIGH_QUALITY_ACTIVE_RATIO_THRESHOLD = 0.60
+HIGH_QUALITY_PEAK_DELTA = 0.025
+HIGH_QUALITY_MIN_PEAKS = 2
 
 
 def probe_video(video_path: Path) -> dict:
@@ -30,10 +34,36 @@ def probe_video(video_path: Path) -> dict:
     }
 
 
-def measure_motion(video_path: Path) -> float:
-    # fps=2 across the whole clip (max 24 frames) catches slow CSS pans and
-    # fades that fps=1 on the first 8 seconds misses entirely.
-    command = ["ffmpeg", "-v", "error", "-i", str(video_path), "-vf", "fps=2,scale=48:48", "-frames:v", "24", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
+def motion_evidence_from_deltas(differences: list[float]) -> dict:
+    """Evaluate real consecutive-frame deltas, not planned animation metadata."""
+    if not differences:
+        return {"passed": False, "mean_delta": 0.0, "active_ratio": 0.0, "peak_count": 0, "static_ratio": 1.0}
+    ordered = sorted(differences)
+    active = [value for value in differences if value >= MOTION_THRESHOLD]
+    peaks = [value for value in differences if value >= HIGH_QUALITY_PEAK_DELTA]
+    mean_delta = sum(differences) / len(differences)
+    p95_index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * 0.95)))
+    active_ratio = len(active) / len(differences)
+    passed = (
+        mean_delta >= HIGH_QUALITY_MEAN_MOTION_THRESHOLD
+        and active_ratio >= HIGH_QUALITY_ACTIVE_RATIO_THRESHOLD
+        and len(peaks) >= HIGH_QUALITY_MIN_PEAKS
+    )
+    return {
+        "passed": passed,
+        "sample_count": len(differences),
+        "mean_delta": round(mean_delta, 5),
+        "p95_delta": round(ordered[p95_index], 5),
+        "active_ratio": round(active_ratio, 5),
+        "static_ratio": round(1 - active_ratio, 5),
+        "peak_count": len(peaks),
+    }
+
+
+def measure_motion_evidence(video_path: Path) -> dict:
+    # Sample all video sections at 2fps. A first-24-frame window misses late
+    # static stretches and cannot prove a full cinematic timeline is active.
+    command = ["ffmpeg", "-v", "error", "-i", str(video_path), "-vf", "fps=2,scale=48:48", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
     process = subprocess.run(command, capture_output=True, timeout=60, check=False)
     if process.returncode:
         raise RuntimeError(process.stderr.decode("utf-8", errors="replace").strip() or "ffmpeg motion sampling failed")
@@ -45,7 +75,11 @@ def measure_motion(video_path: Path) -> float:
     differences = []
     for left, right in zip(frames, frames[1:]):
         differences.append(sum(abs(a - b) for a, b in zip(left, right)) / (255 * frame_size))
-    return round(sum(differences) / len(differences), 5)
+    return motion_evidence_from_deltas(differences)
+
+
+def measure_motion(video_path: Path) -> float:
+    return float(measure_motion_evidence(video_path)["mean_delta"])
 
 
 def _card_titles(render_manifest: dict) -> list[str]:

@@ -19,7 +19,7 @@ from content_platform.cinema_delivery import validate_cinema_delivery
 
 def _probe_video(video: Path) -> dict:
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height", "-of", "json", str(video)],
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height,sample_rate,channels", "-of", "json", str(video)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -30,11 +30,14 @@ def _probe_video(video: Path) -> dict:
     payload = json.loads(result.stdout or "{}")
     streams = payload.get("streams") or []
     video_stream = next((row for row in streams if row.get("codec_type") == "video"), {})
+    audio_stream = next((row for row in streams if row.get("codec_type") == "audio"), {})
     return {
         "duration_seconds": float((payload.get("format") or {}).get("duration") or 0),
         "width": int(video_stream.get("width") or 0),
         "height": int(video_stream.get("height") or 0),
         "audio_streams": sum(1 for row in streams if row.get("codec_type") == "audio"),
+        "sample_rate": int(audio_stream.get("sample_rate") or 0),
+        "channels": int(audio_stream.get("channels") or 0),
     }
 
 

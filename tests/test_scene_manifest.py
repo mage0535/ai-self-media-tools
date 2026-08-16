@@ -100,7 +100,7 @@ def test_cinema_delivery_rejects_untracked_bgm_and_accepts_an_evidenced_final_ar
     from content_platform.scene_manifest import build_scene_manifest
 
     scene_manifest = build_scene_manifest(_cards(), _recipe(), {"platforms": ["douyin"]}, "Useful video")
-    probe = {"duration_seconds": 42.0, "width": 1080, "height": 1920, "audio_streams": 1}
+    probe = {"duration_seconds": 42.0, "width": 1080, "height": 1920, "audio_streams": 1, "sample_rate": 44100, "channels": 2}
     good_bgm = {"source": "licensed_provider", "license": "CC BY 4.0", "sha256": "abc123", "fit_reason": "calm instructional pacing"}
 
     motion = {"passed": True, "unique_frame_count": 3}
@@ -119,7 +119,7 @@ def test_cinema_delivery_requires_rendered_motion_and_subtitle_evidence():
     from content_platform.scene_manifest import build_scene_manifest
 
     scene_manifest = build_scene_manifest(_cards(), _recipe(), {"platforms": ["douyin"]}, "Useful video")
-    probe = {"duration_seconds": 42.0, "width": 1080, "height": 1920, "audio_streams": 1}
+    probe = {"duration_seconds": 42.0, "width": 1080, "height": 1920, "audio_streams": 1, "sample_rate": 44100, "channels": 2}
     bgm = {"source": "licensed_provider", "license": "CC BY 4.0", "sha256": "abc123", "fit_reason": "calm instructional pacing"}
 
     result = validate_cinema_delivery(scene_manifest, probe, bgm, {"passed": False}, {"passed": False})
@@ -127,6 +127,27 @@ def test_cinema_delivery_requires_rendered_motion_and_subtitle_evidence():
     assert result["passed"] is False
     assert "motion evidence failed" in result["failures"]
     assert "subtitle evidence failed" in result["failures"]
+
+
+def test_cinema_delivery_requires_stereo_44100_audio():
+    from content_platform.cinema_delivery import validate_cinema_delivery
+    from content_platform.scene_manifest import build_scene_manifest
+
+    scene_manifest = build_scene_manifest(_cards(), _recipe(), {"platforms": ["douyin"]}, "Useful video")
+    probe = {
+        "duration_seconds": 42.0,
+        "width": 1080,
+        "height": 1920,
+        "audio_streams": 1,
+        "sample_rate": 24000,
+        "channels": 1,
+    }
+    bgm = {"source": "licensed_provider", "license": "CC BY 4.0", "sha256": "abc123", "fit_reason": "calm instructional pacing"}
+
+    result = validate_cinema_delivery(scene_manifest, probe, bgm, {"passed": True}, {"passed": True})
+
+    assert result["passed"] is False
+    assert "audio specification invalid" in result["failures"]
 
 
 def test_scene_manifest_records_real_audio_timing_per_scene():

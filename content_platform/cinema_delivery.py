@@ -28,6 +28,8 @@ def validate_cinema_delivery(
         failures.append("video dimensions missing")
     if int(video_probe.get("audio_streams") or 0) < 1:
         failures.append("video audio stream missing")
+    if int(video_probe.get("sample_rate") or 0) != 44100 or int(video_probe.get("channels") or 0) != 2:
+        failures.append("audio specification invalid")
     if not str(bgm_source.get("source") or "").strip():
         failures.append("bgm source missing")
     if not str(bgm_source.get("license") or "").strip():
