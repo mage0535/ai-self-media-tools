@@ -58,6 +58,7 @@ REAL_BGM_MIN_BYTES = 500_000
 ONLINE_BGM_TIMEOUT = 20
 DEFAULT_BGM_RESOLUTION_MAX_SECONDS = 90
 DEFAULT_BGM_CANDIDATE_MAX_SECONDS = 18
+DEFAULT_BGM_PROVIDER_MAX_SECONDS = 8
 TTS_MAX_ATTEMPTS = 4
 _ACTIVE_BGM_DEADLINE = None
 _ACTIVE_BGM_CANDIDATE_DEADLINE = None
@@ -953,6 +954,7 @@ def _bgm_queries(style):
 
 
 def _online_bgm_candidates(style):
+    global _ACTIVE_BGM_CANDIDATE_DEADLINE
     providers = [
         _openverse_candidates,
         _youtube_audio_library_candidates,
@@ -966,10 +968,17 @@ def _online_bgm_candidates(style):
         for provider in providers:
             if _bgm_deadline_reached():
                 return
+            previous_deadline = _ACTIVE_BGM_CANDIDATE_DEADLINE
+            _ACTIVE_BGM_CANDIDATE_DEADLINE = min(
+                _ACTIVE_BGM_DEADLINE or float("inf"),
+                time.monotonic() + max(1, int(os.environ.get("BGM_PROVIDER_MAX_SECONDS", str(DEFAULT_BGM_PROVIDER_MAX_SECONDS)))),
+            )
             try:
                 yield from provider(query)
             except Exception:
                 continue
+            finally:
+                _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_deadline
 
 
 def _bgm_deadline_reached():
