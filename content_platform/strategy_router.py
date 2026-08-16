@@ -41,6 +41,13 @@ def choose_content_strategy(topic, brief, viral_score, niche_report, viral_growt
     elif any(platform in SHORT_VIDEO_PLATFORMS for platform in primary_platforms) and visual >= 0.75:
         content_form = "short_video"
         asset_plan = ["source_video", "cover", "caption"]
+    elif any(platform in SHORT_VIDEO_PLATFORMS for platform in primary_platforms):
+        # A scheduled vertical-video lane must still produce a video package
+        # when the current trend lacks repost-level visual promise. Use an
+        # original knowledge-card treatment instead of silently becoming a
+        # long article that later has to be force-converted by the renderer.
+        content_form = "knowledge_card_video"
+        asset_plan = ["cover", "knowledge_cards", "human_voiceover", "background_music", "caption"]
     elif any(platform in NOTE_PLATFORMS for platform in primary_platforms):
         content_form = "social_note"
         asset_plan = ["cover", "content_images", "caption"]
