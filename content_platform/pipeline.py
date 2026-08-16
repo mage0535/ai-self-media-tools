@@ -686,15 +686,33 @@ class Pipeline:
         gate = {"passed": True, "gates": {}}
         g1 = risk.get("level", "pass") != "block"
         gate["gates"]["G1_risk_compliance"] = {"passed": g1, "level": risk.get("level", "pass")}
-        g2 = geo.get("score", 0) >= 40
-        gate["gates"]["G2_geo"] = {"passed": g2, "score": geo.get("score", 0)}
+        platforms = dm.get("strategy", {}).get("primary_platforms", [])
+        short_video = (
+            str(dm.get("content_form") or "").casefold() in {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video"}
+            or bool({str(platform).casefold() for platform in platforms} & SHORT_VIDEO_PLATFORMS)
+        )
+        if short_video:
+            checks = geo.get("checks") or {}
+            g2 = bool(checks.get("direct_answer")) and bool(checks.get("short_paragraphs"))
+            gate["gates"]["G2_geo"] = {
+                "passed": g2,
+                "score": geo.get("score", 0),
+                "contract": "short_video",
+                "checks": {
+                    "direct_answer": bool(checks.get("direct_answer")),
+                    "short_paragraphs": bool(checks.get("short_paragraphs")),
+                },
+                "note": "source provenance remains mandatory in G7_growth_recipe",
+            }
+        else:
+            g2 = geo.get("score", 0) >= 40
+            gate["gates"]["G2_geo"] = {"passed": g2, "score": geo.get("score", 0), "contract": "long_form"}
         qg = dm.get("quality_gate", {})
         g3 = qg.get("passed", True)
         gate["gates"]["G3_anti_generic"] = {"passed": g3, "failed": qg.get("failed_dimensions", [])}
         artifacts = dm.get("media_plan", [])
         g4 = len(artifacts) > 0 if "short_video" == dm.get("content_form", "") else True
         gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": artifacts}
-        platforms = dm.get("strategy", {}).get("primary_platforms", [])
         g5 = len(platforms) > 0
         gate["gates"]["G5_format"] = {"passed": g5, "platforms": platforms}
         growth = validate_growth_recipe(dm.get("growth_recipe"))
