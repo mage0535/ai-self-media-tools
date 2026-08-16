@@ -561,6 +561,57 @@ async def _record_shot(name: str, html_path: str, dur: float, out: Path) -> str 
     return None
 
 
+async def _render_shot_still(name: str, html_path: str, dur: float, out: Path) -> str | None:
+    """Render a browser still then apply deterministic FFmpeg camera motion.
+
+    Playwright's video recorder launches a separate WebM encoder that can
+    survive page shutdown on constrained hosts. A screenshot has no recorder
+    child process, while FFmpeg gives the shot a bounded, visible movement.
+    """
+    from playwright.async_api import async_playwright
+
+    browser = page = None
+    still = out / "shots" / f"{name}.png"
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+            page = await browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+            await page.goto(f"file://{html_path}", wait_until="load", timeout=30000)
+            await page.wait_for_timeout(200)
+            await asyncio.wait_for(page.screenshot(path=str(still), animations="disabled"), timeout=20)
+    except Exception as exc:
+        print(f"{name} still capture failed: {exc}", file=sys.stderr)
+        return None
+    finally:
+        if page:
+            try:
+                await asyncio.wait_for(page.close(), timeout=10)
+            except (asyncio.TimeoutError, Exception):
+                pass
+        if browser:
+            try:
+                await asyncio.wait_for(browser.close(), timeout=10)
+            except (asyncio.TimeoutError, Exception):
+                pass
+    if not still.is_file():
+        return None
+    output = out / "shots" / f"{name}.mp4"
+    fps = 25
+    frames = max(1, int(dur * fps))
+    motion = f"zoompan=z='min(zoom+0.0008,1.06)':d={frames}:s={W}x{H}:fps={fps},format=yuv420p"
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-loop", "1", "-i", str(still), "-vf", motion,
+             "-t", f"{dur:.3f}", "-r", str(fps), "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+             "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an", str(output)],
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"{name} still-motion encode timed out", file=sys.stderr)
+        return None
+    return str(output) if result.returncode == 0 and output.is_file() else None
+
+
 def _wrap(text: str, max_chars: int = 20):
     if len(text) <= max_chars:
         return text, ""
@@ -864,6 +915,13 @@ def main() -> int:
                 print(f"{name} Playwright recording timed out; falling back or failing this shot", file=sys.stderr)
                 return None
 
+        async def render_still(name: str, html_path: str, duration: float) -> str | None:
+            try:
+                return await asyncio.wait_for(_render_shot_still(name, html_path, duration, out), timeout=max(45, duration + 30))
+            except asyncio.TimeoutError:
+                print(f"{name} still-motion render timed out", file=sys.stderr)
+                return None
+
         for name, sd in shot_durs:
             hp = out / "html" / f"{name}.html"
             target = out / "shots" / f"{name}.mp4"
@@ -880,23 +938,13 @@ def main() -> int:
             if is_elem:
                 mp4 = await _record_shot_frames(name, str(hp), sd, out)
                 if not mp4:
-                    print(f"{name} 逐帧动效渲染失败，回退 record_video", file=sys.stderr)
-                    webm = await record_bounded(name, str(hp), sd + 0.5)
-                    if webm:
-                        subprocess.run(["ffmpeg", "-y", "-v", "quiet", "-i", webm,
-                                        "-t", f"{sd:.3f}", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-                                        "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an",
-                                        str(target)], timeout=120)
+                    print(f"{name} 逐帧动效渲染失败，回退 still-motion", file=sys.stderr)
+                    await render_still(name, str(hp), sd)
                 continue
-            webm = await record_bounded(name, str(hp), sd + 0.5)
-            if not webm:
-                print(f"{name} 录制失败", file=sys.stderr)
+            mp4 = await render_still(name, str(hp), sd)
+            if not mp4:
+                print(f"{name} still-motion render failed", file=sys.stderr)
                 continue
-            # 强制截断到目标时长（Playwright 录制实际时长偏长 1-2s，累计导致总时长超限）
-            subprocess.run(["ffmpeg", "-y", "-v", "quiet", "-i", webm,
-                            "-t", f"{sd:.3f}", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-                            "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an",
-                            str(target)], timeout=120)
     asyncio.run(_render())
 
     shot_mp4s = [out / "shots" / f"{n}.mp4" for n, _ in shot_durs]

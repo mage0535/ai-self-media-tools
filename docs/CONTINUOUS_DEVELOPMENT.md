@@ -3350,3 +3350,5 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - A shot-level timeout prevents one stuck WebM recorder from holding the
   serial overnight workflow indefinitely; incomplete media remains blocked by
   the existing final artifact gates.
+- Regular shots now use screenshot-plus-FFmpeg camera motion by default;
+  WebM recording is no longer on the normal render path for this host.
