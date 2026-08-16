@@ -3342,3 +3342,11 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Runtime enforcement must report a missing or off-topic native collection as
   an explicit `blocked` reason. It must not fall back to a generic trend just
   to keep a scheduled slot producing output.
+
+## 2026-08-16 - Bounded Film Renderer Recording
+
+- Playwright video recording now waits for local HTML `load` rather than
+  `networkidle`, and each shot has bounded page/context/browser cleanup.
+- A shot-level timeout prevents one stuck WebM recorder from holding the
+  serial overnight workflow indefinitely; incomplete media remains blocked by
+  the existing final artifact gates.
