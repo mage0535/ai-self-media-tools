@@ -15,6 +15,10 @@
   "feature_flags": {
     "real_platform_trend_evidence_mode": "shadow"
   },
+  "notifications": {
+    "network_enabled": false,
+    "hermes_target_env": "AI_SELF_MEDIA_HERMES_TARGET"
+  },
   "risk": {
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/safe_filter.py",
     "timeout": 20

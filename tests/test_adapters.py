@@ -329,7 +329,22 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("platforms=reddit", message)
         self.assertIn("reddit:review_required", message)
         self.assertIn("outbox/reddit/j-reddit.json", message)
-        self.assertIn("content-platform review-action approve-token --action approve", message)
+        self.assertNotIn("approve-token", message)
+        self.assertNotIn("reject-token", message)
+        self.assertIn("review action required through the secure console", message)
+
+    def test_notifier_never_persists_review_action_tokens(self):
+        path = self.root / "notifications.jsonl"
+        notifier = Notifier({"log_path": str(path)})
+
+        notifier.send(
+            "review_required",
+            {"id": "j1", "title": "Title", "review_actions": {"approve": "secret-approve", "reject": "secret-reject"}},
+        )
+
+        row = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+        self.assertNotIn("review_actions", row)
+        self.assertNotIn("secret-approve", path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

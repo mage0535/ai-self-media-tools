@@ -70,6 +70,16 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(receipt["status"], "published")
         self.assertIn("ai-workflow-practical", Store(self.db).used_topics(lookback_days=7))
 
+    def test_notification_redact_removes_legacy_review_actions(self):
+        path = self.root / "notifications.jsonl"
+        path.write_text(json.dumps({"event": "review_required", "review_actions": {"approve": "legacy-secret"}}) + "\n", encoding="utf-8")
+
+        code, result = self.call("notification-redact", "--path", str(path))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(result["changed"], 1)
+        self.assertNotIn("legacy-secret", path.read_text(encoding="utf-8"))
+
     def test_overnight_plan_command_writes_a_recoverable_serial_plan(self):
         tasks = self.root / "tasks.json"
         output = self.root / "plan.json"

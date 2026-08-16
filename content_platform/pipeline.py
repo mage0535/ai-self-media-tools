@@ -260,12 +260,9 @@ class Pipeline:
                 reviewed = self.store.release_claim(job_id, owner, "review_required", "review_requested", detail={"risk": risk["level"]})
                 if self.config.get("delivery", {}).get("auto_stage_review_required"):
                     reviewed = self.stage_drafts(job_id, owner=owner, already_locked=True)
-                notify_job = dict(reviewed)
-                notify_job["review_actions"] = {
-                    "approve": self.review_tokens.issue(job_id, "approve", self.review_ttl),
-                    "reject": self.review_tokens.issue(job_id, "reject", self.review_ttl),
-                }
-                self.notifier.send("review_required", notify_job)
+                # Approval tokens are issued only by the authenticated review
+                # command. They must never be written to logs or notifications.
+                self.notifier.send("review_required", reviewed)
                 return self._hydrate(reviewed)
             except WorkflowBlocked as exc:
                 current = self.store.get_job(job_id)
