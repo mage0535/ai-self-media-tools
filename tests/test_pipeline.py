@@ -170,6 +170,23 @@ class PipelineTests(unittest.TestCase):
         assert gate["gates"]["G2_geo"]["passed"] is True
         assert gate["gates"]["G2_geo"]["contract"] == "short_video"
 
+    def test_short_video_allows_only_burstiness_variance_without_waiving_other_quality_rules(self):
+        draft = {
+            "draft_meta": {
+                "content_form": "short_video",
+                "strategy": {"primary_platforms": ["douyin_ai"]},
+                "quality_gate": {"passed": False, "failed_dimensions": ["burstiness"]},
+                "media_plan": ["cover", "human_voiceover"],
+                "growth_recipe": {},
+            }
+        }
+        geo = {"score": 30, "checks": {"direct_answer": True, "short_paragraphs": True}}
+
+        gate = self.pipeline._quality_gate("job-1", draft, {"level": "pass"}, geo, phase="generation")
+
+        assert gate["gates"]["G3_anti_generic"]["passed"] is True
+        assert gate["gates"]["G3_anti_generic"]["contract"] == "short_video"
+
     def test_enforced_growth_recipe_blocks_tool_demo_without_process_evidence(self):
         pipeline = Pipeline(
             self.store,

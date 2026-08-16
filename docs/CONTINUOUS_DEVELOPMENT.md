@@ -3429,3 +3429,6 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   source provenance cannot be replaced by the short-video GEO result.
 - Long-form content retains the original `score >= 40` GEO requirement and is
   recorded as `contract=long_form`.
+- G3 keeps all anti-generic checks for short video. Its long-form burstiness
+  threshold is ignored only when `burstiness` is the sole failing dimension;
+  hook, authenticity, clarity, and platform-fit failures remain blocking.
