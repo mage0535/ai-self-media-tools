@@ -3323,3 +3323,10 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   keep `network_enabled` private runtime configuration. Never place targets,
   review tokens, cookies, keys, or full generated bodies in Git-tracked config
   or progress logs.
+
+## 2026-08-16 - Native Trend Candidate Preference
+
+- If a verified platform-native source is available, overnight ranking now
+  prefers its eligible candidates over generic cross-platform headlines.
+- The strict evidence contract is unchanged: a missing native source remains
+  a block in `enforce` mode rather than being replaced with strategy text.

@@ -569,6 +569,7 @@ def execute(args):
             candidate_matches_topic_keywords,
             candidate_matches_platform_language,
             growth_strategy_snapshot_status,
+            prefer_platform_source_candidates,
             topic_keywords_for_slot,
         )
         raw_slots = json.loads(Path(args.slots).read_text(encoding="utf-8"))
@@ -631,12 +632,13 @@ def execute(args):
             # small pre-filter pool can be filled by irrelevant high-score
             # headlines and hide valid lane-specific candidates.
             ranked = rank_trends(items, lane_profile, store.used_topics(lookback_days=7), 200, store.learned_ranking_context(args.profile))
-            return [
+            candidates = [
                 candidate
                 for candidate in ranked
                 if candidate_matches_topic_keywords(candidate, keywords)
                 and candidate_matches_platform_language(platform, candidate)
             ]
+            return prefer_platform_source_candidates(platform, candidates, report.get("sources", []))
 
         def candidate_filter(platform, candidate, slot):
             keywords = topic_keywords_for_slot(platform, slot, profile)
