@@ -261,9 +261,7 @@ def _platform_evidence_matrix(
         if item.get("source")
     ]
     strategy_ok = str(strategy.get("status") or "").casefold() == "ok"
-    aliases = {platform, "twitter" if platform == "x" else platform, "rednote" if platform == "xiaohongshu" else platform}
-    if platform.startswith("douyin"):
-        aliases.add("douyin")
+    aliases = _platform_source_aliases(platform)
     candidate_source = str(candidate.get("source") or "").casefold()
     successful_platform_sources = [
         item
@@ -272,7 +270,7 @@ def _platform_evidence_matrix(
         and bool(item.get("collected_at"))
         and any(alias in str(item.get("source") or "").casefold() for alias in aliases)
     ]
-    candidate_source_ok = any(str(item.get("source") or "").casefold() == candidate_source for item in successful_platform_sources)
+    candidate_source_ok = any(_source_matches(candidate_source, str(item.get("source") or "")) for item in successful_platform_sources)
     samples = []
     if candidate_source_ok and str(candidate.get("title") or "").strip():
         samples.append(
@@ -427,13 +425,7 @@ def prefer_platform_source_candidates(
     A global trend is useful context, but it must not displace an available
     real platform signal and then make the strict evidence gate fail.
     """
-    aliases = {str(platform).casefold()}
-    if platform == "x":
-        aliases.add("twitter")
-    if platform == "xiaohongshu":
-        aliases.add("rednote")
-    if str(platform).startswith("douyin"):
-        aliases.add("douyin")
+    aliases = _platform_source_aliases(platform)
     verified_sources = {
         str(item.get("source") or "").casefold()
         for item in source_report
@@ -443,9 +435,30 @@ def prefer_platform_source_candidates(
     }
     if not verified_sources:
         return candidates
-    native = [row for row in candidates if str(row.get("source") or "").casefold() in verified_sources]
-    other = [row for row in candidates if str(row.get("source") or "").casefold() not in verified_sources]
+    native = [row for row in candidates if any(_source_matches(str(row.get("source") or ""), source) for source in verified_sources)]
+    other = [row for row in candidates if not any(_source_matches(str(row.get("source") or ""), source) for source in verified_sources)]
     return native + other
+
+
+def _platform_source_aliases(platform: str) -> set[str]:
+    normalized = str(platform).casefold()
+    aliases = {normalized}
+    if normalized == "x":
+        aliases.add("twitter")
+    if normalized == "xiaohongshu":
+        aliases.add("rednote")
+    if normalized == "wechat":
+        aliases.add("wewrite")
+    if normalized.startswith("douyin"):
+        aliases.add("douyin")
+    return aliases
+
+
+def _source_matches(candidate_source: str, collected_source: str) -> bool:
+    """Allow a real source's named transport suffix, e.g. douyin:web_search."""
+    candidate = str(candidate_source or "").casefold()
+    collected = str(collected_source or "").casefold()
+    return bool(candidate and collected and (candidate == collected or candidate.startswith(collected + ":")))
 
 
 def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age_hours: int = 30) -> dict[str, dict[str, Any]]:

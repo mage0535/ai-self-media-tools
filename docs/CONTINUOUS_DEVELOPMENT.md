@@ -3332,3 +3332,6 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   a block in `enforce` mode rather than being replaced with strategy text.
 - Added real web-search collection lanes for Xiaohongshu, YouTube, and TikTok.
   They are opt-in in runtime configuration and retain their true source labels.
+- Source transport suffixes such as `douyin:web_search` are now correctly
+  associated with the verified `douyin` collection lane; this does not broaden
+  collection provenance beyond the named platform source.
