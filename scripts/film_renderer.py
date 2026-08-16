@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path(__file__).resolve().parents[1])))
@@ -36,6 +37,7 @@ XFADE_DUR_SHORT = 0.35
 XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
+FILM_TTS_MAX_ATTEMPTS = 4
 
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
 # 08-14 增强：从 4 种微动升级为 8 种电影运镜，增加视觉层次
@@ -109,6 +111,32 @@ def validate_render_durations(durations: list[float]) -> dict:
         "max_segment_seconds": max_segment,
         "max_total_seconds": max_total,
     }
+
+
+def synthesize_edge_tts(text: str, output: Path, voice: str) -> int:
+    """Retry a transient Edge response and never retain an empty MP3."""
+    attempts = max(1, int(os.environ.get("FILM_TTS_MAX_ATTEMPTS", FILM_TTS_MAX_ATTEMPTS)))
+    delay = max(0.0, float(os.environ.get("FILM_TTS_RETRY_DELAY_SECONDS", "1")))
+    errors = []
+    for attempt in range(1, attempts + 1):
+        try:
+            output.unlink(missing_ok=True)
+            result = subprocess.run(
+                ["edge-tts", "--voice", voice, "--rate=-5%", "--text", text, "--write-media", str(output)],
+                capture_output=True, text=True, timeout=90,
+            )
+            if result.returncode != 0:
+                raise RuntimeError((result.stderr or "edge-tts failed")[-160:])
+            if not output.is_file() or output.stat().st_size <= 10_000:
+                raise RuntimeError("edge-tts returned empty audio")
+            return attempt
+        except Exception as exc:
+            output.unlink(missing_ok=True)
+            errors.append(str(exc)[:160])
+            if attempt == attempts:
+                raise RuntimeError(f"edge-tts failed after {attempts} attempts: {errors[-1]}") from exc
+            time.sleep(delay * attempt)
+    raise RuntimeError("edge-tts retry loop exited unexpectedly")
 
 
 def _card_title(card: dict, fallback: str = "") -> str:
@@ -777,9 +805,6 @@ def main() -> int:
         mp3 = tts_dir / f"tts_{i:02d}.mp3"
         text = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
             else str(cards[i - 1].get("tts") or cards[i - 1].get("txt") or "")
-        if mp3.is_file() and mp3.stat().st_size > 10_000:
-            tts_files.append(str(mp3))
-            continue
         # display_text/tts_text 分离 + 词典
         display_text = text
         tts_text = text
@@ -792,7 +817,9 @@ def main() -> int:
                 applied_rules = list(compiled.applied_rules or [])
             except Exception:
                 pass
-        if tts_provider == "qwen":
+        existing_audio = mp3.is_file() and mp3.stat().st_size > 10_000
+        provider_used = "edge-tts"
+        if not existing_audio and tts_provider == "qwen":
             # 灰度：Qwen 直接合成（不经 DeAI）
             try:
                 from scripts.voice_engine import QwenTTSProvider
@@ -801,27 +828,31 @@ def main() -> int:
                     qwen.synthesize(tts_text, mp3,
                                     voice=os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
                                     language="Chinese" if tts_lang == "zh" else "English")
+                    provider_used = "qwen"
             except Exception as exc:
                 print(f"Qwen 合成失败({i}): {str(exc)[:80]}", file=sys.stderr)
         if not mp3.is_file() or mp3.stat().st_size <= 10_000:
-            # Edge 生产默认：SSML 控制语速/音调（-5% 语速，接近真人）
-            edge_cmd = ["edge-tts", "--voice", edge_voice, "--rate=-5%",
-                        "--text", tts_text, "--write-media", str(mp3)]
-            subprocess.run(edge_cmd, capture_output=True, text=True, timeout=90)
+            synthesize_edge_tts(tts_text, mp3, edge_voice)
+            provider_used = "edge-tts"
         if mp3.is_file() and mp3.stat().st_size > 10_000:
             tts_files.append(str(mp3))
             tts_records.append({
-                "provider": tts_provider if tts_provider == "qwen" else "edge-tts",
-                "voice": edge_voice if tts_provider != "qwen" else os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
+                "provider": provider_used,
+                "voice": edge_voice if provider_used == "edge-tts" else os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
                 "rate": "-5%", "pitch": "+0Hz",
                 "tts_text": tts_text, "display_text": display_text,
                 "applied_rules": applied_rules,
+                "unhandled_latin_tokens": list(compiled.unhandled_latin_tokens) if compiler else [],
                 "duration_seconds": _duration(str(mp3)),
             })
     durs = [_duration(p) for p in tts_files]
     print("TTS 时长:", [round(d, 2) for d in durs])
     # 规则6：TTS 记录落盘（provider/voice/rate/pitch/tts_text/词典规则/时长）
     (out / "tts_records.json").write_text(json.dumps(tts_records, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "tts_config.json").write_text(
+        json.dumps({"version": "tts_config_v1", "provider": tts_provider, "segments": tts_records}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     # 逐段兜底（多段模式失败时）
     if len(tts_files) < 8:
@@ -833,8 +864,7 @@ def main() -> int:
             if mp3.is_file() and mp3.stat().st_size > 10_000:
                 tts_files.append(str(mp3))
                 continue
-            subprocess.run(["edge-tts", "--voice", "zh-CN-YunxiNeural", "--rate=-5%",
-                            "--text", text, "--write-media", str(mp3)], capture_output=True, text=True, timeout=90)
+            synthesize_edge_tts(text, mp3, "zh-CN-YunxiNeural")
             tts_files.append(str(mp3))
     durs = [_duration(p) for p in tts_files]
     print("TTS 时长:", [round(d, 2) for d in durs])
