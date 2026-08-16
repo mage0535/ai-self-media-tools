@@ -3330,3 +3330,5 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   prefers its eligible candidates over generic cross-platform headlines.
 - The strict evidence contract is unchanged: a missing native source remains
   a block in `enforce` mode rather than being replaced with strategy text.
+- Added real web-search collection lanes for Xiaohongshu, YouTube, and TikTok.
+  They are opt-in in runtime configuration and retain their true source labels.

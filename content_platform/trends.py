@@ -185,6 +185,9 @@ class TrendCollector:
             "kuaishou": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u5feb\u624b \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891"},
             "juejin": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:juejin.cn"},
             "shipinhao": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u89c6\u9891\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387"},
+            "xiaohongshu": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u5c0f\u7ea2\u4e66 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 site:xiaohongshu.com"},
+            "youtube": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI workflow automation productivity site:youtube.com"},
+            "tiktok": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI workflow automation productivity site:tiktok.com"},
             # Optional local adapter. It is never treated as a publisher and is
             # disabled until an operator explicitly configures the command.
             "agent_reach": {"enabled": False, "limit": 20, "timeout": 20},
@@ -287,8 +290,16 @@ class DirectTrendSource:
             return self._github()
         if self.name in ("twitter", "x"):
             return self._web_search_source("twitter", "AI tools workflow automation developer productivity")
-        if self.name in ("kuaishou", "juejin", "shipinhao"):
-            return self._web_search_source(self.name, f"{self.name} \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387")
+        platform_queries = {
+            "kuaishou": "\u5feb\u624b \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891",
+            "juejin": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:juejin.cn",
+            "shipinhao": "\u89c6\u9891\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387",
+            "xiaohongshu": "\u5c0f\u7ea2\u4e66 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 site:xiaohongshu.com",
+            "youtube": "AI workflow automation productivity site:youtube.com",
+            "tiktok": "AI workflow automation productivity site:tiktok.com",
+        }
+        if self.name in platform_queries:
+            return self._web_search_source(self.name, platform_queries[self.name])
         if self.name == "bilibili":
             return self._bilibili()
         if self.name == "zhihu":
