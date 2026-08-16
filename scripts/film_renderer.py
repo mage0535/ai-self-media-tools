@@ -40,7 +40,7 @@ XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
-RENDERER_VERSION = "cinematic-v3"
+RENDERER_VERSION = "cinematic-v4"
 ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS = 90
 
 
@@ -936,6 +936,7 @@ def main() -> int:
         "transitions": TRANSITIONS,
         "xfade_short": XFADE_DUR_SHORT,
         "xfade_long": XFADE_DUR_LONG,
+        "element_frame_render_min_timeout_seconds": ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS,
     }
     if prepare_render_contract(out, render_contract):
         print("渲染契约变化：已废弃旧镜头与最终成片缓存")
