@@ -40,7 +40,7 @@ XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
-RENDERER_VERSION = "cinematic-v4"
+RENDERER_VERSION = "cinematic-v5"
 ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS = 90
 
 
@@ -166,7 +166,7 @@ def script_gate_passed(returncode: int, quality_profile: str) -> bool:
 
 
 def element_render_timeout_seconds(duration: float) -> float:
-    """Keep 1080p frame-sequence shots bounded without timing out valid long scenes."""
+    """Keep native element-motion recordings bounded without cutting long scenes."""
     return max(ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS, float(duration) * 8 + 30)
 
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
@@ -695,7 +695,7 @@ async def _record_shot_frames(name: str, html_path: str, dur: float, out: Path) 
     return str(mp4)
 
 
-async def _record_shot(name: str, html_path: str, dur: float, out: Path) -> str | None:
+async def _record_shot(name: str, html_path: str, dur: float, out: Path, frame_driven: bool = False) -> str | None:
     from playwright.async_api import async_playwright
     browser = context = page = video = None
     video_path = None
@@ -712,7 +712,32 @@ async def _record_shot(name: str, html_path: str, dur: float, out: Path) -> str 
             # Local HTML can keep browser connections alive indefinitely; load
             # proves the document is ready without allowing network-idle hangs.
             await page.goto(f"file://{html_path}", wait_until="load", timeout=30000)
-            await page.wait_for_timeout(int(dur * 1000))
+            if frame_driven:
+                # Drive element state in the page while Chromium records native
+                # video. This keeps real motion without full-resolution PNG
+                # screenshots for every frame.
+                await page.evaluate(
+                    """async (durationMs) => {
+                        if (typeof window.renderFrame !== 'function') {
+                            throw new Error('renderFrame is unavailable');
+                        }
+                        await new Promise((resolve) => {
+                            const started = performance.now();
+                            const tick = (now) => {
+                                window.renderFrame((now - started) / 1000);
+                                if (now - started >= durationMs) {
+                                    resolve();
+                                } else {
+                                    requestAnimationFrame(tick);
+                                }
+                            };
+                            requestAnimationFrame(tick);
+                        });
+                    }""",
+                    int(dur * 1000),
+                )
+            else:
+                await page.wait_for_timeout(int(dur * 1000))
         finally:
             if page:
                 try:
@@ -1145,9 +1170,13 @@ def main() -> int:
     shot_records: list[dict[str, object]] = []
 
     async def _render():
-        async def record_bounded(name: str, html_path: str, duration: float) -> str | None:
+        async def record_bounded(name: str, html_path: str, duration: float, *, frame_driven: bool = False) -> str | None:
             try:
-                return await asyncio.wait_for(_record_shot(name, html_path, duration, out), timeout=max(45, duration + 25))
+                timeout = element_render_timeout_seconds(duration) if frame_driven else max(45, duration + 25)
+                return await asyncio.wait_for(
+                    _record_shot(name, html_path, duration, out, frame_driven=frame_driven),
+                    timeout=timeout,
+                )
             except asyncio.TimeoutError:
                 print(f"{name} Playwright recording timed out", file=sys.stderr)
                 return None
@@ -1166,14 +1195,8 @@ def main() -> int:
                 return None
 
         async def render_element(name: str, html_path: str, duration: float) -> str | None:
-            try:
-                return await asyncio.wait_for(
-                    _record_shot_frames(name, html_path, duration, out),
-                    timeout=element_render_timeout_seconds(duration),
-                )
-            except asyncio.TimeoutError:
-                print(f"{name} frame-motion render timed out", file=sys.stderr)
-                return None
+            webm = await record_bounded(name, html_path, duration + 0.5, frame_driven=True)
+            return _finalize_recorded_shot(webm, out / "shots" / f"{name}.mp4", duration) if webm else None
 
         failed_shots = []
         for name, sd in shot_durs:
@@ -1199,9 +1222,9 @@ def main() -> int:
                         shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
                     else:
                         failed_shots.append(name)
-                        shot_records.append({"name": name, "renderer": "frame-sequence", "fallback": True, "reused": False})
+                    shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": True, "reused": False})
                 else:
-                    shot_records.append({"name": name, "renderer": "frame-sequence", "fallback": False, "reused": False})
+                    shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False})
                 continue
             if render_policy["motion_mode"] == "cinematic":
                 webm = await record_bounded(name, str(hp), sd + 0.5)

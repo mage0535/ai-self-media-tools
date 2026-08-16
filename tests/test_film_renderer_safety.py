@@ -14,8 +14,10 @@ def test_film_renderer_uses_bounded_playwright_recording_and_cleanup():
     source = (ROOT / "scripts" / "film_renderer.py").read_text(encoding="utf-8")
 
     assert 'wait_until="load"' in source
-    assert "asyncio.wait_for(_record_shot" in source
+    assert "_record_shot(name, html_path, duration, out, frame_driven=frame_driven)" in source
     assert "element_render_timeout_seconds(duration)" in source
+    assert "frame_driven: bool = False" in source
+    assert "requestAnimationFrame(tick)" in source
     assert "await asyncio.wait_for(context.close()" in source
     assert "await asyncio.wait_for(browser.close()" in source
 
@@ -32,7 +34,7 @@ def test_default_policy_requires_cinematic_motion(monkeypatch):
 
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
-    assert film_renderer.RENDERER_VERSION == "cinematic-v4"
+    assert film_renderer.RENDERER_VERSION == "cinematic-v5"
 
 
 def test_safe_motion_requires_explicit_degraded_opt_in(monkeypatch):

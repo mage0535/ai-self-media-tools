@@ -3384,6 +3384,11 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   timeout of at least 90 seconds, scaled by scene duration. This prevents a
   valid long 1080p animated scene from being cut off by the short CSS-recording
   deadline; a real timeout still fails closed rather than switching to a still.
+- Element motion is recorded directly by Chromium while an in-page
+  `requestAnimationFrame` loop drives `renderFrame`. The prior per-frame PNG
+  capture path was too costly for a long 1080p scene on the production host;
+  the new path preserves the same dynamic scene state without a static-image
+  fallback or a screenshot bottleneck.
 
 ## 2026-08-16 - Real Trend Evidence Transport Compatibility
 
