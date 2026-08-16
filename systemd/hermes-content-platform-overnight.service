@@ -8,6 +8,7 @@ Type=oneshot
 Environment=HOME=%h
 Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
 Environment=CONTENT_PLATFORM_BIN=%h/.local/bin/content-platform
+Environment=HERMES_PLATFORM_SCRAPER=%h/.hermes/scripts/platform_scraper.py
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
 # The private slots file selects only channels due tonight. It must not contain

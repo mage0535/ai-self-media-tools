@@ -914,14 +914,15 @@ def collect_with_hermes_platform_scraper(
     runner: Callable[[list[str]], tuple[int, str, str]] | None = None,
 ) -> dict[str, Any]:
     runner = runner or _run_command
-    script = Path(script_path or os.environ.get("HERMES_PLATFORM_SCRAPER", ""))
-    if not script:
+    configured_script = str(script_path or os.environ.get("HERMES_PLATFORM_SCRAPER", "")).strip()
+    if not configured_script:
         return {
             "status": "unavailable",
             "collected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source": "hermes_platform_scraper",
             "platforms": {str(_platform(platform)): {"status": "missing_config", "reason": "HERMES_PLATFORM_SCRAPER is not configured"} for platform in platforms},
         }
+    script = Path(configured_script)
     code, stdout, stderr = runner(["python3", str(script), "--json"])
     report = {
         "status": "ok" if code == 0 else "failed",

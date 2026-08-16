@@ -179,6 +179,20 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(report["platforms"]["youtube"]["account_metrics"]["subscribers"], 8)
         self.assertEqual(report["platforms"]["bilibili"]["account_metrics"]["videos"], 12)
 
+    def test_hermes_platform_scraper_without_config_does_not_execute_current_directory(self):
+        calls = []
+
+        def runner(command):
+            calls.append(command)
+            raise AssertionError("missing scraper configuration must not start a subprocess")
+
+        with patch.dict("os.environ", {"HERMES_PLATFORM_SCRAPER": ""}, clear=False):
+            report = collect_with_hermes_platform_scraper(["douyin"], runner=runner)
+
+        self.assertEqual(report["status"], "unavailable")
+        self.assertEqual(report["platforms"]["douyin"]["status"], "missing_config")
+        self.assertEqual(calls, [])
+
     def test_bilibili_cookie_info_file_collects_authenticated_card(self):
         with tempfile.TemporaryDirectory() as tmp:
             cookie_file = Path(tmp) / "bilibili.json"

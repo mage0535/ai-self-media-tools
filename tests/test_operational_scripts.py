@@ -279,6 +279,7 @@ shared_trend_only: false
         text = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
 
         self.assertIn("Environment=HOME=%h", text)
+        self.assertIn("Environment=HERMES_PLATFORM_SCRAPER=%h/.hermes/scripts/platform_scraper.py", text)
         self.assertIn("secrets/notifications.env", text)
 
     def test_overnight_supervisor_is_independent_and_never_republishes(self):
