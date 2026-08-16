@@ -3359,15 +3359,27 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   an explicit `blocked` reason. It must not fall back to a generic trend just
   to keep a scheduled slot producing output.
 
-## 2026-08-16 - Bounded Film Renderer Recording
+## 2026-08-16 - High-Quality Film Renderer Contract
 
-- Playwright video recording now waits for local HTML `load` rather than
-  `networkidle`, and each shot has bounded page/context/browser cleanup.
-- A shot-level timeout prevents one stuck WebM recorder from holding the
-  serial overnight workflow indefinitely; incomplete media remains blocked by
-  the existing final artifact gates.
-- Regular shots now use screenshot-plus-FFmpeg camera motion by default;
-  WebM recording is no longer on the normal render path for this host.
+- The production default is now `FILM_QUALITY_PROFILE=high` plus
+  `FILM_MOTION_MODE=cinematic`. All platforms use bounded Playwright CSS
+  recording or element-level frame rendering; static screenshot motion is not
+  an automatic fallback.
+- A safe renderer requires the explicit, exceptional pair
+  `FILM_QUALITY_PROFILE=degraded`, `FILM_MOTION_MODE=safe`, and
+  `FILM_ALLOW_DEGRADED=1`. Its output is marked degraded and is not eligible
+  for normal automatic delivery.
+- `render_contract.json` fingerprints renderer version, quality mode, script,
+  scene manifest, backgrounds, dimensions, and transition settings. A changed
+  or missing contract with derived outputs invalidates only reproducible
+  renderer assets (`shots`, WebM, frame cache, groups, audio mix, and final).
+- Final delivery now records shot provenance, fallback use, audio quality,
+  A/V timing, and full-timeline measured motion. A cinematic fallback, failed
+  script gate, missing scene manifest, audio other than 44.1 kHz stereo, or
+  insufficient real frame motion blocks the artifact.
+- Timeline alignment uses the exact transition duration for every real
+  boundary, including zero-duration group concatenations, rather than a fixed
+  global transition estimate.
 
 ## 2026-08-16 - Bounded Default Video TTS
 

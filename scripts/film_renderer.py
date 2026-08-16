@@ -14,9 +14,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -38,6 +40,128 @@ XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
+RENDERER_VERSION = "cinematic-v3"
+
+
+def resolve_render_policy() -> dict[str, object]:
+    """Keep the production default cinematic and make degradation explicit."""
+    profile = os.environ.get("FILM_QUALITY_PROFILE", "high").strip().casefold() or "high"
+    motion_mode = os.environ.get("FILM_MOTION_MODE", "cinematic").strip().casefold() or "cinematic"
+    allow_degraded = os.environ.get("FILM_ALLOW_DEGRADED", "").strip() == "1"
+    if profile == "high":
+        if motion_mode != "cinematic":
+            raise ValueError("high quality requires FILM_MOTION_MODE=cinematic")
+        return {"quality_profile": "high", "motion_mode": "cinematic", "allow_degraded": False}
+    if profile == "degraded":
+        if motion_mode != "safe" or not allow_degraded:
+            raise ValueError("degraded rendering requires FILM_MOTION_MODE=safe and FILM_ALLOW_DEGRADED=1")
+        return {"quality_profile": "degraded", "motion_mode": "safe", "allow_degraded": True}
+    raise ValueError(f"unsupported FILM_QUALITY_PROFILE: {profile}")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _remove_renderer_outputs(out: Path) -> None:
+    """Remove only reproducible renderer outputs when its contract changes."""
+    for dirname in ("html", "webm", "shots", "frames", "sub"):
+        shutil.rmtree(out / dirname, ignore_errors=True)
+    for pattern in ("group_*.mp4", "visual_xfade.mp4", "mixed_v2.mp4", "final.mp4", "voice_aligned.wav", "groups.txt"):
+        for path in out.glob(pattern):
+            path.unlink(missing_ok=True)
+
+
+def prepare_render_contract(out: Path, contract: dict[str, object]) -> bool:
+    """Invalidate derived video assets if renderer behavior or inputs changed."""
+    state_path = out / "render_contract.json"
+    previous = None
+    if state_path.is_file():
+        try:
+            previous = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            previous = {"invalid": True}
+    derived_outputs_exist = any((out / name).exists() for name in ("shots", "webm", "frames", "final.mp4", "mixed_v2.mp4"))
+    changed = previous != contract if previous is not None else derived_outputs_exist
+    if changed:
+        _remove_renderer_outputs(out)
+    state_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
+    return changed
+
+
+def validate_audio_spec(probe: dict[str, object]) -> dict[str, object]:
+    sample_rate = int(probe.get("sample_rate") or 0)
+    channels = int(probe.get("channels") or 0)
+    failures = []
+    if sample_rate != 44100:
+        failures.append("audio_sample_rate_invalid")
+    if channels != 2:
+        failures.append("audio_channel_layout_invalid")
+    return {"passed": not failures, "sample_rate": sample_rate, "channels": channels, "failures": failures}
+
+
+def probe_audio_spec(path: Path) -> dict[str, object]:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,sample_rate,channels", "-of", "json", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode:
+        return {"sample_rate": 0, "channels": 0, "probe_error": (result.stderr or "ffprobe failed")[-160:]}
+    try:
+        streams = json.loads(result.stdout).get("streams") or []
+        audio = next((row for row in streams if row.get("codec_type") == "audio"), {})
+        return {"sample_rate": int(audio.get("sample_rate") or 0), "channels": int(audio.get("channels") or 0)}
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return {"sample_rate": 0, "channels": 0, "probe_error": "invalid ffprobe output"}
+
+
+def build_render_quality_evidence(
+    *, policy: dict[str, object], shot_records: list[dict[str, object]], motion: dict[str, object]
+) -> dict[str, object]:
+    """Combine renderer provenance and measured motion into a publishable verdict."""
+    fallbacks = [row.get("name") for row in shot_records if row.get("fallback")]
+    stills = [row.get("name") for row in shot_records if row.get("renderer") == "still-motion"]
+    failures = []
+    if policy.get("motion_mode") == "cinematic" and (fallbacks or stills):
+        failures.append("cinematic_fallback_used")
+    if not motion.get("passed"):
+        failures.append("motion_evidence_insufficient")
+    return {
+        "version": "render_quality_evidence_v1",
+        "passed": not failures,
+        "quality_profile": policy.get("quality_profile"),
+        "motion_mode": policy.get("motion_mode"),
+        "fallback_shots": fallbacks,
+        "still_motion_shots": stills,
+        "shot_records": shot_records,
+        "motion": motion,
+        "failures": failures,
+    }
+
+
+def calculate_timeline(durations: list[float], transition_after: list[float]) -> tuple[list[float], float]:
+    """Return scene starts from the exact transition used at each boundary."""
+    if len(transition_after) != max(0, len(durations) - 1):
+        raise ValueError("transition count must equal duration count minus one")
+    starts: list[float] = []
+    position = 0.0
+    for index, duration in enumerate(durations):
+        starts.append(round(position, 3))
+        if index < len(transition_after):
+            position += duration - transition_after[index]
+        else:
+            position += duration
+    return starts, round(position, 3)
+
+
+def script_gate_passed(returncode: int, quality_profile: str) -> bool:
+    return returncode == 0 or quality_profile == "degraded"
 
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
 # 08-14 增强：从 4 种微动升级为 8 种电影运镜，增加视觉层次
@@ -662,6 +786,22 @@ async def _render_shot_still(name: str, html_path: str, dur: float, out: Path) -
     return str(output) if result.returncode == 0 and output.is_file() else None
 
 
+def _finalize_recorded_shot(webm_path: str, target: Path, duration: float) -> bool:
+    """Normalize a bounded Playwright recording into the renderer's MP4 contract."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", webm_path, "-t", f"{duration:.3f}",
+             "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "baseline",
+             "-pix_fmt", "yuv420p", "-an", str(target)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0 and target.is_file() and target.stat().st_size > 50_000
+
+
 def _wrap(text: str, max_chars: int = 20):
     if len(text) <= max_chars:
         return text, ""
@@ -688,6 +828,11 @@ def main() -> int:
     ap.add_argument("--height", type=int, default=H)
     ap.add_argument("--script", default="", help="完整 8 段脚本文件（空行分隔），避免 runner 按句切分截断 TTS")
     args = ap.parse_args()
+    try:
+        render_policy = resolve_render_policy()
+    except ValueError as exc:
+        print(f"渲染质量策略无效: {exc}", file=sys.stderr)
+        return 2
 
     out = Path(args.video_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -741,9 +886,13 @@ def main() -> int:
             if gate.returncode == 0:
                 print(f"脚本质量门禁: PASS ({gate_lang})")
             else:
-                print(f"⚠️ 脚本质量门禁: FAIL ({gate_lang})——渲染继续但需人工复核（{gate.stdout[:200]}）", file=sys.stderr)
+                print(f"脚本质量门禁: FAIL ({gate_lang})（{gate.stdout[:200]}）", file=sys.stderr)
+                if not script_gate_passed(gate.returncode, str(render_policy["quality_profile"])):
+                    return 3
         except Exception as e:
-            print(f"门禁检查跳过: {e}", file=sys.stderr)
+            print(f"脚本质量门禁不可用: {e}", file=sys.stderr)
+            if render_policy["quality_profile"] == "high":
+                return 3
         # 08-14 敏感词过滤（用户复盘要求）：脚本即 TTS/字幕文案源，阻断式检查
         try:
             import importlib.util as _ilu
@@ -764,6 +913,29 @@ def main() -> int:
                     return 3
         except Exception as e:
             print(f"敏感词检查跳过: {e}", file=sys.stderr)
+
+    scene_manifest_path = out / "scene_manifest.json"
+    if render_policy["quality_profile"] == "high" and (not scene_manifest_path.is_file() or not script_file):
+        print("高质量渲染缺少 scene_manifest.json 或完整脚本", file=sys.stderr)
+        return 2
+    render_contract = {
+        "renderer_version": RENDERER_VERSION,
+        **render_policy,
+        "width": args.width,
+        "height": args.height,
+        "cards_sha256": _sha256_file(cards_path),
+        "script_sha256": _sha256_file(script_file) if script_file else "",
+        "scene_manifest_sha256": _sha256_file(scene_manifest_path) if scene_manifest_path.is_file() else "",
+        "backgrounds_sha256": [_sha256_file(path) for path in bg_paths[:8]],
+        "transitions": TRANSITIONS,
+        "xfade_short": XFADE_DUR_SHORT,
+        "xfade_long": XFADE_DUR_LONG,
+    }
+    if prepare_render_contract(out, render_contract):
+        print("渲染契约变化：已废弃旧镜头与最终成片缓存")
+    for sub in ("html", "webm", "shots", "frames", "sub"):
+        (out / sub).mkdir(parents=True, exist_ok=True)
+    print(f"渲染质量: {render_policy['quality_profile']} / {render_policy['motion_mode']}")
 
     # TTS 生产默认 = Edge TTS 逐段独立合成（08-14 用户 8 条规则）。
     # ⚠️ 不经 voice_engine 的 DeAI 后处理（呼吸音/停顿/变速会引入间隔性杂音——08-14 实测）。
@@ -963,12 +1135,17 @@ def main() -> int:
         shot_durs.append((f"shot_{i:02d}A", a_dur))
         shot_durs.append((f"shot_{i:02d}B", b_dur))
 
+    shot_records: list[dict[str, object]] = []
+
     async def _render():
         async def record_bounded(name: str, html_path: str, duration: float) -> str | None:
             try:
                 return await asyncio.wait_for(_record_shot(name, html_path, duration, out), timeout=max(45, duration + 25))
             except asyncio.TimeoutError:
-                print(f"{name} Playwright recording timed out; falling back or failing this shot", file=sys.stderr)
+                print(f"{name} Playwright recording timed out", file=sys.stderr)
+                return None
+            except Exception as exc:
+                print(f"{name} Playwright recording failed: {str(exc)[:160]}", file=sys.stderr)
                 return None
 
         async def render_still(name: str, html_path: str, duration: float) -> str | None:
@@ -976,6 +1153,9 @@ def main() -> int:
                 return await asyncio.wait_for(_render_shot_still(name, html_path, duration, out), timeout=max(45, duration + 30))
             except asyncio.TimeoutError:
                 print(f"{name} still-motion render timed out", file=sys.stderr)
+                return None
+            except Exception as exc:
+                print(f"{name} still-motion render failed: {str(exc)[:160]}", file=sys.stderr)
                 return None
 
         async def render_element(name: str, html_path: str, duration: float) -> str | None:
@@ -985,6 +1165,7 @@ def main() -> int:
                 print(f"{name} frame-motion render timed out", file=sys.stderr)
                 return None
 
+        failed_shots = []
         for name, sd in shot_durs:
             hp = out / "html" / f"{name}.html"
             target = out / "shots" / f"{name}.mp4"
@@ -993,22 +1174,46 @@ def main() -> int:
                 existing_dur = _duration(str(target))
                 if existing_dur >= sd - 0.35:
                     print(f"{name}: 复用已有镜头 ({existing_dur:.2f}s)")
+                    shot_records.append({"name": name, "renderer": "cinematic-cache", "fallback": False, "reused": True})
                     continue
                 print(f"{name}: 已有镜头时长异常 ({existing_dur:.2f}s vs 目标 {sd:.2f}s)，重渲染", file=sys.stderr)
-            # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → record_video
+            # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → Playwright CSS 录制。
+            # high/cinematic 模式绝不静默降级为 still-motion。
             seg_i = int(name[5:7])
             is_elem = name.endswith("B") and shot_types.get(seg_i)
             if is_elem:
                 mp4 = await render_element(name, str(hp), sd)
                 if not mp4:
-                    print(f"{name} 逐帧动效渲染失败，回退 still-motion", file=sys.stderr)
-                    await render_still(name, str(hp), sd)
+                    if render_policy["motion_mode"] == "safe":
+                        mp4 = await render_still(name, str(hp), sd)
+                        shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+                    else:
+                        failed_shots.append(name)
+                        shot_records.append({"name": name, "renderer": "frame-sequence", "fallback": True, "reused": False})
+                else:
+                    shot_records.append({"name": name, "renderer": "frame-sequence", "fallback": False, "reused": False})
                 continue
-            mp4 = await render_still(name, str(hp), sd)
-            if not mp4:
-                print(f"{name} still-motion render failed", file=sys.stderr)
-                continue
-    asyncio.run(_render())
+            if render_policy["motion_mode"] == "cinematic":
+                webm = await record_bounded(name, str(hp), sd + 0.5)
+                mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
+                if mp4:
+                    shot_records.append({"name": name, "renderer": "playwright-video", "fallback": False, "reused": False})
+                else:
+                    failed_shots.append(name)
+                    shot_records.append({"name": name, "renderer": "playwright-video", "fallback": True, "reused": False})
+            else:
+                mp4 = await render_still(name, str(hp), sd)
+                if mp4:
+                    shot_records.append({"name": name, "renderer": "still-motion", "fallback": False, "reused": False})
+                else:
+                    failed_shots.append(name)
+                    shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+        if failed_shots:
+            print(f"镜头渲染失败: {', '.join(failed_shots)}", file=sys.stderr)
+            return False
+        return True
+    if not asyncio.run(_render()):
+        return 3
 
     shot_mp4s = [out / "shots" / f"{n}.mp4" for n, _ in shot_durs]
     if not all(p.is_file() for p in shot_mp4s):
@@ -1019,6 +1224,7 @@ def main() -> int:
     shot_names = [n for n, _ in shot_durs]
     durs_map = {n: _duration(str(out / "shots" / f"{n}.mp4")) for n in shot_names}
     group_outs = []
+    transition_after = [0.0] * max(0, len(shot_names) - 1)
     for gi in range(4):
         names = shot_names[gi * 4:(gi + 1) * 4]
         inputs = []
@@ -1041,6 +1247,7 @@ def main() -> int:
             else:
                 trans = "circleopen" if i % 2 else "smoothleft"
                 xdur = XFADE_DUR_LONG
+            transition_after[gi * 4 + i - 1] = xdur
             offset_acc += durs_map[names[i - 1]] - xdur
             offset_acc = max(0.05, offset_acc - 0.05)
             label = f"g{gi}x{i}"
@@ -1062,19 +1269,17 @@ def main() -> int:
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(groups_txt),
                     "-c", "copy", str(out / "visual_xfade.mp4")], capture_output=True, text=True, timeout=120)
 
-    # 视觉总时长 + 全局镜头起始
-    visual_total = sum(durs_map.values()) - (len(shot_names) - 1) * XFADE_DUR
-    starts_global = []
-    acc = 0.0
-    for i in range(len(shot_names)):
-        starts_global.append(acc)
-        if i < len(shot_names) - 1:
-            acc += durs_map[shot_names[i]] - XFADE_DUR
+    # 视觉总时长 + 全局镜头起始必须复用实际的组内转场时长；组间 concat 为 0。
+    starts_global, visual_total = calculate_timeline(
+        [durs_map[name] for name in shot_names],
+        transition_after,
+    )
 
     # 配音：8 段 TTS 分段 adelay 到镜头A 起始 + atrim 裁剪到段视觉时长（补偿 xfade 重叠，防溢出）
     voice_path = out / "voice_aligned.wav"
     voice_fc = []
     inputs = []
+    alignment_records = []
     for i in range(1, 9):
         inputs += ["-i", str(tts_files[i - 1])]
         delay_ms = int(starts_global[2 * (i - 1)] * 1000)
@@ -1082,6 +1287,20 @@ def main() -> int:
         seg_end = starts_global[2 * (i - 1) + 1] + durs_map[shot_names[2 * (i - 1) + 1]]
         seg_visual_dur = seg_end - starts_global[2 * (i - 1)]
         tts_dur = durs[i - 1]
+        overflow = round(tts_dur - seg_visual_dur, 3)
+        alignment_records.append({
+            "segment": i,
+            "scene_start": starts_global[2 * (i - 1)],
+            "scene_duration": round(seg_visual_dur, 3),
+            "tts_duration": round(tts_dur, 3),
+            "overflow_seconds": overflow,
+        })
+        if render_policy["quality_profile"] == "high" and overflow > 0.15:
+            print(f"音画对齐失败: 段{i} 配音超出镜头 {overflow:.3f}s", file=sys.stderr)
+            (out / "av_alignment_evidence.json").write_text(
+                json.dumps({"passed": False, "segments": alignment_records}, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            return 3
         # TTS 若比段视觉长，atrim 裁剪到段视觉时长（略留 0.05s 余量防尾音截断突兀）
         # ⚠️ 顺序必须：atrim(裁剪) → asetpts(归零) → adelay(延迟到段起点)。
         # 错误顺序 adelay→atrim→asetpts 会重置 PTS 把所有段拉到 0 起点 → 重叠
@@ -1097,6 +1316,9 @@ def main() -> int:
     if r.returncode != 0:
         print(f"配音对齐失败: {r.stderr[-200:]}", file=sys.stderr)
         return 3
+    (out / "av_alignment_evidence.json").write_text(
+        json.dumps({"passed": True, "segments": alignment_records}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     # 合流（视频 + 配音 + BGM）
     bgm_path = out / "bgm.mp3"
@@ -1107,9 +1329,12 @@ def main() -> int:
     r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(out / "visual_xfade.mp4"),
                         "-i", str(voice_path), "-stream_loop", "-1", "-i", str(bgm_path),
                         "-filter_complex",
-                        "[1:a]volume=2.4[v];[2:a]volume=0.11[bg];[v][bg]amix=inputs=2:duration=longest:normalize=0[a]",
+                        "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=2.4[v];"
+                        "[2:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.11[bg];"
+                        "[v][bg]amix=inputs=2:duration=longest:normalize=0,"
+                        "aformat=sample_rates=44100:channel_layouts=stereo[a]",
                         "-map", "0:v", "-map", "[a]", "-t", f"{visual_total:.3f}",
-                        "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", str(out / "mixed_v2.mp4")],
+                        "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k", str(out / "mixed_v2.mp4")],
                        capture_output=True, text=True, timeout=180)
     if r.returncode != 0:
         print(f"混音失败: {r.stderr[-200:]}", file=sys.stderr)
@@ -1145,7 +1370,7 @@ def main() -> int:
                         "-filter_complex", fc2, "-map", "[v]", "-map", "0:a",
                         "-c:v", "libx264", "-preset", "medium", "-crf", "21",
                         "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                        "-c:a", "aac", "-b:a", "128k", str(final)],
+                        "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k", str(final)],
                        capture_output=True, text=True, timeout=400)
     if r.returncode != 0:
         print(f"编码失败: {r.stderr[-300:]}", file=sys.stderr)
@@ -1176,8 +1401,37 @@ def main() -> int:
         print("字幕烧录验证失败", file=sys.stderr)
         return 4
 
+    audio_evidence = validate_audio_spec(probe_audio_spec(final))
+    (out / "audio_quality_evidence.json").write_text(
+        json.dumps(audio_evidence, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if not audio_evidence["passed"]:
+        print(f"音频规格验证失败: {audio_evidence}", file=sys.stderr)
+        return 4
+
+    try:
+        from content_platform.video_artifact import measure_motion_evidence
+        measured_motion = measure_motion_evidence(final)
+    except Exception as exc:
+        measured_motion = {"passed": False, "error": str(exc)[:160]}
+    render_quality = build_render_quality_evidence(
+        policy=render_policy,
+        shot_records=shot_records,
+        motion=measured_motion,
+    )
+    (out / "shot_render_records.json").write_text(
+        json.dumps(shot_records, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (out / "render_quality_evidence.json").write_text(
+        json.dumps(render_quality, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if not render_quality["passed"]:
+        print(f"电影质量验证失败: {render_quality['failures']}", file=sys.stderr)
+        return 4
+
     # segment_motion_evidence（runner 门禁要求）
     seg_evidence = {"segments": []}
+    record_by_name = {str(row.get("name")): row for row in shot_records}
     for i in range(1, 9):
         shot = (cards[i - 1].get("shotcraft") or {})
         et = shot_types.get(i, "")
@@ -1189,13 +1443,16 @@ def main() -> int:
             move_id = str(shot.get("name") or f"cinema_multishot_{i}")
             profile = f"establish_then_detail_{i}"
             renderer_note = "film_renderer"
+        segment_records = [record_by_name.get(f"shot_{i:02d}{suffix}", {}) for suffix in ("A", "B")]
         seg_evidence["segments"].append({
             "index": i,
             "move_id": move_id,
             "profile": profile,
             "rendered": True,
-            "reused": False,
+            "reused": any(bool(row.get("reused")) for row in segment_records),
             "renderer": renderer_note,
+            "renderer_modes": [row.get("renderer") for row in segment_records],
+            "fallback": any(bool(row.get("fallback")) for row in segment_records),
         })
     (out / "segment_motion_evidence.json").write_text(json.dumps(seg_evidence, ensure_ascii=False, indent=2), encoding="utf-8")
 
