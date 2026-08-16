@@ -19,6 +19,11 @@ run_platform() {
   PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" python3 -m content_platform "$@"
 }
 
+# Always reconcile terminal snapshots too: state vocabulary changes must not
+# wait for a future stale-heartbeat incident before becoming operator-visible.
+run_platform --config "$root/config.json" --db "$root/data/state.db" \
+  overnight-sync-state --state "$state" --output "$out/acceptance_summary.json" > "$out/supervisor-sync.json"
+
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-supervise --state "$state" --heartbeat "$heartbeat" \
   --stale-after-seconds "${OVERNIGHT_HEARTBEAT_STALE_SECONDS:-1800}" > "$report"
@@ -37,6 +42,4 @@ fi
 # A stale service may own browser or publisher state. Recover only durable
 # leases and reconcile facts; a new batch is never started from this watcher.
 run_platform --config "$root/config.json" --db "$root/data/state.db" recover > "$out/supervisor-recover.json" || true
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
-  overnight-sync-state --state "$state" --output "$out/acceptance_summary.json" > "$out/supervisor-sync.json" || true
 notify "action_required" "heartbeat_stale_reconciled; see $report"

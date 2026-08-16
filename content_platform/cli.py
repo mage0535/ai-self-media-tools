@@ -165,6 +165,8 @@ def parser():
     manual_publication.add_argument("--topic-fingerprint", default="")
     manual_publication.add_argument("--external-id", default="")
     manual_publication.add_argument("--source", default="manual_publish")
+    notification_redact = sub.add_parser("notification-redact", help="Remove credential-like fields from notification logs")
+    notification_redact.add_argument("--path", default="")
     review_token = sub.add_parser("review-token")
     review_token.add_argument("job_id")
     review_token.add_argument("--action", choices=["approve", "reject"], required=True)
@@ -700,6 +702,10 @@ def execute(args):
             external_id=args.external_id,
             source=args.source,
         )
+    if args.command == "notification-redact":
+        from .notify import Notifier
+        path = args.path or str(config.get("notifications", {}).get("log_path") or Path(config.get("data_dir", Path(args.db).parent)) / "notifications.jsonl")
+        return Notifier.redact_log(path)
     if args.command in {"trends", "auto"}:
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)

@@ -3294,3 +3294,32 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Every manual publication must be recorded immediately with
   `record-manual-publication`; direct database delivery inserts are unsupported
   because they cannot reserve the topic safely.
+
+## 2026-08-16 - Secure Operations And Terminal-State Closure
+
+### Finding
+- Review-action tokens were previously added to workflow notifications. That
+  made a private log or message a bearer-credential store instead of an
+  operational report.
+- The supervisor reconciled only stale running batches. A terminal batch that
+  predated a state-vocabulary change could continue showing `review_required`
+  without an actionable acceptance summary.
+- A shell failure before `result.json` existed sent an alert but did not leave
+  a consistent machine-readable failure artifact for the next observer.
+
+### Implemented
+- Review tokens are now issued only by the authenticated review command. The
+  notifier never stores or transmits them; review notifications direct an
+  operator to the secure console. `notification-redact` removes legacy
+  `review_actions` fields from an existing notification log.
+- The five-minute supervisor always runs `overnight-sync-state` before health
+  inspection. This migrates terminal state vocabulary and updates
+  `acceptance_summary.json` without replaying work or publishing content.
+- The overnight entrypoint writes a redacted `failed` result and synchronizes
+  durable state before reporting any unexpected shell error.
+
+### Production Rule
+- Enable the workflow notifier only through `AI_SELF_MEDIA_HERMES_TARGET` and
+  keep `network_enabled` private runtime configuration. Never place targets,
+  review tokens, cookies, keys, or full generated bodies in Git-tracked config
+  or progress logs.

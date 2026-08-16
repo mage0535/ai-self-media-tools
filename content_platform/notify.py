@@ -5,6 +5,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 
 
 class Notifier:
@@ -23,7 +24,7 @@ class Notifier:
             "platforms": job.get("platforms", []),
             "deliveries": job.get("deliveries", []),
             "report_path": job.get("report_path", ""),
-            "review_actions": job.get("review_actions", {}),
+            "review_required": bool(job.get("review_actions")) or event == "review_required",
             "workflow_id": job.get("workflow_id", ""),
             "step_name": job.get("step_name", ""),
             "reason_code": job.get("reason_code", ""),
@@ -91,12 +92,38 @@ class Notifier:
             text += "\ndeliveries=" + "; ".join(deliveries)
         if row.get("report_path"):
             text += f"\nreport={row['report_path']}"
-        actions = row.get("review_actions", {})
-        if actions.get("approve"):
-            text += f"\n\n批准：content-platform review-action {actions['approve']} --action approve --actor REVIEWER"
-        if actions.get("reject"):
-            text += f"\n拒绝：content-platform review-action {actions['reject']} --action reject --actor REVIEWER"
+        if row.get("review_required") or row.get("event") == "review_required":
+            text += "\nreview action required through the secure console"
         return text
+
+    @staticmethod
+    def redact_log(path):
+        """Remove credential-like review actions from legacy notification logs."""
+        source = Path(path)
+        if not source.is_file():
+            return {"changed": 0, "rows": 0}
+        changed, cleaned = 0, []
+        for line in source.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                cleaned.append(line)
+                continue
+            if not isinstance(row, dict):
+                cleaned.append(line)
+                continue
+            if row.pop("review_actions", None) is not None:
+                row["review_required"] = True
+                changed += 1
+            message = str(row.get("message") or "")
+            redacted = re.sub(r"content-platform review-action\s+\S+", "content-platform review-action [REDACTED]", message)
+            if redacted != message:
+                row["message"] = redacted
+                changed += 1
+            cleaned.append(json.dumps(row, ensure_ascii=False))
+        if changed:
+            source.write_text("\n".join(cleaned) + "\n", encoding="utf-8")
+        return {"changed": changed, "rows": len(cleaned)}
 
     def _setting(self, name):
         if os.environ.get(name):

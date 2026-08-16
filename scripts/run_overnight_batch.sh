@@ -16,7 +16,22 @@ mkdir -p "$out"
 notify() {
   "$root/scripts/notify_hermes_progress.sh" "overnight" "$1" "${2:-}" || true
 }
-trap 'status=$?; notify "failed" "batch_exit_${status}"' ERR
+
+handle_error() {
+  local status="$1"
+  trap - ERR
+  set +e
+  if [[ ! -f "$out/result.json" ]]; then
+    printf '{"status":"failed","reason":"batch_failed_before_result","exit_code":%s}\n' "$status" > "$out/result.json"
+  fi
+  if [[ -f "$out/state.json" ]]; then
+    run_platform --config "$root/config.json" --db "$root/data/state.db" \
+      overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/error-sync-state-result.json"
+  fi
+  notify "failed" "batch_failed_before_result_exit_${status}"
+  exit "$status"
+}
+trap 'handle_error $?' ERR
 
 # Persistent timers may fire after a reboot. Permit one bounded catch-up hour,
 # then leave the morning window to interactive work and reporting.

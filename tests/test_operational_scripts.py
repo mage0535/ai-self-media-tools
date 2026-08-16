@@ -288,9 +288,16 @@ shared_trend_only: false
 
         self.assertIn("overnight-supervise", script)
         self.assertIn("overnight-sync-state", script)
+        self.assertLess(script.index("overnight-sync-state"), script.index('if [[ "$status" != "stale" ]]'))
         self.assertNotIn("overnight-run", script)
         self.assertIn("run_overnight_supervisor.sh", service)
         self.assertIn("*:0/5", timer)
+
+    def test_overnight_script_writes_a_failed_outcome_before_notifying_on_unhandled_error(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        self.assertIn("batch_failed_before_result", text)
+        self.assertIn("overnight-sync-state", text)
 
     def test_background_systemd_services_use_notification_wrappers(self):
         growth = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
