@@ -141,7 +141,7 @@ class TrendTests(unittest.TestCase):
         self.assertTrue(search.called)
 
     def test_manual_handoff_platforms_collect_real_search_evidence(self):
-        for platform in ("xiaohongshu", "youtube", "tiktok"):
+        for platform in ("wechat", "xiaohongshu", "youtube", "tiktok"):
             with self.subTest(platform=platform):
                 source = DirectTrendSource(platform, {"limit": 5})
                 with patch.object(source, "_duckduckgo_html_search", return_value=[{"title": f"{platform} AI topic", "source": f"{platform}:web_search", "points": 1}]) as search:

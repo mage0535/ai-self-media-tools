@@ -181,6 +181,7 @@ class TrendCollector:
             "bilibili": {"enabled": True, "limit": 20, "timeout": 8},
             "zhihu": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:zhihu.com"},
             "douyin": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891 \u6296\u97f3"},
+            "wechat": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u516c\u4f17\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387"},
             "wewrite_hotspots": {"enabled": False, "limit": 20, "timeout": 8},
             "kuaishou": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u5feb\u624b \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891"},
             "juejin": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:juejin.cn"},
@@ -291,6 +292,7 @@ class DirectTrendSource:
         if self.name in ("twitter", "x"):
             return self._web_search_source("twitter", "AI tools workflow automation developer productivity")
         platform_queries = {
+            "wechat": "\u516c\u4f17\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387",
             "kuaishou": "\u5feb\u624b \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891",
             "juejin": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:juejin.cn",
             "shipinhao": "\u89c6\u9891\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387",
