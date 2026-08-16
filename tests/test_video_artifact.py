@@ -89,7 +89,7 @@ def test_video_artifact_cli_runs_as_a_direct_script():
 
 
 def test_motion_evidence_requires_sustained_actual_frame_changes():
-    from content_platform.video_artifact import motion_evidence_from_deltas
+    from content_platform.video_artifact import MOTION_EVIDENCE_VERSION, motion_evidence_from_deltas
 
     animated = motion_evidence_from_deltas([0.03, 0.04, 0.01, 0.05, 0.02, 0.04])
     static = motion_evidence_from_deltas([0.001, 0.002, 0.001, 0.003, 0.001])
@@ -100,3 +100,4 @@ def test_motion_evidence_requires_sustained_actual_frame_changes():
     assert static["passed"] is False
     assert smooth_cinematic["passed"] is True
     assert smooth_cinematic["sustained_motion_ratio"] >= 0.85
+    assert MOTION_EVIDENCE_VERSION == "sustained-v2"

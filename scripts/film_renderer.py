@@ -27,6 +27,8 @@ from pathlib import Path
 ROOT = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path(__file__).resolve().parents[1])))
 sys.path.insert(0, str(ROOT))
 
+from content_platform.video_artifact import MOTION_EVIDENCE_VERSION, measure_motion_evidence
+
 W, H = 1080, 1920
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 XFADE_DUR = 0.5
@@ -40,7 +42,7 @@ XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
-RENDERER_VERSION = "cinematic-v7"
+RENDERER_VERSION = "cinematic-v8"
 ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS = 90
 
 
@@ -975,6 +977,7 @@ def main() -> int:
         "xfade_short": XFADE_DUR_SHORT,
         "xfade_long": XFADE_DUR_LONG,
         "element_frame_render_min_timeout_seconds": ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS,
+        "motion_evidence_version": MOTION_EVIDENCE_VERSION,
     }
     if prepare_render_contract(out, render_contract):
         print("渲染契约变化：已废弃旧镜头与最终成片缓存")
@@ -1450,7 +1453,6 @@ def main() -> int:
         return 4
 
     try:
-        from content_platform.video_artifact import measure_motion_evidence
         measured_motion = measure_motion_evidence(final)
     except Exception as exc:
         measured_motion = {"passed": False, "error": str(exc)[:160]}

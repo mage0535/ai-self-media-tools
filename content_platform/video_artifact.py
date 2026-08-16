@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 VERTICAL_SHORT_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "tiktok", "youtube"}
+MOTION_EVIDENCE_VERSION = "sustained-v2"
 # Knowledge-card videos animate via CSS zoompan/fade/crop on static card art;
 # a 32x32 thumbnail at fps=1 underestimates that motion badly (0.013 vs 0.02
 # measured for a genuinely animating 52s clip). Threshold 0.01 with denser
