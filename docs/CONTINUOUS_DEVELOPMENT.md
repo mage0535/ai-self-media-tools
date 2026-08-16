@@ -3394,3 +3394,22 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   healthy only when the batch state advances, its append-only events advance,
   and the final handoff artifacts pass acceptance. A provider timeout is a
   reportable terminal condition, never a reason to bypass media gates.
+
+## 2026-08-16 - Short-Video Fact Gate Contract
+
+### Finding
+- The generic GEO gate is calibrated for sourced long-form articles: it
+  expects multiple numerical claims, references, and article structure. A
+  bounded 8-beat short-video script can be truthful, source-evidenced, and
+  suitable for rendering while correctly scoring below the long-form threshold.
+- This made the enforced workflow block a Douyin AI task before the media
+  pipeline, despite its verified trend matrix and separate growth-recipe gate.
+
+### Implemented
+- G2 now uses an explicit short-video contract for short-video content forms
+  and platforms: the script must directly answer the user need and be composed
+  of short readable beats. It records this decision as `contract=short_video`.
+- G7 remains mandatory and unchanged: platform-native trend evidence and
+  source provenance cannot be replaced by the short-video GEO result.
+- Long-form content retains the original `score >= 40` GEO requirement and is
+  recorded as `contract=long_form`.
