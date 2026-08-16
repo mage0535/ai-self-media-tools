@@ -430,6 +430,8 @@ def test_pet_lane_rejects_an_unrelated_general_news_candidate():
 def test_ai_keyword_does_not_match_a_substring_inside_an_unrelated_word():
     assert candidate_matches_topic_keywords({"title": "Facebook pays rage-bait creators"}, ["ai"]) is False
     assert candidate_matches_topic_keywords({"title": "AI agents change workflows"}, ["ai"]) is True
+    title = "\u6296\u97f3AI\u77ed\u89c6\u9891\u5de5\u5177\u5b9e\u6218"
+    assert candidate_matches_topic_keywords({"title": title}, ["ai"]) is True
 
 
 def test_english_platform_rejects_a_chinese_headline_even_when_it_mentions_ai():

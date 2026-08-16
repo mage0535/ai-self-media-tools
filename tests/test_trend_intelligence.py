@@ -101,6 +101,19 @@ def test_platform_matrix_does_not_use_fresh_account_strategy_as_trend_evidence()
     assert matrix["trend_evidence"]["samples"] == []
 
 
+def test_platform_matrix_accepts_a_real_source_transport_suffix_for_douyin_ai():
+    snapshot = {
+        "collected_at": "2026-08-16T00:00:00+00:00",
+        "items": [{"title": "AI short video workflow", "source": "douyin:web_search", "points": 16}],
+        "sources": [{"source": "douyin", "status": "ok", "count": 1}],
+    }
+
+    matrix = build_platform_matrix("douyin_ai", snapshot, snapshot["items"][0], platform_keywords=["ai"])
+
+    assert matrix["real_platform_collection_verified"] is True
+    assert matrix["trend_evidence"]["source"] == "douyin:web_search"
+
+
 def test_calibrate_candidates_rewards_proven_history_without_hiding_missing_history():
     ranked = calibrate_candidates(
         [

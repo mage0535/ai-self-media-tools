@@ -402,7 +402,13 @@ def candidate_matches_topic_keywords(candidate: dict[str, Any], keywords: list[s
         return True
     text = str(candidate.get("title") or "").casefold()
     return any(
-        re.search(rf"\b{re.escape(word)}\b", text) is not None if word.isascii() and word.isalnum() else word in text
+        # CJK codepoints count as \w in Python, so \b rejects the valid
+        # Chinese form "抖音AI". Limit boundaries to Latin letters/digits:
+        # this accepts CJK-adjacent abbreviations while still rejecting
+        # incidental substrings such as the "ai" in "paid".
+        re.search(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", text) is not None
+        if word.isascii() and word.isalnum()
+        else word in text
         for word in keywords
     )
 
