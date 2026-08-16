@@ -34,6 +34,8 @@ TRANSITIONS = ["fadeblack", "smoothleft", "circleopen", "slideleft", "wipeleft",
 # 转场时长：段内镜头间紧凑(0.35s)，段落间强调(0.6s) —— 差异化节奏，非统一 0.5s
 XFADE_DUR_SHORT = 0.35
 XFADE_DUR_LONG = 0.6
+MAX_TTS_SEGMENT_SECONDS = 20.0
+MAX_RENDER_SECONDS = 100.0
 
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
 # 08-14 增强：从 4 种微动升级为 8 种电影运镜，增加视觉层次
@@ -87,6 +89,26 @@ def _duration(path: str) -> float:
         return float(json.loads(r.stdout).get("format", {}).get("duration", 4.0))
     except Exception:
         return 4.0
+
+
+def validate_render_durations(durations: list[float]) -> dict:
+    """Reject runaway narration before allocating browser or FFmpeg work."""
+    max_segment = float(os.environ.get("FILM_RENDERER_MAX_SEGMENT_SECONDS", MAX_TTS_SEGMENT_SECONDS))
+    max_total = float(os.environ.get("FILM_RENDERER_MAX_TOTAL_SECONDS", MAX_RENDER_SECONDS))
+    failures = []
+    if any(duration <= 0 for duration in durations):
+        failures.append("invalid_tts_duration")
+    if any(duration > max_segment for duration in durations):
+        failures.append("segment_duration_exceeded")
+    if sum(durations) > max_total:
+        failures.append("total_duration_exceeded")
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "total_seconds": round(sum(durations), 3),
+        "max_segment_seconds": max_segment,
+        "max_total_seconds": max_total,
+    }
 
 
 def _card_title(card: dict, fallback: str = "") -> str:
@@ -816,6 +838,10 @@ def main() -> int:
             tts_files.append(str(mp3))
     durs = [_duration(p) for p in tts_files]
     print("TTS 时长:", [round(d, 2) for d in durs])
+    duration_check = validate_render_durations(durs)
+    if not duration_check["passed"]:
+        print(f"TTS 时长预算失败: {json.dumps(duration_check, ensure_ascii=False)}", file=sys.stderr)
+        return 3
 
     kicker_map = {
         "kuaishou": "MAJIC AI · AI模型实测",

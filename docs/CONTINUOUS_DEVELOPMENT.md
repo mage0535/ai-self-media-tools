@@ -1,5 +1,17 @@
 # Continuous Development
 
+## 2026-08-16: bounded video narration and renderer budget guard
+
+### Implemented
+- `MediaBridge` now compiles a separate `video_script_v1` before any cinema or standard video renderer runs. It preserves the article body for publishing, converts narration into at most eight paragraph-separated beats, and caps each beat at 40 characters.
+- Every video artifact directory now contains `video_script_manifest.json` with the source, input/output character counts, beat count, and exact narration passed to the provider. This is the audit source for proving that a video did not narrate an entire long article.
+- `film_renderer.py` now rejects invalid TTS timing before launching browser or FFmpeg work: a segment over 20 seconds or total narration over 100 seconds fails closed. Limits are configurable only through `FILM_RENDERER_MAX_SEGMENT_SECONDS` and `FILM_RENDERER_MAX_TOTAL_SECONDS` for a separately declared long-form plan.
+
+### Root Cause And Verification
+- An isolated Douyin AI canary reached the real renderer after trend, content, image, and quality gates, but exposed a production contract error: the full article body was passed to the video renderer and produced a 265-second TTS segment. The canary was stopped without delivery or publication.
+- Regression coverage verifies long-draft compaction, oversized explicit-script normalization, manifest persistence at the provider boundary, and fail-closed runaway-duration rejection. Focused video regressions passed locally.
+- Required follow-up acceptance is an isolated `handoff` canary. It must produce `video_script_manifest.json`, a bounded final MP4, packet/quality evidence, and `handoff_ready`; it must not create a live delivery or publication.
+
 ## 2026-08-12: WeChat Publish License Gate Acceptance
 
 ### Implemented
