@@ -791,11 +791,24 @@ def execute(args):
                 if created_count >= args.limit:
                     break
             if not created_for_platform:
+                aliases = {str(platform).casefold()}
+                if str(platform).casefold().startswith("douyin_"):
+                    aliases.add("douyin")
+                native_source_seen = any(
+                    str(row.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+                    and any(alias in str(row.get("source") or "").casefold() for alias in aliases)
+                    for row in (report.get("sources") or [])
+                    if isinstance(row, dict)
+                )
                 jobs.append(
                     {
                         "platform": platform,
                         "state": "blocked",
-                        "last_error": "platform-specific real trend collection missing",
+                        "last_error": (
+                            "no eligible native topic candidate for configured lane"
+                            if native_source_seen
+                            else "platform-specific real trend collection missing"
+                        ),
                     }
                 )
         return jobs

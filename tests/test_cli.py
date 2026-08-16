@@ -140,6 +140,26 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result[0]["state"], "blocked")
             self.assertEqual(result[0]["last_error"], "platform-specific real trend collection missing")
 
+    def test_auto_reports_no_eligible_native_topic_when_collection_succeeds_but_lane_does_not_match(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = {
+                "items": [{"title": "Unrelated sports headline", "source": "douyin", "url": "https://www.douyin.com/search/sports", "points": 20}],
+                "sources": [{"source": "douyin", "status": "ok", "count": 1}],
+            }
+            from content_platform.store import Store
+            Store(root / "state.db").save_tool_inventory("growth_strategy:douyin_ai:latest", {"policy_id": "growth_quality_policy_v1"})
+            with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = main([
+                        "--db", str(root / "state.db"), "--config", str(root / "missing.json"), "auto", "--limit", "1", "--platform", "douyin_ai",
+                    ])
+            result = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(result[0]["state"], "blocked")
+            self.assertEqual(result[0]["last_error"], "no eligible native topic candidate for configured lane")
+
     def test_auto_prefers_real_douyin_source_for_douyin_ai(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
