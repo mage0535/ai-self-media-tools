@@ -709,7 +709,23 @@ class Pipeline:
             gate["gates"]["G2_geo"] = {"passed": g2, "score": geo.get("score", 0), "contract": "long_form"}
         qg = dm.get("quality_gate", {})
         g3 = qg.get("passed", True)
-        gate["gates"]["G3_anti_generic"] = {"passed": g3, "failed": qg.get("failed_dimensions", [])}
+        failed_dimensions = list(qg.get("failed_dimensions", []) or [])
+        if short_video and not g3 and set(failed_dimensions) == {"burstiness"}:
+            # Eight concise beats are intentionally more even than an article.
+            # Keep every other anti-generic dimension enforced.
+            g3 = True
+            gate["gates"]["G3_anti_generic"] = {
+                "passed": True,
+                "failed": failed_dimensions,
+                "contract": "short_video",
+                "variance_exception": "burstiness_only",
+            }
+        else:
+            gate["gates"]["G3_anti_generic"] = {
+                "passed": g3,
+                "failed": failed_dimensions,
+                "contract": "short_video" if short_video else "long_form",
+            }
         artifacts = dm.get("media_plan", [])
         g4 = len(artifacts) > 0 if "short_video" == dm.get("content_form", "") else True
         gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": artifacts}
