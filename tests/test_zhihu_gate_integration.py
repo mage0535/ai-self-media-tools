@@ -20,13 +20,20 @@ def _zhihu_context():
         "platform_source_matrix": {
             "platform": "zhihu",
             "platform_internal_verified": True,
+            "real_platform_collection_verified": True,
+            "current_platform_specific_topic": True,
             "attempted_sources": [
-                {"source": "zhihu_hot", "status": "ok", "topic_signal": "AI efficiency"},
+                {"source": "zhihu_hot", "status": "ok", "topic_signal": "AI efficiency", "collected_at": "2026-08-16T00:00:00+00:00"},
                 {"source": "github", "status": "ok", "topic_signal": "AI efficiency"},
                 {"source": "wechat", "status": "ok", "topic_signal": "AI efficiency"},
                 {"source": "bilibili", "status": "degraded", "topic_signal": "AI efficiency"},
                 {"source": "account_history", "status": "ok", "topic_signal": "AI efficiency"},
             ],
+            "trend_evidence": {
+                "source": "zhihu_hot",
+                "collected_at": "2026-08-16T00:00:00+00:00",
+                "samples": [{"source": "zhihu_hot", "title": "AI efficiency workflow"}],
+            },
         },
         "language": "zh",
         "style": {"cta": "cta", "opening_patterns": ["数字开场"]},
