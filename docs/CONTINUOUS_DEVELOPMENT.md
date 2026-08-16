@@ -3392,6 +3392,25 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - This repairs the false `platform-specific real trend collection missing`
   block for the Douyin AI lane when its real direct collection succeeded.
 
+## 2026-08-16 - Native Trend Evidence and Growth Signal Repair
+
+- The Douyin lane now reads the native hot-board endpoint directly and records
+  its observed heat, rank, and `douyin.com` search URL. Generic web-search
+  results are no longer the default Douyin source.
+- A `*:web_search` candidate satisfies a platform-native matrix only when its
+  result URL belongs to the requested platform. For example, a Zhihu URL
+  discovered through a query labelled `douyin:web_search` remains external
+  reference material and cannot unlock Douyin generation or publishing.
+- Auto-routing now derives G7 growth signals from observed candidate facts
+  (engagement, freshness, and source provenance). This prevents a valid
+  candidate from being blocked solely because the old route persisted only one
+  synthetic signal.
+- If the native hot board contains no topic matching the account lane, or an
+  authenticated native search is challenged, the platform must report
+  `blocked` with the collection reason. It must not substitute unrelated
+  general-news trends, cached hypotheses, or external search results merely to
+  fill the daily slot.
+
 ## 2026-08-16 - Bounded Default Video TTS
 
 ### Finding
