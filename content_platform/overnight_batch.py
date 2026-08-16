@@ -417,6 +417,37 @@ def candidate_matches_platform_language(platform: str, candidate: dict[str, Any]
     return bool(re.search(r"[A-Za-z]", title)) and not bool(re.search(r"[\u4e00-\u9fff]", title))
 
 
+def prefer_platform_source_candidates(
+    platform: str,
+    candidates: list[dict[str, Any]],
+    source_report: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Prefer candidates from a verified platform-native collection.
+
+    A global trend is useful context, but it must not displace an available
+    real platform signal and then make the strict evidence gate fail.
+    """
+    aliases = {str(platform).casefold()}
+    if platform == "x":
+        aliases.add("twitter")
+    if platform == "xiaohongshu":
+        aliases.add("rednote")
+    if str(platform).startswith("douyin"):
+        aliases.add("douyin")
+    verified_sources = {
+        str(item.get("source") or "").casefold()
+        for item in source_report
+        if str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
+        and item.get("collected_at")
+        and any(alias in str(item.get("source") or "").casefold() for alias in aliases)
+    }
+    if not verified_sources:
+        return candidates
+    native = [row for row in candidates if str(row.get("source") or "").casefold() in verified_sources]
+    other = [row for row in candidates if str(row.get("source") or "").casefold() not in verified_sources]
+    return native + other
+
+
 def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age_hours: int = 30) -> dict[str, dict[str, Any]]:
     """Return per-platform strategy freshness for overnight fail-closed checks."""
     result: dict[str, dict[str, Any]] = {}

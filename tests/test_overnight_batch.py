@@ -10,9 +10,29 @@ from content_platform.overnight_batch import (
     normalize_delivery_boundary,
     candidate_matches_topic_keywords,
     candidate_matches_platform_language,
+    prefer_platform_source_candidates,
     topic_keywords_for_slot,
 )
 from content_platform.store import Store
+
+
+def test_platform_source_preference_keeps_real_platform_candidates_first():
+    candidates = [
+        {"title": "Generic AI headline", "source": "hackernews"},
+        {"title": "Platform trend", "source": "kuaishou"},
+    ]
+    sources = [{"source": "kuaishou", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}]
+
+    ordered = prefer_platform_source_candidates("kuaishou", candidates, sources)
+
+    assert [row["title"] for row in ordered] == ["Platform trend", "Generic AI headline"]
+
+
+def test_platform_source_preference_does_not_claim_missing_source_is_verified():
+    candidates = [{"title": "Generic AI headline", "source": "hackernews"}]
+    sources = [{"source": "hackernews", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}]
+
+    assert prefer_platform_source_candidates("xiaohongshu", candidates, sources) == candidates
 
 
 def test_batch_plan_schedules_all_due_work_before_morning_window():
