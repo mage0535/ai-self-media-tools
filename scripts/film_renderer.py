@@ -517,24 +517,48 @@ async def _record_shot_frames(name: str, html_path: str, dur: float, out: Path) 
 
 async def _record_shot(name: str, html_path: str, dur: float, out: Path) -> str | None:
     from playwright.async_api import async_playwright
+    browser = context = page = video = None
+    video_path = None
     async with async_playwright() as p:
-        b = await p.chromium.launch()
-        ctx = await b.new_context(
+        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        context = await browser.new_context(
             viewport={"width": W, "height": H},
             record_video_dir=str(out / "webm"),
             record_video_size={"width": W, "height": H},
         )
-        page = await ctx.new_page()
-        await page.goto(f"file://{html_path}", wait_until="networkidle", timeout=30000)
-        await page.wait_for_timeout(int(dur * 1000))
-        await page.close()
-        vp = await page.video.path() if page.video else None
-        await ctx.close()
-        if vp:
-            target = out / "webm" / f"{name}.webm"
-            os.replace(vp, target)
-            return str(target)
-        return None
+        page = await context.new_page()
+        video = page.video
+        try:
+            # Local HTML can keep browser connections alive indefinitely; load
+            # proves the document is ready without allowing network-idle hangs.
+            await page.goto(f"file://{html_path}", wait_until="load", timeout=30000)
+            await page.wait_for_timeout(int(dur * 1000))
+        finally:
+            if page:
+                try:
+                    await asyncio.wait_for(page.close(), timeout=10)
+                except (asyncio.TimeoutError, Exception):
+                    pass
+            if context:
+                try:
+                    await asyncio.wait_for(context.close(), timeout=15)
+                except (asyncio.TimeoutError, Exception):
+                    pass
+            if video:
+                try:
+                    video_path = await asyncio.wait_for(video.path(), timeout=15)
+                except (asyncio.TimeoutError, Exception):
+                    pass
+            if browser:
+                try:
+                    await asyncio.wait_for(browser.close(), timeout=10)
+                except (asyncio.TimeoutError, Exception):
+                    pass
+    if video_path:
+        target = out / "webm" / f"{name}.webm"
+        os.replace(video_path, target)
+        return str(target)
+    return None
 
 
 def _wrap(text: str, max_chars: int = 20):
@@ -833,6 +857,13 @@ def main() -> int:
         shot_durs.append((f"shot_{i:02d}B", b_dur))
 
     async def _render():
+        async def record_bounded(name: str, html_path: str, duration: float) -> str | None:
+            try:
+                return await asyncio.wait_for(_record_shot(name, html_path, duration, out), timeout=max(45, duration + 25))
+            except asyncio.TimeoutError:
+                print(f"{name} Playwright recording timed out; falling back or failing this shot", file=sys.stderr)
+                return None
+
         for name, sd in shot_durs:
             hp = out / "html" / f"{name}.html"
             target = out / "shots" / f"{name}.mp4"
@@ -850,14 +881,14 @@ def main() -> int:
                 mp4 = await _record_shot_frames(name, str(hp), sd, out)
                 if not mp4:
                     print(f"{name} 逐帧动效渲染失败，回退 record_video", file=sys.stderr)
-                    webm = await _record_shot(name, str(hp), sd + 0.5, out)
+                    webm = await record_bounded(name, str(hp), sd + 0.5)
                     if webm:
                         subprocess.run(["ffmpeg", "-y", "-v", "quiet", "-i", webm,
                                         "-t", f"{sd:.3f}", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
                                         "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an",
                                         str(target)], timeout=120)
                 continue
-            webm = await _record_shot(name, str(hp), sd + 0.5, out)
+            webm = await record_bounded(name, str(hp), sd + 0.5)
             if not webm:
                 print(f"{name} 录制失败", file=sys.stderr)
                 continue
