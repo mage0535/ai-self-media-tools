@@ -57,6 +57,7 @@ SUBTITLE_MAX_LINES = 2
 REAL_BGM_MIN_BYTES = 500_000
 ONLINE_BGM_TIMEOUT = 20
 DEFAULT_BGM_RESOLUTION_MAX_SECONDS = 90
+TTS_MAX_ATTEMPTS = 4
 _ACTIVE_BGM_DEADLINE = None
 REAL_INSTRUMENT_TERMS = {
     "acoustic",
@@ -618,39 +619,75 @@ def _segment_checkpoint_inputs(video_dir, card, index, width, height):
     }
 
 
-async def gen_tts(video_dir, cards, voice_idx=0):
-    """Generate TTS for all cards"""
+async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
+    """Generate auditable card narration with bounded retry for transient TTS outages."""
     import edge_tts
+    from content_platform.tts_text_compiler import TTSTextCompiler
+
     tts_dir = Path(video_dir) / "tts"
     tts_dir.mkdir(exist_ok=True)
     voice = TTS_VOICES[voice_idx % len(TTS_VOICES)]
+    compiler = TTSTextCompiler.default()
+    max_attempts = max(1, int(os.environ.get("KUAISHOU_TTS_MAX_ATTEMPTS", TTS_MAX_ATTEMPTS)))
+    retry_delay = max(0.0, float(os.environ.get("KUAISHOU_TTS_RETRY_DELAY_SECONDS", "1")))
     rendered = 0
     reused = 0
+    records = []
 
     for i, card in enumerate(cards):
         idx = i + 1
-        text = card.get("tts", "")
-        if not text:
+        display_text = str(card.get("tts", "")).strip()
+        if not display_text:
             continue
+        compiled = compiler.compile(display_text, context="tech", platform=str(platform or ""))
+        tts_text = compiled.tts_text
         out = tts_dir / f"tts_{idx:02d}.mp3"
         checkpoint_inputs = {
-            "renderer": "edge_tts_card_v2",
+            "renderer": "edge_tts_card_v3",
             "index": idx,
             "voice": voice,
-            "text": text,
+            "display_text": display_text,
+            "tts_text": tts_text,
             "renderer_source": fingerprint_paths([Path(__file__)]),
         }
         checkpoint = stage_current_or_adopt(Path(video_dir), f"tts_{idx:02d}", checkpoint_inputs, [out], legacy_marker="tts.done")
         if checkpoint.get("current"):
             print(f"  tts_{idx:02d}.mp3 reused ({checkpoint.get('reason')})")
             reused += 1
-            continue
-        await edge_tts.Communicate(text, voice).save(str(out))
-        rendered += 1
-        mark_complete(Path(video_dir), f"tts_{idx:02d}", checkpoint_inputs, [out])
+        else:
+            errors = []
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    out.unlink(missing_ok=True)
+                    await edge_tts.Communicate(tts_text, voice).save(str(out))
+                    if not out.is_file() or out.stat().st_size <= 10_000:
+                        raise RuntimeError("TTS provider returned an empty audio file")
+                    break
+                except Exception as exc:
+                    out.unlink(missing_ok=True)
+                    errors.append(str(exc)[:160])
+                    if attempt == max_attempts:
+                        raise RuntimeError(f"TTS failed after {max_attempts} attempts for segment {idx}: {errors[-1]}") from exc
+                    await asyncio.sleep(retry_delay * attempt)
+            rendered += 1
+            mark_complete(Path(video_dir), f"tts_{idx:02d}", checkpoint_inputs, [out])
         dur = float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(out)],capture_output=True,text=True).stdout.strip() or 0)
+        records.append({
+            "index": idx,
+            "provider": "edge-tts",
+            "voice": voice,
+            "display_text": display_text,
+            "tts_text": tts_text,
+            "applied_rules": list(compiled.applied_rules),
+            "unhandled_latin_tokens": list(compiled.unhandled_latin_tokens),
+            "duration_seconds": dur,
+        })
         print(f"  ✅ tts_{idx:02d}: {out.stat().st_size//1024}KB, {dur:.1f}s ({voice})")
 
+    (Path(video_dir) / "tts_config.json").write_text(
+        json.dumps({"version": "tts_config_v1", "provider": "edge-tts", "voice": voice, "segments": records}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (Path(video_dir) / "tts.done").write_text("ok")
     print(f"  ✅ TTS完成 ({len(cards)}段, voice={voice})")
 
@@ -1497,7 +1534,7 @@ async def main():
 
     print("\n=== Step 2: TTS ===")
     started = time.perf_counter()
-    tts_result = await gen_tts(vd, cards, args.voice_idx)
+    tts_result = await gen_tts(vd, cards, args.voice_idx, platform=args.platform)
     _record_stage_timing(vd, "tts", started, cached=not tts_result.get("rendered"))
 
     # ── Step 3: Segments ──
