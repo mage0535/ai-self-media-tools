@@ -3380,6 +3380,10 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - Timeline alignment uses the exact transition duration for every real
   boundary, including zero-duration group concatenations, rather than a fixed
   global transition estimate.
+- Element-level high-resolution frame sequences have an independently bounded
+  timeout of at least 90 seconds, scaled by scene duration. This prevents a
+  valid long 1080p animated scene from being cut off by the short CSS-recording
+  deadline; a real timeout still fails closed rather than switching to a still.
 
 ## 2026-08-16 - Real Trend Evidence Transport Compatibility
 

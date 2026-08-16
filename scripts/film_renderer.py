@@ -41,6 +41,7 @@ MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
 RENDERER_VERSION = "cinematic-v3"
+ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS = 90
 
 
 def resolve_render_policy() -> dict[str, object]:
@@ -162,6 +163,11 @@ def calculate_timeline(durations: list[float], transition_after: list[float]) ->
 
 def script_gate_passed(returncode: int, quality_profile: str) -> bool:
     return returncode == 0 or quality_profile == "degraded"
+
+
+def element_render_timeout_seconds(duration: float) -> float:
+    """Keep 1080p frame-sequence shots bounded without timing out valid long scenes."""
+    return max(ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS, float(duration) * 8 + 30)
 
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
 # 08-14 增强：从 4 种微动升级为 8 种电影运镜，增加视觉层次
@@ -1160,7 +1166,10 @@ def main() -> int:
 
         async def render_element(name: str, html_path: str, duration: float) -> str | None:
             try:
-                return await asyncio.wait_for(_record_shot_frames(name, html_path, duration, out), timeout=max(45, duration + 30))
+                return await asyncio.wait_for(
+                    _record_shot_frames(name, html_path, duration, out),
+                    timeout=element_render_timeout_seconds(duration),
+                )
             except asyncio.TimeoutError:
                 print(f"{name} frame-motion render timed out", file=sys.stderr)
                 return None
