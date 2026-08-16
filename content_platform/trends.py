@@ -372,10 +372,12 @@ class DirectTrendSource:
             title = str(row.get("title") or row.get("topic") or row.get("keyword") or "").strip()
             if not title:
                 continue
+            upstream_source = str(row.get("source") or "").strip()
             items.append({
                 **row,
                 "title": title,
-                "source": row.get("source", "wewrite_hotspots"),
+                "source": "wewrite_hotspots" if not upstream_source or upstream_source == "wewrite_hotspots" else f"wewrite_hotspots:{upstream_source}",
+                **({"upstream_source": upstream_source} if upstream_source else {}),
                 "url": row.get("url", ""),
                 "points": int(row.get("points") or row.get("score") or row.get("heat") or 0),
             })

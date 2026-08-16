@@ -188,6 +188,17 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(items[0]["points"], 42)
         self.assertEqual(items[0]["title"], "公众号热点选题")
 
+    def test_wewrite_hotspots_preserves_its_collection_transport(self):
+        payload = [{"title": "公众号热点选题", "source": "wechat"}]
+        completed = type("Completed", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""})()
+
+        with patch("content_platform.trends.Path.is_file", return_value=True):
+            with patch("content_platform.trends.subprocess.run", return_value=completed):
+                items = DirectTrendSource("wewrite_hotspots", {"wewrite_bin": "/tmp/wewrite", "limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "wewrite_hotspots:wechat")
+        self.assertEqual(items[0]["upstream_source"], "wechat")
+
 
     def test_agent_reach_source_records_real_command_output(self):
         completed = type("Completed", (), {
