@@ -129,23 +129,31 @@ def build_platform_matrix(
     sources = _copy_dict_rows(snapshot.get("sources"))
     aliases = _platform_aliases(normalized)
     source_name = str(candidate.get("source") or "").casefold()
-    platform_evidence = any(any(alias in str(row.get("source") or "").casefold() for alias in aliases) for row in sources if str(row.get("status") or "").casefold() in SUCCESS_STATUSES)
-    candidate_platform_evidence = any(alias in source_name for alias in aliases)
-    strategy_status = strategy_status or {}
-    strategy_verified = str(strategy_status.get("status") or "").casefold() == "ok"
-    if strategy_verified:
-        sources.append(
+    collected_at = str(snapshot.get("collected_at") or "")
+    for row in sources:
+        if collected_at:
+            row.setdefault("collected_at", collected_at)
+    platform_sources = [
+        row
+        for row in sources
+        if str(row.get("status") or "").casefold() in SUCCESS_STATUSES
+        and bool(row.get("collected_at"))
+        and any(alias in str(row.get("source") or "").casefold() for alias in aliases)
+    ]
+    candidate_platform_evidence = any(str(row.get("source") or "").casefold() == source_name for row in platform_sources)
+    samples = []
+    if candidate_platform_evidence and str(candidate.get("title") or "").strip():
+        samples.append(
             {
-                "source": f"{normalized}:fresh_growth_strategy",
-                "status": "ok",
-                "evidence_kind": "fresh_account_performance_strategy",
-                "strategy_key": str(strategy_status.get("key") or ""),
-                "age_hours": strategy_status.get("age_hours"),
+                "source": str(candidate.get("source") or ""),
+                "title": str(candidate["title"]),
+                **({"url": str(candidate["url"])} if candidate.get("url") else {}),
             }
         )
+    strategy_status = strategy_status or {}
+    strategy_verified = str(strategy_status.get("status") or "").casefold() == "ok"
     successful = [row for row in sources if str(row.get("status") or "").casefold() in SUCCESS_STATUSES]
-    topic_verified = platform_evidence or candidate_platform_evidence
-    verified = topic_verified or strategy_verified
+    verified = bool(platform_sources and samples)
     return {
         "version": "platform_source_matrix_v2",
         "platform": normalized,
@@ -154,13 +162,19 @@ def build_platform_matrix(
         "sources_succeeded": len(successful),
         "successful_source_count": len(successful),
         "platform_internal_verified": verified,
-        "current_platform_specific_topic": topic_verified,
+        "real_platform_collection_verified": verified,
+        "current_platform_specific_topic": verified,
         "platform_strategy_verified": strategy_verified,
         "shared_trend_only": not verified,
         "platform_fit_reason": _platform_fit_reason(normalized, candidate, platform_keywords or []),
         "candidate_source": str(candidate.get("source") or ""),
         "candidate_breakout": bool(candidate.get("breakout")),
         "report_path": str(snapshot.get("snapshot_path") or "runtime:trend_snapshot"),
+        "trend_evidence": {
+            "source": str(candidate.get("source") or "") if verified else "",
+            "collected_at": str(platform_sources[0].get("collected_at") or "") if verified else "",
+            "samples": samples,
+        },
     }
 
 

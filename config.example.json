@@ -12,6 +12,9 @@
     "timeout": 180,
     "style_guide_path": "{{CONTENT_PLATFORM_HOME}}/skills/content/content-copywriting-style/SKILL.md"
   },
+  "feature_flags": {
+    "real_platform_trend_evidence_mode": "shadow"
+  },
   "risk": {
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/safe_filter.py",
     "timeout": 20

@@ -91,8 +91,17 @@ class CliTests(unittest.TestCase):
                     return {"id": job_id, "state": "blocked"}
 
             report = {
-                "items": [{"title": "AI workflow test", "source": "github", "url": "https://example.test", "points": 20}],
-                "sources": [{"source": "github", "status": "ok", "count": 1}],
+                "items": [
+                    {"title": "AI workflow test", "source": "wechat_hot", "url": "https://example.test/wechat", "points": 20},
+                    {"title": "AI workflow cards", "source": "xiaohongshu_hot", "url": "https://example.test/xhs", "points": 19},
+                ],
+                "sources": [
+                    {"source": "wechat_hot", "status": "ok", "count": 1},
+                    {"source": "xiaohongshu_hot", "status": "ok", "count": 1},
+                    {"source": "github", "status": "ok", "count": 1},
+                    {"source": "bilibili", "status": "ok", "count": 1},
+                    {"source": "weibo", "status": "ok", "count": 1},
+                ],
             }
             from content_platform.store import Store
             store = Store(root / "state.db")
@@ -109,6 +118,27 @@ class CliTests(unittest.TestCase):
             self.assertEqual([row[1] for row in created], [["wechat"], ["xiaohongshu"]])
             self.assertEqual(created[0][2]["platform_source_matrix"]["platform"], "wechat")
             self.assertEqual(created[1][2]["platform_source_matrix"]["platform"], "xiaohongshu")
+
+    def test_auto_blocks_platform_without_a_real_platform_trend_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = {
+                "items": [{"title": "AI workflow test", "source": "github", "url": "https://example.test", "points": 20}],
+                "sources": [{"source": "github", "status": "ok", "count": 1}],
+            }
+            from content_platform.store import Store
+            store = Store(root / "state.db")
+            store.save_tool_inventory("growth_strategy:zhihu:latest", {"policy_id": "growth_quality_policy_v1"})
+            with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = main([
+                        "--db", str(root / "state.db"), "--config", str(root / "missing.json"), "auto", "--limit", "1", "--platform", "zhihu",
+                    ])
+            result = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(result[0]["state"], "blocked")
+            self.assertEqual(result[0]["last_error"], "platform-specific real trend collection missing")
 
     def test_analyze_topic_returns_strategy_report(self):
         with tempfile.TemporaryDirectory() as tmp:

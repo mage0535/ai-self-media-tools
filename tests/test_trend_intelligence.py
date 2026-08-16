@@ -52,6 +52,7 @@ def test_collect_daily_snapshot_honors_force_refresh(tmp_path):
 
 def test_platform_matrix_preserves_failures_and_platform_reason():
     snapshot = {
+        "collected_at": "2026-08-16T00:00:00+00:00",
         "items": [{"title": "Agent workflow guide", "source": "zhihu_hot", "points": 16}],
         "sources": [
             {"source": "zhihu_hot", "status": "ok", "count": 1},
@@ -74,7 +75,7 @@ def test_platform_matrix_preserves_failures_and_platform_reason():
     assert matrix["attempted_sources"][2]["status"] == "failed"
 
 
-def test_platform_matrix_uses_fresh_account_strategy_as_explicit_platform_evidence():
+def test_platform_matrix_does_not_use_fresh_account_strategy_as_trend_evidence():
     snapshot = {
         "items": [{"title": "Agent workflow guide", "source": "hackernews", "points": 16}],
         "sources": [
@@ -92,11 +93,12 @@ def test_platform_matrix_uses_fresh_account_strategy_as_explicit_platform_eviden
         strategy_status={"status": "ok", "key": "growth_strategy:twitter:latest", "age_hours": 0.2},
     )
 
-    assert matrix["platform_internal_verified"] is True
+    assert matrix["platform_internal_verified"] is False
     assert matrix["platform_strategy_verified"] is True
     assert matrix["current_platform_specific_topic"] is False
-    assert matrix["shared_trend_only"] is False
-    assert any(row["source"] == "twitter:fresh_growth_strategy" and row["status"] == "ok" for row in matrix["attempted_sources"])
+    assert matrix["real_platform_collection_verified"] is False
+    assert matrix["shared_trend_only"] is True
+    assert matrix["trend_evidence"]["samples"] == []
 
 
 def test_calibrate_candidates_rewards_proven_history_without_hiding_missing_history():
@@ -170,6 +172,8 @@ def test_overnight_prepare_uses_snapshot_and_platform_specific_matrix(tmp_path, 
     matrix = prepared["tasks"][0]["brief"]["platform_source_matrix"]
     assert matrix["platform"] == "zhihu"
     assert matrix["platform_internal_verified"] is True
-    assert matrix["sources_succeeded"] == 6
+    assert matrix["sources_succeeded"] == 5
     assert matrix["platform_fit_reason"]
+    assert matrix["real_platform_collection_verified"] is True
+    assert matrix["trend_evidence"]["collected_at"]
     assert "trend_snapshot_" in matrix["report_path"]

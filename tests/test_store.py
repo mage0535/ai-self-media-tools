@@ -89,6 +89,17 @@ class StoreTests(unittest.TestCase):
             count = conn.execute("SELECT count(*) FROM topic_history WHERE fingerprint='topic-a'").fetchone()[0]
         self.assertEqual(count, 2)
 
+    def test_manual_publication_reserves_its_topic_for_all_platforms(self):
+        receipt = self.store.record_manual_publication(
+            "kuaishou",
+            "AI automation pitfalls",
+            topic_fingerprint="ai-automation-pitfalls",
+            external_id="manual:demo",
+        )
+
+        self.assertEqual(receipt["status"], "published")
+        self.assertIn("ai-automation-pitfalls", self.store.used_topics())
+
     def test_delivery_queue_claim_and_complete_round_trip(self):
         job = self.store.create_job("Topic", ["file"])
         self.store.enqueue_delivery(job["id"], "file", "stage", {"state": "review_required"})

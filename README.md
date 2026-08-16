@@ -139,6 +139,9 @@ python scripts/check_bgm_uniqueness.py /path/to/render_dir --platform kuaishou
 # 平台选题独立性检查
 python scripts/check_platform_topic_independence.py 20260807 --platforms wechat,kuaishou,bilibili
 
+# 手工发布后写入跨平台选题账本，避免下一批次重复选题
+python -m content_platform record-manual-publication --platform kuaishou --topic "..." --topic-fingerprint "..." --external-id "..."
+
 # 独立发送媒体文件，目标从 HERMES_DELIVERY_TARGET 读取
 python scripts/deliver_media.py "视频交付" /path/to/final.mp4 /path/to/cover.jpg
 ```
@@ -186,6 +189,14 @@ python scripts/validate_channel_rulebook.py
 `overnight-prepare` stores one public-metadata trend snapshot per freshness window and reuses it for later platform selection. The snapshot preserves every source status, including failures and degradation; a cache never turns an unavailable source into a verified signal.
 
 Each candidate now carries a platform-scoped `platform_source_matrix`, a historical-fit calibration score, and an optional breakout marker calculated against the previous snapshot. Downstream quality gates still decide whether evidence is sufficient to generate or publish. The intelligence layer collects and ranks only; it never changes login state or publishes content.
+
+## Overnight Reliability
+
+The overnight workflow uses durable `state.json`, an append-only event journal,
+and a separate systemd heartbeat supervisor. The supervisor can recover stale
+leases and reconcile existing work, but it never creates new content or
+retries publication. Start platform evidence in `shadow` mode and move to
+`enforce` only after a real observed batch proves all due collection lanes.
 
 ## License
 

@@ -32,7 +32,7 @@ HOOK_PATTERNS = {
     "共鸣": [r"有没有人", r"是不是", r"你也", r"都一样", r"打工", r"打工人", r"头疼", r"崩溃", r"烦", r"想放弃", r"坚持不下去", r"emo"],
 }
 # 情绪词（真实感信号）
-EMOTION_WORDS = ["气死", "离谱", "太爽", "崩溃", "后悔", "惊喜", "意外", "心疼", "绝了", "真香", "emo", "难受", "炸裂", "跪了", "离谱", "离谱"]
+EMOTION_WORDS = ["气死", "离谱", "太爽", "崩溃", "后悔", "惊喜", "意外", "心疼", "绝了", "真香", "emo", "难受", "炸裂", "跪了", "离谱", "frustrating", "frustrated", "amazing", "awesome", "love", "hate", "annoying", "exhausted", "tired of", "worth it", "insane", "game changer", "nightmare", "genius", "ridiculous"]
 # 互动引导（结尾应有）
 CTA_PATTERNS = [r"关注", r"点赞", r"收藏", r"评论", r"扣\d", r"回复", r"评论区", r"转发", r"关注我", r"下期", r"follow", r"like", r"comment", r"share", r"tell me", r"try it"]
 
@@ -58,7 +58,8 @@ def check_cta(text: str) -> dict:
 
 
 def check_emotion(text: str) -> dict:
-    found = [w for w in EMOTION_WORDS if w in text]
+    lowered = text.casefold()
+    found = [w for w in EMOTION_WORDS if w.casefold() in lowered]
     return {"passed": len(found) >= 1, "found": found}
 
 

@@ -474,17 +474,19 @@ def complete_full_ops_evidence(platform: str):
         "platform_source_matrix": {
             "platform": platform,
             "attempted_sources": [
-                {"source": "platform_internal_search", "status": "success", "sample_count": 3},
-                {"source": "account_history", "status": "success", "sample_count": 6},
-                {"source": "same_lane_accounts", "status": "success", "sample_count": 3},
-                {"source": "bilibili", "status": "success", "sample_count": 2},
+                {"source": f"{platform}_internal_search", "status": "success", "sample_count": 3, "collected_at": "2026-08-16T00:00:00+00:00"},
+                {"source": "account_history", "status": "success", "sample_count": 6, "collected_at": "2026-08-16T00:00:00+00:00"},
+                {"source": "same_lane_accounts", "status": "success", "sample_count": 3, "collected_at": "2026-08-16T00:00:00+00:00"},
+                {"source": "bilibili", "status": "success", "sample_count": 2, "collected_at": "2026-08-16T00:00:00+00:00"},
                 {"source": "wechat", "status": "failed", "reason": "no same-day public rank"},
             ],
             "successful_source_count": 4,
             "platform_internal_verified": True,
+            "real_platform_collection_verified": True,
             "current_platform_specific_topic": True,
             "shared_trend_only": False,
             "report_path": f"/tmp/current-run/{platform}/source_matrix.json",
+            "trend_evidence": {"source": f"{platform}_internal_search", "collected_at": "2026-08-16T00:00:00+00:00", "samples": [{"title": "real collected sample"}]},
         },
         "operations_workflow": {
             "required": True,
@@ -1494,7 +1496,7 @@ def test_xiaohongshu_auto_packet_rejects_shared_trend_only_source_matrix():
     assert "platform_independent_source_matrix" in result["failed_dimensions"]
 
 
-def test_platform_source_gate_accepts_fresh_platform_strategy_evidence():
+def test_platform_source_gate_rejects_fresh_platform_strategy_without_collection():
     matrix = {
         "platform": "twitter",
         "attempted_sources": [
@@ -1512,7 +1514,7 @@ def test_platform_source_gate_accepts_fresh_platform_strategy_evidence():
         "report_path": "runtime:trend_snapshot",
     }
 
-    assert _platform_source_matrix_gate(matrix, "twitter")["passed"] is True
+    assert _platform_source_matrix_gate(matrix, "twitter")["passed"] is False
 
 
 def test_pre_onboarding_article_platforms_use_explicit_article_gate():

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from video_script_gate import check_hook
+from video_script_gate import check_emotion, check_hook
 
 CASES = [
     # (文本, 期望通过, 说明)
@@ -47,6 +47,14 @@ def test_hook_cases():
             failed.append((label, text, r))
     assert not failed, f"{len(failed)} 条未通过: {failed}"
     print(f"check_hook: {len(CASES)}/{len(CASES)} 通过")
+
+
+def test_emotion_recognizes_case_insensitive_english_words():
+    result = check_emotion("This workflow is AMAZING, but the setup was frustrating.")
+
+    assert result["passed"] is True
+    assert "amazing" in result["found"]
+    assert "frustrating" in result["found"]
 
 
 if __name__ == "__main__":

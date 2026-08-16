@@ -1,0 +1,14 @@
+[Unit]
+Description=Check Hermes content-platform overnight heartbeat and reconcile stale leases
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=%h
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
+ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/run_overnight_supervisor.sh
+WorkingDirectory=%h/.ai-self-media-tools
+MemoryMax=128M
+TimeoutStartSec=120

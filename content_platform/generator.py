@@ -626,6 +626,7 @@ class DraftGenerator:
                 "source": str(row["source"]),
                 "status": str(row.get("status") or "unknown"),
                 "topic_signal": str(row.get("topic_signal") or topic),
+                **({"collected_at": str(row["collected_at"])} if row.get("collected_at") else {}),
                 **({"evidence_kind": str(row["evidence_kind"])} if row.get("evidence_kind") else {}),
                 **({"error": str(row["error"])} if row.get("error") else {}),
             })
@@ -641,27 +642,34 @@ class DraftGenerator:
             ]
         successful = [row for row in attempted if row.get("status") == "ok"]
         platform_aliases = {str(platform).casefold(), "rednote" if platform == "xiaohongshu" else ""}
-        strategy_evidence = any(
-            row.get("status") == "ok" and str(row.get("evidence_kind") or "") == "fresh_account_performance_strategy"
-            for row in attempted
-        )
+        if str(platform).casefold().startswith("douyin"):
+            platform_aliases.add("douyin")
         platform_evidence = any(
             row.get("status") == "ok"
-            and str(row.get("evidence_kind") or "") != "fresh_account_performance_strategy"
+            and bool(row.get("collected_at"))
             and any(alias and alias in str(row.get("source") or "").casefold() for alias in platform_aliases)
             for row in attempted
         )
-        strategy_verified = bool(supplied.get("platform_strategy_verified")) and strategy_evidence
-        internally_verified = bool(supplied.get("platform_internal_verified")) and (platform_evidence or strategy_verified)
+        trend_evidence = supplied.get("trend_evidence") if isinstance(supplied.get("trend_evidence"), dict) else {}
+        real_collection = (
+            bool(supplied.get("real_platform_collection_verified"))
+            and platform_evidence
+            and bool(trend_evidence.get("source"))
+            and bool(trend_evidence.get("collected_at"))
+            and bool(trend_evidence.get("samples"))
+        )
+        internally_verified = bool(supplied.get("platform_internal_verified")) and real_collection
         return {
             "platform": platform,
             "attempted_sources": attempted,
             "successful_source_count": len(successful),
             "platform_internal_verified": internally_verified,
-            "current_platform_specific_topic": platform_evidence,
-            "platform_strategy_verified": strategy_verified,
+            "real_platform_collection_verified": real_collection,
+            "current_platform_specific_topic": real_collection,
+            "platform_strategy_verified": bool(supplied.get("platform_strategy_verified")),
             "shared_trend_only": not internally_verified,
             "report_path": str(supplied.get("report_path") or "runtime:strategy_brief.platform_source_matrix"),
+            "trend_evidence": trend_evidence if real_collection else {"source": "", "collected_at": "", "samples": []},
         }
 
     def _hermes(self, topic, brief, context):

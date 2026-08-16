@@ -11,6 +11,7 @@ publish_receipt_required: enforce
 topic_scoring_mode: shadow
 quality_gate_enhanced: shadow
 duplication_detector: shadow
+real_platform_trend_evidence_mode: shadow
 
 performance_collector: on
 feedback_memory: on

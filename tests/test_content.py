@@ -111,10 +111,12 @@ class ContentTests(unittest.TestCase):
         source_matrix = {
             "platform": "zhihu",
             "attempted_sources": [
-                {"source": "zhihu", "status": "ok", "topic_signal": "AI workflow"},
-                {"source": "github", "status": "ok", "topic_signal": "AI workflow"},
+                {"source": "zhihu", "status": "ok", "topic_signal": "AI workflow", "collected_at": "2026-08-16T00:00:00+00:00"},
+                {"source": "github", "status": "ok", "topic_signal": "AI workflow", "collected_at": "2026-08-16T00:00:00+00:00"},
             ],
             "platform_internal_verified": True,
+            "real_platform_collection_verified": True,
+            "trend_evidence": {"source": "zhihu", "collected_at": "2026-08-16T00:00:00+00:00", "samples": [{"title": "AI workflow"}]},
         }
         draft = DraftGenerator({"allow_fallback": True}).generate(
             "AI workflow",
@@ -124,8 +126,10 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(matrix["successful_source_count"], 2)
         self.assertTrue(matrix["platform_internal_verified"])
         self.assertTrue(matrix["current_platform_specific_topic"])
+        self.assertTrue(matrix["real_platform_collection_verified"])
+        self.assertEqual(matrix["trend_evidence"]["source"], "zhihu")
 
-    def test_full_ops_article_generator_preserves_fresh_platform_strategy_evidence(self):
+    def test_full_ops_article_generator_does_not_treat_strategy_as_trend_evidence(self):
         source_matrix = {
             "platform": "zhihu",
             "attempted_sources": [
@@ -143,10 +147,11 @@ class ContentTests(unittest.TestCase):
         )
 
         matrix = draft["draft_meta"]["platform_source_matrix"]
-        self.assertTrue(matrix["platform_internal_verified"])
+        self.assertFalse(matrix["platform_internal_verified"])
         self.assertTrue(matrix["platform_strategy_verified"])
+        self.assertFalse(matrix["real_platform_collection_verified"])
         self.assertFalse(matrix["current_platform_specific_topic"])
-        self.assertFalse(matrix["shared_trend_only"])
+        self.assertTrue(matrix["shared_trend_only"])
 
     def test_generator_preserves_auto_topic_signal_alias_in_growth_recipe(self):
         draft = DraftGenerator({"allow_fallback": True}).generate(

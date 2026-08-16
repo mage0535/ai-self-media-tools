@@ -80,18 +80,25 @@ def _platform_source_matrix_gate(matrix: dict[str, Any], platform: str) -> dict[
         if isinstance(item, dict) and str(item.get("status") or "").casefold() in {"ok", "success", "saved", "usable"}
     ]
     success_count = max(_safe_int(matrix.get("successful_source_count")) if isinstance(matrix, dict) else 0, len(successful))
+    trend = matrix.get("trend_evidence") if isinstance(matrix, dict) else {}
+    if not isinstance(trend, dict):
+        trend = {}
     return {
         "passed": isinstance(matrix, dict)
         and str(matrix.get("platform") or platform).casefold() == str(platform).casefold()
         and len(attempted) >= 5
         and success_count >= 3
         and bool(matrix.get("platform_internal_verified"))
-        and bool(matrix.get("current_platform_specific_topic") or matrix.get("platform_strategy_verified"))
+        and bool(matrix.get("real_platform_collection_verified"))
+        and bool(matrix.get("current_platform_specific_topic"))
+        and bool(trend.get("source"))
+        and bool(trend.get("collected_at"))
+        and bool(trend.get("samples"))
         and not bool(matrix.get("shared_trend_only"))
         and bool(matrix.get("report_path")),
         "attempted": len(attempted),
         "successful": success_count,
-        "required": ["attempted_sources >= 5", "successful_source_count >= 3", "platform_internal_verified", "platform topic or fresh strategy evidence", "not shared_trend_only"],
+        "required": ["attempted_sources >= 5", "successful_source_count >= 3", "real platform collection", "timestamped trend sample", "not shared_trend_only"],
     }
 
 

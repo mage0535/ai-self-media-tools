@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
@@ -142,6 +142,7 @@ def parser():
     overnight_prepare.add_argument("--output", required=True, help="Prepared task JSON path")
     overnight_prepare.add_argument("--refresh", action="store_true")
     overnight_prepare.add_argument("--profile", default="default")
+    overnight_prepare.add_argument("--trend-evidence-mode", choices=["off", "shadow", "enforce"], default="")
     overnight_prepare.add_argument("--weekday", type=int, choices=range(7), help="Optional Monday=0 schedule simulation; never used by the timer")
     overnight_run = sub.add_parser("overnight-run", help="Resume a planned overnight batch without implicit live publishing")
     overnight_run.add_argument("--plan", required=True, help="JSON plan created by overnight-plan")
@@ -154,6 +155,16 @@ def parser():
     overnight_acceptance.add_argument("--result", required=True, help="Batch result JSON path")
     overnight_acceptance.add_argument("--state", required=True, help="Batch state JSON path")
     overnight_acceptance.add_argument("--output", required=True, help="Acceptance report JSON path")
+    overnight_supervise = sub.add_parser("overnight-supervise", help="Inspect one batch heartbeat without mutating it")
+    overnight_supervise.add_argument("--state", required=True, help="Persistent batch state path")
+    overnight_supervise.add_argument("--heartbeat", required=True, help="Heartbeat JSON path")
+    overnight_supervise.add_argument("--stale-after-seconds", type=int, default=1800)
+    manual_publication = sub.add_parser("record-manual-publication", help="Record a manual delivery in the global topic ledger")
+    manual_publication.add_argument("--platform", required=True)
+    manual_publication.add_argument("--topic", required=True)
+    manual_publication.add_argument("--topic-fingerprint", default="")
+    manual_publication.add_argument("--external-id", default="")
+    manual_publication.add_argument("--source", default="manual_publish")
     review_token = sub.add_parser("review-token")
     review_token.add_argument("job_id")
     review_token.add_argument("--action", choices=["approve", "reject"], required=True)
@@ -564,6 +575,10 @@ def execute(args):
             raise ValueError("overnight slots file must contain a list or slots list")
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
+        collected_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for source in report.get("sources", []):
+            if isinstance(source, dict):
+                source.setdefault("collected_at", collected_at)
         snapshot_path = trend_cache_dir() / f"trend_snapshot_{datetime.now().date().isoformat()}.json"
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         snapshot_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -613,7 +628,7 @@ def execute(args):
             # Filter after ranking against the full bounded collection.  A
             # small pre-filter pool can be filled by irrelevant high-score
             # headlines and hide valid lane-specific candidates.
-            ranked = rank_trends(items, lane_profile, store.used_topics(platform), 200, store.learned_ranking_context(args.profile))
+            ranked = rank_trends(items, lane_profile, store.used_topics(lookback_days=7), 200, store.learned_ranking_context(args.profile))
             return [
                 candidate
                 for candidate in ranked
@@ -636,8 +651,13 @@ def execute(args):
             candidate_filter=candidate_filter,
             growth_strategy_status=strategy_status,
             weekday=weekday,
-            strict_trend_evidence=True,
+            strict_trend_evidence=(
+                (args.trend_evidence_mode or str(config.get("feature_flags", {}).get("real_platform_trend_evidence_mode", "shadow"))).casefold()
+                == "enforce"
+            ),
+            trend_evidence_mode=(args.trend_evidence_mode or str(config.get("feature_flags", {}).get("real_platform_trend_evidence_mode", "shadow"))).casefold(),
             report_path=str(snapshot_path),
+            reserved_topic_fingerprints=store.used_topics(lookback_days=7),
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -669,9 +689,24 @@ def execute(args):
         if not report["passed"]:
             raise RuntimeError("overnight acceptance failed: " + ", ".join(report["failures"]))
         return report
+    if args.command == "overnight-supervise":
+        from .overnight_supervisor import inspect_batch_health
+        return inspect_batch_health(args.state, args.heartbeat, stale_after_seconds=args.stale_after_seconds)
+    if args.command == "record-manual-publication":
+        return store.record_manual_publication(
+            args.platform,
+            args.topic,
+            topic_fingerprint=args.topic_fingerprint,
+            external_id=args.external_id,
+            source=args.source,
+        )
     if args.command in {"trends", "auto"}:
         collector = TrendCollector(config.get("trends", {}))
         report = collector.collect_with_report(args.refresh)
+        collection_time = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for source in report.get("sources", []):
+            if isinstance(source, dict):
+                source.setdefault("collected_at", collection_time)
         items = report["items"]
         profile = resolve_profile(config.get("profiles", {}), args.profile)
         platforms = list(getattr(args, "platform", None) or [])
@@ -690,6 +725,7 @@ def execute(args):
                 return {**report, "ranked": items}
             return items
         from .overnight_batch import growth_strategy_snapshot_status
+        from .trend_intelligence import build_platform_matrix
         strategy_status = growth_strategy_snapshot_status(store, platforms)
         jobs = []
         # A platform is a separate operating decision, not a bulk destination
@@ -711,19 +747,21 @@ def execute(args):
                 items,
                 profile,
                 store.used_topics(platform),
-                args.limit,
+                200,
                 store.learned_ranking_context(args.profile),
             )
-            source_matrix = {
-                "platform": platform,
-                "attempted_sources": [
-                    {"source": row.get("source"), "status": row.get("status", "unknown"), **({"error": row["error"]} if row.get("error") else {})}
-                    for row in report.get("sources", [])
-                    if row.get("source")
-                ],
-                "report_path": "runtime:trend_collection_report",
-            }
+            created_for_platform = False
+            created_count = 0
             for item in ranked:
+                source_matrix = build_platform_matrix(
+                    platform,
+                    {**report, "collected_at": collection_time, "snapshot_path": "runtime:trend_collection_report"},
+                    item,
+                    platform_keywords=profile.get("keywords") or [],
+                    strategy_status=strategy,
+                )
+                if not source_matrix["real_platform_collection_verified"]:
+                    continue
                 sources = [item["url"]] if item.get("url") else []
                 brief = {
                     "source": item.get("source"),
@@ -739,6 +777,18 @@ def execute(args):
                 if result.get("state") not in {"blocked", "failed", "rejected"}:
                     store.mark_topic_used(item["fingerprint"], item["title"], item.get("source", ""), job["id"], platform=platform)
                 jobs.append(result)
+                created_for_platform = True
+                created_count += 1
+                if created_count >= args.limit:
+                    break
+            if not created_for_platform:
+                jobs.append(
+                    {
+                        "platform": platform,
+                        "state": "blocked",
+                        "last_error": "platform-specific real trend collection missing",
+                    }
+                )
         return jobs
     if args.command == "health":
         with store.connect() as conn:
