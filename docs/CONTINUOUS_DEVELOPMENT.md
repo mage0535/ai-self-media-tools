@@ -3410,6 +3410,10 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   `blocked` with the collection reason. It must not substitute unrelated
   general-news trends, cached hypotheses, or external search results merely to
   fill the daily slot.
+- The automatic status distinguishes `platform-specific real trend collection
+  missing` from `no eligible native topic candidate for configured lane`; the
+  latter means collection succeeded but no source item matched the account
+  niche. This keeps real-time reports actionable without weakening the gate.
 
 ## 2026-08-16 - Bounded Default Video TTS
 
