@@ -34,7 +34,7 @@ def test_default_policy_requires_cinematic_motion(monkeypatch):
 
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
-    assert film_renderer.RENDERER_VERSION == "cinematic-v5"
+    assert film_renderer.RENDERER_VERSION == "cinematic-v6"
 
 
 def test_safe_motion_requires_explicit_degraded_opt_in(monkeypatch):
@@ -87,6 +87,12 @@ def test_timeline_uses_real_transition_boundaries():
 
     assert starts == [0.0, 1.65, 3.65]
     assert total == 5.65
+
+
+def test_segment_shot_budget_covers_internal_crossfade_and_audio_margin():
+    a_duration, b_duration = film_renderer.segment_shot_durations(9.38, element_motion=False)
+
+    assert a_duration + b_duration - film_renderer.XFADE_DUR_LONG >= 9.53
 
 
 def test_high_quality_profile_does_not_accept_a_failed_script_gate():
