@@ -630,6 +630,7 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
     compiler = TTSTextCompiler.default()
     max_attempts = max(1, int(os.environ.get("KUAISHOU_TTS_MAX_ATTEMPTS", TTS_MAX_ATTEMPTS)))
     retry_delay = max(0.0, float(os.environ.get("KUAISHOU_TTS_RETRY_DELAY_SECONDS", "1")))
+    attempt_timeout = max(0.1, float(os.environ.get("KUAISHOU_TTS_ATTEMPT_TIMEOUT_SECONDS", "45")))
     rendered = 0
     reused = 0
     records = []
@@ -659,10 +660,21 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
             for attempt in range(1, max_attempts + 1):
                 try:
                     out.unlink(missing_ok=True)
-                    await edge_tts.Communicate(tts_text, voice).save(str(out))
+                    await asyncio.wait_for(
+                        edge_tts.Communicate(tts_text, voice).save(str(out)),
+                        timeout=attempt_timeout,
+                    )
                     if not out.is_file() or out.stat().st_size <= 10_000:
                         raise RuntimeError("TTS provider returned an empty audio file")
                     break
+                except asyncio.TimeoutError as exc:
+                    out.unlink(missing_ok=True)
+                    errors.append(f"TTS attempt timeout after {attempt_timeout:g}s")
+                    if attempt == max_attempts:
+                        raise RuntimeError(
+                            f"TTS failed after {max_attempts} attempts for segment {idx}: {errors[-1]}"
+                        ) from exc
+                    await asyncio.sleep(retry_delay * attempt)
                 except Exception as exc:
                     out.unlink(missing_ok=True)
                     errors.append(str(exc)[:160])

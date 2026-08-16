@@ -3368,3 +3368,29 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   the existing final artifact gates.
 - Regular shots now use screenshot-plus-FFmpeg camera motion by default;
   WebM recording is no longer on the normal render path for this host.
+
+## 2026-08-16 - Bounded Default Video TTS
+
+### Finding
+- The default card-video renderer retried Edge TTS failures, but an individual
+  asynchronous `edge_tts` request had no deadline. A provider connection that
+  neither succeeded nor raised could hold the whole overnight task in
+  `generate_audio` indefinitely, leaving only a stale platform-level heartbeat.
+
+### Implemented
+- `kuaishou_render.gen_tts` now applies a bounded timeout to every provider
+  attempt (`KUAISHOU_TTS_ATTEMPT_TIMEOUT_SECONDS`, default 45 seconds), keeps
+  the existing bounded retry count, removes partial audio between attempts,
+  and raises a redacted timeout failure after the final attempt.
+- The failure text includes `timeout`, allowing the existing bounded
+  overnight transient-retry policy to make one recoverable retry and then
+  finish in an explicit failed/blocked state rather than hanging silently.
+- Regression coverage simulates a permanently waiting async provider and
+  verifies fail-closed termination; the normal retry/evidence test remains in
+  place.
+
+### Operational Rule
+- Do not treat a running process as production success. A video task is
+  healthy only when the batch state advances, its append-only events advance,
+  and the final handoff artifacts pass acceptance. A provider timeout is a
+  reportable terminal condition, never a reason to bypass media gates.

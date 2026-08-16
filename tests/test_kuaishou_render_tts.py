@@ -33,3 +33,24 @@ def test_card_tts_retries_transient_no_audio_and_writes_auditable_config(tmp_pat
     assert config["segments"][0]["display_text"] == "AI 调用 API 生成 TTS 音频"
     assert config["segments"][0]["tts_text"] != config["segments"][0]["display_text"]
     assert (tmp_path / "tts" / "tts_01.mp3").stat().st_size > 10_000
+
+
+def test_card_tts_times_out_each_attempt_instead_of_hanging(tmp_path, monkeypatch):
+    class HungCommunicate:
+        def __init__(self, text, voice):
+            self.text = text
+            self.voice = voice
+
+        async def save(self, output):
+            await asyncio.sleep(1)
+
+    monkeypatch.setitem(sys.modules, "edge_tts", SimpleNamespace(Communicate=HungCommunicate))
+    monkeypatch.setenv("KUAISHOU_TTS_MAX_ATTEMPTS", "1")
+    monkeypatch.setenv("KUAISHOU_TTS_ATTEMPT_TIMEOUT_SECONDS", "0.01")
+
+    try:
+        asyncio.run(kuaishou_render.gen_tts(tmp_path, [{"tts": "等待超时测试"}]))
+    except RuntimeError as exc:
+        assert "timeout" in str(exc)
+    else:  # pragma: no cover - makes an unexpected successful network wait explicit
+        raise AssertionError("hung TTS call must fail closed")
