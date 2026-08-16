@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .content_policy import SHORT_VIDEO_PLATFORMS
 from .content_recipe import build_tool_invocation_manifest
 from .tool_selection import build_tool_selection_evidence
 from .video_recipe import build_visual_recipe
@@ -12,7 +13,6 @@ from .video_recipe import build_visual_recipe
 VIDEO_FORMS = {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video", "article_explainer_video"}
 MIXED_VIDEO_FORMS = {"image_text_knowledge_card_short_video_mix"}
 VIDEO_ASSETS = {"short_video", "source_video", "human_voiceover", "background_music", "knowledge_cards"}
-SHORT_VIDEO_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "bilibili", "tiktok", "youtube"}
 
 
 def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str, Any] | None = None) -> dict[str, Any]:

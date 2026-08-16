@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from content_platform.media import MediaBridge
+from content_platform.generator import DraftGenerator
 from content_platform.strategy_router import choose_content_strategy
 from content_platform.video_recipe import build_visual_recipe
 
@@ -113,6 +114,26 @@ class VideoToolchainTests(unittest.TestCase):
         )
 
         self.assertFalse(strategy["video_toolchain_plan"]["required"])
+
+    def test_strategy_router_treats_douyin_ai_as_a_video_lane_even_with_modest_visual_score(self):
+        strategy = choose_content_strategy(
+            "AI workflow walkthrough",
+            {"platforms": ["douyin_ai"], "audience": "builders"},
+            {"total_score": 0.6, "dimensions": {"visual_promise": 0.55, "utility": 0.85}, "trend_stage": "emerging"},
+            {"style_signature": {"formats": []}, "platform_distribution": {}, "account_count": 0},
+        )
+
+        self.assertEqual(strategy["content_form"], "knowledge_card_video")
+        self.assertTrue(strategy["video_toolchain_plan"]["required"])
+        self.assertIn("human_voiceover", strategy["asset_plan"])
+
+    def test_video_generation_prompt_uses_short_eight_beat_contract(self):
+        requirement, style_limit = DraftGenerator._generation_requirements({
+            "strategy": {"content_form": "knowledge_card_video", "primary_platforms": ["douyin_ai"]}
+        })
+
+        self.assertIn("exactly eight short paragraphs", requirement)
+        self.assertEqual(style_limit, 1800)
 
     def test_media_bridge_passes_video_toolchain_plan_to_selected_script(self):
         with tempfile.TemporaryDirectory() as tmp:

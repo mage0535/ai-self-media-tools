@@ -3,7 +3,7 @@ from collections import Counter
 from urllib.parse import urlparse
 
 
-SHORT_VIDEO_PLATFORMS = {"douyin", "tiktok", "youtube", "bilibili", "kuaishou", "shipinhao"}
+SHORT_VIDEO_PLATFORMS = {"douyin", "douyin_ai", "douyin_pet", "tiktok", "youtube", "bilibili", "kuaishou", "shipinhao"}
 NOTE_PLATFORMS = {"xiaohongshu", "rednote", "instagram", "threads"}
 ARTICLE_PLATFORMS = {"wechat", "weixin", "devto", "telegraph", "mataroa", "tabnews"}
 

@@ -256,11 +256,24 @@ class DraftGenerator:
         code = match.group(1)
         return "provider_auth_failed" if code in {"401", "403"} else f"provider_http_{code}"
 
-    def _style_guide(self):
+    def _style_guide(self, limit=5000):
         path = Path(self.config.get("style_guide_path", str(style_guide_path())))
         if not path.is_file():
             return ""
-        return path.read_text(encoding="utf-8", errors="ignore")[:5000]
+        return path.read_text(encoding="utf-8", errors="ignore")[:limit]
+
+    @staticmethod
+    def _generation_requirements(context):
+        strategy = context.get("strategy") or {}
+        form = str(strategy.get("content_form") or "").casefold()
+        platforms = {str(item).casefold() for item in strategy.get("primary_platforms") or []}
+        if form in {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video"} or platforms.intersection({"douyin", "douyin_ai", "douyin_pet", "kuaishou", "shipinhao", "tiktok", "youtube", "bilibili"}):
+            return (
+                "Body must be 280-420 Chinese characters for Chinese video narration or 90-140 English words. "
+                "Use exactly eight short paragraphs separated by blank lines: hook, problem, three concrete steps, "
+                "case or caution, takeaway, and CTA. Do not write an article."
+            ), 1800
+        return "Body must be 1200-2200 Chinese characters for Chinese articles or 900-1600 English words for English articles.", 5000
 
     def _normalize(self, draft, context, provider, topic="", brief=None):
         brief = brief or {}
@@ -679,6 +692,7 @@ class DraftGenerator:
             if language == "en"
             else "Write in Simplified Chinese for this Chinese-language channel."
         )
+        body_requirement, style_limit = self._generation_requirements(context)
         prompt = (
             "Return only JSON. Do not use markdown fences. "
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
@@ -691,8 +705,8 @@ class DraftGenerator:
             "The hook must read like a real person grabbing attention, not like a headline. "
             "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
             "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting. "
-            "Body must be 1200-2200 Chinese characters for Chinese articles or 900-1600 English words for English articles.\n"
-            f"Style guide:\n{self._style_guide()}\n\n"
+            f"{body_requirement}\n"
+            f"Style guide:\n{self._style_guide(style_limit)}\n\n"
             f"Planning context:\n{prompt_brief(topic, brief)}"
         )
         command = [self.config.get("hermes_command", "hermes")]
@@ -758,13 +772,14 @@ class DraftGenerator:
             if language == "en"
             else "Write in Simplified Chinese for this Chinese-language channel."
         )
+        body_requirement, style_limit = self._generation_requirements(context)
         prompt = (
             "Return JSON with title and body, plus optional hook, cta, hashtags. "
             f"Target language: {language}. {language_instruction} "
             "Write a factual, visually scannable, engaging draft. Learn from the reference style signals and trend stage before generating. "
             "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
-            "Body must be 1200-2200 Chinese characters for Chinese articles or 900-1600 English words for English articles.\n"
-            f"Style guide:\n{self._style_guide()}\n\n"
+            f"{body_requirement}\n"
+            f"Style guide:\n{self._style_guide(style_limit)}\n\n"
             f"Planning context:\n{prompt_brief(topic, brief)}"
         )
         payload = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.4}).encode()
