@@ -57,8 +57,10 @@ SUBTITLE_MAX_LINES = 2
 REAL_BGM_MIN_BYTES = 500_000
 ONLINE_BGM_TIMEOUT = 20
 DEFAULT_BGM_RESOLUTION_MAX_SECONDS = 90
+DEFAULT_BGM_CANDIDATE_MAX_SECONDS = 18
 TTS_MAX_ATTEMPTS = 4
 _ACTIVE_BGM_DEADLINE = None
+_ACTIVE_BGM_CANDIDATE_DEADLINE = None
 REAL_INSTRUMENT_TERMS = {
     "acoustic",
     "piano",
@@ -813,7 +815,7 @@ def concat_video(video_dir, cards):
 
 def download_bgm(video_dir, style="acoustic guitar"):
     """Resolve a fresh online real-instrument BGM for the current render only."""
-    global _ACTIVE_BGM_DEADLINE
+    global _ACTIVE_BGM_DEADLINE, _ACTIVE_BGM_CANDIDATE_DEADLINE
     bgm = Path(video_dir) / "bgm.mp3"
     source_meta = Path(video_dir) / "bgm_source.json"
     if bgm.exists() and source_meta.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
@@ -823,7 +825,12 @@ def download_bgm(video_dir, style="acoustic guitar"):
             stale.unlink()
 
     budget = max(1, int(os.environ.get("BGM_RESOLUTION_MAX_SECONDS", str(DEFAULT_BGM_RESOLUTION_MAX_SECONDS))))
+    candidate_budget = max(
+        1,
+        int(os.environ.get("BGM_CANDIDATE_MAX_SECONDS", str(DEFAULT_BGM_CANDIDATE_MAX_SECONDS))),
+    )
     previous_deadline = _ACTIVE_BGM_DEADLINE
+    previous_candidate_deadline = _ACTIVE_BGM_CANDIDATE_DEADLINE
     _ACTIVE_BGM_DEADLINE = time.monotonic() + budget
     errors = []
     timed_out = False
@@ -834,6 +841,10 @@ def download_bgm(video_dir, style="acoustic guitar"):
                 break
             if not _bgm_candidate_allowed(candidate):
                 continue
+            _ACTIVE_BGM_CANDIDATE_DEADLINE = min(
+                _ACTIVE_BGM_DEADLINE,
+                time.monotonic() + candidate_budget,
+            )
             try:
                 _download_candidate_bgm(candidate, bgm)
                 if bgm.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
@@ -843,8 +854,11 @@ def download_bgm(video_dir, style="acoustic guitar"):
                 errors.append(f"{candidate.get('provider')}:{str(exc)[:120]}")
                 if bgm.exists():
                     bgm.unlink()
+            finally:
+                _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_candidate_deadline
     finally:
         _ACTIVE_BGM_DEADLINE = previous_deadline
+        _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_candidate_deadline
     if timed_out:
         raise RuntimeError("online real-instrument BGM resolution budget exhausted")
     raise RuntimeError(
@@ -957,13 +971,22 @@ def _online_bgm_candidates(style):
 
 
 def _bgm_deadline_reached():
-    return _ACTIVE_BGM_DEADLINE is not None and time.monotonic() >= _ACTIVE_BGM_DEADLINE
+    now = time.monotonic()
+    return any(
+        deadline is not None and now >= deadline
+        for deadline in (_ACTIVE_BGM_DEADLINE, _ACTIVE_BGM_CANDIDATE_DEADLINE)
+    )
 
 
 def _bgm_request_timeout(timeout=ONLINE_BGM_TIMEOUT):
-    if _ACTIVE_BGM_DEADLINE is None:
+    deadlines = [
+        deadline
+        for deadline in (_ACTIVE_BGM_DEADLINE, _ACTIVE_BGM_CANDIDATE_DEADLINE)
+        if deadline is not None
+    ]
+    if not deadlines:
         return timeout
-    remaining = _ACTIVE_BGM_DEADLINE - time.monotonic()
+    remaining = min(deadlines) - time.monotonic()
     return max(0.1, min(float(timeout), remaining))
 
 
