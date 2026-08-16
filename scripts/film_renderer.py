@@ -978,6 +978,13 @@ def main() -> int:
                 print(f"{name} still-motion render timed out", file=sys.stderr)
                 return None
 
+        async def render_element(name: str, html_path: str, duration: float) -> str | None:
+            try:
+                return await asyncio.wait_for(_record_shot_frames(name, html_path, duration, out), timeout=max(45, duration + 30))
+            except asyncio.TimeoutError:
+                print(f"{name} frame-motion render timed out", file=sys.stderr)
+                return None
+
         for name, sd in shot_durs:
             hp = out / "html" / f"{name}.html"
             target = out / "shots" / f"{name}.mp4"
@@ -992,7 +999,7 @@ def main() -> int:
             seg_i = int(name[5:7])
             is_elem = name.endswith("B") and shot_types.get(seg_i)
             if is_elem:
-                mp4 = await _record_shot_frames(name, str(hp), sd, out)
+                mp4 = await render_element(name, str(hp), sd)
                 if not mp4:
                     print(f"{name} 逐帧动效渲染失败，回退 still-motion", file=sys.stderr)
                     await render_still(name, str(hp), sd)
