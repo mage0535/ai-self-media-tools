@@ -1304,9 +1304,21 @@ def _bgm_candidate_allowed(candidate):
 def _download_candidate_bgm(candidate, bgm):
     url = str(candidate.get("download_url") or "")
     tmp = Path(str(bgm) + ".download")
+    if _bgm_deadline_reached():
+        raise TimeoutError("BGM resolution budget exhausted before download")
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools online-bgm-resolver"})
-    with urllib.request.urlopen(request, timeout=_bgm_request_timeout(ONLINE_BGM_TIMEOUT)) as response:
-        tmp.write_bytes(response.read())
+    try:
+        with urllib.request.urlopen(request, timeout=_bgm_request_timeout(ONLINE_BGM_TIMEOUT)) as response, tmp.open("wb") as handle:
+            while True:
+                if _bgm_deadline_reached():
+                    raise TimeoutError("BGM resolution budget exhausted during download")
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     if tmp.stat().st_size <= REAL_BGM_MIN_BYTES:
         tmp.unlink(missing_ok=True)
         raise RuntimeError("downloaded BGM too small")

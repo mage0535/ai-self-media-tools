@@ -3395,6 +3395,22 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   and the final handoff artifacts pass acceptance. A provider timeout is a
   reportable terminal condition, never a reason to bypass media gates.
 
+## 2026-08-16 - Bounded Online BGM Downloads
+
+### Finding
+- The online BGM resolver had a global selection budget, but a selected
+  response was read in one unbounded `response.read()` call. A slow transfer
+  could therefore outlive the resolver budget and hold the video renderer
+  after visual and voice rendering had already finished.
+
+### Implemented
+- BGM downloads now fail before opening a connection when the budget is
+  exhausted, stream in 64 KiB chunks, and re-check the deadline between
+  chunks. Partial files are deleted on every transfer failure.
+- The existing resolver then either chooses another licensed real-instrument
+  source inside its budget or returns an explicit blocked result. It never
+  substitutes synthetic or unlicensed music to make a handoff appear ready.
+
 ## 2026-08-16 - Short-Video Fact Gate Contract
 
 ### Finding

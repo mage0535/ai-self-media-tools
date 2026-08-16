@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sys
+import time
 from types import SimpleNamespace
 
 from scripts import kuaishou_render
@@ -54,3 +55,25 @@ def test_card_tts_times_out_each_attempt_instead_of_hanging(tmp_path, monkeypatc
         assert "timeout" in str(exc)
     else:  # pragma: no cover - makes an unexpected successful network wait explicit
         raise AssertionError("hung TTS call must fail closed")
+
+
+def test_bgm_download_fails_before_opening_network_when_budget_is_exhausted(tmp_path, monkeypatch):
+    calls = []
+
+    def should_not_open(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("expired BGM budget must not open a network request")
+
+    monkeypatch.setattr(kuaishou_render.urllib.request, "urlopen", should_not_open)
+    monkeypatch.setattr(kuaishou_render, "_ACTIVE_BGM_DEADLINE", time.monotonic() - 1)
+
+    try:
+        kuaishou_render._download_candidate_bgm(
+            {"download_url": "https://example.invalid/audio.mp3"},
+            tmp_path / "bgm.mp3",
+        )
+    except TimeoutError as exc:
+        assert "budget" in str(exc)
+    else:  # pragma: no cover - makes a deadline regression explicit
+        raise AssertionError("expired BGM budget must fail closed")
+    assert calls == []
