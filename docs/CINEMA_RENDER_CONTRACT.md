@@ -67,3 +67,17 @@ segment durations are written back to each scene's `start`, `end`, and `audio`
 fields. A scene-count mismatch fails closed. This keeps the manifest as the
 only timeline source; `visual_recipe.json` remains a derived compatibility
 artifact.
+
+## Narration Budget Contract
+
+The article body is never itself a renderer input. `MediaBridge` compiles a
+separate `video_script_manifest.json` before video generation. The normal
+short-video profile contains no more than eight narration beats and no beat
+longer than 40 characters. The manifest records both the original length and
+the exact `script` submitted to TTS.
+
+`film_renderer.py` independently rejects a measured TTS segment longer than
+20 seconds or total narration longer than 100 seconds before browser or
+FFmpeg rendering begins. A dedicated long-form plan may override those two
+limits through explicit environment variables; a generic article cannot do so
+implicitly.

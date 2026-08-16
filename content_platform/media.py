@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 from contextlib import nullcontext
@@ -13,6 +14,10 @@ from .paths import agent_scripts_dir
 
 
 class MediaBridge:
+    VIDEO_SCRIPT_MAX_SEGMENTS = 8
+    VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT = 40
+    VIDEO_SCRIPT_MIN_CHARS_PER_SEGMENT = 8
+
     def __init__(self, config, data_dir, guard=None):
         self.config = config or {}
         self.data_dir = Path(data_dir)
@@ -378,7 +383,85 @@ class MediaBridge:
         except Exception:
             return 0.0
 
+    @classmethod
+    def compile_video_script(cls, job):
+        """Compile an article draft into bounded narration beats.
+
+        Video renderers consume paragraph-separated narration. Passing an
+        article body through unchanged makes one TTS segment arbitrarily long
+        and can stall an entire overnight batch. The display article remains
+        untouched; this only creates the dedicated spoken representation.
+        """
+        meta = job.get("draft_meta") or {}
+        explicit = str(meta.get("video_script") or "").strip()
+        body = str(job.get("body") or meta.get("video_prompt") or "").strip()
+        raw = explicit or body
+        if not raw:
+            raise ValueError("video narration is missing")
+
+        chunks = cls._video_script_chunks(raw)
+        segments = []
+        for chunk in chunks:
+            compact = re.sub(r"\s+", " ", chunk).strip(" -#*\t")
+            while len(compact) > cls.VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT:
+                cut = cls._video_script_cutpoint(compact, cls.VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT)
+                # Do not create an unusable one-word tail. Move the split
+                # back when enough text remains for a complete final beat.
+                if len(compact) - cut < cls.VIDEO_SCRIPT_MIN_CHARS_PER_SEGMENT:
+                    cut = max(
+                        cls.VIDEO_SCRIPT_MIN_CHARS_PER_SEGMENT,
+                        len(compact) - cls.VIDEO_SCRIPT_MIN_CHARS_PER_SEGMENT,
+                    )
+                segments.append(compact[:cut].strip())
+                compact = compact[cut:].strip()
+            if compact:
+                segments.append(compact)
+            if len(segments) >= cls.VIDEO_SCRIPT_MAX_SEGMENTS:
+                break
+        segments = [segment for segment in segments if segment][:cls.VIDEO_SCRIPT_MAX_SEGMENTS]
+        if not segments:
+            raise ValueError("video narration has no usable beats")
+
+        normalized = "\n\n".join(segments)
+        source = "explicit_video_script" if explicit and normalized == explicit else (
+            "normalized_explicit_script" if explicit else "derived_from_draft"
+        )
+        return {
+            "version": "video_script_v1",
+            "source": source,
+            "input_characters": len(raw),
+            "output_characters": len(normalized),
+            "segment_count": len(segments),
+            "max_characters_per_segment": cls.VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT,
+            "segments": segments,
+            "script": normalized,
+        }
+
+    @staticmethod
+    def _video_script_chunks(text):
+        cleaned = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", str(text))
+        cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*[-*+]\s+", "", cleaned, flags=re.MULTILINE)
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", cleaned) if part.strip()]
+        chunks = []
+        for paragraph in paragraphs or [cleaned]:
+            chunks.extend(part.strip() for part in re.split(r"(?<=[。！？!?；;])\s*", paragraph) if part.strip())
+        return chunks
+
+    @staticmethod
+    def _video_script_cutpoint(text, limit):
+        for index in range(limit, max(1, limit - 12), -1):
+            if text[index - 1] in "，。；：、！？!?;: ":
+                return index
+        return limit
+
     def _generate_video(self, job, output_dir):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        script_contract = self.compile_video_script(job)
+        script_body = script_contract["script"]
+        (output_dir / "video_script_manifest.json").write_text(
+            json.dumps(script_contract, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         # ── visual-router 自动适配：结构化/知识内容 → 电影级视频管线 ──
         vr = job.get("visual_route") or {}
         if vr.get("auto") and vr.get("route_order") and vr["route_order"][0] == "cinema-video":
@@ -387,13 +470,11 @@ class MediaBridge:
                 cinema_dir = output_dir / "cinema"
                 cinema_dir.mkdir(parents=True, exist_ok=True)
                 title = job.get("title") or job.get("topic") or "AI"
-                body = (job.get("draft_meta", {}).get("video_script")
-                        or job.get("body") or job.get("draft_meta", {}).get("video_prompt", ""))
                 cinema_script = agent_scripts_dir() / "cinema_video_pipeline.py"
                 if not cinema_script.is_file():
                     raise FileNotFoundError("cinema video adapter is not configured")
                 r = _sp.run([sys.executable, str(cinema_script),
-                             "--title", str(title)[:60], "--body", str(body)[:2000],
+                             "--title", str(title)[:60], "--body", script_body,
                              "--out-dir", str(cinema_dir)],
                             capture_output=True, text=True, timeout=1800)
                 final = cinema_dir / "cinema_final.mp4"
@@ -421,9 +502,9 @@ class MediaBridge:
         if not provider:
             raise FileNotFoundError("video script not configured")
         visual_assets = self._prepare_video_visual_assets(job, output_dir, plan)
-        # ``video_prompt`` is generation guidance, not a narratable script.
-        # The renderer needs the full structured draft to derive distinct beats.
-        script_body = job.get("draft_meta", {}).get("video_script") or job.get("body") or job.get("draft_meta", {}).get("video_prompt", "")
+        # ``script_body`` is a separate, bounded narration contract. The
+        # article stays long-form; a renderer must never infer narration from
+        # the full body again.
         env = os.environ.copy()
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
         platforms = [str(item).lower() for item in job.get("platforms", [])]
