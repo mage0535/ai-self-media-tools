@@ -3402,6 +3402,10 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   above a low continuous-motion floor, at least 20% above the stronger motion
   floor, and two real motion peaks. This is stricter than a metadata check and
   still rejects static or single-transition-only output.
+- The motion-evidence policy version is part of `render_contract.json`. A
+  scoring-policy change therefore cannot leave an old failed or passed quality
+  report beside a new runtime; the next render refreshes its evidence through
+  the same contract mechanism as renderer and asset changes.
 
 ## 2026-08-16 - Real Trend Evidence Transport Compatibility
 
