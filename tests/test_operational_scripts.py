@@ -241,6 +241,7 @@ shared_trend_only: false
 
         self.assertLess(text.index("health-refresh"), text.index("overnight-prepare"))
         self.assertIn("batch_partial_requires_follow_up", text)
+        self.assertIn("trend_evidence_shadow_failures", text)
 
     def test_overnight_script_runs_the_checked_out_module_not_a_global_console_script(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")

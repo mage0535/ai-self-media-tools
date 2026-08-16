@@ -60,6 +60,22 @@ notify "progress" "delivery_health_refreshed"
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-prepare --slots "$slots" --output "$out/prepared.json" --refresh > "$out/prepare-result.json"
 notify "progress" "overnight_prepare_complete"
+shadow_failures="$(python3 - "$out/prepared.json" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+print(sum(
+    1
+    for task in payload.get("tasks", [])
+    if (task.get("trend_evidence_gate") or {}).get("mode") == "shadow"
+    and not (task.get("trend_evidence_gate") or {}).get("passed")
+))
+PY
+)"
+if (( shadow_failures > 0 )); then
+  notify "action_required" "trend_evidence_shadow_failures_${shadow_failures}; enforcement_not_enabled"
+fi
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-plan --tasks "$out/prepared.json" --output "$out/plan.json" \
   --start-minute 0 --deadline-minute 290 --finalization-minutes 10 > "$out/plan-result.json"
