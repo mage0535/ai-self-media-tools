@@ -1,4 +1,4 @@
-from content_platform.growth_recipe import build_growth_recipe, validate_growth_recipe
+from content_platform.growth_recipe import build_growth_recipe, derive_topic_growth_signals, validate_growth_recipe
 
 
 def test_tool_demo_recipe_requires_real_process_evidence():
@@ -53,3 +53,11 @@ def test_growth_recipe_accepts_legacy_signals_alias_from_the_auto_path():
 
     assert recipe["topic_decision"]["growth_signals"] == ["timeliness", "user_benefit"]
     assert validate_growth_recipe(recipe)["passed"]
+
+
+def test_real_ranked_candidate_has_observed_growth_signals_for_auto_gate():
+    signals = derive_topic_growth_signals(
+        {"source": "douyin", "url": "https://www.douyin.com/search/ai", "points": 123456}
+    )
+
+    assert signals == ["observed_engagement", "source_provenance"]

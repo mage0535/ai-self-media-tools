@@ -315,7 +315,7 @@ class DirectTrendSource:
                     return fallback
                 raise
         if self.name == "douyin":
-            return self._web_search_source("douyin", "AI 工具 效率 短视频 抖音")
+            return self._douyin_hot_board()
         if self.name == "wewrite_hotspots":
             return self._wewrite_hotspots()
         if self.name == "agent_reach":
@@ -543,6 +543,28 @@ class DirectTrendSource:
         from .zhihu_cli_adapter import ZhihuCliAdapter
         adapter = ZhihuCliAdapter(timeout=int(self.config.get("timeout", 15)) + 30)
         return adapter.fetch_hot(limit=self.limit)
+
+    def _douyin_hot_board(self):
+        """Collect the native Douyin hot board with observed heat values."""
+        payload = self._request_json(
+            "https://www.douyin.com/aweme/v1/hot/search/list/",
+            headers={"Referer": "https://www.douyin.com/"},
+        )
+        rows = (payload.get("data") or {}).get("word_list") or []
+        items = []
+        for row in rows[: self.limit]:
+            title = str(row.get("word") or "").strip()
+            if not title:
+                continue
+            items.append({
+                "title": title,
+                "source": "douyin",
+                "url": row.get("url") or "https://www.douyin.com/search/" + urllib.parse.quote(title),
+                "points": int(row.get("hot_value") or 0),
+                "rank": int(row.get("position") or 0),
+                "label": row.get("label"),
+            })
+        return items
 
     def _web_search_source(self, source, default_query):
         query = str(self.config.get("query") or default_query)
