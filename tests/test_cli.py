@@ -140,6 +140,46 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result[0]["state"], "blocked")
             self.assertEqual(result[0]["last_error"], "platform-specific real trend collection missing")
 
+    def test_auto_prefers_real_douyin_source_for_douyin_ai(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            created = []
+
+            class FakePipeline:
+                def __init__(self, *_args):
+                    pass
+
+                def create(self, topic, platforms, brief, profile, fingerprint):
+                    created.append((topic, platforms, brief))
+                    return {"id": "job-douyin"}
+
+                def run(self, job_id):
+                    return {"id": job_id, "state": "handoff_ready"}
+
+            report = {
+                "items": [
+                    {"title": "Generic AI headline", "source": "hackernews", "url": "https://example.test/generic", "points": 1000},
+                    {"title": "Douyin AI workflow trend", "source": "douyin", "url": "https://example.test/douyin", "points": 10},
+                ],
+                "sources": [
+                    {"source": "douyin", "status": "ok", "count": 1},
+                    {"source": "hackernews", "status": "ok", "count": 1},
+                ],
+            }
+            from content_platform.store import Store
+            Store(root / "state.db").save_tool_inventory("growth_strategy:douyin_ai:latest", {"policy_id": "growth_quality_policy_v1"})
+            with patch("content_platform.cli.Pipeline", FakePipeline), patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = main([
+                        "--db", str(root / "state.db"), "--config", str(root / "missing.json"),
+                        "auto", "--limit", "1", "--platform", "douyin_ai",
+                    ])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(created[0][0], "Douyin AI workflow trend")
+            self.assertTrue(created[0][2]["platform_source_matrix"]["real_platform_collection_verified"])
+
     def test_analyze_topic_returns_strategy_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = str(Path(tmp) / "state.db")

@@ -3381,6 +3381,17 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   boundary, including zero-duration group concatenations, rather than a fixed
   global transition estimate.
 
+## 2026-08-16 - Real Trend Evidence Transport Compatibility
+
+- A real source may record its transport as a suffix, for example
+  `douyin:web_search`, while the source-health row remains `douyin`. The
+  platform matrix now recognizes that relationship without treating unrelated
+  shared trends as native evidence.
+- ASCII lane keywords now match valid CJK-adjacent abbreviations, while retaining Latin-only boundaries that reject incidental
+  matches such as the `ai` inside `paid`.
+- This repairs the false `platform-specific real trend collection missing`
+  block for the Douyin AI lane when its real direct collection succeeded.
+
 ## 2026-08-16 - Bounded Default Video TTS
 
 ### Finding

@@ -140,7 +140,10 @@ def build_platform_matrix(
         and bool(row.get("collected_at"))
         and any(alias in str(row.get("source") or "").casefold() for alias in aliases)
     ]
-    candidate_platform_evidence = any(str(row.get("source") or "").casefold() == source_name for row in platform_sources)
+    candidate_platform_evidence = any(
+        _source_matches(source_name, str(row.get("source") or ""))
+        for row in platform_sources
+    )
     samples = []
     if candidate_platform_evidence and str(candidate.get("title") or "").strip():
         samples.append(
@@ -204,6 +207,13 @@ def _platform_aliases(platform: str) -> set[str]:
     aliases.update({"douyin"} if platform.startswith("douyin_") else set())
     aliases.update({"twitter"} if platform == "x" else set())
     return {item for item in aliases if item}
+
+
+def _source_matches(candidate_source: str, collected_source: str) -> bool:
+    """Preserve provenance while allowing a named collection transport suffix."""
+    candidate = str(candidate_source or "").casefold()
+    collected = str(collected_source or "").casefold()
+    return bool(candidate and collected and (candidate == collected or candidate.startswith(collected + ":")))
 
 
 def _platform_fit_reason(platform: str, candidate: dict[str, Any], keywords: list[str]) -> str:
