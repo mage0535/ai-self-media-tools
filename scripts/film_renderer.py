@@ -40,7 +40,7 @@ XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
-RENDERER_VERSION = "cinematic-v5"
+RENDERER_VERSION = "cinematic-v6"
 ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS = 90
 
 
@@ -168,6 +168,19 @@ def script_gate_passed(returncode: int, quality_profile: str) -> bool:
 def element_render_timeout_seconds(duration: float) -> float:
     """Keep native element-motion recordings bounded without cutting long scenes."""
     return max(ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS, float(duration) * 8 + 30)
+
+
+def segment_shot_durations(tts_duration: float, *, element_motion: bool) -> tuple[float, float]:
+    """Allocate A/B shots so their post-crossfade span contains the narration."""
+    a_duration = min(2.8, float(tts_duration) * 0.30)
+    # A->B always uses the long crossfade. Reserve it and a small delivery
+    # margin before the later A/V gate performs its exact probe.
+    b_duration = max(1.0, float(tts_duration) - a_duration + XFADE_DUR_LONG + 0.15)
+    if element_motion and b_duration < 3.2:
+        shortfall = 3.2 - b_duration
+        a_duration = max(0.6, a_duration - shortfall)
+        b_duration = float(tts_duration) - a_duration + XFADE_DUR_LONG + 0.15
+    return a_duration, b_duration
 
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
 # 08-14 增强：从 4 种微动升级为 8 种电影运镜，增加视觉层次
@@ -1155,15 +1168,9 @@ def main() -> int:
         (out / "html" / f"shot_{i:02d}A.html").write_text(html_a, encoding="utf-8")
         (out / "html" / f"shot_{i:02d}B.html").write_text(html_b, encoding="utf-8")
         d = durs[i - 1]
-        a_dur = min(2.8, d * 0.30)
-        b_dur = max(1.0, d - a_dur + 0.15)
-        # 动效镜头时长保障：完整展示需要 ≥3.2s（tile 3×1.2 / step 4×0.8 / digit 3×0.8+1.4），
-        # TTS 段过短时压缩 A 镜头时间补给 B（视觉段比语音短是安全的，voice 有 adelay+atrim 对齐）
-        if shot_types.get(i) and b_dur < 3.2:
-            shortfall = 3.2 - b_dur
-            a_dur_new = max(0.6, a_dur - shortfall)
-            b_dur = d - a_dur_new + 0.15
-            a_dur = min(a_dur, a_dur_new)
+        # Element motion still needs at least 3.2s, while every segment keeps
+        # enough post-crossfade visual time for its measured narration.
+        a_dur, b_dur = segment_shot_durations(d, element_motion=bool(shot_types.get(i)))
         shot_durs.append((f"shot_{i:02d}A", a_dur))
         shot_durs.append((f"shot_{i:02d}B", b_dur))
 

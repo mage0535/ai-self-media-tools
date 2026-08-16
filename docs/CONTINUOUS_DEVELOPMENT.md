@@ -3389,6 +3389,10 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   capture path was too costly for a long 1080p scene on the production host;
   the new path preserves the same dynamic scene state without a static-image
   fallback or a screenshot bottleneck.
+- A/B shot allocation now explicitly reserves the internal long crossfade plus
+  a 150 ms narration margin. The subsequent probe remains authoritative, but
+  a nominally matching script duration can no longer lose roughly 450 ms at
+  every A-to-B transition before that probe runs.
 
 ## 2026-08-16 - Real Trend Evidence Transport Compatibility
 
