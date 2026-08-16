@@ -32,6 +32,7 @@ def test_default_policy_requires_cinematic_motion(monkeypatch):
 
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
+    assert film_renderer.RENDERER_VERSION == "cinematic-v4"
 
 
 def test_safe_motion_requires_explicit_degraded_opt_in(monkeypatch):
