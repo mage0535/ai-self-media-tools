@@ -3337,3 +3337,5 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   collection provenance beyond the named platform source.
 - WeWrite hotspot rows preserve both the `wewrite_hotspots` transport and an
   optional upstream source, so public-account evidence stays traceable.
+- The public-account lane also has a dedicated `wechat` real-search source;
+  a broad cross-platform item cannot substitute for it in enforce mode.
