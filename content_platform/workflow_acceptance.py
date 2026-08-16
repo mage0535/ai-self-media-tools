@@ -52,6 +52,13 @@ def _load_body(store: Any, job: dict[str, Any]) -> tuple[str, str]:
 
 
 def _default_artifacts_dir(store: Any, job_id: str) -> Path:
+    # The state database can be deliberately isolated from the configured
+    # runtime data directory during canaries. Prefer a registered media
+    # artifact over inferring a sibling directory from the database path.
+    for artifact in store.artifacts(job_id):
+        path = Path(str(artifact.get("path") or ""))
+        if path.suffix.casefold() == ".mp4" and path.is_file():
+            return path.parent
     return Path(store.path).parent / "artifacts" / str(job_id)
 
 

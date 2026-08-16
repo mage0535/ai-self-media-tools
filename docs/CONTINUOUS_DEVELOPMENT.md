@@ -10,6 +10,7 @@
 
 ### Root Cause And Verification
 - An isolated Douyin AI canary reached the real renderer after trend, content, image, and quality gates, but exposed a production contract error: the full article body was passed to the video renderer and produced a 265-second TTS segment. The canary was stopped without delivery or publication.
+- The next isolated canary exposed two separate fail-closed defects: one transient Edge TTS `NoAudioReceived` response aborted rendering instead of retrying, and generic card rendering omitted `tts_config.json`. The renderer now retries boundedly after deleting an empty partial file, records every segment's display text, compiled TTS text, provider and measured duration, and acceptance resolves the registered MP4's directory instead of assuming the database and artifact directories are siblings.
 - Regression coverage verifies long-draft compaction, oversized explicit-script normalization, manifest persistence at the provider boundary, and fail-closed runaway-duration rejection. Focused video regressions passed locally.
 - Required follow-up acceptance is an isolated `handoff` canary. It must produce `video_script_manifest.json`, a bounded final MP4, packet/quality evidence, and `handoff_ready`; it must not create a live delivery or publication.
 

@@ -37,7 +37,7 @@ def test_acceptance_rejects_video_handoff_without_scene_or_tts_evidence(tmp_path
     store = Store(tmp_path / "state.db")
     job = store.create_job("video", ["douyin_ai"], {"platform_source_matrix": _real_matrix("douyin_ai")})
     store.save_draft(job["id"], "标题", "你需要看到这个案例。" * 20, "pass", {"level": "pass"}, draft_meta={"quality_gate": {"passed": True}})
-    render = tmp_path / "artifacts" / job["id"]
+    render = tmp_path / "isolated-render-output" / job["id"]
     render.mkdir(parents=True)
     (render / "final.mp4").write_bytes(b"video")
 
@@ -58,13 +58,14 @@ def test_acceptance_uses_registered_video_and_cover_paths(tmp_path: Path):
     render.mkdir(parents=True)
     (render / "scene_manifest.json").write_text("{}", encoding="utf-8")
     (render / "tts_config.json").write_text("{}", encoding="utf-8")
-    video = tmp_path / "rendered.mp4"
-    cover = tmp_path / "custom-cover.png"
+    video = render / "rendered.mp4"
+    cover = render / "custom-cover.png"
     video.write_bytes(b"video")
     cover.write_bytes(b"cover")
     store.add_artifact(job["id"], "video", str(video))
     store.add_artifact(job["id"], "cover", str(cover))
 
-    result = evaluate_job_acceptance(store, job["id"], "douyin_ai", artifacts_dir=render)
+    result = evaluate_job_acceptance(store, job["id"], "douyin_ai")
 
     assert result["passed"] is True
+    assert Path(result["artifacts_dir"]) == render
