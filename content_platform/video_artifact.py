@@ -15,7 +15,13 @@ VERTICAL_SHORT_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "tiktok", "youtub
 # sampling separates real animation from a frozen frame without false rejects.
 MOTION_THRESHOLD = 0.01
 HIGH_QUALITY_MEAN_MOTION_THRESHOLD = 0.015
-HIGH_QUALITY_ACTIVE_RATIO_THRESHOLD = 0.60
+# Smooth camera movement can remain visibly continuous while each 0.5-second
+# sample is below the stronger change threshold. Require both a broad low-level
+# motion floor and enough stronger motion/peaks rather than mistaking it for a
+# frozen image.
+HIGH_QUALITY_SUSTAINED_MOTION_THRESHOLD = 0.003
+HIGH_QUALITY_SUSTAINED_MOTION_RATIO_THRESHOLD = 0.85
+HIGH_QUALITY_ACTIVE_RATIO_THRESHOLD = 0.20
 HIGH_QUALITY_PEAK_DELTA = 0.025
 HIGH_QUALITY_MIN_PEAKS = 2
 
@@ -37,15 +43,25 @@ def probe_video(video_path: Path) -> dict:
 def motion_evidence_from_deltas(differences: list[float]) -> dict:
     """Evaluate real consecutive-frame deltas, not planned animation metadata."""
     if not differences:
-        return {"passed": False, "mean_delta": 0.0, "active_ratio": 0.0, "peak_count": 0, "static_ratio": 1.0}
+        return {
+            "passed": False,
+            "mean_delta": 0.0,
+            "active_ratio": 0.0,
+            "sustained_motion_ratio": 0.0,
+            "peak_count": 0,
+            "static_ratio": 1.0,
+        }
     ordered = sorted(differences)
     active = [value for value in differences if value >= MOTION_THRESHOLD]
+    sustained = [value for value in differences if value >= HIGH_QUALITY_SUSTAINED_MOTION_THRESHOLD]
     peaks = [value for value in differences if value >= HIGH_QUALITY_PEAK_DELTA]
     mean_delta = sum(differences) / len(differences)
     p95_index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * 0.95)))
     active_ratio = len(active) / len(differences)
+    sustained_motion_ratio = len(sustained) / len(differences)
     passed = (
         mean_delta >= HIGH_QUALITY_MEAN_MOTION_THRESHOLD
+        and sustained_motion_ratio >= HIGH_QUALITY_SUSTAINED_MOTION_RATIO_THRESHOLD
         and active_ratio >= HIGH_QUALITY_ACTIVE_RATIO_THRESHOLD
         and len(peaks) >= HIGH_QUALITY_MIN_PEAKS
     )
@@ -55,6 +71,7 @@ def motion_evidence_from_deltas(differences: list[float]) -> dict:
         "mean_delta": round(mean_delta, 5),
         "p95_delta": round(ordered[p95_index], 5),
         "active_ratio": round(active_ratio, 5),
+        "sustained_motion_ratio": round(sustained_motion_ratio, 5),
         "static_ratio": round(1 - active_ratio, 5),
         "peak_count": len(peaks),
     }

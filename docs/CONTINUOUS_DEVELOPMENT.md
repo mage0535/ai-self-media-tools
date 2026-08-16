@@ -3397,6 +3397,11 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   templates use continuous six-second linear background camera movement rather
   than an eleven-second ease-in/out cycle, increasing persistent visual change
   without relaxing the active-motion threshold or introducing visual jitter.
+- Motion verification distinguishes sustained smooth camera movement from a
+  frozen frame: it requires mean change `>=0.015`, at least 85% of samples
+  above a low continuous-motion floor, at least 20% above the stronger motion
+  floor, and two real motion peaks. This is stricter than a metadata check and
+  still rejects static or single-transition-only output.
 
 ## 2026-08-16 - Real Trend Evidence Transport Compatibility
 
