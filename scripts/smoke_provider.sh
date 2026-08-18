@@ -38,6 +38,10 @@ import sys
 text = sys.argv[1].strip()
 if re.match(r"^HTTP\s+(401|403|429|5\d{2})\b", text, flags=re.I):
     raise SystemExit("provider returned an HTTP failure")
+if text.startswith("```"):
+    lines = text.splitlines()
+    if lines and lines[-1].strip() == "```":
+        text = "\n".join(lines[1:-1]).strip()
 try:
     payload = json.loads(text)
 except json.JSONDecodeError as exc:
