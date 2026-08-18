@@ -25,7 +25,7 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     failures: list[str] = []
     asset_gate: dict[str, Any] = {}
     matrix = (job.get("brief") or {}).get("platform_source_matrix") or {}
-    if not bool(matrix.get("real_platform_collection_verified")):
+    if not _has_valid_selection_evidence(job.get("brief") or {}, matrix):
         failures.append("platform_evidence_missing")
     gate = (job.get("draft_meta") or {}).get("quality_gate") or {}
     if gate and not bool(gate.get("passed", True)):
@@ -53,6 +53,24 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
         validate_asset_set(records or [], normalized, str(job_id), AssetLedger(Path(store.path).parent / "asset_ledger.db"), register=True)
     store.save_workflow_acceptance(job_id, result)
     return result
+
+
+def _has_valid_selection_evidence(brief: dict[str, Any], matrix: dict[str, Any]) -> bool:
+    if bool(matrix.get("real_platform_collection_verified")):
+        return True
+    if str(brief.get("selection_mode") or "") != "editorial_calendar":
+        return False
+    evidence = brief.get("editorial_evidence") or {}
+    if not isinstance(evidence, dict):
+        return False
+    planned = evidence.get("planned_for") or evidence.get("planned_date")
+    dedupe = evidence.get("dedupe_passed") is True or bool(str(evidence.get("dedupe") or "").strip())
+    return bool(
+        str(evidence.get("strategy_source") or "").strip()
+        and str(evidence.get("calendar_column") or "").strip()
+        and str(planned or "").strip()
+        and dedupe
+    )
 
 
 def _load_body(store: Any, job: dict[str, Any]) -> tuple[str, str]:

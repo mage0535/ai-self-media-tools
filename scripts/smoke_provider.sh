@@ -18,12 +18,18 @@ command="${settings[0]:-hermes}"
 provider="${settings[1]:-}"
 model="${settings[2]:-}"
 
-[[ -n "$provider" && -n "$model" ]] || {
-  echo "generator hermes_provider and hermes_model must be configured" >&2
-  exit 2
-}
+if [[ -n "$provider" || -n "$model" ]]; then
+  [[ -n "$provider" && -n "$model" ]] || {
+    echo "generator provider/model override must configure both values or neither" >&2
+    exit 2
+  }
+  route=(--provider "$provider" --model "$model")
+else
+  # No override means use the same active Hermes route as interactive work.
+  route=()
+fi
 
-output="$(env -i HOME="$HOME" PATH="$PATH" PYTHONPATH="$root" "$command" --provider "$provider" --model "$model" -z 'Return only JSON: {"title":"provider smoke","body":"provider smoke"}' --cli)"
+output="$(env -i HOME="$HOME" PATH="$PATH" PYTHONPATH="$root" "$command" "${route[@]}" -z 'Return only JSON: {"title":"provider smoke","body":"provider smoke"}' --cli)"
 python3 - "$output" <<'PY'
 import json
 import re

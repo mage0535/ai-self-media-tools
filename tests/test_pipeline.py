@@ -159,7 +159,9 @@ class PipelineTests(unittest.TestCase):
             publisher.assert_not_called()
 
     def test_unsourced_operational_claim_blocks_before_media_generation(self):
-        job = self.pipeline.create("Provider fallback", ["juejin"], {"audience": "developers"})
+        from content_platform.run_contract import build_run_contract
+
+        job = self.pipeline.create("Provider fallback", ["juejin"], {"audience": "developers", "run_contract": build_run_contract("juejin")})
         with patch.object(self.pipeline.generator, "generate", return_value={
             "title": "Provider fallback",
             "body": "我实测运行了 8 个月，成功率达到 99%。",
