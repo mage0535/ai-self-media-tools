@@ -44,6 +44,21 @@ class OperationalScriptTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertEqual(result["error"], "HERMES_DELIVERY_TARGET_missing")
 
+    def test_media_delivery_blocks_cover_without_quality_evidence(self):
+        from scripts.deliver_media import deliver
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cover = Path(tmp) / "cover.png"
+            cover.write_bytes(b"not-a-real-cover")
+            with patch("scripts.deliver_media.resolve_target", return_value="telegram:test"), patch(
+                "scripts.deliver_media._send"
+            ) as send:
+                result = deliver("cover", [str(cover)])
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["error"], "cover_quality_gate_failed")
+        send.assert_not_called()
+
     def test_topic_independence_requires_source_matrix(self):
         from scripts.check_platform_topic_independence import check
 
@@ -290,9 +305,10 @@ shared_trend_only: false
         self.assertIn("overnight-supervise", script)
         self.assertIn("overnight-sync-state", script)
         self.assertLess(script.index("overnight-sync-state"), script.index('if [[ "$status" != "stale" ]]'))
-        self.assertNotIn("overnight-run", script)
+        self.assertIn("overnight-run", script)
+        self.assertIn("automatic_recovery", script)
         self.assertIn("run_overnight_supervisor.sh", service)
-        self.assertIn("*:0/5", timer)
+        self.assertIn("*:0/3", timer)
 
     def test_overnight_script_writes_a_failed_outcome_before_notifying_on_unhandled_error(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")

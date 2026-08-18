@@ -1,0 +1,31 @@
+{
+  "policy_id": "viral_cover_policy_v1",
+  "scope": "all_content_with_cover",
+  "default_mode": "high_quality",
+  "required_evidence": [
+    "hook",
+    "conflict_or_payoff",
+    "focal_subjects",
+    "content_match_reason",
+    "layout_key",
+    "safe_zone_verified"
+  ],
+  "allowed_layouts": [
+    "character_showdown",
+    "evidence_interface",
+    "hero_conflict",
+    "diagonal_split",
+    "before_after",
+    "checklist_poster",
+    "magazine_story",
+    "result_reveal"
+  ],
+  "forbidden": [
+    "screenshot_plus_caption",
+    "single_centered_sentence",
+    "unrelated_stock_photo",
+    "fixed_template_without_topic_adaptation"
+  ],
+  "failure_policy": "block_delivery_and_publish",
+  "degraded_policy": "record_but_never_deliver_or_publish"
+}

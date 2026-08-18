@@ -42,4 +42,18 @@ fi
 # A stale service may own browser or publisher state. Recover only durable
 # leases and reconcile facts; a new batch is never started from this watcher.
 run_platform --config "$root/config.json" --db "$root/data/state.db" recover > "$out/supervisor-recover.json" || true
-notify "action_required" "heartbeat_stale_reconciled; see $report"
+if [[ -f "$out/plan.json" ]]; then
+  notify "progress" "automatic_recovery_started; see $report"
+  if run_platform --config "$root/config.json" --db "$root/data/state.db" \
+    overnight-run --plan "$out/plan.json" --state "$state" --events "$out/events.jsonl" \
+    > "$out/supervisor-recovery-result.json"; then
+    run_platform --config "$root/config.json" --db "$root/data/state.db" \
+      overnight-sync-state --state "$state" --output "$out/acceptance_summary.json" \
+      > "$out/supervisor-recovery-sync.json"
+    notify "resolved" "automatic_recovery_completed; see $out/supervisor-recovery-result.json"
+  else
+    notify "action_required" "automatic_recovery_failed; see $out/supervisor-recovery-result.json"
+  fi
+else
+  notify "action_required" "heartbeat_stale_reconciled_without_plan; see $report"
+fi

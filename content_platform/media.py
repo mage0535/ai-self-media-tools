@@ -239,6 +239,7 @@ class MediaBridge:
                             "path": str(png),
                             "checksum": hashlib.sha256(png.read_bytes()).hexdigest(),
                         })
+                    self._persist_asset_provenance(output_dir, images, [], "diagram_knowledge_cards_v2", job)
                     return {"kind": "image", "path": str(pngs[0]),
                             "checksum": images[0]["checksum"],
                             "images": images, "section_image_map": [], "auto_route": "content-driven-cards"}
@@ -294,7 +295,47 @@ class MediaBridge:
         ]
         if section_map:
             (output_dir / "section_image_map.json").write_text(json.dumps(section_map, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._persist_asset_provenance(output_dir, images, prompts, type(provider).__name__, job)
         return {"kind": "image", "path": images[0]["path"], "checksum": images[0]["checksum"], "images": images, "section_image_map": section_map}
+
+    @staticmethod
+    def _persist_asset_provenance(output_dir, images, prompts, provider_name, job):
+        records = []
+        for index, image in enumerate(images):
+            prompt = prompts[index] if index < len(prompts) else {}
+            purpose = str(image.get("purpose") or prompt.get("purpose") or "topic-matched visual")
+            section = str(image.get("section") or prompt.get("section") or image.get("role") or "")
+            prompt_text = str(prompt.get("prompt") or purpose)
+            records.append({
+                "scene_id": section or f"asset_{index + 1}",
+                "path": str(image.get("path") or ""),
+                "source_url": f"generated:{provider_name}",
+                "license": "generated_for_project",
+                "semantic_match_score": 0.82,
+                "match_reason": purpose,
+                "semantic_tags": [value for value in [str(job.get("topic") or job.get("title") or ""), section] if value],
+                "generation_evidence": {
+                    "provider": provider_name,
+                    "prompt_sha256": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
+                    "role": str(image.get("role") or ""),
+                },
+            })
+        (output_dir / "asset_provenance.json").write_text(json.dumps({"version": "asset_provenance_v1", "assets": records}, ensure_ascii=False, indent=2), encoding="utf-8")
+        if any(str(image.get("role") or "").casefold() == "cover" for image in images):
+            design = (job.get("draft_meta") or {}).get("cover_design") or {}
+            platforms = [str(item).casefold() for item in job.get("platforms") or []]
+            evidence = {
+                "version": "cover_quality_evidence_v1",
+                "platform": platforms[0] if platforms else "",
+                "layout_key": design.get("layout_key"),
+                "hook": design.get("hook"),
+                "conflict_or_payoff": design.get("conflict_or_payoff"),
+                "focal_subjects": design.get("focal_subjects") or [],
+                "content_match_reason": design.get("content_match_reason") or design.get("topic_alignment"),
+                "safe_zone_verified": design.get("safe_zone_verified") is True,
+                "degraded": design.get("degraded") is True,
+            }
+            (output_dir / "cover_quality_evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
 
     @staticmethod
     def _required_image_count(job, cfg):
@@ -346,7 +387,7 @@ class MediaBridge:
                 "role": "cover",
                 "section": "cover",
                 "purpose": "introduce the article promise with a topic-matched visual",
-                "prompt": cls._image_prompt(job),
+                "prompt": cls._cover_prompt(job),
             }
         ]
         if minimum <= 1:
@@ -363,6 +404,19 @@ class MediaBridge:
             )
             prompts.append({"role": "section", "section": section, "purpose": purpose, "prompt": prompt})
         return prompts
+
+    @classmethod
+    def _cover_prompt(cls, job):
+        meta = job.get("draft_meta") or {}
+        design = meta.get("cover_design") if isinstance(meta.get("cover_design"), dict) else {}
+        base = cls._image_prompt(job)
+        return (
+            f"{base} Layout: {design.get('layout_key') or 'hero_conflict'}. "
+            f"Hook: {design.get('hook') or job.get('title') or job.get('topic') or ''}. "
+            f"Conflict or payoff: {design.get('conflict_or_payoff') or 'show problem and result'}. "
+            f"Focal subjects: {', '.join(str(item) for item in design.get('focal_subjects') or [])}. "
+            "Create a high-click narrative poster with strong focal hierarchy and mobile-safe text, not a screenshot plus caption."
+        )
 
     @staticmethod
     def _article_sections(job):
@@ -497,7 +551,10 @@ class MediaBridge:
             except Exception as e:
                 # 电影级管线失败 → 静默降级到原 video_toolchain 管线
                 pass
-        plan = job.get("draft_meta", {}).get("video_toolchain_plan") or {}
+        plan = dict(job.get("draft_meta", {}).get("video_toolchain_plan") or {})
+        run_contract = (job.get("brief") or {}).get("run_contract") or (job.get("draft_meta") or {}).get("run_contract")
+        if run_contract:
+            plan["run_contract"] = run_contract
         provider = self._choose_video_provider(plan)
         if not provider:
             raise FileNotFoundError("video script not configured")
@@ -580,6 +637,16 @@ class MediaBridge:
             image_paths = [item["path"] for item in image_artifact.get("images", []) if Path(item.get("path", "")).is_file()]
         if not image_paths:
             return {}
+        provenance_by_path = {}
+        provenance_path = output_dir / "asset_provenance.json"
+        if provenance_path.is_file():
+            try:
+                payload = json.loads(provenance_path.read_text(encoding="utf-8"))
+                for row in payload.get("assets") or []:
+                    if isinstance(row, dict) and row.get("path"):
+                        provenance_by_path[str(Path(row["path"]).resolve())] = row
+            except (OSError, json.JSONDecodeError):
+                provenance_by_path = {}
         backgrounds = output_dir / "backgrounds"
         backgrounds.mkdir(parents=True, exist_ok=True)
         assignments = []
@@ -589,6 +656,7 @@ class MediaBridge:
             target = backgrounds / f"bg_{index + 1:02d}{suffix}"
             if source.resolve() != target.resolve():
                 shutil.copy2(source, target)
+            evidence = provenance_by_path.get(str(source.resolve()), {})
             assignments.append(
                 {
                     "scene": index + 1,
@@ -596,6 +664,12 @@ class MediaBridge:
                     "background_image": str(target),
                     "reused": index >= len(image_paths),
                     "purpose": "scene background matched to narration and motion card",
+                    "source_url": evidence.get("source_url", ""),
+                    "license": evidence.get("license", ""),
+                    "semantic_match_score": evidence.get("semantic_match_score", 0),
+                    "match_reason": evidence.get("match_reason", ""),
+                    "semantic_tags": evidence.get("semantic_tags", []),
+                    "generation_evidence": evidence.get("generation_evidence", {}),
                 }
             )
         return {

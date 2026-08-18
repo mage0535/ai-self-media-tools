@@ -118,6 +118,14 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             pipeline.publish(job["id"])
 
+    def test_compiled_run_cannot_publish_without_passing_acceptance(self):
+        from content_platform.run_contract import build_run_contract
+
+        job = self.pipeline.create("Compiled work", ["wechat"], {"run_contract": build_run_contract("wechat")})
+        self.store.transition(job["id"], {"created"}, "approved", "test_approved")
+        with self.assertRaises(PermissionError, msg="compiled scheduled work must always fail closed"):
+            self.pipeline.publish(job["id"])
+
     def test_required_quality_gate_blocks_before_publish(self):
         pipeline = Pipeline(
             self.store,
@@ -149,6 +157,41 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 self.pipeline.publish(job["id"])
             publisher.assert_not_called()
+
+    def test_unsourced_operational_claim_blocks_before_media_generation(self):
+        job = self.pipeline.create("Provider fallback", ["juejin"], {"audience": "developers"})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Provider fallback",
+            "body": "我实测运行了 8 个月，成功率达到 99%。",
+            "draft_meta": {"claim_ledger": []},
+        }), patch.object(self.pipeline.media, "generate") as media:
+            result = self.pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        steps = self.store.workflow_steps(job["id"])
+        claim_step = [row for row in steps if row["step_name"] == "validate_factual_claims"][-1]
+        self.assertEqual(claim_step["status"], "BLOCKED")
+        media.assert_not_called()
+
+    def test_scheduled_contract_requires_content_depth_before_media(self):
+        from content_platform.run_contract import build_run_contract
+
+        job = self.pipeline.create(
+            "Workflow tutorial",
+            ["tiktok"],
+            {"run_contract": build_run_contract("tiktok")},
+        )
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Workflow tutorial",
+            "body": "Useful but shallow advice without a structured depth plan.",
+            "draft_meta": {"claim_ledger": []},
+        }), patch.object(self.pipeline.media, "generate") as media:
+            result = self.pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        depth_step = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "validate_content_depth"][-1]
+        self.assertEqual(depth_step["status"], "BLOCKED")
+        media.assert_not_called()
 
     def test_short_video_geo_gate_uses_short_form_contract(self):
         draft = {

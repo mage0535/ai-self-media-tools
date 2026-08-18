@@ -100,6 +100,8 @@ def build_due_tasks(
     source_report: list[dict[str, Any]],
     rank_for_platform: Any,
     candidate_filter: Any | None = None,
+    requery_for_platform: Any | None = None,
+    max_research_rounds: int = 3,
     growth_strategy_status: dict[str, dict[str, Any]] | None = None,
     weekday: int | None = None,
     strict_trend_evidence: bool = False,
@@ -130,6 +132,27 @@ def build_due_tasks(
         candidates = list(rank_for_platform(platform, items, raw) or [])
         if candidate_filter is not None:
             candidates = [candidate for candidate in candidates if candidate_filter(platform, candidate, raw)]
+        research_attempts: list[dict[str, int]] = []
+        if not candidates and requery_for_platform is not None:
+            for round_number in range(1, max(0, int(max_research_rounds)) + 1):
+                researched = list(requery_for_platform(platform, items, raw, round_number) or [])
+                if candidate_filter is not None:
+                    researched = [candidate for candidate in researched if candidate_filter(platform, candidate, raw)]
+                research_attempts.append({"round": round_number, "candidate_count": len(researched)})
+                if researched:
+                    candidates = researched
+                    break
+        editorial_evidence = dict(raw.get("editorial_fallback") or {})
+        selection_mode = "native_trend"
+        if not candidates and _valid_editorial_fallback(editorial_evidence):
+            selection_mode = "editorial_calendar"
+            candidates = [{
+                "title": str(editorial_evidence["topic"]),
+                "source": "editorial_calendar",
+                "fingerprint": str(editorial_evidence.get("topic_fingerprint") or normalize_topic(editorial_evidence["topic"])),
+                "score": float(editorial_evidence.get("score") or 0.5),
+                "direction": str(editorial_evidence.get("calendar_column") or "editorial_calendar"),
+            }]
         if not platform:
             row.update({"state": "blocked", "reason": "slot has no platform"})
         elif not candidates:
@@ -166,6 +189,21 @@ def build_due_tasks(
             )
             trend_gate = validate_trend_candidate(trend_candidate)
             matrix = _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
+            from .run_contract import bound_stage_payload, build_run_contract
+            from .content_blueprint import build_content_blueprint, validate_content_blueprint
+
+            run_contract = build_run_contract(platform)
+            content_blueprint = build_content_blueprint(platform, str(selected["title"]), raw, matrix)
+            blueprint_gate = validate_content_blueprint(content_blueprint)
+            bounded_model_input = bound_stage_payload(
+                run_contract,
+                "generate",
+                {
+                    "content_blueprint": content_blueprint,
+                    "claim_ledger": list(raw.get("claim_ledger") or []),
+                    "tool_selection_plan": dict(raw.get("tool_selection_plan") or {}),
+                },
+            )
             selected_topics.setdefault(
                 _topic_identity(selected),
                 {"platform": platform, "adaptation": adaptation, "signal": signal, "stage": str(raw.get("stage") or "")},
@@ -182,16 +220,23 @@ def build_due_tasks(
                         "growth_signals": ["timeliness", "user_benefit"],
                     },
                     "trend_candidate": trend_candidate,
+                    "run_contract": run_contract,
+                    "bounded_model_input": bounded_model_input,
+                    "content_blueprint": content_blueprint,
+                    "content_blueprint_gate": blueprint_gate,
+                    **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
                 },
                 "trend_candidate": trend_candidate,
                 "trend_candidate_gate": trend_gate,
+                "selection_mode": selection_mode,
+                "research_attempts": research_attempts,
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
                 "state": "ready_for_plan",
             })
             evidence_failure = ""
-            if not trend_gate.get("passed"):
+            if not trend_gate.get("passed") and selection_mode != "editorial_calendar":
                 evidence_failure = "trend candidate evidence below 8-attempt/5-success threshold"
-            elif not matrix["real_platform_collection_verified"]:
+            elif not matrix["real_platform_collection_verified"] and selection_mode != "editorial_calendar":
                 evidence_failure = "platform-specific real trend collection missing"
             if evidence_failure and trend_evidence_mode in {"shadow", "enforce"}:
                 row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": False, "reason": evidence_failure}
@@ -201,6 +246,16 @@ def build_due_tasks(
                 row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": not bool(evidence_failure)}
         tasks.append(row)
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
+
+
+def _valid_editorial_fallback(value: dict[str, Any]) -> bool:
+    return bool(
+        str(value.get("topic") or "").strip()
+        and str(value.get("strategy_source") or "").strip()
+        and str(value.get("calendar_column") or "").strip()
+        and str(value.get("planned_for") or "").strip()
+        and value.get("dedupe_passed") is True
+    )
 
 
 def _allows_evidenced_overlap(
@@ -696,8 +751,14 @@ def _load_state(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
                 interrupted = False
                 for task in state.get("tasks") or []:
                     if task.get("state") == "running":
-                        task["state"] = "blocked"
-                        task["reason"] = "interrupted_batch_requires_recovery"
+                        recovery_count = int(task.get("recovery_count") or 0) + 1
+                        task["recovery_count"] = recovery_count
+                        if recovery_count <= 2:
+                            task["state"] = "retry_pending"
+                            task["reason"] = "automatic_recovery_after_interrupted_batch"
+                        else:
+                            task["state"] = "failed"
+                            task["reason"] = "automatic_recovery_limit_exceeded"
                         interrupted = True
                 if interrupted:
                     state["status"] = "partial"

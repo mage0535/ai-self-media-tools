@@ -227,6 +227,73 @@ def test_due_task_builder_applies_a_final_platform_candidate_filter():
     assert prepared["tasks"][0]["state"] == "blocked"
 
 
+def test_due_task_builder_researches_the_lane_before_blocking():
+    rounds = []
+
+    def requery(platform, _items, _slot, round_number):
+        rounds.append((platform, round_number))
+        if round_number == 2:
+            return [{"title": "AI meeting workflow", "source": "tiktok", "fingerprint": "meeting", "score": 2.0}]
+        return []
+
+    report = [
+        {"source": source, "status": "ok", "collected_at": "2026-08-18T00:00:00+00:00"}
+        for source in ("tiktok", "youtube", "github", "hackernews", "bilibili", "weibo", "x", "juejin")
+    ]
+    prepared = build_due_tasks(
+        [{"platform": "tiktok", "topic_keywords": ["AI", "workflow"]}],
+        items=[],
+        source_report=report,
+        rank_for_platform=lambda *_args: [{"title": "unrelated sport", "source": "tiktok"}],
+        candidate_filter=lambda _platform, candidate, _slot: "AI" in candidate.get("title", ""),
+        requery_for_platform=requery,
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["topic"] == "AI meeting workflow"
+    assert task["research_attempts"] == [
+        {"round": 1, "candidate_count": 0},
+        {"round": 2, "candidate_count": 1},
+    ]
+
+
+def test_due_task_builder_uses_only_complete_labeled_editorial_fallback():
+    prepared = build_due_tasks(
+        [{
+            "platform": "tiktok",
+            "editorial_fallback": {
+                "topic": "Three checks before trusting AI notes",
+                "strategy_source": "growth_strategy:tiktok:latest",
+                "calendar_column": "workflow_checklist",
+                "planned_for": "2026-08-18",
+                "dedupe_passed": True,
+            },
+        }],
+        items=[],
+        source_report=[],
+        rank_for_platform=lambda *_args: [],
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["selection_mode"] == "editorial_calendar"
+    assert task["brief"]["editorial_evidence"]["dedupe_passed"] is True
+
+
+def test_due_task_builder_rejects_incomplete_editorial_fallback():
+    prepared = build_due_tasks(
+        [{"platform": "tiktok", "editorial_fallback": {"topic": "generic idea"}}],
+        items=[],
+        source_report=[],
+        rank_for_platform=lambda *_args: [],
+        strict_trend_evidence=True,
+    )
+    assert prepared["tasks"][0]["state"] == "blocked"
+
+
 def test_due_task_builder_blocks_when_strict_trend_evidence_is_incomplete():
     prepared = build_due_tasks(
         [{"platform": "zhihu"}],
@@ -294,6 +361,13 @@ def test_due_task_builder_accepts_a_verified_platform_web_search_candidate():
     task = prepared["tasks"][0]
     assert task["state"] == "ready_for_plan"
     assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is True
+    assert task["brief"]["run_contract"]["platform"] == "douyin_ai"
+    assert task["brief"]["run_contract"]["publish_boundary"] == "manual_handoff_only"
+    assert task["brief"]["bounded_model_input"]["content_blueprint"]["topic"] == "AI workflow"
+    assert set(task["brief"]["bounded_model_input"]) <= {
+        "content_blueprint", "claim_ledger", "tool_selection_plan"
+    }
+    assert task["brief"]["content_blueprint_gate"]["passed"] is True
 
 
 def test_sync_batch_state_records_actual_job_and_delivery_state(tmp_path: Path):
@@ -586,20 +660,31 @@ def test_execute_batch_marks_only_blocked_rows_partial(tmp_path: Path):
     assert summary["status"] == "partial"
 
 
-def test_interrupted_running_task_is_blocked_without_being_recreated(tmp_path: Path):
+def test_interrupted_running_task_is_retried_once_after_reconciliation(tmp_path: Path):
     plan = build_batch_plan([{"platform": "wechat", "topic": "topic", "brief": {}, "estimate_minutes": 10}], deadline_minute=280, finalization_minutes=20)
     state_path = tmp_path / "state.json"
     state_path.write_text(json.dumps({"status": "running", "tasks": [{"platform": "wechat", "state": "running", "topic": "topic"}]}), encoding="utf-8")
 
     class Pipeline:
+        creates = 0
+
         def create(self, *_args, **_kwargs):
-            raise AssertionError("interrupted work must not be recreated")
+            self.creates += 1
+            return {"id": "replacement-job"}
 
-    summary = execute_batch(Pipeline(), plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
+        def run(self, _job_id):
+            return {"id": "replacement-job", "state": "review_required"}
 
-    assert summary["status"] == "partial"
-    assert summary["tasks"][0]["state"] == "blocked"
-    assert summary["tasks"][0]["reason"] == "interrupted_batch_requires_recovery"
+        def stage_drafts(self, _job_id):
+            return {"id": "replacement-job", "state": "partial"}
+
+    pipeline = Pipeline()
+    summary = execute_batch(pipeline, plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert summary["status"] == "completed"
+    assert summary["tasks"][0]["state"] == "staged"
+    assert summary["tasks"][0]["recovery_count"] == 1
+    assert pipeline.creates == 1
 
 
 def test_review_required_task_is_terminal_on_resume(tmp_path: Path):

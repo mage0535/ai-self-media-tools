@@ -39,11 +39,34 @@ def resolve_target(target: str = "") -> str:
 def _stage_for_hermes(path: Path, platform: str) -> Path:
     cache_root = Path(os.environ.get("HERMES_MEDIA_CACHE_DIR", Path.home() / ".hermes" / f"{platform}_media_cache"))
     cache_root.mkdir(parents=True, exist_ok=True)
-    identity = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    identity = digest.hexdigest()[:12]
     staged = cache_root / f"{path.stem}-{identity}{path.suffix.lower()}"
-    if not staged.is_file() or staged.stat().st_size != path.stat().st_size:
+    if not staged.is_file():
         shutil.copy2(path, staged)
     return staged
+
+
+def _cover_preflight(paths: list[str]) -> dict | None:
+    from content_platform.cover_quality import validate_cover
+
+    for raw in paths:
+        path = Path(raw).expanduser().resolve()
+        if "cover" not in path.stem.casefold():
+            continue
+        result = validate_cover(path, path.parent / "cover_quality_evidence.json")
+        if not result.get("passed"):
+            return {
+                "passed": False,
+                "error": "cover_quality_gate_failed",
+                "cover": str(path),
+                "failures": result.get("failures") or [],
+                "sent": [],
+            }
+    return None
 
 
 def _send(target: str, message: str) -> tuple[bool, str]:
@@ -56,6 +79,9 @@ def _send(target: str, message: str) -> tuple[bool, str]:
 
 
 def deliver(text: str, paths: list[str], target: str = "", platform: str = "media") -> dict:
+    cover_failure = _cover_preflight(paths)
+    if cover_failure:
+        return cover_failure
     target = resolve_target(target)
     if not target:
         return {"passed": False, "error": "HERMES_DELIVERY_TARGET_missing", "sent": []}

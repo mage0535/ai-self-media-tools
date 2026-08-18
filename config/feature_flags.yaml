@@ -8,10 +8,13 @@ proxy_policy_gate: enforce
 asset_license_gate: enforce_for_new_content
 publish_receipt_required: enforce
 
-topic_scoring_mode: shadow
-quality_gate_enhanced: shadow
-duplication_detector: shadow
-real_platform_trend_evidence_mode: shadow
+topic_scoring_mode: enforce
+quality_gate_enhanced: enforce
+duplication_detector: enforce
+real_platform_trend_evidence_mode: enforce
+run_contract: enforce
+asset_ledger: enforce
+viral_cover_gate: enforce
 
 performance_collector: on
 feedback_memory: on

@@ -91,14 +91,27 @@ def render_config(home: Path, *, overwrite: bool = False) -> Path:
         "data_dir": str(home / "data"),
         "generator": {
             "provider": "hermes-cli",
-            "allow_fallback": True,
+            "allow_fallback": False,
             "env_file": str(home / "secrets" / "provider.env"),
             "api_key_env": "OPENAI_API_KEY",
-            "model": "gpt-4.1-mini",
+            "model": "",
             "hermes_command": "hermes",
+            "hermes_provider": "",
+            "hermes_model": "",
             "timeout": 180,
             "style_guide_path": str(style_path(home)),
         },
+        "feature_flags": {
+            "real_platform_trend_evidence_mode": "enforce",
+            "topic_scoring_mode": "enforce",
+            "quality_gate_enhanced": "enforce",
+            "duplication_detector": "enforce",
+            "run_contract": "enforce",
+            "asset_ledger": "enforce",
+            "viral_cover_gate": "enforce",
+        },
+        "workflow": {"require_gate_pass": True, "require_unified_acceptance": True},
+        "resources": {"min_available_mb": 1200, "warning_disk_used_percent": 84, "max_disk_used_percent": 88},
         "media": {
             "image": {
                 "enabled": True,
@@ -187,7 +200,8 @@ def render_config(home: Path, *, overwrite: bool = False) -> Path:
         },
         "notifications": {
             "log_path": str(home / "data" / "notifications.jsonl"),
-            "network_enabled": False,
+            "network_enabled": True,
+            "hermes_target_env": "AI_SELF_MEDIA_HERMES_TARGET",
         },
     }
     out = home / "config.json"

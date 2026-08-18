@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 
-CURRENT_PREFLIGHT_MANIFEST_VERSION = "content_preflight_manifest_v1"
+CURRENT_PREFLIGHT_MANIFEST_VERSION = "content_preflight_manifest_v2"
 
 COMMON_REQUIRED_KEYS = [
     "version",
@@ -25,6 +25,7 @@ COMMON_REQUIRED_KEYS = [
     "asset_requirements",
     "quality_gates",
     "publish_constraints",
+    "run_contract",
 ]
 
 REQUIRED_SKILLS_BY_CHANNEL = {
@@ -74,6 +75,8 @@ def build_preflight_manifest(
         set(REQUIRED_SKILLS_BY_CHANNEL.get(normalized_channel, {"meta/content-preflight", "content/content-strategy-workflow"}))
         | set(extra_skills or [])
     )
+    from .run_contract import build_run_contract
+
     return {
         "version": CURRENT_PREFLIGHT_MANIFEST_VERSION,
         "channel": normalized_channel,
@@ -107,6 +110,7 @@ def build_preflight_manifest(
             "delivery_health_required": bool(delivery_health_required),
             "postcheck_required": bool(postcheck_required),
         },
+        "run_contract": build_run_contract(normalized_channel),
     }
 
 
@@ -255,6 +259,11 @@ def validate_preflight_manifest(packet: dict[str, Any], channel: str | None = No
     publish = manifest.get("publish_constraints") or {}
     if not isinstance(publish, dict) or not publish.get("delivery_health_required") or not publish.get("postcheck_required"):
         failures.append("preflight_manifest.publish_constraints_incomplete")
+
+    from .run_contract import validate_run_contract
+
+    contract_gate = validate_run_contract(manifest.get("run_contract"))
+    failures.extend(contract_gate.get("failures") or [])
 
     return _result(failures, manifest)
 

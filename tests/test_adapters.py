@@ -207,6 +207,8 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(len(artifact["images"]), 3)
         self.assertEqual(len(artifact["section_image_map"]), 2)
         self.assertTrue((self.root / "artifacts" / "j1" / "section_image_map.json").is_file())
+        self.assertTrue((self.root / "artifacts" / "j1" / "asset_provenance.json").is_file())
+        self.assertTrue((self.root / "artifacts" / "j1" / "cover_quality_evidence.json").is_file())
 
     def test_image_bridge_defaults_to_article_image_package_for_long_form_platforms(self):
         script = self.root / "image_gen.py"
