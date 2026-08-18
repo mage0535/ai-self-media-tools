@@ -26,7 +26,7 @@ from content_platform.content_recipe import (
 )
 from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.growth_policy import build_growth_strategy
-from content_platform.preflight_manifest import validate_preflight_manifest
+from content_platform.preflight_manifest import build_preflight_manifest, validate_preflight_manifest
 from content_platform.visual_content_policy import visual_content_policy
 
 
@@ -41,41 +41,20 @@ def complete_preflight_manifest(platform: str, content_type: str = "long_article
     if platform in {"wechat", "weixin", "wechat_official", "kuaishou", "douyin", "shipinhao", "bilibili", "xiaohongshu", "rednote", "toutiao", "juejin", "zhihu"} or "knowledge_card" in content_type:
         skills.append("content/knowledge-card-designer")
     skills.append("content/visual-quality-standards")
-    return {
-        "version": "content_preflight_manifest_v1",
-        "channel": platform,
-        "content_type": content_type,
-        "rulebook": {
-            "loaded": True,
-            "path": "config/channel_content_rulebook.json",
-            "channel_rules_loaded": True,
-        },
-        "strategy": {
-            "source": "hermes_operating_strategy",
-            "result_path": "/ignored-runtime/ops_strategy.json",
-            "summary": "strategy selected the topic and content form from account and trend data",
-        },
-        "skills_loaded": skills,
-        "visual_policy": {
-            "loaded": True,
-            "policy_id": "visual_content_design_policy_v1",
-        },
-        "topic_plan": {
-            "selected_topic": "workflow evidence before publishing",
-            "selection_reason": "matches channel lane and current trend evidence",
-            "content_angle": "case-first checklist with concrete operating value",
-        },
-        "asset_requirements": {
-            "required_assets": ["cover", "inline_images", "voiceover", "background_music"],
-            "source_policy": "licensed_or_verified_runtime_assets",
-        },
-        "quality_gates": ["content_quality", "visual_quality", "asset_license", "publish_postcheck"],
-        "publish_constraints": {
-            "delivery_health_required": True,
-            "postcheck_required": True,
-            "schedule_required": True,
-        },
-    }
+    return build_preflight_manifest(
+        channel=platform,
+        content_type=content_type,
+        strategy_source="hermes_operating_strategy",
+        strategy_result_path="/ignored-runtime/ops_strategy.json",
+        strategy_summary="strategy selected the topic and content form from account and trend data",
+        selected_topic="workflow evidence before publishing",
+        selection_reason="matches channel lane and current trend evidence",
+        content_angle="case-first checklist with concrete operating value",
+        required_assets=["cover", "inline_images", "voiceover", "background_music"],
+        source_policy="licensed_or_verified_runtime_assets",
+        quality_gates=["content_quality", "visual_quality", "asset_license", "publish_postcheck"],
+        extra_skills=skills,
+    )
 
 
 def complete_video_plan():

@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import re
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
+
+from .cover_quality import validate_cover
+from .asset_ledger import AssetLedger, validate_asset_set
 
 
 LONG_FORM_PLATFORMS = {"wechat", "zhihu", "juejin"}
 VIDEO_PLATFORMS = {"kuaishou", "douyin", "douyin_ai", "douyin_pet", "shipinhao", "bilibili", "youtube", "tiktok", "xiaohongshu"}
+COVER_PLATFORMS = VIDEO_PLATFORMS | LONG_FORM_PLATFORMS
 
 
 def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts_dir: str | Path = "") -> dict[str, Any]:
@@ -19,6 +24,7 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     body, body_source = _load_body(store, job)
     artifacts = Path(artifacts_dir) if artifacts_dir else _default_artifacts_dir(store, job_id)
     failures: list[str] = []
+    asset_gate: dict[str, Any] = {}
     brief = job.get("brief") or {}
     matrix = brief.get("platform_source_matrix") or {}
     if not _has_valid_selection_evidence(brief, matrix):
@@ -39,6 +45,9 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
         _check_unverified_first_person_claims(body, brief, failures)
     if normalized in VIDEO_PLATFORMS:
         _check_video_artifacts(artifacts, store.artifacts(job_id), failures)
+    if (job.get("brief") or {}).get("run_contract") and normalized in COVER_PLATFORMS:
+        _check_cover_quality(artifacts, store.artifacts(job_id), normalized, failures)
+        asset_gate = _check_asset_quality(artifacts, normalized, job_id, store, failures)
     result = {
         "version": "workflow_acceptance_v1",
         "job_id": str(job_id),
@@ -47,7 +56,12 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
         "failures": failures,
         "body_source": body_source,
         "artifacts_dir": str(artifacts),
+        "asset_quality_gate": asset_gate,
     }
+    if result["passed"] and asset_gate.get("passed"):
+        payload = json.loads((artifacts / "asset_provenance.json").read_text(encoding="utf-8"))
+        records = payload.get("assets") if isinstance(payload, dict) else payload
+        validate_asset_set(records or [], normalized, str(job_id), AssetLedger(Path(store.path).parent / "asset_ledger.db"), register=True)
     store.save_workflow_acceptance(job_id, result)
     return result
 
@@ -58,9 +72,15 @@ def _has_valid_selection_evidence(brief: dict[str, Any], matrix: dict[str, Any])
     if str(brief.get("selection_mode") or "") != "editorial_calendar":
         return False
     evidence = brief.get("editorial_evidence") or {}
-    return isinstance(evidence, dict) and all(
-        str(evidence.get(field) or "").strip()
-        for field in ("strategy_source", "calendar_column", "planned_date", "dedupe")
+    if not isinstance(evidence, dict):
+        return False
+    planned = evidence.get("planned_for") or evidence.get("planned_date")
+    dedupe = evidence.get("dedupe_passed") is True or bool(str(evidence.get("dedupe") or "").strip())
+    return bool(
+        str(evidence.get("strategy_source") or "").strip()
+        and str(evidence.get("calendar_column") or "").strip()
+        and str(planned or "").strip()
+        and dedupe
     )
 
 
@@ -137,3 +157,38 @@ def _file_sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _check_cover_quality(directory: Path, artifacts: list[dict[str, Any]], platform: str, failures: list[str]) -> None:
+    candidates = [path for pattern in ("cover.png", "cover.jpg", "cover.jpeg", "cover*.png", "cover*.jpg", "cover*.jpeg") for path in directory.glob(pattern)]
+    for item in artifacts:
+        if not isinstance(item, dict):
+            continue
+        path = Path(str(item.get("path") or ""))
+        if str(item.get("kind") or "").casefold() == "cover" or path.stem.casefold().startswith("cover"):
+            candidates.append(path)
+    cover = next((path for path in candidates if path.is_file()), None)
+    if cover is None:
+        failures.append("cover_missing")
+        return
+    evidence = directory / "cover_quality_evidence.json"
+    result = validate_cover(cover, evidence, platform)
+    if not result.get("passed"):
+        failures.append("cover_quality_gate_failed")
+
+
+def _check_asset_quality(directory: Path, platform: str, job_id: str, store: Any, failures: list[str]) -> dict[str, Any]:
+    path = directory / "asset_provenance.json"
+    if not path.is_file():
+        failures.append("asset_provenance_missing")
+        return {"passed": False, "failures": ["asset_provenance_missing"]}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        failures.append("asset_provenance_invalid")
+        return {"passed": False, "failures": ["asset_provenance_invalid"]}
+    records = payload.get("assets") if isinstance(payload, dict) else payload
+    result = validate_asset_set(records or [], platform, str(job_id), AssetLedger(Path(store.path).parent / "asset_ledger.db"))
+    if not result.get("passed"):
+        failures.append("asset_quality_gate_failed")
+    return result

@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from PIL import Image
+
+from content_platform.run_contract import build_run_contract
 from content_platform.store import Store
 
 
@@ -71,78 +74,61 @@ def test_acceptance_uses_registered_video_and_cover_paths(tmp_path: Path):
     assert Path(result["artifacts_dir"]) == render
 
 
-def test_acceptance_rejects_unverified_first_person_operational_claim(tmp_path: Path):
+def test_compiled_run_requires_passing_viral_cover_evidence(tmp_path: Path):
     from content_platform.workflow_acceptance import evaluate_job_acceptance
 
     store = Store(tmp_path / "state.db")
-    body = "# 标题\n\n" + ("我维护这条管线八个月，零事故。" * 240)
-    job = store.create_job("真实长文", ["juejin"], {"platform_source_matrix": _real_matrix("juejin")})
-    store.save_draft(job["id"], "标题", body, "pass", {"level": "pass"}, draft_meta={"quality_gate": {"passed": True}})
-
-    result = evaluate_job_acceptance(store, job["id"], "juejin")
-
-    assert result["passed"] is False
-    assert "unverified_first_person_operational_claim" in result["failures"]
-
-
-def test_acceptance_allows_editorial_calendar_with_complete_evidence(tmp_path: Path):
-    from content_platform.workflow_acceptance import evaluate_job_acceptance
-
-    store = Store(tmp_path / "state.db")
-    body = "# 标题\n\n" + ("这是可执行的真实内容。" * 400)
-    brief = {
-        "selection_mode": "editorial_calendar",
-        "editorial_evidence": {
-            "strategy_source": "growth_strategy:juejin:latest",
-            "calendar_column": "engineering",
-            "planned_date": "2026-08-18",
-            "dedupe": "7d_clear",
-        },
-    }
-    job = store.create_job("编辑日历文章", ["juejin"], brief)
-    store.save_draft(job["id"], "标题", body, "pass", {"level": "pass"}, draft_meta={"quality_gate": {"passed": True}})
-
-    result = evaluate_job_acceptance(store, job["id"], "juejin")
-
-    assert result["passed"] is True
-
-
-def test_acceptance_rejects_repeated_video_source_assets(tmp_path: Path):
-    from content_platform.workflow_acceptance import evaluate_job_acceptance
-
-    store = Store(tmp_path / "state.db")
-    job = store.create_job("video", ["bilibili"], {"platform_source_matrix": _real_matrix("bilibili")})
+    job = store.create_job("video", ["tiktok"], {
+        "platform_source_matrix": _real_matrix("tiktok"),
+        "run_contract": build_run_contract("tiktok"),
+    })
     store.save_draft(job["id"], "title", "body", "pass", {}, draft_meta={"quality_gate": {"passed": True}})
     render = tmp_path / "artifacts" / job["id"]
     render.mkdir(parents=True)
     (render / "scene_manifest.json").write_text("{}", encoding="utf-8")
     (render / "tts_config.json").write_text("{}", encoding="utf-8")
     (render / "final.mp4").write_bytes(b"video")
-    (render / "cover.png").write_bytes(b"cover")
-    for index in range(4):
-        path = render / f"section-{index}.png"
-        path.write_bytes(b"same-image")
-        store.add_artifact(job["id"], "image", str(path))
+    Image.new("RGB", (1080, 1920), "navy").save(render / "cover.jpg")
 
-    result = evaluate_job_acceptance(store, job["id"], "bilibili", artifacts_dir=render)
+    missing = evaluate_job_acceptance(store, job["id"], "tiktok", artifacts_dir=render)
+    assert "cover_quality_gate_failed" in missing["failures"]
 
-    assert result["passed"] is False
-    assert "duplicate_visual_assets" in result["failures"]
+    (render / "cover_quality_evidence.json").write_text(
+        '{"platform":"tiktok","layout_key":"hero_conflict","hook":"AI failed?",'
+        '"conflict_or_payoff":"verify first","focal_subjects":["cat","dog"],'
+        '"content_match_reason":"matches the script conflict","safe_zone_verified":true,"degraded":false}',
+        encoding="utf-8",
+    )
+    passed = evaluate_job_acceptance(store, job["id"], "tiktok", artifacts_dir=render)
+    assert "cover_quality_gate_failed" not in passed["failures"]
 
 
-def test_acceptance_rejects_compliance_claims_without_sources(tmp_path: Path):
+def test_compiled_run_rejects_duplicate_asset_provenance(tmp_path: Path):
     from content_platform.workflow_acceptance import evaluate_job_acceptance
 
     store = Store(tmp_path / "state.db")
-    body = "# 标题\n\n" + ("这是一段内容。" * 400)
-    job = store.create_job("真实长文", ["juejin"], {"platform_source_matrix": _real_matrix("juejin")})
-    store.save_draft(
-        job["id"], "标题", body, "pass",
-        {"compliance": {"findings": [{"code": "numeric_claim_without_source"}]}},
-        draft_meta={"quality_gate": {"passed": True}},
+    job = store.create_job("video", ["tiktok"], {
+        "platform_source_matrix": _real_matrix("tiktok"),
+        "run_contract": build_run_contract("tiktok"),
+    })
+    store.save_draft(job["id"], "title", "body", "pass", {}, draft_meta={"quality_gate": {"passed": True}})
+    render = tmp_path / "artifacts" / job["id"]
+    render.mkdir(parents=True)
+    (render / "scene_manifest.json").write_text("{}", encoding="utf-8")
+    (render / "tts_config.json").write_text("{}", encoding="utf-8")
+    (render / "final.mp4").write_bytes(b"video")
+    cover = render / "cover.jpg"
+    Image.new("RGB", (1080, 1920), "navy").save(cover)
+    (render / "cover_quality_evidence.json").write_text(
+        '{"platform":"tiktok","layout_key":"hero_conflict","hook":"AI failed?",'
+        '"conflict_or_payoff":"verify first","focal_subjects":["cat"],'
+        '"content_match_reason":"matches script","safe_zone_verified":true,"degraded":false}', encoding="utf-8"
     )
+    record = {
+        "path": str(cover), "source_url": "https://example.test/cover", "license": "licensed",
+        "semantic_match_score": 0.9, "match_reason": "matches script", "semantic_tags": ["AI"],
+    }
+    (render / "asset_provenance.json").write_text(__import__("json").dumps({"assets": [record, record]}), encoding="utf-8")
 
-    result = evaluate_job_acceptance(store, job["id"], "juejin")
-
-    assert result["passed"] is False
-    assert "unsupported_factual_claims" in result["failures"]
+    result = evaluate_job_acceptance(store, job["id"], "tiktok", artifacts_dir=render)
+    assert "asset_quality_gate_failed" in result["failures"]

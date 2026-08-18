@@ -51,17 +51,13 @@ def _stage_for_hermes(path: Path, platform: str) -> Path:
 
 
 def _cover_preflight(paths: list[str]) -> dict | None:
-    from scripts.cover_quality_gate import validate_cover
+    from content_platform.cover_quality import validate_cover
 
     for raw in paths:
         path = Path(raw).expanduser().resolve()
         if "cover" not in path.stem.casefold():
             continue
-        evidence = path.parent / "cover_quality_evidence.json"
-        try:
-            result = validate_cover(path, evidence)
-        except (OSError, ValueError):
-            result = {"passed": False, "failures": ["cover_quality_evidence_invalid"]}
+        result = validate_cover(path, path.parent / "cover_quality_evidence.json")
         if not result.get("passed"):
             return {
                 "passed": False,

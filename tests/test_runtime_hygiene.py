@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
-def test_runtime_cleanup_archives_only_rebuildable_old_files(tmp_path: Path):
+def test_runtime_cleanup_removes_only_rebuildable_old_files(tmp_path: Path):
     from content_platform.runtime_hygiene import cleanup_runtime
     import os
 
@@ -20,14 +20,12 @@ def test_runtime_cleanup_archives_only_rebuildable_old_files(tmp_path: Path):
 
     result = cleanup_runtime(root, retention_days=14, dry_run=False, disk_usage_percent=90)
 
-    assert str(old) in result["archived"]
+    assert str(old) in result["removed"]
     assert not old.exists()
     assert final.exists()
     assert report.exists()
     assert recent.exists()
-    archive = Path(result["archive"])
-    assert archive.is_dir()
-    assert (archive / "artifacts" / "job-old" / "intermediate.png").is_file()
+    assert result["bytes_removed"] == len(b"evidence")
 
 
 def test_runtime_cleanup_refuses_to_run_when_disk_is_not_over_threshold(tmp_path: Path):
@@ -35,7 +33,7 @@ def test_runtime_cleanup_refuses_to_run_when_disk_is_not_over_threshold(tmp_path
 
     result = cleanup_runtime(tmp_path, retention_days=14, disk_usage_percent=70)
 
-    assert result["archived"] == []
+    assert result["removed"] == []
     assert result["reason"] == "disk_below_cleanup_threshold"
 
 

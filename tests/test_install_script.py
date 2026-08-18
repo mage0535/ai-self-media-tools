@@ -39,6 +39,10 @@ def test_install_config_only_writes_runtime_report_and_international_publishers(
     assert report_path.exists()
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["generator"]["hermes_model"] == ""
+    assert config["generator"]["allow_fallback"] is False
+    assert config["workflow"]["require_unified_acceptance"] is True
+    assert all(value == "enforce" for value in config["feature_flags"].values())
     platforms = config["publishers"]["platforms"]
     for platform in ["youtube", "tiktok", "reddit", "devto", "mastodon", "bluesky", "nostr"]:
         assert platform in platforms

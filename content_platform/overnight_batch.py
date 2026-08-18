@@ -100,6 +100,8 @@ def build_due_tasks(
     source_report: list[dict[str, Any]],
     rank_for_platform: Any,
     candidate_filter: Any | None = None,
+    requery_for_platform: Any | None = None,
+    max_research_rounds: int = 3,
     growth_strategy_status: dict[str, dict[str, Any]] | None = None,
     weekday: int | None = None,
     strict_trend_evidence: bool = False,
@@ -130,8 +132,19 @@ def build_due_tasks(
         candidates = list(rank_for_platform(platform, items, raw) or [])
         if candidate_filter is not None:
             candidates = [candidate for candidate in candidates if candidate_filter(platform, candidate, raw)]
+        research_attempts: list[dict[str, int]] = []
+        if not candidates and requery_for_platform is not None:
+            for round_number in range(1, max(0, int(max_research_rounds)) + 1):
+                researched = list(requery_for_platform(platform, items, raw, round_number) or [])
+                if candidate_filter is not None:
+                    researched = [candidate for candidate in researched if candidate_filter(platform, candidate, raw)]
+                research_attempts.append({"round": round_number, "candidate_count": len(researched)})
+                if researched:
+                    candidates = researched
+                    break
         editorial = _editorial_fallback_candidate(raw)
-        selected_mode = ""
+        editorial_evidence = dict(raw.get("editorial_fallback") or {})
+        selection_mode = "native_trend"
         selected_matrix: dict[str, Any] | None = None
         if not platform:
             row.update({"state": "blocked", "reason": "slot has no platform"})
@@ -167,7 +180,7 @@ def build_due_tasks(
                         continue
                 else:
                     selected = editorial
-                    selected_mode = "editorial_calendar"
+                    selection_mode = "editorial_calendar"
             adaptation = str(raw.get("platform_adaptation_reason") or f"adapt {selected['title']} to {platform} with a platform-specific format and CTA")
             signal = str(raw.get("platform_signal") or f"{platform} source matrix contains current platform and cross-platform evidence")
             trend_candidate = build_trend_candidate(
@@ -183,6 +196,21 @@ def build_due_tasks(
             )
             trend_gate = validate_trend_candidate(trend_candidate)
             matrix = selected_matrix or _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
+            from .run_contract import bound_stage_payload, build_run_contract
+            from .content_blueprint import build_content_blueprint, validate_content_blueprint
+
+            run_contract = build_run_contract(platform)
+            content_blueprint = build_content_blueprint(platform, str(selected["title"]), raw, matrix)
+            blueprint_gate = validate_content_blueprint(content_blueprint)
+            bounded_model_input = bound_stage_payload(
+                run_contract,
+                "generate",
+                {
+                    "content_blueprint": content_blueprint,
+                    "claim_ledger": list(raw.get("claim_ledger") or []),
+                    "tool_selection_plan": dict(raw.get("tool_selection_plan") or {}),
+                },
+            )
             selected_topics.setdefault(
                 _topic_identity(selected),
                 {"platform": platform, "adaptation": adaptation, "signal": signal, "stage": str(raw.get("stage") or "")},
@@ -199,16 +227,23 @@ def build_due_tasks(
                         "growth_signals": ["timeliness", "user_benefit"],
                     },
                     "trend_candidate": trend_candidate,
+                    "run_contract": run_contract,
+                    "bounded_model_input": bounded_model_input,
+                    "content_blueprint": content_blueprint,
+                    "content_blueprint_gate": blueprint_gate,
+                    "selection_mode": selection_mode,
+                    **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
                 },
                 "trend_candidate": trend_candidate,
                 "trend_candidate_gate": trend_gate,
+                "selection_mode": selection_mode,
+                "research_attempts": research_attempts,
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
                 "state": "ready_for_plan",
             })
-            if selected_mode:
-                row["selection_mode"] = selected_mode
+            if selection_mode == "editorial_calendar":
                 row["editorial_evidence"] = selected["editorial_evidence"]
-                row["trend_evidence_gate"] = {"mode": selected_mode, "passed": True}
+                row["trend_evidence_gate"] = {"mode": "editorial_calendar", "passed": True}
             else:
                 evidence_failure = ""
                 if not trend_gate.get("passed"):
@@ -230,8 +265,9 @@ def _editorial_fallback_candidate(slot: dict[str, Any]) -> dict[str, Any] | None
     evidence = slot.get("editorial_fallback")
     if not isinstance(evidence, dict):
         return None
-    required = ("topic", "strategy_source", "calendar_column", "planned_date", "dedupe")
-    if any(not str(evidence.get(field) or "").strip() for field in required):
+    planned = evidence.get("planned_for") or evidence.get("planned_date")
+    dedupe_passed = evidence.get("dedupe_passed") is True or bool(str(evidence.get("dedupe") or "").strip())
+    if not all([str(evidence.get("topic") or "").strip(), str(evidence.get("strategy_source") or "").strip(), str(evidence.get("calendar_column") or "").strip(), str(planned or "").strip(), dedupe_passed]):
         return None
     topic = str(evidence["topic"]).strip()
     return {
@@ -242,7 +278,12 @@ def _editorial_fallback_candidate(slot: dict[str, Any]) -> dict[str, Any] | None
         "score": 0.0,
         "freshness_score": 0.0,
         "platform_fit_score": 0.0,
-        "editorial_evidence": {field: str(evidence[field]) for field in required[1:]},
+        "editorial_evidence": {
+            "strategy_source": str(evidence["strategy_source"]),
+            "calendar_column": str(evidence["calendar_column"]),
+            "planned_for": str(planned),
+            "dedupe_passed": True,
+        },
     }
 
 
@@ -746,8 +787,14 @@ def _load_state(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
                 interrupted = False
                 for task in state.get("tasks") or []:
                     if task.get("state") == "running":
-                        task["state"] = "blocked"
-                        task["reason"] = "interrupted_batch_requires_recovery"
+                        recovery_count = int(task.get("recovery_count") or 0) + 1
+                        task["recovery_count"] = recovery_count
+                        if recovery_count <= 2:
+                            task["state"] = "retry_pending"
+                            task["reason"] = "automatic_recovery_after_interrupted_batch"
+                        else:
+                            task["state"] = "failed"
+                            task["reason"] = "automatic_recovery_limit_exceeded"
                         interrupted = True
                 if interrupted:
                     state["status"] = "partial"
