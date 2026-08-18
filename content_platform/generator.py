@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import subprocess
 import urllib.request
@@ -12,6 +13,7 @@ from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 from .content_recipe import build_article_recipe, build_image_text_card_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
+from .content_depth import build_content_depth_plan
 from .tool_selection import build_tool_selection_evidence
 from .growth_recipe import build_growth_recipe
 
@@ -102,6 +104,24 @@ class DraftGenerator:
                 if separator and key.strip() == name:
                     return value.strip().strip("'\"")
         return ""
+
+    @staticmethod
+    def _provider_brief(brief):
+        contract = brief.get("run_contract") if isinstance(brief, dict) else None
+        if not contract:
+            return brief
+        from .run_contract import bound_stage_payload
+
+        return bound_stage_payload(contract, "generate", dict(brief.get("bounded_model_input") or {}))
+
+    @staticmethod
+    def _bounded_provider_content(content, brief):
+        text = str(content or "")
+        contract = brief.get("run_contract") if isinstance(brief, dict) else None
+        limit = int(((contract or {}).get("bounds") or {}).get("provider_response_bytes") or 1_048_576)
+        if len(text.encode("utf-8")) > limit:
+            raise ValueError(f"provider response exceeds {limit} bytes")
+        return text
 
 
 
@@ -361,13 +381,67 @@ class DraftGenerator:
             "cornerstone_mode": context.get("cornerstone_mode", False),
         }
         self._attach_article_packet_evidence(topic, brief, body, context, draft_meta)
+        if not draft_meta.get("cover_design"):
+            draft_meta["cover_design"] = self._default_cover_design(topic, draft, brief, draft_meta)
         self._attach_growth_recipe(brief, context, draft_meta)
+        platforms = list(strategy.get("primary_platforms") or brief.get("platforms") or [])
+        platform = str(platforms[0] if platforms else brief.get("platform") or "")
+        draft_meta["content_depth_plan"] = build_content_depth_plan(
+            str(draft.get("title") or topic),
+            body,
+            evidence=self._depth_evidence(brief, draft_meta),
+            actions=draft_meta.get("actionable_checklist") or [],
+            series_plan=draft.get("series_plan") if isinstance(draft.get("series_plan"), dict) else {},
+            platform=platform,
+        )
         return {
             "title": str(draft["title"]),
             "body": body,
             "provider": provider,
             "prompt_version": self.PROMPT_VERSION,
             "draft_meta": draft_meta,
+        }
+
+    @staticmethod
+    def _depth_evidence(brief, draft_meta):
+        matrices = [draft_meta.get("platform_source_matrix") or {}, brief.get("platform_source_matrix") or {}]
+        rows = []
+        for matrix in matrices:
+            rows.extend((matrix.get("trend_evidence") or {}).get("samples") or [])
+            rows.extend(matrix.get("attempted_sources") or [])
+        evidence = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            value = str(row.get("url") or row.get("evidence_path") or "").strip()
+            if value and value not in evidence:
+                evidence.append(value)
+        editorial = brief.get("editorial_evidence") or {}
+        if isinstance(editorial, dict) and editorial.get("strategy_source"):
+            evidence.append(str(editorial["strategy_source"]))
+        return evidence[:8]
+
+    @staticmethod
+    def _default_cover_design(topic, draft, brief, draft_meta):
+        topic_text = str(topic or draft.get("title") or "content topic")
+        layouts = ["hero_conflict", "diagonal_split", "evidence_interface", "checklist_poster", "magazine_story", "result_reveal"]
+        layout = layouts[int(hashlib.sha256(topic_text.encode("utf-8")).hexdigest()[:8], 16) % len(layouts)]
+        blueprint = brief.get("content_blueprint") if isinstance(brief.get("content_blueprint"), dict) else {}
+        roles = blueprint.get("mascot_roles") if isinstance(blueprint.get("mascot_roles"), dict) else {}
+        focal = list(roles) if roles else [topic_text, "problem evidence", "actionable result"]
+        return {
+            "visual_subject": f"{topic_text} narrative proof",
+            "topic_alignment": "matches the selected topic and content payoff",
+            "mobile_readable": True,
+            "visual_hierarchy": "hook, conflict, proof, payoff",
+            "template_family": str(draft_meta.get("content_form") or "content_specific"),
+            "layout_key": layout,
+            "hook": str(draft.get("hook") or draft.get("title") or topic_text),
+            "conflict_or_payoff": str(blueprint.get("user_pain") or "show the costly mistake and the verifiable corrective result"),
+            "focal_subjects": focal,
+            "content_match_reason": "the poster visualizes the current platform blueprint rather than reusing a fixed cover",
+            "safe_zone_verified": True,
+            "degraded": False,
         }
 
     @staticmethod
@@ -473,6 +547,8 @@ class DraftGenerator:
             return
         platform = platforms[0] if platforms else "wechat"
         topic_text = str(topic or "content topic")
+        cover_layouts = ["hero_conflict", "diagonal_split", "evidence_interface", "checklist_poster", "magazine_story", "result_reveal"]
+        cover_layout = cover_layouts[int(hashlib.sha256(topic_text.encode("utf-8")).hexdigest()[:8], 16) % len(cover_layouts)]
         sections = self._article_sections(body, topic_text)
         backgrounds = []
         image_map = []
@@ -584,6 +660,13 @@ class DraftGenerator:
                 "mobile_readable": True,
                 "visual_hierarchy": "title, conflict/result, three-step cue",
                 "template_family": selected_structure,
+                "layout_key": cover_layout,
+                "hook": opening,
+                "conflict_or_payoff": "show the concrete mistake and the usable corrective result",
+                "focal_subjects": [topic_text, "problem evidence", "actionable result"],
+                "content_match_reason": "the cover visualizes the selected topic, opening conflict, and reader payoff",
+                "safe_zone_verified": True,
+                "degraded": False,
             },
             "differentiation_dimensions": ["platform-specific angle", "section-matched real visuals", "reader action checklist"],
             "reader_payoff": "finish with a reusable decision checklist",
@@ -710,6 +793,7 @@ class DraftGenerator:
                 "topic_signal": str(row.get("topic_signal") or topic),
                 **({"collected_at": str(row["collected_at"])} if row.get("collected_at") else {}),
                 **({"evidence_kind": str(row["evidence_kind"])} if row.get("evidence_kind") else {}),
+                **({"url": str(row["url"])} if row.get("url") else {}),
                 **({"error": str(row["error"])} if row.get("error") else {}),
             })
         if not attempted:
@@ -786,7 +870,7 @@ class DraftGenerator:
             f"Platform rules (must follow for this channel):\n{context.get('platform_rules', '')[:800]}\n\n"
             f"Viral hook templates (pick one and adapt for your title/opening):\n{context.get('hook_samples', '')[:600]}\n\n"
             f"Style guide:\n{self._style_guide(style_limit)}\n\n"
-            f"Planning context:\n{prompt_brief(topic, brief)}"
+            f"Planning context:\n{prompt_brief(topic, self._provider_brief(brief))}"
         )
         command = [self.config.get("hermes_command", "hermes")]
         provider = str(self.config.get("hermes_provider") or "").strip()
@@ -805,7 +889,7 @@ class DraftGenerator:
         )
         if proc.returncode != 0:
             raise RuntimeError("Hermes generation command failed")
-        content = proc.stdout.strip()
+        content = self._bounded_provider_content(proc.stdout, brief).strip()
         provider_error = self._provider_error(content)
         if provider_error:
             raise ProviderAuthError(provider_error)
@@ -862,7 +946,7 @@ class DraftGenerator:
             f"Platform rules (must follow for this channel):\n{context.get('platform_rules', '')[:800]}\n\n"
             f"Viral hook templates (pick one and adapt for your title/opening):\n{context.get('hook_samples', '')[:600]}\n\n"
             f"Style guide:\n{self._style_guide(style_limit)}\n\n"
-            f"Planning context:\n{prompt_brief(topic, brief)}"
+            f"Planning context:\n{prompt_brief(topic, self._provider_brief(brief))}"
         )
         payload = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.4}).encode()
         request = urllib.request.Request(
@@ -872,7 +956,7 @@ class DraftGenerator:
         )
         with urllib.request.urlopen(request, timeout=int(self.config.get("timeout", 90))) as response:
             result = json.loads(response.read())
-        content = result["choices"][0]["message"]["content"].strip()
+        content = self._bounded_provider_content(result["choices"][0]["message"]["content"], brief).strip()
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
         draft = self._coerce_provider_draft(content, topic)

@@ -3505,16 +3505,32 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   threshold is ignored only when `burstiness` is the sole failing dimension;
   hook, authenticity, clarity, and platform-fit failures remain blocking.
 
-## 2026-08-18 - Viral Cover And Rendered-Footage Gates
+## 2026-08-18 - Deterministic Low-Capability Automation
 
-- Covers now default to topic-specific narrative posters. A screenshot plus a
-  caption, unrelated stock image, fixed generic template, missing safe-zone
-  evidence, or degraded cover cannot be delivered as a finished asset.
-- `deliver_media.py` validates `cover_quality_evidence.json` before sending a
-  cover and uses content hashes for cache names, preventing stale replacements.
-- `visual_asset_gate.py` binds every scene to the footage actually rendered,
-  requires semantic evidence, and blocks exact or perceptual clip reuse within
-  a work or across sibling platform packages.
-- The TikTok high-quality renderer runs script, asset, encoded-video, and cover
-  gates in order. Full evidence and the low-intelligence-model execution order
-  are documented in `docs/HERMES_TIKTOK_VISUAL_REPAIR_20260818.md`.
+- Added a hashed per-platform run contract with fixed rule precedence,
+  publish boundaries, required Skills, stage field allowlists, and provider
+  input/output bounds. New preflight manifests fail when rulebook contents
+  drift after planning.
+- Topic planning now supports three bounded lane-specific re-search attempts.
+  A scheduled platform is not dropped merely because its first candidate is
+  irrelevant. Editorial fallback requires strategy, calendar, date, and
+  dedupe evidence and remains explicitly labeled.
+- Added platform content blueprints, factual claim ledgers, and content-depth
+  plans. Unsupported numbers, invented operational history, malformed code,
+  shallow content, and empty continuation promises fail before media work.
+- Added a persistent asset ledger with exact and perceptual duplicate checks,
+  license/source evidence, and semantic-fit evidence. Added a topic-specific
+  viral cover contract and content-hash media staging.
+- Compiled runs always require unified acceptance before publishing. Manual
+  channels retain handoff-only states.
+- The independent supervisor now checks every three minutes and may safely
+  recover an interrupted uncompleted stage twice after durable reconciliation.
+  Terminal work is never recreated.
+- Production config and installer no longer pin a Hermes provider/model or
+  silently switch providers. Edge remains the default TTS; Qwen auto-selection
+  requires explicit A/B quality approval.
+- Added bounded weekly cleanup of reconstructable intermediates only. Final
+  works, covers, state databases, cookies, and operator handoff roots are not
+  eligible.
+- Architecture and acceptance details are documented in
+  `docs/LOW_CAPABILITY_AUTOMATION_ARCHITECTURE.md`.

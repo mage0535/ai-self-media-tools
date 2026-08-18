@@ -2,18 +2,33 @@
   "data_dir": "{{CONTENT_PLATFORM_HOME}}/data",
   "generator": {
     "provider": "hermes-cli",
-    "allow_fallback": true,
+    "allow_fallback": false,
     "env_file": "{{CONTENT_PLATFORM_HOME}}/secrets/provider.env",
     "api_key_env": "OPENAI_API_KEY",
-    "model": "gpt-4.1-mini",
+    "model": "",
     "hermes_command": "hermes",
-    "hermes_provider": "opencode-go",
-    "hermes_model": "deepseek-v4-flash",
+    "hermes_provider": "",
+    "hermes_model": "",
     "timeout": 180,
     "style_guide_path": "{{CONTENT_PLATFORM_HOME}}/skills/content/content-copywriting-style/SKILL.md"
   },
   "feature_flags": {
-    "real_platform_trend_evidence_mode": "shadow"
+    "real_platform_trend_evidence_mode": "enforce",
+    "topic_scoring_mode": "enforce",
+    "quality_gate_enhanced": "enforce",
+    "duplication_detector": "enforce",
+    "run_contract": "enforce",
+    "asset_ledger": "enforce",
+    "viral_cover_gate": "enforce"
+  },
+  "workflow": {
+    "require_gate_pass": true,
+    "require_unified_acceptance": true
+  },
+  "resources": {
+    "min_available_mb": 1200,
+    "warning_disk_used_percent": 84,
+    "max_disk_used_percent": 88
   },
   "risk": {
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/safe_filter.py",
@@ -31,7 +46,7 @@
       "timeout": 240
     },
     "video": {
-      "enabled": false,
+      "enabled": true,
       "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
       "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/video_pipeline.py",
       "visual_image_count": 8,
@@ -152,7 +167,7 @@
   },
   "notifications": {
     "log_path": "{{CONTENT_PLATFORM_HOME}}/data/notifications.jsonl",
-    "network_enabled": false,
+    "network_enabled": true,
     "hermes_target_env": "AI_SELF_MEDIA_HERMES_TARGET"
   }
 }

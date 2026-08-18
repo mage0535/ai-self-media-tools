@@ -1,7 +1,7 @@
 {
   "policy_id": "viral_cover_policy_v1",
+  "scope": "all_content_with_cover",
   "default_mode": "high_quality",
-  "applies_to": "all_content_with_cover",
   "required_evidence": [
     "hook",
     "conflict_or_payoff",
@@ -10,7 +10,7 @@
     "layout_key",
     "safe_zone_verified"
   ],
-  "allowed_layout_families": [
+  "allowed_layouts": [
     "character_showdown",
     "evidence_interface",
     "hero_conflict",
@@ -20,12 +20,12 @@
     "magazine_story",
     "result_reveal"
   ],
-  "forbidden_layouts": [
+  "forbidden": [
     "screenshot_plus_caption",
     "single_centered_sentence",
     "unrelated_stock_photo",
     "fixed_template_without_topic_adaptation"
   ],
-  "publish_rule": "missing_or_failed_cover_evidence_blocks_delivery_and_publish",
-  "degradation_rule": "degraded_cover_may_be_recorded_but_must_not_be_delivered_or_published"
+  "failure_policy": "block_delivery_and_publish",
+  "degraded_policy": "record_but_never_deliver_or_publish"
 }

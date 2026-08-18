@@ -1,0 +1,10 @@
+[Unit]
+Description=Run bounded content-platform runtime cleanup weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 05:10:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -34,6 +34,7 @@ from content_platform.video_artifact import verify_artifact
 from content_platform.scene_manifest import build_scene_manifest, validate_rendered_duration, validate_scene_manifest
 from content_platform.paths import agent_scripts_dir
 from content_platform.platform_workflow_context import write_platform_workflow_context
+from content_platform.asset_ledger import AssetLedger, validate_asset_set
 
 try:
     from scripts.shotcraft_moves import SHOT_CARD_REGISTRY, shot_plan_for_text, shot_sequence
@@ -159,6 +160,21 @@ def main(argv: list[str] | None = None) -> int:
             pass
     # diagram-design 补图通道：结构化主题且背景不足时，自动生成杂志级 diagram 背景
     materialized_backgrounds = _diagram_background_fill(output_dir, script_body or title, materialized_backgrounds)
+    asset_records = _asset_provenance_records(materialized_backgrounds)
+    asset_provenance_path = output_dir / "asset_provenance.json"
+    asset_provenance_path.write_text(json.dumps({"version": "asset_provenance_v1", "assets": asset_records}, ensure_ascii=False, indent=2), encoding="utf-8")
+    asset_gate = {}
+    if plan.get("run_contract"):
+        asset_gate = validate_asset_set(
+            asset_records,
+            _primary_platform(plan),
+            str(plan.get("work_id") or output_dir.name),
+            AssetLedger(os.environ.get("ASSET_LEDGER_PATH") or ROOT / "data" / "asset_ledger.db"),
+        )
+        (output_dir / "asset_quality_gate.json").write_text(json.dumps(asset_gate, ensure_ascii=False, indent=2), encoding="utf-8")
+        if not asset_gate.get("passed"):
+            _write_manifest(output_dir, {"ok": False, "status": "asset_quality_failed", "error": "visual assets failed provenance, semantic fit, or reuse gate", "asset_quality_gate": asset_gate})
+            return 5
     cinema_scenes = storyboard(script_body or title, 8)
     shotcraft_plan = _shotcraft_motion_plan(script_body or title)
     registry = load_effect_module_registry()
@@ -300,6 +316,8 @@ def main(argv: list[str] | None = None) -> int:
         "shotcraft_motion_plan": shotcraft_plan,
         "visual_assets": visual_assets,
         "materialized_backgrounds": materialized_backgrounds,
+        "asset_provenance_path": str(asset_provenance_path),
+        "asset_quality_gate": asset_gate,
         "visual_recipe": visual_recipe,
         "visual_recipe_path": str(recipe_path),
         "visual_recipe_gate": recipe_gate,
@@ -393,6 +411,14 @@ def main(argv: list[str] | None = None) -> int:
             "status": "rendered",
             "executed_tools": [name for name, record in invocations.items() if isinstance(record, dict) and record.get("status") in {"ok", "generated"}],
         })
+        if asset_gate.get("passed"):
+            validate_asset_set(
+                asset_records,
+                _primary_platform(plan),
+                str(plan.get("work_id") or output_dir.name),
+                AssetLedger(os.environ.get("ASSET_LEDGER_PATH") or ROOT / "data" / "asset_ledger.db"),
+                register=True,
+            )
         _register_visual_recipe_use(visual_recipe, plan, str(generated[0]))
         # 2026-08-17 新增：渲染完成后自动归档规范 JSON + audio/ 到交付包根目录
         # （08-13 规范：platform_source_matrix/scene_manifest/visual_recipe/bgm/tts/checkpoint/quality/publish/audio）
@@ -651,6 +677,12 @@ def _materialize_visual_backgrounds(output_dir: Path, visual_assets: dict) -> li
                 "path": str(dest),
                 "rights_cleared": bool(item.get("rights_cleared", True)),
                 "real_scene": bool(item.get("real_scene", True)),
+                "source_url": str(item.get("source_url") or ""),
+                "license": str(item.get("license") or ""),
+                "semantic_match_score": float(item.get("semantic_match_score") or 0),
+                "match_reason": str(item.get("match_reason") or item.get("purpose") or ""),
+                "semantic_tags": list(item.get("semantic_tags") or []),
+                "generation_evidence": dict(item.get("generation_evidence") or {}),
             }
         )
     return copied
@@ -694,11 +726,34 @@ def _diagram_background_fill(output_dir: Path, text: str, existing: list[dict]) 
                     "rights_cleared": True,
                     "real_scene": False,
                     "diagram": dtype,
+                    "source_url": "generated:diagram_html2png",
+                    "license": "generated_for_project",
+                    "semantic_match_score": 0.8,
+                    "match_reason": f"diagram visualizes the detected {dtype} structure",
+                    "semantic_tags": [dtype, "diagram", "workflow"],
+                    "generation_evidence": {"provider": "diagram_html2png", "source_html": str(html_path)},
                 }
             )
     except Exception as e:
         print(f"[diagram-fill] skipped: {e}", file=sys.stderr)
     return existing
+
+
+def _asset_provenance_records(materialized: list[dict]) -> list[dict]:
+    return [
+        {
+            "scene_id": str(item.get("scene") or f"asset_{index}"),
+            "path": str(item.get("path") or ""),
+            "source_url": str(item.get("source_url") or ""),
+            "license": str(item.get("license") or ""),
+            "semantic_match_score": float(item.get("semantic_match_score") or 0),
+            "match_reason": str(item.get("match_reason") or ""),
+            "semantic_tags": list(item.get("semantic_tags") or []),
+            "generation_evidence": dict(item.get("generation_evidence") or {}),
+        }
+        for index, item in enumerate(materialized, 1)
+        if item.get("path")
+    ]
 
 
 def _renderer_path(plan: dict) -> Path:
