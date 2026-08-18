@@ -3534,3 +3534,21 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   eligible.
 - Architecture and acceptance details are documented in
   `docs/LOW_CAPABILITY_AUTOMATION_ARCHITECTURE.md`.
+
+## 2026-08-18 - Production Deployment And Active-Model Canary
+
+- Production and local full suites passed after the final active-model,
+  factual-sanitization, and short-form fixes. The production suite includes
+  additional server-origin regression coverage retained during reconciliation.
+- A compiled isolated canary used the active Hermes model without provider or
+  model flags. The first attempts exposed and fixed fenced smoke JSON,
+  unsupported generated statistics, numeric titles, and a short-post/long-form
+  contract mismatch. The final canary completed and created only a file draft.
+- The overnight supervisor and bounded runtime-cleanup timers are active. The
+  first cleanup removed only superseded render/review caches; protected final
+  media and business state remained intact.
+- Server runtime changes were snapshotted before reconciliation. Public main,
+  local main, and production main were then aligned without discarding the
+  prior local or server snapshots.
+- Full deployment evidence and the remaining three-run stability boundary are
+  recorded in `docs/DETERMINISTIC_AUTOMATION_DEPLOYMENT_REPORT_20260818.md`.
