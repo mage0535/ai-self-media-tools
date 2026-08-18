@@ -1,1744 +1,1826 @@
 {
-  "version": "2026-07-18",
-  "scope": "all_channels",
-  "mandatory_sequence": [
-    "load_channel_rulebook",
-    "load_hermes_operating_strategy",
-    "collect_current_channel_evidence",
-    "analyze_10_or_more_same_lane_hot_items_when_available",
-    "check_account_lane_fit",
-    "dedupe_cross_channel_and_7_day_same_channel",
-    "generate_channel_specific_strategy_brief",
-    "analyze_available_tools_and_select_content_stack",
-    "generate_channel_specific_content",
-    "run_quality_gate",
-    "run_delivery_health_gate",
-    "draft_or_publish_by_channel_policy",
-    "postcheck_platform_state",
-    "write_metrics_review_row",
-    "write_evidence_report"
+ "version": "2026-08-17",
+ "scope": "all_channels",
+ "mandatory_sequence": [
+  "load_channel_rulebook",
+  "load_hermes_operating_strategy",
+  "collect_current_channel_evidence",
+  "analyze_10_or_more_same_lane_hot_items_when_available",
+  "check_account_lane_fit",
+  "dedupe_cross_channel_and_7_day_same_channel",
+  "generate_channel_specific_strategy_brief",
+  "analyze_selected_topic_platform_account_audience_and_content_form",
+  "write_machine_checkable_content_blueprint",
+  "analyze_available_tools_and_select_content_stack",
+  "generate_channel_specific_content",
+  "run_quality_gate",
+  "run_delivery_health_gate",
+  "draft_or_publish_by_channel_policy",
+  "postcheck_platform_state",
+  "write_metrics_review_row",
+  "write_evidence_report"
+ ],
+ "global_hard_gates": {
+  "no_secret_output": true,
+  "no_model_provider_change": true,
+  "zero_paid_priority": true,
+  "domestic_hermes_proxy": "socks5h://127.0.0.1:1080",
+  "international_hermes_proxy": "US_PROXY",
+  "proxy_required_for_hermes_channel_access": true,
+  "paused_cron_remains_paused_without_explicit_user_approval": true,
+  "strategy_or_outbox_is_not_publish_success": true,
+  "public_publish_requires_explicit_current_approval": true,
+  "domestic_default_state": "draft_or_review",
+  "published_requires": [
+   "public_url_or_trusted_public_api_state",
+   "postcheck_evidence"
   ],
-  "global_hard_gates": {
-    "no_secret_output": true,
-    "no_model_provider_change": true,
-    "zero_paid_priority": true,
-    "domestic_hermes_proxy": "socks5h://127.0.0.1:1080",
-    "international_hermes_proxy": "US_PROXY",
-    "proxy_required_for_hermes_channel_access": true,
-    "paused_cron_remains_paused_without_explicit_user_approval": true,
-    "strategy_or_outbox_is_not_publish_success": true,
-    "public_publish_requires_explicit_current_approval": true,
-    "domestic_default_state": "draft_or_review",
-    "published_requires": [
-      "public_url_or_trusted_public_api_state",
-      "postcheck_evidence"
-    ],
-    "drafted_requires": [
-      "platform_draft_id",
-      "draft_list_or_detail_postcheck"
-    ],
-    "metrics_review_required": true,
-    "anti_platform_spam_similarity": true,
-    "xiaohongshu_manual_publish_only": {
-      "enforced": true,
-      "fail_closed": true,
-      "override": "not configurable",
-      "rule": "Never upload, schedule, or create a Xiaohongshu draft. Generate a validated package and send its text and images to the operator for manual publication only."
+  "drafted_requires": [
+   "platform_draft_id",
+   "draft_list_or_detail_postcheck"
+  ],
+  "metrics_review_required": true,
+  "anti_platform_spam_similarity": true,
+  "xiaohongshu_manual_publish_only": {
+   "enforced": true,
+   "fail_closed": true,
+   "override": "not configurable",
+   "rule": "Never upload, schedule, or create a Xiaohongshu draft. Generate a validated package and send its text directly in chat plus validated images to the operator for manual publication only."
+  },
+  "ai_knowledge_cat_dog_role_policy": {
+   "enforced": true,
+   "scope": "all_ai_knowledge_content_including_video_article_inline_images_knowledge_cards_wechat_newspic_xiaohongshu_and_little_green_book",
+   "primary_style": "cute_playful_cat_and_dog_roles",
+   "semantic_roles": [
+    "curious_cat_explorer",
+    "playful_cat_error_branch",
+    "watchful_dog_guard",
+    "dog_delivery_verifier",
+    "cat_dog_interaction_guide"
+   ],
+   "asset_priority": [
+    "licensed_real_cat_dog_video_or_photo_matching_the_current_knowledge_point",
+    "verified_user_owned_cat_dog_asset",
+    "text_to_image_generation_with_recorded_prompt_model_and_role"
+   ],
+   "forbidden": [
+    "random_cat_dog_asset_without_semantic_match",
+    "cat_dog_visuals_that_hide_or_replace_the_ai_knowledge_point",
+    "reused_same_asset_across_platform_works",
+    "unrecorded_generated_asset",
+    "copy_attachment_for_handoff_text"
+   ],
+   "handoff_copy": "send_title_caption_hashtags_and_publish_notes_as_direct_chat_text_not_as_md_or_json_attachment"
+  },
+  "adaptive_cover_layout_policy": {
+   "enforced": true,
+   "allowed_layouts": ["hero_subject", "split_comparison", "triptych_story", "evidence_interface", "checklist_poster", "cat_dog_interaction"],
+   "selection_inputs": ["topic", "platform", "asset_subjects", "content_payoff", "recent_7_day_cover_fingerprints"],
+   "rules": [
+    "do_not_repeat_the_same_layout_on_consecutive_works",
+    "title_must_fit_safe_area_with_adaptive_wrapping_and_font_size",
+    "cover_visual_must_represent_the_actual_content",
+    "cat_dog_roles_must_support_the_ai_knowledge_point_not_replace_it",
+    "write_cover_layout_and_source_evidence_before_handoff"
+   ]
+  },
+  "topic_platform_content_analysis_policy": {
+   "enforced": true,
+   "scope": "all_platforms_all_content_forms",
+   "required_before": ["copy_generation", "script_generation", "image_generation", "video_rendering"],
+   "required_output": "content_blueprint.json",
+   "required_fields": [
+    "selected_topic",
+    "platform",
+    "account_lane",
+    "target_audience",
+    "core_question",
+    "reader_or_viewer_payoff",
+    "platform_voice_and_style",
+    "knowledge_depth_plan",
+    "hook_plan",
+    "content_structure",
+    "cat_dog_role_plan_when_ai_knowledge_lane",
+    "asset_and_evidence_plan",
+    "subtitle_and_pacing_plan_when_video",
+    "adaptive_cover_direction",
+    "cta_plan"
+   ],
+   "fail_closed": [
+    "missing_blueprint",
+    "generic_cross_platform_copy_without_adaptation",
+    "asset_plan_not_matching_content",
+    "cat_dog_roles_added_without_knowledge_function",
+    "content_generated_before_platform_analysis"
+   ]
+  }
+ },
+ "proxy_policy": {
+  "scope": "all_hermes_browser_or_http_channel_access",
+  "domestic_proxy_env": "CN_PROXY",
+  "domestic_proxy_default": "socks5://127.0.0.1:1080",
+  "international_proxy_env": "US_PROXY",
+  "domestic_channels": [
+   "douyin",
+   "kuaishou",
+   "shipinhao",
+   "wechat",
+   "xiaohongshu",
+   "juejin",
+   "zhihu",
+   "bilibili"
+  ],
+  "international_channels": [
+   "tiktok",
+   "youtube",
+   "twitter",
+   "threads",
+   "bluesky",
+   "mastodon",
+   "nostr",
+   "devto",
+   "telegraph",
+   "writeas",
+   "buttondown"
+  ],
+  "rules": [
+   "Hermes access to domestic channels must use CN_PROXY and must not fall back to the Hermes server public IP.",
+   "Hermes access to international channels must use US_PROXY and must not reuse CN_PROXY unless a current ops report explicitly approves a route exception.",
+   "Login, cookie refresh, upload, draft, schedule, postcheck, analytics, trend scraping, and crawler probes are all channel access and must follow this proxy policy.",
+   "If the required proxy is missing, unreachable, or the observed egress region does not match the channel class, the channel must be blocked before login or upload.",
+   "Cookie files created under the wrong egress class are suspect and must be revalidated through the correct proxy before use."
+  ]
+ },
+ "feedback_schema": {
+  "path": "hermes://promo/metrics_review.jsonl",
+  "fields": [
+   "account",
+   "post_id",
+   "url",
+   "t_1h",
+   "t_24h",
+   "hook",
+   "value",
+   "objections",
+   "next_action",
+   "title",
+   "created_at"
+  ],
+  "rules": [
+   "public items must include url",
+   "drafts use draft_id as post_id and keep url empty or backend-only",
+   "next generation must read unresolved objections before topic selection"
+  ]
+ },
+ "growth_quality_policy": {
+  "policy_id": "growth_quality_policy_v1",
+  "config_path": "config/growth_quality_policy.json",
+  "applies_to": [
+   "douyin",
+   "kuaishou",
+   "wechat",
+   "bilibili",
+   "shipinhao",
+   "xiaohongshu",
+   "zhihu",
+   "juejin",
+   "youtube",
+   "tiktok",
+   "twitter"
+  ],
+  "required_before_generation": [
+   "account_performance_snapshot_or_unavailable_reason",
+   "same_lane_hot_content_analysis",
+   "target_user_action",
+   "hook_plan",
+   "retention_plan",
+   "interaction_plan",
+   "packaging_plan",
+   "post_publish_review_plan",
+   "image_content_match_plan",
+   "data_driven_improvement_plan"
+  ],
+  "pre_publish_gates": [
+   "growth_strategy_present",
+   "hook_score_target_present",
+   "first_frame_or_first_screen_plan_present",
+   "save_or_share_reason_present",
+   "comment_prompt_present",
+   "template_fatigue_risk_recorded"
+  ],
+  "post_publish_metrics_v2": [
+   "views",
+   "likes",
+   "comments",
+   "shares",
+   "saves",
+   "clicks",
+   "impressions",
+   "completion_rate",
+   "avg_watch_seconds",
+   "three_second_view_rate",
+   "follows",
+   "platform_specific_metrics"
+  ]
+ },
+ "video_delivery_hardening": {
+  "policy_id": "video_delivery_hardening_v1",
+  "applies_to": [
+   "kuaishou",
+   "bilibili",
+   "douyin",
+   "shipinhao",
+   "xiaohongshu",
+   "youtube",
+   "tiktok"
+  ],
+  "hard_gates": [
+   "every_platform_video_requires_platform_render_identity",
+   "same_topic_cross_platform_video_must_be_independently_rendered",
+   "bgm_fingerprint_must_be_checked_against_recent_and_same_batch_registry",
+   "manual_handoff_media_must_be_sent_as_independent_MEDIA_message",
+   "long_text_report_must_not_contain_media_path_only_at_message_tail"
+  ],
+  "required_evidence_fields": [
+   "platform_render_identity.output_path",
+   "platform_render_identity.script_hash",
+   "platform_render_identity.visual_hash",
+   "platform_render_identity.bgm_fingerprint",
+   "platform_render_identity.rendered_for_platform",
+   "platform_render_identity.not_reused_from_other_platform",
+   "bgm_history_check.registry_path",
+   "bgm_history_check.current_fingerprint",
+   "bgm_history_check.checked",
+   "media_delivery.mode",
+   "media_delivery.message_kind",
+   "media_delivery.sent_as_separate_message",
+   "media_delivery.text_report_separate",
+   "media_delivery.abs_paths"
+  ],
+  "forbidden": [
+   "reuse_other_platform_final_mp4_as_current_platform_final",
+   "reuse_same_bgm_fingerprint_without_current_ops_exception",
+   "append_MEDIA_line_to_long_report_message",
+   "mark_handoff_pending_as_published"
+  ]
+ },
+ "content_lanes": {
+  "pet_healing": {
+   "allowed_topics": [
+    "cat_behavior",
+    "pet_healing",
+    "animal_knowledge",
+    "localized_pet_story"
+   ],
+   "blocked_topics": [
+    "github_promotion",
+    "enterprise_ai",
+    "developer_tools",
+    "hard_tech_ad"
+   ],
+   "visual_rule": "real_or_verified_behavior_visuals_must_match_narration"
+  },
+  "ai_efficiency_open_source": {
+   "allowed_topics": [
+    "ai_efficiency",
+    "open_source_tools",
+    "developer_workflow",
+    "automation",
+    "github_project"
+   ],
+   "blocked_topics": [
+    "unrelated_pet_healing",
+    "generic_lifestyle_without_transition"
+   ],
+   "promotion_ratio_default_max": 0.25,
+   "same_platform_repeat_interval_days": 7
+  },
+  "international_ai_efficiency": {
+   "allowed_topics": [
+    "ai_efficiency",
+    "creator_workflow",
+    "productivity_lifestyle_transition",
+    "open_source_tools"
+   ],
+   "blocked_topics": [
+    "direct_chinese_copy_repost"
+   ],
+   "adaptation_rule": "rewrite_for_international_context_and_platform_language"
+  }
+ },
+ "platform_account_variants": {
+  "douyin": {
+   "base_platform": "douyin",
+   "execution_order": [
+    "douyin_pet",
+    "douyin_ai"
+   ],
+   "required": true,
+   "selection_rule": "Hermes must execute each account_key as a separate operating object; never treat base platform douyin as a single account when daily ops require Douyin.",
+   "isolation_required": [
+    "cookie_state_profile",
+    "historical_feedback",
+    "performance_metrics",
+    "growth_strategy",
+    "platform_source_matrix",
+    "tools_capability_analysis",
+    "tool_selection_plan",
+    "visual_recipe",
+    "tool_invocation_manifest",
+    "handoff_package",
+    "output_dir"
+   ],
+   "forbidden_cross_account_reuse": [
+    "final.mp4",
+    "template",
+    "bgm",
+    "title",
+    "script",
+    "source_material"
+   ],
+   "cross_account_dedup_required": [
+    "same_base_platform_other_account",
+    "same_topic_recent_cross_platform_content",
+    "same_visual_recipe_core",
+    "same_bgm_fingerprint",
+    "same_source_material"
+   ],
+   "blocked_status": "douyin_account_binding_missing",
+   "accounts": {
+    "douyin_pet": {
+     "base_platform": "douyin",
+     "account_key": "douyin_pet",
+     "cookie_account": "douyin_pet",
+     "profile": "douyin_pet",
+     "state_file_hint": "<social-auto-upload-home>/cookies/douyin_uploader/douyin_pet/main.json",
+     "growth_strategy_key": "growth_strategy:douyin_pet:latest",
+     "performance_key": "performance:douyin_pet",
+     "historical_feedback_scope": "douyin_pet",
+     "lane": "pet_healing",
+     "account_direction": "cat_pet_healing",
+     "publish_boundary": "manual_handoff_only",
+     "weekly_mix": {
+      "cat_knowledge_or_original": 3,
+      "tiktok_hot_localized_reposts": 4,
+      "rule": "2026-08-16 用户确认每日产出（每日1条），原创科普3+搬运4，关注理由+系列化强制",
+      "candidate_selection": "when fewer works are requested than weekly total, include both lines in the candidate pool and prefer the line with the larger remaining weekly quota"
+     },
+     "required_content_lines": [
+      "cat_knowledge_or_original",
+      "tiktok_hot_localized_repost"
+     ],
+     "output_dir_pattern": "data/handoff/douyin_pet/{run_id}",
+     "must_not_use_rules_from": [
+      "douyin_ai"
+     ]
+    },
+    "douyin_ai": {
+     "base_platform": "douyin",
+     "account_key": "douyin_ai",
+     "cookie_account": "douyin_ai",
+     "profile": "douyin_ai",
+     "state_file_hint": "<social-auto-upload-home>/cookies/douyin_uploader/douyin_ai/main.json",
+     "growth_strategy_key": "growth_strategy:douyin_ai:latest",
+     "performance_key": "performance:douyin_ai",
+     "historical_feedback_scope": "douyin_ai",
+     "lane": "ai_efficiency_open_source",
+     "account_direction": "ai_tools_efficiency_open_source",
+     "publish_boundary": "manual_handoff_only",
+     "required_content_lines": [
+      "ai_tool_microcase",
+      "open_source_project_short",
+      "automation_workflow_short"
+     ],
+     "forbidden_content_lines": [
+      "cat_knowledge_or_original",
+      "tiktok_hot_localized_cat_repost"
+     ],
+     "output_dir_pattern": "data/handoff/douyin_ai/{run_id}",
+     "must_not_use_rules_from": [
+      "douyin_pet"
+     ],
+     "weekly_mix": {
+      "ai_tool_microcase": 3,
+      "open_source_project_short": 2,
+      "automation_workflow_short": 2,
+      "rule": "2026-08-16 v5.1 每日产出（weekdays 0-6），收藏型干货结构强制"
+     }
     }
+   }
+  }
+ },
+ "knowledge_card_design_system": {
+  "skill_id": "hermes_skill:content/knowledge-card-designer",
+  "applies_to": [
+   "covers",
+   "inline_knowledge_cards",
+   "carousel_cards",
+   "image_text_notes",
+   "infographics",
+   "posters",
+   "knowledge_card_videos"
+  ],
+  "card_types": [
+   "cover",
+   "knowledge_summary",
+   "carousel",
+   "viewpoint",
+   "step_tutorial",
+   "emotional_companion",
+   "commercial_information",
+   "science_explainer"
+  ],
+  "generation_sequence": [
+   "load_knowledge_card_designer_skill",
+   "classify_card_type",
+   "identify_platform_and_audience",
+   "restructure_information",
+   "select_visual_scheme",
+   "generate_card",
+   "render_screenshot_or_image",
+   "run_self_check"
+  ],
+  "color_rule": {
+   "max_non_neutral_colors": 3,
+   "neutral_colors": [
+    "black",
+    "white",
+    "gray"
+   ],
+   "accent_usage": [
+    "title_keyword",
+    "core_number",
+    "cta",
+    "sequence_marker",
+    "icon"
+   ]
   },
-  "proxy_policy": {
-    "scope": "all_hermes_browser_or_http_channel_access",
-    "domestic_proxy_env": "CN_PROXY",
-    "domestic_proxy_default": "socks5://127.0.0.1:1080",
-    "international_proxy_env": "US_PROXY",
-    "domestic_channels": [
-      "douyin",
-      "kuaishou",
-      "shipinhao",
-      "wechat",
-      "xiaohongshu",
-      "juejin",
-      "zhihu",
-      "bilibili"
+  "typography_rule": {
+   "minimum_hierarchy_ratio": "4:2:1",
+   "title_px": "48-72",
+   "body_px": "18-24",
+   "label_px": "9-12",
+   "line_height_multiplier": "1.6-1.8",
+   "minimum_padding_px": 30,
+   "preferred_padding_px": 40
+  },
+  "text_composition_methods": [
+   "horizontal",
+   "vertical",
+   "diagonal",
+   "rotated",
+   "staggered",
+   "split_screen",
+   "timeline",
+   "card_stack",
+   "magazine_cover",
+   "visual_anchor"
+  ],
+  "reference_patterns": {
+   "douyin_note_20260718_7663515068651409030": [
+    "hook_cover",
+    "one_micro_point_per_page",
+    "strong_visual_hierarchy",
+    "changing_text_groups",
+    "page_by_page_progression"
+   ]
+  },
+  "visual_rules": [
+   "visual_subject_must_match_topic",
+   "decorations_must_add_information_value",
+   "split_crowded_topics_into_carousel",
+   "mobile_readability_required",
+   "text_must_not_overflow_frame"
+  ],
+  "self_check": [
+   "readability",
+   "attraction",
+   "information_density",
+   "share_or_save_value",
+   "visual_match",
+   "mobile_safe_boundaries"
+  ]
+ },
+ "visual_quality_standards": {
+  "skill_id": "hermes_skill:content/visual-quality-standards",
+  "applies_to": [
+   "covers",
+   "inline_images",
+   "inline_knowledge_cards",
+   "carousel_cards",
+   "image_text_notes",
+   "knowledge_card_videos",
+   "short_video_scenes",
+   "manual_handoff_packages"
+  ],
+  "generation_sequence": [
+   "load_visual_quality_standards_skill",
+   "retrieve_or_select_real_scene_assets",
+   "map_each_background_to_section_or_script_beat",
+   "record_source_license_and_match_reason",
+   "render_cards_or_video",
+   "run_real_scene_background_gate"
+  ],
+  "hard_rules": [
+   "css_gradient_solid_color_abstract_shape_or_design_card_cannot_be_primary_background",
+   "each_card_or_slide_requires_a_real_scene_photo_or_video_background",
+   "each_background_asset_requires_source_rights_cleared_real_scene_and_match_reason",
+   "xiaohongshu_shipinhao_douyin_handoff_packages_must_pass_the_same_visual_quality_gate_before_user_review",
+   "kuaishou_publish_runner_must_not_use_skip_preflight_for_new_or_current_work"
+  ],
+  "source_policy": "licensed_or_verified_real_scene_assets",
+  "minimum_evidence_fields": [
+   "asset_id",
+   "asset_type",
+   "source",
+   "rights_cleared",
+   "real_scene",
+   "match_reason"
+  ],
+  "forbidden_primary_backgrounds": [
+   "css_gradient",
+   "solid_color",
+   "abstract_shape",
+   "design_card",
+   "procedural"
+  ]
+ },
+ "channel_rules": {
+  "douyin": {
+   "lane": "pet_healing",
+   "primary_types": [
+    "edited_short_video",
+    "cat_knowledge_video",
+    "knowledge_image_video"
+   ],
+   "weekly_mix": {
+    "cat_knowledge_or_original": 3,
+    "tiktok_hot_localized_reposts": 4,
+    "rule": "2026-08-16 用户确认每日产出（douyin_pet/douyin_ai 各自独立每日1条），收藏率TOP1+原创声明+关注理由强制"
+   },
+   "tiktok_repost_strategy_required": {
+    "strategy_artifact": "hermes_private:ops_strategy/douyin_tiktok_repost_latest.json",
+    "required_fields": [
+     "lane",
+     "content_line",
+     "trend_basis",
+     "keyword_plan",
+     "source_screening",
+     "content_generation_inputs",
+     "quality_gate"
     ],
-    "international_channels": [
-      "tiktok",
-      "youtube",
-      "twitter",
-      "threads",
-      "bluesky",
-      "mastodon",
-      "nostr",
-      "devto",
-      "telegraph",
-      "writeas",
-      "buttondown"
+    "lane": "pet_healing",
+    "content_line": "tiktok_hot_localized_repost",
+    "content_intent": "preserve_source_entertainment_or_story_meaning_translate_localize_and_reedit_not_convert_to_cat_knowledge",
+    "forbidden_conversion": [
+     "do_not_turn_tiktok_hot_localized_reposts_into_cat_knowledge_explainers",
+     "do_not_replace_source_story_with_generic_behavior_science",
+     "do_not_use_knowledge_cards_as_main_structure_for_this_line_unless_ops_explicitly_changes_the_line"
     ],
-    "rules": [
-      "Hermes access to domestic channels must use CN_PROXY and must not fall back to the Hermes server public IP.",
-      "Hermes access to international channels must use US_PROXY and must not reuse CN_PROXY unless a current ops report explicitly approves a route exception.",
-      "Login, cookie refresh, upload, draft, schedule, postcheck, analytics, trend scraping, and crawler probes are all channel access and must follow this proxy policy.",
-      "If the required proxy is missing, unreachable, or the observed egress region does not match the channel class, the channel must be blocked before login or upload.",
-      "Cookie files created under the wrong egress class are suspect and must be revalidated through the correct proxy before use."
+    "keyword_plan_rules": [
+     "keywords_must_come_from_current_ops_strategy_not_script_hardcoding",
+     "use_international_tiktok_high_intent_cat_keywords_first",
+     "do_not_mix_cn_jp_kr_broad_tags_into_tiktok_recall_unless_current_strategy_evidence_supports_it",
+     "record_keyword_reason_heat_signal_and_expected_visual_behavior"
+    ],
+    "source_screening_rules": [
+     "US_PROXY_egress_must_be_verified_before_tiktok_trend_scraping",
+     "captcha_or_slider_state_blocks_source_collection",
+     "candidate_links_must_have_cat_text_or_metadata_context",
+     "one_author_batch_dominance_blocks_download_until_diversified",
+     "downloaded_source_requires_contact_sheet_visual_review_before_content_generation",
+     "non_cat_or_unrelated_visuals_must_be_rejected_not_reused_as_original_stock"
+    ],
+    "audio_adaptation_rules": [
+     "voiceover_must_match_source_entertainment_or_story_tone_not_flat_explainer_reading",
+     "use_playful_or_emotional_humanized_voice_for_pet_meme_reposts",
+     "add_low_volume_background_music_or_light_sfx_when_original_audio_is_removed",
+     "background_music_must_be_selected_per_work_based_on_source_intent_and_pacing",
+     "online_real_instrument_bgm_required_for_every_video_render",
+     "local_bgm_library_and_procedural_bgm_are_forbidden_even_as_fallback",
+     "bgm_source_must_include_license_source_url_fingerprint_and_fit_reason",
+     "same_batch_reusing_same_bgm_requires_current_ops_reason_or_quality_gate_fails",
+     "audio_stream_duration_must_equal_video_duration",
+     "dry_voiceover_only_is_a_quality_failure_for_tiktok_hot_localized_reposts"
+    ],
+    "content_generation_inputs_required": [
+     "source_url",
+     "video_id",
+     "keyword",
+     "trend_reason",
+     "source_caption_or_overlay",
+     "source_entertainment_or_story_intent",
+     "localization_angle",
+     "translation_rewrite_plan",
+     "scene_to_script_mapping"
     ]
-  },
-  "feedback_schema": {
-    "path": "hermes://promo/metrics_review.jsonl",
-    "fields": [
-      "account",
-      "post_id",
-      "url",
-      "t_1h",
-      "t_24h",
-      "hook",
-      "value",
-      "objections",
-      "next_action",
-      "title",
-      "created_at"
+   },
+   "publish_policy": "semi_automatic_hermes_generates_complete_review_package_user_manual_publish_only",
+   "auth_recovery": {
+    "canonical_account_file": "<social-auto-upload-home>/cookies/douyin_uploader/main.json",
+    "legacy_copy_file": "<social-auto-upload-home>/cookies/douyin_main.json",
+    "preferred_refresh_path": "cn_host_novnc_real_chrome_profile",
+    "last_solidified": "2026-07-18",
+    "last_solidified_source": "cn_host_novnc_manual_login_confirmed_by_user_and_user_manual_publish_success",
+    "blocked_refresh_paths": [
+     "headless_qr_success_without_upload_page_probe",
+     "static_qr_screenshot_only",
+     "local_multi_hop_proxy_chrome_when_system_busy"
     ],
-    "rules": [
-      "public items must include url",
-      "drafts use draft_id as post_id and keep url empty or backend-only",
-      "next generation must read unresolved objections before topic selection"
+    "success_evidence": [
+     "storage_state_json_valid",
+     "user_confirmed_manual_publish_or_upload_page_postcheck",
+     "no_cookie_plaintext_output"
     ]
+   },
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "same_lane_hot_video_analysis",
+    "cross_pipeline_v5",
+    "review_package_builder"
+   ],
+   "quality_gates": [
+    "growth_quality_plan",
+    "behavior_visual_match",
+    "lower_third_subtitles",
+    "human_voiceover",
+    "40_to_100_seconds_unless_strategy_explains",
+    "no_unrelated_stock_or_static_loop"
+   ],
+   "blocked_content": [
+    "github_or_ai_tool_hard_promotion"
+   ],
+   "postcheck": "local_review_package_ready_user_manual_publish"
   },
-  "growth_quality_policy": {
-    "policy_id": "growth_quality_policy_v1",
-    "config_path": "config/growth_quality_policy.json",
-    "applies_to": [
-      "douyin",
-      "kuaishou",
-      "wechat",
-      "bilibili",
-      "shipinhao",
-      "xiaohongshu",
-      "zhihu",
-      "juejin",
-      "youtube",
-      "tiktok",
-      "twitter"
+  "kuaishou": {
+   "lane": "mixed_ai_efficiency_and_select_pet",
+   "primary_types": [
+    "edited_short_video",
+    "microcase_video"
+   ],
+   "publish_policy": "schedule_when_platform_supports_it_and_health_allows",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "same_lane_hot_video_analysis",
+    "cross_pipeline_v5",
+    "scripts/validate_kuaishou_auto_packet.py",
+    "scripts/kuaishou_postcheck_manifest.py",
+    "sau_kuaishou_uploader",
+    "management_page_postcheck"
+   ],
+   "quality_gates": [
+    "growth_quality_plan",
+    "strategy_before_generation",
+    "kuaishou_trend_evidence",
+    "six_distinct_knowledge_card_layouts",
+    "no_local_soundhelix_or_synthetic_bgm_without_explicit_exception",
+    "audible_voiceover",
+    "readable_lower_third_subtitles",
+    "no_large_empty_template_area",
+    "scene_changes_match_script"
+   ],
+   "scheduling_rules": [
+    "do_not_trust_upload_page_one_click_schedule_for_exact_strategy_times",
+    "same_day_multi_work_batches_must_upload_to_pending_then_edit_each_pending_work_datetime",
+    "datetime_edit_must_use_real_keyboard_events_on_visible_date_time_input",
+    "completion_requires_management_page_showing_each_expected_work_and_exact_scheduled_time",
+    "submitted_true_or_uploader_success_is_not_schedule_success"
+   ],
+   "postcheck": "kuaishou_management_pending_list_with_exact_schedule_time"
+  },
+  "shipinhao": {
+   "lane": "ai_efficiency_open_source",
+   "primary_types": [
+    "edited_short_video",
+    "microcase_video"
+   ],
+   "publish_policy": "semi_automatic_hermes_generates_complete_review_package_user_manual_publish_only",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "same_lane_hot_video_analysis",
+    "cross_pipeline_v5",
+    "review_package_builder"
+   ],
+   "quality_gates": [
+    "growth_quality_plan",
+    "first_3_second_hook",
+    "2_to_4_second_visual_changes",
+    "real_ui_or_process_visuals_when_possible",
+    "no_center_blocking_subtitles",
+    "wechat_qr_ending_card",
+    "ending_card_title_16_chars_or_less",
+    "ending_card_visual_probe",
+    "no_kuaishou_template_or_topic_reuse_without_explicit_strategy_reason",
+    "wechat_ecosystem_trust_or_retention_fit_required"
+   ],
+   "strategy_requirements": {
+    "must_be_independent_from_kuaishou_batch": true,
+    "required_brief_fields": [
+     "wechat_ecosystem_context",
+     "target_share_or_save_reason",
+     "retention_problem_addressed",
+     "template_family_reason",
+     "same_day_kuaishou_dedupe_result"
     ],
-    "required_before_generation": [
-      "account_performance_snapshot_or_unavailable_reason",
-      "same_lane_hot_content_analysis",
-      "target_user_action",
-      "hook_plan",
-      "retention_plan",
-      "interaction_plan",
-      "packaging_plan",
-      "post_publish_review_plan",
-      "image_content_match_plan",
-      "data_driven_improvement_plan"
+    "blocked_generation_patterns": [
+     "reusing_kuaishou_titles_or_microcase_topics_as_shipinhao_candidates",
+     "same_batch_candidates_with_only_palette_or_text_changes",
+     "generic_ai_efficiency_cards_without_wechat_context_or_retention_reason"
     ],
-    "pre_publish_gates": [
-      "growth_strategy_present",
-      "hook_score_target_present",
-      "first_frame_or_first_screen_plan_present",
-      "save_or_share_reason_present",
-      "comment_prompt_present",
-      "template_fatigue_risk_recorded"
+    "preferred_video_forms": [
+     "wechat_chat_style_recap",
+     "before_after_retention_edit",
+     "ops_diary_or_case_replay",
+     "evidence_chain_explainer"
+    ]
+   },
+   "ending_card_requirements": {
+    "required": true,
+    "must_include": [
+     "wechat_official_account_qr",
+     "wechat_ecosystem_cta",
+     "safe_area_qr_position",
+     "ending_card_probe"
     ],
-    "post_publish_metrics_v2": [
-      "views",
-      "likes",
-      "comments",
-      "shares",
-      "saves",
-      "clicks",
+    "title_max_chars": 16,
+    "allowed_qr_positions": [
+     "lower_right",
+     "lower_left",
+     "bottom_center",
+     "right_safe_area"
+    ],
+    "visual_probe_required": [
+     "frame_path",
+     "qr_detected",
+     "qr_visible",
+     "qr_contrast_ok",
+     "safe_area_ok",
+     "overlay_opacity_max <= 0.65"
+    ],
+    "failure_policy": "block_review_package_until_final_card_probe_passes"
+   },
+   "auth_rule": "do_not_reauth_if_publish_entry_probe_reaches_post_create_with_file_inputs_1",
+   "auth_persistence": {
+    "primary_state": "<social-auto-upload-home>/cookies/tencent_uploader/profile_main",
+    "compat_storage_state": "<social-auto-upload-home>/cookies/tencent_uploader/main.json",
+    "refresh_route": "cn_proxy_visible_persistent_browser_then_export_storage_state",
+    "health_probe_route": "cn_proxy_storage_state_then_profile_main_upload_entry",
+    "entry_routes": [
+     "post_list_publish_button",
+     "platform_home_publish_button",
+     "content_management_video_publish_button"
+    ],
+    "do_not_mark_expired_when": "platform_home_or_post_list_is_logged_in_but_upload_entry_needs_retry_or_profile_fallback",
+    "reauth_only_when": "storage_state_and_profile_main_both_fail_current_cn_proxy_upload_entry_probe_or_login_page_is_visible",
+    "success_evidence": [
+     "logged_in_platform_home_or_post_list",
+     "post_create_file_inputs_1",
+     "storage_state_saved",
+     "profile_cookies_present"
+    ]
+   },
+   "postcheck_contract": {
+    "primary_routes": [
+     "platform_home_to_content_management_to_all_video_post_list",
+     "platform_home_to_content_management_to_left_video_post_list",
+     "platform_home_to_content_management_to_draft_box"
+    ],
+    "success_states": {
+     "published": "public_url_or_trusted_public_api_state",
+     "drafted_or_scheduled_visible": "management_page_exact_or_unique_title_match",
+     "submitted_user_verified": "user_confirmed_backend_submission_success_but_management_list_not_yet_synced"
+    },
+    "status_mapping": {
+     "management_page_exact_or_unique_title_match": "drafted",
+     "user_confirmed_backend_submission_success_but_management_list_not_yet_synced": "handoff_pending",
+     "submit_success_toast_without_management_match": "handoff_pending",
+     "not_found_without_submit_evidence": "blocked_or_unknown"
+    },
+    "anti_duplicate_rule": "if user_verified_submission or submit_success evidence exists, block duplicate reupload until management page or user review clears the state",
+    "tool": "scripts/shipinhao_postcheck.py"
+   },
+   "postcheck": "local_review_package_ready_user_manual_publish"
+  },
+  "wechat": {
+   "lane": "ai_efficiency_open_source",
+   "primary_types": [
+    "long_form_article",
+    "image_text_article"
+   ],
+   "content_channels": {
+    "github_selection": "weekly_bundle_one_ai_project_plus_one_non_ai_project",
+    "hot_content_generation": "topic_selected_from_wechat_same_lane_and_external_platform_trends"
+   },
+   "growth_optimization_strategy": {
+    "diagnosis_date": "2026-08-08",
+    "mode": "wechat_14_day_recovery",
+    "primary_goal": "recover_open_rate_and_finish_read_rate_before_increasing_publish_frequency",
+    "publishing_frequency": {
+     "recommended_articles_per_week": "3",
+     "max_articles_per_week_recovery": 3,
+     "max_articles_per_week_after_recovery": 3,
+     "max_articles_per_day": 1,
+     "min_gap_hours_between_articles": 48,
+     "pause_days_before_next_publish": 2,
+     "avoid_daily_updates": true,
+     "avoid_three_articles_per_day_batching": true
+    },
+    "content_mix": {
+     "open_source_notes": 0.25,
+     "personal_practice_story": 0.3,
+     "opinion_or_trend_interpretation": 0.25,
+     "interactive_qa_or_weekly_recap": 0.2
+    },
+    "columns": [
+     "马吉克开源笔记",
+     "我的 AI 工作台",
+     "AI 说人话",
+     "你问我答 / 工具箱回访"
+    ],
+    "recovery_topic_policy": {
+     "duration_days": 14,
+     "topic_dedup_window_days": 14,
+     "direction_dedup_required": true,
+     "direction_register_key": "data/ops_runs/<YYYYMMDD>/run_manifest.json",
+     "title_frame_dedup_window_days": 14,
+     "suspend_topics": [
+      "自动化实测",
+      "办公自动化实测",
+      "重复劳动自动化",
+      "WordPress SEO 自动化"
+     ],
+     "fatigue_terms": [
+      "实测",
+      "自动化",
+      "工具",
+      "AI"
+     ],
+     "max_fatigue_terms_per_title": 1,
+     "same_topic_action": "block_and_reselect_topic",
+     "same_title_frame_action": "rewrite_title_or_switch_column"
+    },
+    "title_rules": {
+     "ideal_chars": "12-22",
+     "max_chars": 24,
+     "keyword_first_chars": 15,
+     "template_fatigue_limit_days": 14,
+     "avoid_repeated_frames": [
+      "实测",
+      "试了",
+      "值得试试",
+      "自动化",
+      "AI工具"
+     ],
+     "prepare_candidates": 3,
+     "reject_if_fatigue_terms_exceed": 1
+    },
+    "article_structure": {
+     "first_200_chars": "reader pain plus concrete payoff plus why now",
+     "retention_hook_interval_chars": 350,
+     "structure_rotation_required": true,
+     "avoid_reusing_standard_template_for_14_days": true,
+     "allowed_structures": [
+      "story_driven_case",
+      "contrast_test",
+      "contrarian_opinion",
+      "reader_question_answer",
+      "open_source_project_note"
+     ],
+     "must_include": [
+      "real_case",
+      "specific_steps",
+      "failure_or_boundary",
+      "saveable_checklist",
+      "natural_follow_reason"
+     ]
+    },
+    "seo_geo": {
+     "primary_keywords": [
+      "AI效率工具",
+      "AI工作流",
+      "开源项目",
+      "GitHub精选",
+      "AI实践复盘"
+     ],
+     "placement": [
+      "title_first_15_chars",
+      "digest",
+      "first_200_chars",
+      "section_headings"
+     ]
+    },
+    "interaction_conversion": {
+     "backend_reply_keywords": [
+      "工具箱",
+      "清单",
+      "GitHub",
+      "开源笔记",
+      "提问"
+     ],
+     "single_primary_cta_only": true,
+     "required": [
+      "specific_comment_prompt",
+      "share_reason",
+      "cross_platform_follow_funnel"
+     ]
+    },
+    "manual_review_when_api_unavailable": {
+     "trigger": "datacube_or_user_summary_api_48001",
+     "required_metrics": [
       "impressions",
-      "completion_rate",
-      "avg_watch_seconds",
-      "three_second_view_rate",
-      "follows",
-      "platform_specific_metrics"
+      "open_rate",
+      "finish_read_rate",
+      "share_rate",
+      "save_rate",
+      "comment_rate",
+      "new_follows",
+      "read_to_follow_rate"
+     ]
+    }
+   },
+   "publish_policy": "draft_box_is_stage_success_public_publish_requires_user_action_or_explicit_approval",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "wechat_account_data_analysis",
+    "wechat_same_lane_account_analysis",
+    "github_trending_collector",
+    "wechat_and_external_hot_trend_analysis",
+    "hot_article_analysis",
+    "wechat_theme_renderer",
+    "image_asset_selector",
+    "wechat_image_post_cards",
+    "image_text_card_recipe",
+    "scripts/validate_image_text_card_recipe.py",
+    "scripts/validate_wechat_auto_packet.py",
+    "scripts/validate_wechat_image_post_packet.py",
+    "wechat_draft_api",
+    "wechat_image_draft_api",
+    "draft_batchget_postcheck"
+   ],
+   "strategy_requirements": {
+    "required_inputs_before_content_generation": [
+     "account_analysis",
+     "same_lane_account_analysis",
+     "cross_platform_trend_analysis",
+     "topic_selection"
+    ],
+    "github_selection_required": [
+     "github_ai_projects",
+     "github_non_ai_projects",
+     "weekly_bundle_reason_or_ops_override"
+    ],
+    "hot_content_generation_required": [
+     "wechat_same_lane_samples",
+     "external_platform_samples",
+     "hot_content_items"
+    ],
+    "content_workflow_must_receive": [
+     "account_analysis",
+     "same_lane_account_analysis",
+     "cross_platform_trend_analysis",
+     "topic_selection",
+     "content_channels",
+     "growth_optimization_strategy",
+     "content_mix_plan",
+     "column_plan",
+     "frequency_plan",
+     "title_seo_plan",
+     "interaction_conversion_plan",
+     "post_publish_metric_plan"
     ]
+   },
+   "quality_gates": [
+    "growth_quality_plan",
+    "account_data_analysis",
+    "same_lane_account_benchmark",
+    "cross_platform_trend_analysis",
+    "wechat_14_day_recovery_frequency_control",
+    "wechat_14_day_topic_dedup",
+    "topic_and_article_plan",
+    "content_workflow_inputs",
+    "dual_content_channels",
+    "wechat_editorial_frequency_control",
+    "wechat_column_mix_plan",
+    "wechat_title_fatigue_gate",
+    "wechat_first_200_chars_payoff",
+    "wechat_retention_hook_every_350_chars",
+    "wechat_comment_backend_reply_cta",
+    "wechat_search_seo_layout",
+    "wechat_manual_data_review_plan",
+    "github_project_source_required",
+    "batch_quantity_contract",
+    "1200_to_3000_words_when_article",
+    "at_least_3_inline_relevant_images",
+    "inline_img_tags_in_body",
+    "cover_cdn_required",
+    "digest_54_chars_or_less",
+    "css_inline",
+    "real_scene_or_topic_relevant_images",
+    "wechat_image_post_cards_required",
+    "image_text_card_recipe_required",
+    "image_text_card_recipe_cli_gate",
+    "wechat_image_post_real_scene_backgrounds",
+    "wechat_image_post_layout_diversity",
+    "wechat_image_post_readability",
+    "wechat_image_post_newspic_batchget_postcheck",
+    "distinct_template_per_slot"
+   ],
+   "postcheck": "wechat_draft_batchget_or_backend_draft_row"
   },
-  "video_delivery_hardening": {
-    "policy_id": "video_delivery_hardening_v1",
-    "applies_to": [
-      "kuaishou",
-      "bilibili",
-      "douyin",
-      "shipinhao",
-      "xiaohongshu",
-      "youtube",
-      "tiktok"
+  "xiaohongshu": {
+   "lane": "cat_dog_ai_knowledge_workflow_system",
+   "primary_types": [
+    "image_text_note",
+    "knowledge_card_block",
+    "short_video",
+    "carousel"
+   ],
+   "publish_policy": "manual_handoff_only_hard_gate_no_automation_ever",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "account_data_analysis",
+    "same_lane_account_analysis",
+    "bilibili_hot_analysis",
+    "wechat_hot_article_analysis",
+    "xiaohongshu_hot_note_analysis",
+    "youtube_topic_analysis",
+    "external_hot_trend_analysis",
+    "authentic_image_selector",
+    "knowledge_card_designer",
+    "short_video_renderer",
+    "anti_ai_slop_review"
+   ],
+   "strategy_requirements": {
+    "required_inputs_before_content_generation": [
+     "account_analysis",
+     "same_lane_account_analysis",
+     "cross_platform_trend_analysis",
+     "topic_selection",
+     "quantity_plan",
+     "content_brief"
     ],
-    "hard_gates": [
-      "every_platform_video_requires_platform_render_identity",
-      "same_topic_cross_platform_video_must_be_independently_rendered",
-      "bgm_fingerprint_must_be_checked_against_recent_and_same_batch_registry",
-      "manual_handoff_media_must_be_sent_as_independent_MEDIA_message",
-      "long_text_report_must_not_contain_media_path_only_at_message_tail"
+    "cross_platform_sources_required": [
+     "account_history",
+     "same_lane_accounts",
+     "bilibili",
+     "wechat",
+     "xiaohongshu",
+     "youtube",
+     "external_hot_platforms"
     ],
-    "required_evidence_fields": [
-      "platform_render_identity.output_path",
-      "platform_render_identity.script_hash",
-      "platform_render_identity.visual_hash",
-      "platform_render_identity.bgm_fingerprint",
-      "platform_render_identity.rendered_for_platform",
-      "platform_render_identity.not_reused_from_other_platform",
-      "bgm_history_check.registry_path",
-      "bgm_history_check.current_fingerprint",
-      "bgm_history_check.checked",
-      "media_delivery.mode",
-      "media_delivery.message_kind",
-      "media_delivery.sent_as_separate_message",
-      "media_delivery.text_report_separate",
-      "media_delivery.abs_paths"
+    "content_workflow_must_receive": [
+     "selected_topic",
+     "quantity_plan",
+     "copy_plan",
+     "script_plan",
+     "seo_geo_plan",
+     "topic_tags",
+     "asset_mix_plan",
+     "humanization_plan"
+    ],
+    "asset_mix_required": [
+     "ai_generated",
+     "real_material_retrieval",
+     "ai_edit_real_material",
+     "semantically_matched_cat_dog_role_assets"
+    ],
+    "output_package_required": [
+     "title",
+     "body",
+     "topics",
+     "cover",
+     "knowledge_cards",
+     "content_images",
+     "short_video",
+     "ai_assisted_disclosure",
+     "manual_publish_package"
+    ],
+    "recovery_strategy_contract": {
+     "strategy_id": "xiaohongshu_recovery_v1",
+     "content_pillar": "ai_efficiency_workflow_system",
+     "first_image_must_state_a_specific_result_or_checklist": true,
+     "save_value_required": true,
+     "min_publish_interval_hours": 36,
+     "post_publish_review_hours": [
+      1,
+      24,
+      72
+     ],
+     "increase_cadence_only_after": "three completed reviews without an account-health warning"
+    }
+   },
+   "quality_gates": [
+    "growth_quality_plan",
+    "full_ops_workflow",
+    "account_data_analysis",
+    "same_lane_account_benchmark",
+    "cross_platform_hot_trend_analysis",
+    "topic_quantity_decision",
+    "content_workflow_inputs",
+    "asset_mix_plan",
+    "humanization_plan",
+    "no_pure_color_text_cards",
+    "no_obvious_ai_generated_images_as_main_visual",
+    "oral_copy",
+    "image_text_match",
+    "knowledge_card_readability",
+    "first_image_carries_information",
+    "save_oriented_checklist_density",
+    "xiaohongshu_manual_publish_gate",
+    "xiaohongshu_recovery_strategy_gate",
+    "operator_delivery_receipt",
+    "short_video_present_when_strategy_requires",
+    "ai_assisted_disclosure_when_required"
+   ],
+   "postcheck": "user_manual_publish_confirmation",
+   "manual_handoff_contract": {
+    "publish_mode": "manual",
+    "minimum_images": 3,
+    "cover_required": true,
+    "title_max_chars": 20,
+    "topic_max_count": 6,
+    "operator_delivery_required": true
+    ,"copy_delivery": "direct_chat_text_no_attachment"
+   }
+  },
+  "juejin": {
+   "lane": "ai_efficiency_open_source",
+   "primary_types": [
+    "technical_longform",
+    "tutorial"
+   ],
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "account_data_analysis",
+    "same_lane_account_analysis",
+    "bilibili_hot_analysis",
+    "wechat_hot_article_analysis",
+    "xiaohongshu_hot_note_analysis",
+    "youtube_topic_analysis",
+    "external_hot_trend_analysis",
+    "github_trending_collector",
+    "project_screenshot_capture",
+    "image_workflow_provider",
+    "technical_article_formatter",
+    "anti_ai_slop_review"
+   ],
+   "strategy_requirements": {
+    "required_inputs_before_content_generation": [
+     "account_analysis",
+     "same_lane_account_analysis",
+     "cross_platform_trend_analysis",
+     "topic_selection",
+     "quantity_plan",
+     "content_brief"
+    ],
+    "cross_platform_sources_required": [
+     "account_history",
+     "same_lane_accounts",
+     "bilibili",
+     "wechat",
+     "xiaohongshu",
+     "youtube",
+     "external_hot_platforms"
+    ],
+    "content_workflow_must_receive": [
+     "selected_topic",
+     "quantity_plan",
+     "copy_plan",
+     "script_plan",
+     "seo_geo_plan",
+     "topic_tags",
+     "asset_mix_plan",
+     "humanization_plan"
+    ],
+    "output_package_required": [
+     "title",
+     "body",
+     "cover",
+     "project_link",
+     "project_screenshot",
+     "inline_images",
+     "code_blocks",
+     "publish_or_draft_receipt"
+    ]
+   },
+   "content_sources": {
+    "self_written": {
+     "types": [
+      "技术教程",
+      "架构实战",
+      "代码向文章"
+     ],
+     "daily_quota": 2
+    }
+   },
+   "daily_target": "1-2篇技术文章",
+   "publish_policy": "juejin_api_draft_first",
+   "quality_gates": [
+    "growth_quality_plan",
+    "full_ops_workflow",
+    "account_data_analysis",
+    "same_lane_account_benchmark",
+    "cross_platform_hot_trend_analysis",
+    "topic_quantity_decision",
+    "content_workflow_inputs",
+    "asset_mix_plan",
+    "humanization_plan",
+    "technical_depth",
+    "code_examples",
+    "clear_title",
+    "cover_required",
+    "project_screenshot_required_when_github_topic",
+    "inline_images_must_match_adjacent_sections",
+    "not_duplicate_of_zhihu",
+    "anti_spam_similarity_plan",
+    "not_duplicate_of_zhihu_or_wechat"
+   ],
+   "postcheck": "juejin_draft_or_public_url",
+   "anti_spam_similarity_policy": {
+    "not_duplicate_of_zhihu": true,
+    "must_rewrite_for_engineering_context": true,
+    "requires_code_or_architecture_specific_value": true
+   }
+  },
+  "zhihu": {
+   "lane": "ai_efficiency_open_source",
+   "primary_types": [
+    "reasoned_longform",
+    "column_article"
+   ],
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "account_data_analysis",
+    "same_lane_account_analysis",
+    "bilibili_hot_analysis",
+    "wechat_hot_article_analysis",
+    "xiaohongshu_hot_note_analysis",
+    "youtube_topic_analysis",
+    "external_hot_trend_analysis",
+    "zhihu_hot_question_analysis",
+    "image_workflow_provider",
+    "zhihu_formatter",
+    "anti_ai_slop_review",
+    "scripts/zhihu_pin_promotion.py",
+    "content_platform.zhihu_promotion.validate_pin_payload"
+   ],
+   "strategy_requirements": {
+    "required_inputs_before_content_generation": [
+     "account_analysis",
+     "same_lane_account_analysis",
+     "cross_platform_trend_analysis",
+     "topic_selection",
+     "quantity_plan",
+     "content_brief"
+    ],
+    "cross_platform_sources_required": [
+     "account_history",
+     "same_lane_accounts",
+     "bilibili",
+     "wechat",
+     "xiaohongshu",
+     "youtube",
+     "external_hot_platforms"
+    ],
+    "content_workflow_must_receive": [
+     "selected_topic",
+     "quantity_plan",
+     "copy_plan",
+     "script_plan",
+     "seo_geo_plan",
+     "topic_tags",
+     "asset_mix_plan",
+     "humanization_plan",
+     "anti_spam_similarity_plan",
+     "content_form_differentiation_plan"
+    ],
+    "output_package_required": [
+     "title",
+     "body",
+     "cover",
+     "inline_images",
+     "answer_or_article_structure",
+     "publish_or_draft_receipt"
+    ],
+    "zhihu_form_differentiation_required": {
+     "article": "deep reasoning with evidence and tradeoffs",
+     "answer": "question-specific answer with direct answer first",
+     "pin": "short original commentary plus discussion question, never article excerpt"
+    }
+   },
+   "content_sources": {
+    "self_written": {
+     "types": [
+      "AI效率深度分析",
+      "工具横评",
+      "实战经验"
+     ],
+     "daily_quota": 1
+    },
+    "qa_answers": {
+     "types": [
+      "技术问答"
+     ],
+     "daily_quota": 2
+    }
+   },
+   "daily_target": "1篇文章 + 2个回答",
+   "publish_policy": "zhihu_playwright_draft_first",
+   "quality_gates": [
+    "growth_quality_plan",
+    "full_ops_workflow",
+    "account_data_analysis",
+    "same_lane_account_benchmark",
+    "cross_platform_hot_trend_analysis",
+    "topic_quantity_decision",
+    "content_workflow_inputs",
+    "asset_mix_plan",
+    "humanization_plan",
+    "in_depth_analysis",
+    "clear_structure",
+    "section_images",
+    "cover_required",
+    "inline_images_must_match_adjacent_sections",
+    "2000_5000_words",
+    "zhihu_pin_anti_spam_similarity",
+    "answer_article_pin_differentiation",
+    "no_article_excerpt_as_pin"
+   ],
+   "postcheck": "zhihu_draft_or_public_url",
+   "visibility_risk_status": {
+    "last_known_issue": "pin_limited_to_self_visible_for_high_similarity_or_low_meaning_on_2026-08-08",
+    "recovery_mode": "zhihu_similarity_recovery",
+    "next_action": "pause_auto_pin_publish_and_require_distinct_article_answer_pin_packages"
+   },
+   "short_form_policy": {
+    "pin_publish_default": "review_only_unless_validation_passes_and_visible_article_url_exists",
+    "max_pin_article_overlap": 0.22,
+    "max_pin_title_overlap": 0.55,
+    "min_pin_content_chars": 80,
+    "max_pin_content_chars": 360,
+    "one_pin_per_article": true,
+    "min_gap_hours_between_pins": 48,
+    "must_include": [
+     "new_commentary_angle",
+     "specific_discussion_question",
+     "visible_article_url_when_publishing",
+     "anti_spam_similarity_validation"
     ],
     "forbidden": [
-      "reuse_other_platform_final_mp4_as_current_platform_final",
-      "reuse_same_bgm_fingerprint_without_current_ops_exception",
-      "append_MEDIA_line_to_long_report_message",
-      "mark_handoff_pending_as_published"
+     "copying_article_opening_as_pin_hook",
+     "reusing_article_title_as_pin_title",
+     "posting_multiple_near_duplicate_pins_or_answers_for_the_same_article",
+     "publishing_pin_without_validation_report"
     ]
+   }
   },
-  "content_lanes": {
-    "pet_healing": {
-      "allowed_topics": [
-        "cat_behavior",
-        "pet_healing",
-        "animal_knowledge",
-        "localized_pet_story"
-      ],
-      "blocked_topics": [
-        "github_promotion",
-        "enterprise_ai",
-        "developer_tools",
-        "hard_tech_ad"
-      ],
-      "visual_rule": "real_or_verified_behavior_visuals_must_match_narration"
+  "bilibili": {
+   "lane": "ai_efficiency_open_source",
+   "primary_types": [
+    "edited_short_video",
+    "tutorial_video"
+   ],
+   "publish_policy": "manual_handoff_only_generate_video_package_user_manual_publish",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "same_lane_hot_video_analysis",
+    "cross_pipeline_v5",
+    "sau_bilibili_uploader",
+    "manual_publish_package_builder",
+    "video_toolchain_runner",
+    "online_real_instrument_bgm_resolver"
+   ],
+   "quality_gates": [
+    "growth_quality_plan",
+    "clear_tutorial_or_case_value",
+    "subtitles",
+    "voiceover",
+    "scene_to_script_match",
+    "manual_handoff_only",
+    "platform_render_identity",
+    "media_delivery_contract",
+    "online_real_instrument_bgm_required",
+    "unique_render_not_cross_platform_reuse"
+   ],
+   "postcheck": "local_review_package_ready_user_manual_publish",
+   "handoff_policy": {
+    "status": "handoff_pending_only",
+    "forbidden": [
+     "automatic_upload_without_user_confirmation",
+     "reusing_youtube_or_tiktok_final_video",
+     "claiming_published_without_platform_url_or_user_confirmation"
+    ],
+    "must_include": [
+     "title",
+     "description",
+     "tags",
+     "cover",
+     "video_file",
+     "bgm_source",
+     "subtitle_file",
+     "recommended_publish_time"
+    ]
+   }
+  },
+  "tiktok": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_viral_video"
+   ],
+   "duration": "20-60s",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "tiktok_topic_analysis",
+    "cross_platform_hot_trend_analysis",
+    "image_workflow_provider",
+    "video_toolchain_runner",
+    "shotcraft_moves",
+    "cinema_composition",
+    "online_real_instrument_bgm_resolver",
+    "anti_ai_slop_review",
+    "manual_publish_package_builder"
+   ],
+   "content_sources": {
+    "self_generated": {
+     "source": "screencast_engine + TTS",
+     "types": [
+      "AI效率技巧"
+     ],
+     "daily_quota": 2
     },
-    "ai_efficiency_open_source": {
-      "allowed_topics": [
-        "ai_efficiency",
-        "open_source_tools",
-        "developer_workflow",
-        "automation",
-        "github_project"
-      ],
-      "blocked_topics": [
-        "unrelated_pet_healing",
-        "generic_lifestyle_without_transition"
-      ],
-      "promotion_ratio_default_max": 0.25,
-      "same_platform_repeat_interval_days": 7
-    },
-    "international_ai_efficiency": {
-      "allowed_topics": [
-        "ai_efficiency",
-        "creator_workflow",
-        "productivity_lifestyle_transition",
-        "open_source_tools"
-      ],
-      "blocked_topics": [
-        "direct_chinese_copy_repost"
-      ],
-      "adaptation_rule": "rewrite_for_international_context_and_platform_language"
+    "cross_post": {
+     "source": "抖音/快手搬运→英文化",
+     "types": [
+      "热门AI/效率视频"
+     ],
+     "daily_quota": 2
     }
+   },
+   "daily_target": 4,
+   "publish_policy": "manual_handoff_only_generate_video_package_no_aitoearn",
+   "quality_gates": [
+    "growth_quality_plan",
+    "cross_platform_hot_trend_analysis",
+    "first_3_second_hook",
+    "captions_required",
+    "lower_third_subtitles",
+    "scene_changes_match_script",
+    "online_real_instrument_bgm_required",
+    "vertical_9_16",
+    "hashtags_3_to_5",
+    "manual_handoff_only",
+    "platform_render_identity",
+    "media_delivery_contract",
+    "unique_render_not_cross_platform_reuse",
+    "anti_spam_similarity_plan"
+   ],
+   "postcheck": "local_review_package_ready_user_manual_publish",
+   "handoff_policy": {
+    "status": "handoff_pending_only",
+    "forbidden": [
+     "AiToEarn_publish",
+     "automatic_upload",
+     "cross_platform_final_mp4_reuse",
+     "handoff_marked_published"
+    ],
+    "must_include": [
+     "title",
+     "description",
+     "hashtags",
+     "cover",
+     "video_file",
+     "bgm_source",
+     "subtitle_file",
+     "recommended_publish_time"
+    ]
+   }
   },
-  "platform_account_variants": {
-    "douyin": {
-      "base_platform": "douyin",
-      "execution_order": [
-        "douyin_pet",
-        "douyin_ai"
-      ],
-      "required": true,
-      "selection_rule": "Hermes must execute each account_key as a separate operating object; never treat base platform douyin as a single account when daily ops require Douyin.",
-      "isolation_required": [
-        "cookie_state_profile",
-        "historical_feedback",
-        "performance_metrics",
-        "growth_strategy",
-        "platform_source_matrix",
-        "tools_capability_analysis",
-        "tool_selection_plan",
-        "visual_recipe",
-        "tool_invocation_manifest",
-        "handoff_package",
-        "output_dir"
-      ],
-      "forbidden_cross_account_reuse": [
-        "final.mp4",
-        "template",
-        "bgm",
-        "title",
-        "script",
-        "source_material"
-      ],
-      "cross_account_dedup_required": [
-        "same_base_platform_other_account",
-        "same_topic_recent_cross_platform_content",
-        "same_visual_recipe_core",
-        "same_bgm_fingerprint",
-        "same_source_material"
-      ],
-      "blocked_status": "douyin_account_binding_missing",
-      "accounts": {
-        "douyin_pet": {
-          "base_platform": "douyin",
-          "account_key": "douyin_pet",
-          "cookie_account": "douyin_pet",
-          "profile": "douyin_pet",
-          "state_file_hint": "<social-auto-upload-home>/cookies/douyin_uploader/douyin_pet/main.json",
-          "growth_strategy_key": "growth_strategy:douyin_pet:latest",
-          "performance_key": "performance:douyin_pet",
-          "historical_feedback_scope": "douyin_pet",
-          "lane": "pet_healing",
-          "account_direction": "cat_pet_healing",
-          "publish_boundary": "manual_handoff_only",
-          "weekly_mix": {
-            "cat_knowledge_or_original": 2,
-            "tiktok_hot_localized_reposts": 5
-          },
-          "required_content_lines": [
-            "cat_knowledge_or_original",
-            "tiktok_hot_localized_repost"
-          ],
-          "output_dir_pattern": "data/handoff/douyin_pet/{run_id}",
-          "must_not_use_rules_from": [
-            "douyin_ai"
-          ]
-        },
-        "douyin_ai": {
-          "base_platform": "douyin",
-          "account_key": "douyin_ai",
-          "cookie_account": "douyin_ai",
-          "profile": "douyin_ai",
-          "state_file_hint": "<social-auto-upload-home>/cookies/douyin_uploader/douyin_ai/main.json",
-          "growth_strategy_key": "growth_strategy:douyin_ai:latest",
-          "performance_key": "performance:douyin_ai",
-          "historical_feedback_scope": "douyin_ai",
-          "lane": "ai_efficiency_open_source",
-          "account_direction": "ai_tools_efficiency_open_source",
-          "publish_boundary": "manual_handoff_only",
-          "required_content_lines": [
-            "ai_tool_microcase",
-            "open_source_project_short",
-            "automation_workflow_short"
-          ],
-          "forbidden_content_lines": [
-            "cat_knowledge_or_original",
-            "tiktok_hot_localized_cat_repost"
-          ],
-          "output_dir_pattern": "data/handoff/douyin_ai/{run_id}",
-          "must_not_use_rules_from": [
-            "douyin_pet"
-          ]
-        }
-      }
+  "youtube": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "long_form_tutorial",
+    "shorts_tip"
+   ],
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "youtube_topic_analysis",
+    "cross_platform_hot_trend_analysis",
+    "image_workflow_provider",
+    "video_toolchain_runner",
+    "shotcraft_moves",
+    "cinema_composition",
+    "online_real_instrument_bgm_resolver",
+    "seo_geo_generator",
+    "manual_publish_package_builder"
+   ],
+   "content_sources": {
+    "self_generated": {
+     "source": "screencast_engine + TTS",
+     "types": [
+      "AI效率技巧",
+      "工具推荐",
+      "教程"
+     ],
+     "daily_quota": 2
+    },
+    "cross_post": {
+     "source": "抖音/快手搬运→英文化",
+     "types": [
+      "热门AI/效率视频"
+     ],
+     "daily_quota": 1
     }
-  },
-  "knowledge_card_design_system": {
-    "skill_id": "hermes_skill:content/knowledge-card-designer",
-    "applies_to": [
-      "covers",
-      "inline_knowledge_cards",
-      "carousel_cards",
-      "image_text_notes",
-      "infographics",
-      "posters",
-      "knowledge_card_videos"
+   },
+   "shorts_daily_target": 3,
+   "publish_policy": "manual_handoff_only_generate_video_package_no_aitoearn",
+   "quality_gates": [
+    "growth_quality_plan",
+    "cross_platform_hot_trend_analysis",
+    "first_5_second_hook",
+    "voiceover_or_text_overlay",
+    "lower_third_subtitles_when_short",
+    "scene_changes_match_script",
+    "online_real_instrument_bgm_required",
+    "hashtags_3_to_5",
+    "manual_handoff_only",
+    "platform_render_identity",
+    "media_delivery_contract",
+    "unique_render_not_cross_platform_reuse",
+    "anti_spam_similarity_plan"
+   ],
+   "postcheck": "local_review_package_ready_user_manual_publish",
+   "handoff_policy": {
+    "status": "handoff_pending_only",
+    "forbidden": [
+     "AiToEarn_publish",
+     "automatic_upload",
+     "cross_platform_final_mp4_reuse",
+     "handoff_marked_published"
     ],
-    "card_types": [
-      "cover",
-      "knowledge_summary",
-      "carousel",
-      "viewpoint",
-      "step_tutorial",
-      "emotional_companion",
-      "commercial_information",
-      "science_explainer"
-    ],
-    "generation_sequence": [
-      "load_knowledge_card_designer_skill",
-      "classify_card_type",
-      "identify_platform_and_audience",
-      "restructure_information",
-      "select_visual_scheme",
-      "generate_card",
-      "render_screenshot_or_image",
-      "run_self_check"
-    ],
-    "color_rule": {
-      "max_non_neutral_colors": 3,
-      "neutral_colors": [
-        "black",
-        "white",
-        "gray"
-      ],
-      "accent_usage": [
-        "title_keyword",
-        "core_number",
-        "cta",
-        "sequence_marker",
-        "icon"
-      ]
-    },
-    "typography_rule": {
-      "minimum_hierarchy_ratio": "4:2:1",
-      "title_px": "48-72",
-      "body_px": "18-24",
-      "label_px": "9-12",
-      "line_height_multiplier": "1.6-1.8",
-      "minimum_padding_px": 30,
-      "preferred_padding_px": 40
-    },
-    "text_composition_methods": [
-      "horizontal",
-      "vertical",
-      "diagonal",
-      "rotated",
-      "staggered",
-      "split_screen",
-      "timeline",
-      "card_stack",
-      "magazine_cover",
-      "visual_anchor"
-    ],
-    "reference_patterns": {
-      "douyin_note_20260718_7663515068651409030": [
-        "hook_cover",
-        "one_micro_point_per_page",
-        "strong_visual_hierarchy",
-        "changing_text_groups",
-        "page_by_page_progression"
-      ]
-    },
-    "visual_rules": [
-      "visual_subject_must_match_topic",
-      "decorations_must_add_information_value",
-      "split_crowded_topics_into_carousel",
-      "mobile_readability_required",
-      "text_must_not_overflow_frame"
-    ],
-    "self_check": [
-      "readability",
-      "attraction",
-      "information_density",
-      "share_or_save_value",
-      "visual_match",
-      "mobile_safe_boundaries"
+    "must_include": [
+     "title",
+     "description",
+     "hashtags",
+     "cover",
+     "video_file",
+     "bgm_source",
+     "subtitle_file",
+     "recommended_publish_time"
     ]
+   }
   },
-  "visual_quality_standards": {
-    "skill_id": "hermes_skill:content/visual-quality-standards",
-    "applies_to": [
-      "covers",
-      "inline_images",
-      "inline_knowledge_cards",
-      "carousel_cards",
-      "image_text_notes",
-      "knowledge_card_videos",
-      "short_video_scenes",
-      "manual_handoff_packages"
+  "twitter": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_post",
+    "image_text_post"
+   ],
+   "char_limit": 280,
+   "max_images": 4,
+   "publish_policy": "x_playwright_cookie_auto_publish",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "twitter_topic_analysis",
+    "x_playwright_cookie_publisher"
+   ],
+   "quality_gates": [
+    "concise_hook_under_280",
+    "link_or_media_engagement",
+    "hashtag_1_to_2",
+    "anti_spam_similarity_plan",
+    "no_repeated_hook_or_link_dump",
+    "specific_reply_prompt"
+   ],
+   "postcheck": "twitter_public_url_username_status_format",
+   "short_form_policy": {
+    "max_posts_per_run": 1,
+    "min_gap_hours_between_similar_posts": 24,
+    "must_include": [
+     "specific_observation",
+     "reply_prompt_or_profile_click_reason"
     ],
-    "generation_sequence": [
-      "load_visual_quality_standards_skill",
-      "retrieve_or_select_real_scene_assets",
-      "map_each_background_to_section_or_script_beat",
-      "record_source_license_and_match_reason",
-      "render_cards_or_video",
-      "run_real_scene_background_gate"
-    ],
-    "hard_rules": [
-      "css_gradient_solid_color_abstract_shape_or_design_card_cannot_be_primary_background",
-      "each_card_or_slide_requires_a_real_scene_photo_or_video_background",
-      "each_background_asset_requires_source_rights_cleared_real_scene_and_match_reason",
-      "xiaohongshu_shipinhao_douyin_handoff_packages_must_pass_the_same_visual_quality_gate_before_user_review",
-      "kuaishou_publish_runner_must_not_use_skip_preflight_for_new_or_current_work"
-    ],
-    "source_policy": "licensed_or_verified_real_scene_assets",
-    "minimum_evidence_fields": [
-      "asset_id",
-      "asset_type",
-      "source",
-      "rights_cleared",
-      "real_scene",
-      "match_reason"
-    ],
-    "forbidden_primary_backgrounds": [
-      "css_gradient",
-      "solid_color",
-      "abstract_shape",
-      "design_card",
-      "procedural"
+    "forbidden": [
+     "same_link_dump_repeated_across_platforms",
+     "generic_ai_tool_promo_without_observation",
+     "thread_spam"
     ]
+   }
   },
-  "channel_rules": {
-    "douyin": {
-      "lane": "pet_healing",
-      "primary_types": [
-        "edited_short_video",
-        "cat_knowledge_video",
-        "knowledge_image_video"
-      ],
-      "weekly_mix": {
-        "cat_knowledge_or_original": 2,
-        "tiktok_hot_localized_reposts": 5,
-        "rule": "default_weekly_plan_must_preserve_2_plus_5_unless_current_ops_report_overrides_it",
-        "candidate_selection": "when fewer works are requested than weekly total, include both lines in the candidate pool and prefer the line with the larger remaining weekly quota"
-      },
-      "tiktok_repost_strategy_required": {
-        "strategy_artifact": "hermes_private:ops_strategy/douyin_tiktok_repost_latest.json",
-        "required_fields": [
-          "lane",
-          "content_line",
-          "trend_basis",
-          "keyword_plan",
-          "source_screening",
-          "content_generation_inputs",
-          "quality_gate"
-        ],
-        "lane": "pet_healing",
-        "content_line": "tiktok_hot_localized_repost",
-        "content_intent": "preserve_source_entertainment_or_story_meaning_translate_localize_and_reedit_not_convert_to_cat_knowledge",
-        "forbidden_conversion": [
-          "do_not_turn_tiktok_hot_localized_reposts_into_cat_knowledge_explainers",
-          "do_not_replace_source_story_with_generic_behavior_science",
-          "do_not_use_knowledge_cards_as_main_structure_for_this_line_unless_ops_explicitly_changes_the_line"
-        ],
-        "keyword_plan_rules": [
-          "keywords_must_come_from_current_ops_strategy_not_script_hardcoding",
-          "use_international_tiktok_high_intent_cat_keywords_first",
-          "do_not_mix_cn_jp_kr_broad_tags_into_tiktok_recall_unless_current_strategy_evidence_supports_it",
-          "record_keyword_reason_heat_signal_and_expected_visual_behavior"
-        ],
-        "source_screening_rules": [
-          "US_PROXY_egress_must_be_verified_before_tiktok_trend_scraping",
-          "captcha_or_slider_state_blocks_source_collection",
-          "candidate_links_must_have_cat_text_or_metadata_context",
-          "one_author_batch_dominance_blocks_download_until_diversified",
-          "downloaded_source_requires_contact_sheet_visual_review_before_content_generation",
-          "non_cat_or_unrelated_visuals_must_be_rejected_not_reused_as_original_stock"
-        ],
-        "audio_adaptation_rules": [
-          "voiceover_must_match_source_entertainment_or_story_tone_not_flat_explainer_reading",
-          "use_playful_or_emotional_humanized_voice_for_pet_meme_reposts",
-          "add_low_volume_background_music_or_light_sfx_when_original_audio_is_removed",
-          "background_music_must_be_selected_per_work_based_on_source_intent_and_pacing",
-          "online_real_instrument_bgm_required_for_every_video_render",
-          "local_bgm_library_and_procedural_bgm_are_forbidden_even_as_fallback",
-          "bgm_source_must_include_license_source_url_fingerprint_and_fit_reason",
-          "same_batch_reusing_same_bgm_requires_current_ops_reason_or_quality_gate_fails",
-          "audio_stream_duration_must_equal_video_duration",
-          "dry_voiceover_only_is_a_quality_failure_for_tiktok_hot_localized_reposts"
-        ],
-        "content_generation_inputs_required": [
-          "source_url",
-          "video_id",
-          "keyword",
-          "trend_reason",
-          "source_caption_or_overlay",
-          "source_entertainment_or_story_intent",
-          "localization_angle",
-          "translation_rewrite_plan",
-          "scene_to_script_mapping"
-        ]
-      },
-      "publish_policy": "semi_automatic_hermes_generates_complete_review_package_user_manual_publish_only",
-      "auth_recovery": {
-        "canonical_account_file": "<social-auto-upload-home>/cookies/douyin_uploader/main.json",
-        "legacy_copy_file": "<social-auto-upload-home>/cookies/douyin_main.json",
-        "preferred_refresh_path": "cn_host_novnc_real_chrome_profile",
-        "last_solidified": "2026-07-18",
-        "last_solidified_source": "cn_host_novnc_manual_login_confirmed_by_user_and_user_manual_publish_success",
-        "blocked_refresh_paths": [
-          "headless_qr_success_without_upload_page_probe",
-          "static_qr_screenshot_only",
-          "local_multi_hop_proxy_chrome_when_system_busy"
-        ],
-        "success_evidence": [
-          "storage_state_json_valid",
-          "user_confirmed_manual_publish_or_upload_page_postcheck",
-          "no_cookie_plaintext_output"
-        ]
-      },
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "same_lane_hot_video_analysis",
-        "cross_pipeline_v5",
-        "review_package_builder"
-      ],
-      "quality_gates": [
-        "growth_quality_plan",
-        "behavior_visual_match",
-        "lower_third_subtitles",
-        "human_voiceover",
-        "40_to_100_seconds_unless_strategy_explains",
-        "no_unrelated_stock_or_static_loop"
-      ],
-      "blocked_content": [
-        "github_or_ai_tool_hard_promotion"
-      ],
-      "postcheck": "local_review_package_ready_user_manual_publish"
-    },
-    "kuaishou": {
-      "lane": "mixed_ai_efficiency_and_select_pet",
-      "primary_types": [
-        "edited_short_video",
-        "microcase_video"
-      ],
-      "publish_policy": "schedule_when_platform_supports_it_and_health_allows",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "same_lane_hot_video_analysis",
-        "cross_pipeline_v5",
-        "scripts/validate_kuaishou_auto_packet.py",
-        "scripts/kuaishou_postcheck_manifest.py",
-        "sau_kuaishou_uploader",
-        "management_page_postcheck"
-      ],
-      "quality_gates": [
-        "growth_quality_plan",
-        "strategy_before_generation",
-        "kuaishou_trend_evidence",
-        "six_distinct_knowledge_card_layouts",
-        "no_local_soundhelix_or_synthetic_bgm_without_explicit_exception",
-        "audible_voiceover",
-        "readable_lower_third_subtitles",
-        "no_large_empty_template_area",
-        "scene_changes_match_script"
-      ],
-      "scheduling_rules": [
-        "do_not_trust_upload_page_one_click_schedule_for_exact_strategy_times",
-        "same_day_multi_work_batches_must_upload_to_pending_then_edit_each_pending_work_datetime",
-        "datetime_edit_must_use_real_keyboard_events_on_visible_date_time_input",
-        "completion_requires_management_page_showing_each_expected_work_and_exact_scheduled_time",
-        "submitted_true_or_uploader_success_is_not_schedule_success"
-      ],
-      "postcheck": "kuaishou_management_pending_list_with_exact_schedule_time"
-    },
-    "shipinhao": {
-      "lane": "ai_efficiency_open_source",
-      "primary_types": [
-        "edited_short_video",
-        "microcase_video"
-      ],
-      "publish_policy": "semi_automatic_hermes_generates_complete_review_package_user_manual_publish_only",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "same_lane_hot_video_analysis",
-        "cross_pipeline_v5",
-        "review_package_builder"
-      ],
-      "quality_gates": [
-        "growth_quality_plan",
-        "first_3_second_hook",
-        "2_to_4_second_visual_changes",
-        "real_ui_or_process_visuals_when_possible",
-        "no_center_blocking_subtitles",
-        "wechat_qr_ending_card",
-        "ending_card_title_16_chars_or_less",
-        "ending_card_visual_probe",
-        "no_kuaishou_template_or_topic_reuse_without_explicit_strategy_reason",
-        "wechat_ecosystem_trust_or_retention_fit_required"
-      ],
-      "strategy_requirements": {
-        "must_be_independent_from_kuaishou_batch": true,
-        "required_brief_fields": [
-          "wechat_ecosystem_context",
-          "target_share_or_save_reason",
-          "retention_problem_addressed",
-          "template_family_reason",
-          "same_day_kuaishou_dedupe_result"
-        ],
-        "blocked_generation_patterns": [
-          "reusing_kuaishou_titles_or_microcase_topics_as_shipinhao_candidates",
-          "same_batch_candidates_with_only_palette_or_text_changes",
-          "generic_ai_efficiency_cards_without_wechat_context_or_retention_reason"
-        ],
-        "preferred_video_forms": [
-          "wechat_chat_style_recap",
-          "before_after_retention_edit",
-          "ops_diary_or_case_replay",
-          "evidence_chain_explainer"
-        ]
-      },
-      "ending_card_requirements": {
-        "required": true,
-        "must_include": [
-          "wechat_official_account_qr",
-          "wechat_ecosystem_cta",
-          "safe_area_qr_position",
-          "ending_card_probe"
-        ],
-        "title_max_chars": 16,
-        "allowed_qr_positions": [
-          "lower_right",
-          "lower_left",
-          "bottom_center",
-          "right_safe_area"
-        ],
-        "visual_probe_required": [
-          "frame_path",
-          "qr_detected",
-          "qr_visible",
-          "qr_contrast_ok",
-          "safe_area_ok",
-          "overlay_opacity_max <= 0.65"
-        ],
-        "failure_policy": "block_review_package_until_final_card_probe_passes"
-      },
-      "auth_rule": "do_not_reauth_if_publish_entry_probe_reaches_post_create_with_file_inputs_1",
-      "auth_persistence": {
-        "primary_state": "<social-auto-upload-home>/cookies/tencent_uploader/profile_main",
-        "compat_storage_state": "<social-auto-upload-home>/cookies/tencent_uploader/main.json",
-        "refresh_route": "cn_proxy_visible_persistent_browser_then_export_storage_state",
-        "health_probe_route": "cn_proxy_storage_state_then_profile_main_upload_entry",
-        "entry_routes": [
-          "post_list_publish_button",
-          "platform_home_publish_button",
-          "content_management_video_publish_button"
-        ],
-        "do_not_mark_expired_when": "platform_home_or_post_list_is_logged_in_but_upload_entry_needs_retry_or_profile_fallback",
-        "reauth_only_when": "storage_state_and_profile_main_both_fail_current_cn_proxy_upload_entry_probe_or_login_page_is_visible",
-        "success_evidence": [
-          "logged_in_platform_home_or_post_list",
-          "post_create_file_inputs_1",
-          "storage_state_saved",
-          "profile_cookies_present"
-        ]
-      },
-      "postcheck_contract": {
-        "primary_routes": [
-          "platform_home_to_content_management_to_all_video_post_list",
-          "platform_home_to_content_management_to_left_video_post_list",
-          "platform_home_to_content_management_to_draft_box"
-        ],
-        "success_states": {
-          "published": "public_url_or_trusted_public_api_state",
-          "drafted_or_scheduled_visible": "management_page_exact_or_unique_title_match",
-          "submitted_user_verified": "user_confirmed_backend_submission_success_but_management_list_not_yet_synced"
-        },
-        "status_mapping": {
-          "management_page_exact_or_unique_title_match": "drafted",
-          "user_confirmed_backend_submission_success_but_management_list_not_yet_synced": "handoff_pending",
-          "submit_success_toast_without_management_match": "handoff_pending",
-          "not_found_without_submit_evidence": "blocked_or_unknown"
-        },
-        "anti_duplicate_rule": "if user_verified_submission or submit_success evidence exists, block duplicate reupload until management page or user review clears the state",
-        "tool": "scripts/shipinhao_postcheck.py"
-      },
-      "postcheck": "local_review_package_ready_user_manual_publish"
-    },
-    "wechat": {
-      "lane": "ai_efficiency_open_source",
-      "primary_types": [
-        "long_form_article",
-        "image_text_article"
-      ],
-      "content_channels": {
-        "github_selection": "weekly_bundle_one_ai_project_plus_one_non_ai_project",
-        "hot_content_generation": "topic_selected_from_wechat_same_lane_and_external_platform_trends"
-      },
-      "growth_optimization_strategy": {
-        "diagnosis_date": "2026-08-08",
-        "mode": "wechat_14_day_recovery",
-        "primary_goal": "recover_open_rate_and_finish_read_rate_before_increasing_publish_frequency",
-        "publishing_frequency": {
-          "recommended_articles_per_week": "3",
-          "max_articles_per_week_recovery": 3,
-          "max_articles_per_week_after_recovery": 3,
-          "max_articles_per_day": 1,
-          "min_gap_hours_between_articles": 48,
-          "pause_days_before_next_publish": 2,
-          "avoid_daily_updates": true,
-          "avoid_three_articles_per_day_batching": true
-        },
-        "content_mix": {
-          "open_source_notes": 0.25,
-          "personal_practice_story": 0.3,
-          "opinion_or_trend_interpretation": 0.25,
-          "interactive_qa_or_weekly_recap": 0.2
-        },
-        "columns": [
-          "马吉克开源笔记",
-          "我的 AI 工作台",
-          "AI 说人话",
-          "你问我答 / 工具箱回访"
-        ],
-        "recovery_topic_policy": {
-          "duration_days": 14,
-          "topic_dedup_window_days": 14,
-          "direction_dedup_required": true,
-          "direction_register_key": "data/ops_runs/<YYYYMMDD>/run_manifest.json",
-          "title_frame_dedup_window_days": 14,
-          "suspend_topics": [
-            "自动化实测",
-            "办公自动化实测",
-            "重复劳动自动化",
-            "WordPress SEO 自动化"
-          ],
-          "fatigue_terms": [
-            "实测",
-            "自动化",
-            "工具",
-            "AI"
-          ],
-          "max_fatigue_terms_per_title": 1,
-          "same_topic_action": "block_and_reselect_topic",
-          "same_title_frame_action": "rewrite_title_or_switch_column"
-        },
-        "title_rules": {
-          "ideal_chars": "12-22",
-          "max_chars": 24,
-          "keyword_first_chars": 15,
-          "template_fatigue_limit_days": 14,
-          "avoid_repeated_frames": [
-            "实测",
-            "试了",
-            "值得试试",
-            "自动化",
-            "AI工具"
-          ],
-          "prepare_candidates": 3,
-          "reject_if_fatigue_terms_exceed": 1
-        },
-        "article_structure": {
-          "first_200_chars": "reader pain plus concrete payoff plus why now",
-          "retention_hook_interval_chars": 350,
-          "structure_rotation_required": true,
-          "avoid_reusing_standard_template_for_14_days": true,
-          "allowed_structures": [
-            "story_driven_case",
-            "contrast_test",
-            "contrarian_opinion",
-            "reader_question_answer",
-            "open_source_project_note"
-          ],
-          "must_include": [
-            "real_case",
-            "specific_steps",
-            "failure_or_boundary",
-            "saveable_checklist",
-            "natural_follow_reason"
-          ]
-        },
-        "seo_geo": {
-          "primary_keywords": [
-            "AI效率工具",
-            "AI工作流",
-            "开源项目",
-            "GitHub精选",
-            "AI实践复盘"
-          ],
-          "placement": [
-            "title_first_15_chars",
-            "digest",
-            "first_200_chars",
-            "section_headings"
-          ]
-        },
-        "interaction_conversion": {
-          "backend_reply_keywords": [
-            "工具箱",
-            "清单",
-            "GitHub",
-            "开源笔记",
-            "提问"
-          ],
-          "single_primary_cta_only": true,
-          "required": [
-            "specific_comment_prompt",
-            "share_reason",
-            "cross_platform_follow_funnel"
-          ]
-        },
-        "manual_review_when_api_unavailable": {
-          "trigger": "datacube_or_user_summary_api_48001",
-          "required_metrics": [
-            "impressions",
-            "open_rate",
-            "finish_read_rate",
-            "share_rate",
-            "save_rate",
-            "comment_rate",
-            "new_follows",
-            "read_to_follow_rate"
-          ]
-        }
-      },
-      "publish_policy": "draft_box_is_stage_success_public_publish_requires_user_action_or_explicit_approval",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "wechat_account_data_analysis",
-        "wechat_same_lane_account_analysis",
-        "github_trending_collector",
-        "wechat_and_external_hot_trend_analysis",
-        "hot_article_analysis",
-        "wechat_theme_renderer",
-        "image_asset_selector",
-        "wechat_image_post_cards",
-        "image_text_card_recipe",
-        "scripts/validate_image_text_card_recipe.py",
-        "scripts/validate_wechat_auto_packet.py",
-        "scripts/validate_wechat_image_post_packet.py",
-        "wechat_draft_api",
-        "wechat_image_draft_api",
-        "draft_batchget_postcheck"
-      ],
-      "strategy_requirements": {
-        "required_inputs_before_content_generation": [
-          "account_analysis",
-          "same_lane_account_analysis",
-          "cross_platform_trend_analysis",
-          "topic_selection"
-        ],
-        "github_selection_required": [
-          "github_ai_projects",
-          "github_non_ai_projects",
-          "weekly_bundle_reason_or_ops_override"
-        ],
-        "hot_content_generation_required": [
-          "wechat_same_lane_samples",
-          "external_platform_samples",
-          "hot_content_items"
-        ],
-        "content_workflow_must_receive": [
-          "account_analysis",
-          "same_lane_account_analysis",
-          "cross_platform_trend_analysis",
-          "topic_selection",
-          "content_channels",
-          "growth_optimization_strategy",
-          "content_mix_plan",
-          "column_plan",
-          "frequency_plan",
-          "title_seo_plan",
-          "interaction_conversion_plan",
-          "post_publish_metric_plan"
-        ]
-      },
-      "quality_gates": [
-        "growth_quality_plan",
-        "account_data_analysis",
-        "same_lane_account_benchmark",
-        "cross_platform_trend_analysis",
-        "wechat_14_day_recovery_frequency_control",
-        "wechat_14_day_topic_dedup",
-        "topic_and_article_plan",
-        "content_workflow_inputs",
-        "dual_content_channels",
-        "wechat_editorial_frequency_control",
-        "wechat_column_mix_plan",
-        "wechat_title_fatigue_gate",
-        "wechat_first_200_chars_payoff",
-        "wechat_retention_hook_every_350_chars",
-        "wechat_comment_backend_reply_cta",
-        "wechat_search_seo_layout",
-        "wechat_manual_data_review_plan",
-        "github_project_source_required",
-        "batch_quantity_contract",
-        "1200_to_3000_words_when_article",
-        "at_least_3_inline_relevant_images",
-        "inline_img_tags_in_body",
-        "cover_cdn_required",
-        "digest_54_chars_or_less",
-        "css_inline",
-        "real_scene_or_topic_relevant_images",
-        "wechat_image_post_cards_required",
-        "image_text_card_recipe_required",
-        "image_text_card_recipe_cli_gate",
-        "wechat_image_post_real_scene_backgrounds",
-        "wechat_image_post_layout_diversity",
-        "wechat_image_post_readability",
-        "wechat_image_post_newspic_batchget_postcheck",
-        "distinct_template_per_slot"
-      ],
-      "postcheck": "wechat_draft_batchget_or_backend_draft_row"
-    },
-    "xiaohongshu": {
-      "lane": "ai_efficiency_workflow_system",
-      "primary_types": [
-        "image_text_note",
-        "knowledge_card_block",
-        "short_video",
-        "carousel"
-      ],
-      "publish_policy": "manual_handoff_only_hard_gate_no_automation_ever",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "account_data_analysis",
-        "same_lane_account_analysis",
-        "bilibili_hot_analysis",
-        "wechat_hot_article_analysis",
-        "xiaohongshu_hot_note_analysis",
-        "youtube_topic_analysis",
-        "external_hot_trend_analysis",
-        "authentic_image_selector",
-        "knowledge_card_designer",
-        "short_video_renderer",
-        "anti_ai_slop_review"
-      ],
-      "strategy_requirements": {
-        "required_inputs_before_content_generation": [
-          "account_analysis",
-          "same_lane_account_analysis",
-          "cross_platform_trend_analysis",
-          "topic_selection",
-          "quantity_plan",
-          "content_brief"
-        ],
-        "cross_platform_sources_required": [
-          "account_history",
-          "same_lane_accounts",
-          "bilibili",
-          "wechat",
-          "xiaohongshu",
-          "youtube",
-          "external_hot_platforms"
-        ],
-        "content_workflow_must_receive": [
-          "selected_topic",
-          "quantity_plan",
-          "copy_plan",
-          "script_plan",
-          "seo_geo_plan",
-          "topic_tags",
-          "asset_mix_plan",
-          "humanization_plan"
-        ],
-        "asset_mix_required": [
-          "ai_generated",
-          "real_material_retrieval",
-          "ai_edit_real_material"
-        ],
-        "output_package_required": [
-          "title",
-          "body",
-          "topics",
-          "cover",
-          "knowledge_cards",
-          "content_images",
-          "short_video",
-          "ai_assisted_disclosure",
-          "manual_publish_package"
-        ],
-        "recovery_strategy_contract": {
-          "strategy_id": "xiaohongshu_recovery_v1",
-          "content_pillar": "ai_efficiency_workflow_system",
-          "first_image_must_state_a_specific_result_or_checklist": true,
-          "save_value_required": true,
-          "min_publish_interval_hours": 36,
-          "post_publish_review_hours": [1, 24, 72],
-          "increase_cadence_only_after": "three completed reviews without an account-health warning"
-        }
-      },
-      "quality_gates": [
-        "growth_quality_plan",
-        "full_ops_workflow",
-        "account_data_analysis",
-        "same_lane_account_benchmark",
-        "cross_platform_hot_trend_analysis",
-        "topic_quantity_decision",
-        "content_workflow_inputs",
-        "asset_mix_plan",
-        "humanization_plan",
-        "no_pure_color_text_cards",
-        "no_obvious_ai_generated_images_as_main_visual",
-        "oral_copy",
-        "image_text_match",
-        "knowledge_card_readability",
-        "first_image_carries_information",
-        "save_oriented_checklist_density",
-        "xiaohongshu_manual_publish_gate",
-        "xiaohongshu_recovery_strategy_gate",
-        "operator_delivery_receipt",
-        "short_video_present_when_strategy_requires",
-        "ai_assisted_disclosure_when_required"
-      ],
-      "postcheck": "user_manual_publish_confirmation",
-      "manual_handoff_contract": {
-        "publish_mode": "manual",
-        "minimum_images": 3,
-        "cover_required": true,
-        "title_max_chars": 20,
-        "topic_max_count": 6,
-        "operator_delivery_required": true
-      }
-    },
-    "juejin": {
-      "lane": "ai_efficiency_open_source",
-      "primary_types": [
-        "technical_longform",
-        "tutorial"
-      ],
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "account_data_analysis",
-        "same_lane_account_analysis",
-        "bilibili_hot_analysis",
-        "wechat_hot_article_analysis",
-        "xiaohongshu_hot_note_analysis",
-        "youtube_topic_analysis",
-        "external_hot_trend_analysis",
-        "github_trending_collector",
-        "project_screenshot_capture",
-        "image_workflow_provider",
-        "technical_article_formatter",
-        "anti_ai_slop_review"
-      ],
-      "strategy_requirements": {
-        "required_inputs_before_content_generation": [
-          "account_analysis",
-          "same_lane_account_analysis",
-          "cross_platform_trend_analysis",
-          "topic_selection",
-          "quantity_plan",
-          "content_brief"
-        ],
-        "cross_platform_sources_required": [
-          "account_history",
-          "same_lane_accounts",
-          "bilibili",
-          "wechat",
-          "xiaohongshu",
-          "youtube",
-          "external_hot_platforms"
-        ],
-        "content_workflow_must_receive": [
-          "selected_topic",
-          "quantity_plan",
-          "copy_plan",
-          "script_plan",
-          "seo_geo_plan",
-          "topic_tags",
-          "asset_mix_plan",
-          "humanization_plan"
-        ],
-        "output_package_required": [
-          "title",
-          "body",
-          "cover",
-          "project_link",
-          "project_screenshot",
-          "inline_images",
-          "code_blocks",
-          "publish_or_draft_receipt"
-        ]
-      },
-      "content_sources": {
-        "self_written": {
-          "types": [
-            "技术教程",
-            "架构实战",
-            "代码向文章"
-          ],
-          "daily_quota": 2
-        }
-      },
-      "daily_target": "1-2篇技术文章",
-      "publish_policy": "juejin_api_draft_first",
-      "quality_gates": [
-        "growth_quality_plan",
-        "full_ops_workflow",
-        "account_data_analysis",
-        "same_lane_account_benchmark",
-        "cross_platform_hot_trend_analysis",
-        "topic_quantity_decision",
-        "content_workflow_inputs",
-        "asset_mix_plan",
-        "humanization_plan",
-        "technical_depth",
-        "code_examples",
-        "clear_title",
-        "cover_required",
-        "project_screenshot_required_when_github_topic",
-        "inline_images_must_match_adjacent_sections",
-        "not_duplicate_of_zhihu",
-        "anti_spam_similarity_plan",
-        "not_duplicate_of_zhihu_or_wechat"
-      ],
-      "postcheck": "juejin_draft_or_public_url",
-      "anti_spam_similarity_policy": {
-        "not_duplicate_of_zhihu": true,
-        "must_rewrite_for_engineering_context": true,
-        "requires_code_or_architecture_specific_value": true
-      }
-    },
-    "zhihu": {
-      "lane": "ai_efficiency_open_source",
-      "primary_types": [
-        "reasoned_longform",
-        "column_article"
-      ],
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "account_data_analysis",
-        "same_lane_account_analysis",
-        "bilibili_hot_analysis",
-        "wechat_hot_article_analysis",
-        "xiaohongshu_hot_note_analysis",
-        "youtube_topic_analysis",
-        "external_hot_trend_analysis",
-        "zhihu_hot_question_analysis",
-        "image_workflow_provider",
-        "zhihu_formatter",
-        "anti_ai_slop_review",
-        "scripts/zhihu_pin_promotion.py",
-        "content_platform.zhihu_promotion.validate_pin_payload"
-      ],
-      "strategy_requirements": {
-        "required_inputs_before_content_generation": [
-          "account_analysis",
-          "same_lane_account_analysis",
-          "cross_platform_trend_analysis",
-          "topic_selection",
-          "quantity_plan",
-          "content_brief"
-        ],
-        "cross_platform_sources_required": [
-          "account_history",
-          "same_lane_accounts",
-          "bilibili",
-          "wechat",
-          "xiaohongshu",
-          "youtube",
-          "external_hot_platforms"
-        ],
-        "content_workflow_must_receive": [
-          "selected_topic",
-          "quantity_plan",
-          "copy_plan",
-          "script_plan",
-          "seo_geo_plan",
-          "topic_tags",
-          "asset_mix_plan",
-          "humanization_plan",
-          "anti_spam_similarity_plan",
-          "content_form_differentiation_plan"
-        ],
-        "output_package_required": [
-          "title",
-          "body",
-          "cover",
-          "inline_images",
-          "answer_or_article_structure",
-          "publish_or_draft_receipt"
-        ],
-        "zhihu_form_differentiation_required": {
-          "article": "deep reasoning with evidence and tradeoffs",
-          "answer": "question-specific answer with direct answer first",
-          "pin": "short original commentary plus discussion question, never article excerpt"
-        }
-      },
-      "content_sources": {
-        "self_written": {
-          "types": [
-            "AI效率深度分析",
-            "工具横评",
-            "实战经验"
-          ],
-          "daily_quota": 1
-        },
-        "qa_answers": {
-          "types": [
-            "技术问答"
-          ],
-          "daily_quota": 2
-        }
-      },
-      "daily_target": "1篇文章 + 2个回答",
-      "publish_policy": "zhihu_playwright_draft_first",
-      "quality_gates": [
-        "growth_quality_plan",
-        "full_ops_workflow",
-        "account_data_analysis",
-        "same_lane_account_benchmark",
-        "cross_platform_hot_trend_analysis",
-        "topic_quantity_decision",
-        "content_workflow_inputs",
-        "asset_mix_plan",
-        "humanization_plan",
-        "in_depth_analysis",
-        "clear_structure",
-        "section_images",
-        "cover_required",
-        "inline_images_must_match_adjacent_sections",
-        "2000_5000_words",
-        "zhihu_pin_anti_spam_similarity",
-        "answer_article_pin_differentiation",
-        "no_article_excerpt_as_pin"
-      ],
-      "postcheck": "zhihu_draft_or_public_url",
-      "visibility_risk_status": {
-        "last_known_issue": "pin_limited_to_self_visible_for_high_similarity_or_low_meaning_on_2026-08-08",
-        "recovery_mode": "zhihu_similarity_recovery",
-        "next_action": "pause_auto_pin_publish_and_require_distinct_article_answer_pin_packages"
-      },
-      "short_form_policy": {
-        "pin_publish_default": "review_only_unless_validation_passes_and_visible_article_url_exists",
-        "max_pin_article_overlap": 0.22,
-        "max_pin_title_overlap": 0.55,
-        "min_pin_content_chars": 80,
-        "max_pin_content_chars": 360,
-        "one_pin_per_article": true,
-        "min_gap_hours_between_pins": 48,
-        "must_include": [
-          "new_commentary_angle",
-          "specific_discussion_question",
-          "visible_article_url_when_publishing",
-          "anti_spam_similarity_validation"
-        ],
-        "forbidden": [
-          "copying_article_opening_as_pin_hook",
-          "reusing_article_title_as_pin_title",
-          "posting_multiple_near_duplicate_pins_or_answers_for_the_same_article",
-          "publishing_pin_without_validation_report"
-        ]
-      }
-    },
-    "bilibili": {
-      "lane": "ai_efficiency_open_source",
-      "primary_types": [
-        "edited_short_video",
-        "tutorial_video"
-      ],
-      "publish_policy": "manual_handoff_only_generate_video_package_user_manual_publish",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "same_lane_hot_video_analysis",
-        "cross_pipeline_v5",
-        "sau_bilibili_uploader",
-        "manual_publish_package_builder",
-        "video_toolchain_runner",
-        "online_real_instrument_bgm_resolver"
-      ],
-      "quality_gates": [
-        "growth_quality_plan",
-        "clear_tutorial_or_case_value",
-        "subtitles",
-        "voiceover",
-        "scene_to_script_match",
-        "manual_handoff_only",
-        "platform_render_identity",
-        "media_delivery_contract",
-        "online_real_instrument_bgm_required",
-        "unique_render_not_cross_platform_reuse"
-      ],
-      "postcheck": "local_review_package_ready_user_manual_publish",
-      "handoff_policy": {
-        "status": "handoff_pending_only",
-        "forbidden": [
-          "automatic_upload_without_user_confirmation",
-          "reusing_youtube_or_tiktok_final_video",
-          "claiming_published_without_platform_url_or_user_confirmation"
-        ],
-        "must_include": [
-          "title",
-          "description",
-          "tags",
-          "cover",
-          "video_file",
-          "bgm_source",
-          "subtitle_file",
-          "recommended_publish_time"
-        ]
-      }
-    },
-    "tiktok": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_viral_video"
-      ],
-      "duration": "20-60s",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "tiktok_topic_analysis",
-        "cross_platform_hot_trend_analysis",
-        "image_workflow_provider",
-        "video_toolchain_runner",
-        "shotcraft_moves",
-        "cinema_composition",
-        "online_real_instrument_bgm_resolver",
-        "anti_ai_slop_review",
-        "manual_publish_package_builder"
-      ],
-      "content_sources": {
-        "self_generated": {
-          "source": "screencast_engine + TTS",
-          "types": [
-            "AI效率技巧"
-          ],
-          "daily_quota": 2
-        },
-        "cross_post": {
-          "source": "抖音/快手搬运→英文化",
-          "types": [
-            "热门AI/效率视频"
-          ],
-          "daily_quota": 2
-        }
-      },
-      "daily_target": 4,
-      "publish_policy": "manual_handoff_only_generate_video_package_no_aitoearn",
-      "quality_gates": [
-        "growth_quality_plan",
-        "cross_platform_hot_trend_analysis",
-        "first_3_second_hook",
-        "captions_required",
-        "lower_third_subtitles",
-        "scene_changes_match_script",
-        "online_real_instrument_bgm_required",
-        "vertical_9_16",
-        "hashtags_3_to_5",
-        "manual_handoff_only",
-        "platform_render_identity",
-        "media_delivery_contract",
-        "unique_render_not_cross_platform_reuse",
-        "anti_spam_similarity_plan"
-      ],
-      "postcheck": "local_review_package_ready_user_manual_publish",
-      "handoff_policy": {
-        "status": "handoff_pending_only",
-        "forbidden": [
-          "AiToEarn_publish",
-          "automatic_upload",
-          "cross_platform_final_mp4_reuse",
-          "handoff_marked_published"
-        ],
-        "must_include": [
-          "title",
-          "description",
-          "hashtags",
-          "cover",
-          "video_file",
-          "bgm_source",
-          "subtitle_file",
-          "recommended_publish_time"
-        ]
-      }
-    },
-    "youtube": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "long_form_tutorial",
-        "shorts_tip"
-      ],
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "youtube_topic_analysis",
-        "cross_platform_hot_trend_analysis",
-        "image_workflow_provider",
-        "video_toolchain_runner",
-        "shotcraft_moves",
-        "cinema_composition",
-        "online_real_instrument_bgm_resolver",
-        "seo_geo_generator",
-        "manual_publish_package_builder"
-      ],
-      "content_sources": {
-        "self_generated": {
-          "source": "screencast_engine + TTS",
-          "types": [
-            "AI效率技巧",
-            "工具推荐",
-            "教程"
-          ],
-          "daily_quota": 2
-        },
-        "cross_post": {
-          "source": "抖音/快手搬运→英文化",
-          "types": [
-            "热门AI/效率视频"
-          ],
-          "daily_quota": 1
-        }
-      },
-      "shorts_daily_target": 3,
-      "publish_policy": "manual_handoff_only_generate_video_package_no_aitoearn",
-      "quality_gates": [
-        "growth_quality_plan",
-        "cross_platform_hot_trend_analysis",
-        "first_5_second_hook",
-        "voiceover_or_text_overlay",
-        "lower_third_subtitles_when_short",
-        "scene_changes_match_script",
-        "online_real_instrument_bgm_required",
-        "hashtags_3_to_5",
-        "manual_handoff_only",
-        "platform_render_identity",
-        "media_delivery_contract",
-        "unique_render_not_cross_platform_reuse",
-        "anti_spam_similarity_plan"
-      ],
-      "postcheck": "local_review_package_ready_user_manual_publish",
-      "handoff_policy": {
-        "status": "handoff_pending_only",
-        "forbidden": [
-          "AiToEarn_publish",
-          "automatic_upload",
-          "cross_platform_final_mp4_reuse",
-          "handoff_marked_published"
-        ],
-        "must_include": [
-          "title",
-          "description",
-          "hashtags",
-          "cover",
-          "video_file",
-          "bgm_source",
-          "subtitle_file",
-          "recommended_publish_time"
-        ]
-      }
-    },
-    "twitter": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_post",
-        "image_text_post"
-      ],
-      "char_limit": 280,
-      "max_images": 4,
-      "publish_policy": "x_playwright_cookie_auto_publish",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "twitter_topic_analysis",
-        "x_playwright_cookie_publisher"
-      ],
-      "quality_gates": [
-        "concise_hook_under_280",
-        "link_or_media_engagement",
-        "hashtag_1_to_2",
-        "anti_spam_similarity_plan",
-        "no_repeated_hook_or_link_dump",
-        "specific_reply_prompt"
-      ],
-      "postcheck": "twitter_public_url_username_status_format",
-      "short_form_policy": {
-        "max_posts_per_run": 1,
-        "min_gap_hours_between_similar_posts": 24,
-        "must_include": [
-          "specific_observation",
-          "reply_prompt_or_profile_click_reason"
-        ],
-        "forbidden": [
-          "same_link_dump_repeated_across_platforms",
-          "generic_ai_tool_promo_without_observation",
-          "thread_spam"
-        ]
-      }
-    },
-    "threads": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_post",
-        "image_text_post"
-      ],
-      "char_limit": 500,
-      "max_images": 10,
-      "publish_policy": "manual_or_cookie_handoff_no_aitoearn",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "threads_topic_analysis",
-        "cross_platform_hot_trend_analysis",
-        "manual_publish_package_builder"
-      ],
-      "quality_gates": [
-        "conversational_tone",
-        "engagement_question",
-        "hashtag_1_to_3"
-      ],
-      "postcheck": "threads_public_url_or_work_link"
-    },
-    "bluesky": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_post"
-      ],
-      "char_limit": 300,
-      "max_images": 4,
-      "publish_policy": "api_direct_publish",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "bluesky_topic_analysis",
-        "bluesky_publisher"
-      ],
-      "quality_gates": [
-        "concise_point",
-        "no_external_link_shortener",
-        "hashtag_1_to_3"
-      ],
-      "postcheck": "bluesky_public_url"
-    },
-    "mastodon": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_post",
-        "thread_post"
-      ],
-      "char_limit": 500,
-      "max_images": 4,
-      "instances": [
-        "mstdn.social",
-        "techhub.social",
-        "privacysafe.social",
-        "mastodon.nl",
-        "mathstodon.xyz",
-        "expressional.social"
-      ],
-      "publish_policy": "api_direct_publish_multi_instance",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "mastodon_publisher"
-      ],
-      "quality_gates": [
-        "content_warning_for_controversial",
-        "alt_text_for_images",
-        "no_duplicate_across_instances"
-      ],
-      "postcheck": "mastodon_public_url",
-      "description": "适用于所有 mastodon 实例"
-    },
-    "nostr": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_post"
-      ],
-      "char_limit": 500,
-      "publish_policy": "api_direct_publish",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "nostr_publisher"
-      ],
-      "quality_gates": [
-        "meaningful_content",
-        "no_spam_pattern"
-      ],
-      "postcheck": "nostr_relay_confirmation"
-    },
-    "devto": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "technical_article",
-        "tutorial"
-      ],
-      "publish_policy": "api_direct_draft",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "devto_publisher"
-      ],
-      "quality_gates": [
-        "clear_title_under_128",
-        "markdown_formatting",
-        "code_blocks_proper",
-        "cover_image_required",
-        "tags_3_to_6"
-      ],
-      "postcheck": "devto_article_draft_id"
-    },
-    "telegraph": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_article"
-      ],
-      "publish_policy": "api_direct_publish",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "telegraph_publisher"
-      ],
-      "quality_gates": [
-        "title_required",
-        "readable_body",
-        "single_page_format"
-      ],
-      "postcheck": "telegraph_public_url"
-    },
-    "writeas": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "short_anonymous_post"
-      ],
-      "publish_policy": "api_direct_publish_anonymous",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "writeas_publisher"
-      ],
-      "quality_gates": [
-        "title_optional",
-        "readable_body"
-      ],
-      "postcheck": "writeas_public_url"
-    },
-    "buttondown": {
-      "lane": "international_ai_efficiency",
-      "primary_types": [
-        "email_newsletter"
-      ],
-      "publish_policy": "api_direct_draft",
-      "must_use_tools": [
-        "hermes_operating_strategy",
-        "buttondown_publisher"
-      ],
-      "quality_gates": [
-        "subject_line_required",
-        "email_ready_format"
-      ],
-      "postcheck": "buttondown_email_draft_id"
-    }
+  "threads": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_post",
+    "image_text_post"
+   ],
+   "char_limit": 500,
+   "max_images": 10,
+   "publish_policy": "manual_or_cookie_handoff_no_aitoearn",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "threads_topic_analysis",
+    "cross_platform_hot_trend_analysis",
+    "manual_publish_package_builder"
+   ],
+   "quality_gates": [
+    "conversational_tone",
+    "engagement_question",
+    "hashtag_1_to_3"
+   ],
+   "postcheck": "threads_public_url_or_work_link"
   },
-  "human_first_policy": {
-    "policy_id": "human_first_v1",
-    "core_principle": "所有内容是给真人看的，不是给AI/机器看的",
-    "required_before_publish": [
-      "human_quality_check_passed",
-      "hook_in_first_200_chars",
-      "no_ai_transition_words",
-      "has_specific_details",
-      "conversational_tone"
-    ],
-    "forbidden_patterns": [
-      "首先/其次/最后 结构",
-      "值得注意的是/不可忽视的是",
-      "综上所述/总而言之",
-      "在当今时代/随着科技的发展",
-      "模板化三段式结构",
-      "纯色/渐变背景配图",
-      "AI生图作为主视觉（除非策略特批）"
-    ],
-    "visual_rules": [
-      "配图必须与内容直接相关",
-      "禁止纯色背景+一行字的卡片",
-      "真人实拍/真实截图优于AI生图",
-      "文字可读性优先（遮罩+阴影）"
-    ]
+  "bluesky": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_post"
+   ],
+   "char_limit": 300,
+   "max_images": 4,
+   "publish_policy": "api_direct_publish",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "bluesky_topic_analysis",
+    "bluesky_publisher"
+   ],
+   "quality_gates": [
+    "concise_point",
+    "no_external_link_shortener",
+    "hashtag_1_to_3"
+   ],
+   "postcheck": "bluesky_public_url"
   },
-  "anti_spam_similarity_policy": {
-    "policy_id": "anti_spam_similarity_v1",
-    "applies_to": [
-      "douyin",
-      "kuaishou",
-      "shipinhao",
-      "wechat",
-      "xiaohongshu",
-      "juejin",
-      "zhihu",
-      "bilibili",
-      "tiktok",
-      "youtube",
-      "twitter",
-      "threads",
-      "bluesky",
-      "mastodon",
-      "nostr",
-      "devto",
-      "telegraph",
-      "writeas",
-      "buttondown"
-    ],
-    "lookback_days_default": 14,
-    "rules": [
-      "do_not_publish_near_duplicate_content_across_article_answer_pin_note_or_video_forms",
-      "companion_or_promotion_posts_must_add_a_new_angle_not_copy_the_source_body_or_title",
-      "short_form_promotions_must_include_a_specific_discussion_question_or_reader_action",
-      "same_topic_cross_platform_reuse_requires_platform_specific_rewrite_visual_identity_and_postcheck_evidence",
-      "if_any_platform_limits_visibility_for_similarity_or_spam_pause_that_platform_line_and_reselect_topics_before_next_run"
-    ],
-    "failure_action": "block_publish_or_handoff_until_topic_copy_and_visual_recipe_are_rebuilt"
+  "mastodon": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_post",
+    "thread_post"
+   ],
+   "char_limit": 500,
+   "max_images": 4,
+   "instances": [
+    "mstdn.social",
+    "techhub.social",
+    "privacysafe.social",
+    "mastodon.nl",
+    "mathstodon.xyz",
+    "expressional.social"
+   ],
+   "publish_policy": "api_direct_publish_multi_instance",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "mastodon_publisher"
+   ],
+   "quality_gates": [
+    "content_warning_for_controversial",
+    "alt_text_for_images",
+    "no_duplicate_across_instances"
+   ],
+   "postcheck": "mastodon_public_url",
+   "description": "适用于所有 mastodon 实例"
+  },
+  "nostr": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_post"
+   ],
+   "char_limit": 500,
+   "publish_policy": "api_direct_publish",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "nostr_publisher"
+   ],
+   "quality_gates": [
+    "meaningful_content",
+    "no_spam_pattern"
+   ],
+   "postcheck": "nostr_relay_confirmation"
+  },
+  "devto": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "technical_article",
+    "tutorial"
+   ],
+   "publish_policy": "api_direct_draft",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "devto_publisher"
+   ],
+   "quality_gates": [
+    "clear_title_under_128",
+    "markdown_formatting",
+    "code_blocks_proper",
+    "cover_image_required",
+    "tags_3_to_6"
+   ],
+   "postcheck": "devto_article_draft_id"
+  },
+  "telegraph": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_article"
+   ],
+   "publish_policy": "api_direct_publish",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "telegraph_publisher"
+   ],
+   "quality_gates": [
+    "title_required",
+    "readable_body",
+    "single_page_format"
+   ],
+   "postcheck": "telegraph_public_url"
+  },
+  "writeas": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "short_anonymous_post"
+   ],
+   "publish_policy": "api_direct_publish_anonymous",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "writeas_publisher"
+   ],
+   "quality_gates": [
+    "title_optional",
+    "readable_body"
+   ],
+   "postcheck": "writeas_public_url"
+  },
+  "buttondown": {
+   "lane": "international_ai_efficiency",
+   "primary_types": [
+    "email_newsletter"
+   ],
+   "publish_policy": "api_direct_draft",
+   "must_use_tools": [
+    "hermes_operating_strategy",
+    "buttondown_publisher"
+   ],
+   "quality_gates": [
+    "subject_line_required",
+    "email_ready_format"
+   ],
+   "postcheck": "buttondown_email_draft_id"
   }
+ },
+ "human_first_policy": {
+  "policy_id": "human_first_v1",
+  "core_principle": "所有内容是给真人看的，不是给AI/机器看的",
+  "required_before_publish": [
+   "human_quality_check_passed",
+   "hook_in_first_200_chars",
+   "no_ai_transition_words",
+   "has_specific_details",
+   "conversational_tone"
+  ],
+  "forbidden_patterns": [
+   "首先/其次/最后 结构",
+   "值得注意的是/不可忽视的是",
+   "综上所述/总而言之",
+   "在当今时代/随着科技的发展",
+   "模板化三段式结构",
+   "纯色/渐变背景配图",
+   "AI生图作为主视觉（除非策略特批）"
+  ],
+  "visual_rules": [
+   "配图必须与内容直接相关",
+   "禁止纯色背景+一行字的卡片",
+   "真人实拍/真实截图优于AI生图",
+   "文字可读性优先（遮罩+阴影）"
+  ]
+ },
+ "anti_spam_similarity_policy": {
+  "policy_id": "anti_spam_similarity_v1",
+  "applies_to": [
+   "douyin",
+   "kuaishou",
+   "shipinhao",
+   "wechat",
+   "xiaohongshu",
+   "juejin",
+   "zhihu",
+   "bilibili",
+   "tiktok",
+   "youtube",
+   "twitter",
+   "threads",
+   "bluesky",
+   "mastodon",
+   "nostr",
+   "devto",
+   "telegraph",
+   "writeas",
+   "buttondown"
+  ],
+  "lookback_days_default": 14,
+  "rules": [
+   "do_not_publish_near_duplicate_content_across_article_answer_pin_note_or_video_forms",
+   "companion_or_promotion_posts_must_add_a_new_angle_not_copy_the_source_body_or_title",
+   "short_form_promotions_must_include_a_specific_discussion_question_or_reader_action",
+   "same_topic_cross_platform_reuse_requires_platform_specific_rewrite_visual_identity_and_postcheck_evidence",
+   "if_any_platform_limits_visibility_for_similarity_or_spam_pause_that_platform_line_and_reselect_topics_before_next_run"
+  ],
+  "failure_action": "block_publish_or_handoff_until_topic_copy_and_visual_recipe_are_rebuilt"
+ }
 }

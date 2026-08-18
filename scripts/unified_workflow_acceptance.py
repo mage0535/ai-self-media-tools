@@ -38,14 +38,44 @@ def d1_account(analysis_text: str, platform: str):
     check(f"D1 {platform} account analysis", len(hits) >= 3, f"signals: {hits}")
 
 # ── D2. Ops strategy (growth strategy loaded & matched) ──
-def d2_strategy(analysis_text: str, strategy_dir: Path):
+def d2_strategy(analysis_text: str, strategy_dir: Path, platform: str = ""):
     strategy_files = sorted((ROOT / "data").glob("growth_strategy_*.md")) if (ROOT / "data").exists() else []
     if not strategy_files:
         check("D2 growth strategy file", False, "no growth_strategy_*.md")
         return
-    latest = strategy_files[-1].name
+    # 2026-08-16 修复：按平台匹配策略文件（避免字母序取 xhs 误判所有平台）
+    # 优先 exact 平台前缀（growth_strategy_douyin_ai_20260816.md），
+    # 其次平台子串（douyin_ai 匹配 growth_strategy_douyin_ai_* / growth_strategy_*_douyin_ai*），
+    # 否则回退最近文件（旧行为）
+    plat = str(platform or "").casefold()
+    matched = None
+    if plat:
+        exact = [f.name for f in strategy_files if f.name.casefold().startswith(f"growth_strategy_{plat}_")]
+        if exact:
+            matched = exact[-1]
+        else:
+            sub = [f.name for f in strategy_files if plat in f.name.casefold()]
+            if sub:
+                matched = sub[-1]
+    if not matched:
+        # 2026-08-16 修复：无专属策略时回退最新主策略（v6），而非任意字母序文件
+        # （此前会取 xhs 误判；v6 已合并宠物号/全平台内容）
+        main = [f.name for f in strategy_files if f.name.casefold().startswith("growth_strategy_20")]
+        if main:
+            # 取日期最新的主策略（growth_strategy_YYYYMMDD.md）
+            main = sorted(main, key=lambda n: n.replace("growth_strategy_", "").replace(".md", ""), reverse=True)
+            matched = main[0] if main[0].startswith("growth_strategy_20") else None
+    latest = matched or strategy_files[-1].name
     referenced = latest in (analysis_text or "") or "growth_strategy" in (analysis_text or "")
     check("D2 ops strategy referenced", referenced, f"latest={latest}")
+    # 2026-08-16 强化：分析文件必须引用 2026 平台规则（防用过时逻辑/防规则遗漏）
+    rules_ref = "platform_rules_2026" in (analysis_text or "") or "2026 算法适配" in (analysis_text or "") \
+        or "platform-ops-rules" in (analysis_text or "") or "收藏率" in (analysis_text or "")
+    check("D2 2026 rules referenced", rules_ref, "analysis 应引用 platform_rules_2026 / 收藏率等 2026 规则")
+    # 2026-08-16 强化：分析文件必须声明发布模式（快手/X 自动、公众号系草稿、其余手动）
+    # 防自动任务把手动平台当自动发
+    mode_ref = any(k in (analysis_text or "") for k in ["发布模式", "handoff", "草稿箱", "手动发布", "自动上传"])
+    check("D2 publish mode referenced", mode_ref, "analysis 应声明发布模式（自动/草稿/手动）")
 
 # ── D3. Topic independence (platform gate) ──
 def d3_topic(platform: str, date_str: str):
@@ -157,7 +187,8 @@ def d8_video(artifacts_dir: Path, platform: str):
         return check(f"D8 {platform} video", True, "n/a")
     bg_dir = artifacts_dir / "backgrounds"
     if bg_dir.exists():
-        bg_files = sorted(bg_dir.glob("*.png"))
+        # 2026-08-17 修复：兼容 jpg/png（背景图从 Pexels/Pollinations 下载为 jpg）
+        bg_files = sorted(bg_dir.glob("*.png")) + sorted(bg_dir.glob("*.jpg"))
         hashes = []
         for f in bg_files:
             hashes.append(subprocess.run(["md5sum", str(f)], capture_output=True, text=True).stdout.split()[0])
@@ -254,7 +285,7 @@ def main():
 
     print(f"=== Unified Workflow Acceptance: {platform} ({args.date}) ===")
     d1_account(analysis_text, platform)
-    d2_strategy(analysis_text, ROOT / "data")
+    d2_strategy(analysis_text, ROOT / "data", platform)
     d3_topic(platform, args.date)
     d4_copy(body, platform, cards)
     d5_format(body, platform, args.content_form, cards)

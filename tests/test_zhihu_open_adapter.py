@@ -81,3 +81,35 @@ def test_zhihu_direct_source_falls_back_to_cookie_cli_when_open_adapter_fails():
             items = DirectTrendSource("zhihu", {"limit": 5}).collect()
 
     assert items[0]["title"] == "Cookie topic"
+
+
+def test_zhihu_markdown_requires_cdn_url_for_every_section_image():
+    from content_platform.zhihu_publisher import build_markdown_with_cdn
+
+    body = "## One\n\n![one]()\n\n## Two\n\n![two]()"
+    section_map = [
+        {"section": "One", "purpose": "first"},
+        {"section": "Two", "purpose": "second"},
+    ]
+
+    with pytest.raises(ValueError, match="cdn upload incomplete"):
+        build_markdown_with_cdn(body, section_map, ["https://cdn.example/cover.jpg", "https://cdn.example/one.jpg"])
+
+
+def test_zhihu_markdown_replaces_all_empty_image_markers():
+    from content_platform.zhihu_publisher import build_markdown_with_cdn
+
+    body = "## One\n\n![one]()\n\n## Two\n\n![two]()"
+    section_map = [
+        {"section": "One", "purpose": "first"},
+        {"section": "Two", "purpose": "second"},
+    ]
+
+    markdown = build_markdown_with_cdn(
+        body,
+        section_map,
+        ["https://cdn.example/cover.jpg", "https://cdn.example/one.jpg", "https://cdn.example/two.jpg"],
+    )
+
+    assert markdown.count("https://cdn.example/") == 3
+    assert "![]()" not in markdown

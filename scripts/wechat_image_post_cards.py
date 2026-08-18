@@ -208,7 +208,7 @@ def build_packet(md_path: Path, title: str, out_dir: Path, max_cards: int, provi
         "platform": "wechat",
         "content_type": "wechat_image_post",
         "title": title[:32],
-        "desc": "图片消息补充长文核心结论，方便读者滑动、收藏和转发。",
+        "desc": "图片消息补充长文核心结论，方便读者滑动、收藏和转发。贴图方法论(2026-08-16 提炼)：1000字长文→浓缩500字+卡片图，不能直接转图；选题=现实共鸣话题(失业/存钱/婆媳/养老/情绪价值)；发布后自己留第一条评论抛砖引玉；高峰时段早7-9/中12-14/下班17:30-19/晚20-23。",
         "card_count": len(cards),
         "cards": cards,
         "design_strategy": {

@@ -223,6 +223,16 @@ def _ass_time(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:05.2f}"
 
 
+def _resolve_voice(platform: str, requested: str, script_text: str) -> str:
+    if str(requested or "").strip():
+        return requested
+    ascii_count = sum(1 for ch in script_text if ord(ch) < 128 and ch.isalpha())
+    cjk_count = sum(1 for ch in script_text if "\u4e00" <= ch <= "\u9fff")
+    if str(platform).casefold() == "youtube" and ascii_count > cjk_count * 2:
+        return "en-US-GuyNeural"
+    return "zh-CN-YunjianNeural"
+
+
 def render(args: argparse.Namespace) -> dict:
     out_dir = Path(args.out_dir).expanduser().resolve()
     render_dir = out_dir / "render"
@@ -238,7 +248,8 @@ def render(args: argparse.Namespace) -> dict:
 
     theme = THEMES[args.platform]
     _write_slides(render_dir, beats, bg_dir, theme)
-    asyncio.run(_tts(render_dir, beats, args.voice))
+    voice = _resolve_voice(args.platform, args.voice, script_text)
+    asyncio.run(_tts(render_dir, beats, voice))
     asyncio.run(_screenshots(render_dir, len(beats)))
     _segments(render_dir, len(beats))
     raw = _concat(render_dir, len(beats))
@@ -340,7 +351,7 @@ def main() -> int:
     parser.add_argument("--bg-dir", required=True)
     parser.add_argument("--title", required=True)
     parser.add_argument("--platform", choices=sorted(THEMES), default="bilibili")
-    parser.add_argument("--voice", default="zh-CN-YunxiNeural")
+    parser.add_argument("--voice", default="")
     parser.add_argument("--bgm-style", default="acoustic guitar instrumental")
     parser.add_argument("--max-duration", type=int, default=120)
     parser.add_argument("--force", action="store_true")

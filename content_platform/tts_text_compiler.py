@@ -51,6 +51,11 @@ class TTSTextCompiler:
                 continue
             source = str(rule["source"])
             alias = str(rule.get("alias") or source)
+            # 国际英文平台必须保持英文 TTS；中文发音词典只适用于中文口播，
+            # 否则 "AI" -> "人工智能" 会把中文混入英文音轨并改变时长。
+            international_english = {"tiktok", "youtube", "youtube_shorts", "shorts"}
+            if platform.casefold() in international_english and re.search(r"[\u3400-\u9fff]", alias):
+                continue
             pattern = re.compile(re.escape(source), re.IGNORECASE if source.isascii() else 0)
             for match in list(pattern.finditer(result)):
                 span = match.span()

@@ -13,7 +13,7 @@ def _text_length(value):
 
 
 def _public_url(item):
-    url = item.get("url") or item.get("public_url") or ""
+    url = item.get("url") or item.get("public_url") or item.get("path") or ""
     return url if isinstance(url, str) and url.startswith("http") else ""
 
 

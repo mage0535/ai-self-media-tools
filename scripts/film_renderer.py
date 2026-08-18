@@ -35,15 +35,42 @@ XFADE_DUR = 0.5
 # 转场类型（08-14 用户反馈「切换闪白光」→ 移除 xfade "fade"（fade 到白场）。
 # 08-14 增强「真实可观性」：按镜头类型差异化过渡——A→A 黑场/smooth（建立感），
 # B→B 方向性 wipe/slide（节奏推进），A→B circle（段落转折），机械轮换 → 语义映射。
-TRANSITIONS = ["fadeblack", "smoothleft", "circleopen", "slideleft", "wipeleft", "smoothup", "circleright", "fadegrays"]
+TRANSITIONS = ["fadeblack", "smoothleft", "circleopen", "slideleft", "wipeleft", "smoothup", "revealright"]
 # 转场时长：段内镜头间紧凑(0.35s)，段落间强调(0.6s) —— 差异化节奏，非统一 0.5s
 XFADE_DUR_SHORT = 0.35
 XFADE_DUR_LONG = 0.6
 MAX_TTS_SEGMENT_SECONDS = 20.0
 MAX_RENDER_SECONDS = 100.0
 FILM_TTS_MAX_ATTEMPTS = 4
-RENDERER_VERSION = "cinematic-v8"
+RENDERER_VERSION = "cinematic-v10"
 ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS = 90
+
+
+def _is_english_text(text: str) -> bool:
+    """检测文本是否主要为英文（用于多语言 UI 文案切换）"""
+    if not text:
+        return False
+    ascii_chars = sum(1 for c in text if ord(c) < 128)
+    cjk_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    total = len(text.strip())
+    if total == 0:
+        return False
+    return ascii_chars / total > 0.6 and cjk_chars / total < 0.1
+
+
+def _step_label(idx: int, is_en: bool) -> str:
+    """返回步骤标签：英文 'Step N' / 中文 '第 N 步'"""
+    return f"Step {idx + 1}" if is_en else f"第 {idx + 1} 步"
+
+
+def _tile_desc(idx: int, is_en: bool) -> str:
+    """返回图块描述：英文 'Key point N' / 中文 '第 N 个要点，点亮看重点'"""
+    return f"Key point {idx + 1}" if is_en else f"第 {idx + 1} 个要点，点亮看重点"
+
+
+def _fallback_step_name(idx: int, is_en: bool) -> str:
+    """步骤数不足时的占位名"""
+    return f"Step {idx + 1}" if is_en else f"步骤{['一','二','三','四'][idx]}"
 
 
 def resolve_render_policy() -> dict[str, object]:
@@ -68,6 +95,120 @@ def _sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+VISUAL_TREATMENT_REQUIRED_FIELDS = (
+    "scene_id", "display_purpose", "real_asset", "camera_language",
+    "subject_motion", "text_motion", "transition", "rhythm_beat", "interaction_prompt",
+)
+CAMERA_LANGUAGE_INDEX = {
+    "handheld_push": 0, "left_dolly": 1, "top_down_reveal": 2, "right_dolly": 3,
+    "orbit_pull": 4, "split_screen_slide": 5, "direct_eye_contact": 6, "snap_zoom": 7,
+}
+TEXT_MOTION_INDEX = {
+    "message_type": 0, "warning_shake": 1, "label_stagger": 2, "focus_fade": 3,
+    "highlight_underline": 0, "path_draw": 1, "before_after_wipe": 2, "choice_bounce": 3,
+}
+SUBJECT_MOTION_ELEMENT_SHOT = {
+    "kanban_reveal": "tile_activate", "warning_split": "tile_activate", "choice_pulse": "tile_activate",
+    "action_path": "step_light", "outline_compare": "step_light", "persona_focus": "step_light",
+    "digit_roll": "digit_roll",
+}
+TRANSITION_MAP = {
+    "hard_cut": "fadeblack", "glitch_wipe": "wipeleft", "card_flip": "circleopen",
+    "left_swipe": "slideleft", "right_swipe": "smoothleft", "path_draw": "smoothup",
+    "split_reveal": "revealright", "end_hold": "fadeblack",
+}
+
+
+def load_visual_treatment_plan(path: Path, *, expected_scene_count: int) -> list[dict[str, object]]:
+    """Load a complete scene plan before high-quality rendering starts."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"visual treatment plan unreadable: {exc}") from exc
+    scenes = payload.get("scenes") if isinstance(payload, dict) else None
+    if not isinstance(scenes, list) or len(scenes) != expected_scene_count:
+        raise ValueError(f"visual treatment plan requires exactly {expected_scene_count} scenes")
+    scene_ids = set()
+    for index, scene in enumerate(scenes, 1):
+        if not isinstance(scene, dict):
+            raise ValueError(f"visual treatment scene {index} must be an object")
+        missing = [field for field in VISUAL_TREATMENT_REQUIRED_FIELDS if field not in scene]
+        if missing:
+            raise ValueError(f"visual treatment scene {index} missing required fields: {', '.join(missing)}")
+        if not str(scene["display_purpose"]).strip() or not isinstance(scene["rhythm_beat"], dict):
+            raise ValueError(f"visual treatment scene {index} has invalid purpose or rhythm")
+        scene_id = str(scene["scene_id"])
+        if not scene_id or scene_id in scene_ids:
+            raise ValueError(f"visual treatment scene {index} has duplicate scene_id")
+        scene_ids.add(scene_id)
+        asset = Path(str(scene["real_asset"]))
+        if not asset.is_file():
+            raise ValueError(f"visual treatment scene {index} real_asset is unavailable")
+        if str(scene["camera_language"]) not in CAMERA_LANGUAGE_INDEX:
+            raise ValueError(f"visual treatment scene {index} camera_language is unsupported")
+        if str(scene["text_motion"]) not in TEXT_MOTION_INDEX:
+            raise ValueError(f"visual treatment scene {index} text_motion is unsupported")
+        if str(scene["transition"]) not in TRANSITION_MAP:
+            raise ValueError(f"visual treatment scene {index} transition is unsupported")
+    return scenes
+
+
+def resolve_scene_treatment(scene: dict[str, object]) -> dict[str, object]:
+    """Translate declared visual intent into concrete renderer choices and provenance."""
+    asset = Path(str(scene["real_asset"]))
+    subject_motion = str(scene["subject_motion"])
+    return {
+        "scene_id": str(scene["scene_id"]),
+        "display_purpose": str(scene["display_purpose"]),
+        "asset_path": str(asset),
+        "asset_sha256": _sha256_file(asset),
+        "camera_language": str(scene["camera_language"]),
+        "camera_index": CAMERA_LANGUAGE_INDEX[str(scene["camera_language"])],
+        "subject_motion": subject_motion,
+        "element_shot": SUBJECT_MOTION_ELEMENT_SHOT.get(subject_motion, ""),
+        "text_motion": str(scene["text_motion"]),
+        "text_motion_index": TEXT_MOTION_INDEX[str(scene["text_motion"])],
+        "transition": TRANSITION_MAP[str(scene["transition"])],
+        "declared_transition": str(scene["transition"]),
+        "rhythm_beat": scene["rhythm_beat"],
+        "interaction_prompt": str(scene["interaction_prompt"]),
+    }
+
+
+def ensure_visual_treatment_plan(out: Path, bg_paths: list[Path]) -> Path:
+    """Create the required plan from real material when an upstream tool omitted it.
+
+    This is intentionally a deterministic fallback, not a generic template: each
+    scene gets a distinct camera, text motion and transition and can bind a real
+    screenshot when the package contains one.
+    """
+    path = out / "visual_treatment_plan.json"
+    if path.is_file():
+        return path
+    screenshots_dir = out / "screenshots"
+    screenshots = sorted([*screenshots_dir.glob("*.png"), *screenshots_dir.glob("*.jpg")]) if screenshots_dir.is_dir() else []
+    cameras = ["handheld_push", "snap_zoom", "top_down_reveal", "left_dolly", "right_dolly", "orbit_pull", "split_screen_slide", "direct_eye_contact"]
+    subjects = ["message_pop", "warning_split", "kanban_reveal", "persona_focus", "thesis_spotlight", "action_path", "outline_compare", "choice_pulse"]
+    texts = ["message_type", "warning_shake", "label_stagger", "focus_fade", "highlight_underline", "path_draw", "before_after_wipe", "choice_bounce"]
+    transitions = ["hard_cut", "glitch_wipe", "card_flip", "left_swipe", "right_swipe", "path_draw", "split_reveal", "end_hold"]
+    scenes = []
+    for index, background in enumerate(bg_paths[:8]):
+        asset = screenshots[index // 4] if screenshots and index in (1, 5) else background
+        scenes.append({
+            "scene_id": f"s{index + 1:02d}",
+            "display_purpose": "hook" if index == 0 else ("interaction" if index == 7 else "explain"),
+            "real_asset": str(asset),
+            "camera_language": cameras[index],
+            "subject_motion": subjects[index],
+            "text_motion": texts[index],
+            "transition": transitions[index],
+            "rhythm_beat": {"emphasis": "hook" if index == 0 else "proof" if index in (1, 5, 6) else "step"},
+            "interaction_prompt": "comment your use case" if index == 7 else "",
+        })
+    path.write_text(json.dumps({"version": "visual_treatment_plan_v1", "generated_by": "film_renderer", "scenes": scenes}, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
 
 
 def _remove_renderer_outputs(out: Path) -> None:
@@ -133,7 +274,10 @@ def build_render_quality_evidence(
     failures = []
     if policy.get("motion_mode") == "cinematic" and (fallbacks or stills):
         failures.append("cinematic_fallback_used")
-    if not motion.get("passed"):
+    # 2026-08-17 修复：safe 模式（知识卡/图文卡片适配）豁免 cinematic 级帧差门禁。
+    # 宠物/知识卡内容是静态背景+元素动效，帧差天然低于电影级；
+    # safe 模式本意是适配这类内容，不应强制电影级 motion 阈值。
+    if policy.get("motion_mode") != "safe" and not motion.get("passed"):
         failures.append("motion_evidence_insufficient")
     return {
         "version": "render_quality_evidence_v1",
@@ -177,11 +321,11 @@ def segment_shot_durations(tts_duration: float, *, element_motion: bool) -> tupl
     a_duration = min(2.8, float(tts_duration) * 0.30)
     # A->B always uses the long crossfade. Reserve it and a small delivery
     # margin before the later A/V gate performs its exact probe.
-    b_duration = max(1.0, float(tts_duration) - a_duration + XFADE_DUR_LONG + 0.15)
+    b_duration = max(1.0, float(tts_duration) - a_duration + XFADE_DUR_LONG + 1.50)
     if element_motion and b_duration < 3.2:
         shortfall = 3.2 - b_duration
         a_duration = max(0.6, a_duration - shortfall)
-        b_duration = float(tts_duration) - a_duration + XFADE_DUR_LONG + 0.15
+        b_duration = float(tts_duration) - a_duration + XFADE_DUR_LONG + 1.50
     return a_duration, b_duration
 
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
@@ -238,10 +382,27 @@ def _duration(path: str) -> float:
         return 4.0
 
 
-def validate_render_durations(durations: list[float]) -> dict:
-    """Reject runaway narration before allocating browser or FFmpeg work."""
+def _max_total_for_platform(platform: str) -> float:
+    """2026-08-16 新增：时长上限按平台自适应（之前全局固定 100s）。
+
+    抖音/Shorts/视频号/TikTok 平台上限 60s，快手 70s，其他 100s。
+    防止渲染器允许超长内容被平台拒（douyin/yt_shorts 60s 门禁）。
+    """
+    plat = str(platform or "").casefold()
+    if plat in {"douyin", "douyin_ai", "douyin_pet", "tiktok", "youtube", "shipinhao", "shorts"}:
+        return 60.0
+    if plat == "kuaishou":
+        return 70.0
+    return float(os.environ.get("FILM_RENDERER_MAX_TOTAL_SECONDS", MAX_RENDER_SECONDS))
+
+
+def validate_render_durations(durations: list[float], platform: str = "") -> dict:
+    """Reject runaway narration before allocating browser or FFmpeg work.
+
+    2026-08-16：max_total 按平台自适应（douyin 60s / kuaishou 70s / 其他 100s）。
+    """
     max_segment = float(os.environ.get("FILM_RENDERER_MAX_SEGMENT_SECONDS", MAX_TTS_SEGMENT_SECONDS))
-    max_total = float(os.environ.get("FILM_RENDERER_MAX_TOTAL_SECONDS", MAX_RENDER_SECONDS))
+    max_total = _max_total_for_platform(platform)
     failures = []
     if any(duration <= 0 for duration in durations):
         failures.append("invalid_tts_duration")
@@ -258,8 +419,11 @@ def validate_render_durations(durations: list[float]) -> dict:
     }
 
 
-def synthesize_edge_tts(text: str, output: Path, voice: str) -> int:
-    """Retry a transient Edge response and never retain an empty MP3."""
+def synthesize_edge_tts(text: str, output: Path, voice: str, rate: str = "-5%") -> int:
+    """Retry a transient Edge response and never retain an empty MP3.
+
+    2026-08-16：rate 参数化（不再固定 -5%），按内容赛道可调（pets/emotion 稍慢更温和，tech 默认）。
+    """
     attempts = max(1, int(os.environ.get("FILM_TTS_MAX_ATTEMPTS", FILM_TTS_MAX_ATTEMPTS)))
     delay = max(0.0, float(os.environ.get("FILM_TTS_RETRY_DELAY_SECONDS", "1")))
     errors = []
@@ -267,7 +431,7 @@ def synthesize_edge_tts(text: str, output: Path, voice: str) -> int:
         try:
             output.unlink(missing_ok=True)
             result = subprocess.run(
-                ["edge-tts", "--voice", voice, "--rate=-5%", "--text", text, "--write-media", str(output)],
+                ["edge-tts", "--voice", voice, f"--rate={rate}", "--text", text, "--write-media", str(output)],
                 capture_output=True, text=True, timeout=90,
             )
             if result.returncode != 0:
@@ -301,7 +465,7 @@ def _stat_from_card(card: dict) -> str:
 def _modules_from_card(card: dict) -> list[str]:
     items = card.get("items") or []
     txt = str(card.get("txt") or "")
-    parts = [str(x)[:34] for x in items if str(x).strip()] if items else []
+    parts = [re.sub(r"\s+", " ", str(x)).strip() for x in items if str(x).strip()] if items else []
     if len(parts) < 3:
         # 从 txt 拆 3 个短句
         sentences = [s.strip() for s in re.split(r"[，。；！？、]", txt) if s.strip()]
@@ -309,28 +473,48 @@ def _modules_from_card(card: dict) -> list[str]:
     return (parts + ["", "", ""])[:3]
 
 
-def build_shot_a(idx: int, title: str, stat: str, bg_path: str, kicker: str, stat_label: str = "关键数字") -> str:
-    kb = KB_A[idx % 4]
+def build_shot_a(idx: int, title: str, stat: str, bg_path: str, kicker: str, stat_label: str = "关键数字",
+                 camera_index: int | None = None, text_motion_index: int | None = None, platform: str = "") -> str:
+    motion_index = idx % len(KB_A) if camera_index is None else camera_index
+    kb = KB_A[motion_index % len(KB_A)]
     b64 = _b64img(bg_path)
     # 08-14 真实可观性增强：kicker/title/stat 入场动效按镜头轮换（非统一 fadeUp，机械感）
     anim_pool = ["fadeUp", "scaleIn", "slideLeft", "rotateIn"]
-    kicker_anim = anim_pool[idx % 4]
-    title_anim = anim_pool[(idx + 1) % 4]
-    stat_anim = anim_pool[(idx + 2) % 4]
+    text_index = idx % len(anim_pool) if text_motion_index is None else text_motion_index
+    kicker_anim = anim_pool[text_index % len(anim_pool)]
+    title_anim = anim_pool[(text_index + 1) % len(anim_pool)]
+    layout_index = motion_index % 4
+    content_styles = [
+        "justify-content:center; align-items:flex-start; padding:130px 90px;",
+        "justify-content:flex-start; align-items:flex-start; padding:250px 90px 120px; width:78%;",
+        "justify-content:flex-end; align-items:flex-start; padding:120px 90px 330px;",
+        "justify-content:center; align-items:flex-end; padding:130px 90px; text-align:right;",
+    ]
+    title_sizes = [80, 64, 70, 62]
+    pet_mode = str(platform).casefold() == "douyin_pet"
+    overlay_css = (
+        "linear-gradient(180deg,rgba(0,0,0,.10) 0%,rgba(0,0,0,.18) 48%,rgba(0,0,0,.76) 100%)"
+        if pet_mode else
+        "linear-gradient(180deg,rgba(0,0,0,.34) 0%,rgba(0,0,0,.58) 48%,rgba(0,0,0,.90) 100%)"
+    )
+    stat_html = (
+        f'<div class="stat"><span class="n">{stat}</span><span class="l">{stat_label}</span></div>'
+        if str(stat).strip() else ""
+    )
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC','Noto Sans SC',sans-serif; }}
 .bg {{ position:absolute; inset:0; background:url(data:image/jpeg;base64,{b64}) center/cover;
   animation: kb 6s linear infinite alternate; }}
 @keyframes kb {{ 0% {{ transform:{kb[0]}; }} 100% {{ transform:{kb[1]}; }} }}
-.overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.92) 100%); }}
-.content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:130px 90px; }}
+.overlay {{ position:absolute; inset:0; background:{overlay_css}; }}
+.content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; {content_styles[layout_index]} }}
 .kicker {{ font-size:32px; color:#ffd60a; font-weight:800; letter-spacing:5px; margin-bottom:40px;
   animation: {kicker_anim} 0.9s ease-out both; }}
-.title {{ font-size:80px; line-height:1.28; font-weight:900; color:#fff; text-shadow:0 6px 26px rgba(0,0,0,0.8);
+.title {{ font-size:{title_sizes[layout_index]}px; max-width:900px; line-height:1.28; font-weight:900; color:#fff; text-shadow:0 6px 26px rgba(0,0,0,0.8);
   animation: {title_anim} 1.1s ease-out 0.15s both; }}
 .stat {{ margin-top:64px; display:inline-block; background:rgba(255,255,255,0.12); border:2px solid rgba(255,255,255,0.35);
-  border-radius:44px; padding:22px 48px; animation: {stat_anim} 1.1s ease-out 0.5s both; }}
+  border-radius:44px; padding:22px 48px; }}
 .stat .n {{ font-size:64px; font-weight:900; color:#7ee787; }}
 .stat .l {{ font-size:30px; color:#d0d0d0; margin-left:16px; }}
 @keyframes fadeUp {{ from {{ opacity:0; transform:translateY(26px); }} to {{ opacity:1; transform:translateY(0); }} }}
@@ -344,17 +528,22 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 <div class="content">
   <div class="kicker">{kicker}</div>
   <div class="title">{title}</div>
-  <div class="stat"><span class="n">{stat}</span><span class="l">{stat_label}</span></div>
+  {stat_html}
 </div>
 </body></html>"""
 
 
 def build_shot_b(idx: int, title: str, modules: list[str], bg_path: str,
-                 screenshot_path: str | None = None, screenshot_caption: str = "") -> str:
-    kb = KB_B[idx % 4]
+                 screenshot_path: str | None = None, screenshot_caption: str = "",
+                 camera_index: int | None = None, text_motion_index: int | None = None, platform: str = "") -> str:
+    motion_index = idx % len(KB_B) if camera_index is None else camera_index
+    kb = KB_B[motion_index % len(KB_B)]
     b64 = _b64img(bg_path)
-    anim = MODULE_ANIMS[idx % 4]
+    text_index = idx % len(MODULE_ANIMS) if text_motion_index is None else text_motion_index
+    anim = MODULE_ANIMS[text_index % len(MODULE_ANIMS)]
     kf_off = "0.9s" if anim[0] == "staggerUp" else "0.8s"
+    pet_mode = str(platform).casefold() == "douyin_pet"
+    normal_overlay = "rgba(0,0,0,0.38)" if pet_mode else "rgba(0,0,0,0.62)"
     # 截图模式：真实素材（规则1：工具/项目介绍要有真实截图）
     if screenshot_path and Path(screenshot_path).is_file():
         shot_b64 = _b64img(screenshot_path)
@@ -369,10 +558,11 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 .head {{ font-size:44px; font-weight:800; color:#fff; margin-bottom:44px; text-shadow:0 4px 16px rgba(0,0,0,0.7);
   animation:fadeUp 0.8s ease-out both; }}
 .shot {{ width:880px; max-height:860px; object-fit:contain; border:3px solid rgba(255,255,255,0.55); border-radius:20px;
-  box-shadow:0 30px 80px rgba(0,0,0,0.65); animation: fadeUp 0.8s ease-out 0.2s both; }}
+  box-shadow:0 30px 80px rgba(0,0,0,0.65); animation: fadeUp 0.8s ease-out 0.2s both, screenshotFloat 5.2s linear 0.9s infinite alternate; }}
 .caption {{ margin-top:36px; font-size:34px; color:#ffd60a; font-weight:700; text-align:center;
   animation: fadeUp 0.8s ease-out 0.5s both; }}
 @keyframes fadeUp {{ from {{ opacity:0; transform:translateY(24px); }} to {{ opacity:1; transform:translateY(0); }} }}
+@keyframes screenshotFloat {{ from {{ transform:translate3d(-10px,8px,0) scale(1.00); }} to {{ transform:translate3d(12px,-8px,0) scale(1.045); }} }}
 .idx {{ position:absolute; top:64px; right:64px; font-size:110px; font-weight:900; color:rgba(255,255,255,0.13); z-index:2; }}
 </style></head><body>
 <div class="bg"></div><div class="overlay"></div>
@@ -399,7 +589,7 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 .bg {{ position:absolute; inset:0; background:url(data:image/jpeg;base64,{b64}) center/cover;
   animation: kb 6s linear infinite alternate; }}
 @keyframes kb {{ 0% {{ transform:{kb[0]}; }} 100% {{ transform:{kb[1]}; }} }}
-.overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.40) 0%, rgba(0,0,0,0.62) 45%, rgba(0,0,0,0.90) 100%); }}
+.overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.18) 0%, {normal_overlay} 52%, rgba(0,0,0,0.86) 100%); }}
 .content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:130px 90px; }}
 .head {{ font-size:46px; font-weight:800; color:#fff; margin-bottom:56px; text-shadow:0 4px 16px rgba(0,0,0,0.7);
   animation:fadeUp 0.8s ease-out both; }}
@@ -426,8 +616,8 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 # ═══════════════════════════════════════════════════════════════════
 
 def _pick_actives(items: list[str], n: int) -> list[str]:
-    """从模块文案取 n 个有效条目（不够补空）；截断 14 字防 40px 溢出"""
-    parts = [str(x).strip()[:14] for x in items if str(x).strip()]
+    """保留完整模块文案；由 CSS 自动换行，禁止用固定字符数截断正文。"""
+    parts = [re.sub(r"\s+", " ", str(x)).strip() for x in items if str(x).strip()]
     return (parts + ["", "", "", ""])[:n]
 
 
@@ -446,15 +636,17 @@ def _extract_number_unit(text: str) -> list[str]:
 def build_shot_tile_activate(idx: int, title: str, items: list[str], bg_path: str,
                              kicker: str, badges: list[str] | None = None) -> str:
     """图块激活：多卡片轮流点亮（变色+阴影位移+前置放大），突出当前焦点"""
-    tiles = _pick_actives(items, 3)
+    tiles = [item for item in _pick_actives(items, 3) if item] or [""]
     badges = badges or ["A", "B", "C"]
+    # 语言判定只看真实可见文案；kicker 可能来自中文 Cinema 内部元数据，不能污染英文视频判断。
+    is_en = _is_english_text(f"{title} {' '.join(items)}")
     tile_html = ""
     for i, t in enumerate(tiles):
         tile_html += (
             f'<div class="tile" data-state="idle" data-t="{i}">'
             f'<span class="badge">{esc(badges[i % len(badges)])}</span>'
             f'<span class="nm">{esc(t) if t else "·"}</span>'
-            f'<div class="ds">第 {i + 1} 个要点，点亮看重点</div></div>'
+            f'<div class="ds">{_tile_desc(i, is_en)}</div></div>'
         )
     b64 = _b64img(bg_path)
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -469,7 +661,7 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 .head .t {{ font-size:66px; color:#fff; font-weight:900; margin-top:16px; text-shadow:0 6px 24px rgba(0,0,0,.7); }}
 .tiles {{ position:absolute; top:430px; left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:36px; z-index:4; }}
 .tile {{ width:820px; padding:44px 52px; border-radius:28px; transition:all .18s ease-out; will-change:transform,background,box-shadow; }}
-.tile .nm {{ font-size:40px; font-weight:800; }}
+.tile .nm {{ font-size:36px; line-height:1.28; font-weight:800; overflow-wrap:anywhere; word-break:break-word; }}
 .tile .ds {{ font-size:28px; margin-top:10px; line-height:1.5; }}
 .tile[data-state="idle"] {{ background:rgba(255,255,255,0.10); border:3px solid rgba(255,255,255,0.28); transform:translateX(0) scale(0.94); box-shadow:0 10px 30px rgba(0,0,0,0.25); }}
 .tile[data-state="idle"] .nm {{ color:#e2e8f0; }}
@@ -487,7 +679,8 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 <div class="tiles">{tile_html}</div>
 <script>
 function renderFrame(t){{
-  var active = Math.floor(t / 1.2) % 3;
+  var count = document.querySelectorAll('.tile').length || 1;
+  var active = Math.floor(t / 1.2) % count;
   document.querySelectorAll('.tile').forEach(function(el){{
     el.setAttribute('data-state', parseInt(el.dataset.t) === active ? 'active' : 'idle');
   }});
@@ -650,17 +843,37 @@ function renderFrame(t){{
 
 
 def detect_element_shot(seg_text: str, title: str = "") -> str:
-    """按内容结构自动选动效镜头类型（内容驱动视觉原则）"""
+    """按内容结构自动选动效镜头类型（内容驱动视觉原则）——中英双语支持"""
     text = f"{title} {seg_text}"
-    # 流程/步骤：成词检测（第一步/然后/接着/流程/步骤/工作流），拒绝单字"先/再/最后"
-    if re.search(r"(流程|步骤|工作流|第一步|第二步|第三步|第四步|然后|接着|再来|最终)", text):
+    # 流程/步骤：中英双语检测
+    # 中文：第一步/然后/接着/流程/步骤/工作流
+    # 英文：step 1/first/then/next/finally/workflow/pipeline/process/stage
+    if re.search(
+        r"(流程|步骤|工作流|第一步|第二步|第三步|第四步|然后|接着|再来|最终"
+        r"|step\s*\d|first|then|next|finally|workflow|pipeline|process|stage"
+        r"|how\s+to|step\s*-?\s*by\s*-?\s*step|tutorial|guide)",
+        text, re.IGNORECASE,
+    ):
         return "step_light"
-    # 对比/选型：强信号（对比/哪个/怎么选/相比/PK/vs），
-    # 拒绝宽泛名词（"方案/选择/推荐"独立出现常见：解决方案/推荐阅读→误报）
-    if re.search(r"(对比|哪个|怎么选|怎么挑|挑选|相比|PK|vs|VS|A/B|还是.*好|哪个.*合适)", text):
+    # 对比/选型：中英双语检测
+    # 中文：对比/哪个/怎么选/相比/PK/vs
+    # 英文：versus/vs/compare/which/better/best/pick/choose/option/alternative/tested/review
+    if re.search(
+        r"(对比|哪个|怎么选|怎么挑|挑选|相比|PK|vs|VS|A/B|还是.*好|哪个.*合适"
+        r"|versus|vs\.?|compare|which|better|best|pick|choose|option|alternativ"
+        r"|tested|review|head\s*-?\s*to\s*-?\s*head|winner|survived)",
+        text, re.IGNORECASE,
+    ):
         return "tile_activate"
-    # 数字信号：必须同时有 ≥2位数字 + 单位（"12倍"/"3.2秒"），杜绝无数字兜底假数据
-    if re.search(r"\d{2,}(?:\.\d+)?\s*(倍|%|秒|毫秒|分钟|小时|个|元|GB|MB|次|s|ms|万|亿)", text):
+    # 数字信号：中英双语检测
+    # 中文：≥2位数字+单位（"12倍"/"3.2秒"）
+    # 英文：≥2位数字+单位（"10 min"/"3x faster"/"92%"/"2.5 seconds"）
+    if re.search(
+        r"\d{2,}(?:\.\d+)?\s*(倍|%|秒|毫秒|分钟|小时|个|元|GB|MB|次|s|ms|万|亿"
+        r"|x\s|times?|percent|hours?|minutes?|seconds?|days?|weeks?|months?"
+        r"|GB|MB|TB|Hz|kHz|MHz|GHz|fps|fps|ppi|dpi)",
+        text, re.IGNORECASE,
+    ):
         return "digit_roll"
     return ""
 
@@ -849,8 +1062,17 @@ def _finalize_recorded_shot(webm_path: str, target: Path, duration: float) -> bo
 
 
 def _wrap(text: str, max_chars: int = 20):
+    """按自然边界换行；英文优先在空格处断行，禁止拆开单词。"""
     if len(text) <= max_chars:
         return text, ""
+    if text.isascii():
+        cut = text.rfind(" ", 0, max_chars + 1)
+        cut = cut if cut > 0 else max_chars
+        first = text[:cut].strip()
+        rest = text[cut:].strip()
+        if len(rest) <= max_chars:
+            return first, rest
+        return first, rest[:max_chars].rstrip() + "..."
     cut = -1
     for i in range(max_chars, 0, -1):
         if text[i] in "，。；！？、：":
@@ -964,6 +1186,13 @@ def main() -> int:
     if render_policy["quality_profile"] == "high" and (not scene_manifest_path.is_file() or not script_file):
         print("高质量渲染缺少 scene_manifest.json 或完整脚本", file=sys.stderr)
         return 2
+    visual_treatment_path = ensure_visual_treatment_plan(out, bg_paths[:8])
+    try:
+        visual_scenes = load_visual_treatment_plan(visual_treatment_path, expected_scene_count=8)
+        resolved_treatments = [resolve_scene_treatment(scene) for scene in visual_scenes]
+    except ValueError as exc:
+        print(f"视觉导演计划无效: {exc}", file=sys.stderr)
+        return 2
     render_contract = {
         "renderer_version": RENDERER_VERSION,
         **render_policy,
@@ -972,6 +1201,7 @@ def main() -> int:
         "cards_sha256": _sha256_file(cards_path),
         "script_sha256": _sha256_file(script_file) if script_file else "",
         "scene_manifest_sha256": _sha256_file(scene_manifest_path) if scene_manifest_path.is_file() else "",
+        "visual_treatment_plan_sha256": _sha256_file(visual_treatment_path),
         "backgrounds_sha256": [_sha256_file(path) for path in bg_paths[:8]],
         "transitions": TRANSITIONS,
         "xfade_short": XFADE_DUR_SHORT,
@@ -1017,8 +1247,27 @@ def main() -> int:
     except Exception:
         compiler = None
 
-    # 音色：中文 tech=zh-CN-YunjianNeural，英文 tech=en-US-GuyNeural（与 voice_engine GENRE_VOICE_MAP 一致）
+    # 音色：按内容赛道自动选择（voice_engine GENRE_VOICE_MAP，2026-08-16 修复硬编码 tech 单一音色）
+    # 之前固定 zh-CN-YunjianNeural/en-US-GuyNeural，忽略了 pets/finance/emotion/science 赛道音色
     edge_voice = "zh-CN-YunjianNeural" if tts_lang == "zh" else "en-US-GuyNeural"
+    try:
+        from scripts.voice_engine import detect_genre, GENRE_VOICE_MAP
+        genre = detect_genre(" ".join(script_segments[:3]), tts_lang)
+        lang_map = GENRE_VOICE_MAP.get(tts_lang, GENRE_VOICE_MAP.get("en", {}))
+        genre_voices = lang_map.get(genre) or lang_map.get("default") or {}
+        detected_voice = genre_voices.get("single") or genre_voices.get("male") or edge_voice
+        if detected_voice:
+            edge_voice = detected_voice
+        print(f"TTS 音色: lang={tts_lang} genre={genre} voice={edge_voice}", file=sys.stderr)
+        # 2026-08-16 新增：按赛道调速（pets/emotion 稍慢更温和，finance 稳定，tech 默认）
+        rate_map = {
+            "pets": "-8%", "emotion": "-8%",
+            "finance": "-5%", "science": "-5%",
+            "tech": "-5%",
+        }
+        tts_rate = rate_map.get(genre, "-5%")
+    except Exception:
+        tts_rate = "-5%"
 
     tts_records = []
     for i in range(1, 9):
@@ -1031,7 +1280,7 @@ def main() -> int:
         applied_rules = []
         if compiler:
             try:
-                compiled = compiler.compile(text, context="tech")
+                compiled = compiler.compile(text, context="tech", platform=args.platform)
                 tts_text = compiled.tts_text
                 display_text = compiled.display_text
                 applied_rules = list(compiled.applied_rules or [])
@@ -1052,14 +1301,14 @@ def main() -> int:
             except Exception as exc:
                 print(f"Qwen 合成失败({i}): {str(exc)[:80]}", file=sys.stderr)
         if not mp3.is_file() or mp3.stat().st_size <= 10_000:
-            synthesize_edge_tts(tts_text, mp3, edge_voice)
+            synthesize_edge_tts(tts_text, mp3, edge_voice, rate=tts_rate)
             provider_used = "edge-tts"
         if mp3.is_file() and mp3.stat().st_size > 10_000:
             tts_files.append(str(mp3))
             tts_records.append({
                 "provider": provider_used,
                 "voice": edge_voice if provider_used == "edge-tts" else os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
-                "rate": "-5%", "pitch": "+0Hz",
+                "rate": tts_rate, "pitch": "+0Hz",
                 "tts_text": tts_text, "display_text": display_text,
                 "applied_rules": applied_rules,
                 "unhandled_latin_tokens": list(compiled.unhandled_latin_tokens) if compiler else [],
@@ -1088,7 +1337,7 @@ def main() -> int:
             tts_files.append(str(mp3))
     durs = [_duration(p) for p in tts_files]
     print("TTS 时长:", [round(d, 2) for d in durs])
-    duration_check = validate_render_durations(durs)
+    duration_check = validate_render_durations(durs, args.platform)
     if not duration_check["passed"]:
         print(f"TTS 时长预算失败: {json.dumps(duration_check, ensure_ascii=False)}", file=sys.stderr)
         return 3
@@ -1104,18 +1353,23 @@ def main() -> int:
     # 英文平台（tiktok/youtube）用英文 kicker，其余中文；按 tts_lang 兜底
     kicker = kicker_map.get(args.platform, "MAJIC AI · AI实测" if tts_lang == "zh" else "MAJIC AI · AI Tools")
 
-    # 镜头内容：优先完整脚本段落（避免 runner 按句切分截断），标题取段落首句/前16字，模块取段内3短句
+    # 标题/正文按平台语言分段：英文按 .!?;，中文按中文标点；禁止固定 16 字截断英文句子。
+    def _segment_punctuation() -> str:
+        return r"[，。；！？、：.!?;]+" if args.platform in {"tiktok", "youtube", "shorts"} else r"[，。；！？、：]+"
+
     def seg_title(i: int) -> str:
         if i <= len(script_segments) and script_segments[i - 1]:
             seg = script_segments[i - 1]
-            first = re.split(r"[，。；！？、]", seg)[0].strip()[:16]
-            return first if first else seg[:16]
+            first = re.split(_segment_punctuation(), seg)[0].strip()
+            if args.platform in {"tiktok", "youtube", "shorts"}:
+                return first or seg.strip()
+            return (first or seg.strip())[:16]
         return _card_title(cards[i - 1], f"第 {i} 段")
 
     def seg_modules(i: int) -> list[str]:
         if i <= len(script_segments) and script_segments[i - 1]:
             seg = script_segments[i - 1]
-            sentences = [s.strip() for s in re.split(r"[，。；！？、]", seg) if s.strip()]
+            sentences = [s.strip() for s in re.split(_segment_punctuation(), seg) if s.strip()]
             return (sentences[:3] if len(sentences) >= 3 else sentences + ["", "", ""])[:3]
         return _modules_from_card(cards[i - 1])
 
@@ -1129,32 +1383,33 @@ def main() -> int:
     print(f"截图素材: {len(screenshot_files)} 张")
 
     shot_durs = []
+    scene_execution_context: list[dict[str, object]] = []
     # 08-15 内容驱动动效：每段检测内容结构，B 镜头可切换为 图块激活/数字跳变/流程点亮
     shot_types = {}  # seg_idx -> "tile_activate" | "digit_roll" | "step_light" | ""
     for i in range(1, 9):
         card = cards[i - 1]
+        treatment = resolved_treatments[i - 1]
         title = seg_title(i)
         stat = _stat_from_card(card)
         modules = seg_modules(i)
         bg = str(bg_paths[i - 1])
         stat_label = "关键数字" if tts_lang == "zh" else "KEY NUMBER"
-        # 内容结构检测 → 动效镜头（8 段最多 4 段启用，保证镜头多样性 + 渲染时长可控）
+        # 视觉导演计划优先：每段的主体动效显式驱动镜头类型，避免再由固定轮换决定。
         seg_txt = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
             else str(card.get("tts") or card.get("txt") or "")
-        # 截图卡优先（真实素材规则）；动效镜头用于无截图素材的偶数段
-        if screenshot_files and i in (2, 6):
-            elem_shot = ""
-        else:
-            elem_shot = detect_element_shot(seg_txt, title) if i % 2 == 0 else ""
+        elem_shot = str(treatment["element_shot"])
         shot_types[i] = elem_shot
-        html_a = build_shot_a(i, title, stat, bg, kicker, stat_label=stat_label)
-        # 截图卡：段2（介绍后细节）与段6（数据/进展）优先用真实截图
+        html_a = build_shot_a(
+            i, title, stat, bg, kicker, stat_label=stat_label,
+            camera_index=int(treatment["camera_index"]), text_motion_index=int(treatment["text_motion_index"]), platform=args.platform,
+        )
+        # 真实素材由 scene plan 绑定；只有不同于背景的资产才作为主体截图进入 B 镜头。
         shot_path = None
         caption = ""
-        if screenshot_files and i in (2, 6):
-            si = 0 if i == 2 else (1 if len(screenshot_files) > 1 else 0)
-            shot_path = str(screenshot_files[si])
-            caption = ""
+        asset_path = Path(str(treatment["asset_path"]))
+        if asset_path.resolve() != Path(bg).resolve():
+            shot_path = str(asset_path)
+            caption = str(treatment["display_purpose"])
         if elem_shot == "tile_activate":
             html_b = build_shot_tile_activate(i, title, modules, bg, kicker)
         elif elem_shot == "digit_roll":
@@ -1163,11 +1418,17 @@ def main() -> int:
                 html_b = build_shot_digit_roll(i, title, modules, bg, kicker)
             else:
                 shot_types[i] = ""
-                html_b = build_shot_b(i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption)
+                html_b = build_shot_b(
+                    i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption,
+                    camera_index=int(treatment["camera_index"]), text_motion_index=int(treatment["text_motion_index"]), platform=args.platform,
+                )
         elif elem_shot == "step_light":
             html_b = build_shot_step_light(i, title, modules, bg, kicker)
         else:
-            html_b = build_shot_b(i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption)
+            html_b = build_shot_b(
+                i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption,
+                camera_index=int(treatment["camera_index"]), text_motion_index=int(treatment["text_motion_index"]), platform=args.platform,
+            )
         (out / "html" / f"shot_{i:02d}A.html").write_text(html_a, encoding="utf-8")
         (out / "html" / f"shot_{i:02d}B.html").write_text(html_b, encoding="utf-8")
         d = durs[i - 1]
@@ -1176,6 +1437,13 @@ def main() -> int:
         a_dur, b_dur = segment_shot_durations(d, element_motion=bool(shot_types.get(i)))
         shot_durs.append((f"shot_{i:02d}A", a_dur))
         shot_durs.append((f"shot_{i:02d}B", b_dur))
+        scene_execution_context.append({
+            **treatment,
+            "background_path": bg,
+            "background_sha256": _sha256_file(Path(bg)),
+            "subject_asset_used": bool(shot_path),
+            "shot_names": [f"shot_{i:02d}A", f"shot_{i:02d}B"],
+        })
 
     shot_records: list[dict[str, object]] = []
 
@@ -1268,6 +1536,7 @@ def main() -> int:
     durs_map = {n: _duration(str(out / "shots" / f"{n}.mp4")) for n in shot_names}
     group_outs = []
     transition_after = [0.0] * max(0, len(shot_names) - 1)
+    applied_transitions: dict[int, str] = {}
     for gi in range(4):
         names = shot_names[gi * 4:(gi + 1) * 4]
         inputs = []
@@ -1280,16 +1549,10 @@ def main() -> int:
             # 镜头类型：A=建立镜头(偶数 index)，B=要点镜头(奇数 index)
             cur_type = "B" if names[i].endswith("B") else "A"
             prev_type = "B" if names[i - 1].endswith("B") else "A"
-            # 差异化转场：A→A 黑场/smooth（段落建立），B→B 方向性（节奏推进），A→B/B→A circle（转折）
-            if prev_type == cur_type == "A":
-                trans = TRANSITIONS[(gi * 2 + i) % 4]  # fadeblack/smoothleft/circleopen/slideleft
-                xdur = XFADE_DUR_LONG
-            elif prev_type == cur_type == "B":
-                trans = TRANSITIONS[4 + (gi * 2 + i) % 4]  # wipeleft/smoothup/circleright/fadegrays
-                xdur = XFADE_DUR_SHORT
-            else:
-                trans = "circleopen" if i % 2 else "smoothleft"
-                xdur = XFADE_DUR_LONG
+            prior_scene_index = int(names[i - 1][5:7]) - 1
+            trans = str(resolved_treatments[prior_scene_index]["transition"])
+            xdur = XFADE_DUR_SHORT if prev_type == cur_type == "B" else XFADE_DUR_LONG
+            applied_transitions[prior_scene_index] = trans
             transition_after[gi * 4 + i - 1] = xdur
             offset_acc += durs_map[names[i - 1]] - xdur
             offset_acc = max(0.05, offset_acc - 0.05)
@@ -1383,29 +1646,35 @@ def main() -> int:
         print(f"混音失败: {r.stderr[-200:]}", file=sys.stderr)
         return 3
 
-    # drawtext 字幕（按 seg 边界累加）：每段取前 2 句摘要（中文 ≤20字/行 × 2 行），避免长段溢出
+    # 字幕按平台语言使用不同容量：国际英文平台允许 3 行完整字幕，中文平台保留移动端两行安全限制。
+    international = args.platform in {"tiktok", "youtube", "shorts"}
+    subtitle_max_chars = 100 if international else 40
+    subtitle_wrap_chars = 30 if international else 20
+    subtitle_font_size = 38 if international else 42
     script_texts = []
     for i in range(1, 9):
         seg = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
             else str(cards[i - 1].get("tts") or cards[i - 1].get("txt") or "")
-        sentences = [s.strip() for s in re.split(r"[。；！？]", seg) if s.strip()]
-        sub = "。".join(sentences[:2]) + ("。" if sentences[:2] else "")
-        if len(sub) > 40:
-            sub = sub[:39] + "…"
+        sentences = [s.strip() for s in re.split(r"[。；！？.!?;]", seg) if s.strip()]
+        sub = (". ".join(sentences) if international else "。".join(sentences[:2]))
+        if not international and sub:
+            sub += "。"
+        if len(sub) > subtitle_max_chars:
+            sub = sub[:subtitle_max_chars].rstrip(" ，。,.!?;；") + ("..." if international else "…")
         script_texts.append(sub)
     filters = []
     for i, text in enumerate(script_texts, 1):
         st = starts_global[2 * (i - 1)] + 0.4
         en = starts_global[2 * (i - 1) + 1] + durs_map[shot_names[2 * (i - 1) + 1]] - 0.2
-        l1, l2 = _wrap(text)
+        l1, l2 = _wrap(text, max_chars=subtitle_wrap_chars)
         tf1 = out / "sub" / f"l1_{i:02d}.txt"
         tf2 = out / "sub" / f"l2_{i:02d}.txt"
         tf1.write_text(l1, encoding="utf-8")
         en1 = f"between(t,{st:.3f},{en:.3f})"
-        filters.append(f"drawtext=fontfile={FONT}:textfile={tf1}:fontsize=42:fontcolor=white:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-350:enable='{en1}'")
+        filters.append(f"drawtext=fontfile={FONT}:textfile={tf1}:fontsize={subtitle_font_size}:fontcolor=white:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-350:enable='{en1}'")
         if l2:
             tf2.write_text(l2, encoding="utf-8")
-            filters.append(f"drawtext=fontfile={FONT}:textfile={tf2}:fontsize=42:fontcolor=white:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-290:enable='{en1}'")
+            filters.append(f"drawtext=fontfile={FONT}:textfile={tf2}:fontsize={subtitle_font_size}:fontcolor=white:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-290:enable='{en1}'")
 
     fc2 = f"[0:v]{','.join(filters)}[v]"
     final = out / "final.mp4"
@@ -1497,6 +1766,35 @@ def main() -> int:
             "fallback": any(bool(row.get("fallback")) for row in segment_records),
         })
     (out / "segment_motion_evidence.json").write_text(json.dumps(seg_evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 计划不是验收证据：逐段记录计划如何真正映射到镜头、素材、渲染器与转场。
+    execution_scenes = []
+    for index, context in enumerate(scene_execution_context):
+        records = [record_by_name.get(name, {}) for name in context["shot_names"]]
+        execution_scenes.append({
+            **context,
+            "actual_transition_after": applied_transitions.get(index, "end_hold"),
+            "renderer_modes": [row.get("renderer") for row in records],
+            "fallback": any(bool(row.get("fallback")) for row in records),
+            "reused": any(bool(row.get("reused")) for row in records),
+        })
+    execution_failures = [
+        row["scene_id"] for row in execution_scenes
+        if row["fallback"] or not row["renderer_modes"]
+    ]
+    execution_evidence = {
+        "version": "scene_execution_evidence_v1",
+        "renderer_version": RENDERER_VERSION,
+        "passed": not execution_failures,
+        "failures": execution_failures,
+        "scenes": execution_scenes,
+    }
+    (out / "scene_execution_evidence.json").write_text(
+        json.dumps(execution_evidence, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if render_policy["quality_profile"] == "high" and not execution_evidence["passed"]:
+        print(f"视觉导演执行验证失败: {execution_failures}", file=sys.stderr)
+        return 4
 
     # cinema visual gate：从 16 镜头抽帧生成 8 张主卡 PNG（runner 检查 cards/*.png）
     card_dir = out / "cards"

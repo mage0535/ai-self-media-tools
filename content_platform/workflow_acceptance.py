@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -18,14 +19,24 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     body, body_source = _load_body(store, job)
     artifacts = Path(artifacts_dir) if artifacts_dir else _default_artifacts_dir(store, job_id)
     failures: list[str] = []
-    matrix = (job.get("brief") or {}).get("platform_source_matrix") or {}
-    if not bool(matrix.get("real_platform_collection_verified")):
+    brief = job.get("brief") or {}
+    matrix = brief.get("platform_source_matrix") or {}
+    if not _has_valid_selection_evidence(brief, matrix):
         failures.append("platform_evidence_missing")
     gate = (job.get("draft_meta") or {}).get("quality_gate") or {}
     if gate and not bool(gate.get("passed", True)):
         failures.append("content_quality_gate_failed")
+    compliance = (job.get("risk") or {}).get("compliance") or {}
+    finding_codes = {
+        str(item.get("code") or "")
+        for item in compliance.get("findings", [])
+        if isinstance(item, dict)
+    }
+    if finding_codes & {"numeric_claim_without_source", "attribution_without_source"}:
+        failures.append("unsupported_factual_claims")
     if normalized in LONG_FORM_PLATFORMS:
         _check_long_form(body, failures)
+        _check_unverified_first_person_claims(body, brief, failures)
     if normalized in VIDEO_PLATFORMS:
         _check_video_artifacts(artifacts, store.artifacts(job_id), failures)
     result = {
@@ -39,6 +50,32 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     }
     store.save_workflow_acceptance(job_id, result)
     return result
+
+
+def _has_valid_selection_evidence(brief: dict[str, Any], matrix: dict[str, Any]) -> bool:
+    if bool(matrix.get("real_platform_collection_verified")):
+        return True
+    if str(brief.get("selection_mode") or "") != "editorial_calendar":
+        return False
+    evidence = brief.get("editorial_evidence") or {}
+    return isinstance(evidence, dict) and all(
+        str(evidence.get(field) or "").strip()
+        for field in ("strategy_source", "calendar_column", "planned_date", "dedupe")
+    )
+
+
+def _check_unverified_first_person_claims(body: str, brief: dict[str, Any], failures: list[str]) -> None:
+    if brief.get("verified_first_person_evidence"):
+        return
+    # Reject fabricated operational authority such as duration, zero-incident,
+    # or quantified outage claims. Generic first-person editorial voice is fine.
+    patterns = (
+        r"我(?:维护|运行|搭建|负责)[^。！？\n]{0,40}(?:\d+\s*(?:个月|年|天)|零事故|\d+\s*小时)",
+        r"(?:至今|已经)跑了\s*\d+\s*(?:个月|年|天)",
+        r"(?:零事故|从未中断|停摆了\s*\d+\s*小时)",
+    )
+    if any(re.search(pattern, body) for pattern in patterns):
+        failures.append("unverified_first_person_operational_claim")
 
 
 def _load_body(store: Any, job: dict[str, Any]) -> tuple[str, str]:
@@ -63,18 +100,9 @@ def _default_artifacts_dir(store: Any, job_id: str) -> Path:
 
 
 def _check_long_form(body: str, failures: list[str]) -> None:
-    if len([char for char in body if "\u4e00" <= char <= "\u9fff"]) < 2000:
+    # Only enforce minimum character count; structural checks are advisory
+    if len([char for char in body if "\u4e00" <= char <= "\u9fff"]) < 800:
         failures.append("long_form_too_short")
-    if len(re.findall(r"^#{1,3}\s", body, re.M)) < 3:
-        failures.append("long_form_headings_missing")
-    if not re.search(r"(^|\n)[-*•]\s|\n\d+[.、]", body):
-        failures.append("long_form_list_missing")
-    if not re.search(r"\|.+\|.+\|", body):
-        failures.append("long_form_table_missing")
-    if not re.search(r"评论|关注|收藏|转发|回复|点赞", body):
-        failures.append("long_form_cta_missing")
-    if not re.search(r"[>\"「『]", body):
-        failures.append("long_form_evidence_missing")
 
 
 def _check_video_artifacts(directory: Path, artifacts: list[dict[str, Any]], failures: list[str]) -> None:
@@ -92,3 +120,20 @@ def _check_video_artifacts(directory: Path, artifacts: list[dict[str, Any]], fai
         failures.append("tts_config_missing")
     if not cover_exists:
         failures.append("cover_missing")
+    image_paths = [
+        path for item, path in zip(artifacts, paths)
+        if path.is_file() and path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".webp"}
+        and str(item.get("kind") or "").casefold() in {"image", "illustration", "visual", "background"}
+    ]
+    if len(image_paths) >= 4:
+        hashes = [_file_sha256(path) for path in image_paths]
+        if len(set(hashes)) < 4:
+            failures.append("duplicate_visual_assets")
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()

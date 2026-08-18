@@ -269,7 +269,61 @@ def build_generation_context(topic, brief):
         "open_notebook_research": on_research,
         "content_hygiene": content_hygiene,
         "cornerstone_mode": cornerstone_mode,
+        # 2026-08-16：注入平台运营规则（收藏率权重/AI声明/新规等），生成器自动适配
+        "platform_rules": _load_platform_rules(strategy),
+        # 2026-08-16：注入平台可用钩子模板库，生成标题/脚本时参考爆款结构
+        "hook_samples": _load_hook_samples(strategy.get("primary_platforms") or ""),
     }
+
+
+def _load_platform_rules(strategy: dict) -> str:
+    """按策略主平台加载 2026 规则浓缩文本；失败时静默返回空串（不阻断生成）。"""
+    try:
+        from .platform_rules import platform_rules_brief
+
+        platforms = {str(p).casefold() for p in strategy.get("primary_platforms") or []}
+        # douyin_ai/douyin_pet 映射到 douyin 规则；wechat_official 映射 gzh
+        alias = {
+            "douyin_ai": "douyin", "douyin_pet": "douyin",
+            "wechat_official": "gzh", "weixin": "gzh", "rednote": "xhs",
+        }
+        platform = next(
+            (alias.get(p, p) for p in platforms
+             if p in {"douyin", "douyin_ai", "douyin_pet", "kuaishou", "shipinhao", "tiktok",
+                      "youtube", "bilibili", "xiaohongshu", "xhs", "wechat", "gzh", "wechat_official",
+                      "weixin", "rednote", "zhihu", "juejin"}),
+            "",
+        )
+        brief = platform_rules_brief(platform, 900) if platform else ""
+        if platform and not brief:
+            raise RuntimeError(f"2026 platform rules unavailable for {platform}; refusing generation without rule context")
+        return brief
+    except Exception:
+        if platform:
+            raise
+        return ""
+
+
+def _load_hook_samples(platform: str, max_hooks: int = 5) -> str:
+    """加载平台可用钩子模板库作为标题/脚本生成参考（2026-08-16 新增接入）。
+    返回浓缩文本注入生成 prompt；失败静默返回空串。
+    """
+    try:
+        from .hooks_loader import pick_hooks
+
+        hooks = pick_hooks(platform, max_hooks)
+        if not hooks:
+            return ""
+        lines = []
+        for h in hooks[:max_hooks]:
+            template = str(h.get("template") or "")
+            example = str(h.get("example") or "")
+            lines.append(f"模板: {template}")
+            if example:
+                lines.append(f"示例: {example}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
 
 
 def prompt_brief(topic, brief):
@@ -295,6 +349,7 @@ def prompt_brief(topic, brief):
             "image_prompt": context["image_prompt"],
             "video_prompt": context["video_prompt"],
             "narration_guide": context.get("narration_guide", ""),
+            "platform_rules": context.get("platform_rules", ""),
             "open_notebook_research": context.get("open_notebook_research", {}),
         },
         ensure_ascii=False,

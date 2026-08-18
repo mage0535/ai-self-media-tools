@@ -1204,18 +1204,43 @@ class Store:
 
     def save_publish_receipt(self, content_package_id, platform, receipt, job_id=""):
         payload = receipt.to_dict() if hasattr(receipt, "to_dict") else dict(receipt)
+        package_id = str(content_package_id or "")
+        platform_name = str(platform or payload.get("platform") or "")
+        status = str(payload.get("status") or "")
+        platform_content_id = str(payload.get("platform_content_id") or "")
         with self.connect() as conn:
+            existing = conn.execute(
+                """SELECT id FROM publish_receipts
+                   WHERE content_package_id=? AND platform=? AND status=? AND platform_content_id=?
+                   ORDER BY id DESC LIMIT 1""",
+                (package_id, platform_name, status, platform_content_id),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """UPDATE publish_receipts
+                       SET job_id=?, verification_level=?, url=?, payload_json=?, created_at=?
+                       WHERE id=?""",
+                    (
+                        str(job_id or payload.get("job_id") or ""),
+                        str(payload.get("verification_level") or ""),
+                        str(payload.get("url") or ""),
+                        json.dumps(payload, ensure_ascii=False),
+                        utc_now(),
+                        existing["id"],
+                    ),
+                )
+                return
             conn.execute(
                 """INSERT INTO publish_receipts(
                     content_package_id,job_id,platform,status,verification_level,platform_content_id,url,payload_json,created_at
                 ) VALUES(?,?,?,?,?,?,?,?,?)""",
                 (
-                    str(content_package_id or ""),
+                    package_id,
                     str(job_id or payload.get("job_id") or ""),
-                    str(platform or payload.get("platform") or ""),
-                    str(payload.get("status") or ""),
+                    platform_name,
+                    status,
                     str(payload.get("verification_level") or ""),
-                    str(payload.get("platform_content_id") or ""),
+                    platform_content_id,
                     str(payload.get("url") or ""),
                     json.dumps(payload, ensure_ascii=False),
                     utc_now(),

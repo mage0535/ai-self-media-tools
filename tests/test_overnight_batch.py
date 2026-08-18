@@ -278,7 +278,7 @@ def test_due_task_builder_rejects_a_platform_named_candidate_without_real_collec
     assert task["reason"] == "platform-specific real trend collection missing"
 
 
-def test_due_task_builder_accepts_a_verified_platform_web_search_candidate():
+def test_due_task_builder_rejects_a_web_search_candidate_as_native_platform_evidence():
     report = [
         {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
         for index in range(7)
@@ -292,8 +292,56 @@ def test_due_task_builder_accepts_a_verified_platform_web_search_candidate():
     )
 
     task = prepared["tasks"][0]
+    assert task["state"] == "blocked"
+    assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is False
+
+
+def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_was_collected():
+    report = [
+        {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
+        for index in range(7)
+    ] + [{"source": "douyin", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}]
+    prepared = build_due_tasks(
+        [{"platform": "douyin_ai"}],
+        items=[],
+        source_report=report,
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "douyin", "fingerprint": "ai-workflow", "score": 1.0}],
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
     assert task["state"] == "ready_for_plan"
     assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is True
+
+
+def test_due_task_builder_uses_editorial_fallback_after_invalid_native_candidate():
+    report = [
+        {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
+        for index in range(7)
+    ] + [{"source": "zhihu", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}]
+    prepared = build_due_tasks(
+        [{
+            "platform": "zhihu",
+            "editorial_fallback": {
+                "topic": "A unique engineering field guide",
+                "direction": "engineering_field_guide",
+                "strategy_source": "growth_strategy:zhihu:latest",
+                "calendar_column": "engineering",
+                "planned_date": "2026-08-18",
+                "dedupe": "7d_clear",
+            },
+        }],
+        items=[],
+        source_report=report,
+        rank_for_platform=lambda *_args: [{"title": "Bad web candidate", "source": "zhihu:web_search", "fingerprint": "bad", "score": 1.0}],
+        growth_strategy_status={"zhihu": {"status": "ok", "key": "growth_strategy:zhihu:latest"}},
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["selection_mode"] == "editorial_calendar"
+    assert task["topic"] == "A unique engineering field guide"
 
 
 def test_sync_batch_state_records_actual_job_and_delivery_state(tmp_path: Path):

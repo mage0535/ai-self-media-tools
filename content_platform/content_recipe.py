@@ -259,7 +259,7 @@ def build_tool_invocation_manifest(
         "version": "tool_invocation_manifest_v1",
         "planned_tools": planned,
         "invocations": records,
-        "executed_count": len([item for item in records.values() if isinstance(item, dict) and item.get("status") in {"ok", "planned_internal", "generated"}]),
+        "executed_count": len([item for item in records.values() if isinstance(item, dict) and item.get("status") in {"ok", "generated"}]),
         "missing_tools": [name for name in planned if name not in records],
     }
 

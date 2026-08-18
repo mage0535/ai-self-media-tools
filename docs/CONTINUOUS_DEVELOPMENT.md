@@ -3504,3 +3504,17 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
 - G3 keeps all anti-generic checks for short video. Its long-form burstiness
   threshold is ignored only when `burstiness` is the sole failing dimension;
   hook, authenticity, clarity, and platform-fit failures remain blocking.
+
+## 2026-08-18 - Viral Cover And Rendered-Footage Gates
+
+- Covers now default to topic-specific narrative posters. A screenshot plus a
+  caption, unrelated stock image, fixed generic template, missing safe-zone
+  evidence, or degraded cover cannot be delivered as a finished asset.
+- `deliver_media.py` validates `cover_quality_evidence.json` before sending a
+  cover and uses content hashes for cache names, preventing stale replacements.
+- `visual_asset_gate.py` binds every scene to the footage actually rendered,
+  requires semantic evidence, and blocks exact or perceptual clip reuse within
+  a work or across sibling platform packages.
+- The TikTok high-quality renderer runs script, asset, encoded-video, and cover
+  gates in order. Full evidence and the low-intelligence-model execution order
+  are documented in `docs/HERMES_TIKTOK_VISUAL_REPAIR_20260818.md`.

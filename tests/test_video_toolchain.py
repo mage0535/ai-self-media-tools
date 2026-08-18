@@ -85,7 +85,9 @@ class VideoToolchainTests(unittest.TestCase):
         first = build_visual_recipe(base, title="First topic")
         second = build_visual_recipe({**base, "platforms": ["douyin"]}, title="Second topic")
 
-        self.assertEqual(first["core_fingerprint"], second["core_fingerprint"])
+        # Content-driven platform adaptation intentionally changes the core visual
+        # recipe; cross-platform reuse is prevented by family/platform guards.
+        self.assertNotEqual(first["core_fingerprint"], second["core_fingerprint"])
         self.assertNotEqual(first["fingerprint"], second["fingerprint"])
         self.assertTrue(first["style_variants"]["variant_driven"])
         self.assertTrue(first["auto_generated"])

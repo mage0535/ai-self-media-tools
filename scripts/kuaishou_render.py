@@ -40,8 +40,11 @@ try:
 except Exception:
     SHOT_CARD_REGISTRY = {}
 
-# ── TTS voices (轮换) ──
-TTS_VOICES = ["zh-CN-YunxiNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-YunjianNeural"]
+# ── TTS voices (按语言自动选择) ──
+TTS_VOICES_ZH = ["zh-CN-YunxiNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-YunjianNeural"]
+TTS_VOICES_EN = ["en-US-GuyNeural", "en-US-JennyNeural", "en-US-AriaNeural"]
+# 向后兼容：旧代码引用 TTS_VOICES 仍可用
+TTS_VOICES = TTS_VOICES_ZH
 
 # ── Theme palettes ──
 THEMES = {
@@ -625,11 +628,31 @@ def _segment_checkpoint_inputs(video_dir, card, index, width, height):
 async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
     """Generate auditable card narration with bounded retry for transient TTS outages."""
     import edge_tts
+    import re as _re_lang
     from content_platform.tts_text_compiler import TTSTextCompiler
 
     tts_dir = Path(video_dir) / "tts"
     tts_dir.mkdir(exist_ok=True)
-    voice = TTS_VOICES[voice_idx % len(TTS_VOICES)]
+
+    # ── 语言检测：从卡片内容判断中/英文 ──
+    _all_text = " ".join(str(c.get("tts", "") or c.get("txt", "") or c.get("title", "")) for c in cards)
+    _tts_lang = "zh" if _re_lang.search(r"[\u4e00-\u9fff]", _all_text) else "en"
+
+    # ── 赛道音色选择（与 film_renderer.py 对齐） ──
+    edge_voice = None
+    try:
+        from scripts.voice_engine import detect_genre, GENRE_VOICE_MAP
+        genre = detect_genre(_all_text[:200], _tts_lang)
+        lang_map = GENRE_VOICE_MAP.get(_tts_lang, GENRE_VOICE_MAP.get("en", {}))
+        genre_voices = lang_map.get(genre) or lang_map.get("default") or {}
+        edge_voice = genre_voices.get("single") or genre_voices.get("male")
+        print(f"  TTS 语言检测: lang={_tts_lang} genre={genre} voice={edge_voice}")
+    except Exception:
+        pass
+    if not edge_voice:
+        voice_pool = TTS_VOICES_ZH if _tts_lang == "zh" else TTS_VOICES_EN
+        edge_voice = voice_pool[voice_idx % len(voice_pool)]
+
     compiler = TTSTextCompiler.default()
     max_attempts = max(1, int(os.environ.get("KUAISHOU_TTS_MAX_ATTEMPTS", TTS_MAX_ATTEMPTS)))
     retry_delay = max(0.0, float(os.environ.get("KUAISHOU_TTS_RETRY_DELAY_SECONDS", "1")))
@@ -649,7 +672,7 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
         checkpoint_inputs = {
             "renderer": "edge_tts_card_v3",
             "index": idx,
-            "voice": voice,
+            "voice": edge_voice,
             "display_text": display_text,
             "tts_text": tts_text,
             "renderer_source": fingerprint_paths([Path(__file__)]),
@@ -664,7 +687,7 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
                 try:
                     out.unlink(missing_ok=True)
                     await asyncio.wait_for(
-                        edge_tts.Communicate(tts_text, voice).save(str(out)),
+                        edge_tts.Communicate(tts_text, edge_voice).save(str(out)),
                         timeout=attempt_timeout,
                     )
                     if not out.is_file() or out.stat().st_size <= 10_000:
@@ -690,21 +713,21 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
         records.append({
             "index": idx,
             "provider": "edge-tts",
-            "voice": voice,
+            "voice": edge_voice,
             "display_text": display_text,
             "tts_text": tts_text,
             "applied_rules": list(compiled.applied_rules),
             "unhandled_latin_tokens": list(compiled.unhandled_latin_tokens),
             "duration_seconds": dur,
         })
-        print(f"  ✅ tts_{idx:02d}: {out.stat().st_size//1024}KB, {dur:.1f}s ({voice})")
+        print(f"  ✅ tts_{idx:02d}: {out.stat().st_size//1024}KB, {dur:.1f}s ({edge_voice})")
 
     (Path(video_dir) / "tts_config.json").write_text(
-        json.dumps({"version": "tts_config_v1", "provider": "edge-tts", "voice": voice, "segments": records}, ensure_ascii=False, indent=2),
+        json.dumps({"version": "tts_config_v1", "provider": "edge-tts", "voice": edge_voice, "segments": records}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     (Path(video_dir) / "tts.done").write_text("ok")
-    print(f"  ✅ TTS完成 ({len(cards)}段, voice={voice})")
+    print(f"  ✅ TTS完成 ({len(cards)}段, voice={edge_voice})")
 
 
     return {"rendered": rendered, "reused": reused}
@@ -861,11 +884,46 @@ def download_bgm(video_dir, style="acoustic guitar"):
         _ACTIVE_BGM_DEADLINE = previous_deadline
         _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_candidate_deadline
     if timed_out:
+        # 2026-08-16 修复：在线 provider 预算耗尽时，自动兜底 archive.org 本地纯钢琴库
+        # （解决定时任务渲染必卡「online real-instrument BGM resolution budget exhausted」）
+        try:
+            fallback = _fetch_archive_bgm(video_dir)
+            if fallback:
+                return str(fallback)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"archive_fallback:{str(exc)[:120]}")
         raise RuntimeError("online real-instrument BGM resolution budget exhausted")
     raise RuntimeError(
         "online real-instrument BGM unavailable; checked network music providers; "
         + ("; ".join(errors[-5:]) if errors else "no licensed real-instrument candidates")
     )
+
+
+def _fetch_archive_bgm(video_dir):
+    """兜底：调用 scripts/fetch_bgm_archive.py 从 archive.org solo-piano-7 下载未用过纯钢琴曲。
+
+    返回 bgm.mp3 Path 或 None。复用主渲染器的真实乐器/BGM 校验门禁（>500KB, ffprobe 时长）。
+    """
+    import subprocess
+    import sys
+    script = Path(__file__).resolve().parent / "fetch_bgm_archive.py"
+    if not script.is_file():
+        print("archive fallback: fetch_bgm_archive.py 不存在", file=sys.stderr)
+        return None
+    proc = subprocess.run(
+        [sys.executable, str(script), "--out", str(video_dir), "--min-duration", "60"],
+        capture_output=True, text=True, timeout=int(os.environ.get("BGM_ARCHIVE_FALLBACK_TIMEOUT", "150")),
+        check=False,
+    )
+    if proc.returncode != 0:
+        print(f"archive fallback 失败: {proc.stderr[-300:]}", file=sys.stderr)
+        return None
+    bgm = Path(video_dir) / "bgm.mp3"
+    src = Path(video_dir) / "bgm_source.json"
+    if bgm.is_file() and src.is_file() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
+        print(f"archive fallback BGM: {bgm.name} ({bgm.stat().st_size // 1024}KB)")
+        return bgm
+    return None
 
 
 def _write_bgm_source(video_dir, candidate, style):

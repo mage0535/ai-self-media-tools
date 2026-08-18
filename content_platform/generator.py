@@ -16,6 +16,52 @@ from .tool_selection import build_tool_selection_evidence
 from .growth_recipe import build_growth_recipe
 
 
+# 2026-08-17 新增：网页抓取残留清洗（douyin/kuaishou 批量 JS/导航文本污染根因修复）
+WEB_RESIDUE_PATTERNS = (
+    # JS 代码残留（var glb; (glb="undefined"==typeof window ... 等）
+    r"var\s+glb",
+    r"glb\s*=\s*[\"']undefined[\"']",
+    r"typeof\s+window",
+    r"\(glb=",
+    r"if\(navigator",
+    r"navigator\.\w+",
+    r"window\.\w+",
+    r"document\.\w+",
+    # 常见网页导航文本
+    r"产品与服务\s+解决方案",
+    r"产品与服务",
+    r"关于我们\s+加入",
+    r"关于我们",
+    r"联系我们\s+业务咨询",
+    r"联系我们",
+    r"解决方案\s+关于我们",
+    r"加入我们|友情链接|隐私政策|合作咨询",
+)
+
+
+def strip_web_residue(text: str) -> str:
+    """移除 AI 生成内容中的网页抓取残留（JS 代码 + 导航文本）。
+
+    按行过滤：含 JS 变量/导航词的行整体删除；保留正文行。
+    """
+    import re
+    text = str(text or "")
+    kept: list[str] = []
+    for raw_line in text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            kept.append("")
+            continue
+        lowered = line.casefold()
+        if any(re.search(pat, line) or re.search(pat, lowered) for pat in WEB_RESIDUE_PATTERNS):
+            continue  # 丢弃残留行
+        kept.append(raw_line)
+    cleaned = "\n".join(kept)
+    # 折叠 3+ 连续空行为 2
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
+
+
 class ProviderAuthError(RuntimeError):
     """A provider returned an authentication or service-level failure."""
 
@@ -281,6 +327,8 @@ class DraftGenerator:
         cta = draft.get("cta") or context["style"]["cta"]
         if cta and cta not in body:
             body = body.rstrip() + f"\n\n{cta}"
+        # 2026-08-17 新增：先清网页残留再 humanize，防止 JS/导航文本混入成稿
+        body = strip_web_residue(body)
         rewrite = naturalize_copy(body, context)
         body = self._fit_article_length(rewrite["body"], context)
         strategy = context["strategy"]
@@ -616,11 +664,32 @@ class DraftGenerator:
 
     @staticmethod
     def _select_article_structure(content_form, topic):
+        """按内容赛道/关键词选择文章结构（2026-08-16 修复：不再固定 problem-cause-solution）。
+
+        之前只有 checklist/case/workflow 触发，其余一律 problem-cause-solution，
+        忽略了 style guide 的故事-观点/热点-预判模板。现在按内容语义选 4 种结构。
+        """
         content = f"{content_form} {topic}".casefold()
-        if "checklist" in content:
+        if any(k in content for k in ["checklist", "list", "清单", "步骤", "模板", "合集", "避坑", "top", "个技巧", "个坑", "个方法"]):
             return "checklist-steps-cautions"
-        if "case" in content or "workflow" in content:
+        if any(k in content for k in ["case", "workflow", "实测", "案例", "工作流", "拆解", "教程", "复盘", "实操"]):
             return "case-breakdown-method"
+        # 热点/趋势类 → 热点-解读-预判（2026-08-16 新增）
+        if any(k in content for k in ["热点", "趋势", "热搜", "爆款", "为什么突然", "新规", "重磅", "变天", "最新"]):
+            return "hotspot-interpret-forecast"
+        # 故事/情感类 → 故事-观点-延伸（2026-08-16 新增）
+        if any(k in content for k in ["故事", "经历", "我", "崩溃", "后悔", "坚持", "新手", "感悟", "治愈", "翻车", "踩坑"]):
+            return "story-opinion-extension"
+        # 赛道兜底（2026-08-16 新增：结合 detect_genre）
+        try:
+            from scripts.voice_engine import detect_genre
+            genre = detect_genre(topic or "")
+            if genre in {"emotion", "pets"}:
+                return "story-opinion-extension"
+            if genre in {"finance", "science"}:
+                return "problem-cause-solution"
+        except Exception:
+            pass
         return "problem-cause-solution"
 
     @staticmethod
@@ -693,6 +762,13 @@ class DraftGenerator:
             else "Write in Simplified Chinese for this Chinese-language channel."
         )
         body_requirement, style_limit = self._generation_requirements(context)
+        editorial_facts_only = str(brief.get("selection_mode") or "") == "editorial_calendar"
+        factual_boundary = (
+            "Do not write first-person operational history, named-team anecdotes, incident timelines, "
+            "percentages, durations, benchmark figures, provider performance claims, or invented examples. "
+            "Write recommendations and clearly labelled hypothetical steps only; do not imply they happened. "
+            if editorial_facts_only else ""
+        )
         prompt = (
             "Return only JSON. Do not use markdown fences. "
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
@@ -705,7 +781,10 @@ class DraftGenerator:
             "The hook must read like a real person grabbing attention, not like a headline. "
             "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
             "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting. "
+            f"{factual_boundary}"
             f"{body_requirement}\n"
+            f"Platform rules (must follow for this channel):\n{context.get('platform_rules', '')[:800]}\n\n"
+            f"Viral hook templates (pick one and adapt for your title/opening):\n{context.get('hook_samples', '')[:600]}\n\n"
             f"Style guide:\n{self._style_guide(style_limit)}\n\n"
             f"Planning context:\n{prompt_brief(topic, brief)}"
         )
@@ -760,6 +839,7 @@ class DraftGenerator:
             "## Production notes\n\n"
             f"- Use these platforms first: {', '.join(strategy['primary_platforms'])}\n"
             f"- Asset plan: {', '.join(strategy['asset_plan'])}\n"
+            f"- Platform rules: {context.get('platform_rules', '')[:400]}\n"
         )
         return self._normalize({"title": title, "body": body, "hook": hook}, context, "fallback", topic, brief)
 
@@ -779,6 +859,8 @@ class DraftGenerator:
             "Write a factual, visually scannable, engaging draft. Learn from the reference style signals and trend stage before generating. "
             "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
             f"{body_requirement}\n"
+            f"Platform rules (must follow for this channel):\n{context.get('platform_rules', '')[:800]}\n\n"
+            f"Viral hook templates (pick one and adapt for your title/opening):\n{context.get('hook_samples', '')[:600]}\n\n"
             f"Style guide:\n{self._style_guide(style_limit)}\n\n"
             f"Planning context:\n{prompt_brief(topic, brief)}"
         )
