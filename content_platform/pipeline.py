@@ -764,8 +764,8 @@ class Pipeline:
         gate["gates"]["G1_risk_compliance"] = {"passed": g1, "level": risk.get("level", "pass")}
         platforms = dm.get("strategy", {}).get("primary_platforms", [])
         short_video = (
-            str(dm.get("content_form") or "").casefold() in {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video"}
-            or bool({str(platform).casefold() for platform in platforms} & SHORT_VIDEO_PLATFORMS)
+            str(dm.get("content_form") or "").casefold() in {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video", "short_post", "micro_post", "tweet"}
+            or bool({str(platform).casefold() for platform in platforms} & (SHORT_VIDEO_PLATFORMS | {"twitter", "x", "threads", "bluesky"}))
         )
         if short_video:
             checks = geo.get("checks") or {}

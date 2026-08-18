@@ -84,3 +84,11 @@ def test_video_draft_also_gets_an_adaptive_cover_contract():
     assert design["layout_key"]
     assert design["focal_subjects"] == ["cat", "dog"]
     assert design["safe_zone_verified"] is True
+
+
+def test_blueprint_content_form_controls_generation_context():
+    draft = DraftGenerator({"allow_fallback": True}).generate("AI checklist", {
+        "platform": "twitter", "platforms": ["twitter"],
+        "content_blueprint": {"content_form": "short_post", "audience": "operators", "platform_style": "compact"},
+    })
+    assert draft["draft_meta"]["content_form"] == "short_post"
