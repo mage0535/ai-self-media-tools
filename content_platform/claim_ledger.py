@@ -17,7 +17,7 @@ FIRST_PERSON_OPERATION = re.compile(
 
 
 def _sentences(text: str) -> list[str]:
-    return [item.strip() for item in re.split(r"(?<=[。！？!?])|\n+", str(text or "")) if item.strip()]
+    return [item.strip() for item in re.split(r"(?<=[。！？.!?])|\n+", str(text or "")) if item.strip()]
 
 
 def _valid_evidence(row: dict[str, Any], *, first_person: bool) -> bool:
@@ -62,3 +62,13 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
         "findings": findings,
         "ledger_count": len(ledger),
     }
+
+
+def sanitize_unsupported_claims(text: str, findings: list[dict[str, Any]] | None) -> str:
+    cleaned = str(text or "")
+    unsupported = [str(row.get("text") or "") for row in (findings or []) if isinstance(row, dict) and not row.get("covered")]
+    for sentence in sorted((item for item in unsupported if item), key=len, reverse=True):
+        cleaned = cleaned.replace(sentence, "")
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
