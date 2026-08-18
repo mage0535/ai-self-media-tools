@@ -1360,6 +1360,39 @@ def test_kuaishou_auto_packet_rejects_reused_bgm_fingerprint():
     assert "bgm_fingerprint_history" in result["failed_dimensions"]
 
 
+def test_kuaishou_editorial_calendar_packet_can_replace_missing_trend_samples():
+    packet = complete_kuaishou_auto_packet()
+    packet["trend_evidence"] = {}
+    packet["selection_mode"] = "editorial_calendar"
+    packet["editorial_evidence"] = {
+        "strategy_source": "growth_strategy_20260816",
+        "calendar_column": "AI效率实测",
+        "planned_for": "2026-08-18",
+        "dedupe_passed": True,
+    }
+    packet["workflow_evidence"]["completed_steps"] = [
+        "strategy",
+        "editorial_selection",
+        "content_generation",
+        "quality_gate",
+    ]
+
+    assert validate_kuaishou_auto_packet(packet, phase="preflight")["passed"] is True
+
+
+def test_kuaishou_short_experiment_uses_packet_duration_policy():
+    packet = complete_kuaishou_auto_packet()
+    packet["audio_probe"]["duration"] = 35.5
+    packet["video_artifact_probe"]["duration_seconds"] = 35.5
+    packet["duration_policy"] = {
+        "mode": "experimental_short",
+        "min_seconds": 25,
+        "max_seconds": 40,
+    }
+
+    assert validate_kuaishou_auto_packet(packet, phase="preflight")["passed"] is True
+
+
 def test_kuaishou_preflight_does_not_require_future_postcheck_steps():
     packet = complete_kuaishou_auto_packet()
     packet["workflow_evidence"]["completed_steps"] = ["strategy", "trend_analysis", "content_generation", "quality_gate"]
