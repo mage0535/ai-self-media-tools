@@ -224,6 +224,7 @@ def build_due_tasks(
                     "bounded_model_input": bounded_model_input,
                     "content_blueprint": content_blueprint,
                     "content_blueprint_gate": blueprint_gate,
+                    "selection_mode": selection_mode,
                     **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
                 },
                 "trend_candidate": trend_candidate,

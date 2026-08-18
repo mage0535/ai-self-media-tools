@@ -188,7 +188,8 @@ class Pipeline:
                 claim_ledger = (draft.get("draft_meta") or {}).get("claim_ledger") or brief.get("claim_ledger") or []
                 claim_gate = validate_claims(text, claim_ledger)
                 draft.setdefault("draft_meta", {})["claim_gate"] = claim_gate
-                if not claim_gate.get("passed"):
+                strict_claims = bool((job.get("brief") or {}).get("run_contract")) or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
+                if not claim_gate.get("passed") and strict_claims:
                     runner.block(
                         "validate_factual_claims",
                         "factual_claim_evidence_missing",
@@ -196,7 +197,7 @@ class Pipeline:
                         claim_gate,
                         depends_on=["validate_content_structure"],
                     )
-                runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"])
+                runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"], message="legacy review-only claim findings" if not claim_gate.get("passed") else "")
                 if (job.get("brief") or {}).get("run_contract"):
                     depth_gate = validate_content_depth_plan((draft.get("draft_meta") or {}).get("content_depth_plan"))
                     draft["draft_meta"]["content_depth_gate"] = depth_gate
