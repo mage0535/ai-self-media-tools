@@ -210,6 +210,9 @@ def build_generation_context(topic, brief):
     viral_score = score_topic_candidate(topic, brief, references, niche_report)
     viral_growth_report = build_viral_report(source_catalog or references, brief.get("recent_by_account", {}))
     strategy = choose_content_strategy(topic, brief, viral_score, niche_report, viral_growth_report)
+    if str(brief.get("content_form") or "").strip():
+        strategy = dict(strategy)
+        strategy["content_form"] = str(brief["content_form"]).strip()
     trend_stage = brief.get("trend_stage", viral_score["trend_stage"])
     trend_angle = brief.get("trend_angle", "")
     reference_titles = [row.get("title", "") for row in references if row.get("title")]
