@@ -275,6 +275,7 @@ shared_trend_only: false
         self.assertIn('route=()', text)
         self.assertIn('"${route[@]}"', text)
         self.assertNotIn("hermes_provider and hermes_model must be configured", text)
+        self.assertIn('text.startswith("```")', text)
 
     def test_overnight_script_writes_acceptance_summary_after_batch_execution(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")

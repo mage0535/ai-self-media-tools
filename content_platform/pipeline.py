@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from .compliance import ComplianceChecker
-from .claim_ledger import validate_claims
+from .claim_ledger import sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
@@ -207,13 +207,26 @@ class Pipeline:
                 draft.setdefault("draft_meta", {})["claim_gate"] = claim_gate
                 strict_claims = bool((job.get("brief") or {}).get("run_contract")) or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
                 if not claim_gate.get("passed") and strict_claims:
-                    runner.block(
-                        "validate_factual_claims",
-                        "factual_claim_evidence_missing",
-                        "numeric or first-person operational claims require verifiable evidence",
-                        claim_gate,
-                        depends_on=["validate_content_structure"],
-                    )
+                    cleaned_body = sanitize_unsupported_claims(draft["body"], claim_gate.get("findings"))
+                    cleaned_gate = validate_claims(draft["title"] + "\n" + cleaned_body, claim_ledger)
+                    if len(cleaned_body) >= 80 and cleaned_gate.get("passed"):
+                        draft["body"] = cleaned_body
+                        text = draft["title"] + "\n" + cleaned_body
+                        draft["draft_meta"]["claim_sanitization"] = {
+                            "removed_count": len([row for row in claim_gate.get("findings") or [] if not row.get("covered")]),
+                            "original_gate": claim_gate,
+                            "passed": True,
+                        }
+                        claim_gate = cleaned_gate
+                        draft["draft_meta"]["claim_gate"] = claim_gate
+                    else:
+                        runner.block(
+                            "validate_factual_claims",
+                            "factual_claim_evidence_missing",
+                            "numeric or first-person operational claims require verifiable evidence",
+                            claim_gate,
+                            depends_on=["validate_content_structure"],
+                        )
                 runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"], message="legacy review-only claim findings" if not claim_gate.get("passed") else "")
                 if (job.get("brief") or {}).get("run_contract"):
                     depth_gate = validate_content_depth_plan((draft.get("draft_meta") or {}).get("content_depth_plan"))
