@@ -12,6 +12,8 @@ WORKFLOW_STEPS = [
     "run_operation_strategy",
     "generate_content",
     "validate_content_structure",
+    "validate_factual_claims",
+    "validate_content_depth",
     "run_fact_check",
     "run_safety_gate",
     "run_quality_gate",

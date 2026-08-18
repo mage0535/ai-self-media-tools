@@ -1,8 +1,8 @@
 [Unit]
-Description=Check the Hermes content-platform overnight heartbeat every five minutes
+Description=Check the Hermes content-platform overnight heartbeat every three minutes
 
 [Timer]
-OnCalendar=*:0/5
+OnCalendar=*:0/3
 Persistent=true
 AccuracySec=30s
 

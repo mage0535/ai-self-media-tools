@@ -5,6 +5,8 @@ import uuid
 from pathlib import Path
 
 from .compliance import ComplianceChecker
+from .claim_ledger import validate_claims
+from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
 from .delivery_health import delivery_health_decision
@@ -183,7 +185,33 @@ class Pipeline:
                 runner.succeeded("validate_content_structure", {"title_present": bool(draft.get("title")), "body_chars": len(str(draft.get("body", "")))}, depends_on=["generate_content"])
                 self._persist_intelligence(job_id, draft.get("draft_meta", {}))
                 text = draft["title"] + "\n" + draft["body"]
-                geo = runner.run("run_fact_check", lambda: geo_check(text), depends_on=["validate_content_structure"], require_output=True)
+                claim_ledger = (draft.get("draft_meta") or {}).get("claim_ledger") or brief.get("claim_ledger") or []
+                claim_gate = validate_claims(text, claim_ledger)
+                draft.setdefault("draft_meta", {})["claim_gate"] = claim_gate
+                if not claim_gate.get("passed"):
+                    runner.block(
+                        "validate_factual_claims",
+                        "factual_claim_evidence_missing",
+                        "numeric or first-person operational claims require verifiable evidence",
+                        claim_gate,
+                        depends_on=["validate_content_structure"],
+                    )
+                runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"])
+                if (job.get("brief") or {}).get("run_contract"):
+                    depth_gate = validate_content_depth_plan((draft.get("draft_meta") or {}).get("content_depth_plan"))
+                    draft["draft_meta"]["content_depth_gate"] = depth_gate
+                    if not depth_gate.get("passed"):
+                        runner.block(
+                            "validate_content_depth",
+                            "content_depth_contract_failed",
+                            "scheduled content lacks evidence, knowledge depth, actions, or a valid series plan",
+                            depth_gate,
+                            depends_on=["validate_factual_claims"],
+                        )
+                    runner.succeeded("validate_content_depth", depth_gate, depends_on=["validate_factual_claims"])
+                else:
+                    runner.skipped("validate_content_depth", "legacy_job_without_run_contract", "depth enforcement applies to compiled scheduled runs", depends_on=["validate_factual_claims"])
+                geo = runner.run("run_fact_check", lambda: geo_check(text), depends_on=["validate_content_depth"], require_output=True)
                 self.store.save_geo_score(job_id, geo)
                 risk = runner.run("run_safety_gate", lambda: self.risk.evaluate(text), depends_on=["run_fact_check"], require_output=True)
                 risk["content_hygiene"] = hygiene
@@ -300,7 +328,8 @@ class Pipeline:
 
     def publish(self, job_id):
         job = self._hydrate(self.store.get_job(job_id))
-        if self.config.get("workflow", {}).get("require_unified_acceptance") and not bool(job.get("acceptance", {}).get("passed")):
+        compiled_run = bool((job.get("brief") or {}).get("run_contract"))
+        if (compiled_run or self.config.get("workflow", {}).get("require_unified_acceptance")) and not bool(job.get("acceptance", {}).get("passed")):
             raise PermissionError("job has no passing unified workflow acceptance")
         if job["state"] == "published":
             return job

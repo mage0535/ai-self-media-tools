@@ -16,11 +16,13 @@ def cleanup_runtime(data_dir: str | Path, *, retention_days: int = 14, dry_run: 
     root = Path(data_dir)
     usage = float(disk_usage_percent) if disk_usage_percent is not None else shutil.disk_usage(root).used * 100 / shutil.disk_usage(root).total
     if usage < threshold_percent:
-        return {"archived": [], "reason": "disk_below_cleanup_threshold", "usage_percent": round(usage, 2)}
+        return {"removed": [], "bytes_removed": 0, "reason": "disk_below_cleanup_threshold", "usage_percent": round(usage, 2)}
     cutoff = datetime.now(timezone.utc).timestamp() - max(1, int(retention_days)) * 86400
-    archive_dir = root / "runtime_archive" / datetime.now(timezone.utc).strftime("%Y%m%d")
-    archived: list[str] = []
-    for base in (root / "artifacts", root / "local_ops_kuaishou", root / "local_ops_douyin", root / "local_ops_tiktok"):
+    removed: list[str] = []
+    bytes_removed = 0
+    # Only generated intermediates are eligible. Local-ops and handoff roots
+    # may contain the operator's only publishable copy and are never scanned.
+    for base in (root / "artifacts", root / "tmp"):
         if not base.is_dir():
             continue
         for path in base.rglob("*"):
@@ -28,9 +30,8 @@ def cleanup_runtime(data_dir: str | Path, *, retention_days: int = 14, dry_run: 
                 continue
             if path.stat().st_mtime > cutoff:
                 continue
-            archived.append(str(path))
+            removed.append(str(path))
             if not dry_run:
-                target = archive_dir / path.relative_to(root)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(path), str(target))
-    return {"archived": archived, "archive": str(archive_dir), "reason": "dry_run" if dry_run else "archived", "usage_percent": round(usage, 2)}
+                bytes_removed += path.stat().st_size
+                path.unlink()
+    return {"removed": removed, "bytes_removed": bytes_removed, "reason": "dry_run" if dry_run else "removed", "usage_percent": round(usage, 2)}

@@ -32,6 +32,15 @@ import requests
 from content_platform.tts_text_compiler import TTSTextCompiler
 from content_platform.voice_plan import build_voice_plan
 
+
+def select_tts_provider(requested: str, *, qwen_available: bool, language: str) -> str:
+    selected = str(requested or "edge").strip().lower()
+    if selected != "auto":
+        return selected
+    approved = os.environ.get("TTS_AB_TEST_APPROVED_PROVIDER", "").strip().lower() == "qwen"
+    quality_approved = os.environ.get("QWEN_TTS_QUALITY_APPROVED", "false").strip().lower() in {"1", "true", "yes"}
+    return "qwen" if qwen_available and language in {"zh", "en"} and approved and quality_approved else "edge"
+
 # ────────────────────────────────────────────────────────────────
 # 语言检测
 # ────────────────────────────────────────────────────────────────
@@ -792,8 +801,7 @@ class VoiceEngine:
         compiler = TTSTextCompiler.from_file(dictionary) if dictionary.is_file() else TTSTextCompiler([])
         platform = os.environ.get("TTS_PLATFORM", "")
         selected_provider = (provider_name or os.environ.get("VOICE_TTS_PROVIDER", "edge")).strip().lower()
-        if selected_provider == "auto":
-            selected_provider = "qwen" if qwen_provider.available and lang in {"zh", "en"} else "edge"
+        selected_provider = select_tts_provider(selected_provider, qwen_available=qwen_provider.available, language=lang)
         audio_files, all_timings, segment_texts, all_durations = [], [], [], []
         provider_events = []
         tts_records = []
