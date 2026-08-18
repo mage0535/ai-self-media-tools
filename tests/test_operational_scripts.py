@@ -270,6 +270,12 @@ shared_trend_only: false
         self.assertLess(text.index("smoke_provider.sh"), text.index("performance-cycle"))
         self.assertIn("provider_preflight_failed", text)
 
+    def test_provider_smoke_can_use_the_active_hermes_model_without_pinning(self):
+        text = Path("scripts/smoke_provider.sh").read_text(encoding="utf-8")
+        self.assertIn('route=()', text)
+        self.assertIn('"${route[@]}"', text)
+        self.assertNotIn("hermes_provider and hermes_model must be configured", text)
+
     def test_overnight_script_writes_acceptance_summary_after_batch_execution(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
 
