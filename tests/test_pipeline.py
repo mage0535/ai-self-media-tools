@@ -195,6 +195,23 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(depth_step["status"], "BLOCKED")
         media.assert_not_called()
 
+    def test_compiled_run_sanitizes_unsupported_numeric_title(self):
+        from content_platform.run_contract import build_run_contract
+
+        job = self.pipeline.create("Verified workflow", ["twitter"], {"run_contract": build_run_contract("twitter")})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "99% success in 30 seconds",
+            "body": "Use the verified source. Check the owner. Check the deadline. Check the source before acting. " * 3,
+            "draft_meta": {"claim_ledger": [], "content_depth_plan": {
+                "version": "content_depth_plan_v1", "title": "Verified workflow", "knowledge_points": ["owner", "deadline", "source"],
+                "case_or_demo": "verified source", "steps": ["owner", "deadline"], "counterexample": "do not guess",
+                "takeaway": "verify", "interaction_prompt": "which step?", "continuation_claimed": False,
+            }},
+        }):
+            result = self.pipeline.run(job["id"])
+        assert result["state"] == "review_required"
+        assert result["title"] == "Verified workflow"
+
     def test_short_video_geo_gate_uses_short_form_contract(self):
         draft = {
             "draft_meta": {
