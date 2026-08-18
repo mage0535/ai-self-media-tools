@@ -362,8 +362,8 @@ def main() -> None:
 
     douyin = channel_rules["douyin"]
     weekly = douyin.get("weekly_mix") or {}
-    require(weekly.get("cat_knowledge_or_original") == 2, "douyin weekly_mix.cat_knowledge_or_original must be 2")
-    require(weekly.get("tiktok_hot_localized_reposts") == 5, "douyin weekly_mix.tiktok_hot_localized_reposts must be 5")
+    require(weekly.get("cat_knowledge_or_original") == 3, "douyin weekly_mix.cat_knowledge_or_original must be 3")  # 08-16 每日版
+    require(weekly.get("tiktok_hot_localized_reposts") == 4, "douyin weekly_mix.tiktok_hot_localized_reposts must be 4")  # 08-16 每日版
     account_variants = (rulebook.get("platform_account_variants") or {}).get("douyin") or {}
     require(account_variants.get("base_platform") == "douyin", "douyin account variants must declare base_platform=douyin")
     require(account_variants.get("required") is True, "douyin account variants must be required")
@@ -389,8 +389,8 @@ def main() -> None:
     require(pet_account.get("lane") == "pet_healing", "douyin_pet lane must be pet_healing")
     require(ai_account.get("lane") == "ai_efficiency_open_source", "douyin_ai lane must be ai_efficiency_open_source")
     pet_weekly = pet_account.get("weekly_mix") or {}
-    require(pet_weekly.get("cat_knowledge_or_original") == 2, "douyin_pet weekly cat knowledge quota must be 2")
-    require(pet_weekly.get("tiktok_hot_localized_reposts") == 5, "douyin_pet weekly TikTok repost quota must be 5")
+    require(pet_weekly.get("cat_knowledge_or_original") == 3, "douyin_pet weekly cat knowledge quota must be 3")  # 08-16 每日版
+    require(pet_weekly.get("tiktok_hot_localized_reposts") == 4, "douyin_pet weekly TikTok repost quota must be 4")  # 08-16 每日版
     require("tiktok_hot_localized_repost" in (pet_account.get("required_content_lines") or []), "douyin_pet must include TikTok localized repost line")
     require("ai_tool_microcase" in (ai_account.get("required_content_lines") or []), "douyin_ai must include AI tool microcase line")
     require("cat_knowledge_or_original" in (ai_account.get("forbidden_content_lines") or []), "douyin_ai must forbid cat knowledge line")

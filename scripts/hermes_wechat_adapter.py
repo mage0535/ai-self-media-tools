@@ -88,14 +88,17 @@ def publish_packet(packet: dict, work_dir: Path) -> dict:
     inline_urls = _upload_inline_images(packet, work_dir, token, wx)
     if len(inline_urls) < 3:
         return {"ok": False, "status": "failed", "error": f"inline image upload incomplete: {len(inline_urls)}/3"}
-    md = _markdown_with_inline_images(packet, cover_url, inline_urls)
+    try:
+        md = _markdown_with_inline_images(packet, cover_url, inline_urls)
+    except ValueError as exc:
+        return {"ok": False, "status": "blocked", "error": str(exc)}
     html = wx.md_to_wechat(md, theme=theme)
     digest = _digest(packet)
     author = _author(packet)
     media_id = wx.publish_draft(token, title, html, author=author, digest=digest, thumb_media_id=thumb_id)
     if not media_id:
         return {"ok": False, "status": "failed", "error": "draft add returned no media_id"}
-    postcheck = _batchget_confirm(token, media_id, title)
+    postcheck = _batchget_confirm(token, media_id, title, expected_inline_images=len(inline_urls))
     evidence = {
         "theme": theme,
         "cover_uploaded": bool(thumb_id),
@@ -277,23 +280,24 @@ def _strip_redundant_title_heading(body: str, title: str) -> str:
 def _markdown_with_inline_images(packet: dict, cover_url: str, inline_urls: list[str]) -> str:
     body = str(packet.get("body", ""))
     title = str(packet.get("title", ""))
-    # Strip redundant heading that duplicates the article title (Fix #2)
     body = _strip_redundant_title_heading(body, title)
-    sections = [part.strip() for part in body.split("\n\n") if part.strip()]
-    if not sections:
-        sections = [body]
-    out = []
-    if cover_url:
-        out.append(f"![]({cover_url})")
-    url_iter = iter(inline_urls)
-    for idx, section in enumerate(sections, 1):
-        out.append(section)
-        if idx <= len(inline_urls):
-            try:
-                out.append(f"![]({next(url_iter)})")
-            except StopIteration:
-                pass
-    return "\n\n".join(out)
+    placeholders = list(re.finditer(r"!\[([^\]]*)\]\(\s*\)", body))
+    if len(placeholders) > len(inline_urls):
+        raise ValueError(
+            f"unresolved inline image placeholders: {len(placeholders)} placeholders, {len(inline_urls)} uploaded"
+        )
+
+    def replace_placeholder(match: re.Match[str]) -> str:
+        index = replace_placeholder.index
+        replace_placeholder.index += 1
+        alt = match.group(1)
+        return f"![{alt}]({inline_urls[index]})"
+
+    replace_placeholder.index = 0
+    rendered = re.sub(r"!\[([^\]]*)\]\(\s*\)", replace_placeholder, body)
+    if re.search(r"!\[[^\]]*\]\(\s*\)", rendered):
+        raise ValueError("unresolved inline image placeholders after replacement")
+    return f"![]({cover_url})\n\n{rendered}" if cover_url else rendered
 
 
 def _digest(packet: dict) -> str:
@@ -310,7 +314,7 @@ def _author(packet: dict) -> str:
     return str(strategy.get("geo_author") or strategy.get("author") or "Magic")[:32]
 
 
-def _batchget_confirm(token: str, media_id: str, title: str) -> dict:
+def _batchget_confirm(token: str, media_id: str, title: str, *, expected_inline_images: int = 0) -> dict:
     url = "https://api.weixin.qq.com/cgi-bin/draft/batchget?" + urllib.parse.urlencode({"access_token": token})
     data = json.dumps({"offset": 0, "count": 20, "no_content": 0}, ensure_ascii=False).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
@@ -324,8 +328,21 @@ def _batchget_confirm(token: str, media_id: str, title: str) -> dict:
             continue
         content = item.get("content") or {}
         news = content.get("news_item") or []
-        found_title = any(str(article.get("title", "")) == title for article in news)
-        return {"passed": found_title, "media_id": media_id, "title_match": found_title}
+        article = next((row for row in news if str(row.get("title", "")) == title), {})
+        found_title = bool(article)
+        content = str(article.get("content", ""))
+        inline_image_count = len(
+            re.findall(r"<img\b[^>]*\b(?:src|data-src)=[\"']https?://", content, flags=re.IGNORECASE)
+        )
+        inline_images_match = inline_image_count >= expected_inline_images
+        return {
+            "passed": found_title and inline_images_match,
+            "media_id": media_id,
+            "title_match": found_title,
+            "inline_image_count": inline_image_count,
+            "expected_inline_images": expected_inline_images,
+            "inline_images_match": inline_images_match,
+        }
     return {"passed": False, "media_id": media_id, "error": "media_id not found in draft batchget"}
 
 

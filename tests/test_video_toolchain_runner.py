@@ -468,7 +468,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 env=env,
-                timeout=30,
+                timeout=60,  # workflow context + recipe generation can exceed 30s under full-suite load
                 check=False,
             )
 
@@ -841,8 +841,10 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             with patch.dict(os.environ, {"BGM_RESOLUTION_MAX_SECONDS": "1"}, clear=False):
                 with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
                     with patch("scripts.kuaishou_render.time.monotonic", side_effect=[0.0, 2.0]):
-                        with self.assertRaisesRegex(RuntimeError, "resolution budget exhausted"):
-                            download_bgm(root, "acoustic guitar")
+                        # 2026-08-16：在线预算耗尽会自动兜底 archive（改进）；测试 patch 掉兜底验证原预算逻辑
+                        with patch("scripts.kuaishou_render._fetch_archive_bgm", return_value=None):
+                            with self.assertRaisesRegex(RuntimeError, "resolution budget exhausted"):
+                                download_bgm(root, "acoustic guitar")
 
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm

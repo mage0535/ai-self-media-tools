@@ -88,6 +88,47 @@ SCENE_COLOR_MAP = {
         "mood": "干净、利落、高审美",
         "bgm_hint": "live jazz trio with brushed drums",
     },
+    # 2026-08-16 新增：生活/情感类配色（之前缺，落入默认中性）
+    r"猫|宠物|萌宠|猫咪|狗狗|小猫|治愈|温暖|陪伴": {
+        "primary": (50, 40, 45),       # 暖棕黑
+        "secondary": (90, 75, 80),     # 暖灰
+        "accent": (255, 170, 140),     # 蜜桃橙（毛茸茸感）
+        "source": "温暖台灯 + 毛绒质感的室内光",
+        "mood": "温馨、柔软、治愈",
+        "bgm_hint": "light piano, warm, gentle",
+    },
+    r"情感|情绪|故事|感动|心里|治愈系": {
+        "primary": (45, 35, 55),       # 深紫灰
+        "secondary": (80, 65, 95),     # 藕紫
+        "accent": (230, 170, 220),     # 柔粉（情绪温度）
+        "source": "黄昏窗光 + 暖色灯串",
+        "mood": "感性、温柔、共鸣",
+        "bgm_hint": "soft piano instrumental, gentle, emotional",
+    },
+    r"美食|菜谱|烘焙|做饭|料理|咖啡|早餐": {
+        "primary": (45, 35, 25),       # 深咖
+        "secondary": (85, 70, 50),     # 暖棕
+        "accent": (240, 170, 90),      # 焦糖橙（食欲感）
+        "source": "厨房暖光 + 食物质感",
+        "mood": "烟火气、满足、治愈",
+        "bgm_hint": "light acoustic guitar, warm",
+    },
+    r"科普|知识|科学|原理|讲解|学习": {
+        "primary": (25, 35, 45),       # 深墨蓝
+        "secondary": (50, 65, 80),     # 雾蓝
+        "accent": (90, 200, 250),      # 天蓝（求知感）
+        "source": "自然光 + 书本反射",
+        "mood": "清晰、理性、可信",
+        "bgm_hint": "minimal piano instrumental, clean, calm",
+    },
+    r"健康|养生|健身|运动|睡眠|心理": {
+        "primary": (25, 45, 40),       # 深松绿
+        "secondary": (55, 80, 70),     # 灰绿
+        "accent": (120, 220, 170),     # 薄荷绿（活力感）
+        "source": "晨光 + 自然绿植",
+        "mood": "健康、活力、平衡",
+        "bgm_hint": "light piano, fresh, calm",
+    },
     # 默认回退
     r"": {
         "primary": (35, 35, 40),

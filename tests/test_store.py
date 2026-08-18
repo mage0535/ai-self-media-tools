@@ -41,6 +41,23 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(len(self.store.artifacts(job["id"])), 1)
         self.assertEqual(len(self.store.deliveries(job["id"])), 1)
 
+    def test_publish_receipt_upsert_is_idempotent(self):
+        receipt = {
+            "status": "blocked",
+            "verification_level": "none",
+            "platform_content_id": "",
+            "url": "",
+            "error": "temporary health gate",
+        }
+
+        self.store.save_publish_receipt("pkg-1", "juejin", receipt, job_id="job-1")
+        receipt["error"] = "updated health gate"
+        self.store.save_publish_receipt("pkg-1", "juejin", receipt, job_id="job-1")
+
+        rows = self.store.publish_receipts(content_package_id="pkg-1", platform="juejin")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["payload"]["error"], "updated health gate")
+
     def test_invalid_transition_is_rejected(self):
         job = self.store.create_job("Topic", ["file"])
         with self.assertRaises(ValueError):

@@ -23,6 +23,7 @@ class MediaBridge:
         self.data_dir = Path(data_dir)
         self.guard = guard or ResourceGuard(self.data_dir, {})
         self.registry = ToolRegistry({"media": self.config, **self.config})
+        self._visual_route: dict | None = None
 
     def inventory(self):
         return self.registry.probe()
@@ -85,8 +86,10 @@ class MediaBridge:
                 "route_order": route_order,
                 "auto": True,
             }
+            self._visual_route = job["visual_route"]
         except Exception as e:
             job["visual_route"] = {"auto": False, "error": str(e)[:100]}
+            self._visual_route = job["visual_route"]
         output_dir = self.data_dir / "artifacts" / job["id"]
         output_dir.mkdir(parents=True, exist_ok=True)
         if kind == "audio":
@@ -547,6 +550,8 @@ class MediaBridge:
             "render_manifest": manifest,
             "render_packet": self._renderer_packet(output_dir),
         }
+        if self._visual_route:
+            artifact["visual_route"] = self._visual_route
         if plan:
             artifact["toolchain_plan"] = str(output_dir / "video_toolchain_plan.json")
             artifact["selected_pipeline"] = str(plan.get("selected_pipeline", ""))

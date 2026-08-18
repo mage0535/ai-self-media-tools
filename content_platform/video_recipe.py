@@ -139,9 +139,10 @@ def validate_visual_recipe(recipe: dict[str, Any] | None, registry: dict[str, An
 
 def recipe_core_fingerprint(recipe: dict[str, Any]) -> str:
     style = dict(recipe.get("style_variants") or {})
-    if style.get("variant_driven"):
-        for key in ["color_mood", "motion_density", "text_layout", "scene_change_interval_sec"]:
-            style[key] = "variant_driven"
+    # 2026-08-17 修复：variant_driven 时保留实际变体值参与指纹。
+    # 原来把所有变体强制替换为 "variant_driven" → 无论换什么变体指纹都相同，
+    # recipe_reuse_gate 永远拦截重渲染（今天 douyin_ai 反复被拦的根因）。
+    # 真正应检测的是"实际用了哪个变体组合"，因此保留 color_mood/text_layout 等真实值。
     style.pop("recipe_variant", None)
     style.pop("variant_driven", None)
     stable = {

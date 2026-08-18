@@ -61,6 +61,28 @@ def _mapped_sources(section_map, artifacts):
     return sources
 
 
+def build_markdown_with_cdn(body_text, section_map, cdn_urls):
+    """Build import markdown only when every mapped image has a CDN URL."""
+    expected = len(section_map)
+    if len(cdn_urls) != expected + 1:
+        raise ValueError(f"cdn upload incomplete: expected {expected + 1}, got {len(cdn_urls)}")
+    if any(not isinstance(url, str) or not url.startswith("http") for url in cdn_urls):
+        raise ValueError("cdn upload incomplete: invalid image URL")
+    markdown = f"![cover]({cdn_urls[0]})\n\n{body_text}"
+    for row, url in zip(section_map, cdn_urls[1:]):
+        label = str(row.get("purpose") or row.get("section") or "image")
+        replaced = re.sub(r"!\[([^\]]*)\]\(\s*\)", f"![{label}]({url})", markdown, count=1)
+        if replaced == markdown:
+            marker = str(row.get("section") or "").strip()
+            if not marker or marker not in markdown:
+                raise ValueError("zhihu article image markers do not match section_image_map")
+            replaced = markdown.replace(marker, f"{marker}\n\n![{label}]({url})", 1)
+        markdown = replaced
+    if re.search(r"!\[[^\]]*\]\(\s*\)", markdown):
+        raise ValueError("zhihu article contains unresolved image markers")
+    return markdown
+
+
 def _article_guard(job, title, body_text, platform_payload):
     artifacts = job.get("artifacts") or []
     draft_meta = job.get("draft_meta") or {}
@@ -232,22 +254,11 @@ class ZhihuPublisher:
                 except Exception as e:
                     print(f"  Upload {i} failed: {e}")
 
-            md_body = body_text
-            if cdn_urls:
-                md_body = f"![cover]({cdn_urls[0]})\n\n{md_body}"
-            import re as _re
-            for row, url in zip(section_map, cdn_urls[1:]):
-                label = str(row.get("purpose") or row.get("section") or "image")
-                replaced = _re.sub(r'!\[([^\]]*)\]\(\)', f'![{label}]({url})', md_body, count=1)
-                if replaced != md_body:
-                    md_body = replaced
-                    continue
-                marker = str(row.get("section") or "").strip()
-                if marker and marker in md_body:
-                    md_body = md_body.replace(marker, f"{marker}\n\n![{label}]({url})", 1)
-                    continue
+            try:
+                md_body = build_markdown_with_cdn(body_text, section_map, cdn_urls)
+            except ValueError as exc:
                 browser.close()
-                return DeliveryResult(False, "blocked", error="zhihu article image markers do not match section_image_map")
+                return DeliveryResult(False, "blocked", error=str(exc))
 
             md_path = Path("/tmp") / f"zhihu_{job.get('id', 'article')}.md"
             md_path.write_text(md_body, encoding="utf-8")

@@ -34,7 +34,7 @@ def test_default_policy_requires_cinematic_motion(monkeypatch):
 
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
-    assert film_renderer.RENDERER_VERSION == "cinematic-v8"
+    assert film_renderer.RENDERER_VERSION == "cinematic-v10"
 
 
 def test_safe_motion_requires_explicit_degraded_opt_in(monkeypatch):
@@ -100,6 +100,84 @@ def test_cinematic_templates_use_continuous_high_frequency_background_motion():
 
     assert "animation: kb 6s linear infinite alternate" in source
     assert '"motion_evidence_version": MOTION_EVIDENCE_VERSION' in source
+
+
+def test_screenshot_shots_keep_moving_after_their_entrance_animation():
+    source = (ROOT / "scripts" / "film_renderer.py").read_text(encoding="utf-8")
+
+    assert "@keyframes screenshotFloat" in source
+    assert "screenshotFloat 5.2s linear 0.9s infinite alternate" in source
+
+
+def test_cinematic_establishing_shots_use_multiple_compositions_and_pet_documentary_mode():
+    source = (ROOT / "scripts" / "film_renderer.py").read_text(encoding="utf-8")
+
+    assert "content_styles = [" in source
+    assert "title_sizes = [80, 64, 70, 62]" in source
+    assert 'platform).casefold() == "douyin_pet"' in source
+    assert "platform=args.platform" in source
+
+
+def test_visual_treatment_rejects_scene_without_required_directives(tmp_path):
+    plan = {
+        "version": "visual_treatment_plan_v1",
+        "scenes": [{"scene_id": "s01", "display_purpose": "hook"}],
+    }
+    path = tmp_path / "visual_treatment_plan.json"
+    path.write_text(json.dumps(plan), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing required fields"):
+        film_renderer.load_visual_treatment_plan(path, expected_scene_count=1)
+
+
+def test_visual_treatment_maps_plan_to_real_renderer_choices(tmp_path):
+    asset = tmp_path / "proof.png"
+    asset.write_bytes(b"asset")
+    plan = {
+        "version": "visual_treatment_plan_v1",
+        "scenes": [{
+            "scene_id": "s01",
+            "display_purpose": "show proof",
+            "real_asset": str(asset),
+            "camera_language": "left_dolly",
+            "subject_motion": "action_path",
+            "text_motion": "before_after_wipe",
+            "transition": "left_swipe",
+            "rhythm_beat": {"emphasis": "proof"},
+            "interaction_prompt": "comment",
+        }],
+    }
+    path = tmp_path / "visual_treatment_plan.json"
+    path.write_text(json.dumps(plan), encoding="utf-8")
+
+    scene = film_renderer.load_visual_treatment_plan(path, expected_scene_count=1)[0]
+    applied = film_renderer.resolve_scene_treatment(scene)
+
+    assert applied["camera_index"] == 1
+    assert applied["element_shot"] == "step_light"
+    assert applied["transition"] == "slideleft"
+    assert applied["asset_sha256"] == film_renderer._sha256_file(asset)
+
+
+def test_visual_treatment_never_selects_unsupported_xfade_transition():
+    supported = {"fadeblack", "smoothleft", "circleopen", "slideleft", "wipeleft", "smoothup", "revealright"}
+
+    assert set(film_renderer.TRANSITION_MAP.values()).issubset(supported)
+
+
+def test_visual_treatment_builder_creates_complete_unique_scene_plan(tmp_path):
+    backgrounds = []
+    for index in range(8):
+        path = tmp_path / f"bg_{index:02d}.jpg"
+        path.write_bytes(f"background-{index}".encode())
+        backgrounds.append(path)
+
+    generated = film_renderer.ensure_visual_treatment_plan(tmp_path, backgrounds)
+    scenes = film_renderer.load_visual_treatment_plan(generated, expected_scene_count=8)
+
+    assert generated.is_file()
+    assert len({scene["camera_language"] for scene in scenes}) >= 6
+    assert len({scene["transition"] for scene in scenes}) >= 4
 
 
 def test_high_quality_profile_does_not_accept_a_failed_script_gate():

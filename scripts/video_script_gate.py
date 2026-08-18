@@ -27,9 +27,9 @@ AI_CLICHES = [
 # 钩子类型关键词（开头 3 秒应命中至少 1 类）
 HOOK_PATTERNS = {
     "悬念": [r"为什么", r"怎么办", r"如何", r"竟然", r"居然", r"没想到", r"秘密", r"真相", r"后悔没", r"不会告诉你", r"结果它", r"结果居然", r"[?？]"],
-    "利益": [r"赚", r"省", r"免费", r"学会", r"月入", r"涨", r"提升", r"技巧", r"攻略", r"\d+分钟学会", r"\d+秒"],
+    "利益": [r"赚", r"省", r"免费", r"学会", r"月入", r"涨", r"提升", r"技巧", r"攻略", r"\d+分钟学会", r"\d+秒", r"\d+万", r"\d+块", r"\d+元", r"攒下", r"存下", r"多赚"],
     "反常识": [r"别", r"千万别", r"都错了", r"一直", r"原来", r"错了", r"误区", r"别再做", r"浪费时间", r"反而", r"更差", r"根本", r"第一步就", r"\d+%的人", r"90%", r"别再", r"stop\b", r"wrong", r"mistake", r"worse", r"don't use", r"overrated", r"waste of time"],
-    "共鸣": [r"有没有人", r"是不是", r"你也", r"都一样", r"打工", r"打工人", r"头疼", r"崩溃", r"烦", r"想放弃", r"坚持不下去", r"emo"],
+    "共鸣": [r"有没有人", r"是不是", r"你也", r"都一样", r"打工", r"打工人", r"头疼", r"崩溃", r"烦", r"想放弃", r"坚持不下去", r"emo", r"身份", r"农村", r"宝妈", r"新手", r"月薪"],
 }
 # 情绪词（真实感信号）
 EMOTION_WORDS = ["气死", "离谱", "太爽", "崩溃", "后悔", "惊喜", "意外", "心疼", "绝了", "真香", "emo", "难受", "炸裂", "跪了", "离谱", "frustrating", "frustrated", "amazing", "awesome", "love", "hate", "annoying", "exhausted", "tired of", "worth it", "insane", "game changer", "nightmare", "genius", "ridiculous"]
@@ -53,7 +53,7 @@ def check_ai_cliches(text: str) -> dict:
 
 
 def check_cta(text: str) -> dict:
-    found = [p for p in CTA_PATTERNS if re.search(p, text[-200:])]
+    found = [p for p in CTA_PATTERNS if re.search(p, text[-200:], re.IGNORECASE)]
     return {"passed": len(found) >= 1, "found": found}
 
 
@@ -88,6 +88,37 @@ def check_info_density(segments: list[str], min_points: int = 3) -> dict:
     return {"passed": dense >= min_points, "dense_segments": dense, "required": min_points}
 
 
+def check_save_value(segments: list[str]) -> dict:
+    """2026-08-16 新增（公众号文章洞察 [012][103]）：抖音收藏率权重 TOP1。
+    收藏型内容 = 可保存复用信息（步骤清单/模板/参数/避坑），结尾有收藏引导更佳。
+    """
+    save_signals = [r"步骤", r"清单", r"模板", r"参数", r"避坑", r"教程", r"免费", r"合集", r"整理",
+                    r"收藏", r"保存", r"先用", r"直接抄", r"拿去用", r"干货",
+                    # 2026-08-17 英文适配：收藏型内容信号词
+                    r"list", r"template", r"checklist", r"steps", r"guide", r"free",
+                    r"save", r"bookmark", r"copy", r"workflow", r"tools?", r"tips"]
+    has_content = sum(1 for s in segments if any(re.search(p, s, re.IGNORECASE) for p in save_signals))
+    tail = " ".join(segments[-1:])
+    has_guide = bool(re.search(r"收藏|保存|先收|存下|建议收藏|save this|bookmark|save for later|save it", tail, re.IGNORECASE))
+    return {"passed": has_content >= 1 and has_guide, "content_hits": has_content, "save_guide": has_guide}
+
+
+def check_engagement_comment(script_text: str) -> dict:
+    """2026-08-16 新增（公众号文章洞察 [095]）：抖音高质量评论率权重高于点赞。
+    有效评论 = 10字以上观点/提问/经验；禁止封闭问答（'你学会了吗'只回会/不会）。
+    结尾必须开放提问/制造争议/布置任务/自建评论区氛围。
+    """
+    tail = script_text[-200:]
+    closed = re.search(r"你学会了吗|学会了吗|好不好用\?|是不是很简单|你们觉得呢$|did you like it\?|was it helpful\?|right\?$", tail, re.IGNORECASE)
+    open_question = re.search(r"什么|怎么|吗|呢|哪|最大|卡点|观点|站队|扣\d|回复|评论区|what|how|which|your favorite|your fav|comment|tell me|share", tail, re.IGNORECASE)
+    task = re.search(r"评论区.*(留下|发|分享|扣|回复|交流|给)|comment.*(below|your)|share.*(your|below)", tail, re.IGNORECASE)
+    return {
+        "passed": bool(open_question or task) and not closed,
+        "closed_question": bool(closed),
+        "open_question": bool(open_question or task),
+    }
+
+
 def validate_script(script_text: str, lang: str = "zh") -> dict:
     segments = [s.strip() for s in re.split(r"\n\s*\n", script_text) if s.strip()]
     checks = {
@@ -97,6 +128,8 @@ def validate_script(script_text: str, lang: str = "zh") -> dict:
         "emotion": check_emotion(script_text),
         "segments": check_segments(segments, lang),
         "info_density": check_info_density(segments),
+        "save_value": check_save_value(segments),
+        "engagement_comment": check_engagement_comment(script_text),
     }
     failed = [k for k, v in checks.items() if not v["passed"]]
     return {

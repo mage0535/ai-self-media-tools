@@ -8,6 +8,7 @@ from .store import utc_now
 
 WORKFLOW_STEPS = [
     "initialize_task",
+    "load_platform_workflow_context",
     "load_content_strategy",
     "run_operation_strategy",
     "generate_content",

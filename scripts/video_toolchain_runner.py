@@ -33,6 +33,7 @@ from content_platform.video_recipe import build_visual_recipe, load_effect_modul
 from content_platform.video_artifact import verify_artifact
 from content_platform.scene_manifest import build_scene_manifest, validate_rendered_duration, validate_scene_manifest
 from content_platform.paths import agent_scripts_dir
+from content_platform.platform_workflow_context import write_platform_workflow_context
 
 try:
     from scripts.shotcraft_moves import SHOT_CARD_REGISTRY, shot_plan_for_text, shot_sequence
@@ -115,9 +116,17 @@ def main(argv: list[str] | None = None) -> int:
     output_dir = Path(os.environ.get("VIDEO_OUTPUT_DIR") or ROOT / "data" / "artifacts" / "video_toolchain").resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     plan = _load_plan()
-    if str(plan.get("selected_pipeline") or "") == "localized_repost_video" and os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") != "1":
-        return _run_localized_repost(plan, output_dir, title)
+    platform_context = None
+    requested_platforms = [str(item).strip() for item in (plan.get("platforms") or []) if str(item).strip()]
+    if requested_platforms:
+        if len(requested_platforms) != 1:
+            raise RuntimeError("video renderer requires exactly one platform per serial workflow")
+        platform_context = write_platform_workflow_context(output_dir, requested_platforms[0], plan=plan)
+    elif os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") != "1":
+        raise RuntimeError("real video render requires plan.platforms and platform workflow context")
     dry_run = os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1"
+    if str(plan.get("selected_pipeline") or "") == "localized_repost_video" and not dry_run:
+        return _run_localized_repost(plan, output_dir, title)
     script_structure = validate_script_structure(script_body)
     # Dry runs retain incomplete-plan evidence for isolated gate tests; real renders fail closed.
     if not dry_run and not script_structure.get("passed"):
@@ -137,6 +146,17 @@ def main(argv: list[str] | None = None) -> int:
         return 5
     visual_assets = _load_visual_assets()
     materialized_backgrounds = _materialize_visual_backgrounds(output_dir, visual_assets)
+    # 2026-08-16 新增：背景不足时自动 Pexels 语义下载兜底（取代 Hermes 手动下载）
+    if len(materialized_backgrounds) < 8:
+        try:
+            sys.path.insert(0, str(ROOT / "scripts"))
+            from pexels_auto_bg import auto_fetch_backgrounds, write_auto_assets
+            auto_assets = auto_fetch_backgrounds(script_body or title, title or "", output_dir, _primary_platform(plan))
+            if auto_assets:
+                materialized_backgrounds = auto_assets
+        except Exception:
+            # 静默失败，不阻断渲染
+            pass
     # diagram-design 补图通道：结构化主题且背景不足时，自动生成杂志级 diagram 背景
     materialized_backgrounds = _diagram_background_fill(output_dir, script_body or title, materialized_backgrounds)
     cinema_scenes = storyboard(script_body or title, 8)
@@ -241,8 +261,24 @@ def main(argv: list[str] | None = None) -> int:
     renderer, plan = _content_driven_renderer(plan, script_body, title, output_dir)
     template_family = str(visual_recipe.get("template_family") or plan.get("template_family") or "")
     style_variants = visual_recipe.get("style_variants") if isinstance(visual_recipe.get("style_variants"), dict) else {}
-    theme = str(style_variants.get("theme") or THEME_BY_TEMPLATE.get(template_family, "cyber-neon"))
-    bgm_style = _bgm_style(cinema_scenes)
+    # 2026-08-16 修复：主题按内容赛道适配（不再固定 cyber-neon / 随机哈希）
+    # 与 TTS/BGM 同步：pets→mint-fresh(清新萌宠)，finance/tech→blueprint(专业蓝)，emotion→mint-fresh(柔和)，science→blueprint
+    theme = str(style_variants.get("theme") or THEME_BY_TEMPLATE.get(template_family, "") or "")
+    if not theme:
+        try:
+            from scripts.voice_engine import detect_genre
+            genre = detect_genre(f"{title} {script_body}")
+            theme_map = {
+                "pets": "mint-fresh",
+                "emotion": "mint-fresh",
+                "finance": "blueprint",
+                "science": "blueprint",
+                "tech": "cyber-neon",
+            }
+            theme = theme_map.get(genre, "cyber-neon")
+        except Exception:
+            theme = "cyber-neon"
+    bgm_style = _bgm_style(cinema_scenes, text=f"{title} {script_body}")
     renderer_cmd = _renderer_command(renderer, output_dir, theme, title, script_body, plan, bgm_style)
     toolchain_contract = _toolchain_contract(plan, theme, bgm_style, renderer, visual_recipe)
     manifest = {
@@ -335,12 +371,55 @@ def main(argv: list[str] | None = None) -> int:
             print(manifest["error"], file=sys.stderr)
             return 4
         manifest["segment_motion_evidence"] = {"path": str(segment_motion_path), "segments": segments}
-        for record in (manifest.get("tool_invocation_manifest", {}).get("invocations", {}) or {}).values():
-            if isinstance(record, dict) and record.get("status") == "planned_internal":
+        actual_tools = {
+            "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text", "shotcraft_moves.shot_sequence",
+            "video_toolchain_runner.build_cards", "kuaishou_render.render_cards", "kuaishou_render.gen_tts",
+            "kuaishou_render.render_segments", "kuaishou_render.concat_video", "kuaishou_render.gen_subtitles",
+            "kuaishou_render.encode_final", "visual_gate.py --cinema",
+        }
+        invocations = manifest.get("tool_invocation_manifest", {}).get("invocations", {}) or {}
+        for name, record in invocations.items():
+            if not isinstance(record, dict) or record.get("status") != "planned_internal":
+                continue
+            if name in actual_tools:
                 record["status"] = "ok"
                 record["artifact"] = str(generated[0])
-        manifest.update({"ok": True, "output": str(generated[0]), "status": "rendered", "executed_tools": PLANNED_TOOLS})
+            else:
+                record["status"] = "not_invoked"
+                record["reason"] = "planned candidate was not called by the selected renderer"
+        manifest.update({
+            "ok": True,
+            "output": str(generated[0]),
+            "status": "rendered",
+            "executed_tools": [name for name, record in invocations.items() if isinstance(record, dict) and record.get("status") in {"ok", "generated"}],
+        })
         _register_visual_recipe_use(visual_recipe, plan, str(generated[0]))
+        # 2026-08-17 新增：渲染完成后自动归档规范 JSON + audio/ 到交付包根目录
+        # （08-13 规范：platform_source_matrix/scene_manifest/visual_recipe/bgm/tts/checkpoint/quality/publish/audio）
+        # 由 scripts/archive_delivery_package.py 统一执行，防止 render/ 产物漏归档
+        try:
+            from scripts.archive_delivery_package import archive_delivery_package_direct
+            archive_delivery_package_direct(output_dir)
+        except Exception as _archive_err:
+            manifest["archive_warning"] = f"delivery archive failed: {_archive_err}"
+        # 2026-08-16 新增：渲染完成后自动生成优化封面（取代 Hermes 手动生成）
+        try:
+            bg_for_cover = None
+            if materialized_backgrounds:
+                bg_for_cover = materialized_backgrounds[0].get("background_image") or materialized_backgrounds[0].get("path")
+            if bg_for_cover:
+                sys.path.insert(0, str(ROOT / "scripts"))
+                from gen_cover import generate_cover
+                orientation = "horizontal" if _primary_platform(plan) in {"bilibili", "youtube"} else "vertical"
+                cover_path = output_dir / "cover_1080x1920.jpg" if orientation == "vertical" else output_dir / "cover_1920x1080.jpg"
+                cover = generate_cover(
+                    title=title[:24], subtitle=_summary(script_body)[:36], hook="🔥 先收藏 慢慢看",
+                    bg_image=str(bg_for_cover), output_path=str(cover_path), orientation=orientation,
+                )
+                if cover:
+                    manifest["cover"] = str(cover)
+        except Exception:
+            pass
         _write_manifest(output_dir, manifest)
         print(json.dumps({"ok": True, "output": str(generated[0])}, ensure_ascii=False))
         return 0
@@ -369,7 +448,7 @@ def build_cards(
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
         card = {
             "layout": layout,
-            "t": title[:36] if index == 0 else _card_title(beat, index),
+            "t": title if index == 0 else _card_title(beat, index),
             "txt": beat,
             "tts": beat,
             "f": str(plan.get("template_family") or "video_toolchain"),
@@ -385,7 +464,7 @@ def build_cards(
         if visual_assignments:
             card["visual_asset"] = visual_assignments[index % len(visual_assignments)]
         if layout == "cover":
-            card.update({"sub": _summary(script_body)[:40], "hook": title[:42], "hook_prefix": "Auto selected video workflow"})
+            card.update({"sub": _summary(script_body), "hook": title, "hook_prefix": "Auto selected video workflow"})
         if layout == "card_stack":
             card["items"] = [beat, next_beat, title]
         if layout == "big_number":
@@ -645,13 +724,24 @@ def _content_driven_renderer(plan: dict, script_body: str, title: str, output_di
     try:
         from scripts.film_renderer import detect_element_shot
         segs = [s for s in re.split(r"\n\s*\n", text) if s.strip()]
+        # 2026-08-17 修复：检测所有段落（不只偶数段）——流程词"第一步/第二步"常在奇数段，
+        # 只检偶数段导致流程类内容永远不命中 film_renderer
         for idx, seg in enumerate(segs, 1):
-            if idx % 2 == 0 and detect_element_shot(seg):
+            if detect_element_shot(seg):
                 wants_element_motion = True
                 break
-        # 偶数段都不命中时，再查 title 本身（标题也可能是动效信号，且 title 会进 film_renderer 的 seg_title）
+        # 所有段都不命中时，再查 title 本身（标题也可能是动效信号，且 title 会进 film_renderer 的 seg_title）
         if not wants_element_motion and title and detect_element_shot(title):
             wants_element_motion = True
+        # 2026-08-17 英文兜底：所有段+标题都不命中时，检查是否英文评测/对比类内容
+        # 这类内容天然有对比结构（tool A vs tool B），应强制走 film_renderer
+        if not wants_element_motion and title and re.search(
+            r"(test|review|compare|top\s+\d|best|which|vs\.?|versus|head\s*-?\s*to\s*-?\s*head"
+            r"|tested|survived|winner|showdown|comparison|roundup|alternative)",
+            title, re.IGNORECASE,
+        ):
+            wants_element_motion = True
+            print(f"[content-driven-renderer] 英文评测类标题兜底 → film_renderer", file=sys.stderr)
     except Exception as exc:  # pragma: no cover - film_renderer 不可用时静默回退默认
         print(f"[content-driven-renderer] film_renderer import 失败，回退默认: {exc}", file=sys.stderr)
     if wants_element_motion:
@@ -693,13 +783,27 @@ def _renderer_command(renderer: Path, output_dir: Path, theme: str, title: str, 
     ]
 
 
-def _bgm_style(cinema_scenes: list[dict]) -> str:
+def _bgm_style(cinema_scenes: list[dict], text: str = "") -> str:
     for scene in cinema_scenes:
         scheme = scene.get("color_scheme") or {}
         hint = str(scheme.get("bgm_hint") or scheme.get("bgm") or "").strip()
         if hint:
             return hint[:80]
-    return "warm acoustic guitar and light piano"
+    # 2026-08-16 新增：按内容赛道选 BGM 曲风（不再固定 acoustic）
+    # 对应 voice_engine GENRE_VOICE_MAP 的赛道，让音频情绪与内容匹配
+    try:
+        from scripts.voice_engine import detect_genre
+        genre = detect_genre(text or "")
+        style_map = {
+            "pets": "light piano instrumental, cheerful, warm",
+            "finance": "classical piano instrumental, steady, professional",
+            "emotion": "soft piano instrumental, gentle, emotional",
+            "science": "minimal piano instrumental, clean, calm",
+            "tech": "warm acoustic guitar and light piano",
+        }
+        return style_map.get(genre, "warm acoustic guitar and light piano")
+    except Exception:
+        return "warm acoustic guitar and light piano"
 
 
 def _toolchain_contract(plan: dict, theme: str, bgm_style: str, renderer: Path, visual_recipe: dict | None = None) -> dict:
@@ -760,6 +864,10 @@ def _load_visual_recipe_registry() -> dict:
 
 
 def _recipe_reuse_gate(recipe: dict, plan: dict) -> dict:
+    # Isolated dry-runs must not read the production registry; tests can opt in
+    # with VISUAL_RECIPE_FINGERPRINT_REGISTRY to exercise collision behavior.
+    if os.environ.get("VIDEO_TOOLCHAIN_DRY_RUN") == "1" and not os.environ.get("VISUAL_RECIPE_FINGERPRINT_REGISTRY"):
+        return {"passed": True, "policy_enabled": True, "dry_run_isolated": True, "duplicate_count": 0, "duplicates": []}
     policy = _duplication_policy().get("same_day_template_duplicate") or {}
     if policy.get("enabled") is False:
         return {"passed": True, "policy_enabled": False}
@@ -769,9 +877,19 @@ def _recipe_reuse_gate(recipe: dict, plan: dict) -> dict:
     registry = _load_visual_recipe_registry()
     cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
     platforms = {str(item).casefold() for item in (plan.get("platforms") or []) if str(item).strip()}
+    recipe_family = str(recipe.get("template_family") or plan.get("template_family") or "").strip()
+    recipe_pipeline = str(recipe.get("selected_pipeline") or plan.get("selected_pipeline") or "").strip()
     duplicates = []
     for item in registry.get("recipes", []):
-        if not isinstance(item, dict) or str(item.get("core_fingerprint") or "").strip() != core:
+        if not isinstance(item, dict):
+            continue
+        item_core = str(item.get("core_fingerprint") or "").strip()
+        item_family = str(item.get("template_family") or "").strip()
+        item_pipeline = str(item.get("selected_pipeline") or "").strip()
+        item_platforms = {str(value).casefold() for value in (item.get("platforms") or []) if str(value).strip()}
+        same_core = bool(core and item_core == core and item_platforms)
+        same_visual_family = bool(recipe_family and item_family == recipe_family and item_platforms)
+        if not (same_core or same_visual_family):
             continue
         used_at = _parse_utc(item.get("used_at"))
         if used_at and used_at < cutoff:
@@ -956,13 +1074,11 @@ def _card_title(text: str, index: int) -> str:
     text = str(text or "").strip()
     if not text:
         return f"Scene {index + 1}"
-    # 中文为主：直接取前 16 字符
+    # 英文标题保留完整首句；中文标题仍保持短标题，正文由卡片模块承载。
     if re.search(r"[\u4e00-\u9fff]", text):
         return text[:16]
-    words = text.split()
-    if len(words) >= 4:
-        return " ".join(words[:6])[:36]
-    return text[:36] or f"Scene {index + 1}"
+    first = re.split(r"[.!?;]", text, maxsplit=1)[0].strip()
+    return first or text or f"Scene {index + 1}"
 
 
 def _summary(text: str) -> str:
@@ -979,6 +1095,12 @@ def _tags(plan: dict) -> list[str]:
 
 
 def _write_manifest(output_dir: Path, manifest: dict) -> None:
+    context_path = output_dir / "platform_workflow_context.json"
+    if context_path.is_file() and "platform_workflow_context" not in manifest:
+        try:
+            manifest["platform_workflow_context"] = json.loads(context_path.read_text(encoding="utf-8"))
+        except Exception:
+            manifest["platform_workflow_context"] = {"path": str(context_path), "loaded": False}
     (output_dir / "video_toolchain_runner_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

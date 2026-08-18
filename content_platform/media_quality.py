@@ -485,6 +485,10 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
     form = str(packet.get("content_form", "")).casefold()
     allows_no_subtitles = form in {"knowledge_image_video", "image_card_knowledge_video", "visual_card_voiceover"}
     duration = float(audio.get("duration", 0))
+    duration_policy = packet.get("duration_policy") or {}
+    experimental_short = isinstance(duration_policy, dict) and str(duration_policy.get("mode") or "").casefold() == "experimental_short"
+    minimum_duration = float(duration_policy.get("min_seconds") or 25) if experimental_short else 40.0
+    maximum_duration = float(duration_policy.get("max_seconds") or 40) if experimental_short else 100.0
     long_reason = str(packet.get("duration_strategy_reason", "")).strip()
     gates = {
         "preflight_manifest": validate_preflight_manifest(packet, str(packet.get("platform") or "")),
@@ -514,12 +518,12 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "tool_selection": validate_tool_selection_evidence(packet, content_kind="video"),
         "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
         "duration": {
-            "passed": duration >= 40 and (duration <= 100 or bool(long_reason)),
+            "passed": duration >= minimum_duration and (duration <= maximum_duration or bool(long_reason)),
             "actual": duration,
-            "recommended_range_seconds": [40, 100],
+            "recommended_range_seconds": [minimum_duration, maximum_duration],
             "long_reason": long_reason,
         },
-        "audio_stream": {"passed": int(audio.get("stream_count", 0)) > 0 and duration >= 40},
+        "audio_stream": {"passed": int(audio.get("stream_count", 0)) > 0 and duration >= minimum_duration},
         "audio_composition": {
             "passed": bool(packet.get("voiceover_present", True)) and bool(packet.get("background_music_present")),
         },
@@ -896,6 +900,8 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
     video = validate_video_packet(packet)
     strategy = packet.get("strategy_brief") or {}
     trend = packet.get("trend_evidence") or strategy.get("trend_evidence") or {}
+    selection_mode = str(packet.get("selection_mode") or strategy.get("selection_mode") or "trend_driven").casefold()
+    editorial = packet.get("editorial_evidence") or strategy.get("editorial_evidence") or {}
     workflow = packet.get("workflow_evidence") or {}
     card_sequence = packet.get("knowledge_card_sequence") or []
     bgm = packet.get("bgm") or packet.get("background_music") or packet.get("bgm_source") or {}
@@ -916,24 +922,39 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
     }
     bgm_source = str(bgm.get("source") or "").casefold()
     normalized_phase = str(phase or "preflight").casefold()
-    required_steps = [
-        "strategy",
-        "trend_analysis",
-        "content_generation",
-        "quality_gate",
-    ]
+    selection_step = "editorial_selection" if selection_mode == "editorial_calendar" else "trend_analysis"
+    required_steps = ["strategy", selection_step, "content_generation", "quality_gate"]
     if normalized_phase in {"postcheck", "post_delivery", "post-delivery"}:
         required_steps.extend(["scheduled_upload", "management_postcheck"])
     completed = {str(item).casefold() for item in (workflow.get("completed_steps") or [])}
+    trend_evidence_passed = (
+        bool(trend.get("source"))
+        and bool(trend.get("collected_at"))
+        and len(trend.get("samples") or []) >= 3
+    )
+    editorial_evidence_passed = (
+        selection_mode == "editorial_calendar"
+        and bool(editorial.get("strategy_source"))
+        and bool(editorial.get("calendar_column"))
+        and bool(editorial.get("planned_for"))
+        and editorial.get("dedupe_passed") is True
+    )
+    duration_policy = packet.get("duration_policy") or {}
+    experimental_short = isinstance(duration_policy, dict) and str(duration_policy.get("mode") or "").casefold() == "experimental_short"
+    minimum_duration = float(duration_policy.get("min_seconds") or 25) if experimental_short else 40.0
+    maximum_duration = float(duration_policy.get("max_seconds") or 40) if experimental_short else None
+    observed_duration = float(artifact_probe.get("duration_seconds") or 0)
+    duration_passed = observed_duration >= minimum_duration and (
+        maximum_duration is None or observed_duration <= maximum_duration
+    )
     gates = {
         "base_video_quality": {"passed": bool(video.get("passed")), "failed": video.get("failed_dimensions", [])},
         "strategy_before_generation": {
             "passed": all(strategy.get(key) for key in ["target_user", "channel_lane", "topic_basis", "content_form"])
         },
         "kuaishou_trend_evidence": {
-            "passed": bool(trend.get("source"))
-            and bool(trend.get("collected_at"))
-            and len(trend.get("samples") or []) >= 3,
+            "passed": trend_evidence_passed or editorial_evidence_passed,
+            "selection_mode": selection_mode,
             "sample_count": len(trend.get("samples") or []),
         },
         "workflow_steps": {
@@ -969,7 +990,7 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
         },
         "video_artifact_probe": {
             "passed": bool(artifact_probe.get("file_exists"))
-            and float(artifact_probe.get("duration_seconds") or 0) >= 40
+            and duration_passed
             and int(artifact_probe.get("audio_stream_count") or 0) >= 1
             and -32 <= float(artifact_probe.get("mean_volume_db") or -99) <= -6
             and str(artifact_probe.get("subtitle_position") or "").casefold() in {"lower_third", "readable_cards"}
@@ -978,7 +999,7 @@ def validate_kuaishou_auto_packet(packet: dict[str, Any], phase: str = "prefligh
             and str(artifact_probe.get("resolution") or "") in {"1080x1920", "2160x3840", "1440x2560"},
             "required": [
                 "file_exists",
-                "duration_seconds >= 40",
+                f"duration_seconds >= {minimum_duration:g}" + (f" and <= {maximum_duration:g}" if maximum_duration is not None else ""),
                 "audio_stream_count >= 1",
                 "-32 <= mean_volume_db <= -6",
                 "subtitle_position lower_third/readable_cards",

@@ -130,27 +130,44 @@ def build_due_tasks(
         candidates = list(rank_for_platform(platform, items, raw) or [])
         if candidate_filter is not None:
             candidates = [candidate for candidate in candidates if candidate_filter(platform, candidate, raw)]
+        editorial = _editorial_fallback_candidate(raw)
+        selected_mode = ""
+        selected_matrix: dict[str, Any] | None = None
         if not platform:
             row.update({"state": "blocked", "reason": "slot has no platform"})
-        elif not candidates:
-            row.update({"state": "blocked", "reason": "no independently ranked topic candidate"})
         else:
             selected = None
+            rejected_candidate = None
+            rejected_matrix = None
             for candidate in candidates:
                 identity = _topic_identity(candidate)
                 if identity in reserved_topic_fingerprints:
                     continue
                 previous = selected_topics.get(identity)
+                matrix = _platform_evidence_matrix(platform, candidate, source_report, strategy, report_path=report_path)
+                if trend_evidence_mode in {"shadow", "enforce"} and not matrix["real_platform_collection_verified"]:
+                    rejected_candidate = rejected_candidate or candidate
+                    rejected_matrix = rejected_matrix or matrix
+                    continue
                 if previous is None or _allows_evidenced_overlap(platform, candidate, raw, previous, source_report, strategy):
                     selected = candidate
+                    selected_matrix = matrix
                     break
             if not selected:
-                row.update({
-                    "state": "blocked",
-                    "reason": "topic already reserved by recent delivery" if any(_topic_identity(candidate) in reserved_topic_fingerprints for candidate in candidates) else "no independently evidenced cross-platform topic candidate",
-                })
-                tasks.append(row)
-                continue
+                if editorial is None:
+                    if rejected_candidate is not None:
+                        selected = rejected_candidate
+                        selected_matrix = rejected_matrix
+                    else:
+                        row.update({
+                            "state": "blocked",
+                            "reason": "topic already reserved by recent delivery" if any(_topic_identity(candidate) in reserved_topic_fingerprints for candidate in candidates) else "no independently evidenced cross-platform topic candidate",
+                        })
+                        tasks.append(row)
+                        continue
+                else:
+                    selected = editorial
+                    selected_mode = "editorial_calendar"
             adaptation = str(raw.get("platform_adaptation_reason") or f"adapt {selected['title']} to {platform} with a platform-specific format and CTA")
             signal = str(raw.get("platform_signal") or f"{platform} source matrix contains current platform and cross-platform evidence")
             trend_candidate = build_trend_candidate(
@@ -165,7 +182,7 @@ def build_due_tasks(
                 platform_fit_score=float(selected.get("platform_fit_score") or selected.get("score") or 0),
             )
             trend_gate = validate_trend_candidate(trend_candidate)
-            matrix = _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
+            matrix = selected_matrix or _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
             selected_topics.setdefault(
                 _topic_identity(selected),
                 {"platform": platform, "adaptation": adaptation, "signal": signal, "stage": str(raw.get("stage") or "")},
@@ -188,19 +205,45 @@ def build_due_tasks(
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
                 "state": "ready_for_plan",
             })
-            evidence_failure = ""
-            if not trend_gate.get("passed"):
-                evidence_failure = "trend candidate evidence below 8-attempt/5-success threshold"
-            elif not matrix["real_platform_collection_verified"]:
-                evidence_failure = "platform-specific real trend collection missing"
-            if evidence_failure and trend_evidence_mode in {"shadow", "enforce"}:
-                row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": False, "reason": evidence_failure}
-                if trend_evidence_mode == "enforce":
-                    row.update({"state": "blocked", "reason": evidence_failure})
+            if selected_mode:
+                row["selection_mode"] = selected_mode
+                row["editorial_evidence"] = selected["editorial_evidence"]
+                row["trend_evidence_gate"] = {"mode": selected_mode, "passed": True}
             else:
-                row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": not bool(evidence_failure)}
+                evidence_failure = ""
+                if not trend_gate.get("passed"):
+                    evidence_failure = "trend candidate evidence below 8-attempt/5-success threshold"
+                elif not matrix["real_platform_collection_verified"]:
+                    evidence_failure = "platform-specific real trend collection missing"
+                if evidence_failure and trend_evidence_mode in {"shadow", "enforce"}:
+                    row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": False, "reason": evidence_failure}
+                    if trend_evidence_mode == "enforce":
+                        row.update({"state": "blocked", "reason": evidence_failure})
+                else:
+                    row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": not bool(evidence_failure)}
         tasks.append(row)
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
+
+
+def _editorial_fallback_candidate(slot: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a clearly-labelled calendar item only when its evidence is complete."""
+    evidence = slot.get("editorial_fallback")
+    if not isinstance(evidence, dict):
+        return None
+    required = ("topic", "strategy_source", "calendar_column", "planned_date", "dedupe")
+    if any(not str(evidence.get(field) or "").strip() for field in required):
+        return None
+    topic = str(evidence["topic"]).strip()
+    return {
+        "title": topic,
+        "source": "editorial_calendar",
+        "fingerprint": str(evidence.get("fingerprint") or normalize_topic(topic)),
+        "direction": str(evidence.get("direction") or normalize_topic(topic)),
+        "score": 0.0,
+        "freshness_score": 0.0,
+        "platform_fit_score": 0.0,
+        "editorial_evidence": {field: str(evidence[field]) for field in required[1:]},
+    }
 
 
 def _allows_evidenced_overlap(
@@ -270,7 +313,13 @@ def _platform_evidence_matrix(
         and bool(item.get("collected_at"))
         and any(alias in str(item.get("source") or "").casefold() for alias in aliases)
     ]
-    candidate_source_ok = any(_source_matches(candidate_source, str(item.get("source") or "")) for item in successful_platform_sources)
+    # A platform collection proves only the source that actually yielded the
+    # candidate.  Do not let ``platform:web_search`` inherit trust from a
+    # separately collected native feed merely because both share a prefix.
+    candidate_source_ok = any(
+        candidate_source == str(item.get("source") or "").casefold()
+        for item in successful_platform_sources
+    )
     samples = []
     if candidate_source_ok and str(candidate.get("title") or "").strip():
         samples.append(
@@ -280,9 +329,10 @@ def _platform_evidence_matrix(
                 **({"url": str(candidate["url"])} if candidate.get("url") else {}),
             }
         )
-    # Strategy snapshots remain useful context but never substitute for a
-    # successful platform collection with a timestamp and actual sample.
-    verified = bool(successful_platform_sources and samples)
+    # Strategy snapshots and a successful native collector are useful context,
+    # but neither can validate an unrelated candidate.  The candidate must
+    # come from the timestamped platform source recorded above.
+    verified = candidate_source_ok
     platform_fit_reason = str(candidate.get("platform_fit_reason") or "").strip()
     if verified and not platform_fit_reason:
         platform_fit_reason = f"candidate source {candidate.get('source') or platform} matches the {platform} evidence lane"

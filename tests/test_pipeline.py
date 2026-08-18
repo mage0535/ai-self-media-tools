@@ -422,6 +422,39 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(reviewed["draft_meta"]["content_hygiene"]["status"], "review")
         self.assertTrue(reviewed["draft_meta"]["cornerstone_mode"])
 
+    def test_unsourced_claims_block_before_media_generation(self):
+        job = self.pipeline.create("Editorial engineering guide", ["juejin"], {
+            "selection_mode": "editorial_calendar",
+            "editorial_evidence": {
+                "strategy_source": "growth_strategy:juejin:latest",
+                "calendar_column": "engineering",
+                "planned_date": "2026-08-18",
+                "dedupe": "7d_clear",
+            },
+        })
+        compliance = {
+            "level": "review",
+            "findings": [{"code": "numeric_claim_without_source", "level": "review"}],
+            "platforms": ["juejin"],
+        }
+
+        with patch.object(self.pipeline.compliance, "evaluate", return_value=compliance), \
+             patch.object(self.pipeline, "_generate_optional_media") as generate_media:
+            blocked = self.pipeline.run(job["id"])
+
+        self.assertEqual(blocked["state"], "blocked")
+        generate_media.assert_not_called()
+
+    def test_prepopulated_markdown_keeps_fenced_code_structure(self):
+        job = self.pipeline.create("Code guide", ["juejin"], {"audience": "builders"})
+        body = "# Guide\n\n```python\ndef run():\n    return True\n```\n\n" + ("正文内容。" * 100)
+        with self.store.connect() as conn:
+            conn.execute("UPDATE jobs SET title=?, body=? WHERE id=?", ("Code guide", body, job["id"]))
+
+        reviewed = self.pipeline.run(job["id"])
+
+        self.assertIn("def run():\n    return True", reviewed["body"])
+
 
 if __name__ == "__main__":
     unittest.main()

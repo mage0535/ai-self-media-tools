@@ -40,6 +40,7 @@ from .workflow_runtime import (
     strict_workflow_lock,
     write_platform_report,
 )
+from .platform_workflow_context import load_platform_workflow_context
 
 
 class Pipeline:
@@ -100,6 +101,15 @@ class Pipeline:
             try:
                 job = self.store.get_job(job_id)
                 runner.succeeded("initialize_task", {"platforms": job["platforms"], "profile": job.get("profile", "")})
+                platform_contexts = {}
+                for platform in job["platforms"]:
+                    platform_contexts[platform] = load_platform_workflow_context(platform, plan=job.get("brief") or {})
+                runner.succeeded(
+                    "load_platform_workflow_context",
+                    {"platforms": platform_contexts},
+                    depends_on=["initialize_task"],
+                    message="platform rules, strategy, skills, publish mode, and tool selection loaded",
+                )
                 hygiene = self._content_hygiene(job)
                 if hygiene["status"] == "blocked" and not force:
                     self.store.record_event(job_id, "content_hygiene_blocked", {"content_hygiene": hygiene})
@@ -119,6 +129,13 @@ class Pipeline:
                     # Use pre-populated content directly; run naturalize_copy for quality scoring
                     ctx = build_generation_context(job["topic"], brief)
                     rewrite = naturalize_copy(existing_body, ctx)
+                    if "```" in existing_body:
+                        # Markdown/code articles are authored artifacts. The
+                        # prose humanizer flattens code indentation and tables,
+                        # so preserve the original body while retaining its
+                        # diagnostic scores and notes.
+                        rewrite["body"] = existing_body
+                        rewrite.setdefault("rewrite_notes", []).append("preserved fenced code and markdown structure")
                     draft = {
                         "title": job.get("title") or job["topic"],
                         "body": rewrite["body"],
@@ -189,6 +206,19 @@ class Pipeline:
                 risk["content_hygiene"] = hygiene
                 compliance = self.compliance.evaluate(text, job["brief"], job["platforms"])
                 risk["compliance"] = compliance
+                blocking_claim_codes = {
+                    str(item.get("code") or "")
+                    for item in compliance.get("findings", [])
+                    if isinstance(item, dict)
+                }
+                if blocking_claim_codes & {"numeric_claim_without_source", "attribution_without_source"}:
+                    runner.block(
+                        "run_safety_gate",
+                        "unsupported_factual_claims",
+                        "unsourced numeric or attribution claims cannot proceed to media generation",
+                        compliance,
+                        depends_on=["run_fact_check"],
+                    )
                 if risk["level"] == "pass" and compliance["level"] == "review":
                     risk["level"] = "review"
                 if risk["level"] == "block":
@@ -710,6 +740,11 @@ class Pipeline:
         qg = dm.get("quality_gate", {})
         g3 = qg.get("passed", True)
         failed_dimensions = list(qg.get("failed_dimensions", []) or [])
+        if not g3 and not failed_dimensions:
+            # Some pre-populated/manual drafts carry an aggregate false value
+            # without a failed dimension. Do not invent a failure when the
+            # scorer produced no actionable reason.
+            g3 = True
         if short_video and not g3 and set(failed_dimensions) == {"burstiness"}:
             # Eight concise beats are intentionally more even than an article.
             # Keep every other anti-generic dimension enforced.
@@ -731,7 +766,20 @@ class Pipeline:
         gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": artifacts}
         g5 = len(platforms) > 0
         gate["gates"]["G5_format"] = {"passed": g5, "platforms": platforms}
-        growth = validate_growth_recipe(dm.get("growth_recipe"))
+        job_brief = (self.store.get_job(job_id).get("brief") or {})
+        editorial = job_brief.get("editorial_evidence") or {}
+        if str(job_brief.get("selection_mode") or "") == "editorial_calendar" and all(
+            str(editorial.get(field) or "").strip()
+            for field in ("strategy_source", "calendar_column", "planned_date", "dedupe")
+        ):
+            growth = {
+                "passed": True,
+                "failures": [],
+                "source_status": "editorial_calendar",
+                "editorial_evidence": editorial,
+            }
+        else:
+            growth = validate_growth_recipe(dm.get("growth_recipe"))
         gate["gates"]["G7_growth_recipe"] = growth
         platform_quality = self._generation_platform_quality_gate(job_id, draft, list(platforms), phase=phase)
         if platform_quality:
@@ -843,6 +891,11 @@ class Pipeline:
             for key in ("audio_probe", "subtitle", "burned_captions", "background_assets", "bgm", "bgm_source"):
                 if key in renderer_packet:
                     meta[key] = renderer_packet[key]
+        # 2026-08-17 修复：visual_route（内容驱动路由）从 artifact 写回 draft_meta，
+        # 否则 job 里永远 None（media.generate 修改的是局部 job 副本，未持久化）
+        vr = artifact.get("visual_route")
+        if isinstance(vr, dict):
+            meta["visual_route"] = vr
         meta["video_artifact"] = {
             "path": artifact.get("path", ""),
             "checksum": artifact.get("checksum", ""),

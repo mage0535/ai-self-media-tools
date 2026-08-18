@@ -526,25 +526,59 @@ body {{ width: {width}px; height: {height}px; overflow: hidden; font-family: 'No
 
 def shot_plan_for_text(text, num_shots=4):
     """
-    根据文案内容自动选择镜头序列。
+    根据文案内容自动选择镜头序列（2026-08-16 修复：不再固定 12 种循环）。
+
+    之前固定 [hero-card + 12种循环 + scale-bounce]，121 种镜头只用了 ~12 种。
+    现在按内容关键词从 8 大镜头池（opening/data/transition/type/ui/interaction/effects/outro）选择，
+    镜头语言更丰富且匹配内容。
     返回 [(shot_name, duration, params)]。
     """
     plan = []
-    # 开场
-    plan.append(("hero-card", 90, {"target": "title"}))
-    # 内容段落 - 交替使用不同镜头（8卡需≥6种，避免同批循环重复）
-    paragraphs = [p.strip() for p in text.replace("\r\n", "\n").split("\n\n") if len(p.strip()) > 10]
-    shot_cycle = [
-        "stagger-fade", "fly-in-left", "depth-layer", "tilt-reveal",
-        "dolly-in", "typewriter", "card-flip-reveal", "wipe-up",
-        "crane-rise-reveal", "spotlight-sweep-moves", "kinetic-type", "split-flap-title",
+    # 开场：从 opening 池选（hero-card 优先保留为默认，但加入更多开场镜头）
+    opening_pool = [
+        "hero-card", "crane-rise-reveal", "brand-ink-open", "crash-zoom",
+        "stagger-fade", "tilt-reveal", "fly-in-left", "dolly-in",
+        "depth-layer", "space-camera-moves", "overhead-camera-moves", "typewriter",
     ]
-    mid_count = min(num_shots - 2, max(1, len(paragraphs)))
+    plan.append((opening_pool[0], 90, {"target": "title"}))
+
+    # 内容段落 - 按内容类型选镜头池（避免固定循环）
+    paragraphs = [p.strip() for p in text.replace("\r\n", "\n").split("\n\n") if len(p.strip()) > 10]
+    text_lower = text.casefold()
+
+    # 内容类型 → 镜头池
+    if any(k in text_lower for k in ["数字", "数据", "统计", "提升", "倍", "performance", "stat", "number", "%"]):
+        content_pool = ["odometer-digit-roll", "chart-live-moves", "gauge-readout-moves",
+                        "before-after-slider-scrub", "crash-zoom", "spotlight-sweep-moves"]
+    elif any(k in text_lower for k in ["步骤", "流程", "工作流", "教程", "step", "workflow", "how to"]):
+        content_pool = ["beat-step-list-theme-cycle", "command-palette-summon", "row-embed",
+                        "stagger-fade", "canvas-materialize-moves", "list-stack-press"]
+    elif any(k in text_lower for k in ["对比", "哪个", "怎么选", "vs", "比较", "compare"]):
+        content_pool = ["before-after-slider-scrub", "card-flip-reveal", "morph-from-primitive",
+                        "split-flap-title", "wipe-up", "color-block-step-wipe"]
+    elif any(k in text_lower for k in ["情感", "治愈", "故事", "猫", "宠物", "温暖", "emotion", "heart"]):
+        content_pool = ["bubble-swarm-takeover", "glow-flyline-moves", "gradient-word-sweep",
+                        "kinetic-type", "spotlight-sweep-moves", "particle-celebrate-hits"]
+    else:
+        # 默认：从更广的池子轮换（含 camera/ui/interaction/effects 各类）
+        content_pool = [
+            "stagger-fade", "fly-in-left", "depth-layer", "tilt-reveal",
+            "dolly-in", "typewriter", "card-flip-reveal", "wipe-up",
+            "crane-rise-reveal", "spotlight-sweep-moves", "kinetic-type", "split-flap-title",
+            "command-palette-summon", "icon-performance-moves", "ai-stream-response",
+            "montage-rhythm-moves", "deck-deal", "canvas-materialize-moves",
+        ]
+
+    mid_count = num_shots - 2 if num_shots > 2 else max(1, num_shots - 1)
+    # 随机起点 + 步进（避免每次同一顺序，但仍轮换）
+    start = random.randint(0, len(content_pool) - 1) if len(content_pool) > 1 else 0
     for i in range(mid_count):
-        shot = shot_cycle[i % len(shot_cycle)]
+        shot = content_pool[(start + i) % len(content_pool)]
         plan.append((shot, 60, {"count": random.randint(3, 6)}))
-    # 结尾
-    plan.append(("scale-bounce", 50, {"target": "cta"}))
+
+    # 结尾：从 outro 池选（scale-bounce 保留，但加入其他结尾镜头）
+    outro_pool = ["scale-bounce", "edit-hook-moves", "brand-frame-snap", "neon-triple-marquee"]
+    plan.append((random.choice(outro_pool), 50, {"target": "cta"}))
     return plan
 
 

@@ -10,4 +10,4 @@ target="${AI_SELF_MEDIA_HERMES_TARGET:-}"
 [[ -n "$target" ]] || exit 0
 message="[ai-self-media:${component}] ${state}"
 [[ -n "$detail" ]] && message+=$'\n'"detail=${detail}"
-hermes send --to "$target" --quiet "$message"
+hermes send --to "$target" --quiet "$message" || exit 0

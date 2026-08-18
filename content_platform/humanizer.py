@@ -101,7 +101,7 @@ def _hermes_llm_call(prompt: str, system: str = "", timeout: int = 60) -> str:
     if not api_key:
         return ""
 
-    model = model_cfg.get(provider_name, "deepseek-v4-flash")
+    model = model_cfg.get("default") or model_cfg.get(provider_name, "")
 
     payload = {
         "model": model,

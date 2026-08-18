@@ -568,7 +568,8 @@ def _cloudflare_image(
     elif account_id and token:
         quoted_model = urllib.parse.quote(model_name, safe="/@")
         url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{quoted_model}"
-        payload = json.dumps({"prompt": prompt[:2048], "seed": int(time.time()) % 2_147_483_647, "steps": 4}).encode("utf-8")
+        # 2026-08-16 修复：flux-1-schnell 不接受 seed/steps（HTTP 400），仅传 prompt
+        payload = json.dumps({"prompt": prompt[:2048]}).encode("utf-8")
     else:
         raise ImageProviderError("Cloudflare image provider is not configured")
     headers = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"}

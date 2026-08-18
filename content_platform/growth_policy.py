@@ -6,6 +6,7 @@ from typing import Any
 
 
 GROWTH_POLICY_ID = "growth_quality_policy_v1"
+GROWTH_POLICY_VERSION = "2026-08-17"
 
 VIDEO_CONTENT_HINTS = {"video", "short", "repost", "microcase"}
 
@@ -164,10 +165,22 @@ XIAOHONGSHU_RECOVERY_PLAYBOOK: dict[str, Any] = {
 
 PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
     "douyin": {
-        "primary_metric": "completion_rate",
-        "secondary_metrics": ["three_second_view_rate", "comment_rate", "follow_conversion_rate"],
-        "rules": ["strong_first_motion", "lower_third_subtitles", "matched_real_footage", "single_best_candidate"],
-        "target_action": "comment_or_follow",
+        # 2026-08-16 更新：收藏率取代完播率成 TOP1（196篇公众号文章提炼，platform_rules_2026.md）
+        "primary_metric": "save_rate",
+        "secondary_metrics": ["revisit_rate", "loyal_fan_interaction_rate", "three_second_view_rate", "quality_comment_rate", "completion_rate"],
+        "rules": [
+            "strong_first_motion",
+            "lower_third_subtitles",
+            "matched_real_footage",
+            "single_best_candidate",
+            "save_value_content_checklist",  # 收藏型干货（步骤/清单/模板/避坑）
+            "save_guide_cta",               # 结尾"建议收藏"
+            "original_declaration_check",   # 原创声明勾选 +20-40% 流量
+            "open_comment_prompt",          # 有效评论引导（10字以上观点），禁封闭问答
+            "seven_day_longtail_retention", # 7天长尾赛马，勿首日删视频
+            "loyal_fan_first_hour_reply",   # 发布1小时黄金窗口回评
+        ],
+        "target_action": "save_or_comment",
     },
     "kuaishou": {
         "primary_metric": "completion_rate",
@@ -191,6 +204,12 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
             "wechat_search_seo_layout",
             "cross_platform_follow_funnel",
             "manual_backend_metrics_review_when_api_unavailable",
+            # 2026-08-16 更新（platform_rules_2026.md）
+            "ai_generated_label_required",       # 用AI必须打AI标注，否则影响推荐权重
+            "no_pure_ai_auto_creation",          # 非真人自动化创作违规（运营规范3.27）
+            "tietu_500_char_condense",           # 贴图红利：长文浓缩500字+卡片图
+            "tietu_emotional_resonance_topic",   # 贴图选题：现实共鸣话题
+            "publish_peak_slots",                # 发布高峰早7-9/中12-14/晚20-23
         ],
         "target_action": "read_to_follow",
         "wechat_growth_playbook": WECHAT_RECOVERY_PLAYBOOK,
@@ -208,8 +227,9 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
         "target_action": "share_or_save",
     },
     "xiaohongshu": {
-        "primary_metric": "click_through_rate",
-        "secondary_metrics": ["save_rate", "comment_rate", "follow_conversion_rate"],
+        # 2026-08-16 更新：星云5.0 + 8月新规（AI内容2设置/同质化严查，platform_rules_2026.md）
+        "primary_metric": "save_rate",
+        "secondary_metrics": ["avg_stay_seconds", "comment_rate", "follow_conversion_rate", "click_through_rate"],
         "rules": [
             "authentic_cover",
             "pain_point_title",
@@ -219,6 +239,11 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
             "first_image_specific_payoff",
             "saveable_checklist_required",
             "manual_1h_24h_72h_review",
+            "ai_creator_identity_setting",   # 8月新规：职业身份设「AI创作者」
+            "ai_content_secondary_creation", # AI内容必须二次创作（剪辑/配音/字幕/特效）
+            "ai_content_declaration",        # AI内容必须声明
+            "homogenization_semantic_dedup", # 同质化严查：语义去重禁批量洗稿
+            "single_primary_keyword",        # 每篇只定一个主词
         ],
         "target_action": "save_or_comment",
         "xiaohongshu_growth_playbook": XIAOHONGSHU_RECOVERY_PLAYBOOK,
@@ -308,6 +333,36 @@ PLATFORM_GROWTH_RULES: dict[str, dict[str, Any]] = {
     },
     "rednote": {
         "alias": "xiaohongshu",
+    },
+    # 2026-08-16：douyin 双账号变体映射到 douyin 规则（收藏率 TOP1 等 2026 规则自动生效）
+    "douyin_ai": {
+        "alias": "douyin",
+    },
+    "douyin_pet": {
+        # 猫咪号专属：赞粉比 174:1 → 转粉是 P0，但收藏率/原创声明等 2026 规则仍生效
+        "primary_metric": "follow_conversion_rate",
+        "secondary_metrics": ["save_rate", "loyal_fan_interaction_rate", "three_second_view_rate", "completion_rate"],
+        "rules": [
+            "strong_first_motion",
+            "lower_third_subtitles",
+            "matched_real_footage",
+            "single_best_candidate",
+            "follow_reason_cta",            # 关注理由（系列化/每天一只猫）
+            "series_collection_build",     # 合集功能（EP系列/追更动力）
+            "save_value_content_checklist", # 科普内容收藏型干货
+            "save_guide_cta",
+            "original_declaration_check",
+            "open_comment_prompt",
+            "seven_day_longtail_retention",
+            "loyal_fan_first_hour_reply",
+        ],
+        "target_action": "follow_or_save",
+    },
+    "wechat_official": {
+        "alias": "wechat",
+    },
+    "weixin": {
+        "alias": "wechat",
     },
 }
 

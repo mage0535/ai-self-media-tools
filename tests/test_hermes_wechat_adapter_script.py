@@ -2,6 +2,7 @@ import sys
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+import json
 
 from scripts import hermes_wechat_adapter
 from scripts import gzh_publish_license
@@ -35,6 +36,89 @@ def test_generated_image_path_keeps_legacy_path_key(tmp_path):
     image.write_bytes(b"image")
 
     assert hermes_wechat_adapter._generated_image_path({"path": str(image)}, tmp_path / "fallback.jpg") == image
+
+
+def test_markdown_replaces_section_placeholders_without_empty_image_links():
+    packet = {
+        "title": "Working title",
+        "body": "Intro\n\n## One\n\n![weekly]()\n\n## Two\n\n![meeting]()\n\n## Three\n\n![email]()",
+    }
+
+    markdown = hermes_wechat_adapter._markdown_with_inline_images(
+        packet,
+        "https://cdn.example/cover.jpg",
+        [
+            "https://cdn.example/weekly.jpg",
+            "https://cdn.example/meeting.jpg",
+            "https://cdn.example/email.jpg",
+        ],
+    )
+
+    assert "![](https://cdn.example/cover.jpg)" in markdown
+    assert "![weekly](https://cdn.example/weekly.jpg)" in markdown
+    assert "![meeting](https://cdn.example/meeting.jpg)" in markdown
+    assert "![email](https://cdn.example/email.jpg)" in markdown
+    assert "![]()" not in markdown
+
+
+def test_markdown_rejects_unresolved_section_placeholders():
+    packet = {"body": "## One\n\n![weekly]()\n\n## Two\n\n![meeting]()"}
+
+    try:
+        hermes_wechat_adapter._markdown_with_inline_images(packet, "", ["https://cdn.example/one.jpg"])
+    except ValueError as exc:
+        assert "unresolved inline image" in str(exc)
+    else:
+        raise AssertionError("unresolved placeholders must block the draft")
+
+
+def test_draft_postcheck_rejects_missing_inline_images(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps({
+                "item": [{
+                    "media_id": "draft-1",
+                    "content": {"news_item": [{"title": "Working title", "content": "<p>text only</p>"}]},
+                }],
+            }).encode("utf-8")
+
+    monkeypatch.setattr(hermes_wechat_adapter.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse())
+
+    result = hermes_wechat_adapter._batchget_confirm("token", "draft-1", "Working title", expected_inline_images=3)
+
+    assert result["passed"] is False
+    assert result["inline_image_count"] == 0
+
+
+def test_draft_postcheck_counts_wechat_data_src_images(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            content = "".join(f'<img data-src="https://cdn.example/{index}.jpg">' for index in range(4))
+            return json.dumps({
+                "item": [{
+                    "media_id": "draft-1",
+                    "content": {"news_item": [{"title": "Working title", "content": content}]},
+                }],
+            }).encode("utf-8")
+
+    monkeypatch.setattr(hermes_wechat_adapter.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse())
+
+    result = hermes_wechat_adapter._batchget_confirm("token", "draft-1", "Working title", expected_inline_images=3)
+
+    assert result["passed"] is True
+    assert result["inline_image_count"] == 4
 
 
 def test_publish_license_gate_blocks_missing_title(tmp_path):
