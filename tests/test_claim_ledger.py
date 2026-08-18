@@ -1,4 +1,4 @@
-from content_platform.claim_ledger import validate_claims
+from content_platform.claim_ledger import sanitize_unsupported_claims, validate_claims
 
 
 def test_claim_gate_rejects_unsourced_numeric_and_first_person_operations() -> None:
@@ -28,3 +28,11 @@ def test_claim_gate_rejects_malformed_code_fence() -> None:
 def test_claim_gate_allows_unsourced_advice_without_factual_claims() -> None:
     result = validate_claims("先确认负责人，再记录下一步。不要让工具替你猜。", [])
     assert result["passed"] is True
+
+
+def test_claim_sanitizer_removes_only_unsupported_sentences() -> None:
+    text = "This checklist is practical. Success rose 99% in 8 months. Verify the owner before acting."
+    gate = validate_claims(text, [])
+    cleaned = sanitize_unsupported_claims(text, gate["findings"])
+    assert "99%" not in cleaned
+    assert "Verify the owner" in cleaned
