@@ -29,7 +29,12 @@ class DraftGenerator:
         self.config = config or {}
 
     def generate(self, topic, brief=None):
-        brief = brief or {}
+        brief = dict(brief or {})
+        blueprint = brief.get("content_blueprint") if isinstance(brief.get("content_blueprint"), dict) else {}
+        if blueprint:
+            brief.setdefault("content_form", blueprint.get("content_form"))
+            brief.setdefault("audience", blueprint.get("audience"))
+            brief.setdefault("platform_style", blueprint.get("platform_style"))
         context = build_generation_context(topic, brief)
         if self.config.get("provider") == "hermes-cli":
             try:
