@@ -207,11 +207,13 @@ class Pipeline:
                 draft.setdefault("draft_meta", {})["claim_gate"] = claim_gate
                 strict_claims = bool((job.get("brief") or {}).get("run_contract")) or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
                 if not claim_gate.get("passed") and strict_claims:
+                    cleaned_title = sanitize_unsupported_claims(draft["title"], claim_gate.get("findings")) or str(job.get("topic") or "Verified workflow")
                     cleaned_body = sanitize_unsupported_claims(draft["body"], claim_gate.get("findings"))
-                    cleaned_gate = validate_claims(draft["title"] + "\n" + cleaned_body, claim_ledger)
+                    cleaned_gate = validate_claims(cleaned_title + "\n" + cleaned_body, claim_ledger)
                     if len(cleaned_body) >= 80 and cleaned_gate.get("passed"):
+                        draft["title"] = cleaned_title
                         draft["body"] = cleaned_body
-                        text = draft["title"] + "\n" + cleaned_body
+                        text = cleaned_title + "\n" + cleaned_body
                         draft["draft_meta"]["claim_sanitization"] = {
                             "removed_count": len([row for row in claim_gate.get("findings") or [] if not row.get("covered")]),
                             "original_gate": claim_gate,
