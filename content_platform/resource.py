@@ -29,7 +29,8 @@ class ResourceGuard:
     def check(self, kind):
         snapshot = self.probe()
         min_memory = int(self.config.get("min_available_mb", 1200 if kind == "video" else 256))
-        max_disk = float(self.config.get("max_disk_used_percent", 88))
+        default_disk_limit = self.config.get("max_disk_used_percent", 88)
+        max_disk = float(self.config.get("video_max_disk_used_percent", default_disk_limit)) if kind == "video" else float(default_disk_limit)
         warning_disk = float(self.config.get("warning_disk_used_percent", 84))
         if snapshot["available_mb"] < min_memory:
             raise RuntimeError(f"resource_guard: available memory {snapshot['available_mb']}MB below {min_memory}MB")
