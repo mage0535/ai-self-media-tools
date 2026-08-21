@@ -111,7 +111,7 @@ def render_config(home: Path, *, overwrite: bool = False) -> Path:
             "viral_cover_gate": "enforce",
         },
         "workflow": {"require_gate_pass": True, "require_unified_acceptance": True},
-        "resources": {"min_available_mb": 1200, "warning_disk_used_percent": 84, "max_disk_used_percent": 88},
+            "resources": {"min_available_mb": 1200, "warning_disk_used_percent": 84, "max_disk_used_percent": 88, "video_max_disk_used_percent": 87},
         "media": {
             "image": {
                 "enabled": True,

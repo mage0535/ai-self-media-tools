@@ -28,6 +28,15 @@ class ResourceTests(unittest.TestCase):
         safe = ResourceGuard(self.root, {}, probe=lambda: {"available_mb": 1400, "disk_used_percent": 84.5}).check("video")
         self.assertIn("disk_usage_warning", safe["warnings"])
 
+    def test_video_uses_separate_disk_safety_limit(self):
+        guard = ResourceGuard(
+            self.root,
+            {"max_disk_used_percent": 88, "video_max_disk_used_percent": 87},
+            probe=lambda: {"available_mb": 1400, "disk_used_percent": 87.2},
+        )
+        with self.assertRaisesRegex(RuntimeError, "disk usage"):
+            guard.check("video")
+
     def test_video_lock_is_exclusive(self):
         guard = ResourceGuard(self.root, {}, probe=lambda: {"available_mb": 4096, "disk_used_percent": 20})
         with guard.video_lock():

@@ -28,7 +28,8 @@
   "resources": {
     "min_available_mb": 1200,
     "warning_disk_used_percent": 84,
-    "max_disk_used_percent": 88
+    "max_disk_used_percent": 88,
+    "video_max_disk_used_percent": 87
   },
   "risk": {
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/safe_filter.py",
