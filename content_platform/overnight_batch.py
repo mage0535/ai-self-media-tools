@@ -324,7 +324,11 @@ def _candidate_has_native_source(platform: str, candidate: dict[str, Any]) -> bo
     prefix, _, suffix = source.partition(":")
     if prefix not in canonical:
         return False
-    return suffix not in {"web_search", "search", "github", "source_fallback", "external"}
+    if suffix in {"web_search", "search"}:
+        from .trend_intelligence import _candidate_source_url_is_native
+
+        return _candidate_source_url_is_native(platform, candidate)
+    return suffix not in {"github", "source_fallback", "external"}
 
 
 def _editorial_fallback_candidate(slot: dict[str, Any]) -> dict[str, Any] | None:
