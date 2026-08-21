@@ -40,6 +40,34 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(draft["draft_meta"]["tool_invocation_manifest"], manifest)
 
+    def test_rendered_gate_recovers_manifest_after_later_optional_media_failure(self):
+        import json
+
+        job_id = "render-recovery"
+        artifact_dir = self.pipeline.data_dir / "artifacts" / job_id
+        artifact_dir.mkdir(parents=True)
+        output = artifact_dir / "final.mp4"
+        output.write_bytes(b"video")
+        manifest = {
+            "status": "rendered",
+            "ok": True,
+            "output": str(output),
+            "tool_invocation_manifest": {
+                "planned_tools": {"video_toolchain_runner": "renderer"},
+                "invocations": {"video_toolchain_runner": {"status": "ok"}},
+            },
+        }
+        (artifact_dir / "video_toolchain_runner_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        draft = {"draft_meta": {}}
+
+        self.pipeline._recover_video_render_evidence(job_id, draft)
+
+        self.assertEqual(draft["draft_meta"]["render_manifest"]["status"], "rendered")
+        self.assertEqual(
+            draft["draft_meta"]["tool_invocation_manifest"]["invocations"]["video_toolchain_runner"]["status"],
+            "ok",
+        )
+
     def test_end_to_end_requires_approval_and_is_idempotent(self):
         job = self.pipeline.create("Practical automation", ["wechat", "xiaohongshu"], {"audience": "operators"})
         reviewed = self.pipeline.run(job["id"])
