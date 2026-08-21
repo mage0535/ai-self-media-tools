@@ -394,7 +394,7 @@ def _platform_evidence_matrix(
     # candidate.  Do not let ``platform:web_search`` inherit trust from a
     # separately collected native feed merely because both share a prefix.
     candidate_source_ok = any(
-        candidate_source == str(item.get("source") or "").casefold()
+        _source_matches(candidate_source, str(item.get("source") or ""))
         for item in successful_platform_sources
     )
     samples = []
@@ -588,10 +588,17 @@ def _platform_source_aliases(platform: str) -> set[str]:
 
 
 def _source_matches(candidate_source: str, collected_source: str) -> bool:
-    """Allow a real source's named transport suffix, e.g. douyin:web_search."""
+    """Match source transports without trusting search/aggregator suffixes."""
     candidate = str(candidate_source or "").casefold()
     collected = str(collected_source or "").casefold()
-    return bool(candidate and collected and (candidate == collected or candidate.startswith(collected + ":")))
+    if not candidate or not collected:
+        return False
+    if candidate == collected:
+        return True
+    if not candidate.startswith(collected + ":"):
+        return False
+    suffix = candidate.split(":", 1)[1]
+    return suffix not in {"web_search", "search", "github", "source_fallback", "external"}
 
 
 def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age_hours: int = 30) -> dict[str, dict[str, Any]]:
