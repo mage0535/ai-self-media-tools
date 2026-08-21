@@ -3694,3 +3694,4 @@ treated as a gateway failure.
 - Native trend evidence is timestamped and source-specific; external search is never relabeled as native evidence.
 - Video and card canaries contain renderer-written manifests and measured output evidence; manual channels remain `handoff_ready`.
 - Local, GitHub, and server public code resolve to the same release tree; private production assets are not committed.
+- When network BGM providers are unavailable, the renderer may use `BGM_LIBRARY_DIR` only when each local track has an adjacent `bgm_manifest.json` with a license, source URL, and fingerprint; the global BGM fingerprint registry still forbids reuse.
