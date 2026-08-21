@@ -622,6 +622,8 @@ def execute(args):
             store,
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
         )
+        from .runtime_capabilities import build_runtime_capability_snapshot
+        runtime_capabilities = build_runtime_capability_snapshot()
 
         def rank_for_platform(platform, items, slot):
             # Keep a candidate pool so the batch builder can reserve a unique
@@ -662,6 +664,7 @@ def execute(args):
             trend_evidence_mode=(args.trend_evidence_mode or str(config.get("feature_flags", {}).get("real_platform_trend_evidence_mode", "shadow"))).casefold(),
             report_path=str(snapshot_path),
             reserved_topic_fingerprints=store.used_topics(lookback_days=7),
+            runtime_capabilities=runtime_capabilities,
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)

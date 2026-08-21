@@ -12,7 +12,7 @@
 
 ### Verification
 - Focused regression passed locally: `python -m pytest tests/test_content_quality_reference.py tests/test_reference_pack_runtime_wiring.py tests/test_content_blueprint.py tests/test_platform_workflow_context.py tests/test_generator_evidence.py tests/test_overnight_batch.py -q` => `58 passed`.
-- Server follow-up still required after sync: verify `/root/.ai-self-media-tools` can load `content_quality_reference_pack` inside a real `overnight-prepare` or isolated canary, and confirm no private evidence files were copied into the public repository.
+- Server follow-up still required after sync: verify `$AGENT_HOME` can load `content_quality_reference_pack` inside a real `overnight-prepare` or isolated canary, and confirm no private evidence files were copied into the public repository.
 
 ## 2026-08-16: bounded video narration and renderer budget guard
 
@@ -3676,3 +3676,21 @@ Other international traffic remains on the existing proxy. Direct Telegram
 Bot API and webhook checks passed after restart; the content-platform timer
 failure was a separate stale batch acceptance result and was reset, not
 treated as a gateway failure.
+
+## 2026-08-21: pre-generation tool selection and production consistency
+
+- The overnight planner now builds the executable tool-selection evidence before the generate stage and includes it in `bounded_model_input`; an empty raw slot plan is no longer carried into provider input.
+- Runtime capability snapshots preserve nested TTS provider availability without exposing paths, endpoints, credentials, or cookies. Unavailable tools are recorded as rejected with a reason instead of being silently presented as usable.
+- A generation-stage `tool_invocation_manifest` records selected tools as `planned`; renderer output promotes its real manifest into draft metadata. Planned work is not treated as executed work, and final gates require terminal execution evidence after rendering.
+- Generation-stage quality checks only require planning evidence. Rendered-stage checks require terminal tool execution and measured media evidence, avoiding both premature failure and false success.
+- Public documentation must use `$AGENT_HOME` or other neutral placeholders. Production databases, cookies, secrets, generated media, and licensed runtime assets remain outside the public release tree.
+- A production release must be built from the public release tree, then validated with a fresh prepare plan and no-publish canaries. A historical overnight plan generated before a later fix is not evidence for the later code.
+
+### Release acceptance
+
+- `python -m pytest -q` passes with the current baseline or higher.
+- `python -m content_platform project-audit` returns `ok: true` with no issues.
+- Every queued task has all six generate-stage fields, a non-empty executable tool selection, and a matching invocation ledger.
+- Native trend evidence is timestamped and source-specific; external search is never relabeled as native evidence.
+- Video and card canaries contain renderer-written manifests and measured output evidence; manual channels remain `handoff_ready`.
+- Local, GitHub, and server public code resolve to the same release tree; private production assets are not committed.

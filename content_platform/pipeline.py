@@ -887,7 +887,10 @@ class Pipeline:
                 job_brief = {}
             if job_brief.get("run_contract"):
                 packet["run_contract"] = job_brief["run_contract"]
-                packet["runtime_execution_required"] = True
+                # Generation only proves that the selected stack is planned.
+                # Require terminal tool execution after assets/rendering, when
+                # the renderer and publishers have emitted real evidence.
+                packet["runtime_execution_required"] = phase == "rendered"
             plan = packet.get("video_toolchain_plan") or {}
             needs_rendered_video = normalized in SHORT_VIDEO_PLATFORMS and bool(plan.get("required"))
             if phase == "generation" and self._defers_render_only_video_evidence(packet):
@@ -978,11 +981,17 @@ class Pipeline:
         manifest = artifact.get("render_manifest")
         if isinstance(manifest, dict):
             meta["render_manifest"] = manifest
+            nested_manifest = manifest.get("tool_invocation_manifest")
+            if isinstance(nested_manifest, dict) and nested_manifest:
+                meta["tool_invocation_manifest"] = nested_manifest
         renderer_packet = artifact.get("render_packet")
         if isinstance(renderer_packet, dict):
             for key in ("audio_probe", "subtitle", "burned_captions", "background_assets", "bgm", "bgm_source"):
                 if key in renderer_packet:
                     meta[key] = renderer_packet[key]
+            manifest = renderer_packet.get("tool_invocation_manifest")
+            if isinstance(manifest, dict) and manifest:
+                meta["tool_invocation_manifest"] = manifest
         # 2026-08-17 修复：visual_route（内容驱动路由）从 artifact 写回 draft_meta，
         # 否则 job 里永远 None（media.generate 修改的是局部 job 副本，未持久化）
         vr = artifact.get("visual_route")

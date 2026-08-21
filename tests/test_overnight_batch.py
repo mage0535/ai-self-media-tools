@@ -389,6 +389,10 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["content_quality_reference_gate"]["passed"] is True
     assert task["brief"]["bounded_model_input"]["content_quality_reference_pack"]["loaded"] is True
     assert task["brief"]["bounded_model_input"]["runtime_capabilities"]["version"] == "runtime_capabilities_v1"
+    tool_plan = task["brief"]["bounded_model_input"]["tool_selection_plan"]
+    assert len(tool_plan["selected_tools"]) >= 6
+    assert tool_plan["invocation_order"] == tool_plan["selected_tools"]
+    assert tool_plan["selection_reasons"]
 
 
 def test_due_task_builder_uses_editorial_fallback_after_invalid_native_candidate():
