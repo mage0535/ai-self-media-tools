@@ -396,6 +396,27 @@ class DraftGenerator:
             draft_meta["cover_design"] = self._default_cover_design(topic, draft, brief, draft_meta)
         self._attach_growth_recipe(brief, context, draft_meta)
         platforms = list(strategy.get("primary_platforms") or brief.get("platforms") or [])
+        if not draft_meta.get("tool_invocation_manifest"):
+            selected = [
+                str(item).strip()
+                for item in (draft_meta.get("tool_selection_plan") or {}).get("selected_tools") or []
+                if str(item).strip()
+            ]
+            draft_meta["tool_invocation_manifest"] = build_tool_invocation_manifest(
+                planned_tools={name: "pre_generation_selection" for name in selected},
+                invocations={
+                    name: {"status": "planned", "output": "pending_runtime_execution"}
+                    for name in selected
+                },
+            )
+            draft_meta.update(build_tool_selection_evidence(
+                platform=platforms[0] if platforms else "",
+                content_type=str((context.get("strategy") or {}).get("content_form") or draft_meta.get("content_form") or "article"),
+                content_goal="select an executable, platform-matched tool stack before generation",
+                capability_status={"tools": self._runtime_capabilities(brief).get("tools") or {}},
+                video_effect_registry=self._runtime_capabilities(brief).get("video_effect_modules") or {},
+                planned_manifest=draft_meta["tool_invocation_manifest"],
+            ))
         platform = str(platforms[0] if platforms else brief.get("platform") or "")
         draft_meta["content_depth_plan"] = build_content_depth_plan(
             str(draft.get("title") or topic),

@@ -31,13 +31,31 @@ def build_runtime_capability_snapshot() -> dict[str, Any]:
     """Return the currently available project capabilities without private data."""
     probed = ToolRegistry({"fast_probe": True}).probe()
     tools = {str(name): _sanitize(record) for name, record in probed.items()}
+    # Preserve nested provider availability in a safe, model-readable shape.
+    # The old generic sanitizer turned ``tts_engines`` into an empty object,
+    # so planning could not distinguish an available voice provider from a
+    # missing one.
+    raw_tts = probed.get("tts_engines")
+    if isinstance(raw_tts, dict):
+        tools["tts_engines"] = {
+            str(name): _sanitize(record)
+            for name, record in raw_tts.items()
+            if isinstance(record, (dict, bool))
+        }
     registry = load_effect_module_registry()
     modules = registry.get("modules") if isinstance(registry, dict) else {}
     families = registry.get("template_families") if isinstance(registry, dict) else {}
+    available_tools = sorted(
+        name for name, record in tools.items()
+        if isinstance(record, dict) and record.get("available") is True
+    )
+    for name, record in (tools.get("tts_engines") or {}).items():
+        if isinstance(record, dict) and record.get("available") is True:
+            available_tools.append(f"tts_engines.{name}")
     return {
         "version": "runtime_capabilities_v1",
         "tools": tools,
-        "available_tools": sorted(name for name, record in tools.items() if record.get("available") is True),
+        "available_tools": sorted(set(available_tools)),
         "video_effect_modules": {
             "version": str(registry.get("version") or "") if isinstance(registry, dict) else "",
             "modules": {str(name): {"available": True} for name in modules} if isinstance(modules, dict) else {},

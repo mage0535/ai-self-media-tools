@@ -74,6 +74,7 @@ def build_tools_capability_analysis(
         analyzed_groups["video_template_families"] = sorted(families)
 
     candidate_count = sum(len(v) for v in analyzed_groups.values() if isinstance(v, list))
+    available_tool_ids = _available_tool_ids(tools, modules, families)
     return {
         "version": "tools_capability_analysis_v1",
         "platform": platform,
@@ -81,6 +82,7 @@ def build_tools_capability_analysis(
         "required_tool_groups": sorted(required_groups),
         "analyzed_tool_groups": analyzed_groups,
         "candidate_tool_count": candidate_count,
+        "available_tool_ids": sorted(available_tool_ids),
         "selection_policy": "choose the combination that best fits platform, topic, audience, assets, quality gates, free availability, and reliability; do not use default-only paths",
         "all_relevant_tool_types_analyzed": True,
         "tool_catalog": catalog_snapshot(),
@@ -100,6 +102,16 @@ def build_tool_selection_plan(
     analysis = capability_analysis or build_tools_capability_analysis(platform=platform, content_type=content_type)
     planned = (planned_manifest or {}).get("planned_tools") if isinstance((planned_manifest or {}).get("planned_tools"), dict) else {}
     selected = list(planned) if planned else _fallback_selected_tools(_is_video(content_type))
+    available = set(analysis.get("available_tool_ids") or [])
+    rejected: list[dict[str, str]] = []
+    if available:
+        kept = []
+        for name in selected:
+            if name in available:
+                kept.append(name)
+            else:
+                rejected.append({"tool": name, "reason": "runtime capability probe did not confirm this tool"})
+        selected = kept
     required_groups = analysis.get("required_tool_groups") or []
     return {
         "version": "tool_selection_plan_v1",
@@ -108,6 +120,7 @@ def build_tool_selection_plan(
         "content_goal": content_goal or "improve retention, saves, interaction, and follow conversion",
         "candidate_group_count": len(required_groups),
         "selected_tools": selected,
+        "rejected_tools": rejected,
         "selection_reasons": {
             name: "selected because it contributes directly to the current platform format, asset fit, or quality gate"
             for name in selected
@@ -211,6 +224,33 @@ def validate_tool_selection_evidence(
 def _is_video(content_type: str) -> bool:
     text = str(content_type or "").casefold()
     return "video" in text or text in {"short", "reel"}
+
+
+def _available_tool_ids(tools: dict[str, Any], modules: dict[str, Any], families: dict[str, Any]) -> set[str]:
+    """Map sanitized runtime probes to executable internal tool identifiers."""
+    if not tools and not modules and not families:
+        return set()
+    available: set[str] = set()
+
+    def ok(name: str) -> bool:
+        value = tools.get(name)
+        return isinstance(value, dict) and value.get("available") is True
+
+    if ok("python"):
+        available.update({"generator_normalize", "preflight_manifest", "visual_policy", "image_text_card_recipe"})
+    if ok("ffmpeg") or ok("video_script"):
+        available.update({"video_toolchain_runner", "mix_bgm_with_gate", "visual_gate", "loudness_probe"})
+    if modules or families:
+        available.update({"visual_recipe", "shotcraft_moves", "cinema_composition", "template_family_registry"})
+    tts = tools.get("tts_engines") if isinstance(tools.get("tts_engines"), dict) else {}
+    if any(isinstance(record, dict) and record.get("available") is True for record in tts.values()):
+        available.add("voice_engine")
+    if ok("skills_adapter") or any(
+        isinstance(tools.get(name), dict) and tools[name].get("available") is True
+        for name in ("guizang_social_card", "gzh_design_skill", "humanizer_zh")
+    ):
+        available.add("knowledge_card_designer")
+    return available
 
 
 def _default_candidates(group: str, is_video: bool) -> list[str]:

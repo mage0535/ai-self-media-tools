@@ -136,6 +136,10 @@ def test_video_draft_also_gets_an_adaptive_cover_contract():
     assert design["layout_key"]
     assert design["focal_subjects"] == ["cat", "dog"]
     assert design["safe_zone_verified"] is True
+    manifest = draft["draft_meta"]["tool_invocation_manifest"]
+    assert len(manifest["planned_tools"]) >= 6
+    assert set(manifest["planned_tools"]) == set(manifest["invocations"])
+    assert all(item["status"] == "planned" for item in manifest["invocations"].values())
 
 
 def test_blueprint_content_form_controls_generation_context():

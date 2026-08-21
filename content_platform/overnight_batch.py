@@ -108,6 +108,7 @@ def build_due_tasks(
     trend_evidence_mode: str = "",
     report_path: str = "runtime:overnight_trend_collection",
     reserved_topic_fingerprints: set[str] | None = None,
+    runtime_capabilities: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
@@ -115,6 +116,10 @@ def build_due_tasks(
     reserved_topic_fingerprints = {str(value).strip() for value in (reserved_topic_fingerprints or set()) if str(value).strip()}
     trend_evidence_mode = str(trend_evidence_mode or ("enforce" if strict_trend_evidence else "off")).casefold()
     growth_strategy_status = growth_strategy_status or {}
+    if runtime_capabilities is None:
+        from .runtime_capabilities import build_runtime_capability_snapshot
+
+        runtime_capabilities = build_runtime_capability_snapshot()
     weekday = datetime.now().weekday() if weekday is None else int(weekday)
     for raw in slots:
         platform = str(raw.get("platform") or "").casefold()
@@ -207,6 +212,7 @@ def build_due_tasks(
                 validate_content_quality_reference_pack,
             )
             from .runtime_capabilities import build_runtime_capability_snapshot
+            from .tool_selection import build_tool_selection_evidence
 
             run_contract = build_run_contract(platform)
             compiled_strategy = (growth_strategy_status.get(platform) or {}).get("compiled_strategy")
@@ -218,6 +224,17 @@ def build_due_tasks(
                 content_form=str(content_slot.get("content_form") or content_slot.get("stage") or ""),
             )
             quality_reference_gate = validate_content_quality_reference_pack(quality_reference_pack)
+            content_type = str(content_slot.get("content_form") or content_slot.get("stage") or "")
+            if not content_type and platform in MANUAL_HANDOFF_PLATFORMS:
+                content_type = "short_video" if str(raw.get("action") or "").casefold() != "handoff_card" else "manual_carousel"
+            tool_evidence = build_tool_selection_evidence(
+                platform=platform,
+                content_type=content_type or "article",
+                content_goal="select an executable, platform-matched tool stack before model generation",
+                capability_status={"tools": runtime_capabilities.get("tools") or {}},
+                video_effect_registry=runtime_capabilities.get("video_effect_modules") or {},
+                planned_manifest=raw.get("tool_invocation_manifest") or {},
+            )
             content_blueprint = build_content_blueprint(
                 platform,
                 str(selected["title"]),
@@ -232,7 +249,7 @@ def build_due_tasks(
                 {
                     "content_blueprint": content_blueprint,
                     "claim_ledger": list(raw.get("claim_ledger") or []),
-                    "tool_selection_plan": dict(raw.get("tool_selection_plan") or {}),
+                    "tool_selection_plan": tool_evidence["tool_selection_plan"],
                     "strategy": compiled_strategy or {},
                     "content_quality_reference_pack": quality_reference_pack,
                     "runtime_capabilities": build_runtime_capability_snapshot(),

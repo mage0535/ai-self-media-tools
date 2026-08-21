@@ -15,6 +15,7 @@ from typing import Any
 from .strategy_compiler import compile_strategy, validate_compiled_strategy
 from .content_quality_reference import load_content_quality_reference_pack, validate_content_quality_reference_pack
 from .runtime_capabilities import build_runtime_capability_snapshot
+from .tool_selection import build_tool_selection_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 RULEBOOK = ROOT / "config" / "channel_content_rulebook.json"
@@ -187,14 +188,20 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
     if missing and strict_runtime:
         raise FileNotFoundError(f"required platform skills missing: {', '.join(missing)}")
 
-    selected_tools = plan.get("selected_tools") or plan.get("tools") or []
+    runtime_capabilities = build_runtime_capability_snapshot()
+    tool_evidence = build_tool_selection_evidence(
+        platform=platform,
+        content_type=str(plan.get("content_form") or plan.get("stage") or "article"),
+        content_goal="select an executable, platform-matched tool stack before generation",
+        capability_status={"tools": runtime_capabilities.get("tools") or {}},
+        video_effect_registry=runtime_capabilities.get("video_effect_modules") or {},
+        planned_manifest=plan.get("tool_invocation_manifest") or {},
+    )
+    plan.update(tool_evidence)
+    selected_tools = list(dict.fromkeys(tool_evidence["tool_selection_plan"].get("selected_tools") or []))
     if not selected_tools:
-        selected_tools = [
-            "platform_rules_loader", "growth_strategy_loader", "channel_operations_workflow",
-            "content_quality_reference_pack", "content_strategy", "visual_quality_gate", "platform_renderer", "publish_mode_guard",
-        ]
-    else:
-        selected_tools = list(selected_tools) + ["content_quality_reference_pack"]
+        raise RuntimeError(f"no executable tools available for platform={platform}")
+    selected_tools.append("content_quality_reference_pack")
     quality_reference_pack = load_content_quality_reference_pack(
         platform,
         content_form=str(plan.get("content_form") or plan.get("stage") or ""),
@@ -215,7 +222,7 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
         "skills": skill_records,
         "content_quality_reference_pack": quality_reference_pack,
         "content_quality_reference_gate": quality_reference_gate,
-        "runtime_capabilities": build_runtime_capability_snapshot(),
+        "runtime_capabilities": runtime_capabilities,
         "publish_mode": PUBLISH_MODES.get(platform, "manual_handoff"),
         "selected_tools": list(dict.fromkeys(map(str, selected_tools))),
         "plan": {"template_family": plan.get("template_family", ""), "selected_pipeline": plan.get("selected_pipeline", "")},

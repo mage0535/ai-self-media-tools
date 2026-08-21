@@ -28,6 +28,18 @@ class PipelineTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_renderer_tool_invocation_manifest_is_promoted_to_draft_metadata(self):
+        manifest = {
+            "planned_tools": {"video_toolchain_runner": "renderer"},
+            "invocations": {"video_toolchain_runner": {"status": "ok", "output": "final.mp4"}},
+        }
+        draft = {"draft_meta": {}}
+        Pipeline._attach_video_render_evidence(
+            draft,
+            {"render_manifest": {"tool_invocation_manifest": manifest}, "render_packet": {}},
+        )
+        self.assertEqual(draft["draft_meta"]["tool_invocation_manifest"], manifest)
+
     def test_end_to_end_requires_approval_and_is_idempotent(self):
         job = self.pipeline.create("Practical automation", ["wechat", "xiaohongshu"], {"audience": "operators"})
         reviewed = self.pipeline.run(job["id"])
