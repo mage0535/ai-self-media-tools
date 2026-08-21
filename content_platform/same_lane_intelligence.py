@@ -305,6 +305,16 @@ def _flatten_platform_samples(platform: str, payload: Any) -> list[dict[str, Any
                 if isinstance(work, dict):
                     rows.append({**work, "account": work.get("account") or account_name})
         return rows
+    if isinstance(payload.get("queries"), list):
+        rows = []
+        for query in payload["queries"]:
+            if not isinstance(query, dict):
+                continue
+            query_text = str(query.get("query") or "")
+            for row in query.get("items") or query.get("samples") or []:
+                if isinstance(row, dict):
+                    rows.append({**row, "query": row.get("query") or query_text})
+        return rows
     if isinstance(payload.get("keywords"), list):
         rows = []
         for entry in payload["keywords"]:
