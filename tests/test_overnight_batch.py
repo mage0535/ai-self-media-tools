@@ -420,6 +420,21 @@ def test_due_task_builder_accepts_native_url_from_platform_search_transport():
     assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is True
 
 
+def test_platform_source_preference_promotes_native_url_search_candidate():
+    from content_platform.overnight_batch import prefer_platform_source_candidates
+
+    candidates = [
+        {"title": "External", "source": "github", "url": "https://github.com/example/project"},
+        {"title": "Native", "source": "kuaishou:web_search", "url": "https://ai.kuaishou.com/creation"},
+    ]
+    ordered = prefer_platform_source_candidates(
+        "kuaishou",
+        candidates,
+        [{"source": "kuaishou", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}],
+    )
+    assert ordered[0]["title"] == "Native"
+
+
 def test_due_task_builder_uses_editorial_fallback_after_invalid_native_candidate():
     report = [
         {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
