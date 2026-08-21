@@ -15,6 +15,7 @@
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import urllib.parse
@@ -25,7 +26,7 @@ from pathlib import Path
 DEFAULT_COLLECTION = "solo-piano-7"
 META_URL = "https://archive.org/metadata/{collection}"
 DOWNLOAD_URL = "https://archive.org/download/{collection}"
-FINGERPRINT_FILE = Path("/root/.hermes/data/bgm_fingerprint.json")
+FINGERPRINT_FILE = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser() / "data/bgm_fingerprint.json"
 MIN_BYTES = 500 * 1024
 DEFAULT_MIN_DURATION = 60.0
 LICENSE = "CC-BY-NC-ND 3.0 (archive.org {collection} collection, personal-use video background)"

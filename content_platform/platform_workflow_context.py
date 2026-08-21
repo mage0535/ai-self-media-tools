@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .strategy_compiler import compile_strategy, validate_compiled_strategy
+
 ROOT = Path(__file__).resolve().parents[1]
 RULEBOOK = ROOT / "config" / "channel_content_rulebook.json"
 RULES_FILE = ROOT / "data" / "platform_rules_2026.md"
@@ -107,7 +109,7 @@ def _platform_rule_loaded(platform: str) -> tuple[bool, str]:
         if any(name.casefold() in text for name in names):
             matched = True
             break
-    return (RULES_FILE.is_file(), "" if RULES_FILE.is_file() else "platform_rules_2026.md missing")
+    return (matched, "" if matched else "2026 platform rule section missing")
 
 
 def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -147,8 +149,19 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
         raise ValueError(f"2026 platform rules missing for {platform}: {rules_reason}")
 
     strategy = _latest_strategy(platform)
+    strict_runtime = bool(plan.get("run_contract"))
+    if strategy is None and not strict_runtime:
+        strategy = ROOT / "config" / "default_growth_strategy.md"
+    compiled_strategy = None
     if strategy is None or not strategy.is_file():
-        raise FileNotFoundError(f"growth strategy missing for {platform}")
+        if strict_runtime:
+            raise FileNotFoundError(f"growth strategy missing for {platform}")
+        strategy_gate = {"passed": False, "failures": ["growth_strategy_missing_legacy_adapter"]}
+    else:
+        compiled_strategy = compile_strategy(strategy, platform)
+        strategy_gate = validate_compiled_strategy(compiled_strategy)
+        if not strategy_gate["passed"]:
+            raise ValueError("compiled growth strategy invalid: " + ", ".join(strategy_gate["failures"]))
     required_skills = list(dict.fromkeys(GENERIC_SKILLS + PLATFORM_SKILLS.get(platform, [])))
     skill_records = []
     missing = []
@@ -160,7 +173,7 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
         else:
             missing.append(skill)
         skill_records.append(record)
-    if missing:
+    if missing and strict_runtime:
         raise FileNotFoundError(f"required platform skills missing: {', '.join(missing)}")
 
     selected_tools = plan.get("selected_tools") or plan.get("tools") or []
@@ -175,7 +188,12 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
         "platform": platform,
         "rulebook": {"path": str(RULEBOOK), "entry_loaded": True},
         "platform_rules_2026": {"path": str(RULES_FILE), "matched": True},
-        "strategy": {"path": str(strategy), "sha256": _sha256(strategy)},
+        "strategy": {
+            "path": str(strategy) if strategy else "",
+            "sha256": _sha256(strategy) if strategy else "",
+            "compiled": compiled_strategy,
+            "compiled_gate": strategy_gate,
+        },
         "skills": skill_records,
         "publish_mode": PUBLISH_MODES.get(platform, "manual_handoff"),
         "selected_tools": list(dict.fromkeys(map(str, selected_tools))),

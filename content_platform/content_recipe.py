@@ -345,7 +345,11 @@ def validate_image_text_card_recipe(recipe: dict[str, Any] | None) -> dict[str, 
     return _validation_result(failures)
 
 
-def validate_tool_invocation_manifest(manifest: dict[str, Any] | None) -> dict[str, Any]:
+def validate_tool_invocation_manifest(
+    manifest: dict[str, Any] | None,
+    *,
+    require_execution: bool = False,
+) -> dict[str, Any]:
     failures: list[str] = []
     if not isinstance(manifest, dict) or not manifest:
         failures.append("tool_invocation_manifest missing")
@@ -359,7 +363,17 @@ def validate_tool_invocation_manifest(manifest: dict[str, Any] | None) -> dict[s
             failures.append("invocations must include at least 3 tool records")
         if missing:
             failures.append("all planned tools must have invocation records")
-    return _validation_result(failures)
+        if require_execution:
+            for name in planned:
+                record = invocations.get(name)
+                status = record.get("status") if isinstance(record, dict) else "missing"
+                if status in {"planned_internal", "not_invoked", "missing"}:
+                    failures.append(f"tool_not_executed:{name}")
+                elif status not in {"ok", "generated", "reused_verified"}:
+                    failures.append(f"tool_execution_failed:{name}")
+    result = _validation_result(failures)
+    result["require_execution"] = require_execution
+    return result
 
 
 def article_core_fingerprint(recipe: dict[str, Any]) -> str:

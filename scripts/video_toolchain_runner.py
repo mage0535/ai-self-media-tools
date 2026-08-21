@@ -173,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         (output_dir / "asset_quality_gate.json").write_text(json.dumps(asset_gate, ensure_ascii=False, indent=2), encoding="utf-8")
         if not asset_gate.get("passed"):
-            _write_manifest(output_dir, {"ok": False, "status": "asset_quality_failed", "error": "visual assets failed provenance, semantic fit, or reuse gate", "asset_quality_gate": asset_gate})
+            _write_manifest(output_dir, {"ok": False, "status": "asset_quality_failed", "error": "visual assets failed provenance, semantic fit, or reuse gate: " + ", ".join(asset_gate.get("failures") or ["unknown"]), "asset_quality_gate": asset_gate, "reselection_required": any("reuse" in str(item) or "duplicate" in str(item) for item in asset_gate.get("failures") or [])})
             return 5
     cinema_scenes = storyboard(script_body or title, 8)
     shotcraft_plan = _shotcraft_motion_plan(script_body or title)
@@ -250,17 +250,22 @@ def main(argv: list[str] | None = None) -> int:
         platform=_primary_platform(plan),
         require_backgrounds=False,
         require_scene_manifest=True,
+        require_functional_mascots=bool(plan.get("require_functional_mascots")),
     )
     pre_render_gate_path = output_dir / "pre_render_gate.json"
     pre_render_gate_path.write_text(json.dumps(pre_render_gate, ensure_ascii=False, indent=2), encoding="utf-8")
     if not pre_render_gate.get("passed"):
+        for record in (tool_manifest.get("invocations") or {}).values():
+            if isinstance(record, dict) and record.get("status") == "planned_internal":
+                record["status"] = "not_invoked"
+                record["reason"] = "pre_render_gate_failed"
         manifest = {
             "ok": False,
             "title": title,
             "selected_pipeline": plan.get("selected_pipeline", ""),
             "template_family": plan.get("template_family", ""),
             "status": "pre_render_gate_failed",
-            "error": "generated cards failed pre-render validation",
+            "error": "generated cards failed pre-render validation: " + ", ".join(pre_render_gate.get("failures") or ["unknown"]),
             "script_structure_gate": script_structure,
             "pre_render_gate": pre_render_gate,
             "pre_render_gate_path": str(pre_render_gate_path),

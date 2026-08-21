@@ -167,6 +167,16 @@ def test_metrics_readiness_requires_identified_rows_in_metrics_file():
     assert report["accounts"]["shipinhao"]["strategy_eligible"] is False
 
 
+def test_metrics_readiness_quarantines_identical_account_fields():
+    with tempfile.TemporaryDirectory() as tmp:
+        metrics_file = Path(tmp) / "suspicious.json"
+        metrics_file.write_text(json.dumps({"videos": [{"video_id": "x-1", "views": 2100, "followers": 2100, "works": 2100}]}), encoding="utf-8")
+        report = metrics_readiness_report(["youtube"], {"youtube": {"metrics_file": str(metrics_file)}})
+
+    assert report["accounts"]["youtube"]["status"] == "metrics_schema_suspicious"
+    assert report["accounts"]["youtube"]["strategy_eligible"] is False
+
+
 def test_legacy_creator_page_snapshot_is_excluded_without_strategy_flag():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")

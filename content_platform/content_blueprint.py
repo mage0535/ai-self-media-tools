@@ -43,6 +43,16 @@ def build_content_blueprint(platform: str, topic: str, slot: dict[str, Any], mat
         "cross_platform_copy_reuse_forbidden": True,
         "mascot_roles": {},
     }
+    compiled_strategy = slot.get("strategy_compiled") or slot.get("strategy")
+    if isinstance(compiled_strategy, dict) and compiled_strategy.get("version") == "compiled_strategy_v1":
+        blueprint["strategy_policy"] = {
+            "source_sha256": compiled_strategy.get("source_sha256", ""),
+            "content_pillars": list(compiled_strategy.get("content_pillars") or [])[:8],
+            "structure_pool": list(compiled_strategy.get("structure_pool") or [])[:8],
+            "hook_templates": list(compiled_strategy.get("hook_templates") or [])[:8],
+            "cta_pool": list(compiled_strategy.get("cta_pool") or [])[:8],
+            "evidence_policy": dict(compiled_strategy.get("evidence_policy") or {}),
+        }
     if ai_lane:
         blueprint["mascot_roles"] = {
             "cat": {"tone": "cute_playful", "narrative_function": f"explore or draft the {topic} workflow", "decorative_only": False},

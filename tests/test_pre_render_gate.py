@@ -94,6 +94,32 @@ class PreRenderGateTests(unittest.TestCase):
 
             self.assertTrue(result["passed"])
 
+    def test_mascots_are_functional_work_level_requirement_not_scene_wide(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cards = [{"layout": "cover", "t": "AI workflow"}, {"t": "evidence"}, {"t": "result"}]
+            manifest = {
+                "version": "scene_manifest_v1",
+                "mascot_roles": {"cat": {"narrative_function": "introduce the problem", "decorative_only": False}},
+                "scenes": [],
+            }
+            (root / "scene_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            result = validate_render_inputs(root, cards, require_backgrounds=False, require_scene_manifest=True, require_functional_mascots=True)
+            self.assertIn("scene_manifest_invalid", result["failures"])
+            self.assertNotIn("functional_mascot_role_missing", result["failures"])
+
+    def test_mascot_requirement_fails_without_functional_role(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cards = [{"layout": "cover", "t": "AI workflow"}, {"t": "evidence"}, {"t": "result"}]
+            (root / "scene_manifest.json").write_text(json.dumps({"version": "scene_manifest_v1", "scenes": []}), encoding="utf-8")
+            result = validate_render_inputs(root, cards, require_backgrounds=False, require_scene_manifest=True, require_functional_mascots=True)
+            self.assertIn("functional_mascot_role_missing", result["failures"])
+
     def test_subtitle_builder_uses_dot_timestamps_and_safe_wrapping(self):
         from scripts.build_subtitles import build_ass
 

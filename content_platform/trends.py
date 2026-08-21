@@ -11,6 +11,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .paths import agent_home, project_home, trend_cache_dir
+from .source_quality import source_is_rankable
 
 
 def normalize_topic(title):
@@ -29,7 +30,7 @@ def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     for item in items:
         # Fallback hypotheses document a failed source; they are not evidence
         # and must never be promoted into an automatic topic candidate.
-        if item.get("source_unavailable"):
+        if not source_is_rankable(item):
             continue
         title = str(item.get("title", "")).strip()
         normalized = normalize_topic(title)
@@ -696,6 +697,7 @@ class DirectTrendSource:
                 "points": max(1, len(templates) - index),
                 "fallback_source": True,
                 "source_unavailable": True,
+                "provenance_kind": "synthetic_fallback",
                 "query": query,
                 "warning": "live platform/search source unavailable; use only as a temporary operating hypothesis",
             }

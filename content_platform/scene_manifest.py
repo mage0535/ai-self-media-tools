@@ -49,7 +49,7 @@ def build_scene_manifest(
             }
         )
     max_seconds = SHORT_DURATION_LIMITS.get(platform)
-    return {
+    result = {
         "version": "scene_manifest_v1",
         "title": str(title or "").strip(),
         "platform": platform,
@@ -57,6 +57,10 @@ def build_scene_manifest(
         "visual_recipe_fingerprint": str(visual_recipe.get("fingerprint") or ""),
         "scenes": scenes,
     }
+    roles = plan.get("mascot_roles") or plan.get("content_blueprint", {}).get("mascot_roles")
+    if isinstance(roles, dict) and roles:
+        result["mascot_roles"] = roles
+    return result
 
 
 def validate_scene_manifest(manifest: dict[str, Any] | None) -> dict[str, Any]:

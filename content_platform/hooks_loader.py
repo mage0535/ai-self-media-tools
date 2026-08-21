@@ -5,6 +5,7 @@
 就能读取标题/开场/结尾钩子模板库，自动套用生成爆款标题和脚本开头。
 """
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -105,8 +106,9 @@ def sync_library(hook_md_path: Path):
 
 if __name__ == "__main__":
     # 从 Hermes skill 同步
-    hermes_hooks = Path("/root/.hermes/skills/content/content-hooks/references/hook-template-library.md")
-    hermes_2026 = Path("/root/.hermes/skills/content/content-hooks/references/2026-title-formulas-and-structures.md")
+    hermes_home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser()
+    hermes_hooks = hermes_home / "skills/content/content-hooks/references/hook-template-library.md"
+    hermes_2026 = hermes_home / "skills/content/content-hooks/references/2026-title-formulas-and-structures.md"
     if hermes_hooks.is_file():
         sync_library(hermes_hooks)
         print("已同步 hook-template-library.md")

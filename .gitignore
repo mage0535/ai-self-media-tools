@@ -17,7 +17,8 @@ venv/
 *.orig
 *.local.json
 *.secret.json
-data/
+data/*
+!data/platform_rules_2026.md
 secrets/
 logs/
 artifacts/

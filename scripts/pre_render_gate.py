@@ -48,6 +48,7 @@ def validate_render_inputs(
     require_backgrounds: bool = True,
     require_cover_contract: bool = True,
     require_scene_manifest: bool = False,
+    require_functional_mascots: bool = False,
 ) -> dict[str, Any]:
     """Validate cheap input contracts without rendering or downloading assets."""
     video_dir = Path(video_dir)
@@ -89,6 +90,14 @@ def validate_render_inputs(
             scene_gate = validate_scene_manifest(manifest)
             if not scene_gate.get("passed"):
                 failures.append("scene_manifest_invalid")
+            if require_functional_mascots:
+                roles = manifest.get("mascot_roles") if isinstance(manifest, dict) else {}
+                scenes = manifest.get("scenes") if isinstance(manifest, dict) else []
+                role_text = json.dumps(roles, ensure_ascii=False).casefold()
+                scene_text = json.dumps(scenes, ensure_ascii=False).casefold()
+                functional = any(token in role_text or token in scene_text for token in ("cat", "dog", "猫", "狗", "猫咪", "小猫", "小狗"))
+                if not functional:
+                    failures.append("functional_mascot_role_missing")
 
     bgm = video_dir / "bgm.mp3"
     bgm_source = video_dir / "bgm_source.json"
@@ -133,6 +142,7 @@ def main() -> int:
     parser.add_argument("--platform", default="kuaishou")
     parser.add_argument("--bgm-mean-volume-db", type=float, default=None)
     parser.add_argument("--require-scene-manifest", action="store_true")
+    parser.add_argument("--require-functional-mascots", action="store_true")
     parser.add_argument("--out", default="")
     args = parser.parse_args()
     video_dir = Path(args.video_dir)
@@ -142,7 +152,7 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         result = {"passed": False, "platform": args.platform, "failures": [f"cards_read_failed:{type(exc).__name__}"], "warnings": []}
     else:
-        result = validate_render_inputs(video_dir, cards, platform=args.platform, bgm_mean_volume_db=args.bgm_mean_volume_db, require_scene_manifest=args.require_scene_manifest)
+        result = validate_render_inputs(video_dir, cards, platform=args.platform, bgm_mean_volume_db=args.bgm_mean_volume_db, require_scene_manifest=args.require_scene_manifest, require_functional_mascots=args.require_functional_mascots)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
