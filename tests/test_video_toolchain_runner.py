@@ -825,6 +825,38 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "online real-instrument BGM unavailable"):
                     download_bgm(root, "lo-fi")
 
+    def test_bgm_download_uses_operator_licensed_local_library_before_network(self):
+        from scripts.kuaishou_render import REAL_BGM_MIN_BYTES, download_bgm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            library = root / "library" / "track-a"
+            library.mkdir(parents=True)
+            (library / "bgm.mp3").write_bytes(b"licensed" * (REAL_BGM_MIN_BYTES // 8 + 1))
+            (library / "bgm_manifest.json").write_text(
+                json.dumps({
+                    "title": "Licensed piano",
+                    "artist": "Artist",
+                    "license": "CC BY",
+                    "source_url": "https://example.test/license",
+                    "provider": "local_test_library",
+                    "style": "piano instrumental",
+                }),
+                encoding="utf-8",
+            )
+            registry = root / "fingerprints.json"
+            with patch.dict(os.environ, {
+                "BGM_LIBRARY_DIR": str(root / "library"),
+                "BGM_FINGERPRINT_REGISTRY": str(registry),
+            }, clear=False):
+                with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[]):
+                    result = download_bgm(root, "piano instrumental")
+
+            self.assertEqual(result, str(root / "bgm.mp3"))
+            source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
+            self.assertEqual(source["license"], "CC BY")
+            self.assertEqual(source["source"], "local_test_library")
+
     def test_bgm_download_stops_when_the_global_resolution_budget_is_exhausted(self):
         from scripts.kuaishou_render import download_bgm
 

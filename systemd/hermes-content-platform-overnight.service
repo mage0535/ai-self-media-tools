@@ -11,6 +11,7 @@ Environment=CONTENT_PLATFORM_BIN=%h/.local/bin/content-platform
 Environment=HERMES_PLATFORM_SCRAPER=%h/.hermes/scripts/platform_scraper.py
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
+Environment=BGM_LIBRARY_DIR=%h/.ai-self-media-tools/data
 # The private slots file selects only channels due tonight. It must not contain
 # credentials and is deliberately separate from the public repository.
 ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/run_overnight_batch.sh
