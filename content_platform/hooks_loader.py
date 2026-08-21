@@ -35,7 +35,7 @@ def parse_hooks(md_path: Path) -> dict:
             if re.match(r"^\|\s*#\s*\|", s):
                 continue
             cells = [c.strip() for c in s.strip("|").split("|")]
-            if len(cells) >= 4 and re.match(r"^[THAE][0-9]", cells[0]):
+            if len(cells) >= 4 and re.match(r"^[THAE]\d+\b", cells[0]):
                 # 表头: # | 模板句式 | 平台 | 示例 | 原理
                 hook = {
                     "id": cells[0],
@@ -87,11 +87,18 @@ def load_hooks() -> dict:
     if LIB_JSON.is_file():
         try:
             _CACHE = json.loads(LIB_JSON.read_text(encoding="utf-8"))
-            return _CACHE
+            if any(_CACHE.get(key) for key in ("title", "opening", "ending")):
+                return _CACHE
         except Exception:
             pass
-    _CACHE = parse_hooks(LIB_MD)
-    LIB_JSON.write_text(json.dumps(_CACHE, ensure_ascii=False, indent=1), encoding="utf-8")
+    source = LIB_MD
+    if not source.is_file():
+        hermes_home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser()
+        source = hermes_home / "skills/content/content-hooks/references/hook-template-library.md"
+    _CACHE = parse_hooks(source)
+    if _CACHE and any(_CACHE.get(key) for key in ("title", "opening", "ending")):
+        LIB_JSON.parent.mkdir(parents=True, exist_ok=True)
+        LIB_JSON.write_text(json.dumps(_CACHE, ensure_ascii=False, indent=1), encoding="utf-8")
     return _CACHE
 
 
