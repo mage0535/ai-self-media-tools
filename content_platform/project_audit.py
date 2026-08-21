@@ -24,6 +24,7 @@ IGNORED_PARTS = {
     "cookies",
     "local-ops-lab",
     "tmp",
+    "graphify-out",
 }
 
 IGNORED_EXACT = {
