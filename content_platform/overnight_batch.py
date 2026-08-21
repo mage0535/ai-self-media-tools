@@ -125,7 +125,7 @@ def build_due_tasks(
             row.update({"state": "deferred", "reason": "not scheduled for this weekday"})
             tasks.append(row)
             continue
-        if strategy.get("status") in {"missing", "stale"}:
+        if strategy.get("status") in {"missing", "stale", "invalid"}:
             row.update({"state": "blocked", "reason": f"growth strategy snapshot {strategy['status']}", "growth_strategy_key": strategy.get("key", "")})
             tasks.append(row)
             continue
@@ -206,6 +206,7 @@ def build_due_tasks(
                 load_content_quality_reference_pack,
                 validate_content_quality_reference_pack,
             )
+            from .runtime_capabilities import build_runtime_capability_snapshot
 
             run_contract = build_run_contract(platform)
             compiled_strategy = (growth_strategy_status.get(platform) or {}).get("compiled_strategy")
@@ -234,7 +235,7 @@ def build_due_tasks(
                     "tool_selection_plan": dict(raw.get("tool_selection_plan") or {}),
                     "strategy": compiled_strategy or {},
                     "content_quality_reference_pack": quality_reference_pack,
-                    "strategy": compiled_strategy or {},
+                    "runtime_capabilities": build_runtime_capability_snapshot(),
                 },
             )
             selected_topics.setdefault(
@@ -636,8 +637,35 @@ def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age
         if age_hours is not None and age_hours > max_age_hours:
             result[normalized] = {"status": "stale", "key": key, "age_hours": round(age_hours, 2)}
         else:
-            result[normalized] = {"status": "ok", "key": key, "age_hours": round(age_hours, 2) if age_hours is not None else None}
+            from .platform_workflow_context import load_platform_workflow_context
+
+            context = load_platform_workflow_context(normalized)
+            compiled = context.get("strategy", {}).get("compiled")
+            if not isinstance(compiled, dict):
+                result[normalized] = {"status": "invalid", "key": key, "reason": "compiled growth strategy unavailable"}
+                continue
+            runtime_strategy = _runtime_growth_strategy(row.get("payload"))
+            compiled = {**compiled, "runtime_growth_strategy": runtime_strategy}
+            result[normalized] = {
+                "status": "ok",
+                "key": key,
+                "age_hours": round(age_hours, 2) if age_hours is not None else None,
+                "compiled_strategy": compiled,
+                "runtime_growth_strategy": runtime_strategy,
+            }
     return result
+
+
+def _runtime_growth_strategy(payload: Any) -> dict[str, Any]:
+    """Bound the live growth snapshot before it reaches generation input."""
+    source = payload if isinstance(payload, dict) else {}
+    fields = {
+        "policy_id", "platform", "content_type", "primary_metric", "secondary_metrics",
+        "target_user_action", "hook_plan", "retention_plan", "interaction_plan",
+        "packaging_plan", "platform_growth_rules", "quality_targets",
+        "historical_feedback_status", "data_driven_improvement_plan",
+    }
+    return {name: source[name] for name in fields if name in source}
 
 
 def _age_hours(value: str | None) -> float | None:

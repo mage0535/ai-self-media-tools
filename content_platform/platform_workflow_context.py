@@ -14,6 +14,7 @@ from typing import Any
 
 from .strategy_compiler import compile_strategy, validate_compiled_strategy
 from .content_quality_reference import load_content_quality_reference_pack, validate_content_quality_reference_pack
+from .runtime_capabilities import build_runtime_capability_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 RULEBOOK = ROOT / "config" / "channel_content_rulebook.json"
@@ -212,14 +213,9 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
             "compiled_gate": strategy_gate,
         },
         "skills": skill_records,
-        "content_quality_reference_pack": {
-            "path": str(ROOT / quality_reference_pack["path"]),
-            "version": quality_reference_pack["version"],
-            "sha256": quality_reference_pack["sha256"],
-            "sections": quality_reference_pack["sections"],
-            "loaded": quality_reference_gate["passed"],
-            "failures": quality_reference_gate["failures"],
-        },
+        "content_quality_reference_pack": quality_reference_pack,
+        "content_quality_reference_gate": quality_reference_gate,
+        "runtime_capabilities": build_runtime_capability_snapshot(),
         "publish_mode": PUBLISH_MODES.get(platform, "manual_handoff"),
         "selected_tools": list(dict.fromkeys(map(str, selected_tools))),
         "plan": {"template_family": plan.get("template_family", ""), "selected_pipeline": plan.get("selected_pipeline", "")},

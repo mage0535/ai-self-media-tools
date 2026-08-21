@@ -383,11 +383,12 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["run_contract"]["publish_boundary"] == "manual_handoff_only"
     assert task["brief"]["bounded_model_input"]["content_blueprint"]["topic"] == "AI workflow"
     assert set(task["brief"]["bounded_model_input"]) <= {
-        "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack"
+        "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities"
     }
     assert task["brief"]["content_blueprint_gate"]["passed"] is True
     assert task["brief"]["content_quality_reference_gate"]["passed"] is True
     assert task["brief"]["bounded_model_input"]["content_quality_reference_pack"]["loaded"] is True
+    assert task["brief"]["bounded_model_input"]["runtime_capabilities"]["version"] == "runtime_capabilities_v1"
 
 
 def test_due_task_builder_uses_editorial_fallback_after_invalid_native_candidate():
@@ -526,11 +527,17 @@ def test_due_task_builder_blocks_when_growth_strategy_snapshot_is_missing():
 
 def test_growth_strategy_snapshot_status_reads_store_inventory(tmp_path: Path):
     store = Store(tmp_path / "state.db")
-    store.save_tool_inventory("growth_strategy:wechat:latest", {"policy_id": "growth_quality_policy_v1"})
+    store.save_tool_inventory("growth_strategy:wechat:latest", {
+        "policy_id": "growth_quality_policy_v1",
+        "primary_metric": "click_through_rate",
+        "retention_plan": {"first_3_seconds": "lead with a concrete result"},
+    })
 
     status = growth_strategy_snapshot_status(store, ["wechat", "zhihu"])
 
     assert status["wechat"]["status"] == "ok"
+    assert status["wechat"]["compiled_strategy"]["version"] == "compiled_strategy_v1"
+    assert status["wechat"]["runtime_growth_strategy"]["primary_metric"] == "click_through_rate"
     assert status["zhihu"] == {"status": "missing", "key": "growth_strategy:zhihu:latest"}
 
 

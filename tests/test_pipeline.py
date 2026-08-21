@@ -90,6 +90,34 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(self.store.idea_candidates(job["id"]))
         self.assertTrue(self.store.topic_clusters(job["id"]))
 
+    def test_compiled_pipeline_preserves_quality_reference_in_provider_brief(self):
+        """A compiled strategy must not discard the executable quality rules."""
+        from content_platform.content_quality_reference import load_content_quality_reference_pack
+
+        reference = load_content_quality_reference_pack("wechat", content_form="long_article")
+        context = {
+            "strategy": {"compiled": {"version": "compiled_strategy_v1", "content_pillars": ["practical"]}},
+            "content_quality_reference_pack": reference,
+        }
+        captured = {}
+        job = self.pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
+
+        def generate(topic, brief):
+            captured["brief"] = brief
+            return {
+                "title": topic,
+                "body": "A concrete, evidence-backed workflow with a reusable checklist.",
+                "draft_meta": {"quality_gate": {"passed": True}, "strategy": {}},
+            }
+
+        with patch("content_platform.pipeline.load_platform_workflow_context", return_value=context):
+            with patch.object(self.pipeline.generator, "generate", side_effect=generate):
+                self.pipeline.run(job["id"])
+
+        bounded = captured["brief"]["bounded_model_input"]
+        self.assertTrue(bounded["content_quality_reference_pack"]["loaded"])
+        self.assertEqual(bounded["content_quality_reference_pack"]["sha256"], reference["sha256"])
+
     def test_publish_uses_delivery_queue(self):
         job = self.pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
         self.pipeline.run(job["id"])

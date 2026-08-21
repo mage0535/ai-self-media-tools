@@ -3652,6 +3652,19 @@ the persisted state/result/acceptance manifests, not from timer exit status.
 
 ## Hermes gateway incident recovery
 
+## 2026-08-21: runtime tool and strategy execution evidence
+
+- `content_quality_reference_pack` now remains a complete platform-specific executable pack in workflow context and in the bounded provider input. Earlier code retained only its provenance summary in one Pipeline path, which allowed rules to appear loaded while their actual gate details were absent from generation input.
+- `runtime_capabilities_v1` is built from the local `ToolRegistry` and video effect registry with only safe availability, type, module, and template identifiers. Paths, URLs, errors, cookies, and credentials are not included. The snapshot is passed through platform context, the bounded generate-stage contract, the generator tool-selection evidence, and MCP `capability_status` / `build_tool_selection_plan`.
+- The night-batch strategy freshness check now carries both a validated compiled strategy and a bounded live performance strategy. A fresh inventory record without an available compiled strategy is `invalid` and is blocked before generation rather than producing an empty strategy input.
+- The tool manifest remains truthful: `planned_internal` is valid only before execution or after a blocked run. Renderers write `ok` only after final artifact and quality gates pass; `not_invoked` records an explicit reason. A failed pre-render task must never be rewritten as an executed tool stack.
+- Regression coverage verifies complete reference sections, sanitized capability propagation, generator selection use of the runtime snapshot, Pipeline preservation after strategy recompilation, and overnight compiled/live strategy propagation. Eight platform contract probes produced `compiled_strategy_v1` inputs under the 16 KiB stage bound.
+
+### Verification target
+
+- Run `python -m pytest -q` and `python -m content_platform.project_audit` before release.
+- On Hermes, verify `load_platform_workflow_context(<platform>)` exposes a full quality pack, runtime capability snapshot, and compiled strategy; then run a non-publishing canary and require its artifact manifest to distinguish every selected tool as `ok`, `not_invoked`, or a documented failure.
+
 On 2026-08-21 the content project was not the cause of the Hermes messaging
 outage. The gateway process remained active, but Telegram traffic was forced
 through a local SOCKS tunnel whose upstream timed out. Hermes also attempted
