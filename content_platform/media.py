@@ -642,6 +642,20 @@ class MediaBridge:
             image_paths = [item["path"] for item in image_artifact.get("images", []) if Path(item.get("path", "")).is_file()]
         if not image_paths:
             return {}
+        unique_image_paths = []
+        seen_checksums = set()
+        for image_path in image_paths:
+            try:
+                checksum = hashlib.sha256(Path(image_path).read_bytes()).hexdigest()
+            except OSError:
+                continue
+            if checksum in seen_checksums:
+                continue
+            seen_checksums.add(checksum)
+            unique_image_paths.append(image_path)
+        image_paths = unique_image_paths
+        if not image_paths:
+            return {}
         provenance_by_path = {}
         provenance_path = output_dir / "asset_provenance.json"
         if provenance_path.is_file():
