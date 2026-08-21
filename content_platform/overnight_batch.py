@@ -611,8 +611,15 @@ def prefer_platform_source_candidates(
     }
     if not verified_sources:
         return candidates
-    native = [row for row in candidates if any(_source_matches(str(row.get("source") or ""), source) for source in verified_sources)]
-    other = [row for row in candidates if not any(_source_matches(str(row.get("source") or ""), source) for source in verified_sources)]
+    def is_verified_native(row: dict[str, Any]) -> bool:
+        candidate_source = str(row.get("source") or "").casefold()
+        if any(_source_matches(candidate_source, source) for source in verified_sources):
+            return True
+        prefix, _, suffix = candidate_source.partition(":")
+        return suffix in {"web_search", "search"} and prefix in verified_sources and _candidate_has_native_source(platform, row)
+
+    native = [row for row in candidates if is_verified_native(row)]
+    other = [row for row in candidates if not is_verified_native(row)]
     return native + other
 
 
