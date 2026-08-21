@@ -420,6 +420,8 @@ def _platform_evidence_matrix(
     strategy_ok = str(strategy.get("status") or "").casefold() == "ok"
     aliases = _platform_source_aliases(platform)
     candidate_source = str(candidate.get("source") or "").casefold()
+    from .trend_intelligence import _candidate_source_url_is_native
+
     successful_platform_sources = [
         item
         for item in attempted
@@ -433,7 +435,7 @@ def _platform_evidence_matrix(
     candidate_source_ok = any(
         _source_matches(candidate_source, str(item.get("source") or ""))
         for item in successful_platform_sources
-    )
+    ) and _candidate_source_url_is_native(platform, candidate)
     samples = []
     if candidate_source_ok and str(candidate.get("title") or "").strip():
         samples.append(

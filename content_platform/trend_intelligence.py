@@ -236,6 +236,7 @@ def _candidate_source_url_is_native(platform: str, candidate: dict[str, Any]) ->
         "kuaishou": ("kuaishou.com", "gifshow.com"),
         "shipinhao": ("weixin.qq.com", "channels.weixin.qq.com"),
         "twitter": ("x.com", "twitter.com"),
+        "wechat": ("mp.weixin.qq.com", "weixin.qq.com"),
     }
     target = "douyin" if platform.startswith("douyin_") else platform
     return any(host == root or host.endswith("." + root) for root in roots.get(target, ()))

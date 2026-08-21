@@ -128,6 +128,18 @@ def test_platform_matrix_rejects_external_url_for_platform_web_search_transport(
     assert matrix["candidate_source_url_native"] is False
 
 
+def test_platform_matrix_rejects_external_web_search_for_every_native_lane():
+    for platform, source in (("wechat", "wechat:web_search"), ("juejin", "juejin:web_search"), ("shipinhao", "shipinhao:web_search")):
+        candidate = {"title": "AI workflow", "source": source, "url": "https://example.test/not-native"}
+        snapshot = {
+            "items": [candidate],
+            "sources": [{"source": platform, "status": "ok", "count": 1}],
+        }
+        matrix = build_platform_matrix(platform, snapshot, candidate, platform_keywords=["AI"])
+        assert matrix["real_platform_collection_verified"] is False
+        assert matrix["trend_evidence"]["samples"] == []
+
+
 def test_calibrate_candidates_rewards_proven_history_without_hiding_missing_history():
     ranked = calibrate_candidates(
         [
