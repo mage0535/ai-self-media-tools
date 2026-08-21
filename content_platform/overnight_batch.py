@@ -439,7 +439,15 @@ def _platform_evidence_matrix(
     candidate_source_ok = any(
         _source_matches(candidate_source, str(item.get("source") or ""))
         for item in successful_platform_sources
-    ) and _candidate_source_url_is_native(platform, candidate)
+    )
+    if not candidate_source_ok:
+        prefix, _, suffix = candidate_source.partition(":")
+        candidate_source_ok = (
+            suffix in {"web_search", "search"}
+            and prefix in aliases
+            and _candidate_source_url_is_native(platform, candidate)
+            and any(str(item.get("source") or "").casefold() == prefix for item in successful_platform_sources)
+        )
     samples = []
     if candidate_source_ok and str(candidate.get("title") or "").strip():
         samples.append(
