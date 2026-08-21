@@ -151,6 +151,23 @@ class TrendTests(unittest.TestCase):
                     items = source.collect()
                 self.assertEqual(items[0]["source"], f"{platform}:web_search")
                 self.assertTrue(search.called)
+                self.assertIn("site:", search.call_args.args[-1])
+
+    def test_collect_report_marks_external_platform_search_as_degraded(self):
+        with patch.object(TrendCollector, "_direct_sources", return_value={"kuaishou": {"enabled": True}}), patch.object(
+            DirectTrendSource,
+            "collect",
+            return_value=[
+                {
+                    "title": "External result",
+                    "source": "kuaishou:web_search",
+                    "url": "https://example.test/result",
+                }
+            ],
+        ):
+            report = TrendCollector({"direct_sources": {"kuaishou": {"enabled": True}}}).collect_with_report()
+
+        self.assertEqual(report["sources"][0]["status"], "degraded")
 
     def test_zhihu_falls_back_to_web_search_when_cli_fails(self):
         with patch.object(DirectTrendSource, "_zhihu_cli_hot", side_effect=RuntimeError("cli missing")):

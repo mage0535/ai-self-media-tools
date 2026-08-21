@@ -18,6 +18,30 @@ def normalize_topic(title):
     return " ".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", str(title).casefold()))
 
 
+NATIVE_SEARCH_DOMAINS = {
+    "wechat": ("mp.weixin.qq.com", "weixin.qq.com"),
+    "kuaishou": ("kuaishou.com", "gifshow.com"),
+    "juejin": ("juejin.cn",),
+    "shipinhao": ("channels.weixin.qq.com", "weixin.qq.com"),
+    "xiaohongshu": ("xiaohongshu.com", "xhslink.com"),
+    "youtube": ("youtube.com", "youtu.be"),
+    "tiktok": ("tiktok.com",),
+    "twitter": ("x.com", "twitter.com"),
+}
+
+
+def _has_native_result(source: str, items: list[dict]) -> bool:
+    domains = NATIVE_SEARCH_DOMAINS.get(str(source or "").casefold(), ())
+    if not domains:
+        return True
+    for item in items:
+        host = urllib.parse.urlparse(str(item.get("url") or "")).hostname or ""
+        host = host.casefold()
+        if any(host == domain or host.endswith("." + domain) for domain in domains):
+            return True
+    return False
+
+
 def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     profile, used = profile or {}, {normalize_topic(item) for item in (used or set())}
     learned = learned or {}
@@ -116,6 +140,8 @@ class TrendCollector:
                 source_items = DirectTrendSource(source_name, source_cfg).collect()
                 items.extend(source_items)
                 if source_items and all(row.get("source_unavailable") for row in source_items):
+                    status = "degraded"
+                elif source_items and not _has_native_result(source_name, source_items):
                     status = "degraded"
                 else:
                     status = "ok" if source_items else "empty"
@@ -302,7 +328,7 @@ class DirectTrendSource:
             "tiktok": "AI workflow automation productivity site:tiktok.com",
         }
         if self.name in platform_queries:
-            return self._web_search_source(self.name, platform_queries[self.name])
+            return self._web_search_source(self.name, self._native_query(platform_queries[self.name]))
         if self.name == "bilibili":
             return self._bilibili()
         if self.name == "zhihu":
@@ -322,6 +348,23 @@ class DirectTrendSource:
         if self.name == "agent_reach":
             return self._agent_reach()
         raise ValueError(f"unknown direct trend source: {self.name}")
+
+    def _native_query(self, query: str) -> str:
+        """Constrain web-search transport to the target platform domain."""
+        if "site:" in query.casefold():
+            return query
+        domains = {
+            "wechat": "mp.weixin.qq.com",
+            "kuaishou": "kuaishou.com",
+            "juejin": "juejin.cn",
+            "shipinhao": "channels.weixin.qq.com",
+            "xiaohongshu": "xiaohongshu.com",
+            "youtube": "youtube.com",
+            "tiktok": "tiktok.com",
+            "twitter": "x.com",
+        }
+        domain = domains.get(self.name)
+        return f"{query} site:{domain}" if domain else query
 
     def _request_json(self, url, headers=None):
         request = urllib.request.Request(
