@@ -49,9 +49,12 @@ AI Self-Media Tools 是一个自媒体内容工作流系统，目标不是单点
 
 ```bash
 python -m content_platform trends --limit 10
+python -m content_platform same-lane-intel --platform youtube --sample-file data/intel/samples.json
 python -m content_platform analyze-topic --topic "AI 自动化"
 python -m content_platform account-report --topic "AI 自动化"
 ```
+
+`same-lane-intel` 用于把同赛道账号和作品样本蒸馏成可执行规则。它只接受平台原生作品链接作为有效证据；OpenAI 官网、GitHub 项目页、通用网页搜索结果不能冒充 B 站、知乎、公众号、YouTube 或 TikTok 的平台热度。自有账号缺少 1h/24h/72h 单作品数据时，输出会标记为 `competitor_inspired_not_auto_tuned`，只能作为竞品启发，不能自动调参。
 
 ### 5.2 生成
 

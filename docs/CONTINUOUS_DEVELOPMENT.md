@@ -3701,3 +3701,22 @@ treated as a gateway failure.
 - Video rendering uses `video_max_disk_used_percent` (87% in the production template) separately from the general 88% disk limit, leaving room for temporary FFmpeg/browser files. The timer must remain disabled during a failed or manually stopped batch until a fresh canary passes.
 - Production deployment must rewrite private `config.json` script/data paths to the active versioned release directory; changing `CONTENT_PLATFORM_HOME` alone is insufficient because media adapter paths may be absolute. Verify the child process command line before accepting a batch.
 - Visual recipe reuse compares core fingerprint first, then template family plus modules and style variants. Different style variants are allowed; identical core recipes remain blocked.
+
+## 2026-08-22: same-lane intelligence evidence layer
+
+- Added `content_platform.same_lane_intelligence` and CLI command `same-lane-intel`.
+  It ingests same-lane account/work samples collected by Hermes or direct
+  platform tools, rejects non-native/generic evidence, and distills platform
+  playbooks for topic, hook, structure, visual proof, and generation rules.
+- The command writes a JSON report and stores `same_lane_intelligence:latest`
+  in `tool_inventory`, so scheduled workflows can load the latest competitor
+  distillation before choosing topics or generating copy.
+- Native work evidence is mandatory. Generic pages such as model homepages,
+  GitHub projects, Baidu answers, or external search results cannot be counted
+  as Bilibili/WeChat/Zhihu/YouTube/TikTok same-lane evidence.
+- When own content-level metrics are not strategy-eligible, the report marks
+  the guidance as `competitor_inspired_not_auto_tuned`. This prevents account
+  snapshots or malformed platform counters from being used as automatic
+  strategy feedback.
+- Minimum verification: `python -m pytest tests/test_same_lane_intelligence.py
+  tests/test_trend_intelligence.py tests/test_performance_cycle.py -q`.
