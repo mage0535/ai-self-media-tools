@@ -126,3 +126,33 @@ def test_cli_same_lane_intel_reads_sample_file_writes_report_and_snapshot(tmp_pa
     assert sorted(report["platforms"]) == ["bilibili", "youtube"]
     latest = Store(tmp_path / "state.db").latest_tool_inventory("same_lane_intelligence:latest")
     assert latest["payload"]["report_path"] == str(output_path)
+
+
+def test_load_samples_file_supports_nested_platform_query_items(tmp_path):
+    from content_platform.same_lane_intelligence import load_samples_file
+
+    sample_file = tmp_path / "nested.json"
+    sample_file.write_text(
+        json.dumps(
+            {
+                "platforms": {
+                    "zhihu": {
+                        "queries": [
+                            {
+                                "query": "AI 工作流",
+                                "items": [
+                                    {"title": "AI 工作流真实案例", "url": "https://www.zhihu.com/question/123/answer/456"}
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    samples = load_samples_file(sample_file)
+
+    assert samples["zhihu"][0]["title"] == "AI 工作流真实案例"
