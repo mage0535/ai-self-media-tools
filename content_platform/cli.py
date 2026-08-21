@@ -12,6 +12,7 @@ from .intelligence import build_generation_context
 from .niche_analysis import analyze_niche
 from .metrics import render_metrics
 from .seo import search as _seo_search, analyze as _seo_analyze, geo_checklist
+from .same_lane_intelligence import build_same_lane_report, load_samples_file
 from .paths import project_home, trend_cache_dir
 from .pipeline import Pipeline
 from .project_audit import audit_project
@@ -310,6 +311,11 @@ def parser():
     viral = sub.add_parser("viral-monitor", help="Score collected platform works for growth decisions")
     viral.add_argument("--input", required=True, help="JSON file containing posts or {posts,recent_by_account}")
     viral.add_argument("--output", default="")
+    same_lane = sub.add_parser("same-lane-intel", help="Distill same-lane account and work samples into generation rules")
+    same_lane.add_argument("--platform", action="append", required=True)
+    same_lane.add_argument("--sample-file", required=True, help="JSON samples collected from native platform tools")
+    same_lane.add_argument("--readiness-file", default="", help="Optional metrics-readiness JSON used only for claim boundaries")
+    same_lane.add_argument("--output", default="", help="Optional JSON report path")
     return p
 
 
@@ -469,6 +475,38 @@ def execute(args):
         result = inspect_delivery_readiness(config)
         store.save_tool_inventory("content-tools", result.get("tools", {}).get("content_tools", {}))
         return result
+    if args.command == "same-lane-intel":
+        samples_by_platform = load_samples_file(args.sample_file)
+        readiness = {}
+        if args.readiness_file:
+            readiness_payload = json.loads(Path(args.readiness_file).read_text(encoding="utf-8"))
+            readiness = readiness_payload.get("platforms") if isinstance(readiness_payload.get("platforms"), dict) else readiness_payload
+        report = build_same_lane_report(samples_by_platform, args.platform, readiness)
+        if args.output:
+            output = Path(args.output)
+        else:
+            output = Path(config.get("data_dir", Path(args.db).parent)) / "same_lane_intelligence_latest.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["output"] = str(output)
+        store.save_tool_inventory(
+            "same_lane_intelligence:latest",
+            {
+                "report_path": str(output),
+                "platforms": report["platforms"],
+                "generated_at": report["generated_at"],
+                "summary": {
+                    platform: {
+                        "accepted_sample_count": data.get("accepted_sample_count", 0),
+                        "rejected_sample_count": data.get("rejected_sample_count", 0),
+                        "own_data_status": data.get("own_data_status", "unknown"),
+                        "topic_patterns": data.get("topic_patterns", []),
+                    }
+                    for platform, data in report.get("reports", {}).items()
+                },
+            },
+        )
+        return report
     if args.command == "cookie-inventory":
         from .auth_registry import cookie_inventory
         platforms = args.platform or sorted((config.get("publishers") or {}).get("platforms") or {})
