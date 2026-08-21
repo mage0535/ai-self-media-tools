@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import time
 import uuid
@@ -792,6 +793,8 @@ class Pipeline:
         runner.succeeded("validate_image_requirements", gate, depends_on=["generate_or_collect_images"])
 
     def _quality_gate(self, job_id, draft, risk, geo, *, phase="rendered"):
+        if phase == "rendered":
+            self._recover_video_render_evidence(job_id, draft)
         dm = draft.get("draft_meta", {})
         gate = {"passed": True, "gates": {}}
         g1 = risk.get("level", "pass") != "block"
@@ -874,6 +877,41 @@ class Pipeline:
         gate["score"] = sum(1 for g in gate["gates"].values() if g["passed"])
         gate["total"] = len(gate["gates"])
         return gate
+
+    def _recover_video_render_evidence(self, job_id, draft):
+        """Recover renderer evidence when an optional later media step fails."""
+        meta = draft.setdefault("draft_meta", {})
+        if meta.get("render_manifest") or meta.get("video_artifact"):
+            return
+        artifact_dir = self.data_dir / "artifacts" / str(job_id)
+        manifest_path = artifact_dir / "video_toolchain_runner_manifest.json"
+        if not manifest_path.is_file():
+            return
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(manifest, dict) or manifest.get("status") != "rendered":
+            return
+        output = Path(str(manifest.get("output") or ""))
+        if not output.is_file():
+            return
+        packet = {}
+        packet_path = artifact_dir / "packet.json"
+        if packet_path.is_file():
+            try:
+                packet = json.loads(packet_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                packet = {}
+        self._attach_video_render_evidence(
+            draft,
+            {
+                "path": str(output),
+                "checksum": hashlib.sha256(output.read_bytes()).hexdigest(),
+                "render_manifest": manifest,
+                "render_packet": packet,
+            },
+        )
 
     def _generation_platform_quality_gate(self, job_id, draft, platforms, *, phase="generation"):
         if not self.require_gate_pass:
