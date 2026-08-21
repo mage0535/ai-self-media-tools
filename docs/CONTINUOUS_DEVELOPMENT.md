@@ -3602,7 +3602,7 @@ compatible while making scheduled runs fail closed.
 - Privacy audit: `python -m content_platform.cli project-audit` -> `ok: true`,
   `issues: []`, `scanned_files: 430`.
 - Video runner dry-run smoke passed for the Shotcraft motion-plan path.
-- Server isolated worktree `/root/.ai-self-media-tools-luna` at `b254ee1`
+- Server isolated worktree at commit `b254ee1`
   passed the same `116` quality tests and project audit. Production private
   strategy/skill loading passed for `douyin_ai`, `youtube`, `xiaohongshu`, and
   `zhihu`, all with compiled strategy gates and no missing skills.
