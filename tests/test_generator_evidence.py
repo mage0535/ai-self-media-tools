@@ -1,4 +1,5 @@
 from content_platform.generator import DraftGenerator
+from content_platform.content_quality_reference import load_content_quality_reference_pack
 from content_platform.run_contract import build_run_contract
 import pytest
 
@@ -47,6 +48,7 @@ def test_normalized_draft_carries_depth_and_adaptive_cover_contract():
 def test_compiled_generation_uses_only_bounded_model_input():
     generator = DraftGenerator()
     contract = build_run_contract("tiktok")
+    pack = load_content_quality_reference_pack("tiktok", content_form="short_video")
     brief = {
         "run_contract": contract,
         "bounded_model_input": {
@@ -54,12 +56,16 @@ def test_compiled_generation_uses_only_bounded_model_input():
             "claim_ledger": [],
             "tool_selection_plan": {},
             "strategy": {"version": "compiled_strategy_v1"},
+            "content_quality_reference_pack": pack,
+            "strategy": {"version": "compiled_strategy_v1"},
         },
         "private_unbounded_history": "must not reach the model",
     }
     bounded = generator._provider_brief(brief)
     assert "private_unbounded_history" not in bounded
     assert bounded["content_blueprint"]["topic"] == "AI meeting notes"
+    assert bounded["content_quality_reference_pack"]["loaded"] is True
+    assert bounded["strategy"]["version"] == "compiled_strategy_v1"
 
 
 def test_compiled_generation_rejects_oversized_provider_response():

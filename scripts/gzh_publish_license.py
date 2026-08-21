@@ -136,13 +136,22 @@ def recent_direction_conflicts(root: Path, direction: str) -> list[dict]:
         from content_platform.ops_run import _normalized_direction, _recent_records
     except Exception:
         return []
-    today = datetime.now(CST).strftime("%Y%m%d")
+    today = _latest_ops_run_date(Path(root)) or datetime.now(CST).strftime("%Y%m%d")
     normalized = _normalized_direction("", direction)
     return [
         item
         for item in _recent_records(Path(root), today, RECENT_WINDOW_DAYS)
         if str(item.get("direction") or "") == normalized
     ]
+
+
+def _latest_ops_run_date(root: Path) -> str:
+    runs = []
+    for path in (root / "data" / "ops_runs").glob("*/run_manifest.json"):
+        name = path.parent.name
+        if re.fullmatch(r"\d{8}", name):
+            runs.append(name)
+    return max(runs) if runs else ""
 
 
 def title_similarity(left: str, right: str) -> float:

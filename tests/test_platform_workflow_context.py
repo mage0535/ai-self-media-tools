@@ -13,4 +13,7 @@ def test_platform_workflow_context_loads_rules_strategy_skills_and_publish_mode(
         assert context["platform_rules_2026"]["matched"] is True
         assert Path(context["strategy"]["path"]).is_file()
         assert all(item["exists"] for item in context["skills"])
+        assert context["content_quality_reference_pack"]["loaded"] is True
+        assert context["content_quality_reference_pack"]["sha256"]
+        assert "content_quality_reference_pack" in context["selected_tools"]
         assert context["selected_tools"]

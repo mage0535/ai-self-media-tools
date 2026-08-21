@@ -202,13 +202,28 @@ def build_due_tasks(
             matrix = selected_matrix or _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
             from .run_contract import bound_stage_payload, build_run_contract
             from .content_blueprint import build_content_blueprint, validate_content_blueprint
+            from .content_quality_reference import (
+                load_content_quality_reference_pack,
+                validate_content_quality_reference_pack,
+            )
 
             run_contract = build_run_contract(platform)
             compiled_strategy = (growth_strategy_status.get(platform) or {}).get("compiled_strategy")
             content_slot = dict(raw)
             if isinstance(compiled_strategy, dict):
                 content_slot["strategy_compiled"] = compiled_strategy
-            content_blueprint = build_content_blueprint(platform, str(selected["title"]), content_slot, matrix)
+            quality_reference_pack = load_content_quality_reference_pack(
+                platform,
+                content_form=str(content_slot.get("content_form") or content_slot.get("stage") or ""),
+            )
+            quality_reference_gate = validate_content_quality_reference_pack(quality_reference_pack)
+            content_blueprint = build_content_blueprint(
+                platform,
+                str(selected["title"]),
+                content_slot,
+                matrix,
+                quality_reference_pack=quality_reference_pack,
+            )
             blueprint_gate = validate_content_blueprint(content_blueprint)
             bounded_model_input = bound_stage_payload(
                 run_contract,
@@ -217,6 +232,8 @@ def build_due_tasks(
                     "content_blueprint": content_blueprint,
                     "claim_ledger": list(raw.get("claim_ledger") or []),
                     "tool_selection_plan": dict(raw.get("tool_selection_plan") or {}),
+                    "strategy": compiled_strategy or {},
+                    "content_quality_reference_pack": quality_reference_pack,
                     "strategy": compiled_strategy or {},
                 },
             )
@@ -240,6 +257,7 @@ def build_due_tasks(
                     "bounded_model_input": bounded_model_input,
                     "content_blueprint": content_blueprint,
                     "content_blueprint_gate": blueprint_gate,
+                    "content_quality_reference_gate": quality_reference_gate,
                     "selection_mode": selection_mode,
                     **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
                 },
