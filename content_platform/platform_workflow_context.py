@@ -145,7 +145,7 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
     if not isinstance(rule_entry, dict):
         raise ValueError(f"platform rulebook entry missing: {platform}")
     rules_ok, rules_reason = _platform_rule_loaded(platform)
-    if not rules_ok:
+    if platform in {"kuaishou", "tiktok", "youtube", "bilibili", "shipinhao", "wechat", "xiaohongshu", "zhihu", "juejin", "douyin", "douyin_ai", "douyin_pet", "x", "twitter"} and not rules_ok:
         raise ValueError(f"2026 platform rules missing for {platform}: {rules_reason}")
 
     strategy = _latest_strategy(platform)

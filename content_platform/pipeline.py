@@ -866,7 +866,10 @@ class Pipeline:
         for platform in platforms:
             normalized = str(platform or "").casefold()
             packet = self._generation_platform_packet(job_id, draft, platforms, normalized)
-            job_brief = (self.store.get_job(job_id).get("brief") or {})
+            try:
+                job_brief = (self.store.get_job(job_id).get("brief") or {})
+            except KeyError:
+                job_brief = {}
             if job_brief.get("run_contract"):
                 packet["run_contract"] = job_brief["run_contract"]
                 packet["runtime_execution_required"] = True
