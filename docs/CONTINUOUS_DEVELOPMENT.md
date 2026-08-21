@@ -3602,6 +3602,16 @@ compatible while making scheduled runs fail closed.
 - Privacy audit: `python -m content_platform.cli project-audit` -> `ok: true`,
   `issues: []`, `scanned_files: 430`.
 - Video runner dry-run smoke passed for the Shotcraft motion-plan path.
+- Server isolated worktree `/root/.ai-self-media-tools-luna` at `b254ee1`
+  passed the same `116` quality tests and project audit. Production private
+  strategy/skill loading passed for `douyin_ai`, `youtube`, `xiaohongshu`, and
+  `zhihu`, all with compiled strategy gates and no missing skills.
+- A server Douyin AI canary first blocked with the explicit
+  `functional_mascot_role_missing` reason when the plan omitted role evidence;
+  after adding functional cat/dog role evidence, the same canary passed
+  pre-render checks and wrote a truthful dry-run manifest. Its tool records
+  remained `planned_internal` because it was intentionally dry-run, so it was
+  not treated as a production execution success.
 
 ## Deployment boundary
 
