@@ -68,6 +68,51 @@ def test_compiled_generation_uses_only_bounded_model_input():
     assert bounded["strategy"]["version"] == "compiled_strategy_v1"
 
 
+def test_compiled_generation_carries_sanitized_runtime_capabilities():
+    generator = DraftGenerator()
+    contract = build_run_contract("tiktok")
+    brief = {
+        "run_contract": contract,
+        "bounded_model_input": {
+            "content_blueprint": {"topic": "AI meeting notes"},
+            "claim_ledger": [],
+            "tool_selection_plan": {},
+            "strategy": {"version": "compiled_strategy_v1"},
+            "content_quality_reference_pack": load_content_quality_reference_pack("tiktok", content_form="short_video"),
+            "runtime_capabilities": {
+                "version": "runtime_capabilities_v1",
+                "tools": {"ffmpeg": {"available": True, "kind": "media_runtime"}},
+                "video_effect_modules": {"modules": ["hero-card"], "template_families": ["tutorial"]},
+            },
+        },
+    }
+
+    bounded = generator._provider_brief(brief)
+
+    assert bounded["runtime_capabilities"]["tools"]["ffmpeg"]["available"] is True
+    assert "path" not in str(bounded["runtime_capabilities"])
+
+
+def test_compiled_generation_strips_strategy_source_path_from_provider_input():
+    generator = DraftGenerator()
+    brief = {
+        "run_contract": build_run_contract("tiktok"),
+        "bounded_model_input": {
+            "content_blueprint": {"topic": "AI meeting notes"},
+            "claim_ledger": [],
+            "tool_selection_plan": {},
+            "strategy": {"version": "compiled_strategy_v1", "source_path": "/private/runtime/strategy.md"},
+            "content_quality_reference_pack": load_content_quality_reference_pack("tiktok", content_form="short_video"),
+            "runtime_capabilities": {"version": "runtime_capabilities_v1", "tools": {}, "video_effect_modules": {}},
+        },
+    }
+
+    bounded = generator._provider_brief(brief)
+
+    assert bounded["strategy"]["version"] == "compiled_strategy_v1"
+    assert "source_path" not in bounded["strategy"]
+
+
 def test_compiled_generation_rejects_oversized_provider_response():
     generator = DraftGenerator()
     contract = build_run_contract("tiktok")
@@ -99,3 +144,24 @@ def test_blueprint_content_form_controls_generation_context():
         "content_blueprint": {"content_form": "short_post", "audience": "operators", "platform_style": "compact"},
     })
     assert draft["draft_meta"]["content_form"] == "short_post"
+
+
+def test_generation_selection_uses_runtime_capability_snapshot():
+    draft = DraftGenerator({"allow_fallback": True}).generate("AI checklist", {
+        "platform": "tiktok",
+        "platforms": ["tiktok"],
+        "content_form": "short_video",
+        "runtime_capabilities": {
+            "version": "runtime_capabilities_v1",
+            "tools": {"ffmpeg": {"available": True, "kind": "media_runtime"}},
+            "video_effect_modules": {
+                "version": "test",
+                "modules": {"hero-card": {"available": True}},
+                "template_families": {"tutorial": {"available": True}},
+            },
+        },
+    })
+
+    analysis = draft["draft_meta"]["tools_capability_analysis"]
+    assert "ffmpeg" in analysis["analyzed_tool_groups"]["runtime_probe"]
+    assert "hero-card" in analysis["analyzed_tool_groups"]["video_effect_modules"]

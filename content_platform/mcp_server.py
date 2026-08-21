@@ -118,16 +118,15 @@ def _tools():
         return {"audio": result.get("audio", ""), "subtitle": result.get("subtitle", "")}
 
     async def mcp_capability_status() -> dict:
-        from content_platform.tool_registry import ToolRegistry
-        from content_platform.video_recipe import load_effect_module_registry
+        from content_platform.runtime_capabilities import build_runtime_capability_snapshot
 
-        registry = load_effect_module_registry()
-        modules = registry.get("modules") if isinstance(registry, dict) else {}
-        families = registry.get("template_families") if isinstance(registry, dict) else {}
+        snapshot = build_runtime_capability_snapshot()
+        modules = snapshot["video_effect_modules"].get("modules") or {}
+        families = snapshot["video_effect_modules"].get("template_families") or {}
         return {
-            "tools": ToolRegistry({"fast_probe": True}).probe(),
+            "tools": snapshot["tools"],
             "video_effect_modules": {
-                "version": registry.get("version", ""),
+                "version": snapshot["video_effect_modules"].get("version", ""),
                 "module_count": len(modules or {}),
                 "template_family_count": len(families or {}),
             },
@@ -148,14 +147,18 @@ def _tools():
 
     async def mcp_build_tool_selection_plan(packet: str = "{}", platform: str = "") -> dict:
         from content_platform.tool_selection import build_tool_selection_evidence
+        from content_platform.runtime_capabilities import build_runtime_capability_snapshot
 
         data = json.loads(packet or "{}")
         channel = platform or str(data.get("platform") or "")
         content_type = str(data.get("content_type") or data.get("content_form") or "article")
+        snapshot = build_runtime_capability_snapshot()
         return build_tool_selection_evidence(
             platform=channel,
             content_type=content_type,
             content_goal=str(data.get("content_goal") or data.get("goal") or ""),
+            capability_status={"tools": snapshot["tools"]},
+            video_effect_registry=snapshot["video_effect_modules"],
             planned_manifest=data.get("tool_invocation_manifest") or {},
         )
 

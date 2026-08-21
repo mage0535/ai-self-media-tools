@@ -15,5 +15,8 @@ def test_platform_workflow_context_loads_rules_strategy_skills_and_publish_mode(
         assert all(item["exists"] for item in context["skills"])
         assert context["content_quality_reference_pack"]["loaded"] is True
         assert context["content_quality_reference_pack"]["sha256"]
+        assert context["content_quality_reference_pack"]["hook_title_gate"]
+        assert context["runtime_capabilities"]["version"] == "runtime_capabilities_v1"
+        assert "tools" in context["runtime_capabilities"]
         assert "content_quality_reference_pack" in context["selected_tools"]
         assert context["selected_tools"]

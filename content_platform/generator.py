@@ -117,7 +117,13 @@ class DraftGenerator:
             return brief
         from .run_contract import bound_stage_payload
 
-        return bound_stage_payload(contract, "generate", dict(brief.get("bounded_model_input") or {}))
+        payload = dict(brief.get("bounded_model_input") or {})
+        strategy = payload.get("strategy")
+        if isinstance(strategy, dict):
+            # Provenance remains in local workflow context; providers only need
+            # the strategy policy and stable source hash, never machine paths.
+            payload["strategy"] = {key: value for key, value in strategy.items() if key != "source_path"}
+        return bound_stage_payload(contract, "generate", payload)
 
     @staticmethod
     def _bounded_provider_content(content, brief):
@@ -484,13 +490,15 @@ class DraftGenerator:
         topic_decision.setdefault("score", float(score.get("total_score") or 0.01) if isinstance(score, dict) else 0.01)
         topic_decision.setdefault("growth_signals", topic_decision.get("signals") or signals)
         content_form = str(draft_meta.get("content_form") or strategy.get("content_form") or "article")
-        if not draft_meta.get("tool_selection_plan"):
-            draft_meta.update(build_tool_selection_evidence(
-                platform=platform,
-                content_type=content_form,
-                content_goal="select a platform-matched format and tool stack from verified available capabilities",
-                planned_manifest=draft_meta.get("tool_invocation_manifest") or {},
-            ))
+        runtime = DraftGenerator._runtime_capabilities(brief)
+        draft_meta.update(build_tool_selection_evidence(
+            platform=platform,
+            content_type=content_form,
+            content_goal="select a platform-matched format and tool stack from verified available capabilities",
+            capability_status={"tools": runtime.get("tools") or {}},
+            video_effect_registry=runtime.get("video_effect_modules") or {},
+            planned_manifest=draft_meta.get("tool_invocation_manifest") or {},
+        ))
         draft_meta["growth_recipe"] = build_growth_recipe(
             platform=platform,
             content_form=content_form,
@@ -726,8 +734,18 @@ class DraftGenerator:
             platform=platform,
             content_type=selection_content_type,
             content_goal="increase opens, saves, and follow conversion with platform-matched structure, cards, and visuals",
+            capability_status={"tools": self._runtime_capabilities(brief).get("tools") or {}},
+            video_effect_registry=self._runtime_capabilities(brief).get("video_effect_modules") or {},
             planned_manifest=tool_manifest,
         ))
+
+    @staticmethod
+    def _runtime_capabilities(brief):
+        bounded = brief.get("bounded_model_input") if isinstance(brief, dict) else {}
+        bounded = bounded if isinstance(bounded, dict) else {}
+        direct = brief.get("runtime_capabilities") if isinstance(brief, dict) else {}
+        runtime = bounded.get("runtime_capabilities") or direct or {}
+        return runtime if isinstance(runtime, dict) else {}
 
     @staticmethod
     def _article_sections(body, topic):

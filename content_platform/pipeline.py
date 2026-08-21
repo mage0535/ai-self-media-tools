@@ -125,13 +125,26 @@ class Pipeline:
                 runner.succeeded("run_content_hygiene", hygiene, depends_on=["initialize_task"])
                 brief = runner.run("load_content_strategy", lambda: self._enrich_brief(job, hygiene), depends_on=["run_content_hygiene"], require_output=True)
                 if len(platform_contexts) == 1:
-                    compiled = next(iter(platform_contexts.values())).get("strategy", {}).get("compiled")
+                    platform_context = next(iter(platform_contexts.values()))
+                    compiled = platform_context.get("strategy", {}).get("compiled")
                     if isinstance(compiled, dict):
                         brief["strategy_compiled"] = compiled
                         brief["strategy"] = compiled
                         contract = brief.get("run_contract")
+                        if not isinstance(contract, dict):
+                            from .run_contract import build_run_contract
+                            contract = build_run_contract(str(next(iter(platform_contexts))))
+                            brief["run_contract"] = contract
                         if isinstance(contract, dict):
                             from .run_contract import bound_stage_payload
+                            from .content_quality_reference import load_content_quality_reference_pack
+
+                            quality_reference = platform_context.get("content_quality_reference_pack")
+                            if not isinstance(quality_reference, dict) or quality_reference.get("loaded") is not True:
+                                quality_reference = load_content_quality_reference_pack(
+                                    str(next(iter(platform_contexts))),
+                                    content_form=str((brief.get("content_blueprint") or {}).get("content_form") or brief.get("content_form") or ""),
+                                )
                             brief["bounded_model_input"] = bound_stage_payload(
                                 contract,
                                 "generate",
@@ -140,6 +153,8 @@ class Pipeline:
                                     "claim_ledger": list(brief.get("claim_ledger") or []),
                                     "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
                                     "strategy": compiled,
+                                    "content_quality_reference_pack": quality_reference,
+                                    "runtime_capabilities": platform_context.get("runtime_capabilities") or {},
                                 },
                             )
                 runner.succeeded("run_operation_strategy", {"historical_feedback": bool(brief.get("historical_feedback"))}, depends_on=["load_content_strategy"])
