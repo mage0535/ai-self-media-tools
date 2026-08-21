@@ -981,7 +981,20 @@ def _recipe_reuse_gate(recipe: dict, plan: dict) -> dict:
         item_pipeline = str(item.get("selected_pipeline") or "").strip()
         item_platforms = {str(value).casefold() for value in (item.get("platforms") or []) if str(value).strip()}
         same_core = bool(core and item_core == core and item_platforms)
-        same_visual_family = bool(recipe_family and item_family == recipe_family and item_platforms)
+        item_modules = item.get("modules") or []
+        recipe_modules = recipe.get("modules") or []
+        item_style = item.get("style_variants")
+        recipe_style = recipe.get("style_variants")
+        same_visual_family = bool(
+            recipe_family
+            and item_family == recipe_family
+            and item_platforms
+            and (
+                not item_modules
+                or not recipe_modules
+                or (item_modules == recipe_modules and item_style == recipe_style)
+            )
+        )
         if not (same_core or same_visual_family):
             continue
         used_at = _parse_utc(item.get("used_at"))
@@ -1015,6 +1028,7 @@ def _register_visual_recipe_use(recipe: dict, plan: dict, output_path: str) -> N
         "fingerprint": recipe.get("fingerprint"),
         "template_family": recipe.get("template_family"),
         "modules": recipe.get("modules") or [],
+        "style_variants": recipe.get("style_variants") or {},
         "platforms": plan.get("platforms") or [],
         "selected_pipeline": plan.get("selected_pipeline") or "",
         "output_path": output_path,
