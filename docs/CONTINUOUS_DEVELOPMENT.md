@@ -3695,3 +3695,7 @@ treated as a gateway failure.
 - Video and card canaries contain renderer-written manifests and measured output evidence; manual channels remain `handoff_ready`.
 - Local, GitHub, and server public code resolve to the same release tree; private production assets are not committed.
 - When network BGM providers are unavailable, the renderer may use `BGM_LIBRARY_DIR` only when each local track has an adjacent `bgm_manifest.json` with a license, source URL, and fingerprint; the global BGM fingerprint registry still forbids reuse.
+- Video preparation deduplicates image files by checksum before scene assignment and never cycles a smaller image set to fill missing scenes. Missing unique assets remain a blocking condition until approved retrieval or generation supplies them.
+- Renderer sidecar recovery reads `ffprobe`, BGM, subtitle, caption, and background evidence from the actual artifact directory. Optional later media failures cannot erase already-rendered evidence, and cannot turn a failed artifact into a pass.
+- Vertical short videos are normalized to 59.8 seconds when the measured output exceeds the 60-second platform limit; the artifact and scene-duration gates run again after normalization.
+- Video rendering uses `video_max_disk_used_percent` (87% in the production template) separately from the general 88% disk limit, leaving room for temporary FFmpeg/browser files. The timer must remain disabled during a failed or manually stopped batch until a fresh canary passes.
