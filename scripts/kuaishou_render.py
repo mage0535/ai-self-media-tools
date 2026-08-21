@@ -916,7 +916,9 @@ def _local_bgm_candidates(style):
     if not root or not Path(root).is_dir():
         return []
     manifest_path = os.environ.get("BGM_LIBRARY_MANIFEST", "").strip()
-    manifests = [Path(manifest_path)] if manifest_path and Path(manifest_path).is_file() else sorted(Path(root).rglob("bgm_manifest.json"))
+    manifests = [Path(manifest_path)] if manifest_path and Path(manifest_path).is_file() else sorted(
+        set(Path(root).rglob("bgm_manifest.json")) | set(Path(root).rglob("*.bgm_manifest.json"))
+    )
     candidates = []
     for manifest in manifests[:200]:
         try:
@@ -930,6 +932,8 @@ def _local_bgm_candidates(style):
         if not audio.is_absolute():
             audio = manifest.parent / audio
         if not audio.is_file() or audio.stat().st_size <= REAL_BGM_MIN_BYTES:
+            continue
+        if meta.get("duration") and float(meta.get("duration") or 0) < 60:
             continue
         tags = " ".join(str(meta.get(key) or "") for key in ("title", "artist", "style", "fit_reason"))
         candidates.append({
