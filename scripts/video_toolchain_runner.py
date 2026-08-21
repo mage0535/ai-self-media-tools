@@ -354,6 +354,13 @@ def main(argv: list[str] | None = None) -> int:
     manifest.update({"renderer_command": cmd, "returncode": proc.returncode, "stdout_tail": (proc.stdout or "")[-800:], "stderr_tail": (proc.stderr or "")[-800:]})
     generated = sorted(output_dir.glob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
     if proc.returncode == 0 and generated:
+        duration_fix = _normalize_short_video_duration(generated[0], _primary_platform(plan))
+        manifest["duration_normalization"] = duration_fix
+        if not duration_fix.get("passed"):
+            manifest.update({"ok": False, "output": str(generated[0]), "status": "duration_normalization_failed", "error": duration_fix.get("error") or "short video duration normalization failed"})
+            _write_manifest(output_dir, manifest)
+            print(manifest["error"], file=sys.stderr)
+            return 4
         cinema_gate = _run_cinema_visual_gate(output_dir)
         manifest["cinema_visual_gate"] = cinema_gate
         if not cinema_gate.get("passed"):
@@ -458,6 +465,32 @@ def main(argv: list[str] | None = None) -> int:
     _write_manifest(output_dir, manifest)
     print(manifest["stderr_tail"] or manifest["stdout_tail"] or manifest["error"], file=sys.stderr)
     return proc.returncode or 3
+
+
+def _normalize_short_video_duration(path: Path, platform: str) -> dict:
+    """Trim over-limit vertical shorts before measured artifact gates run."""
+    normalized = str(platform or "").casefold()
+    if normalized not in {"douyin", "douyin_ai", "douyin_pet", "kuaishou", "shipinhao", "tiktok", "youtube"}:
+        return {"passed": True, "applied": False, "reason": "platform has no short duration limit"}
+    duration = _video_duration(path)
+    if duration <= 60.0:
+        return {"passed": True, "applied": False, "duration_seconds": round(duration, 3)}
+    temp = path.with_name(path.stem + ".duration-normalized.mp4")
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", str(path), "-t", "59.8",
+             "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-c:a", "aac",
+             "-b:a", "128k", "-pix_fmt", "yuv420p", str(temp)],
+            capture_output=True, text=True, timeout=180, check=False,
+        )
+        if result.returncode != 0 or not temp.is_file():
+            return {"passed": False, "applied": True, "error": (result.stderr or "ffmpeg duration normalization failed")[-400:]}
+        temp.replace(path)
+        measured = _video_duration(path)
+        return {"passed": measured <= 60.0, "applied": True, "original_seconds": round(duration, 3), "duration_seconds": round(measured, 3)}
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        temp.unlink(missing_ok=True)
+        return {"passed": False, "applied": True, "error": str(exc)[:400]}
 
 
 def build_cards(
