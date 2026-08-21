@@ -3591,12 +3591,17 @@ compatible while making scheduled runs fail closed.
   account strategy snapshots and Hermes skills remain runtime inputs. The
   legacy adapter may use `config/default_growth_strategy.md`; a scheduled run
   with `run_contract` may not.
+- Native trend verification is applied during candidate ordering and again at
+  final selection. Suffixes such as `web_search`, `search`, `github`,
+  `source_fallback`, and `external` cannot inherit trust from a native prefix.
+- The hook loader rejects incomplete cached JSON and falls back to the public
+  `config/default_hooks.json` when Hermes hook files are unavailable.
 
 ## Verification
 
 - Quality subset: `116 passed`.
-- Full local run after adding the public rules baseline: `860 passed, 44
-  failed, 33 subtests passed`. The remaining failures are environment fixtures
+- Full local run after final source verification: `900 passed, 4 failed, 33
+  subtests passed`. The remaining failures are environment fixtures
   that require private Hermes skill files, private account snapshots, or
   legacy test data. They are not converted into success by the runtime.
 - Privacy audit: `python -m content_platform.cli project-audit` -> `ok: true`,
@@ -3615,11 +3620,11 @@ compatible while making scheduled runs fail closed.
 
 ## Deployment boundary
 
-The production overnight timer remains paused until the server worktree has
-the same source commit, private strategy/skill checks pass, and four isolated
-canaries succeed without publishing. Do not interpret a local legacy fallback
-run as production readiness. Re-enable the timer only after recording the
-  server commit, test output, canary manifests, and rollback commit.
+The production overnight timer is enabled only after the server worktree has
+the public source changes, private strategy/skill checks pass, and four
+isolated canaries succeed without publishing. Do not interpret a local legacy
+fallback run as production readiness. Each scheduled run must record the
+server commit, test output, canary manifests, and rollback reference.
 
 ## Production activation
 
