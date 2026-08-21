@@ -1,11 +1,16 @@
 import sys
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 import json
 
 from scripts import hermes_wechat_adapter
 from scripts import gzh_publish_license
+
+
+def _today_run_date() -> str:
+    return datetime.now().strftime("%Y%m%d")
 
 
 def test_generated_image_helpers_accept_image_gen_engine_output_key(tmp_path, monkeypatch):
@@ -204,10 +209,11 @@ def test_publish_license_ignores_unstructured_markdown_recaps(tmp_path):
 def test_publish_license_blocks_reused_direction_from_run_manifest(tmp_path):
     from content_platform.ops_run import create_run, record_topic
 
-    create_run(tmp_path, "20260812", lookback_days=7)
+    run_date = _today_run_date()
+    create_run(tmp_path, run_date, lookback_days=7)
     record_topic(
         tmp_path,
-        "20260812",
+        run_date,
         "wechat",
         "How an AI agent runs eleven channels",
         direction="agent_workflow",
@@ -256,8 +262,9 @@ def test_adapter_passes_direction_to_publish_license_gate(tmp_path, monkeypatch)
 def test_publish_license_direction_gate_works_from_arbitrary_cwd(tmp_path):
     from content_platform.ops_run import create_run, record_topic
 
-    create_run(tmp_path, "20260812", lookback_days=7)
-    record_topic(tmp_path, "20260812", "wechat", "AI agent operations", direction="agent_workflow")
+    run_date = _today_run_date()
+    create_run(tmp_path, run_date, lookback_days=7)
+    record_topic(tmp_path, run_date, "wechat", "AI agent operations", direction="agent_workflow")
     script = Path(__file__).resolve().parents[1] / "scripts" / "gzh_publish_license.py"
 
     result = subprocess.run(

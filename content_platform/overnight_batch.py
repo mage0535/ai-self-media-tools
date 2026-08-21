@@ -157,6 +157,10 @@ def build_due_tasks(
                 if identity in reserved_topic_fingerprints:
                     continue
                 previous = selected_topics.get(identity)
+                if trend_evidence_mode in {"shadow", "enforce"} and not _candidate_has_native_source(platform, candidate):
+                    rejected_candidate = rejected_candidate or candidate
+                    rejected_matrix = rejected_matrix or _platform_evidence_matrix(platform, candidate, source_report, strategy, report_path=report_path)
+                    continue
                 matrix = _platform_evidence_matrix(platform, candidate, source_report, strategy, report_path=report_path)
                 if trend_evidence_mode in {"shadow", "enforce"} and not matrix["real_platform_collection_verified"]:
                     rejected_candidate = rejected_candidate or candidate
@@ -263,6 +267,27 @@ def build_due_tasks(
                     row["trend_evidence_gate"] = {"mode": trend_evidence_mode, "passed": not bool(evidence_failure)}
         tasks.append(row)
     return {"version": "overnight_due_tasks_v1", "tasks": tasks, "source_report": source_report}
+
+
+def _candidate_has_native_source(platform: str, candidate: dict[str, Any]) -> bool:
+    """Reject search/aggregator labels even when a native source also exists.
+
+    Native collection is a property of the selected candidate, not merely of
+    the day's source report. This prevents a web-search candidate from
+    borrowing the platform's successful collection count.
+    """
+    source = str(candidate.get("source") or "").casefold().strip()
+    canonical = {str(platform or "").casefold().strip()}
+    if platform in {"douyin_ai", "douyin_pet", "douyin"}:
+        canonical.add("douyin")
+    if platform in {"x", "twitter"}:
+        canonical.update({"x", "twitter"})
+    if not source:
+        return False
+    prefix, _, suffix = source.partition(":")
+    if prefix not in canonical:
+        return False
+    return suffix not in {"web_search", "search", "github", "source_fallback", "external"}
 
 
 def _editorial_fallback_candidate(slot: dict[str, Any]) -> dict[str, Any] | None:
