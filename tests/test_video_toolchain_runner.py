@@ -10,6 +10,26 @@ from unittest.mock import patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
+    def test_short_video_duration_is_normalized_before_artifact_gate(self):
+        from scripts import video_toolchain_runner as runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "final.mp4"
+            path.write_bytes(b"original")
+
+            def fake_ffmpeg(command, **_kwargs):
+                Path(command[-1]).write_bytes(b"trimmed")
+                return type("Result", (), {"returncode": 0, "stderr": ""})()
+
+            with patch.object(runner, "_video_duration", side_effect=[60.8, 59.8]):
+                with patch.object(runner.subprocess, "run", side_effect=fake_ffmpeg):
+                    result = runner._normalize_short_video_duration(path, "kuaishou")
+
+            self.assertTrue(result["passed"])
+            self.assertTrue(result["applied"])
+            self.assertEqual(result["duration_seconds"], 59.8)
+            self.assertEqual(path.read_bytes(), b"trimmed")
+
     def test_script_structure_gate_requires_distinct_story_beats(self):
         from scripts.video_toolchain_runner import validate_script_structure
 
