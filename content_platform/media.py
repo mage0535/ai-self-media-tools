@@ -655,8 +655,11 @@ class MediaBridge:
         backgrounds = output_dir / "backgrounds"
         backgrounds.mkdir(parents=True, exist_ok=True)
         assignments = []
-        for index in range(required_count):
-            source = Path(image_paths[index % len(image_paths)])
+        # Never fill missing scenes by cycling the same image. The renderer's
+        # asset gate must receive the actual unique set so approved retrieval
+        # or generation can add more material, otherwise the job fails closed.
+        for index, image_path in enumerate(image_paths[:required_count]):
+            source = Path(image_path)
             suffix = source.suffix if source.suffix.casefold() in {".jpg", ".jpeg", ".png", ".webp"} else ".png"
             target = backgrounds / f"bg_{index + 1:02d}{suffix}"
             if source.resolve() != target.resolve():
@@ -667,7 +670,7 @@ class MediaBridge:
                     "scene": index + 1,
                     "source_image": str(source),
                     "background_image": str(target),
-                    "reused": index >= len(image_paths),
+                    "reused": False,
                     "purpose": "scene background matched to narration and motion card",
                     "source_url": evidence.get("source_url", ""),
                     "license": evidence.get("license", ""),
@@ -680,7 +683,7 @@ class MediaBridge:
         return {
             "source": "media.image",
             "image_count": len(image_paths),
-            "scene_count": required_count,
+            "scene_count": len(assignments),
             "assignments": assignments,
         }
 
