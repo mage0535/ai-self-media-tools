@@ -396,6 +396,30 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert tool_plan["selection_reasons"]
 
 
+def test_due_task_builder_accepts_native_url_from_platform_search_transport():
+    report = [
+        {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
+        for index in range(7)
+    ] + [{"source": "kuaishou:web_search", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}]
+    prepared = build_due_tasks(
+        [{"platform": "kuaishou", "content_form": "short_video"}],
+        items=[],
+        source_report=report,
+        rank_for_platform=lambda *_args: [{
+            "title": "快手 AI 开放平台",
+            "source": "kuaishou:web_search",
+            "url": "https://ai.kuaishou.com/creation",
+            "fingerprint": "kuaishou-ai",
+            "score": 1.0,
+        }],
+        strict_trend_evidence=True,
+    )
+
+    task = prepared["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is True
+
+
 def test_due_task_builder_uses_editorial_fallback_after_invalid_native_candidate():
     report = [
         {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
