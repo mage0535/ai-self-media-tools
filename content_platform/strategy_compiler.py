@@ -92,3 +92,18 @@ def validate_compiled_strategy(strategy: dict[str, Any] | None) -> dict[str, Any
     if strategy.get("selection_policy", {}).get("shadow_can_create_jobs") is not False:
         failures.append("compiled_strategy_shadow_publish_boundary_invalid")
     return {"passed": not failures, "failures": failures}
+
+
+def compact_compiled_strategy(strategy: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep provider policy bounded while retaining auditable provenance."""
+    if not isinstance(strategy, dict):
+        return {}
+    fields = (
+        "version", "platform", "source_sha256", "content_pillars", "structure_pool",
+        "hook_templates", "cta_pool", "kpi_hypotheses", "evidence_policy", "selection_policy",
+    )
+    compact = {key: strategy[key] for key in fields if key in strategy}
+    for key in ("content_pillars", "structure_pool", "hook_templates", "cta_pool"):
+        if isinstance(compact.get(key), list):
+            compact[key] = compact[key][:8]
+    return compact
