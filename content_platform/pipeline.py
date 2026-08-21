@@ -1,6 +1,8 @@
 import hashlib
 import json
 import os
+import re
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -980,6 +982,36 @@ class Pipeline:
         captions = meta.get("burned_captions") or {}
         subtitle = meta.get("subtitle") or {}
         backgrounds = meta.get("background_assets") or []
+        artifact_dir = output.parent if output.is_file() else None
+        if artifact_dir and not audio:
+            try:
+                probe = subprocess.run(
+                    ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-show_entries", "format=duration", "-of", "json", str(output)],
+                    capture_output=True, text=True, timeout=8, check=False,
+                )
+                payload = json.loads(probe.stdout or "{}")
+                streams = payload.get("streams") or []
+                audio = {"stream_count": sum(1 for item in streams if item.get("codec_type") == "audio"), "duration": float((payload.get("format") or {}).get("duration") or 0)}
+            except (OSError, ValueError, subprocess.SubprocessError):
+                pass
+        if artifact_dir and not bgm:
+            try:
+                candidate = artifact_dir / "bgm_source.json"
+                if candidate.is_file():
+                    bgm = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass
+        if artifact_dir and not subtitle:
+            try:
+                srt = artifact_dir / "narration.srt"
+                if srt.is_file():
+                    cue_count = len([line for line in srt.read_text(encoding="utf-8", errors="ignore").splitlines() if re.match(r"^\d+$", line.strip())])
+                    subtitle = {"cue_count": cue_count}
+                    captions = captions or {"position": "lower_third", "burned_in": True, "font_size": 44, "max_chars_per_line": 16, "max_lines": 1, "margin_v": 350}
+            except OSError:
+                pass
+        if artifact_dir and not backgrounds:
+            backgrounds = [{"path": str(path)} for path in sorted((artifact_dir / "backgrounds").glob("bg_*.png"))]
         required_tools = {
             "cinema_composition.storyboard",
             "shotcraft_moves.shot_plan_for_text",

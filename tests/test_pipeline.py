@@ -68,6 +68,43 @@ class PipelineTests(unittest.TestCase):
             "ok",
         )
 
+    def test_rendered_gate_reads_renderer_sidecar_measurements(self):
+        import json
+        from unittest.mock import patch
+
+        root = self.pipeline.data_dir / "artifacts" / "sidecar-render"
+        (root / "backgrounds").mkdir(parents=True)
+        output = root / "final.mp4"
+        output.write_bytes(b"video")
+        for index in range(4):
+            (root / "backgrounds" / f"bg_{index:02d}.png").write_bytes(b"image")
+        (root / "bgm_source.json").write_text(json.dumps({
+            "source": "licensed_local_library", "source_url": "https://example.test/license",
+            "license": "CC BY", "fit_reason": "matched", "fallback_used": False,
+        }), encoding="utf-8")
+        (root / "narration.srt").write_text("\n".join(f"{i}\n00:00:00,000 --> 00:00:01,000\ntext" for i in range(1, 9)), encoding="utf-8")
+        required = {
+            "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text",
+            "kuaishou_render.render_cards", "kuaishou_render.download_bgm",
+            "kuaishou_render.gen_subtitles", "kuaishou_render.encode_final",
+        }
+        manifest = {
+            "ok": True, "status": "rendered", "output": str(output),
+            "toolchain_contract": {"planned_tools": sorted(required)},
+            "motion_evidence": {"passed": True, "unique_frame_count": 4},
+            "segment_motion_evidence": {"segments": [{"move_id": "m1", "profile": "p1"}] * 3},
+        }
+        packet = {
+            "video_toolchain_plan": {"required": True, "platforms": ["kuaishou"]},
+            "video_artifact": {"path": str(output)},
+            "render_manifest": manifest,
+        }
+        probe = type("Result", (), {"stdout": json.dumps({"streams": [{"codec_type": "audio"}], "format": {"duration": "45"}})})()
+        with patch("content_platform.pipeline.subprocess.run", return_value=probe):
+            result = Pipeline._rendered_video_platform_gate(packet, "kuaishou")
+
+        assert result["passed"] is True
+
     def test_end_to_end_requires_approval_and_is_idempotent(self):
         job = self.pipeline.create("Practical automation", ["wechat", "xiaohongshu"], {"audience": "operators"})
         reviewed = self.pipeline.run(job["id"])
