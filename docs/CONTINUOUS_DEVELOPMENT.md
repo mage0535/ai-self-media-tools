@@ -3619,4 +3619,14 @@ The production overnight timer remains paused until the server worktree has
 the same source commit, private strategy/skill checks pass, and four isolated
 canaries succeed without publishing. Do not interpret a local legacy fallback
 run as production readiness. Re-enable the timer only after recording the
-server commit, test output, canary manifests, and rollback commit.
+  server commit, test output, canary manifests, and rollback commit.
+
+## Production activation
+
+The server snapshot was merged without overwriting its private operational
+changes. The public source remains the privacy-clean `main` branch. Server
+audit passed after excluding generated `graphify-out` cache data, which is
+runtime output, not publishable source. The overnight timer was re-enabled
+after the server subset and four private-context canaries passed. The next
+scheduled run is the first real batch under this recovery layer; judge it from
+the persisted state/result/acceptance manifests, not from timer exit status.
