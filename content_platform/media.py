@@ -567,6 +567,12 @@ class MediaBridge:
         # the full body again.
         env = os.environ.copy()
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
+        # Make the licensed local BGM fallback explicit for nested renderers;
+        # do not rely on an inherited shell environment across adapters.
+        if os.environ.get("BGM_LIBRARY_DIR"):
+            env["BGM_LIBRARY_DIR"] = os.environ["BGM_LIBRARY_DIR"]
+        if os.environ.get("BGM_LIBRARY_MANIFEST"):
+            env["BGM_LIBRARY_MANIFEST"] = os.environ["BGM_LIBRARY_MANIFEST"]
         platforms = [str(item).lower() for item in job.get("platforms", [])]
         if platforms:
             env["BGM_TARGET_PLATFORM"] = "youtube" if any(item in {"youtube", "youtube_shorts", "youtube-shorts"} for item in platforms) else platforms[0]
