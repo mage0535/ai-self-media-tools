@@ -3635,3 +3635,17 @@ runtime output, not publishable source. The overnight timer was re-enabled
 after the server subset and four private-context canaries passed. The next
 scheduled run is the first real batch under this recovery layer; judge it from
 the persisted state/result/acceptance manifests, not from timer exit status.
+
+## Hermes gateway incident recovery
+
+On 2026-08-21 the content project was not the cause of the Hermes messaging
+outage. The gateway process remained active, but Telegram traffic was forced
+through a local SOCKS tunnel whose upstream timed out. Hermes also attempted
+DNS-over-HTTPS fallback discovery before honoring the disable flag, leaving
+startup in a connecting state. The server-side recovery used a private
+systemd drop-in to bypass the failed proxy for Telegram only and a backed-up
+Hermes adapter patch to skip fallback discovery when explicitly disabled.
+Other international traffic remains on the existing proxy. Direct Telegram
+Bot API and webhook checks passed after restart; the content-platform timer
+failure was a separate stale batch acceptance result and was reset, not
+treated as a gateway failure.
