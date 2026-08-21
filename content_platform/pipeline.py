@@ -138,6 +138,7 @@ class Pipeline:
                         if isinstance(contract, dict):
                             from .run_contract import bound_stage_payload
                             from .content_quality_reference import load_content_quality_reference_pack
+                            from .strategy_compiler import compact_compiled_strategy
 
                             quality_reference = platform_context.get("content_quality_reference_pack")
                             if not isinstance(quality_reference, dict) or quality_reference.get("loaded") is not True:
@@ -152,7 +153,7 @@ class Pipeline:
                                     "content_blueprint": brief.get("content_blueprint") or {},
                                     "claim_ledger": list(brief.get("claim_ledger") or []),
                                     "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
-                                    "strategy": compiled,
+                                    "strategy": compact_compiled_strategy(compiled),
                                     "content_quality_reference_pack": quality_reference,
                                     "runtime_capabilities": platform_context.get("runtime_capabilities") or {},
                                 },

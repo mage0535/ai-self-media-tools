@@ -212,6 +212,7 @@ def build_due_tasks(
                 validate_content_quality_reference_pack,
             )
             from .runtime_capabilities import build_runtime_capability_snapshot
+            from .strategy_compiler import compact_compiled_strategy
             from .tool_selection import build_tool_selection_evidence
 
             run_contract = build_run_contract(platform)
@@ -250,7 +251,7 @@ def build_due_tasks(
                     "content_blueprint": content_blueprint,
                     "claim_ledger": list(raw.get("claim_ledger") or []),
                     "tool_selection_plan": tool_evidence["tool_selection_plan"],
-                    "strategy": compiled_strategy or {},
+                    "strategy": compact_compiled_strategy(compiled_strategy),
                     "content_quality_reference_pack": quality_reference_pack,
                     "runtime_capabilities": build_runtime_capability_snapshot(),
                 },
