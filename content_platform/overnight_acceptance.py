@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-ALLOWED_STATUSES = {"completed", "partial", "blocked", "no_run"}
+ALLOWED_STATUSES = {"completed", "partial", "blocked", "failed", "no_run"}
 VIDEO_PLATFORMS = {"bilibili", "douyin", "douyin_ai", "douyin_pet", "shipinhao", "xiaohongshu", "youtube", "tiktok", "kuaishou"}
 
 

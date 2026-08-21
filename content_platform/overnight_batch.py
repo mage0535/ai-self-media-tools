@@ -200,7 +200,11 @@ def build_due_tasks(
             from .content_blueprint import build_content_blueprint, validate_content_blueprint
 
             run_contract = build_run_contract(platform)
-            content_blueprint = build_content_blueprint(platform, str(selected["title"]), raw, matrix)
+            compiled_strategy = (growth_strategy_status.get(platform) or {}).get("compiled_strategy")
+            content_slot = dict(raw)
+            if isinstance(compiled_strategy, dict):
+                content_slot["strategy_compiled"] = compiled_strategy
+            content_blueprint = build_content_blueprint(platform, str(selected["title"]), content_slot, matrix)
             blueprint_gate = validate_content_blueprint(content_blueprint)
             bounded_model_input = bound_stage_payload(
                 run_contract,
@@ -209,6 +213,7 @@ def build_due_tasks(
                     "content_blueprint": content_blueprint,
                     "claim_ledger": list(raw.get("claim_ledger") or []),
                     "tool_selection_plan": dict(raw.get("tool_selection_plan") or {}),
+                    "strategy": compiled_strategy or {},
                 },
             )
             selected_topics.setdefault(
@@ -298,6 +303,9 @@ def _allows_evidenced_overlap(
     """Allow natural resonance only when both platform executions are evidenced."""
     adaptation = str(slot.get("platform_adaptation_reason") or "").strip()
     signal = str(slot.get("platform_signal") or "").strip()
+    follow_up_to = str(slot.get("follow_up_to") or "").strip()
+    difference_angle = str(slot.get("difference_angle") or "").strip()
+    recap_reason = str(slot.get("recap_reason") or "").strip()
     matrix = _platform_evidence_matrix(platform, candidate, source_report, strategy)
     current_stage = str(slot.get("stage") or "").strip()
     previous_stage = str(previous.get("stage") or "").strip()
@@ -306,6 +314,9 @@ def _allows_evidenced_overlap(
     return bool(
         adaptation
         and signal
+        and follow_up_to
+        and difference_angle
+        and recap_reason
         and adaptation != previous.get("adaptation")
         and platform != previous.get("platform")
         and matrix["platform_internal_verified"]

@@ -29,7 +29,7 @@ STAGE_FIELDS = {
     "collect": {"platform", "source_report", "strategy_status"},
     "select": {"candidates", "reserved_topics", "lane_keywords", "editorial_fallback"},
     "blueprint": {"selected_topic", "platform_source_matrix", "account_context", "strategy"},
-    "generate": {"content_blueprint", "claim_ledger", "tool_selection_plan"},
+    "generate": {"content_blueprint", "claim_ledger", "tool_selection_plan", "strategy"},
     "assets": {"scene_manifest", "asset_requirements", "claim_ledger", "cover_brief"},
     "render": {"scene_manifest", "voice_plan", "bgm_plan", "cover_brief"},
     "deliver": {"artifacts", "gate_results", "publish_info"},

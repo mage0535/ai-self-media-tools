@@ -124,6 +124,24 @@ class Pipeline:
                     )
                 runner.succeeded("run_content_hygiene", hygiene, depends_on=["initialize_task"])
                 brief = runner.run("load_content_strategy", lambda: self._enrich_brief(job, hygiene), depends_on=["run_content_hygiene"], require_output=True)
+                if len(platform_contexts) == 1:
+                    compiled = next(iter(platform_contexts.values())).get("strategy", {}).get("compiled")
+                    if isinstance(compiled, dict):
+                        brief["strategy_compiled"] = compiled
+                        brief["strategy"] = compiled
+                        contract = brief.get("run_contract")
+                        if isinstance(contract, dict):
+                            from .run_contract import bound_stage_payload
+                            brief["bounded_model_input"] = bound_stage_payload(
+                                contract,
+                                "generate",
+                                {
+                                    "content_blueprint": brief.get("content_blueprint") or {},
+                                    "claim_ledger": list(brief.get("claim_ledger") or []),
+                                    "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
+                                    "strategy": compiled,
+                                },
+                            )
                 runner.succeeded("run_operation_strategy", {"historical_feedback": bool(brief.get("historical_feedback"))}, depends_on=["load_content_strategy"])
                 # Check if job has pre-populated body content (manually written, not a stub)
                 existing_body = (job.get("body") or "").strip()
@@ -848,6 +866,10 @@ class Pipeline:
         for platform in platforms:
             normalized = str(platform or "").casefold()
             packet = self._generation_platform_packet(job_id, draft, platforms, normalized)
+            job_brief = (self.store.get_job(job_id).get("brief") or {})
+            if job_brief.get("run_contract"):
+                packet["run_contract"] = job_brief["run_contract"]
+                packet["runtime_execution_required"] = True
             plan = packet.get("video_toolchain_plan") or {}
             needs_rendered_video = normalized in SHORT_VIDEO_PLATFORMS and bool(plan.get("required"))
             if phase == "generation" and self._defers_render_only_video_evidence(packet):

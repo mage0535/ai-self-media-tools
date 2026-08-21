@@ -23,6 +23,7 @@ from content_platform.content_recipe import (
     build_knowledge_card_recipe,
     build_tool_invocation_manifest,
     validate_image_text_card_recipe,
+    validate_tool_invocation_manifest,
 )
 from content_platform.tool_selection import build_tool_selection_evidence
 from content_platform.growth_policy import build_growth_strategy
@@ -321,6 +322,16 @@ def complete_tool_invocation_manifest(content_type: str = "article"):
         planned_tools=planned,
         invocations={name: {"status": "ok", "output": ref} for name, ref in planned.items()},
     )
+
+
+def test_runtime_tool_gate_rejects_planned_only_invocations():
+    manifest = build_tool_invocation_manifest(
+        planned_tools={"renderer": "scripts/renderer.py", "tts": "scripts/voice.py", "cover": "scripts/cover.py"},
+        invocations={name: {"status": "planned_internal"} for name in ("renderer", "tts", "cover")},
+    )
+    result = validate_tool_invocation_manifest(manifest, require_execution=True)
+    assert not result["passed"]
+    assert "tool_not_executed:renderer" in result["failures"]
 
 
 def test_wechat_image_post_packet_requires_real_scene_cards_and_hard_postcheck():

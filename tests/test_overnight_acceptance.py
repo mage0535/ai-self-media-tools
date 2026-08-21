@@ -34,6 +34,19 @@ def test_acceptance_requires_real_artifacts_for_successful_video_task(tmp_path: 
     assert "video_artifacts_missing:douyin_ai" in report["failures"]
 
 
+def test_acceptance_reports_failed_batch_without_wrapper_status_error(tmp_path: Path):
+    from content_platform.overnight_acceptance import validate_overnight_result
+
+    result = tmp_path / "result.json"
+    state = tmp_path / "state.json"
+    _write(result, {"status": "failed"})
+    _write(state, {"status": "failed", "tasks": []})
+
+    report = validate_overnight_result(result, state)
+    assert report["passed"] is True
+    assert "status_not_allowed" not in report["failures"]
+
+
 def test_acceptance_accepts_evidenced_handoff_and_staged_tasks(tmp_path: Path):
     from content_platform.overnight_acceptance import validate_overnight_result
 

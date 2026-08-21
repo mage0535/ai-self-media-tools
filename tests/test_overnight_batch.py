@@ -181,8 +181,8 @@ def test_due_task_builder_allows_evidenced_natural_overlap_with_distinct_executi
     ]
     prepared = build_due_tasks(
         [
-            {"platform": "wechat", "platform_adaptation_reason": "personal field guide", "platform_signal": "wechat reader questions"},
-            {"platform": "zhihu", "platform_adaptation_reason": "evidence-led answer", "platform_signal": "zhihu question demand"},
+            {"platform": "wechat", "platform_adaptation_reason": "personal field guide", "platform_signal": "wechat reader questions", "follow_up_to": "shared-topic", "difference_angle": "personal checklist", "recap_reason": "same source, different reader job"},
+            {"platform": "zhihu", "platform_adaptation_reason": "evidence-led answer", "platform_signal": "zhihu question demand", "follow_up_to": "shared-topic", "difference_angle": "evidence answer", "recap_reason": "same source, different reader job"},
         ],
         items=[],
         source_report=report,
@@ -383,7 +383,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["run_contract"]["publish_boundary"] == "manual_handoff_only"
     assert task["brief"]["bounded_model_input"]["content_blueprint"]["topic"] == "AI workflow"
     assert set(task["brief"]["bounded_model_input"]) <= {
-        "content_blueprint", "claim_ledger", "tool_selection_plan"
+        "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy"
     }
     assert task["brief"]["content_blueprint_gate"]["passed"] is True
 

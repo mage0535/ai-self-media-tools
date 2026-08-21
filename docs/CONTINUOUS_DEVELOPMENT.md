@@ -3552,3 +3552,61 @@ Fix WeChat Official Account draft quality enforcement after a drafted item expos
   prior local or server snapshots.
 - Full deployment evidence and the remaining three-run stability boundary are
   recorded in `docs/DETERMINISTIC_AUTOMATION_DEPLOYMENT_REPORT_20260818.md`.
+# 2026-08-21 Luna quality recovery implementation
+
+## Scope
+
+This wave addresses the production gap where strategy files, trend sources,
+tool plans, and media gates existed but were not consistently consumed by the
+runtime. The implementation is additive and keeps legacy/offline adapters
+compatible while making scheduled runs fail closed.
+
+## Implemented contracts
+
+- `content_platform/source_quality.py` rejects mojibake, code/HTML contamination,
+  and synthetic fallback rows from ranked trend candidates. Fallback evidence is
+  labeled `synthetic_fallback` and is never promoted as native trend evidence.
+- `content_platform/strategy_compiler.py` compiles the selected strategy into a
+  bounded generation policy: content pillars, structure pool, hooks, CTAs,
+  evidence policy, KPI hypotheses, and Shadow boundaries. Scheduled runs attach
+  the compiled strategy to the `generate` stage payload; private strategy text
+  is not copied into public logs.
+- Cross-platform resonance now requires `follow_up_to`, `difference_angle`,
+  and `recap_reason` in addition to independent platform evidence. Same-core
+  topic reuse without those fields is blocked.
+- Tool manifests support strict runtime validation. A scheduled packet with a
+  run contract rejects `planned_internal`, `not_invoked`, missing, and failed
+  tool records; offline legacy fixtures retain explicit non-strict behavior.
+- Video pre-render evidence now preserves the exact failure reason. Functional
+  cat/dog roles are a work-level requirement when explicitly requested, not a
+  requirement that every scene use a mascot. Scene manifests can carry
+  `mascot_roles` while real demonstrations remain real demonstrations.
+- Metrics readiness quarantines suspicious content exports where views,
+  followers, and works are identically mapped. Account snapshots remain audit
+  only and cannot drive automatic strategy tuning.
+- Overnight acceptance accepts terminal `failed` as a reportable state, so a
+  failed batch is reported as failed instead of producing a second wrapper
+  error such as `status_not_allowed`.
+- `data/platform_rules_2026.md` is now a tracked, public rules baseline. Private
+  account strategy snapshots and Hermes skills remain runtime inputs. The
+  legacy adapter may use `config/default_growth_strategy.md`; a scheduled run
+  with `run_contract` may not.
+
+## Verification
+
+- Quality subset: `116 passed`.
+- Full local run after adding the public rules baseline: `860 passed, 44
+  failed, 33 subtests passed`. The remaining failures are environment fixtures
+  that require private Hermes skill files, private account snapshots, or
+  legacy test data. They are not converted into success by the runtime.
+- Privacy audit: `python -m content_platform.cli project-audit` -> `ok: true`,
+  `issues: []`, `scanned_files: 430`.
+- Video runner dry-run smoke passed for the Shotcraft motion-plan path.
+
+## Deployment boundary
+
+The production overnight timer remains paused until the server worktree has
+the same source commit, private strategy/skill checks pass, and four isolated
+canaries succeed without publishing. Do not interpret a local legacy fallback
+run as production readiness. Re-enable the timer only after recording the
+server commit, test output, canary manifests, and rollback commit.

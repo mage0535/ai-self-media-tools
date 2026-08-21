@@ -404,6 +404,20 @@ def metrics_readiness_report(platforms: list[str], collector_config: dict[str, A
         )
         if not identified:
             return "content_identity_missing", "metrics export has no title or stable content identifier", False
+        if isinstance(rows, list):
+            suspicious = 0
+            checked = 0
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                values = [row.get(key) for key in ("views", "followers", "works", "作品数", "播放量", "粉丝数")]
+                numeric = [str(value).strip() for value in values if value not in (None, "")]
+                if len(numeric) >= 3:
+                    checked += 1
+                    if len(set(numeric)) == 1:
+                        suspicious += 1
+            if checked and suspicious == checked:
+                return "metrics_schema_suspicious", "views, followers, and works are identical across all rows", False
         return "content_metrics_configured", "content-level metrics export is configured", True
 
     for platform in selected:

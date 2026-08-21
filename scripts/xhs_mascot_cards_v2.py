@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import asyncio, base64, json, urllib.parse, urllib.request
+import asyncio, base64, json, os, urllib.parse, urllib.request
 from pathlib import Path
 
-ROOT=Path('/root/.ai-self-media-tools'); OUT=ROOT/'data/overnight/codex-recovery-20260818/xiaohongshu_mascot_v2'; OUT.mkdir(parents=True,exist_ok=True)
+ROOT=Path(os.environ.get('AI_SELF_MEDIA_TOOLS_HOME') or Path.cwd()).expanduser(); OUT=ROOT/'data/overnight/xiaohongshu_mascot_v2'; OUT.mkdir(parents=True,exist_ok=True)
 CARDS=[
  ('hero','小猫负责生成','小狗负责验收','AI输出四步双检法','cat dog working together'),
  ('split','角色一：生成猫','负责起草、整理、给候选','候选不等于事实','playful cat laptop'),

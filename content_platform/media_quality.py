@@ -336,7 +336,10 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "article_recipe": validate_article_recipe(packet.get("article_recipe")),
         "knowledge_card_recipe": validate_knowledge_card_recipe(packet.get("knowledge_card_recipe")),
         "tool_selection": validate_tool_selection_evidence(packet, content_kind="article"),
-        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
+        "tool_invocation_manifest": validate_tool_invocation_manifest(
+            packet.get("tool_invocation_manifest"),
+            require_execution=bool(packet.get("runtime_execution_required") or packet.get("run_contract")),
+        ),
         "embedded_knowledge_cards": {
             "passed": len(embedded_cards) >= 3
             and all(isinstance(card, dict) and _valid_knowledge_card(card) and card.get("section") for card in embedded_cards),
@@ -423,7 +426,10 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "knowledge_card_recipe": validate_knowledge_card_recipe(packet.get("knowledge_card_recipe")),
         "tool_selection": validate_tool_selection_evidence(packet, content_kind="article"),
-        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
+        "tool_invocation_manifest": validate_tool_invocation_manifest(
+            packet.get("tool_invocation_manifest"),
+            require_execution=bool(packet.get("runtime_execution_required") or packet.get("run_contract")),
+        ),
         "image_text_mapping": {
             "passed": len(images) >= 3
             and all(
@@ -516,7 +522,10 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "visual_recipe": validate_visual_recipe(visual_recipe, load_effect_module_registry()),
         "tool_selection": validate_tool_selection_evidence(packet, content_kind="video"),
-        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
+        "tool_invocation_manifest": validate_tool_invocation_manifest(
+            packet.get("tool_invocation_manifest"),
+            require_execution=bool(packet.get("runtime_execution_required") or packet.get("run_contract")),
+        ),
         "duration": {
             "passed": duration >= minimum_duration and (duration <= maximum_duration or bool(long_reason)),
             "actual": duration,
@@ -874,7 +883,10 @@ def validate_wechat_image_post_packet(packet: dict[str, Any]) -> dict[str, Any]:
             ),
         },
         "image_text_card_recipe": validate_image_text_card_recipe(packet.get("image_text_card_recipe")),
-        "tool_invocation_manifest": validate_tool_invocation_manifest(packet.get("tool_invocation_manifest")),
+        "tool_invocation_manifest": validate_tool_invocation_manifest(
+            packet.get("tool_invocation_manifest"),
+            require_execution=bool(packet.get("runtime_execution_required") or packet.get("run_contract")),
+        ),
         "publishing_contract": {
             "passed": str(publishing.get("article_type") or "").casefold() == "newspic"
             and str(publishing.get("publish_mode") or "").casefold() in {"draft", "scheduled_draft"},

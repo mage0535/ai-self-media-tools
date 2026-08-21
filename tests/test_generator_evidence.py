@@ -53,6 +53,7 @@ def test_compiled_generation_uses_only_bounded_model_input():
             "content_blueprint": {"topic": "AI meeting notes"},
             "claim_ledger": [],
             "tool_selection_plan": {},
+            "strategy": {"version": "compiled_strategy_v1"},
         },
         "private_unbounded_history": "must not reach the model",
     }
