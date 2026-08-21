@@ -1,0 +1,29 @@
+{
+  "title": [
+    {"id": "T1", "name": "问题反转", "template": "你以为问题在A，其实真正卡住你的是B", "platforms": "全平台", "type": "title"},
+    {"id": "T2", "name": "数字清单", "template": "这3个细节，决定你的结果是否可靠", "platforms": "全平台", "type": "title"},
+    {"id": "T3", "name": "结果承诺", "template": "从零完成一个可验证的实际结果", "platforms": "抖音/快手/视频号", "type": "title"},
+    {"id": "T4", "name": "避坑提醒", "template": "别急着换工具，先检查这4个地方", "platforms": "知乎/掘金/公众号", "type": "title"},
+    {"id": "T5", "name": "前后对比", "template": "同一个任务，为什么前后结果差这么多", "platforms": "B站/YouTube/小红书", "type": "title"},
+    {"id": "T6", "name": "身份共鸣", "template": "如果你也经常遇到这个问题，先收藏", "platforms": "小红书/抖音", "type": "title"},
+    {"id": "T7", "name": "实测复盘", "template": "我把完整流程跑了一遍，结果有两个意外", "platforms": "全平台", "type": "title"},
+    {"id": "T8", "name": "错误示范", "template": "很多人第一步就做错了，问题在这里", "platforms": "全平台", "type": "title"},
+    {"id": "T9", "name": "工具选择", "template": "工具不是越多越好，这样选才不浪费时间", "platforms": "知乎/掘金/公众号", "type": "title"},
+    {"id": "T10", "name": "可带走结论", "template": "看完只记住这一条，就能少走一个弯路", "platforms": "全平台", "type": "title"}
+  ],
+  "opening": [
+    {"id": "H1", "name": "直接冲突", "template": "先看结果，再解释为什么。", "platforms": "全平台", "type": "opening"},
+    {"id": "H2", "name": "真实问题", "template": "如果你也遇到这个现象，下面的检查顺序很重要。", "platforms": "全平台", "type": "opening"},
+    {"id": "H3", "name": "实测开场", "template": "我不讲概念，直接把这次真实运行过程拆开。", "platforms": "知乎/掘金/视频", "type": "opening"},
+    {"id": "H4", "name": "错误开场", "template": "先看一个最容易被忽略的错误。", "platforms": "全平台", "type": "opening"},
+    {"id": "H5", "name": "收益开场", "template": "看完这一段，你可以直接少做一次返工。", "platforms": "抖音/快手/小红书", "type": "opening"}
+  ],
+  "ending": [
+    {"id": "E1", "name": "行动", "template": "先做第一步，再根据结果决定下一步。", "platforms": "全平台", "type": "ending"},
+    {"id": "E2", "name": "提问", "template": "你最想先解决哪一个环节？", "platforms": "全平台", "type": "ending"},
+    {"id": "E3", "name": "保存", "template": "把这份检查清单留着，下次遇到同类问题可以直接用。", "platforms": "全平台", "type": "ending"},
+    {"id": "E4", "name": "边界", "template": "如果条件不同，不要照搬结论，先重新验证。", "platforms": "知乎/掘金/公众号", "type": "ending"},
+    {"id": "E5", "name": "反馈", "template": "如果你跑出了不同结果，带上证据再回来对照。", "platforms": "全平台", "type": "ending"}
+  ],
+  "sections": {"title": "公开默认钩子", "opening": "公开默认开场", "ending": "公开默认结尾"}
+}

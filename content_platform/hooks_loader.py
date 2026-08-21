@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LIB_MD = ROOT / "data" / "hooks_library.md"
 LIB_JSON = ROOT / "data" / "hooks_library.json"
+PUBLIC_FALLBACK_JSON = ROOT / "config" / "default_hooks.json"
 OUT_MD = ROOT / "data" / "hooks_library.md"
 
 
@@ -87,7 +88,7 @@ def load_hooks() -> dict:
     if LIB_JSON.is_file():
         try:
             _CACHE = json.loads(LIB_JSON.read_text(encoding="utf-8"))
-            if any(_CACHE.get(key) for key in ("title", "opening", "ending")):
+            if len(_CACHE.get("title", [])) >= 10 and len(_CACHE.get("opening", [])) >= 5:
                 return _CACHE
         except Exception:
             pass
@@ -96,6 +97,13 @@ def load_hooks() -> dict:
         hermes_home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser()
         source = hermes_home / "skills/content/content-hooks/references/hook-template-library.md"
     _CACHE = parse_hooks(source)
+    if (len(_CACHE.get("title", [])) < 10 or len(_CACHE.get("opening", [])) < 5) and PUBLIC_FALLBACK_JSON.is_file():
+        try:
+            fallback = json.loads(PUBLIC_FALLBACK_JSON.read_text(encoding="utf-8"))
+            if isinstance(fallback, dict):
+                _CACHE = fallback
+        except (OSError, json.JSONDecodeError):
+            pass
     if _CACHE and any(_CACHE.get(key) for key in ("title", "opening", "ending")):
         LIB_JSON.parent.mkdir(parents=True, exist_ok=True)
         LIB_JSON.write_text(json.dumps(_CACHE, ensure_ascii=False, indent=1), encoding="utf-8")
