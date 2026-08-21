@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LIB_MD = ROOT / "data" / "hooks_library.md"
 LIB_JSON = ROOT / "data" / "hooks_library.json"
 PUBLIC_FALLBACK_JSON = ROOT / "config" / "default_hooks.json"
+CONFIG_LIB_JSON = ROOT / "config" / "hooks_library.json"
 OUT_MD = ROOT / "data" / "hooks_library.md"
 
 
@@ -100,6 +101,13 @@ def load_hooks() -> dict:
     if (len(_CACHE.get("title", [])) < 10 or len(_CACHE.get("opening", [])) < 5) and PUBLIC_FALLBACK_JSON.is_file():
         try:
             fallback = json.loads(PUBLIC_FALLBACK_JSON.read_text(encoding="utf-8"))
+            if isinstance(fallback, dict):
+                _CACHE = fallback
+        except (OSError, json.JSONDecodeError):
+            pass
+    if (len(_CACHE.get("title", [])) < 10 or len(_CACHE.get("opening", [])) < 5) and CONFIG_LIB_JSON.is_file():
+        try:
+            fallback = json.loads(CONFIG_LIB_JSON.read_text(encoding="utf-8"))
             if isinstance(fallback, dict):
                 _CACHE = fallback
         except (OSError, json.JSONDecodeError):

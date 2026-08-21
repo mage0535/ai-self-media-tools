@@ -1,5 +1,19 @@
 # Continuous Development
 
+## 2026-08-21: executable content-quality reference pack
+
+### Implemented
+- Added `config/content_quality_reference_pack.json`, a publish-safe rule pack distilled from public GitHub visual/scene skills and the 2026-08-21 WeChat reference review. The file stores derived rules only; no copied article bodies, downloaded images, private paths, credentials, or server runtime evidence are committed.
+- Added `content_platform.content_quality_reference` to load a compact, platform-specific pack for model input. The loader records version, SHA-256, selected sections, and `derived_only=true` so workflow evidence can prove the pack was loaded.
+- `run_contract` now allows `content_quality_reference_pack` in the `generate` stage. `overnight_batch.build_due_tasks()` injects the pack into `bounded_model_input`, meaning Hermes and `ai-self-media-tools` generation can no longer merely reference the rules in docs while omitting them from the provider context.
+- `content_blueprint` now embeds the loaded reference metadata and maps it into machine-checkable quality requirements for hook/title, structure, cover, image-text cards, video director rules, motion discipline, and compliance.
+- `platform_workflow_context` now includes `content_quality_reference_pack` as a selected tool/evidence item. Hermes runtime context therefore reports whether the quality pack was loaded before generation.
+- Added public fallback `data/platform_rules_2026.md`, generic growth strategy baselines, and minimal public skill stubs so local/GitHub checkouts have the same rule-loading contract as the server without depending on private Hermes skill files.
+
+### Verification
+- Focused regression passed locally: `python -m pytest tests/test_content_quality_reference.py tests/test_reference_pack_runtime_wiring.py tests/test_content_blueprint.py tests/test_platform_workflow_context.py tests/test_generator_evidence.py tests/test_overnight_batch.py -q` => `58 passed`.
+- Server follow-up still required after sync: verify `/root/.ai-self-media-tools` can load `content_quality_reference_pack` inside a real `overnight-prepare` or isolated canary, and confirm no private evidence files were copied into the public repository.
+
 ## 2026-08-16: bounded video narration and renderer budget guard
 
 ### Implemented

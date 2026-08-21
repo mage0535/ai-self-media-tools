@@ -18,6 +18,7 @@ from pathlib import Path
 
 PROJECT_HOME = Path(__file__).resolve().parents[1]
 RULES_FILE = PROJECT_HOME / "data" / "platform_rules_2026.md"
+PUBLIC_RULES_FILE = PROJECT_HOME / "config" / "platform_rules_2026.md"
 FALLBACK_SKILL = Path.home() / ".hermes" / "skills" / "content" / "platform-ops-rules-2026" / "SKILL.md"
 
 _SECTION_MAP = {
@@ -48,7 +49,7 @@ def load_rules() -> dict[str, str]:
     global _CACHE
     if _CACHE is not None:
         return _CACHE
-    path = RULES_FILE if RULES_FILE.is_file() else FALLBACK_SKILL
+    path = RULES_FILE if RULES_FILE.is_file() else PUBLIC_RULES_FILE if PUBLIC_RULES_FILE.is_file() else FALLBACK_SKILL
     if not path.is_file():
         _CACHE = {}
         return _CACHE

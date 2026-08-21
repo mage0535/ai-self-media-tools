@@ -20,7 +20,14 @@ PLATFORM_DEFAULTS = {
 }
 
 
-def build_content_blueprint(platform: str, topic: str, slot: dict[str, Any], matrix: dict[str, Any]) -> dict[str, Any]:
+def build_content_blueprint(
+    platform: str,
+    topic: str,
+    slot: dict[str, Any],
+    matrix: dict[str, Any],
+    *,
+    quality_reference_pack: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     normalized = str(platform or "").casefold()
     default_form, default_style = PLATFORM_DEFAULTS.get(normalized, ("article", "platform_specific_practical_explanation"))
     keywords = [str(item) for item in slot.get("topic_keywords") or []]
@@ -53,6 +60,22 @@ def build_content_blueprint(platform: str, topic: str, slot: dict[str, Any], mat
             "cta_pool": list(compiled_strategy.get("cta_pool") or [])[:8],
             "evidence_policy": dict(compiled_strategy.get("evidence_policy") or {}),
         }
+    if isinstance(quality_reference_pack, dict) and quality_reference_pack.get("loaded") is True:
+        sections = [str(item) for item in quality_reference_pack.get("sections") or []]
+        blueprint["quality_reference"] = {
+            "version": str(quality_reference_pack.get("version") or ""),
+            "sha256": str(quality_reference_pack.get("sha256") or ""),
+            "sections": sections,
+        }
+        blueprint["quality_requirements"] = {
+            "hook_title_gate": "hook_title_gate" in sections,
+            "content_structure_gate": "content_structure_gate" in sections,
+            "cover_design_gate": "cover_design_gate" in sections,
+            "image_text_card_gate": "image_text_card_gate" in sections,
+            "video_director_gate": "video_director_gate" in sections,
+            "motion_discipline_gate": "motion_discipline_gate" in sections,
+            "compliance_gate": "compliance_gate" in sections,
+        }
     if ai_lane:
         blueprint["mascot_roles"] = {
             "cat": {"tone": "cute_playful", "narrative_function": f"explore or draft the {topic} workflow", "decorative_only": False},
@@ -72,6 +95,12 @@ def validate_content_blueprint(blueprint: dict[str, Any] | None) -> dict[str, An
         failures.append("platform_style_generic")
     if len(blueprint.get("narrative_structure") or []) < 5:
         failures.append("narrative_structure_incomplete")
+    quality_reference = blueprint.get("quality_reference")
+    if isinstance(quality_reference, dict):
+        if quality_reference.get("version") != "content_quality_reference_pack_v1":
+            failures.append("quality_reference_version_mismatch")
+        if not quality_reference.get("sha256") or not quality_reference.get("sections"):
+            failures.append("quality_reference_incomplete")
     roles = blueprint.get("mascot_roles") or {}
     for role in roles.values():
         if not isinstance(role, dict) or not role.get("narrative_function") or role.get("decorative_only") is not False:

@@ -1,0 +1,99 @@
+{
+  "version": "content_quality_reference_pack_v1",
+  "purpose": "Executable quality rules distilled from public GitHub skills and WeChat operation references. This file stores rules only, not copied article bodies or private runtime data.",
+  "source_summary": {
+    "public_github_references": [
+      "traveler0621/reality-restaged",
+      "Zeejay0/gathered-scenes-zine-skill",
+      "LiamGvchi/gc-minimal-zine-poster",
+      "LiamGvchi/gc-still-image-motion-director",
+      "MickeyWzt/photo-form-transposition"
+    ],
+    "wechat_reference_batch": "20260821 content-quality link review",
+    "derived_only": true
+  },
+  "hook_title_gate": {
+    "required_jobs": ["click_reason", "specific_payoff", "audience_pain_or_conflict"],
+    "allowed_hook_families": [
+      "mistake_correction",
+      "result_first",
+      "proof_challenge",
+      "practical_rescue",
+      "truth_or_false",
+      "self_projection",
+      "numbered_checklist",
+      "before_after_gap"
+    ],
+    "forbidden": ["generic_ai_news", "hello_everyone_opening", "empty_future_promise", "platform_same_title_reuse"]
+  },
+  "content_structure_gate": {
+    "required": ["core_question", "evidence", "example_or_demo", "steps", "counterexample_or_boundary", "takeaway", "interaction_prompt"],
+    "structure_pool": [
+      "pain_reversal_tutorial",
+      "failure_case_postmortem",
+      "before_after_test",
+      "tool_demo",
+      "controversial_viewpoint",
+      "saveable_checklist",
+      "micro_story_case"
+    ],
+    "min_knowledge_points": 3,
+    "series_teaser_requires_plan": true,
+    "facts_must_be_evidence_backed": true
+  },
+  "cover_design_gate": {
+    "single_job": true,
+    "must_include": ["dominant_visual_subject", "large_readable_promise", "contrast_or_conflict", "content_match_reason"],
+    "layout_pool": [
+      "character_showdown",
+      "evidence_interface",
+      "hero_conflict",
+      "diagonal_split",
+      "before_after",
+      "checklist_poster",
+      "magazine_story",
+      "result_reveal",
+      "zine_grid"
+    ],
+    "reject": ["unrelated_stock_photo", "single_centered_sentence", "fixed_cover_template", "cropped_text", "reused_recent_cover_layout"]
+  },
+  "image_text_card_gate": {
+    "must_define": ["card_job", "section_title", "visual_metaphor", "text_density", "source_or_proof", "cta"],
+    "card_jobs": ["audit", "compare", "execute", "save", "diagnose", "template"],
+    "required_variety": ["cover", "checklist", "table_or_grid", "example", "summary"],
+    "reject": ["repeated_image_hash", "oversized_unbounded_illustration", "missing_image_marker", "decorative_only_card"]
+  },
+  "video_director_gate": {
+    "scene_contract": {
+      "min_scenes": 6,
+      "must_define": ["display_purpose", "real_or_generated_asset", "camera_language", "subject_motion", "text_motion", "transition", "rhythm_point", "interaction_prompt"],
+      "must_bind": ["narration", "subtitle", "asset", "motion", "evidence"]
+    },
+    "motion_requirements": ["background_layer", "subject_layer", "text_layer", "transition_layer"],
+    "cinematic_defaults": ["establishing_shot", "insert_detail", "proof_closeup", "reaction_beat", "payoff_reveal"],
+    "reject": ["single_image_loop", "same_background_after_scene_3", "same_transition_only", "subtitle_missing", "audio_video_misalignment"]
+  },
+  "motion_discipline_gate": {
+    "must_verify_after_render": ["frame_diff", "motion_peaks", "static_frame_ratio", "subtitle_safe_area", "audio_44100_stereo", "cover_complete"],
+    "cache_key_inputs": ["renderer_version", "motion_mode", "scene_manifest_sha256", "asset_hashes", "ffmpeg_params"],
+    "fallback_policy": "cinematic failure may fall back only when marked degraded and gated separately"
+  },
+  "compliance_gate": {
+    "must_check": ["platform_2026_rules", "account_growth_strategy", "copyright_or_license", "evidence_claims", "manual_handoff_boundary"],
+    "reject": ["fabricated_test_result", "fake_platform_trend", "secret_leak", "unauthorized_auto_publish", "unverified_sensitive_claim"]
+  },
+  "platform_applicability": {
+    "wechat": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "image_text_card_gate", "compliance_gate"],
+    "zhihu": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "image_text_card_gate", "compliance_gate"],
+    "juejin": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "image_text_card_gate", "compliance_gate"],
+    "xiaohongshu": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "image_text_card_gate", "compliance_gate"],
+    "kuaishou": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "video_director_gate", "motion_discipline_gate", "compliance_gate"],
+    "douyin_ai": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "video_director_gate", "motion_discipline_gate", "compliance_gate"],
+    "douyin_pet": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "video_director_gate", "motion_discipline_gate", "compliance_gate"],
+    "bilibili": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "video_director_gate", "motion_discipline_gate", "compliance_gate"],
+    "youtube": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "video_director_gate", "motion_discipline_gate", "compliance_gate"],
+    "tiktok": ["hook_title_gate", "content_structure_gate", "cover_design_gate", "video_director_gate", "motion_discipline_gate", "compliance_gate"],
+    "twitter": ["hook_title_gate", "content_structure_gate", "compliance_gate"],
+    "x": ["hook_title_gate", "content_structure_gate", "compliance_gate"]
+  }
+}

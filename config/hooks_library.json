@@ -1,0 +1,31 @@
+{
+  "title": [
+    {"id": "T1", "type": "title", "name": "悬念提问", "template": "为什么你做了{action}，结果还是{bad_result}？", "platforms": "全平台", "principle": "制造认知缺口"},
+    {"id": "T2", "type": "title", "name": "结果前置", "template": "我用{tool}把{task}从{before}压到{after}", "platforms": "全平台", "principle": "先给收益"},
+    {"id": "T3", "type": "title", "name": "避坑提醒", "template": "{audience}最容易踩的{number}个坑", "platforms": "全平台", "principle": "损失规避"},
+    {"id": "T4", "type": "title", "name": "反常识", "template": "真正拖慢{workflow}的不是{obvious}，而是{hidden}", "platforms": "全平台", "principle": "反预期"},
+    {"id": "T5", "type": "title", "name": "清单收藏", "template": "{number}步检查你的{asset}是否真的可用", "platforms": "小红书,知乎,公众号,掘金", "principle": "收藏价值"},
+    {"id": "T6", "type": "title", "name": "实测对比", "template": "我实测了{options}，最后只保留{winner}", "platforms": "知乎,掘金,B站,YouTube", "principle": "证据驱动"},
+    {"id": "T7", "type": "title", "name": "三秒冲突", "template": "别再这样用{tool}了，{consequence}会直接发生", "platforms": "抖音,快手,TikTok,YouTube", "principle": "即时冲突"},
+    {"id": "T8", "type": "title", "name": "低粉爆文", "template": "低粉账号也能复用的{topic}爆款结构", "platforms": "全平台", "principle": "降低门槛"},
+    {"id": "T9", "type": "title", "name": "场景代入", "template": "如果你每天都要{routine}，这套{method}能省掉{pain}", "platforms": "全平台", "principle": "代入自己"},
+    {"id": "T10", "type": "title", "name": "证明挑战", "template": "给我{time}，证明{claim}不是空话", "platforms": "抖音,快手,B站,YouTube,TikTok", "principle": "可观测证明"}
+  ],
+  "opening": [
+    {"id": "H1", "type": "opening", "template": "先看结果，再说方法。", "platforms": "全平台"},
+    {"id": "H2", "type": "opening", "template": "这个问题我昨天也踩了，关键不是工具，而是流程。", "platforms": "全平台"},
+    {"id": "H3", "type": "opening", "template": "如果你只检查输出，基本一定会漏掉这里。", "platforms": "全平台"},
+    {"id": "H4", "type": "opening", "template": "先别急着换工具，先看这张错误链路。", "platforms": "全平台"},
+    {"id": "H5", "type": "opening", "template": "同样的题目为什么别人能爆，你的会被划走？", "platforms": "全平台"}
+  ],
+  "ending": [
+    {"id": "E1", "type": "ending", "template": "你最想先检查哪一步？我按评论补一版清单。", "platforms": "全平台"},
+    {"id": "E2", "type": "ending", "template": "收藏这张表，下次出问题直接逐项排。", "platforms": "全平台"},
+    {"id": "E3", "type": "ending", "template": "如果你要，我可以把这套流程拆成可复制模板。", "platforms": "全平台"}
+  ],
+  "sections": {
+    "title": "标题钩子",
+    "opening": "开场钩子",
+    "ending": "结尾钩子"
+  }
+}

@@ -13,11 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from .strategy_compiler import compile_strategy, validate_compiled_strategy
+from .content_quality_reference import load_content_quality_reference_pack, validate_content_quality_reference_pack
 
 ROOT = Path(__file__).resolve().parents[1]
 RULEBOOK = ROOT / "config" / "channel_content_rulebook.json"
 RULES_FILE = ROOT / "data" / "platform_rules_2026.md"
+PUBLIC_RULES_FILE = ROOT / "config" / "platform_rules_2026.md"
 STRATEGY_DIR = ROOT / "data"
+PUBLIC_STRATEGY_DIR = ROOT / "config"
 
 GENERIC_SKILLS = [
     "content/channel-operations-workflow",
@@ -60,9 +63,14 @@ def _sha256(path: Path) -> str:
 
 
 def _skill_path(name: str) -> Path:
+    repo_skills = ROOT / "skills"
     candidates = [Path.home() / ".hermes" / "skills" / name / "SKILL.md"]
     if name.startswith("content/"):
         candidates.append(Path.home() / ".hermes" / "skills" / name.split("/", 1)[1] / "SKILL.md")
+        candidates.append(repo_skills / name / "SKILL.md")
+        candidates.append(repo_skills / "content" / name.split("/", 1)[1] / "SKILL.md")
+    else:
+        candidates.append(repo_skills / name / "SKILL.md")
     for candidate in candidates:
         if candidate.is_file():
             return candidate
@@ -71,6 +79,8 @@ def _skill_path(name: str) -> Path:
 
 def _latest_strategy(platform: str) -> Path | None:
     candidates = sorted(STRATEGY_DIR.glob("growth_strategy_*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not candidates:
+        candidates = sorted(PUBLIC_STRATEGY_DIR.glob("growth_strategy_*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
     platform = platform.casefold()
     # Exact platform strategy mapping; substring matching would map `x` to `xhs`.
     prefixes = {
@@ -100,7 +110,7 @@ def _platform_rule_loaded(platform: str) -> tuple[bool, str]:
     }
     names = aliases.get(platform, [platform])
     fallback = Path.home() / ".hermes" / "skills" / "content" / "platform-ops-rules-2026" / "SKILL.md"
-    candidates = [RULES_FILE, fallback]
+    candidates = [RULES_FILE, PUBLIC_RULES_FILE, fallback]
     matched = False
     for path in candidates:
         if not path.is_file():
@@ -180,14 +190,21 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
     if not selected_tools:
         selected_tools = [
             "platform_rules_loader", "growth_strategy_loader", "channel_operations_workflow",
-            "content_strategy", "visual_quality_gate", "platform_renderer", "publish_mode_guard",
+            "content_quality_reference_pack", "content_strategy", "visual_quality_gate", "platform_renderer", "publish_mode_guard",
         ]
+    else:
+        selected_tools = list(selected_tools) + ["content_quality_reference_pack"]
+    quality_reference_pack = load_content_quality_reference_pack(
+        platform,
+        content_form=str(plan.get("content_form") or plan.get("stage") or ""),
+    )
+    quality_reference_gate = validate_content_quality_reference_pack(quality_reference_pack)
     context = {
         "version": "platform_workflow_context_v1",
         "loaded_at": datetime.now(timezone.utc).isoformat(),
         "platform": platform,
         "rulebook": {"path": str(RULEBOOK), "entry_loaded": True},
-        "platform_rules_2026": {"path": str(RULES_FILE), "matched": True},
+        "platform_rules_2026": {"path": str(RULES_FILE if RULES_FILE.is_file() else PUBLIC_RULES_FILE), "matched": True},
         "strategy": {
             "path": str(strategy) if strategy else "",
             "sha256": _sha256(strategy) if strategy else "",
@@ -195,6 +212,14 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
             "compiled_gate": strategy_gate,
         },
         "skills": skill_records,
+        "content_quality_reference_pack": {
+            "path": str(ROOT / quality_reference_pack["path"]),
+            "version": quality_reference_pack["version"],
+            "sha256": quality_reference_pack["sha256"],
+            "sections": quality_reference_pack["sections"],
+            "loaded": quality_reference_gate["passed"],
+            "failures": quality_reference_gate["failures"],
+        },
         "publish_mode": PUBLISH_MODES.get(platform, "manual_handoff"),
         "selected_tools": list(dict.fromkeys(map(str, selected_tools))),
         "plan": {"template_family": plan.get("template_family", ""), "selected_pipeline": plan.get("selected_pipeline", "")},
