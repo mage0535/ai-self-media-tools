@@ -16,6 +16,7 @@ from .strategy_compiler import compile_strategy, validate_compiled_strategy
 from .content_quality_reference import load_content_quality_reference_pack, validate_content_quality_reference_pack
 from .runtime_capabilities import build_runtime_capability_snapshot
 from .tool_selection import build_tool_selection_evidence
+from .overnight_batch import load_hot_work_parameter_pack_compact
 
 ROOT = Path(__file__).resolve().parents[1]
 RULEBOOK = ROOT / "config" / "channel_content_rulebook.json"
@@ -223,6 +224,7 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
         "content_quality_reference_pack": quality_reference_pack,
         "content_quality_reference_gate": quality_reference_gate,
         "runtime_capabilities": runtime_capabilities,
+        "hot_work_parameter_pack": load_hot_work_parameter_pack_compact(platform),
         "publish_mode": PUBLISH_MODES.get(platform, "manual_handoff"),
         "selected_tools": list(dict.fromkeys(map(str, selected_tools))),
         "plan": {"template_family": plan.get("template_family", ""), "selected_pipeline": plan.get("selected_pipeline", "")},

@@ -13,6 +13,7 @@ from .risk import redact_secrets
 from .trends import normalize_topic
 from .trend_candidate import build_trend_candidate, validate_trend_candidate
 
+ROOT = Path(__file__).resolve().parents[1]
 
 MANUAL_HANDOFF_PLATFORMS = {
     "bilibili",
@@ -38,6 +39,47 @@ PLATFORM_TOPIC_KEYWORDS = {
     "douyin_ai": ("ai", "agent", "automation", "人工智能", "智能体", "自动化"),
 }
 DEFAULT_AI_TOPIC_KEYWORDS = ("ai", "agent", "automation", "llm", "model", "人工智能", "智能体", "自动化", "大模型")
+
+
+def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | None = None) -> dict[str, Any]:
+    """Load the latest same-lane hot-work pack for provider input.
+
+    The full pack may contain large raw titles and evidence.  Generation only
+    needs the platform-specific patterns, requirements, and top evidence
+    snippets, so keep this bounded and path-free for providers.
+    """
+    source = Path(path) if path else ROOT / "data" / "intel" / "hot_work_parameter_pack_latest.json"
+    if not source.is_file():
+        return {"version": "hot_work_parameter_pack_compact_v1", "status": "missing"}
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"version": "hot_work_parameter_pack_compact_v1", "status": "invalid", "error": str(exc)[:160]}
+    platform = str(platform or "").casefold().strip()
+    aliases = {"twitter": "x", "douyin": "douyin_ai"}
+    data = (payload.get("platforms") or {}).get(platform) or (payload.get("platforms") or {}).get(aliases.get(platform, ""))
+    if not isinstance(data, dict):
+        return {"version": "hot_work_parameter_pack_compact_v1", "status": "missing_platform"}
+    samples = []
+    for sample in (data.get("top_samples") or [])[:5]:
+        if not isinstance(sample, dict):
+            continue
+        samples.append({
+            "title": str(sample.get("title") or "")[:120],
+            "author": str(sample.get("author") or "")[:60],
+            "metric": sample.get("views") or sample.get("likes") or sample.get("favorites") or sample.get("engagement") or "",
+            "evidence_strength": sample.get("evidence_strength", ""),
+            "source": sample.get("source", ""),
+            "analysis": sample.get("analysis", {}),
+        })
+    return {
+        "version": "hot_work_parameter_pack_compact_v1",
+        "status": "ready" if data.get("ready") else "insufficient",
+        "strong_sample_count": data.get("strong_sample_count", 0),
+        "recommended_patterns": data.get("recommended_patterns") or [],
+        "generation_requirements": data.get("generation_requirements") or [],
+        "top_samples": samples,
+    }
 
 
 def normalize_delivery_boundary(platform: str, requested_state: str) -> str:
@@ -255,6 +297,7 @@ def build_due_tasks(
                     "content_quality_reference_pack": quality_reference_pack,
                     "runtime_capabilities": build_runtime_capability_snapshot(),
                     "same_lane_intelligence": (growth_strategy_status.get(platform) or {}).get("same_lane_intelligence") or {"version": "same_lane_playbook_compact_v1", "status": "missing"},
+                    "hot_work_parameter_pack": load_hot_work_parameter_pack_compact(platform),
                 },
             )
             selected_topics.setdefault(

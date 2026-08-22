@@ -72,6 +72,36 @@ notify "progress" "performance_cycle_complete"
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   health-refresh --output "$root/data/delivery_health_state.json" > "$out/delivery-health-result.json"
 notify "progress" "delivery_health_refreshed"
+hot_work_args=(
+  hot-works-collect
+  --platform wechat
+  --platform kuaishou
+  --platform douyin_ai
+  --platform douyin_pet
+  --query "wechat=AI工具 自动化 工作流 效率"
+  --query "wechat=Claude Code Codex AI效率"
+  --query "kuaishou=AI工具"
+  --query "kuaishou=Claude Code Codex"
+  --query "douyin_ai=AI工具"
+  --query "douyin_pet=猫咪治愈"
+  --output-dir "$out/hot-works"
+)
+for sample in "$root"/data/intel/hot_works_multiplatform_*/hot_works_raw_enriched_v2.json "$root"/data/intel/hot_works_multiplatform_*/*logged_samples.json; do
+  if [[ -f "$sample" ]]; then
+    hot_work_args+=(--sample-file "$sample")
+  fi
+done
+if [[ -f "$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json" ]]; then
+  hot_work_args+=(--state-file "kuaishou=$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json")
+fi
+if [[ -f "$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json" ]]; then
+  hot_work_args+=(--state-file "douyin=$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json")
+fi
+if run_platform --config "$root/config.json" --db "$root/data/state.db" "${hot_work_args[@]}" > "$out/hot-works-result.json"; then
+  notify "progress" "hot_work_strategy_refreshed"
+else
+  notify "action_required" "hot_work_strategy_refresh_failed; continuing_with_previous_pack"
+fi
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-prepare --slots "$slots" --output "$out/prepared.json" --refresh > "$out/prepare-result.json"
 notify "progress" "overnight_prepare_complete"
