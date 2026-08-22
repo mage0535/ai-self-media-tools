@@ -128,6 +128,7 @@ class Pipeline:
                 runner.succeeded("run_content_hygiene", hygiene, depends_on=["initialize_task"])
                 brief = runner.run("load_content_strategy", lambda: self._enrich_brief(job, hygiene), depends_on=["run_content_hygiene"], require_output=True)
                 if len(platform_contexts) == 1:
+                    platform_name = str(next(iter(platform_contexts)))
                     platform_context = next(iter(platform_contexts.values()))
                     compiled = platform_context.get("strategy", {}).get("compiled")
                     if isinstance(compiled, dict):
@@ -142,11 +143,12 @@ class Pipeline:
                             from .run_contract import bound_stage_payload
                             from .content_quality_reference import load_content_quality_reference_pack
                             from .strategy_compiler import compact_compiled_strategy
+                            from .same_lane_intelligence import latest_same_lane_playbook
 
                             quality_reference = platform_context.get("content_quality_reference_pack")
                             if not isinstance(quality_reference, dict) or quality_reference.get("loaded") is not True:
                                 quality_reference = load_content_quality_reference_pack(
-                                    str(next(iter(platform_contexts))),
+                                    platform_name,
                                     content_form=str((brief.get("content_blueprint") or {}).get("content_form") or brief.get("content_form") or ""),
                                 )
                             brief["bounded_model_input"] = bound_stage_payload(
@@ -159,6 +161,7 @@ class Pipeline:
                                     "strategy": compact_compiled_strategy(compiled),
                                     "content_quality_reference_pack": quality_reference,
                                     "runtime_capabilities": platform_context.get("runtime_capabilities") or {},
+                                    "same_lane_intelligence": latest_same_lane_playbook(self.store, platform_name),
                                 },
                             )
                 runner.succeeded("run_operation_strategy", {"historical_feedback": bool(brief.get("historical_feedback"))}, depends_on=["load_content_strategy"])

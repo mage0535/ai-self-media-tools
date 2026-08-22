@@ -353,3 +353,60 @@ def build_same_lane_report(
         "platforms": selected,
         "reports": reports,
     }
+
+
+def compact_same_lane_playbook(playbook: dict[str, Any] | None) -> dict[str, Any]:
+    source = playbook if isinstance(playbook, dict) else {}
+    if not source:
+        return {"version": "same_lane_playbook_compact_v1", "status": "missing"}
+    return {
+        "version": "same_lane_playbook_compact_v1",
+        "status": "available" if int(source.get("accepted_sample_count") or 0) > 0 else "insufficient_samples",
+        "own_data_status": source.get("own_data_status", "unknown"),
+        "strategy_claim_boundary": source.get("strategy_claim_boundary", ""),
+        "accepted_sample_count": int(source.get("accepted_sample_count") or 0),
+        "rejected_sample_count": int(source.get("rejected_sample_count") or 0),
+        "topic_patterns": list(source.get("topic_patterns") or [])[:6],
+        "proof_requirements": list(source.get("proof_requirements") or [])[:6],
+        "recommended_content_moves": list(source.get("recommended_content_moves") or [])[:6],
+        "top_accounts": [
+            {
+                "account": row.get("account", ""),
+                "work_count": row.get("work_count", 0),
+                "total_views": row.get("total_views", 0),
+            }
+            for row in list(source.get("top_accounts") or [])[:3]
+            if isinstance(row, dict)
+        ],
+        "top_works": [
+            {
+                "title": row.get("title", ""),
+                "account": row.get("account", ""),
+                "views": row.get("views", 0),
+            }
+            for row in list(source.get("top_works") or [])[:5]
+            if isinstance(row, dict)
+        ],
+    }
+
+
+def latest_same_lane_playbook(store: Any, platform: str) -> dict[str, Any]:
+    row = store.latest_tool_inventory("same_lane_intelligence:latest")
+    payload = row.get("payload") if isinstance(row, dict) else {}
+    if not isinstance(payload, dict):
+        return compact_same_lane_playbook(None)
+    report: dict[str, Any] = {}
+    report_path = payload.get("report_path")
+    if report_path:
+        path = Path(str(report_path))
+        if path.is_file():
+            try:
+                report = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                report = {}
+    platform_key = str(platform or "").casefold()
+    playbook = ((report.get("reports") or {}).get(platform_key) if isinstance(report, dict) else None)
+    if isinstance(playbook, dict):
+        return compact_same_lane_playbook(playbook)
+    summary = ((payload.get("summary") or {}).get(platform_key) if isinstance(payload.get("summary"), dict) else None)
+    return compact_same_lane_playbook(summary if isinstance(summary, dict) else None)

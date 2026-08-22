@@ -254,6 +254,7 @@ def build_due_tasks(
                     "strategy": compact_compiled_strategy(compiled_strategy),
                     "content_quality_reference_pack": quality_reference_pack,
                     "runtime_capabilities": build_runtime_capability_snapshot(),
+                    "same_lane_intelligence": (growth_strategy_status.get(platform) or {}).get("same_lane_intelligence") or {"version": "same_lane_playbook_compact_v1", "status": "missing"},
                 },
             )
             selected_topics.setdefault(
@@ -685,12 +686,15 @@ def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age
                 continue
             runtime_strategy = _runtime_growth_strategy(row.get("payload"))
             compiled = {**compiled, "runtime_growth_strategy": runtime_strategy}
+            from .same_lane_intelligence import latest_same_lane_playbook
+
             result[normalized] = {
                 "status": "ok",
                 "key": key,
                 "age_hours": round(age_hours, 2) if age_hours is not None else None,
                 "compiled_strategy": compiled,
                 "runtime_growth_strategy": runtime_strategy,
+                "same_lane_intelligence": latest_same_lane_playbook(store, normalized),
             }
     return result
 
