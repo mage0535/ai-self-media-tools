@@ -22,6 +22,14 @@ from .skills_adapter import fetch_hot_data, generate_content, get_status as skil
 from .store import Store
 from .task_market import TaskMarketRunner
 from .trends import DirectTrendSource, TrendCollector, rank_trends
+from .hot_work_intelligence import (
+    collect_douyin_shipin,
+    collect_logged_short_video_search,
+    collect_wechat,
+    load_samples,
+    save_collection,
+    write_playwright_state,
+)
 
 
 def _load_env_defaults(path: str | Path | None = None) -> str:
@@ -316,6 +324,15 @@ def parser():
     same_lane.add_argument("--sample-file", required=True, help="JSON samples collected from native platform tools")
     same_lane.add_argument("--readiness-file", default="", help="Optional metrics-readiness JSON used only for claim boundaries")
     same_lane.add_argument("--output", default="", help="Optional JSON report path")
+    hot_works = sub.add_parser("hot-works-collect", help="Collect same-lane hot works and build a generation parameter pack")
+    hot_works.add_argument("--platform", action="append", default=[], help="Live platform collector to run; defaults to wechat,douyin_ai,douyin_pet")
+    hot_works.add_argument("--query", action="append", default=[], help="Query or platform=query")
+    hot_works.add_argument("--sample-file", action="append", default=[], help="JSON sample file from logged browser collectors")
+    hot_works.add_argument("--output-dir", default="", help="Output directory for raw data, parameter pack, and report")
+    hot_works.add_argument("--skip-live", action="store_true", help="Only import sample files and cookie states")
+    hot_works.add_argument("--cookie-file", action="append", default=[], help="platform=/private/raw-cookie-export.json")
+    hot_works.add_argument("--state-file", action="append", default=[], help="platform=/private/playwright-storage-state.json for logged short-video search")
+    hot_works.add_argument("--state-output-dir", default="", help="Private output directory for generated Playwright storage_state files")
     return p
 
 
@@ -475,38 +492,6 @@ def execute(args):
         result = inspect_delivery_readiness(config)
         store.save_tool_inventory("content-tools", result.get("tools", {}).get("content_tools", {}))
         return result
-    if args.command == "same-lane-intel":
-        samples_by_platform = load_samples_file(args.sample_file)
-        readiness = {}
-        if args.readiness_file:
-            readiness_payload = json.loads(Path(args.readiness_file).read_text(encoding="utf-8"))
-            readiness = readiness_payload.get("platforms") if isinstance(readiness_payload.get("platforms"), dict) else readiness_payload
-        report = build_same_lane_report(samples_by_platform, args.platform, readiness)
-        if args.output:
-            output = Path(args.output)
-        else:
-            output = Path(config.get("data_dir", Path(args.db).parent)) / "same_lane_intelligence_latest.json"
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-        report["output"] = str(output)
-        store.save_tool_inventory(
-            "same_lane_intelligence:latest",
-            {
-                "report_path": str(output),
-                "platforms": report["platforms"],
-                "generated_at": report["generated_at"],
-                "summary": {
-                    platform: {
-                        "accepted_sample_count": data.get("accepted_sample_count", 0),
-                        "rejected_sample_count": data.get("rejected_sample_count", 0),
-                        "own_data_status": data.get("own_data_status", "unknown"),
-                        "topic_patterns": data.get("topic_patterns", []),
-                    }
-                    for platform, data in report.get("reports", {}).items()
-                },
-            },
-        )
-        return report
     if args.command == "cookie-inventory":
         from .auth_registry import cookie_inventory
         platforms = args.platform or sorted((config.get("publishers") or {}).get("platforms") or {})
@@ -575,6 +560,134 @@ def execute(args):
     if args.command == "viral-monitor":
         from .viral_monitor import score_posts_file
         return score_posts_file(args.input, args.output)
+    if args.command == "same-lane-intel":
+        samples_by_platform = load_samples_file(args.sample_file)
+        readiness = {}
+        if args.readiness_file:
+            readiness_payload = json.loads(Path(args.readiness_file).read_text(encoding="utf-8"))
+            readiness = readiness_payload.get("platforms") if isinstance(readiness_payload.get("platforms"), dict) else readiness_payload
+        report = build_same_lane_report(samples_by_platform, args.platform, readiness)
+        if args.output:
+            output = Path(args.output)
+        else:
+            output = Path(config.get("data_dir", Path(args.db).parent)) / "same_lane_intelligence_latest.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["output"] = str(output)
+        store.save_tool_inventory(
+            "same_lane_intelligence:latest",
+            {
+                "report_path": str(output),
+                "platforms": report["platforms"],
+                "generated_at": report["generated_at"],
+                "summary": {
+                    platform: {
+                        "accepted_sample_count": data.get("accepted_sample_count", 0),
+                        "rejected_sample_count": data.get("rejected_sample_count", 0),
+                        "own_data_status": data.get("own_data_status", "unknown"),
+                        "topic_patterns": data.get("topic_patterns", []),
+                    }
+                    for platform, data in report.get("reports", {}).items()
+                },
+            },
+        )
+        return report
+    if args.command == "hot-works-collect":
+        from collections import defaultdict
+
+        data_dir = Path(config.get("data_dir", Path(args.db).parent))
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        output_dir = Path(args.output_dir) if args.output_dir else data_dir / "intel" / f"hot_works_{stamp}"
+        items = []
+        statuses = []
+
+        for entry in args.cookie_file or []:
+            platform, separator, cookie_path = str(entry).partition("=")
+            if not separator or not platform.strip() or not cookie_path.strip():
+                statuses.append({"source": "cookie_state", "status": "failed", "reason": "cookie-file must use platform=path"})
+                continue
+            state_dir = Path(args.state_output_dir) if args.state_output_dir else output_dir / "cookie_states"
+            target = state_dir / f"{platform.strip().casefold()}_playwright_state.json"
+            try:
+                written = write_playwright_state(cookie_path.strip(), target)
+                statuses.append({"source": f"{platform}:cookie_state", "status": "ok", "state_file": str(written)})
+            except Exception as exc:
+                statuses.append({"source": f"{platform}:cookie_state", "status": "failed", "error": str(exc)[:240]})
+
+        state_files = {}
+        for entry in args.state_file or []:
+            platform, separator, state_path = str(entry).partition("=")
+            if separator and platform.strip() and state_path.strip():
+                state_files[platform.casefold().strip()] = state_path.strip()
+
+        for sample_file in args.sample_file or []:
+            try:
+                loaded = load_samples(sample_file)
+                items.extend(loaded)
+                statuses.append({"source": f"sample_file:{Path(sample_file).name}", "status": "ok", "count": len(loaded)})
+            except Exception as exc:
+                statuses.append({"source": f"sample_file:{Path(sample_file).name}", "status": "failed", "count": 0, "error": str(exc)[:240]})
+
+        query_map: dict[str, list[str]] = defaultdict(list)
+        for entry in args.query or []:
+            platform, separator, query = str(entry).partition("=")
+            if separator:
+                query_map[platform.casefold().strip()].append(query.strip())
+            else:
+                query_map["all"].append(str(entry).strip())
+
+        live_platforms = {str(platform).casefold().strip() for platform in (args.platform or []) if str(platform).strip()}
+        if not args.skip_live:
+            if not live_platforms:
+                live_platforms = {"wechat", "douyin_ai", "douyin_pet"}
+            if "wechat" in live_platforms:
+                for query in query_map.get("wechat") or query_map.get("all") or ["Claude Code Skills MCP AI效率 工作流", "AI工具 自动化 工作流 效率 公众号"]:
+                    started = datetime.now()
+                    try:
+                        rows = collect_wechat(query)
+                        items.extend(rows)
+                        statuses.append({"source": "wechat:sogou_weixin", "query": query, "status": "ok", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
+                    except Exception as exc:
+                        statuses.append({"source": "wechat:sogou_weixin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
+            if live_platforms.intersection({"douyin", "douyin_ai"}):
+                for query in query_map.get("douyin_ai") or query_map.get("douyin") or query_map.get("all") or ["AI工具", "Claude Code Codex"]:
+                    started = datetime.now()
+                    try:
+                        rows = collect_douyin_shipin(query, "douyin_ai")
+                        items.extend(rows)
+                        statuses.append({"source": "douyin_ai:public_shipin", "query": query, "status": "ok", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
+                    except Exception as exc:
+                        statuses.append({"source": "douyin_ai:public_shipin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
+            if "douyin_pet" in live_platforms:
+                for query in query_map.get("douyin_pet") or ["猫咪治愈", "猫狗日常"]:
+                    started = datetime.now()
+                    try:
+                        rows = collect_douyin_shipin(query, "douyin_pet")
+                        items.extend(rows)
+                        statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "ok", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
+                    except Exception as exc:
+                        statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
+            for platform in sorted(live_platforms.intersection({"douyin", "douyin_ai", "douyin_pet", "kuaishou"})):
+                state_file = state_files.get(platform) or state_files.get("douyin" if platform.startswith("douyin") else platform)
+                if not state_file:
+                    continue
+                queries = query_map.get(platform) or query_map.get("douyin" if platform.startswith("douyin") else platform) or query_map.get("all")
+                if not queries:
+                    queries = ["AI工具", "Claude Code Codex"] if platform in {"douyin", "douyin_ai", "kuaishou"} else ["猫咪治愈", "猫狗日常"]
+                for query in queries:
+                    started = datetime.now()
+                    try:
+                        rows, status = collect_logged_short_video_search(platform, query, state_file=state_file, output_dir=output_dir / "logged_search")
+                        items.extend(rows)
+                        status.setdefault("elapsed_ms", int((datetime.now() - started).total_seconds() * 1000))
+                        statuses.append(status)
+                    except Exception as exc:
+                        statuses.append({"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
+
+        paths = save_collection(items, statuses, output_dir)
+        result = {"ok": True, "items": len(items), "collection_status": statuses, "paths": paths}
+        store.save_tool_inventory("hot_work_parameter_pack:latest", result)
+        return result
     if args.command == "analyze-topic":
         brief = json.loads(args.brief)
         if not isinstance(brief, dict):
@@ -660,8 +773,6 @@ def execute(args):
             store,
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
         )
-        from .runtime_capabilities import build_runtime_capability_snapshot
-        runtime_capabilities = build_runtime_capability_snapshot()
 
         def rank_for_platform(platform, items, slot):
             # Keep a candidate pool so the batch builder can reserve a unique
@@ -702,7 +813,6 @@ def execute(args):
             trend_evidence_mode=(args.trend_evidence_mode or str(config.get("feature_flags", {}).get("real_platform_trend_evidence_mode", "shadow"))).casefold(),
             report_path=str(snapshot_path),
             reserved_topic_fingerprints=store.used_topics(lookback_days=7),
-            runtime_capabilities=runtime_capabilities,
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
