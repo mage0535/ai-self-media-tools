@@ -3711,6 +3711,10 @@ treated as a gateway failure.
 - The command writes a JSON report and stores `same_lane_intelligence:latest`
   in `tool_inventory`, so scheduled workflows can load the latest competitor
   distillation before choosing topics or generating copy.
+- `Pipeline.run` and `overnight-prepare` now inject a compact
+  `same_lane_intelligence` playbook into the generate-stage
+  `bounded_model_input`. If the snapshot is missing, the field is explicitly
+  marked `status=missing`; it is never silently omitted.
 - Native work evidence is mandatory. Generic pages such as model homepages,
   GitHub projects, Baidu answers, or external search results cannot be counted
   as Bilibili/WeChat/Zhihu/YouTube/TikTok same-lane evidence.
@@ -3719,4 +3723,5 @@ treated as a gateway failure.
   snapshots or malformed platform counters from being used as automatic
   strategy feedback.
 - Minimum verification: `python -m pytest tests/test_same_lane_intelligence.py
+  tests/test_pipeline.py tests/test_overnight_batch.py
   tests/test_trend_intelligence.py tests/test_performance_cycle.py -q`.

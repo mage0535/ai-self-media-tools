@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -204,6 +205,47 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(self.store.list_delivery_queue("completed"))
         self.assertTrue(self.store.workflow_reports(job["id"], "wechat"))
         self.assertIn("send_completion_report", [row["step_name"] for row in self.store.workflow_steps(job["id"], "wechat")])
+
+    def test_generation_input_includes_latest_same_lane_playbook(self):
+        report_path = Path(self.tmp.name) / "same_lane.json"
+        report_path.write_text(
+            json.dumps(
+                {
+                    "reports": {
+                        "wechat": {
+                            "platform": "wechat",
+                            "own_data_status": "insufficient",
+                            "topic_patterns": ["tool_workflow_tutorial"],
+                            "proof_requirements": ["screen_or_tool_stack_demo"],
+                            "recommended_content_moves": ["show a concrete tool stack"],
+                            "top_accounts": [{"account": "Sample", "total_views": 100}],
+                            "top_works": [{"title": "AI 工作流案例", "account": "Sample", "views": 100}],
+                        }
+                    }
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        self.store.save_tool_inventory("same_lane_intelligence:latest", {"report_path": str(report_path), "platforms": ["wechat"]})
+        captured = {}
+        job = self.pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
+
+        def generate(topic, brief):
+            captured["brief"] = brief
+            return {
+                "title": topic,
+                "body": "A concrete, evidence-backed workflow with a reusable checklist.",
+                "draft_meta": {"quality_gate": {"passed": True}, "strategy": {}},
+            }
+
+        with patch.object(self.pipeline.generator, "generate", side_effect=generate):
+            self.pipeline.run(job["id"])
+
+        same_lane = captured["brief"]["bounded_model_input"]["same_lane_intelligence"]
+        self.assertEqual(same_lane["own_data_status"], "insufficient")
+        self.assertEqual(same_lane["topic_patterns"], ["tool_workflow_tutorial"])
+        self.assertIn("show a concrete tool stack", same_lane["recommended_content_moves"])
 
     def test_required_unified_acceptance_blocks_publish(self):
         pipeline = Pipeline(
