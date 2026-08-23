@@ -244,6 +244,7 @@ def build_due_tasks(
                 heat_score=float(selected.get("score") or 0),
                 freshness_score=float(selected.get("freshness_score") or 0),
                 platform_fit_score=float(selected.get("platform_fit_score") or selected.get("score") or 0),
+                associated_hotspot=selected.get("associated_hotspot") if isinstance(selected.get("associated_hotspot"), dict) else None,
             )
             trend_gate = validate_trend_candidate(trend_candidate)
             matrix = selected_matrix or _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
