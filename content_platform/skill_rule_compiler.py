@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,11 @@ def _relative(path: Path, root: Path) -> str:
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
-        return path.name
+        hermes_root = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).resolve()
+        try:
+            return "hermes/" + path.resolve().relative_to(hermes_root).as_posix()
+        except ValueError:
+            return "external/" + path.name
 
 
 def compile_skill_rules(paths: list[str | Path], *, root: str | Path) -> dict[str, Any]:
@@ -73,4 +78,7 @@ def default_skill_paths(platform: str, *, root: str | Path) -> list[Path]:
     }.get(str(platform).casefold())
     if platform_name:
         names.append(platform_name)
-    return [root / "skills" / "content" / name / "SKILL.md" for name in names]
+    paths = [root / "skills" / "content" / name / "SKILL.md" for name in names]
+    hermes_root = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+    paths.extend(hermes_root / "skills" / "content" / name / "SKILL.md" for name in names)
+    return list(dict.fromkeys(path for path in paths if path.is_file()))
