@@ -166,6 +166,7 @@ class Pipeline:
                             brief["content_profile"] = capability_context["profile"]
                             brief["capability_plan"] = capability_context["capability_plan"]
                             brief["tool_selection"] = capability_context["tool_selection"]
+                            brief["compiled_skill_rules"] = capability_context["compiled_skill_rules"]
                             brief["bounded_model_input"] = bound_stage_payload(
                                 contract,
                                 "generate",
@@ -174,6 +175,7 @@ class Pipeline:
                                     "content_profile": capability_context["profile"],
                                     "capability_plan": capability_context["capability_plan"],
                                     "tool_selection": capability_context["tool_selection"],
+                                    "compiled_skill_rules": capability_context["compiled_skill_rules"],
                                     "claim_ledger": list(brief.get("claim_ledger") or []),
                                     "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
                                     "strategy": compact_compiled_strategy(compiled),

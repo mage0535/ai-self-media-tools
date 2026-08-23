@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .capability_router import build_capability_plan
 from .content_profile import classify_content_profile
 from .tool_selection import build_tool_selection_evidence
+from .skill_rule_compiler import compile_skill_rules, default_skill_paths
+from .content_assets import load_compiled_assets, select_content_asset_ids
 
 
 def build_generation_capability_context(platform: str, content_blueprint: dict) -> dict:
@@ -15,6 +19,27 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         content_format=str(content_blueprint.get("content_form") or ""),
     )
     full_plan = build_capability_plan(profile)
+    project_root = Path(__file__).resolve().parents[1]
+    compiled_skill_rules = compile_skill_rules(default_skill_paths(platform, root=project_root), root=project_root)
+    # Keep full provenance local while fitting bounded provider input.
+    compiled_skill_rules["sources"] = [
+        {"id": source["id"], "sha256": source["sha256"]}
+        for source in compiled_skill_rules.get("sources", [])
+    ]
+    compiled_skill_rules["rules"] = [
+        {"id": rule["id"], "section": rule["section"], "text": str(rule.get("text") or "")[:160]}
+        for rule in compiled_skill_rules.get("rules", [])[:4]
+    ]
+    assets = load_compiled_assets(project_root / "config" / "content_assets")
+    selected_assets = select_content_asset_ids(profile, assets)
+    compiled_skill_rules["content_assets"] = {
+        "selected": selected_assets,
+        "available_counts": {
+            "hooks": sum(len(value) for value in (assets.get("hooks") or {}).values() if isinstance(value, list)),
+            "structures": len((assets.get("structures") or {}).get("structures") or []),
+            "formulas": len((assets.get("formulas") or {}).get("formulas") or []),
+        },
+    }
     plan = {
         "version": full_plan["version"],
         "profile": full_plan["profile"],
@@ -50,5 +75,6 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         "profile": profile,
         "capability_plan": plan,
         "tool_selection": tool_selection,
+        "compiled_skill_rules": compiled_skill_rules,
         "ready_for_generation": not bool(plan.get("skipped")),
     }

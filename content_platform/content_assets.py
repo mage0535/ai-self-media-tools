@@ -55,3 +55,34 @@ def load_compiled_assets(asset_dir: Path) -> dict[str, Any]:
     structures = _read(asset_dir / "structures.json")
     formulas = _read(asset_dir / "formulas.json")
     return {"hooks": hooks, "structures": structures, "formulas": formulas}
+
+
+def select_content_asset_ids(profile: dict[str, Any], assets: dict[str, Any]) -> dict[str, Any]:
+    """Choose a small deterministic asset set for the current content format."""
+    content_format = str((profile or {}).get("content_format") or "article")
+    structures = list((assets.get("structures") or {}).get("structures") or [])
+    formulas = list((assets.get("formulas") or {}).get("formulas") or [])
+    structure_preference = {
+        "carousel": "saveable_checklist",
+        "short_video": "before_after_test",
+        "long_video": "tool_demo",
+        "article": "pain_reversal_tutorial",
+    }.get(content_format, "pain_reversal_tutorial")
+    formula_preference = {
+        "carousel": "numbered_checklist",
+        "short_video": "result_first",
+        "long_video": "before_after_gap",
+        "article": "practical_rescue",
+    }.get(content_format, "practical_rescue")
+    hook_ids = []
+    hooks = assets.get("hooks") or {}
+    for key in ("title", "opening", "ending"):
+        rows = hooks.get(key) if isinstance(hooks.get(key), list) else []
+        if rows and isinstance(rows[0], dict) and rows[0].get("id"):
+            hook_ids.append(str(rows[0]["id"]))
+    return {
+        "structure_id": structure_preference if structure_preference in structures else (structures[0] if structures else ""),
+        "formula_id": formula_preference if formula_preference in formulas else (formulas[0] if formulas else ""),
+        "hook_ids": hook_ids,
+        "selection_reason": f"format-aware selection for {content_format}",
+    }
