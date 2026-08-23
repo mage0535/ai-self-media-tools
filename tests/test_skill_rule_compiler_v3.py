@@ -1,6 +1,7 @@
 from pathlib import Path
+from unittest.mock import patch
 
-from content_platform.skill_rule_compiler import compile_skill_rules
+from content_platform.skill_rule_compiler import compile_skill_rules, default_skill_paths
 
 
 def test_compiler_emits_rule_ids_and_source_hash_without_absolute_paths(tmp_path: Path):
@@ -26,3 +27,9 @@ def test_compiler_ignores_archived_skill_sources(tmp_path: Path):
     assert result["passed"] is True
     assert result["rules"] == []
     assert result["sources"] == []
+
+
+def test_default_skill_paths_survive_missing_home_environment(tmp_path: Path):
+    with patch.dict("os.environ", {}, clear=True):
+        paths = default_skill_paths("douyin_ai", root=tmp_path)
+    assert paths == []

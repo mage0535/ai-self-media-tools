@@ -13,11 +13,18 @@ def _relative(path: Path, root: Path) -> str:
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
-        hermes_root = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).resolve()
+        hermes_root = _hermes_root(root).resolve()
         try:
             return "hermes/" + path.resolve().relative_to(hermes_root).as_posix()
         except ValueError:
             return "external/" + path.name
+
+
+def _hermes_root(fallback_root: Path | None = None) -> Path:
+    configured = os.environ.get("HERMES_HOME") or os.environ.get("USERPROFILE") or os.environ.get("HOME")
+    if configured:
+        return Path(configured) / ".hermes" if not os.environ.get("HERMES_HOME") else Path(configured)
+    return (fallback_root or Path.cwd()) / ".hermes"
 
 
 def compile_skill_rules(paths: list[str | Path], *, root: str | Path) -> dict[str, Any]:
@@ -79,6 +86,6 @@ def default_skill_paths(platform: str, *, root: str | Path) -> list[Path]:
     if platform_name:
         names.append(platform_name)
     paths = [root / "skills" / "content" / name / "SKILL.md" for name in names]
-    hermes_root = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+    hermes_root = _hermes_root(root)
     paths.extend(hermes_root / "skills" / "content" / name / "SKILL.md" for name in names)
     return list(dict.fromkeys(path for path in paths if path.is_file()))
