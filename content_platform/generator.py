@@ -964,7 +964,6 @@ class DraftGenerator:
         audience = brief.get("audience", "builders")
         tone = brief.get("tone", "clear")
         strategy = context["strategy"]
-        score = context["viral_score"]["total_score"]
         title_suffix = "3 moves worth copying now" if context["trend_stage"] in {"hot", "viral_candidate"} else "execution guide"
         title = f"{topic}: {title_suffix}"
         hook = next(iter(context["style"]["opening_patterns"]), "Start with the conclusion.")
@@ -973,7 +972,6 @@ class DraftGenerator:
             f"{hook} This draft targets {audience} with a {tone} tone.\n\n"
             f"## Why this topic matters\n\n"
             f"- Trend stage: {context['trend_stage']}\n"
-            f"- Viral score: {score}\n"
             f"- Recommended form: {strategy['content_form']}\n\n"
             "## Suggested structure\n\n"
             "1. Lead with the payoff.\n"
@@ -983,7 +981,7 @@ class DraftGenerator:
             "## Production notes\n\n"
             f"- Use these platforms first: {', '.join(strategy['primary_platforms'])}\n"
             f"- Asset plan: {', '.join(strategy['asset_plan'])}\n"
-            f"- Platform rules: {context.get('platform_rules', '')[:400]}\n"
+            "- Public copy rule: use only claims supported by the supplied evidence ledger.\n"
         )
         return self._normalize({"title": title, "body": body, "hook": hook}, context, "fallback", topic, brief)
 
