@@ -3734,3 +3734,16 @@ treated as a gateway failure.
 - Publication metrics require a verified canonical URL, internal account alias, platform content ID, and published timestamp. Draft, scheduled, review, and handoff states do not start metric windows.
 - `run_quality_canary.py` currently provides twelve reproducible contract canaries with input hashes. Cases requiring real platform identities or media artifacts remain explicitly `contract_only` until isolated production evidence is available; this is not a production readiness claim.
 - Remaining release gates are real media canaries, dual-model content generation, platform collector integration, three-way synchronization, and rollback rehearsal.
+# 2026-08-24 Luna Quality Runtime V3
+
+- Created isolated branch `codex/luna-quality-runtime-v3`; production main and Hermes timers remain untouched.
+- Added generation-time Pipeline context propagation: `content_profile`, `capability_plan`, `tool_selection`, `compiled_skill_rules`, and optional `associated_hotspot` now enter the bounded provider payload before model generation.
+- Added a truthful capability catalog. Legacy tool groups, active skill paths, and MCP namespaces are inventory-only until an allowlisted adapter and gate exist; methodology remains `consulted`.
+- Added verified associated-hotspot identity, expiry, native-evidence validation, bounded scoring bonus, and a conservative per-platform support matrix. Unknown platform support remains `unsupported_or_unverified`.
+- Added deterministic compilation and format-aware selection of Hooks/Structures/Formulas/Skill rules with source hashes; model context is compacted to the stage payload budget.
+- Added required/optional capability execution DAG, MCP allowlist executor, explicit execution evidence, and honest Canary status (`declared`, `contract_verified`, `artifact_verified`, `external_verified`).
+- Added media artifact probing for ffprobe streams, 44.1kHz stereo audio, duration, alignment, audio-quality, and render-quality evidence.
+- Extended Publication Ledger with required metrics, observations, collection attempts, retry timestamps, and schema-compatible columns. Empty or incomplete metrics remain `insufficient`.
+- Rebased nested media tools to the active project release and isolated visual-recipe registry. A real isolated run confirmed production absolute paths were not used for generated artifacts.
+- Verification: local and server isolated worktrees reached `979 passed / 0 failed`, 33 subtests, and `project-audit ok=true` after the payload-budget fix. Contract Canary reports `10 contract_verified`, `2 pending`, `production_ready=false`.
+- Real isolated generation correctly blocked an unsourced/low-confidence draft before media delivery; no publication occurred. Real v3 media generation, platform-native hotspot adapters, active MCP execution, real metric collectors, dual-model evidence, three-way deployment, and rollback rehearsal remain release gates.
