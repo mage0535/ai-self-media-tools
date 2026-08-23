@@ -688,6 +688,8 @@ class Pipeline:
         return hygiene
 
     def _deliver(self, platform, job, action="publish"):
+        if str(self.config.get("feature_flags", {}).get("delivery_master_switch", "on")).casefold() == "off":
+            return DeliveryResult(False, "blocked", error="delivery_master_switch=off")
         decision = delivery_health_decision(platform, self.config, action)
         if not decision.ok:
             return DeliveryResult(False, "blocked", error=decision.error())
