@@ -1242,10 +1242,14 @@ def main() -> int:
     # 发音词典（TTSTextCompiler：处理 AI/API/TTS/数字/专有名词）
     try:
         from content_platform.tts_text_compiler import TTSTextCompiler
+        from content_platform.tts_cache import tts_fingerprint
         dict_path = ROOT / "config" / "pronunciation_dictionary.json"
         compiler = TTSTextCompiler.from_file(dict_path) if dict_path.is_file() else TTSTextCompiler([])
+        pronunciation_dictionary_version = hashlib.sha256(dict_path.read_bytes()).hexdigest() if dict_path.is_file() else "none"
     except Exception:
         compiler = None
+        tts_fingerprint = None
+        pronunciation_dictionary_version = "none"
 
     # 音色：按内容赛道自动选择（voice_engine GENRE_VOICE_MAP，2026-08-16 修复硬编码 tech 单一音色）
     # 之前固定 zh-CN-YunjianNeural/en-US-GuyNeural，忽略了 pets/finance/emotion/science 赛道音色
@@ -1270,6 +1274,8 @@ def main() -> int:
         tts_rate = "-5%"
 
     tts_records = []
+    tts_model = os.environ.get("QWEN_AUDIO_TTS_MODEL", "qwen-audio-3.0-tts-flash")
+    postprocess_profile = "none"
     for i in range(1, 9):
         mp3 = tts_dir / f"tts_{i:02d}.mp3"
         text = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
@@ -1286,8 +1292,20 @@ def main() -> int:
                 applied_rules = list(compiled.applied_rules or [])
             except Exception:
                 pass
-        existing_audio = mp3.is_file() and mp3.stat().st_size > 10_000
         provider_used = "edge-tts"
+        provider_model = "edge-tts"
+        sig_file = mp3.with_suffix(mp3.suffix + ".sig")
+        planned_sig = tts_fingerprint(
+            display_text=display_text, tts_text=tts_text, provider="edge-tts", model="edge-tts",
+            voice=edge_voice, rate=tts_rate, pitch="+0Hz",
+            pronunciation_dictionary_version=pronunciation_dictionary_version,
+            postprocess_profile=postprocess_profile,
+        ) if tts_fingerprint else ""
+        existing_audio = mp3.is_file() and mp3.stat().st_size > 10_000 and tts_provider != "qwen"
+        if existing_audio and (not sig_file.is_file() or sig_file.read_text(encoding="utf-8").strip() != planned_sig):
+            mp3.unlink(missing_ok=True)
+            sig_file.unlink(missing_ok=True)
+            existing_audio = False
         if not existing_audio and tts_provider == "qwen":
             # 灰度：Qwen 直接合成（不经 DeAI）
             try:
@@ -1298,15 +1316,25 @@ def main() -> int:
                                     voice=os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
                                     language="Chinese" if tts_lang == "zh" else "English")
                     provider_used = "qwen"
+                    provider_model = tts_model
             except Exception as exc:
                 print(f"Qwen 合成失败({i}): {str(exc)[:80]}", file=sys.stderr)
         if not mp3.is_file() or mp3.stat().st_size <= 10_000:
             synthesize_edge_tts(tts_text, mp3, edge_voice, rate=tts_rate)
             provider_used = "edge-tts"
         if mp3.is_file() and mp3.stat().st_size > 10_000:
+            actual_sig = tts_fingerprint(
+                display_text=display_text, tts_text=tts_text, provider=provider_used, model=provider_model,
+                voice=edge_voice if provider_used == "edge-tts" else os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
+                rate=tts_rate, pitch="+0Hz",
+                pronunciation_dictionary_version=pronunciation_dictionary_version,
+                postprocess_profile=postprocess_profile,
+            ) if tts_fingerprint else ""
+            sig_file.write_text(actual_sig, encoding="utf-8")
             tts_files.append(str(mp3))
             tts_records.append({
                 "provider": provider_used,
+                "model": provider_model,
                 "voice": edge_voice if provider_used == "edge-tts" else os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
                 "rate": tts_rate, "pitch": "+0Hz",
                 "tts_text": tts_text, "display_text": display_text,

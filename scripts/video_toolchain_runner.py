@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -300,6 +301,24 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             theme = "cyber-neon"
     bgm_style = _bgm_style(cinema_scenes, text=f"{title} {script_body}")
+    from content_platform.content_profile import classify_content_profile
+    from content_platform.capability_router import match_capabilities, build_invocation_manifest
+    from content_platform.capability_runtime import execute_generation_capabilities
+    profile = classify_content_profile(
+        script_body or title,
+        platform=_primary_platform(plan),
+        content_format="short_video" if plan.get("selected_pipeline") in ("video", "cinema_multishot_video") else "article",
+    )
+    match_result = match_capabilities(profile)
+    invocation_manifest = build_invocation_manifest(match_result)
+    capability_execution = execute_generation_capabilities(
+        {"title": title, "body": script_body},
+        {"content_profile": profile, "content_form": profile.get("content_format", "short_video")},
+    )
+    if not capability_execution.get("passed"):
+        raise RuntimeError("capability execution failed before rendering")
+    plan["content_profile"] = profile
+    plan["capability_plan"] = {"selection": invocation_manifest, "execution": capability_execution}
     renderer_cmd = _renderer_command(renderer, output_dir, theme, title, script_body, plan, bgm_style)
     toolchain_contract = _toolchain_contract(plan, theme, bgm_style, renderer, visual_recipe)
     manifest = {
@@ -335,6 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         "card_titles": [str(card.get("t") or "") for card in cards],
         "subtitle": {"width": 1080, "height": 1920},
         "tool_invocation_manifest": tool_manifest,
+        "capability_invocation": {"selection": invocation_manifest, "execution": capability_execution},
         **tool_selection_evidence,
     }
     if manifest["dry_run"]:
@@ -361,6 +381,21 @@ def main(argv: list[str] | None = None) -> int:
             _write_manifest(output_dir, manifest)
             print(manifest["error"], file=sys.stderr)
             return 4
+        if (output_dir / "bgm_source.json").is_file() or (output_dir / "bgm.mp3").is_file():
+            bgm_proc = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "gen_bgm_history_check.py"), str(output_dir), "--platform", _primary_platform(plan)],
+                capture_output=True, text=True, timeout=180,
+            )
+            try:
+                bgm_evidence = json.loads((output_dir / "bgm_history_check.json").read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                bgm_evidence = {"ok": False, "failed_dimensions": ["bgm_history_check_missing"]}
+            manifest["bgm_history_check"] = bgm_evidence
+            if bgm_proc.returncode != 0 or not bgm_evidence.get("ok"):
+                manifest.update({"ok": False, "output": str(generated[0]), "status": "bgm_gate_failed", "error": "BGM history gate failed"})
+                _write_manifest(output_dir, manifest)
+                print(manifest["error"], file=sys.stderr)
+                return 4
         cinema_gate = _run_cinema_visual_gate(output_dir)
         manifest["cinema_visual_gate"] = cinema_gate
         if not cinema_gate.get("passed"):

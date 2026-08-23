@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "version": "content_assets_v1",
+    "source_sha256": "de63885d07a6da79d77160b2b48a34b5fb71346e5c7075e8c5b74d7605572419"
+  },
+  "formulas": [
+    "mistake_correction",
+    "result_first",
+    "proof_challenge",
+    "practical_rescue",
+    "truth_or_false",
+    "self_projection",
+    "numbered_checklist",
+    "before_after_gap"
+  ]
+}

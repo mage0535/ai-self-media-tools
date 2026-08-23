@@ -5,6 +5,7 @@
 就能读取标题/开场/结尾钩子模板库，自动套用生成爆款标题和脚本开头。
 """
 import json
+import hashlib
 import os
 import re
 import sys
@@ -15,6 +16,7 @@ LIB_MD = ROOT / "data" / "hooks_library.md"
 LIB_JSON = ROOT / "data" / "hooks_library.json"
 PUBLIC_FALLBACK_JSON = ROOT / "config" / "default_hooks.json"
 CONFIG_LIB_JSON = ROOT / "config" / "hooks_library.json"
+COMPILED_ASSET_DIR = ROOT / "config" / "content_assets"
 OUT_MD = ROOT / "data" / "hooks_library.md"
 
 
@@ -86,6 +88,19 @@ def load_hooks() -> dict:
     global _CACHE
     if _CACHE is not None:
         return _CACHE
+    compiled = COMPILED_ASSET_DIR / "hooks.json"
+    if compiled.is_file():
+        try:
+            cached = json.loads(compiled.read_text(encoding="utf-8"))
+            metadata = cached.get("metadata") if isinstance(cached, dict) else {}
+            source = ROOT / "config" / "default_hooks.json"
+            rules = ROOT / "config" / "content_quality_reference_pack.json"
+            source_hash = hashlib.sha256(source.read_bytes() + b"\n" + rules.read_bytes()).hexdigest()
+            if metadata.get("source_sha256") == source_hash:
+                _CACHE = {key: cached.get(key, []) for key in ("title", "opening", "ending")}
+                return _CACHE
+        except (OSError, ValueError, TypeError):
+            pass
     if LIB_JSON.is_file():
         try:
             _CACHE = json.loads(LIB_JSON.read_text(encoding="utf-8"))
@@ -112,9 +127,6 @@ def load_hooks() -> dict:
                 _CACHE = fallback
         except (OSError, json.JSONDecodeError):
             pass
-    if _CACHE and any(_CACHE.get(key) for key in ("title", "opening", "ending")):
-        LIB_JSON.parent.mkdir(parents=True, exist_ok=True)
-        LIB_JSON.write_text(json.dumps(_CACHE, ensure_ascii=False, indent=1), encoding="utf-8")
     return _CACHE
 
 

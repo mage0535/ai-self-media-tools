@@ -119,6 +119,23 @@ def check_engagement_comment(script_text: str) -> dict:
     }
 
 
+def check_structure_match(segments: list[str]) -> dict:
+    """Return evidence that the script contains an ordered problem/value/payoff arc."""
+    text = " ".join(segments)
+    groups = [
+        ("pain_solution", r"问题|痛点|困扰|错误", r"解决|步骤|方法|方案"),
+        ("reversal", r"大家|一直|以为|常识", r"其实|真相|错|反而"),
+        ("result_first", r"结果|实测|数据|提升", r"怎么|方法|关键|步骤"),
+    ]
+    matched = [name for name, left, right in groups if re.search(left, text) and re.search(right, text)]
+    return {
+        "passed": bool(matched),
+        "matched_structure": matched[0] if matched else None,
+        "matched_structures": matched,
+        "confidence": min(1.0, len(matched) / 2),
+    }
+
+
 def validate_script(script_text: str, lang: str = "zh") -> dict:
     segments = [s.strip() for s in re.split(r"\n\s*\n", script_text) if s.strip()]
     checks = {
@@ -130,6 +147,7 @@ def validate_script(script_text: str, lang: str = "zh") -> dict:
         "info_density": check_info_density(segments),
         "save_value": check_save_value(segments),
         "engagement_comment": check_engagement_comment(script_text),
+        "structure_match": check_structure_match(segments),
     }
     failed = [k for k, v in checks.items() if not v["passed"]]
     return {

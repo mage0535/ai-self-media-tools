@@ -1,0 +1,41 @@
+{
+  "version": "creative_capability_registry_v2",
+  "capabilities": [
+    {
+      "id": "cinema_composition_reference",
+      "capability_kind": "methodology",
+      "stage": "blueprint",
+      "applies_to": ["short_video", "long_video", "cover", "poster"],
+      "required_inputs": ["content_profile"],
+      "adapter": "builtin:reference_compiler",
+      "output_contract": "reference_rules_v1",
+      "license": "derived",
+      "source_hash": "config/content_quality_reference_pack.json",
+      "trigger": {"visual_treatment": ["cinematic"]}
+    },
+    {
+      "id": "hook_structure_reference",
+      "capability_kind": "methodology",
+      "stage": "generation",
+      "applies_to": ["article", "carousel", "short_video", "long_video"],
+      "required_inputs": ["content_profile"],
+      "adapter": "builtin:reference_compiler",
+      "output_contract": "reference_rules_v1",
+      "license": "derived",
+      "source_hash": "config/content_assets/hooks.json",
+      "trigger": {"content_format": ["article", "carousel", "short_video", "long_video"]}
+    },
+    {
+      "id": "structure_match",
+      "capability_kind": "analyzer",
+      "stage": "generation",
+      "applies_to": ["article", "carousel", "short_video", "long_video"],
+      "required_inputs": ["segments"],
+      "adapter": "python:content_platform.adapters.structure:execute",
+      "output_contract": "structure_match_v1",
+      "license": "internal",
+      "source_hash": "internal:structure-adapter-v1",
+      "trigger": {"content_format": ["article", "carousel", "short_video", "long_video"]}
+    }
+  ]
+}

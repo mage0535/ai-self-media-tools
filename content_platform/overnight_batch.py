@@ -256,6 +256,7 @@ def build_due_tasks(
             from .runtime_capabilities import build_runtime_capability_snapshot
             from .strategy_compiler import compact_compiled_strategy
             from .tool_selection import build_tool_selection_evidence
+            from .capability_context import build_generation_capability_context
 
             run_contract = build_run_contract(platform)
             compiled_strategy = (growth_strategy_status.get(platform) or {}).get("compiled_strategy")
@@ -286,11 +287,16 @@ def build_due_tasks(
                 quality_reference_pack=quality_reference_pack,
             )
             blueprint_gate = validate_content_blueprint(content_blueprint)
+            capability_context = build_generation_capability_context(platform, content_blueprint)
+            if not capability_context["ready_for_generation"]:
+                raise ValueError("capability plan contains skipped capabilities")
             bounded_model_input = bound_stage_payload(
                 run_contract,
                 "generate",
                 {
                     "content_blueprint": content_blueprint,
+                    "content_profile": capability_context["profile"],
+                    "capability_plan": capability_context["capability_plan"],
                     "claim_ledger": list(raw.get("claim_ledger") or []),
                     "tool_selection_plan": tool_evidence["tool_selection_plan"],
                     "strategy": compact_compiled_strategy(compiled_strategy),
