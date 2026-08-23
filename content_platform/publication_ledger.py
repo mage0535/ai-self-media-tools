@@ -69,6 +69,8 @@ class PublicationLedger:
     def record_metrics(self, platform: str, account_alias: str, content_id: str, window: str, metrics: dict) -> bool:
         if window not in WINDOWS:
             return False
+        if not isinstance(metrics, dict) or not metrics:
+            metrics = {"status": None}
         safe = {key: ("insufficient" if value is None or (isinstance(value, (int, float)) and value < 0) else value) for key, value in metrics.items()}
         with self._connect() as conn:
             row = conn.execute("SELECT m.id FROM metric_windows m JOIN publication_identities p ON p.id=m.publication_id WHERE p.platform=? AND p.account_alias=? AND p.content_id=? AND m.window=?", (platform, account_alias, content_id, window)).fetchone()
@@ -97,8 +99,10 @@ def identity_from_delivery(platform: str, result, *, account_alias: str | None =
     if getattr(result, "status", "") != "published":
         return None
     external_id = str(getattr(result, "external_id", "") or "")
-    error = str(getattr(result, "error", "") or "")
-    url = external_id if external_id.startswith(("http://", "https://")) else (error if error.startswith(("http://", "https://")) else "")
+    url = str(getattr(result, "canonical_url", "") or "")
+    verification = str(getattr(result, "verification_level", "") or "")
+    if verification not in {"url_verified", "postcheck_verified"}:
+        return None
     if not url:
         return None
     return {
@@ -107,5 +111,5 @@ def identity_from_delivery(platform: str, result, *, account_alias: str | None =
         "platform_content_id": external_id,
         "canonical_url": url,
         "published_at": published_at or datetime.now(timezone.utc).isoformat(),
-        "verification_level": "url_verified",
+        "verification_level": verification,
     }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .capability_router import build_capability_plan
 from .content_profile import classify_content_profile
+from .tool_selection import build_tool_selection_evidence
 
 
 def build_generation_capability_context(platform: str, content_blueprint: dict) -> dict:
@@ -14,8 +15,29 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         content_format=str(content_blueprint.get("content_form") or ""),
     )
     plan = build_capability_plan(profile)
+    full_tool_selection = build_tool_selection_evidence(
+        platform=platform,
+        content_type=str(content_blueprint.get("content_form") or profile["content_format"]),
+        content_goal="select the executable tool stack for this generation stage",
+    )
+    tool_selection = {
+        "version": "tool_selection_compact_v1",
+        "tools_capability_analysis": {
+            "version": full_tool_selection["tools_capability_analysis"].get("version"),
+            "required_tool_groups": full_tool_selection["tools_capability_analysis"].get("required_tool_groups", []),
+            "candidate_tool_count": full_tool_selection["tools_capability_analysis"].get("candidate_tool_count", 0),
+        },
+        "tool_selection_plan": {
+            "version": full_tool_selection["tool_selection_plan"].get("version"),
+            "selected_tools": full_tool_selection["tool_selection_plan"].get("selected_tools", []),
+            "selection_reasons": full_tool_selection["tool_selection_plan"].get("selection_reasons", {}),
+            "invocation_order": full_tool_selection["tool_selection_plan"].get("invocation_order", []),
+            "not_default_only": full_tool_selection["tool_selection_plan"].get("not_default_only", False),
+        },
+    }
     return {
         "profile": profile,
         "capability_plan": plan,
+        "tool_selection": tool_selection,
         "ready_for_generation": not bool(plan.get("skipped")),
     }
