@@ -393,7 +393,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["run_contract"]["publish_boundary"] == "manual_handoff_only"
     assert task["brief"]["bounded_model_input"]["content_blueprint"]["topic"] == "AI workflow"
     assert set(task["brief"]["bounded_model_input"]) <= {
-        "content_blueprint", "content_profile", "capability_plan", "tool_selection", "compiled_skill_rules", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "distilled_per_account", "hot_work_parameter_pack", "same_lane_intelligence"
+        "content_blueprint", "content_profile", "capability_plan", "tool_selection", "compiled_skill_rules", "associated_hotspot", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "distilled_per_account", "hot_work_parameter_pack", "same_lane_intelligence"
     }
     assert task["brief"]["bounded_model_input"]["same_lane_intelligence"]["topic_patterns"] == ["tool_workflow_tutorial"]
     assert task["brief"]["content_blueprint_gate"]["passed"] is True
@@ -401,6 +401,25 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["bounded_model_input"]["content_quality_reference_pack"]["loaded"] is True
     assert task["brief"]["bounded_model_input"]["runtime_capabilities"]["version"] == "runtime_capabilities_v1"
     assert len(__import__("json").dumps(task["brief"]["bounded_model_input"], ensure_ascii=False).encode("utf-8")) <= 16384
+
+
+def test_due_task_builder_propagates_associated_hotspot_to_generation_input():
+    hotspot = {
+        "platform": "douyin_ai", "hotspot_id": "h-1", "title": "AI workflow",
+        "captured_at": "2026-08-16T00:00:00+00:00", "expires_at": "2099-08-16T00:00:00+00:00",
+        "native_verified": True, "association_mode": "manual_handoff", "heat_rank": 1,
+        "heat_score": 0.9, "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
+    }
+    prepared = build_due_tasks(
+        [{"platform": "douyin_ai"}],
+        items=[],
+        source_report=[{"source": f"douyin-{i}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"} for i in range(8)],
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "douyin", "fingerprint": "h-1", "score": 1.0, "associated_hotspot": hotspot}],
+        strict_trend_evidence=True,
+    )
+    task = prepared["tasks"][0]
+    assert task["brief"]["associated_hotspot"]["hotspot_id"] == "h-1"
+    assert task["brief"]["bounded_model_input"]["associated_hotspot"]["hotspot_id"] == "h-1"
     tool_plan = task["brief"]["bounded_model_input"]["tool_selection_plan"]
     assert len(tool_plan["selected_tools"]) >= 6
     assert tool_plan["invocation_order"] == tool_plan["selected_tools"]
