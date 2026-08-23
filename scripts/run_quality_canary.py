@@ -49,7 +49,17 @@ def run_canary() -> dict:
         else:
             result["evidence"] = {"status": "contract_only", "note": "publication and media canaries require real verified external identity or media input"}
         cases.append(result)
-    return {"version": "quality_canary_v1", "total": len(cases), "passed": sum(c["status"] == "passed" for c in cases), "cases": cases}
+    contract_passed = sum(c["status"] == "passed" for c in cases)
+    external_pending = [c["name"] for c in cases if c["evidence"].get("status") == "contract_only"]
+    return {
+        "version": "quality_canary_v1",
+        "total": len(cases),
+        "passed": contract_passed,
+        "evidence_level": "contract_only" if external_pending else "full",
+        "production_ready": not external_pending,
+        "external_evidence_pending": external_pending,
+        "cases": cases,
+    }
 
 
 def main() -> int:
