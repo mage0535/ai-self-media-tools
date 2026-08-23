@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .capability_catalog import build_capability_catalog
+
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "config" / "creative_capability_registry.json"
 
@@ -18,7 +20,11 @@ def legacy_tool_group_plan(content_type: str) -> dict:
 
 
 def load_registry() -> dict:
-    return json.loads(REGISTRY.read_text(encoding="utf-8"))
+    raw = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    return build_capability_catalog(
+        raw,
+        legacy_groups=legacy_tool_group_plan("short_video") | legacy_tool_group_plan("article"),
+    )
 
 
 def _matches(cap: dict, profile: dict) -> bool:
@@ -30,9 +36,12 @@ def _matches(cap: dict, profile: dict) -> bool:
 
 
 def match_capabilities(profile: dict, registry: dict | None = None) -> dict:
-    consulted, candidates, skipped = [], [], []
+    consulted, candidates, skipped, inventory = [], [], [], []
     for cap in (registry or load_registry()).get("capabilities", []):
         if not _matches(cap, profile):
+            continue
+        if cap.get("lifecycle") == "inventory_only":
+            inventory.append({"capability_id": cap.get("id"), "reason": "adapter_not_registered"})
             continue
         if cap.get("license") in {"unverified", ""}:
             skipped.append({"capability_id": cap.get("id"), "reason": "license_unverified"})
@@ -42,7 +51,7 @@ def match_capabilities(profile: dict, registry: dict | None = None) -> dict:
             consulted.append({**item, "status": "consulted", "rules_applied": list((cap.get("trigger") or {}).keys())})
         else:
             candidates.append(item)
-    return {"consulted": consulted, "candidates": candidates, "executed": [], "skipped": skipped}
+    return {"consulted": consulted, "candidates": candidates, "executed": [], "skipped": skipped, "inventory": inventory}
 
 
 def build_capability_plan(profile: dict, registry: dict | None = None) -> dict:
