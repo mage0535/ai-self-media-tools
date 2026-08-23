@@ -3728,7 +3728,7 @@ treated as a gateway failure.
 ## 2026-08-23 Luna Quality Runtime V2
 
 - Production remains unchanged and the overnight timer stays disabled until real media and dual-model acceptance is complete.
-- P0 baseline was rebuilt from `origin/main`; server verification reached 953 passing tests and `project-audit ok=true` after the generation contract, asset, routing, adapter, TTS, BGM, and ledger changes in the Luna worktree.
+- P0 baseline was rebuilt from `origin/main`; server verification reached 957 passing tests and `project-audit ok=true` after the generation contract, asset, routing, adapter, TTS, BGM, and ledger changes in the Luna worktree.
 - Content assets are compiled into separate hooks, structures, and formulas JSON files. Runtime loading is read-only and validates the source hash.
 - Content profile and capability plan are created before generation input. Methodology is `consulted`; adapter output is `executed` only after allowlisted invocation and contract validation.
 - Publication metrics require a verified canonical URL, internal account alias, platform content ID, and published timestamp. Draft, scheduled, review, and handoff states do not start metric windows.
