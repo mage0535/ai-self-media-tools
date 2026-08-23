@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -102,8 +103,24 @@ def compact_compiled_strategy(strategy: dict[str, Any] | None) -> dict[str, Any]
         "version", "platform", "source_sha256", "content_pillars", "structure_pool",
         "hook_templates", "cta_pool", "kpi_hypotheses", "evidence_policy", "selection_policy",
     )
-    compact = {key: strategy[key] for key in fields if key in strategy}
-    for key in ("content_pillars", "structure_pool", "hook_templates", "cta_pool"):
-        if isinstance(compact.get(key), list):
-            compact[key] = compact[key][:8]
+    def clip(value: Any) -> Any:
+        if isinstance(value, str):
+            return value[:180]
+        if isinstance(value, list):
+            return [clip(item) for item in value[:6]]
+        if isinstance(value, dict):
+            return {str(key): clip(item) for key, item in list(value.items())[:8]}
+        return value
+
+    compact = {key: clip(strategy[key]) for key in fields if key in strategy}
+    encoded = json.dumps(compact, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > 5000:
+        compact = {
+            key: clip(strategy[key])
+            for key in ("version", "platform", "source_sha256", "content_pillars", "structure_pool", "hook_templates", "cta_pool", "selection_policy")
+            if key in strategy
+        }
+        for key in ("content_pillars", "structure_pool", "hook_templates", "cta_pool"):
+            if isinstance(compact.get(key), list):
+                compact[key] = [str(item)[:100] for item in compact[key][:3]]
     return compact
