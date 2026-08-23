@@ -1358,13 +1358,39 @@ def main() -> int:
             mp3 = tts_dir / f"tts_{i:02d}.mp3"
             text = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
                 else str(cards[i - 1].get("tts") or cards[i - 1].get("txt") or "")
-            if mp3.is_file() and mp3.stat().st_size > 10_000:
+            display_text = text
+            tts_text = text
+            applied_rules = []
+            if compiler:
+                compiled = compiler.compile(text, context="tech", platform=args.platform)
+                display_text = compiled.display_text
+                tts_text = compiled.tts_text
+                applied_rules = list(compiled.applied_rules or [])
+            fallback_voice = "zh-CN-YunxiNeural"
+            fallback_sig = tts_fingerprint(
+                display_text=display_text, tts_text=tts_text, provider="edge-tts", model="edge-tts",
+                voice=fallback_voice, rate=tts_rate, pitch="+0Hz",
+                pronunciation_dictionary_version=pronunciation_dictionary_version,
+                postprocess_profile=postprocess_profile,
+            ) if tts_fingerprint else ""
+            sig_file = mp3.with_suffix(mp3.suffix + ".sig")
+            cache_ok = mp3.is_file() and mp3.stat().st_size > 10_000 and sig_file.is_file() and sig_file.read_text(encoding="utf-8").strip() == fallback_sig
+            if cache_ok:
                 tts_files.append(str(mp3))
                 continue
-            synthesize_edge_tts(text, mp3, "zh-CN-YunxiNeural")
+            synthesize_edge_tts(tts_text, mp3, fallback_voice, rate=tts_rate)
+            sig_file.write_text(fallback_sig, encoding="utf-8")
             tts_files.append(str(mp3))
+            tts_records.append({
+                "provider": "edge-tts", "model": "edge-tts", "voice": fallback_voice,
+                "rate": tts_rate, "pitch": "+0Hz", "display_text": display_text,
+                "tts_text": tts_text, "applied_rules": applied_rules,
+                "pronunciation_dictionary_version": pronunciation_dictionary_version,
+                "postprocess_profile": postprocess_profile, "duration_seconds": _duration(str(mp3)),
+            })
     durs = [_duration(p) for p in tts_files]
     print("TTS 时长:", [round(d, 2) for d in durs])
+    (out / "tts_records.json").write_text(json.dumps(tts_records, ensure_ascii=False, indent=2), encoding="utf-8")
     duration_check = validate_render_durations(durs, args.platform)
     if not duration_check["passed"]:
         print(f"TTS 时长预算失败: {json.dumps(duration_check, ensure_ascii=False)}", file=sys.stderr)

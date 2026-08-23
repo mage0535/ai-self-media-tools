@@ -76,6 +76,8 @@ class DraftGenerator:
 
     def generate(self, topic, brief=None):
         brief = dict(brief or {})
+        if (self.config.get("automated_workflow") or brief.get("automated_workflow")) and str(self.config.get("hermes_model") or "").strip():
+            raise ValueError("automated workflow must follow the active Hermes model; fixed hermes_model is forbidden")
         blueprint = brief.get("content_blueprint") if isinstance(brief.get("content_blueprint"), dict) else {}
         if blueprint:
             brief.setdefault("content_form", blueprint.get("content_form"))
@@ -92,6 +94,7 @@ class DraftGenerator:
             brief.update({
                 "content_profile": capability_context["profile"],
                 "capability_plan": capability_context["capability_plan"],
+                "tool_selection": capability_context["tool_selection"],
             })
         context = build_generation_context(topic, brief)
         if self.config.get("provider") == "hermes-cli":

@@ -27,3 +27,11 @@ def test_due_collector_failure_is_insufficient_not_fake_zero(tmp_path):
     report = run_due_collections(ledger, lambda *_: (_ for _ in ()).throw(RuntimeError("offline")))
     assert report["results"][0]["status"] == "insufficient"
     assert ledger.ready_for_analysis() == []
+
+
+def test_empty_metrics_are_insufficient(tmp_path):
+    ledger = PublicationLedger(tmp_path / "ledger.db")
+    identity = {"platform": "x", "internal_account_alias": "x_main", "platform_content_id": "tweet-3", "canonical_url": "https://x.com/a/status/3", "published_at": "2020-01-01T00:00:00+00:00", "verification_level": "url_verified"}
+    ledger.register(identity)
+    assert ledger.record_metrics("x", "x_main", "tweet-3", "1h", {}) is True
+    assert ledger.ready_for_analysis() == []
