@@ -24,7 +24,7 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         "candidates": full_plan.get("candidates", []),
         "executed": full_plan.get("executed", []),
         "skipped": full_plan.get("skipped", []),
-        "inventory": full_plan.get("inventory", []),
+        "inventory_count": len(full_plan.get("inventory", [])),
     }
     full_tool_selection = build_tool_selection_evidence(
         platform=platform,

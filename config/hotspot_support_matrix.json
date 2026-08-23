@@ -1,0 +1,18 @@
+{
+  "version": "hotspot_support_matrix_v1",
+  "default_mode": "unsupported_or_unverified",
+  "platforms": {
+    "wechat": {"association_mode": "manual_handoff", "verified": false},
+    "kuaishou": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "bilibili": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "zhihu": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "juejin": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "douyin_ai": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "douyin_pet": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "shipinhao": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "xiaohongshu": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "youtube": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "tiktok": {"association_mode": "unsupported_or_unverified", "verified": false},
+    "x": {"association_mode": "unsupported_or_unverified", "verified": false}
+  }
+}
