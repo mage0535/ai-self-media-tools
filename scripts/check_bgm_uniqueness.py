@@ -16,7 +16,8 @@ except Exception:  # pragma: no cover - script fallback when PYTHONPATH is absen
     def project_home() -> Path:
         import os
 
-        return Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.cwd()))
+        configured = os.environ.get("CONTENT_PLATFORM_HOME", "").strip()
+        return Path(configured) if configured else Path(__file__).resolve().parents[1]
 
 
 def _default_registry() -> Path:
