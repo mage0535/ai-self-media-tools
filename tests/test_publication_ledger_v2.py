@@ -35,3 +35,22 @@ def test_empty_metrics_are_insufficient(tmp_path):
     ledger.register(identity)
     assert ledger.record_metrics("x", "x_main", "tweet-3", "1h", {}) is True
     assert ledger.ready_for_analysis() == []
+
+
+def test_ledger_records_required_metrics_and_observation_attempt_tables(tmp_path):
+    ledger = PublicationLedger(tmp_path / "ledger.db")
+    identity = {"platform": "x", "internal_account_alias": "x_main", "platform_content_id": "tweet-4", "canonical_url": "https://x.com/a/status/4", "published_at": "2020-01-01T00:00:00+00:00", "verification_level": "url_verified"}
+    ledger.register(identity)
+    assert ledger.record_metrics("x", "x_main", "tweet-4", "1h", {"views": 10, "likes": 2, "comments": 1, "shares": 1}) is True
+    with ledger._connect() as conn:
+        tables = {row["name"] for row in conn.execute("select name from sqlite_master where type='table'")}
+        assert {"metric_observations", "metric_collection_attempts"} <= tables
+        assert conn.execute("select count(*) from metric_observations").fetchone()[0] == 1
+
+
+def test_missing_required_metric_is_insufficient(tmp_path):
+    ledger = PublicationLedger(tmp_path / "ledger.db")
+    identity = {"platform": "x", "internal_account_alias": "x_main", "platform_content_id": "tweet-5", "canonical_url": "https://x.com/a/status/5", "published_at": "2020-01-01T00:00:00+00:00", "verification_level": "url_verified"}
+    ledger.register(identity)
+    ledger.record_metrics("x", "x_main", "tweet-5", "1h", {"views": 10})
+    assert ledger.ready_for_analysis() == []

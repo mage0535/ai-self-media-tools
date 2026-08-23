@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .publication_ledger import PublicationLedger
 
@@ -19,8 +19,11 @@ def run_due_collections(ledger: PublicationLedger, collector) -> dict:
             metrics = collector(identity, window["window"])
             if not isinstance(metrics, dict):
                 raise ValueError("collector must return an object")
+            ledger.record_collection_attempt(window["id"], "succeeded")
             ok = ledger.record_metrics(identity["platform"], identity["account_alias"], identity["content_id"], window["window"], metrics)
             results.append({"window_id": window["id"], "status": "collected" if ok else "insufficient"})
         except Exception as exc:
-            results.append({"window_id": window["id"], "status": "insufficient", "reason": f"collector_error:{type(exc).__name__}"})
+            retry_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+            attempt_no = ledger.record_collection_attempt(window["id"], "failed", error=f"{type(exc).__name__}", next_attempt_at=retry_at.isoformat())
+            results.append({"window_id": window["id"], "status": "insufficient", "retry_scheduled": True, "attempt": attempt_no, "reason": f"collector_error:{type(exc).__name__}"})
     return {"due": len(due), "results": results}
