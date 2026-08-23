@@ -924,6 +924,7 @@ class DraftGenerator:
             "The hook must read like a real person grabbing attention, not like a headline. "
             "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
             "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting. "
+            "Platform rules, growth targets, and internal gate thresholds are production constraints, not public evidence; never copy their numeric thresholds into the article or script unless the claim ledger supplies a public source. "
             f"{factual_boundary}"
             f"{body_requirement}\n"
             f"Platform rules (must follow for this channel):\n{context.get('platform_rules', '')[:800]}\n\n"
