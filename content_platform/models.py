@@ -10,6 +10,10 @@ class DeliveryResult:
     status: str
     external_id: str = ""
     error: str = ""
+    canonical_url: str = ""
+    verification_level: str = ""
+    account_alias: str = ""
+    published_at: str = ""
 
 
 @dataclass
