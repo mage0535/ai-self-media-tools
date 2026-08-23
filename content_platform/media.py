@@ -570,6 +570,7 @@ class MediaBridge:
         # shell or systemd CONTENT_PLATFORM_HOME inherited from another release.
         env["CONTENT_PLATFORM_HOME"] = str(Path(__file__).resolve().parents[1])
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
+        env["VISUAL_RECIPE_FINGERPRINT_REGISTRY"] = str(self.data_dir / "visual_recipe_fingerprints.json")
         # Make the licensed local BGM fallback explicit for nested renderers;
         # do not rely on an inherited shell environment across adapters.
         if os.environ.get("BGM_LIBRARY_DIR"):

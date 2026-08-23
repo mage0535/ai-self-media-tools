@@ -131,6 +131,7 @@ class AdapterTests(unittest.TestCase):
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / "generated.mp4").write_bytes(b"video")
             assert kwargs["env"]["CONTENT_PLATFORM_HOME"] == str(Path(__file__).resolve().parents[1])
+            assert kwargs["env"]["VISUAL_RECIPE_FINGERPRINT_REGISTRY"] == str(self.root / "visual_recipe_fingerprints.json")
             return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
         with patch.dict(os.environ, {"CONTENT_PLATFORM_HOME": "/old/release"}, clear=True):
