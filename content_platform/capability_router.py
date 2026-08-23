@@ -46,7 +46,13 @@ def match_capabilities(profile: dict, registry: dict | None = None) -> dict:
         if cap.get("license") in {"unverified", ""}:
             skipped.append({"capability_id": cap.get("id"), "reason": "license_unverified"})
             continue
-        item = {"capability_id": cap["id"], "stage": cap.get("stage"), "adapter": cap.get("adapter"), "output_contract": cap.get("output_contract")}
+        item = {
+            "capability_id": cap["id"],
+            "stage": cap.get("stage"),
+            "adapter": cap.get("adapter"),
+            "output_contract": cap.get("output_contract"),
+            "required_or_optional": cap.get("required_or_optional", "required"),
+        }
         if cap.get("capability_kind") == "methodology":
             consulted.append({**item, "status": "consulted", "rules_applied": list((cap.get("trigger") or {}).keys())})
         else:
