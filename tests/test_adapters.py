@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -119,6 +120,22 @@ class AdapterTests(unittest.TestCase):
         self.assertNotIn("--output", command)
         self.assertEqual(command[-2:], ["Body", "Topic"])
         self.assertTrue(artifact["path"].endswith("generated.mp4"))
+
+    def test_video_bridge_rebases_project_home_for_nested_renderer(self):
+        script = self.root / "video_pipeline.py"
+        script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge({"video": {"enabled": True, "script": str(script)}}, self.root)
+
+        def fake_run(command, **kwargs):
+            output_dir = Path(kwargs["env"]["VIDEO_OUTPUT_DIR"])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "generated.mp4").write_bytes(b"video")
+            assert kwargs["env"]["CONTENT_PLATFORM_HOME"] == str(Path(__file__).resolve().parents[1])
+            return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        with patch.dict(os.environ, {"CONTENT_PLATFORM_HOME": "/old/release"}, clear=True):
+            with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run):
+                bridge.generate("video", {"id": "j1", "topic": "Topic", "body": "Body"})
 
     def test_image_bridge_passes_provider_options_and_reference_image(self):
         script = self.root / "image_gen.py"
