@@ -299,6 +299,7 @@ def build_due_tasks(
                     "content_profile": capability_context["profile"],
                     "capability_plan": capability_context["capability_plan"],
                     "tool_selection": capability_context["tool_selection"],
+                    "compiled_skill_rules": capability_context["compiled_skill_rules"],
                     "claim_ledger": list(raw.get("claim_ledger") or []),
                     "tool_selection_plan": tool_evidence["tool_selection_plan"],
                     "strategy": compact_compiled_strategy(compiled_strategy),

@@ -11,4 +11,10 @@ def test_capability_context_is_ready_before_model_generation():
     assert result["capability_plan"]["version"] == "capability_plan_v2"
     assert "tts" in result["capability_plan"]["tool_group_names"]
     assert result["tool_selection"]["tool_selection_plan"]["selected_tools"]
+    assert result["compiled_skill_rules"]["version"] == "compiled_skill_rules_v1"
+    assert all("/" not in item["source"] or not item["source"].startswith("/") for item in result["compiled_skill_rules"]["rules"])
+    assert result["compiled_skill_rules"]["content_assets"]["available_counts"]["structures"] > 0
+    assert result["compiled_skill_rules"]["content_assets"]["available_counts"]["formulas"] > 0
+    assert result["compiled_skill_rules"]["content_assets"]["selected"]["structure_id"]
+    assert result["compiled_skill_rules"]["content_assets"]["selected"]["formula_id"]
     assert result["ready_for_generation"] is True

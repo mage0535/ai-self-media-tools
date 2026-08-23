@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from content_platform.content_assets import compile_content_assets, load_compiled_assets
+from content_platform.content_assets import compile_content_assets, load_compiled_assets, select_content_asset_ids
 
 
 def test_compile_separates_hooks_structures_and_formulas(tmp_path: Path):
@@ -52,3 +52,15 @@ def test_compiled_assets_are_rebuilt_when_source_hash_changes(tmp_path: Path):
 
     assert first["source_sha256"] != second["source_sha256"]
     assert load_compiled_assets(out)["hooks"]["title"][0]["id"] == "T2"
+
+
+def test_content_asset_selection_is_deterministic_and_format_aware():
+    assets = {
+        "hooks": {"title": [{"id": "T1"}], "opening": [{"id": "H1"}], "ending": [{"id": "E1"}]},
+        "structures": {"structures": ["pain_reversal_tutorial", "saveable_checklist"]},
+        "formulas": {"formulas": ["result_first", "numbered_checklist"]},
+    }
+    selected = select_content_asset_ids({"content_format": "carousel", "emotional_tone": "authoritative"}, assets)
+    assert selected["structure_id"] == "saveable_checklist"
+    assert selected["formula_id"] == "numbered_checklist"
+    assert selected["hook_ids"] == ["T1", "H1", "E1"]

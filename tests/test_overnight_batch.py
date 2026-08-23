@@ -392,7 +392,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["run_contract"]["publish_boundary"] == "manual_handoff_only"
     assert task["brief"]["bounded_model_input"]["content_blueprint"]["topic"] == "AI workflow"
     assert set(task["brief"]["bounded_model_input"]) <= {
-        "content_blueprint", "content_profile", "capability_plan", "tool_selection", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "distilled_per_account", "hot_work_parameter_pack", "same_lane_intelligence"
+        "content_blueprint", "content_profile", "capability_plan", "tool_selection", "compiled_skill_rules", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "distilled_per_account", "hot_work_parameter_pack", "same_lane_intelligence"
     }
     assert task["brief"]["bounded_model_input"]["same_lane_intelligence"]["topic_patterns"] == ["tool_workflow_tutorial"]
     assert task["brief"]["content_blueprint_gate"]["passed"] is True
