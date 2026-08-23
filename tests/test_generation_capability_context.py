@@ -8,6 +8,7 @@ def test_capability_context_is_ready_before_model_generation():
     )
     assert result["profile"]["content_domain"] == "tech"
     assert result["profile"]["visual_treatment"] == "cinematic"
-    assert result["capability_plan"]["version"] == "capability_plan_v1"
+    assert result["capability_plan"]["version"] == "capability_plan_v2"
+    assert "tts" in result["capability_plan"]["tool_group_names"]
     assert result["tool_selection"]["tool_selection_plan"]["selected_tools"]
     assert result["ready_for_generation"] is True

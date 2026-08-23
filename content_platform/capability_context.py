@@ -14,7 +14,17 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         platform=platform,
         content_format=str(content_blueprint.get("content_form") or ""),
     )
-    plan = build_capability_plan(profile)
+    full_plan = build_capability_plan(profile)
+    plan = {
+        "version": full_plan["version"],
+        "profile": full_plan["profile"],
+        "tool_group_count": len(full_plan.get("tool_groups", {})),
+        "tool_group_names": sorted(full_plan.get("tool_groups", {})),
+        "consulted": full_plan.get("consulted", []),
+        "candidates": full_plan.get("candidates", []),
+        "executed": full_plan.get("executed", []),
+        "skipped": full_plan.get("skipped", []),
+    }
     full_tool_selection = build_tool_selection_evidence(
         platform=platform,
         content_type=str(content_blueprint.get("content_form") or profile["content_format"]),

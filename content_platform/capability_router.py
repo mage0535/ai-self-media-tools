@@ -9,6 +9,14 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "config" / "creative_capability_registry.json"
 
 
+def legacy_tool_group_plan(content_type: str) -> dict:
+    """Expose legacy tool candidates in the unified plan without claiming execution."""
+    from .tool_selection import ARTICLE_TOOL_GROUPS, VIDEO_TOOL_GROUPS, _default_candidates, _is_video
+    is_video = _is_video(content_type)
+    groups = VIDEO_TOOL_GROUPS if is_video else ARTICLE_TOOL_GROUPS
+    return {group: _default_candidates(group, is_video) for group in sorted(groups)}
+
+
 def load_registry() -> dict:
     return json.loads(REGISTRY.read_text(encoding="utf-8"))
 
@@ -39,7 +47,12 @@ def match_capabilities(profile: dict, registry: dict | None = None) -> dict:
 
 def build_capability_plan(profile: dict, registry: dict | None = None) -> dict:
     result = match_capabilities(profile, registry)
-    return {"version": "capability_plan_v1", "profile": profile, **result}
+    return {
+        "version": "capability_plan_v2",
+        "profile": profile,
+        "tool_groups": legacy_tool_group_plan(str(profile.get("content_format") or "article")),
+        **result,
+    }
 
 
 def build_invocation_manifest(match_result: dict) -> dict:
