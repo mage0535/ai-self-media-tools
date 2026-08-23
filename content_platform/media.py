@@ -566,6 +566,9 @@ class MediaBridge:
         # article stays long-form; a renderer must never infer narration from
         # the full body again.
         env = os.environ.copy()
+        # Nested renderers must follow the active project release, not a stale
+        # shell or systemd CONTENT_PLATFORM_HOME inherited from another release.
+        env["CONTENT_PLATFORM_HOME"] = str(Path(__file__).resolve().parents[1])
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
         # Make the licensed local BGM fallback explicit for nested renderers;
         # do not rely on an inherited shell environment across adapters.
