@@ -121,6 +121,20 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(repeated["state"], "partial")
         self.assertEqual(len(self.store.deliveries(job["id"])), 2)
 
+    def test_delivery_master_switch_blocks_all_publishers(self):
+        pipeline = Pipeline(
+            self.store,
+            {
+                "data_dir": str(Path(self.tmp.name)),
+                "feature_flags": {"delivery_master_switch": "off"},
+                "publishers": {"default": {"type": "file"}},
+            },
+        )
+        result = pipeline._deliver("wechat", {"id": "delivery-switch", "title": "T", "body": "B"})
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "blocked")
+        self.assertIn("delivery_master_switch", result.error)
+
     def test_blocked_content_cannot_be_approved(self):
         job = self.pipeline.create("blocked-word", ["file"])
         blocked = self.pipeline.run(job["id"])
