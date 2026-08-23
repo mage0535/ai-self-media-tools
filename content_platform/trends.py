@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .paths import agent_home, project_home, trend_cache_dir
 from .source_quality import source_is_rankable
+from .associated_hotspot import score_topic_with_hotspot
 
 
 def normalize_topic(title):
@@ -74,6 +75,22 @@ def rank_trends(items, profile=None, used=None, limit=10, learned=None):
             continue
         score = source_score + fit_score + learned_source_score + learned_cluster_score
         score += math.log1p(max(0, float(item.get("points", 0) or 0))) / 4
+        hotspot_bonus = 0.0
+        hotspot_gate = None
+        if item.get("associated_hotspot"):
+            hotspot_result = score_topic_with_hotspot(
+                {
+                    "platform_fit": min(1.0, fit_score / 3.0),
+                    "utility": 0.8 if any(token in title.casefold() for token in ("workflow", "教程", "方法", "步骤")) else 0.5,
+                    "novelty": 0.7,
+                },
+                item.get("associated_hotspot"),
+            )
+            hotspot_gate = hotspot_result["hotspot_gate"]
+            if not hotspot_gate.get("passed"):
+                continue
+            hotspot_bonus = float(hotspot_result.get("hotspot_bonus") or 0.0)
+            score += hotspot_bonus * 4.0
         stage = "emerging"
         points = max(0, float(item.get("points", 0) or 0))
         if points >= 150 or score >= 7:
@@ -93,6 +110,8 @@ def rank_trends(items, profile=None, used=None, limit=10, learned=None):
             "trend_angle": angle,
             "learned_source_score": round(learned_source_score, 3),
             "learned_cluster_score": round(learned_cluster_score, 3),
+            "hotspot_bonus": round(hotspot_bonus, 3),
+            "hotspot_gate": hotspot_gate or {"passed": False, "failures": ["hotspot_not_selected"]},
         }
         if normalized not in unique or candidate["score"] > unique[normalized]["score"]:
             unique[normalized] = candidate
