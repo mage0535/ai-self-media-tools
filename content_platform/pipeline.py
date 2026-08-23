@@ -146,6 +146,7 @@ class Pipeline:
                             from .content_quality_reference import load_content_quality_reference_pack
                             from .strategy_compiler import compact_compiled_strategy
                             from .same_lane_intelligence import latest_same_lane_playbook
+                            from .capability_context import build_generation_capability_context
 
                             quality_reference = platform_context.get("content_quality_reference_pack")
                             if not isinstance(quality_reference, dict) or quality_reference.get("loaded") is not True:
@@ -153,11 +154,26 @@ class Pipeline:
                                     platform_name,
                                     content_form=str((brief.get("content_blueprint") or {}).get("content_form") or brief.get("content_form") or ""),
                                 )
+                            content_blueprint = brief.get("content_blueprint")
+                            if not isinstance(content_blueprint, dict):
+                                content_blueprint = {
+                                    "topic": job.get("topic", ""),
+                                    "content_form": brief.get("content_form") or "article",
+                                }
+                            capability_context = build_generation_capability_context(platform_name, content_blueprint)
+                            if not capability_context["ready_for_generation"]:
+                                raise ValueError("capability plan contains skipped capabilities")
+                            brief["content_profile"] = capability_context["profile"]
+                            brief["capability_plan"] = capability_context["capability_plan"]
+                            brief["tool_selection"] = capability_context["tool_selection"]
                             brief["bounded_model_input"] = bound_stage_payload(
                                 contract,
                                 "generate",
                                 {
-                                    "content_blueprint": brief.get("content_blueprint") or {},
+                                    "content_blueprint": content_blueprint,
+                                    "content_profile": capability_context["profile"],
+                                    "capability_plan": capability_context["capability_plan"],
+                                    "tool_selection": capability_context["tool_selection"],
                                     "claim_ledger": list(brief.get("claim_ledger") or []),
                                     "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
                                     "strategy": compact_compiled_strategy(compiled),
