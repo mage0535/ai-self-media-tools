@@ -147,6 +147,7 @@ class Pipeline:
                             from .strategy_compiler import compact_compiled_strategy
                             from .same_lane_intelligence import latest_same_lane_playbook
                             from .capability_context import build_generation_capability_context
+                            from .runtime_capabilities import compact_runtime_capability_snapshot
 
                             quality_reference = platform_context.get("content_quality_reference_pack")
                             if not isinstance(quality_reference, dict) or quality_reference.get("loaded") is not True:
@@ -181,7 +182,7 @@ class Pipeline:
                                     "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
                                     "strategy": compact_compiled_strategy(compiled),
                                     "content_quality_reference_pack": quality_reference,
-                                    "runtime_capabilities": platform_context.get("runtime_capabilities") or {},
+                                    "runtime_capabilities": compact_runtime_capability_snapshot(platform_context.get("runtime_capabilities") or {}),
                                     "same_lane_intelligence": latest_same_lane_playbook(self.store, platform_name),
                                 },
                             )

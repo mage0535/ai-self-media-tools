@@ -254,7 +254,7 @@ def build_due_tasks(
                 load_content_quality_reference_pack,
                 validate_content_quality_reference_pack,
             )
-            from .runtime_capabilities import build_runtime_capability_snapshot
+            from .runtime_capabilities import build_runtime_capability_snapshot, compact_runtime_capability_snapshot
             from .strategy_compiler import compact_compiled_strategy
             from .tool_selection import build_tool_selection_evidence
             from .capability_context import build_generation_capability_context
@@ -305,7 +305,7 @@ def build_due_tasks(
                     "tool_selection_plan": tool_evidence["tool_selection_plan"],
                     "strategy": compact_compiled_strategy(compiled_strategy),
                     "content_quality_reference_pack": quality_reference_pack,
-                    "runtime_capabilities": build_runtime_capability_snapshot(),
+                    "runtime_capabilities": compact_runtime_capability_snapshot(build_runtime_capability_snapshot()),
                     "same_lane_intelligence": (growth_strategy_status.get(platform) or {}).get("same_lane_intelligence") or {"version": "same_lane_playbook_compact_v1", "status": "missing"},
                     "hot_work_parameter_pack": load_hot_work_parameter_pack_compact(platform),
                 },

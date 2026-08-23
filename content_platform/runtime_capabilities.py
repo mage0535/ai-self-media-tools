@@ -62,3 +62,20 @@ def build_runtime_capability_snapshot() -> dict[str, Any]:
             "template_families": {str(name): {"available": True} for name in families} if isinstance(families, dict) else {},
         },
     }
+
+
+def compact_runtime_capability_snapshot(snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep model input bounded while retaining every executable identifier."""
+    snapshot = snapshot or {}
+    effects = snapshot.get("video_effect_modules") if isinstance(snapshot.get("video_effect_modules"), dict) else {}
+    modules = effects.get("modules") if isinstance(effects.get("modules"), dict) else {}
+    families = effects.get("template_families") if isinstance(effects.get("template_families"), dict) else {}
+    return {
+        "version": snapshot.get("version", "runtime_capabilities_v1"),
+        "available_tools": sorted(str(item) for item in (snapshot.get("available_tools") or [])),
+        "video_effect_modules": {
+            "version": effects.get("version", ""),
+            "module_ids": sorted(str(item) for item in modules),
+            "template_family_ids": sorted(str(item) for item in families),
+        },
+    }
