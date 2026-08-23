@@ -48,13 +48,18 @@ from .workflow_runtime import (
     write_platform_report,
 )
 from .platform_workflow_context import load_platform_workflow_context
+from .runtime_paths import rebase_runtime_config
 
 
 class Pipeline:
     def __init__(self, store, config=None):
         self.store = store
-        self.config = config or {}
-        self.data_dir = Path(self.config.get("data_dir", store.path.parent))
+        self.data_dir = Path(store.path).parent
+        self.config = rebase_runtime_config(
+            config or {},
+            data_dir=self.data_dir,
+            project_root=Path(__file__).resolve().parents[1],
+        )
         self.generator = DraftGenerator(self.config.get("generator", {}))
         self.compliance = ComplianceChecker()
         risk_cfg = self.config.get("risk", {})
