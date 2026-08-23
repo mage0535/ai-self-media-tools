@@ -80,3 +80,26 @@ def test_stage_payload_rejects_oversized_provider_input(tmp_path: Path) -> None:
     contract = build_run_contract("tiktok", rulebook_path=rulebook)
     with pytest.raises(RunContractError, match="payload exceeds"):
         bound_stage_payload(contract, "blueprint", {"selected_topic": "x" * 20_000}, rulebook_path=rulebook)
+
+
+def test_generate_payload_compacts_optional_context_but_preserves_core_fields(tmp_path: Path) -> None:
+    rulebook = tmp_path / "rulebook.json"
+    rulebook.write_text(json.dumps({"version": "test", "channel_rules": {"demo": {}}}), encoding="utf-8")
+    contract = build_run_contract("demo", rulebook_path=rulebook)
+    payload = {
+        "content_blueprint": {"topic": "core topic", "steps": ["step-1", "step-2"]},
+        "content_profile": {"domain": "tech", "format": "short_video"},
+        "capability_plan": {"required": ["tts", "renderer"]},
+        "tool_selection": {"selected": ["edge_tts", "ffmpeg"]},
+        "compiled_skill_rules": {"rules": ["rule-" + ("x" * 500) for _ in range(20)]},
+        "tool_selection_plan": {"candidates": ["tool-" + ("x" * 500) for _ in range(20)]},
+        "strategy": {"platform": "demo"},
+        "content_quality_reference_pack": {"sections": ["ref-" + ("x" * 500) for _ in range(20)]},
+        "runtime_capabilities": {"tools": {"tool": {"notes": "x" * 5000}}},
+        "same_lane_intelligence": {"patterns": ["pattern-" + ("x" * 500) for _ in range(20)]},
+        "hot_work_parameter_pack": {"samples": ["sample-" + ("x" * 500) for _ in range(20)]},
+    }
+    bounded = bound_stage_payload(contract, "generate", payload, rulebook_path=rulebook)
+    assert bounded["content_blueprint"]["topic"] == "core topic"
+    assert bounded["content_profile"]["domain"] == "tech"
+    assert len(json.dumps(bounded, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= contract["bounds"]["stage_payload_bytes"]
