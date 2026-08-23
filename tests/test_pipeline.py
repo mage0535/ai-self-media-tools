@@ -196,6 +196,40 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(bounded["content_quality_reference_pack"]["loaded"])
         self.assertEqual(bounded["content_quality_reference_pack"]["sha256"], reference["sha256"])
 
+    def test_compiled_pipeline_injects_generation_capability_context_before_provider(self):
+        """The provider payload must contain the same routing context as overnight."""
+        from content_platform.content_quality_reference import load_content_quality_reference_pack
+        from content_platform.run_contract import build_run_contract
+
+        reference = load_content_quality_reference_pack("wechat", content_form="long_article")
+        context = {
+            "strategy": {"compiled": {"version": "compiled_strategy_v1", "content_pillars": ["practical"]}},
+            "content_quality_reference_pack": reference,
+        }
+        captured = {}
+        job = self.pipeline.create(
+            "AI workflow automation guide",
+            ["wechat"],
+            {"run_contract": build_run_contract("wechat"), "content_form": "article"},
+        )
+
+        def generate(topic, brief):
+            captured["brief"] = brief
+            return {
+                "title": topic,
+                "body": "A concrete, evidence-backed workflow with a reusable checklist.",
+                "draft_meta": {"quality_gate": {"passed": True}, "strategy": {}},
+            }
+
+        with patch("content_platform.pipeline.load_platform_workflow_context", return_value=context):
+            with patch.object(self.pipeline.generator, "generate", side_effect=generate):
+                self.pipeline.run(job["id"])
+
+        bounded = captured["brief"]["bounded_model_input"]
+        self.assertEqual(bounded["content_profile"]["content_domain"], "tech")
+        self.assertEqual(bounded["capability_plan"]["version"], "capability_plan_v2")
+        self.assertTrue(bounded["tool_selection"]["tool_selection_plan"]["selected_tools"])
+
     def test_publish_uses_delivery_queue(self):
         job = self.pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
         self.pipeline.run(job["id"])
