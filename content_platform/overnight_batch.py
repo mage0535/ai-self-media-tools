@@ -317,6 +317,7 @@ def build_due_tasks(
                 "topic": selected["title"],
                 "topic_fingerprint": selected.get("fingerprint", ""),
                 "brief": {
+                    "automated_workflow": True,
                     "source": selected.get("source"),
                     "sources": [selected["url"]] if selected.get("url") else [],
                     "platform_source_matrix": matrix,
