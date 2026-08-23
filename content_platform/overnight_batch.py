@@ -300,6 +300,7 @@ def build_due_tasks(
                     "capability_plan": capability_context["capability_plan"],
                     "tool_selection": capability_context["tool_selection"],
                     "compiled_skill_rules": capability_context["compiled_skill_rules"],
+                    **({"associated_hotspot": selected["associated_hotspot"]} if isinstance(selected.get("associated_hotspot"), dict) else {}),
                     "claim_ledger": list(raw.get("claim_ledger") or []),
                     "tool_selection_plan": tool_evidence["tool_selection_plan"],
                     "strategy": compact_compiled_strategy(compiled_strategy),
@@ -318,6 +319,7 @@ def build_due_tasks(
                 "topic_fingerprint": selected.get("fingerprint", ""),
                 "brief": {
                     "automated_workflow": True,
+                    **({"associated_hotspot": selected["associated_hotspot"]} if isinstance(selected.get("associated_hotspot"), dict) else {}),
                     "source": selected.get("source"),
                     "sources": [selected["url"]] if selected.get("url") else [],
                     "platform_source_matrix": matrix,

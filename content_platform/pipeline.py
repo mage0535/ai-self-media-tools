@@ -176,6 +176,7 @@ class Pipeline:
                                     "capability_plan": capability_context["capability_plan"],
                                     "tool_selection": capability_context["tool_selection"],
                                     "compiled_skill_rules": capability_context["compiled_skill_rules"],
+                                    "associated_hotspot": brief.get("associated_hotspot") or {},
                                     "claim_ledger": list(brief.get("claim_ledger") or []),
                                     "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
                                     "strategy": compact_compiled_strategy(compiled),
