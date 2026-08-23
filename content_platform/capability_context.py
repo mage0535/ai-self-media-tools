@@ -28,7 +28,7 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
     ]
     compiled_skill_rules["rules"] = [
         {"id": rule["id"], "section": rule["section"], "text": str(rule.get("text") or "")[:160]}
-        for rule in compiled_skill_rules.get("rules", [])[:4]
+        for rule in compiled_skill_rules.get("rules", [])[:1]
     ]
     assets = load_compiled_assets(project_root / "config" / "content_assets")
     selected_assets = select_content_asset_ids(profile, assets)
