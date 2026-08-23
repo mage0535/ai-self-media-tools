@@ -401,6 +401,10 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["bounded_model_input"]["content_quality_reference_pack"]["loaded"] is True
     assert task["brief"]["bounded_model_input"]["runtime_capabilities"]["version"] == "runtime_capabilities_v1"
     assert len(__import__("json").dumps(task["brief"]["bounded_model_input"], ensure_ascii=False).encode("utf-8")) <= 16384
+    tool_plan = task["brief"]["bounded_model_input"]["tool_selection_plan"]
+    assert len(tool_plan["selected_tools"]) >= 6
+    assert tool_plan["invocation_order"] == tool_plan["selected_tools"]
+    assert tool_plan["selection_reasons"]
 
 
 def test_due_task_builder_propagates_associated_hotspot_to_generation_input():
@@ -420,10 +424,22 @@ def test_due_task_builder_propagates_associated_hotspot_to_generation_input():
     task = prepared["tasks"][0]
     assert task["brief"]["associated_hotspot"]["hotspot_id"] == "h-1"
     assert task["brief"]["bounded_model_input"]["associated_hotspot"]["hotspot_id"] == "h-1"
-    tool_plan = task["brief"]["bounded_model_input"]["tool_selection_plan"]
-    assert len(tool_plan["selected_tools"]) >= 6
-    assert tool_plan["invocation_order"] == tool_plan["selected_tools"]
-    assert tool_plan["selection_reasons"]
+
+
+def test_hot_work_parameter_pack_compact_is_bounded(tmp_path):
+    import json
+    from content_platform.overnight_batch import load_hot_work_parameter_pack_compact
+
+    source = tmp_path / "pack.json"
+    source.write_text(json.dumps({"platforms": {"douyin_ai": {
+        "ready": True,
+        "strong_sample_count": 10,
+        "recommended_patterns": ["x" * 1000] * 20,
+        "generation_requirements": ["y" * 1000] * 20,
+        "top_samples": [{"title": "z" * 1000, "analysis": "q" * 1000}] * 20,
+    }}}), encoding="utf-8")
+    result = load_hot_work_parameter_pack_compact("douyin_ai", path=source)
+    assert len(json.dumps(result, ensure_ascii=False).encode()) <= 4000
 
 
 def test_due_task_builder_accepts_native_url_from_platform_search_transport():

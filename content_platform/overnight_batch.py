@@ -61,7 +61,7 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
     if not isinstance(data, dict):
         return {"version": "hot_work_parameter_pack_compact_v1", "status": "missing_platform"}
     samples = []
-    for sample in (data.get("top_samples") or [])[:5]:
+    for sample in (data.get("top_samples") or [])[:2]:
         if not isinstance(sample, dict):
             continue
         samples.append({
@@ -70,16 +70,22 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
             "metric": sample.get("views") or sample.get("likes") or sample.get("favorites") or sample.get("engagement") or "",
             "evidence_strength": sample.get("evidence_strength", ""),
             "source": sample.get("source", ""),
-            "analysis": sample.get("analysis", {}),
+            "analysis": str(sample.get("analysis", ""))[:240],
         })
-    return {
+    compact = {
         "version": "hot_work_parameter_pack_compact_v1",
         "status": "ready" if data.get("ready") else "insufficient",
         "strong_sample_count": data.get("strong_sample_count", 0),
-        "recommended_patterns": data.get("recommended_patterns") or [],
-        "generation_requirements": data.get("generation_requirements") or [],
+        "recommended_patterns": [str(item)[:180] for item in (data.get("recommended_patterns") or [])[:8]],
+        "generation_requirements": [str(item)[:180] for item in (data.get("generation_requirements") or [])[:8]],
         "top_samples": samples,
     }
+    encoded = json.dumps(compact, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > 3500:
+        compact["top_samples"] = []
+        compact["recommended_patterns"] = [str(item)[:80] for item in compact["recommended_patterns"][:3]]
+        compact["generation_requirements"] = [str(item)[:80] for item in compact["generation_requirements"][:3]]
+    return compact
 
 
 def normalize_delivery_boundary(platform: str, requested_state: str) -> str:
