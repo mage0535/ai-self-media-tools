@@ -37,24 +37,31 @@ def run_canary() -> dict:
         ("ledger", "verified publication", "x"), ("insufficient", "collector failure", "x"),
     ]
     for name, topic, platform in inputs:
-        result = {"name": name, "platform": platform, "input_sha256": _hash({"topic": topic, "platform": platform}), "status": "passed", "evidence": {}}
+        result = {"name": name, "platform": platform, "input_sha256": _hash({"topic": topic, "platform": platform}), "status": "declared", "evidence": {}}
         if name.startswith("profile"):
             result["evidence"] = classify_content_profile(topic, platform)
+            result["status"] = "contract_verified"
         elif name in {"article", "carousel", "short_video", "long_video", "router"}:
             result["evidence"] = build_generation_capability_context(platform, {"topic": topic, "content_form": name})
+            result["status"] = "contract_verified"
         elif name == "structure":
             result["evidence"] = execute_generation_capabilities({"title": topic, "body": "问题导致结果失败。按步骤解决并验证。"}, {"platform": platform, "content_form": "article"})
+            result["status"] = "contract_verified" if result["evidence"].get("passed") else "failed"
         elif name == "tts":
             result["evidence"] = {"fingerprint": tts_fingerprint(display_text=topic, tts_text="A I A P I 语音合成", provider="edge", model="edge-v1", voice="default", rate="-5%", pitch="+0Hz", pronunciation_dictionary_version="test", postprocess_profile="none")}
+            result["status"] = "contract_verified"
         else:
             result["evidence"] = {"status": "contract_only", "note": "publication and media canaries require real verified external identity or media input"}
         cases.append(result)
-    contract_passed = sum(c["status"] == "passed" for c in cases)
+    contract_passed = sum(c["status"] in {"contract_verified", "artifact_verified", "external_verified"} for c in cases)
     external_pending = [c["name"] for c in cases if c["evidence"].get("status") == "contract_only"]
     return {
         "version": "quality_canary_v1",
         "total": len(cases),
+        "declared": len(cases),
         "passed": contract_passed,
+        "failed": sum(c["status"] == "failed" for c in cases),
+        "pending": [c["name"] for c in cases if c["status"] == "declared"],
         "evidence_level": "contract_only" if external_pending else "full",
         "production_ready": not external_pending,
         "external_evidence_pending": external_pending,
