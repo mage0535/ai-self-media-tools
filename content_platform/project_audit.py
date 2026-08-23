@@ -63,37 +63,40 @@ def audit_project(root):
     root = Path(root)
     issues = []
     scanned = 0
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(root)
-        if _is_ignored_runtime_path(relative):
-            continue
-        if path.name in IGNORED_EXACT:
-            continue
-        if _is_secure_gitignored_runtime_env(root, path, relative):
-            continue
-        if path.name == "project_audit.py":
-            continue
-        scanned += 1
-        relative_text = relative.as_posix()
-        lowered = relative_text.casefold()
-        if len(relative.parts) == 1 and path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".mp4", ".mov", ".webm"}:
-            issues.append({"path": relative_text, "reason": "root_level_media_evidence"})
-            continue
-        if any(re.search(pattern, lowered) for pattern in FORBIDDEN_NAME_PATTERNS):
-            issues.append({"path": relative_text, "reason": "forbidden_filename_pattern"})
-            continue
-        if path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".mp4", ".db", ".sqlite", ".sqlite3", ".pyc"}:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-        for pattern in FORBIDDEN_CONTENT_PATTERNS + PRIVATE_PATH_PATTERNS:
-            if re.search(pattern, text):
-                issues.append({"path": relative_text, "reason": f"forbidden_content_pattern:{pattern}"})
-                break
+    for directory, dirnames, filenames in os.walk(root, followlinks=False):
+        directory_path = Path(directory)
+        dirnames[:] = [
+            name for name in dirnames
+            if name not in IGNORED_PARTS and not (directory_path / name).is_symlink()
+        ]
+        for filename in filenames:
+            path = directory_path / filename
+            if not path.is_file() or path.is_symlink():
+                continue
+            relative = path.relative_to(root)
+            if _is_ignored_runtime_path(relative) or path.name in IGNORED_EXACT:
+                continue
+            if _is_secure_gitignored_runtime_env(root, path, relative) or path.name == "project_audit.py":
+                continue
+            scanned += 1
+            relative_text = relative.as_posix()
+            lowered = relative_text.casefold()
+            if len(relative.parts) == 1 and path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".mp4", ".mov", ".webm"}:
+                issues.append({"path": relative_text, "reason": "root_level_media_evidence"})
+                continue
+            if any(re.search(pattern, lowered) for pattern in FORBIDDEN_NAME_PATTERNS):
+                issues.append({"path": relative_text, "reason": "forbidden_filename_pattern"})
+                continue
+            if path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".mp4", ".mov", ".webm", ".db", ".sqlite", ".sqlite3", ".pyc"}:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            for pattern in FORBIDDEN_CONTENT_PATTERNS + PRIVATE_PATH_PATTERNS:
+                if re.search(pattern, text):
+                    issues.append({"path": relative_text, "reason": f"forbidden_content_pattern:{pattern}"})
+                    break
     return {"ok": not issues, "scanned_files": scanned, "issues": issues}
 
 
