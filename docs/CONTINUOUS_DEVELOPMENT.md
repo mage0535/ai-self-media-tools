@@ -3725,3 +3725,12 @@ treated as a gateway failure.
 - Minimum verification: `python -m pytest tests/test_same_lane_intelligence.py
   tests/test_pipeline.py tests/test_overnight_batch.py
   tests/test_trend_intelligence.py tests/test_performance_cycle.py -q`.
+## 2026-08-23 Luna Quality Runtime V2
+
+- Production remains unchanged and the overnight timer stays disabled until real media and dual-model acceptance is complete.
+- P0 baseline was rebuilt from `origin/main`; server verification reached 953 passing tests and `project-audit ok=true` after the generation contract, asset, routing, adapter, TTS, BGM, and ledger changes in the Luna worktree.
+- Content assets are compiled into separate hooks, structures, and formulas JSON files. Runtime loading is read-only and validates the source hash.
+- Content profile and capability plan are created before generation input. Methodology is `consulted`; adapter output is `executed` only after allowlisted invocation and contract validation.
+- Publication metrics require a verified canonical URL, internal account alias, platform content ID, and published timestamp. Draft, scheduled, review, and handoff states do not start metric windows.
+- `run_quality_canary.py` currently provides twelve reproducible contract canaries with input hashes. Cases requiring real platform identities or media artifacts remain explicitly `contract_only` until isolated production evidence is available; this is not a production readiness claim.
+- Remaining release gates are real media canaries, dual-model content generation, platform collector integration, three-way synchronization, and rollback rehearsal.
