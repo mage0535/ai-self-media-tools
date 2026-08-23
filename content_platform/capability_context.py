@@ -34,11 +34,6 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
     selected_assets = select_content_asset_ids(profile, assets)
     compiled_skill_rules["content_assets"] = {
         "selected": selected_assets,
-        "available_counts": {
-            "hooks": sum(len(value) for value in (assets.get("hooks") or {}).values() if isinstance(value, list)),
-            "structures": len((assets.get("structures") or {}).get("structures") or []),
-            "formulas": len((assets.get("formulas") or {}).get("formulas") or []),
-        },
     }
     plan = {
         "version": full_plan["version"],
