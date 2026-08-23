@@ -15,6 +15,8 @@ from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
 from .generator import DraftGenerator
+from .capability_runtime import execute_generation_capabilities
+from .publication_ledger import PublicationLedger, identity_from_delivery
 from .humanize import naturalize_copy
 from .intelligence import GLOBAL_EN_PLATFORMS, build_generation_context
 from .media import MediaBridge
@@ -221,6 +223,21 @@ class Pipeline:
                     }, depends_on=["run_operation_strategy"])
                 else:
                     draft = runner.run("generate_content", lambda: self.generator.generate(job["topic"], brief), depends_on=["run_operation_strategy"], require_output=True)
+                capability_execution = runner.run(
+                    "execute_generation_capabilities",
+                    lambda: execute_generation_capabilities(draft, brief),
+                    depends_on=["generate_content"],
+                    require_output=True,
+                )
+                draft.setdefault("draft_meta", {})["capability_execution"] = capability_execution
+                if not capability_execution.get("passed"):
+                    runner.block(
+                        "execute_generation_capabilities",
+                        "capability_execution_failed",
+                        "selected generation capability failed its output contract",
+                        capability_execution,
+                        depends_on=["generate_content"],
+                    )
                 if requires_wechat_toolchain(self.config, job["platforms"]):
                     draft = runner.run(
                         "prepare_wechat_professional_toolchain",
@@ -667,6 +684,10 @@ class Pipeline:
     def _save_delivery_result(self, job_id, platform, result):
         key = hashlib.sha256(f"{job_id}:{platform}".encode()).hexdigest()
         self.store.save_delivery(job_id, platform, result.status, result.external_id, redact_secrets(result.error), key)
+        identity = identity_from_delivery(platform, result)
+        if identity:
+            ledger_path = self.config.get("publication_ledger_path") or (self.data_dir / "publication_ledger.db")
+            PublicationLedger(ledger_path).register(identity)
         if self.config.get("feature_flags", {}).get("content_package_v1"):
             packages = self.store.content_packages(job_id=job_id, platform=platform, limit=1)
             if packages:

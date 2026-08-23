@@ -81,6 +81,18 @@ class DraftGenerator:
             brief.setdefault("content_form", blueprint.get("content_form"))
             brief.setdefault("audience", blueprint.get("audience"))
             brief.setdefault("platform_style", blueprint.get("platform_style"))
+        if "content_profile" not in brief or "capability_plan" not in brief:
+            from .capability_context import build_generation_capability_context
+            capability_context = build_generation_capability_context(
+                str((brief.get("platforms") or [brief.get("platform") or ""])[0]),
+                blueprint or {"topic": topic, "content_form": brief.get("content_form", "article")},
+            )
+            if not capability_context["ready_for_generation"]:
+                raise ValueError("capability plan contains skipped capabilities")
+            brief.update({
+                "content_profile": capability_context["profile"],
+                "capability_plan": capability_context["capability_plan"],
+            })
         context = build_generation_context(topic, brief)
         if self.config.get("provider") == "hermes-cli":
             try:
