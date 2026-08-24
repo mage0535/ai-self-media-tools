@@ -110,11 +110,19 @@ REPOST_PLANNED_TOOLS = [
 ]
 
 
+def resolve_video_output_dir() -> Path:
+    """Return an isolated output directory; production must provide one."""
+    configured = str(os.environ.get("VIDEO_OUTPUT_DIR") or "").strip()
+    if not configured and str(os.environ.get("CONTENT_PLATFORM_OPS_RUNNER") or "").casefold() in {"1", "true", "yes", "on"}:
+        raise RuntimeError("production video render requires isolated VIDEO_OUTPUT_DIR")
+    return Path(configured or ROOT / "data" / "artifacts" / "video_toolchain").resolve()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     script_body = argv[0] if argv else ""
     title = argv[1] if len(argv) > 1 else "Untitled video"
-    output_dir = Path(os.environ.get("VIDEO_OUTPUT_DIR") or ROOT / "data" / "artifacts" / "video_toolchain").resolve()
+    output_dir = resolve_video_output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
     plan = _load_plan()
     platform_context = None

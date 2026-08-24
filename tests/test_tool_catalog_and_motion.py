@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from content_platform.tool_catalog import catalog_snapshot
+import content_platform.tool_selection as tool_selection
 from content_platform.tool_selection import build_tools_capability_analysis
 from content_platform.theme_registry import select_theme
 from scripts.kuaishou_render import _layered_segment_filter, _shotcraft_motion_profile, build_card_html
@@ -22,6 +23,12 @@ class ToolCatalogAndMotionTests(unittest.TestCase):
         result = build_tools_capability_analysis(platform="kuaishou", content_type="video")
         self.assertIn("tool_catalog", result)
         self.assertTrue(result["tool_catalog"]["tools"]["openmontage"])
+
+    def test_kuaishou_video_stage_does_not_silently_fall_back_to_article(self):
+        self.assertEqual(tool_selection.resolve_content_type("kuaishou", "article", stage="video"), "short_video")
+
+    def test_article_platform_keeps_article_content_type(self):
+        self.assertEqual(tool_selection.resolve_content_type("wechat", "article", stage="article"), "article")
 
     def test_card_html_contains_selected_shotcraft_recipe(self):
         html = build_card_html(

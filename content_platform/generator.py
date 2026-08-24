@@ -14,7 +14,7 @@ from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 from .content_recipe import build_article_recipe, build_image_text_card_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 from .content_depth import build_content_depth_plan
-from .tool_selection import build_tool_selection_evidence
+from .tool_selection import build_tool_selection_evidence, resolve_content_type
 from .growth_recipe import build_growth_recipe
 
 
@@ -409,9 +409,16 @@ class DraftGenerator:
                     for name in selected
                 },
             )
+            primary_platform = str(platforms[0] if platforms else brief.get("platform") or "")
+            resolved_content_type = resolve_content_type(
+                primary_platform,
+                str((context.get("strategy") or {}).get("content_form") or draft_meta.get("content_form") or ""),
+                stage=str(brief.get("stage") or brief.get("content_form") or ""),
+            )
+            draft_meta["content_form"] = resolved_content_type
             draft_meta.update(build_tool_selection_evidence(
-                platform=platforms[0] if platforms else "",
-                content_type=str((context.get("strategy") or {}).get("content_form") or draft_meta.get("content_form") or "article"),
+                platform=primary_platform,
+                content_type=resolved_content_type,
                 content_goal="select an executable, platform-matched tool stack before generation",
                 capability_status={"tools": self._runtime_capabilities(brief).get("tools") or {}},
                 video_effect_registry=self._runtime_capabilities(brief).get("video_effect_modules") or {},
@@ -510,7 +517,12 @@ class DraftGenerator:
         topic_decision = dict(brief.get("topic_decision") or {})
         topic_decision.setdefault("score", float(score.get("total_score") or 0.01) if isinstance(score, dict) else 0.01)
         topic_decision.setdefault("growth_signals", topic_decision.get("signals") or signals)
-        content_form = str(draft_meta.get("content_form") or strategy.get("content_form") or "article")
+        content_form = resolve_content_type(
+            platform,
+            str(draft_meta.get("content_form") or strategy.get("content_form") or ""),
+            stage=str(brief.get("stage") or brief.get("content_form") or ""),
+        )
+        draft_meta["content_form"] = content_form
         runtime = DraftGenerator._runtime_capabilities(brief)
         draft_meta.update(build_tool_selection_evidence(
             platform=platform,
@@ -750,7 +762,11 @@ class DraftGenerator:
             },
         )
         draft_meta["tool_invocation_manifest"] = tool_manifest
-        selection_content_type = "note" if platform in {"xiaohongshu", "rednote"} else (content_form or "article")
+        selection_content_type = "note" if platform in {"xiaohongshu", "rednote"} else resolve_content_type(
+            platform,
+            content_form,
+            stage=str(brief.get("stage") or brief.get("content_form") or ""),
+        )
         draft_meta.update(build_tool_selection_evidence(
             platform=platform,
             content_type=selection_content_type,

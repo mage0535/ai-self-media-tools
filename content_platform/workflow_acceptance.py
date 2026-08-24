@@ -178,6 +178,9 @@ def _check_cover_quality(directory: Path, artifacts: list[dict[str, Any]], platf
 
 
 def _check_asset_quality(directory: Path, platform: str, job_id: str, store: Any, failures: list[str]) -> dict[str, Any]:
+    alignment = _check_scene_asset_alignment(directory)
+    if not alignment.get("passed"):
+        failures.append("scene_asset_semantic_gate_failed")
     path = directory / "asset_provenance.json"
     if not path.is_file():
         failures.append("asset_provenance_missing")
@@ -191,4 +194,47 @@ def _check_asset_quality(directory: Path, platform: str, job_id: str, store: Any
     result = validate_asset_set(records or [], platform, str(job_id), AssetLedger(Path(store.path).parent / "asset_ledger.db"))
     if not result.get("passed"):
         failures.append("asset_quality_gate_failed")
+    return result
+
+
+def _check_scene_asset_alignment(directory: Path) -> dict[str, Any]:
+    """Fail closed when scene claims and actual visual provenance disagree."""
+    manifest_path = directory / "scene_manifest.json"
+    provenance_path = directory / "asset_provenance.json"
+    if not manifest_path.is_file() or not provenance_path.is_file():
+        return {"passed": False, "failures": ["scene_manifest_or_asset_provenance_missing"]}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        payload = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"passed": False, "failures": ["scene_asset_metadata_invalid"]}
+    scenes = manifest.get("scenes") or []
+    records = payload.get("scenes") if isinstance(payload, dict) else payload
+    records = records or []
+    failures: list[str] = []
+    if not scenes or len(scenes) != len(records):
+        failures.append("scene_asset_count_mismatch")
+    checked: list[dict[str, str]] = []
+    for index, (scene, record) in enumerate(zip(scenes, records), 1):
+        scene_id = str(scene.get("scene_id") or f"s{index:02d}")
+        path = Path(str(record.get("path") or "")).expanduser()
+        if not path.is_absolute():
+            path = directory / path
+        terms = {str(item).casefold() for item in scene.get("asset_search_terms") or [] if str(item).strip()}
+        observed = {str(item).casefold() for item in record.get("observed_subjects") or [] if str(item).strip()}
+        if not path.is_file():
+            failures.append(f"{scene_id}:asset_missing")
+            continue
+        actual_sha = _file_sha256(path)
+        if not record.get("sha256") or str(record.get("sha256")) != actual_sha:
+            failures.append(f"{scene_id}:asset_sha_mismatch")
+        if not terms or not observed or not terms.intersection(observed):
+            failures.append(f"{scene_id}:semantic_terms_not_evidenced")
+        if float(record.get("semantic_match_score") or 0) < 0.72:
+            failures.append(f"{scene_id}:semantic_match_below_threshold")
+        if not str(record.get("match_reason") or "").strip():
+            failures.append(f"{scene_id}:match_reason_missing")
+        checked.append({"scene_id": scene_id, "path": str(path), "sha256": actual_sha})
+    result = {"passed": not failures, "scenes_checked": checked, "failures": sorted(set(failures))}
+    (directory / "scene_asset_semantic_gate.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result

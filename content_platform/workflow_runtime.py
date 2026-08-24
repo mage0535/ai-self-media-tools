@@ -1,4 +1,5 @@
 import time
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -47,12 +48,25 @@ class WorkflowBlocked(RuntimeError):
 
 
 class WorkflowStepRunner:
-    def __init__(self, store, workflow_id, job_id, platform="", notifier=None):
+    def __init__(self, store, workflow_id, job_id, platform="", notifier=None, heartbeat_interval_seconds=30):
         self.store = store
         self.workflow_id = workflow_id
         self.job_id = job_id
         self.platform = platform or ""
         self.notifier = notifier
+        self.heartbeat_interval_seconds = max(float(heartbeat_interval_seconds), 0.01)
+
+    def _heartbeat_loop(self, step_name, stop_event):
+        while not stop_event.wait(self.heartbeat_interval_seconds):
+            try:
+                self.store.record_event(
+                    self.job_id,
+                    "workflow_step_heartbeat",
+                    {"workflow_id": self.workflow_id, "platform": self.platform, "step_name": step_name},
+                )
+            except Exception:
+                # A progress event must never terminate the business step.
+                continue
 
     def succeeded(self, step_name, output=None, required=True, depends_on=None, message=""):
         self._notify("workflow_step_succeeded", step_name, message=message)
@@ -120,6 +134,14 @@ class WorkflowStepRunner:
             started_at=started,
         )
         self._notify("workflow_step_started", step_name)
+        heartbeat_stop = threading.Event()
+        heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            args=(step_name, heartbeat_stop),
+            name=f"workflow-heartbeat-{self.job_id}-{step_name}",
+            daemon=True,
+        )
+        heartbeat_thread.start()
         try:
             result = func()
             if require_output and result in (None, "", [], {}):
@@ -162,6 +184,9 @@ class WorkflowStepRunner:
             if required:
                 raise
             return None
+        finally:
+            heartbeat_stop.set()
+            heartbeat_thread.join(timeout=max(self.heartbeat_interval_seconds, 0.1) * 2)
 
     def _notify(self, event, step_name, reason_code="", message=""):
         if not self.notifier:

@@ -10,6 +10,12 @@ from unittest.mock import patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
+    def test_production_runner_requires_isolated_output_dir(self):
+        from scripts.video_toolchain_runner import resolve_video_output_dir
+
+        with patch.dict(os.environ, {"CONTENT_PLATFORM_OPS_RUNNER": "1"}, clear=False):
+            with self.assertRaises(RuntimeError):
+                resolve_video_output_dir()
     def test_short_video_duration_is_normalized_before_artifact_gate(self):
         from scripts import video_toolchain_runner as runner
 

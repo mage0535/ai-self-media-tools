@@ -12,6 +12,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class KuaishouPublishGuardTests(unittest.TestCase):
+    def test_cover_binding_is_required_before_upload(self):
+        from scripts import kuaishou_publish_with_postcheck as wrapper
+
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "video.mp4"
+            video.write_bytes(b"video")
+            self.assertFalse(wrapper.cover_binding_valid({"video_file": str(video)}))
+
     def test_thumbnail_path_accepts_nested_cover_object(self):
         from scripts import kuaishou_publish_with_postcheck as wrapper
 
