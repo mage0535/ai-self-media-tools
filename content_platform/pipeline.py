@@ -808,10 +808,16 @@ class Pipeline:
         job = self.store.get_job(job_id)
         required = self._media_required(kind, cfg, job)
         if not cfg.get("enabled", False):
-            if required:
-                runner.block(step, f"{kind}_required_but_not_enabled", f"{kind} generation is required by platform strategy but not enabled", depends_on=depends_on)
-            runner.skipped(step, f"{kind}_not_enabled", f"{kind} generation is not enabled by config", required=False, depends_on=depends_on)
-            return None
+            if required and kind == "image":
+                # Article platforms may use the built-in content-card renderer
+                # even when an external image provider is unavailable.
+                self.media.config.setdefault("image", {})["enabled"] = True
+                cfg = self.media.config["image"]
+            else:
+                if required:
+                    runner.block(step, f"{kind}_required_but_not_enabled", f"{kind} generation is required by platform strategy but not enabled", depends_on=depends_on)
+                runner.skipped(step, f"{kind}_not_enabled", f"{kind} generation is not enabled by config", required=False, depends_on=depends_on)
+                return None
         try:
             artifact = runner.run(step, lambda: self.media.generate(kind, self.store.get_job(job_id)), required=required, depends_on=depends_on)
         except Exception:
@@ -850,19 +856,25 @@ class Pipeline:
     def _media_required(kind, cfg, job):
         if bool((cfg or {}).get("required", False)):
             return True
+        platforms = {str(item).casefold() for item in (job or {}).get("platforms", [])}
+        draft_meta = (job or {}).get("draft_meta") or {}
+        media_plan = {str(item).casefold() for item in draft_meta.get("media_plan", [])}
+        if kind == "image" and platforms.intersection({"juejin", "zhihu", "wechat", "weixin"}):
+            return bool(media_plan.intersection({"cover", "article", "inline_images", "project_screenshot"})) or bool(draft_meta.get("content_form") in {"article", "long_article"})
         if kind != "video":
             return False
-        plan = ((job or {}).get("draft_meta") or {}).get("video_toolchain_plan") or {}
+        plan = draft_meta.get("video_toolchain_plan") or {}
         return bool(plan.get("required"))
 
     def _validate_image_requirements(self, job_id, runner, generated_image=None):
         image_cfg = self.config.get("media", {}).get("image", {})
-        required = bool(image_cfg.get("required", False))
+        job = self.store.get_job(job_id)
+        required = self._media_required("image", image_cfg, job)
         artifacts = [item for item in self.store.artifacts(job_id) if item.get("kind") == "image"]
         if not required and not image_cfg.get("enabled", False):
             runner.skipped("validate_image_requirements", "image_not_required", "current config does not require images", required=False, depends_on=["generate_or_collect_images"])
             return
-        minimum = int(image_cfg.get("min_count", 1 if required else 0))
+        minimum = int(image_cfg.get("min_count", 2 if required and {str(item).casefold() for item in job.get("platforms", [])}.intersection({"juejin", "zhihu"}) else (1 if required else 0)))
         verified = []
         failures = []
         for item in artifacts:
@@ -934,9 +946,23 @@ class Pipeline:
                 "failed": failed_dimensions,
                 "contract": "short_video" if short_video else "long_form",
             }
-        artifacts = dm.get("media_plan", [])
-        g4 = len(artifacts) > 0 if "short_video" == dm.get("content_form", "") else True
-        gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": artifacts}
+        planned_artifacts = list(dm.get("media_plan", []) or [])
+        actual_artifacts = []
+        try:
+            actual_artifacts = [item for item in self.store.artifacts(job_id) if Path(item.get("path", "")).is_file() and Path(item.get("path", "")).stat().st_size > 0]
+        except (OSError, KeyError):
+            actual_artifacts = []
+        platforms_set = {str(item).casefold() for item in platforms}
+        article_media_required = bool(platforms_set.intersection({"juejin", "zhihu", "wechat", "weixin"}) and (planned_artifacts or dm.get("content_form") in {"article", "long_article"}))
+        actual_images = [item for item in actual_artifacts if item.get("kind") == "image"]
+        required_image_count = 2 if platforms_set.intersection({"juejin", "zhihu"}) else 1
+        if article_media_required:
+            g4 = len(actual_images) >= required_image_count
+        elif "short_video" == dm.get("content_form", ""):
+            g4 = len(actual_artifacts) > 0
+        else:
+            g4 = True
+        gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": planned_artifacts, "actual_count": len(actual_artifacts), "actual_image_count": len(actual_images), "required_image_count": required_image_count if article_media_required else 0}
         g5 = len(platforms) > 0
         gate["gates"]["G5_format"] = {"passed": g5, "platforms": platforms}
         try:
