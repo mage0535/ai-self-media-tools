@@ -981,13 +981,19 @@ class Pipeline:
         article_media_required = bool(platforms_set.intersection({"juejin", "zhihu", "wechat", "weixin"}) and (planned_artifacts or dm.get("content_form") in {"article", "long_article"}))
         actual_images = [item for item in actual_artifacts if item.get("kind") == "image"]
         required_image_count = 2 if platforms_set.intersection({"juejin", "zhihu"}) else 1
-        if article_media_required:
+        if phase == "generation":
+            g4 = True
+            g4_deferred = True
+        elif article_media_required:
             g4 = len(actual_images) >= required_image_count
+            g4_deferred = False
         elif "short_video" == dm.get("content_form", ""):
             g4 = len(actual_artifacts) > 0
+            g4_deferred = False
         else:
             g4 = True
-        gate["gates"]["G4_media_assets"] = {"passed": g4, "plan": planned_artifacts, "actual_count": len(actual_artifacts), "actual_image_count": len(actual_images), "required_image_count": required_image_count if article_media_required else 0}
+            g4_deferred = False
+        gate["gates"]["G4_media_assets"] = {"passed": g4, "deferred": g4_deferred, "plan": planned_artifacts, "actual_count": len(actual_artifacts), "actual_image_count": len(actual_images), "required_image_count": required_image_count if article_media_required else 0}
         g5 = len(platforms) > 0
         gate["gates"]["G5_format"] = {"passed": g5, "platforms": platforms}
         try:
