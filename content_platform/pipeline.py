@@ -10,7 +10,7 @@ from pathlib import Path
 from .compliance import ComplianceChecker
 from .claim_ledger import sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
-from .content_hygiene import audit_topic
+from .content_hygiene import audit_topic, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
 from .capability_runtime import execute_generation_capabilities
 from .delivery_health import delivery_health_decision
@@ -285,6 +285,16 @@ class Pipeline:
                     "missing_tools": [],
                     "capability_execution": capability_execution,
                 }
+                generated_hygiene = validate_generated_text(str(draft.get("title") or "") + "\n" + str(draft.get("body") or ""))
+                draft.setdefault("draft_meta", {})["generated_text_hygiene"] = generated_hygiene
+                if not generated_hygiene.get("passed"):
+                    runner.block(
+                        "validate_content_structure",
+                        "source_page_code_contamination",
+                        "generated text contains scraped page code or script payload",
+                        generated_hygiene,
+                        depends_on=["generate_content", "execute_generation_capabilities"],
+                    )
                 if brief.get("automated_workflow") and not capability_execution.get("passed"):
                     runner.block(
                         "execute_generation_capabilities",
