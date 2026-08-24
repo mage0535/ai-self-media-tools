@@ -38,3 +38,16 @@ def test_optional_failure_does_not_block_stage():
     )
     assert result["passed"] is True
     assert result["optional_failures"][0]["capability_id"] == "optional"
+
+
+def test_execution_result_is_auditable_without_conflating_consulted_and_executed():
+    result = execute_capability_dag(
+        {"candidates": [], "consulted": [{"capability_id": "method"}], "skipped": []},
+        {},
+        {},
+        executor=lambda *_: {"status": "executed", "output_hash": "sha256:x"},
+    )
+    assert result["version"] == "capability_execution_dag_v1"
+    assert result["consulted"][0]["status"] == "consulted"
+    assert result["executed"] == []
+    assert result["failures"] == []
