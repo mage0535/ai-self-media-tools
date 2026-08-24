@@ -258,3 +258,25 @@ class PlatformQualityGateRuntimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_article_gate_requires_real_image_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            job = store.create_job("Article", ["juejin"], {"platforms": ["juejin"]})
+            draft = {
+                "title": "Article",
+                "body": "A factual article with a concrete workflow and evidence.",
+                "draft_meta": {
+                    "strategy": {"primary_platforms": ["juejin"]},
+                    "content_form": "article",
+                    "media_plan": ["cover", "article"],
+                    "quality_gate": {"passed": True},
+                },
+            }
+            pipeline = Pipeline(store, {"data_dir": tmp})
+            gate = pipeline._quality_gate(job["id"], draft, {"level": "pass"}, {"score": 80})
+            assert gate["gates"]["G4_media_assets"]["passed"] is False
+            assert gate["gates"]["G4_media_assets"]["actual_image_count"] == 0
+            assert gate["passed"] is False
