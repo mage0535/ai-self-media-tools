@@ -127,6 +127,18 @@ class StoreTests(unittest.TestCase):
         queue = self.store.list_delivery_queue("completed")
         self.assertEqual(len(queue), 1)
 
+    def test_delivery_queue_requeues_completed_item_when_retry_is_requested(self):
+        job = self.store.create_job("Topic", ["file"])
+        self.store.enqueue_delivery(job["id"], "file", "stage", {"state": "review_required"})
+        claimed = self.store.claim_delivery("worker-1", ttl_seconds=60)
+        self.store.complete_delivery(claimed["id"], "worker-1", "completed", "stale health")
+
+        self.store.enqueue_delivery(job["id"], "file", "stage", {"state": "review_required", "retry": True})
+
+        queue = self.store.list_delivery_queue()
+        self.assertEqual(queue[0]["state"], "queued")
+        self.assertEqual(queue[0]["payload"]["retry"], True)
+
     def test_workflow_lock_is_persistent_and_exclusive(self):
         self.assertTrue(self.store.acquire_workflow_lock("worker-1", "wf-1", ttl_seconds=60))
         self.assertFalse(self.store.acquire_workflow_lock("worker-2", "wf-2", ttl_seconds=60))

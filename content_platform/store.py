@@ -1303,17 +1303,26 @@ class Store:
 
     def enqueue_delivery(self, job_id, platform, action, payload=None):
         now = utc_now()
+        payload = payload or {}
         with self.connect() as conn:
+            existing = conn.execute(
+                "SELECT state FROM delivery_queue WHERE job_id=? AND platform=? AND action=?",
+                (job_id, platform, action),
+            ).fetchone()
+            retry_requested = bool(payload.get("retry"))
+            state = "queued"
+            if existing and existing["state"] in {"completed", "handoff_ready"} and not retry_requested:
+                state = existing["state"]
             conn.execute(
                 """INSERT INTO delivery_queue(job_id,platform,action,state,payload_json,created_at,updated_at)
                 VALUES(?,?,?,?,?,?,?)
                 ON CONFLICT(job_id,platform,action) DO UPDATE SET
-                state=CASE WHEN delivery_queue.state IN ('completed', 'handoff_ready') THEN delivery_queue.state ELSE 'queued' END,
+                state=excluded.state,
                 payload_json=excluded.payload_json,
                 updated_at=excluded.updated_at""",
-                (job_id, platform, action, "queued", json.dumps(payload or {}, ensure_ascii=False), now, now),
+                (job_id, platform, action, state, json.dumps(payload, ensure_ascii=False), now, now),
             )
-            self._event(conn, job_id, "delivery_enqueued", {"platform": platform, "action": action})
+            self._event(conn, job_id, "delivery_enqueued", {"platform": platform, "action": action, "retry": retry_requested})
 
     def claim_delivery(self, owner, ttl_seconds=300):
         owner = str(owner or "").strip()
