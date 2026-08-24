@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 import json
 import tempfile
 from pathlib import Path
@@ -53,7 +54,7 @@ class IntelligenceTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with unittest.mock.patch("content_platform.intelligence._fetch_url", return_value="<title>AI 自动化工作流</title><p>建议收藏。1. 先定目标</p>"):
+            with mock.patch("content_platform.intelligence._fetch_url", return_value="<title>AI 自动化工作流</title><p>建议收藏。1. 先定目标</p>"):
                 posts = collect_reference_posts({"keywords": ["AI"], "trend_cache_dir": str(root)}, limit=2)
         self.assertEqual(len(posts), 1)
         self.assertIn("AI 自动化工作流", posts[0]["title"])

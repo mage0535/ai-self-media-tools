@@ -60,8 +60,8 @@ def collect_reference_posts(brief, limit=3):
         if isinstance(row, dict) and (row.get("title") or row.get("body")):
             posts.append(
                 {
-                    "title": str(row.get("title", "")),
-                    "body": str(row.get("body", "")),
+                    "title": _plain(row.get("title", "")),
+                    "body": _plain(row.get("body", "")),
                     "source": row.get("source", "reference"),
                     "account_handle": str(row.get("account_handle", "")),
                     "platform": str(row.get("platform", "")),
