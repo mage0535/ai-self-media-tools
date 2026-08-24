@@ -56,6 +56,8 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         "tools_capability_analysis": {
             "version": full_tool_selection["tools_capability_analysis"].get("version"),
             "required_tool_groups": full_tool_selection["tools_capability_analysis"].get("required_tool_groups", []),
+            "analyzed_tool_groups": full_tool_selection["tools_capability_analysis"].get("analyzed_tool_groups", {}),
+            "all_relevant_tool_types_analyzed": full_tool_selection["tools_capability_analysis"].get("all_relevant_tool_types_analyzed", False),
             "candidate_tool_count": full_tool_selection["tools_capability_analysis"].get("candidate_tool_count", 0),
         },
         "tool_selection_plan": {
