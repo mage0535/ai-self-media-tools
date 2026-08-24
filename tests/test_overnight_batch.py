@@ -377,7 +377,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
         growth_strategy_status={
             "douyin_ai": {
                 "status": "ok",
-                "same_lane_intelligence", "hot_work_parameter_pack": {
+                "same_lane_intelligence": {
                     "version": "same_lane_playbook_compact_v1",
                     "topic_patterns": ["tool_workflow_tutorial"],
                 },
