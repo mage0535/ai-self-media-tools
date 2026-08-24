@@ -811,6 +811,14 @@ def execute(args):
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
         )
 
+        def official_candidate_matches(platform, candidate):
+            hotspot = candidate.get("associated_hotspot") if isinstance(candidate.get("associated_hotspot"), dict) else {}
+            return bool(
+                candidate.get("official_reference_only")
+                and str(candidate.get("platform") or platform).casefold() == str(platform).casefold()
+                and (float(hotspot.get("lane_fit_score") or 0) >= 0.55 or float(hotspot.get("semantic_fit_score") or 0) >= 0.55)
+            )
+
         def rank_for_platform(platform, items, slot):
             # Keep a candidate pool so the batch builder can reserve a unique
             # topic for each channel instead of duplicating the first trend.
@@ -823,7 +831,7 @@ def execute(args):
             candidates = [
                 candidate
                 for candidate in ranked
-                if candidate_matches_topic_keywords(candidate, keywords)
+                if (official_candidate_matches(platform, candidate) or candidate_matches_topic_keywords(candidate, keywords))
                 and candidate_matches_platform_language(platform, candidate)
             ]
             return prefer_platform_source_candidates(platform, candidates, report.get("sources", []))
@@ -831,7 +839,7 @@ def execute(args):
         def candidate_filter(platform, candidate, slot):
             keywords = topic_keywords_for_slot(platform, slot, profile)
             return (
-                candidate_matches_topic_keywords(candidate, keywords)
+                (official_candidate_matches(platform, candidate) or candidate_matches_topic_keywords(candidate, keywords))
                 and candidate_matches_platform_language(platform, candidate)
             )
 
