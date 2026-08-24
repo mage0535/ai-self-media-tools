@@ -22,7 +22,7 @@ class PublicationLedger:
         if any(not str(payload.get(k) or "").strip() for k in fields): return {"passed":False,"reason":"publication_identity_fields_missing"}
         if str(payload["verification_level"]) not in VERIFIED_LEVELS: return {"passed":False,"reason":"publication_not_independently_verified"}
         with self._connect() as c:
-            c.execute("INSERT OR IGNORE INTO publication_identities(platform,account_id,platform_content_id,canonical_url,published_at,verification_level,identity_source,metadata_json) VALUES(?,?,?,?,?,?,?,?)",tuple(str(payload[k]) for k in fields[:-1])+ (json.dumps(payload,ensure_ascii=False),))
+            c.execute("INSERT OR IGNORE INTO publication_identities(platform,account_id,platform_content_id,canonical_url,published_at,verification_level,identity_source,metadata_json) VALUES(?,?,?,?,?,?,?,?)",tuple(str(payload[k]) for k in fields)+ (json.dumps(payload,ensure_ascii=False),))
             row=c.execute("SELECT * FROM publication_identities WHERE platform=? AND account_id=? AND platform_content_id=?",(payload["platform"],payload["account_id"],payload["platform_content_id"])).fetchone()
             published=datetime.fromisoformat(str(payload["published_at"]).replace("Z","+00:00"))
             for hours in (1,24,72): c.execute("INSERT OR IGNORE INTO metric_windows(identity_id,hours,due_at,state) VALUES(?,?,?,?)",(row["id"],hours,(published+timedelta(hours=hours)).isoformat(),"pending"))
