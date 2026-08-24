@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .paths import agent_home, project_home, trend_cache_dir
 from .source_quality import source_is_rankable
+from .topic_ranker_v2 import rank_topic_candidates
 
 
 def normalize_topic(title):
@@ -44,6 +45,9 @@ def _has_native_result(source: str, items: list[dict]) -> bool:
 
 def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     profile, used = profile or {}, {normalize_topic(item) for item in (used or set())}
+    if str(profile.get("topic_scoring_mode") or "").casefold() in {"v2", "enforce"}:
+        candidates = [item for item in (items or []) if normalize_topic(item.get("title", "")) not in used]
+        return rank_topic_candidates(candidates, profile)[: int(limit)]
     learned = learned or {}
     keywords = [str(word).casefold() for word in profile.get("keywords", [])]
     source_weights = profile.get("source_weights", {})
