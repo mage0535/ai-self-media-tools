@@ -110,7 +110,8 @@ def load_config(path, db_path):
     db_parent = str(Path(db_path).parent)
     data_root = os.environ.get("CONTENT_PLATFORM_DATA_DIR", "").strip() or str(config.get("data_dir") or db_parent)
     secrets_root = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", "").strip() or str(Path(data_root).parent / "secrets")
-    code_root = os.environ.get("CONTENT_PLATFORM_HOME", "").strip() or str(project_home())
+    release_root = Path("/root/.ai-self-media-tools-current")
+    code_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip() or (str(release_root) if release_root.exists() else str(project_home()))
     config = _rewrite_runtime_paths(config, code_root, data_root, secrets_root)
     config["data_dir"] = data_root
     config.setdefault("generator", {"allow_fallback": True})
