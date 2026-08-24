@@ -280,3 +280,12 @@ if __name__ == "__main__":
             assert gate["gates"]["G4_media_assets"]["passed"] is False
             assert gate["gates"]["G4_media_assets"]["actual_image_count"] == 0
             assert gate["passed"] is False
+
+
+    def test_generated_strategy_is_bound_to_target_platform():
+        draft = {"draft_meta": {"strategy": {"primary_platforms": ["wechat"], "content_form": "long_article"}, "media_plan": []}}
+        result = Pipeline._enforce_target_platform_strategy(draft, {"platforms": ["juejin"]})
+        assert result["changed"] is True
+        assert draft["draft_meta"]["strategy"]["primary_platforms"] == ["juejin"]
+        assert draft["draft_meta"]["content_form"] == "article"
+        assert set(("cover", "article")) <= set(draft["draft_meta"]["media_plan"])

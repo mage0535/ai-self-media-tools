@@ -320,8 +320,9 @@ class Pipeline:
                             depends_on=["generate_content"],
                         )
                 self._validate_draft_structure(draft)
-                draft.setdefault("draft_meta", {}).setdefault("strategy", {}).setdefault("primary_platforms", job["platforms"])
-                runner.succeeded("validate_content_structure", {"title_present": bool(draft.get("title")), "body_chars": len(str(draft.get("body", "")))}, depends_on=["generate_content"])
+                platform_alignment = self._enforce_target_platform_strategy(draft, job)
+                draft.setdefault("draft_meta", {})["platform_alignment"] = platform_alignment
+                runner.succeeded("validate_content_structure", {"title_present": bool(draft.get("title")), "body_chars": len(str(draft.get("body", ""))), "platform_alignment": platform_alignment}, depends_on=["generate_content"])
                 self._persist_intelligence(job_id, draft.get("draft_meta", {}))
                 text = draft["title"] + "\n" + draft["body"]
                 claim_ledger = (draft.get("draft_meta") or {}).get("claim_ledger") or brief.get("claim_ledger") or []
@@ -776,6 +777,31 @@ class Pipeline:
         payload["report_path"] = report.get("path", "")
         payload["title"] = f"{job.get('title') or job.get('topic', '')} [{platform}]"
         self.notifier.send("platform_report", payload)
+
+    @staticmethod
+    def _enforce_target_platform_strategy(draft, job):
+        meta = draft.setdefault("draft_meta", {})
+        strategy = meta.setdefault("strategy", {})
+        target_platforms = [str(item).casefold() for item in (job.get("platforms") or [])]
+        if not target_platforms:
+            return {"changed": False, "target_platforms": []}
+        before = list(strategy.get("primary_platforms") or [])
+        changed = [str(item).casefold() for item in before] != target_platforms
+        strategy["primary_platforms"] = target_platforms
+        strategy["platforms"] = target_platforms
+        if len(target_platforms) == 1:
+            strategy["platform"] = target_platforms[0]
+        article_platforms = {"juejin", "zhihu", "wechat", "weixin"}
+        if set(target_platforms) & article_platforms and str(meta.get("content_form") or strategy.get("content_form") or "article").casefold() not in {"short_video", "tweet"}:
+            meta["content_form"] = "article"
+            strategy["content_form"] = "article"
+            planned = list(meta.get("media_plan") or strategy.get("asset_plan") or [])
+            for item in ("cover", "article"):
+                if item not in planned:
+                    planned.append(item)
+            meta["media_plan"] = planned
+            strategy["asset_plan"] = planned
+        return {"changed": changed, "before": before, "target_platforms": target_platforms}
 
     def _validate_draft_structure(self, draft):
         if not isinstance(draft, dict):
