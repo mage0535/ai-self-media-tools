@@ -15,3 +15,11 @@ def test_router_separates_consulted_and_executed_and_rejects_unverified():
     assert all(item["status"] == "consulted" for item in result["consulted"])
     assert all(item.get("license") != "unverified" for item in result["executed"])
     assert all(item.get("status") != "executed" for item in result["skipped"])
+
+
+def test_runtime_enabled_mcp_namespaces_are_inventoryable(monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_MCP_SERVERS", "gbrain,anysearch")
+    registry = load_registry("douyin_ai")
+    ids = {item["id"] for item in registry["capabilities"]}
+    assert "mcp:gbrain" in ids
+    assert "mcp:anysearch" in ids

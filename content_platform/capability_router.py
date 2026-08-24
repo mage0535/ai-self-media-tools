@@ -3,12 +3,29 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from .capability_catalog import build_capability_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "config" / "creative_capability_registry.json"
+
+
+def _runtime_mcp_servers() -> list[str]:
+    configured = [item.strip() for item in os.environ.get("CONTENT_PLATFORM_MCP_SERVERS", "").split(",") if item.strip()]
+    if configured:
+        return configured
+    config = Path.home() / ".hermes" / "config.yaml"
+    if not config.is_file():
+        return []
+    try:
+        import yaml
+        data = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+        servers = data.get("mcp_servers") or data.get("mcp") or {}
+        return sorted(str(name) for name, value in servers.items() if isinstance(value, dict) and value.get("enabled") is True)
+    except Exception:
+        return []
 
 
 def legacy_tool_group_plan(content_type: str) -> dict:
@@ -24,11 +41,7 @@ def load_registry(platform: str = "") -> dict:
     from .skill_rule_compiler import default_skill_paths
 
     skills = [str(path) for path in default_skill_paths(platform, root=ROOT)]
-    mcp_servers = [
-        item.strip()
-        for item in __import__("os").environ.get("CONTENT_PLATFORM_MCP_SERVERS", "").split(",")
-        if item.strip()
-    ]
+    mcp_servers = _runtime_mcp_servers()
     return build_capability_catalog(
         raw,
         legacy_groups=legacy_tool_group_plan("short_video") | legacy_tool_group_plan("article"),
