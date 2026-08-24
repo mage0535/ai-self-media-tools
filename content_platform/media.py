@@ -833,27 +833,57 @@ class MediaBridge:
             output_dir = self.data_dir / "artifacts" / job["id"]
             output_dir.mkdir(parents=True, exist_ok=True)
 
+            provider = self.registry.choose_provider("image")
+            if not provider:
+                raise FileNotFoundError("illustration image provider is not configured")
+            image_cfg = self.config.get("image", {})
+            extra_args = [
+                "--method", image_cfg.get("method", "auto"),
+                "--provider", image_cfg.get("provider", "auto"),
+                "--size", image_cfg.get("size", "1024x1024"),
+                "--quality", image_cfg.get("quality", "low"),
+            ]
+            if image_cfg.get("model"):
+                extra_args.extend(["--model", str(image_cfg["model"])])
+
             artifacts = []
+            prompts = []
             for idx, concept in enumerate(concepts):
                 prompt = concept["prompt"]
-                # 调用 hermes image_generate 生成图片
-                # 这里保存提示词，实际生成由 pipeline 编排层或外部调用
                 prompt_path = output_dir / f"illustration-{idx+1}-prompt.txt"
                 prompt_path.write_text(prompt, encoding="utf-8")
+                image_path = output_dir / f"illustration-{idx+1}.png"
+                provider.run(prompt, image_path, extra_args)
+                if not image_path.is_file() or image_path.stat().st_size == 0:
+                    raise RuntimeError(f"illustration provider produced no image: {idx + 1}")
+                checksum = hashlib.sha256(image_path.read_bytes()).hexdigest()
+                prompts.append({"prompt": prompt, "role": "illustration", "section": str(idx + 1), "purpose": concept.get("structure", "")})
                 artifacts.append({
                     "kind": "illustration",
                     "index": idx,
                     "prompt": prompt,
                     "prompt_path": str(prompt_path),
+                    "path": str(image_path),
+                    "checksum": checksum,
                     "structure": concept.get("structure", ""),
                     "labels": concept.get("labels", []),
                     "accent": concept.get("accent", "ikb_blue"),
                 })
 
+            self._persist_asset_provenance(
+                output_dir,
+                [{"path": item["path"], "role": "illustration", "section": str(item["index"] + 1), "purpose": item["structure"], "checksum": item["checksum"]} for item in artifacts],
+                prompts,
+                type(provider).__name__,
+                job,
+            )
+
             return {
                 "kind": "illustration",
                 "artifacts": artifacts,
                 "prompt_count": len(artifacts),
+                "generated_count": len(artifacts),
+                "provider": type(provider).__name__,
             }
         except ImportError:
             return None
