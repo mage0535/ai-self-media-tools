@@ -19,11 +19,21 @@ def legacy_tool_group_plan(content_type: str) -> dict:
     return {group: _default_candidates(group, is_video) for group in sorted(groups)}
 
 
-def load_registry() -> dict:
+def load_registry(platform: str = "") -> dict:
     raw = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    from .skill_rule_compiler import default_skill_paths
+
+    skills = [str(path) for path in default_skill_paths(platform, root=ROOT)]
+    mcp_servers = [
+        item.strip()
+        for item in __import__("os").environ.get("CONTENT_PLATFORM_MCP_SERVERS", "").split(",")
+        if item.strip()
+    ]
     return build_capability_catalog(
         raw,
         legacy_groups=legacy_tool_group_plan("short_video") | legacy_tool_group_plan("article"),
+        mcp_servers=mcp_servers,
+        skill_paths=skills,
     )
 
 
@@ -61,7 +71,7 @@ def match_capabilities(profile: dict, registry: dict | None = None) -> dict:
 
 
 def build_capability_plan(profile: dict, registry: dict | None = None) -> dict:
-    result = match_capabilities(profile, registry)
+    result = match_capabilities(profile, registry or load_registry(str(profile.get("platform") or "")))
     return {
         "version": "capability_plan_v2",
         "profile": profile,

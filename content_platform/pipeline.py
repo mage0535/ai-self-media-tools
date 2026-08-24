@@ -255,6 +255,7 @@ class Pipeline:
                     require_output=True,
                 )
                 draft.setdefault("draft_meta", {})["capability_execution"] = capability_execution
+                self._persist_capability_manifest(job_id, job, draft, capability_execution)
                 if not capability_execution.get("passed"):
                     runner.block(
                         "execute_generation_capabilities",
@@ -531,6 +532,22 @@ class Pipeline:
         clusters = list(draft_meta.get("topic_clusters", []))
         if clusters:
             self.store.save_topic_clusters(job_id, clusters)
+
+    def _persist_capability_manifest(self, job_id, job, draft, execution):
+        """Persist a standalone, redacted capability execution record."""
+        output_dir = self.data_dir / "capability_manifests"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "version": "capability_execution_manifest_v1",
+            "job_id": str(job_id),
+            "platforms": list(job.get("platforms") or []),
+            "topic_hash": hashlib.sha256(str(job.get("topic") or "").encode("utf-8")).hexdigest(),
+            "content_profile": execution.get("profile") or {},
+            "capability_execution": execution,
+            "tool_invocation_manifest": (draft.get("draft_meta") or {}).get("tool_invocation_manifest") or {},
+        }
+        path = output_dir / f"{job_id}.json"
+        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
     def stage_drafts(self, job_id, owner=None, already_locked=False):
         job = self._hydrate(self.store.get_job(job_id))
