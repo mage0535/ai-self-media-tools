@@ -852,14 +852,13 @@ class Pipeline:
         return artifact
 
 
-    @staticmethod
-    def _media_required(kind, cfg, job):
+    def _media_required(self, kind, cfg, job):
         if bool((cfg or {}).get("required", False)):
             return True
         platforms = {str(item).casefold() for item in (job or {}).get("platforms", [])}
         draft_meta = (job or {}).get("draft_meta") or {}
         media_plan = {str(item).casefold() for item in draft_meta.get("media_plan", [])}
-        if kind == "image" and platforms.intersection({"juejin", "zhihu", "wechat", "weixin"}):
+        if kind == "image" and bool(self.config.get("strict_media_contract", False)) and platforms.intersection({"juejin", "zhihu", "wechat", "weixin"}):
             return bool(media_plan.intersection({"cover", "article", "inline_images", "project_screenshot"})) or bool(draft_meta.get("content_form") in {"article", "long_article"})
         if kind != "video":
             return False
