@@ -37,6 +37,12 @@ def _plain(text):
     text = re.sub(r"<style\b[^>]*>.*?</style\s*>", " ", text, flags=re.I | re.S)
     text = re.sub(r"<[^>]+>", " ", text)
     text = unescape(text)
+    navigation_prefixes = (
+        r"^稀土掘金\s+首页\s+沸点\s+课程\s+APP\s+搜索历史\s+清空\s+创作者中心\s+写文章\s+发沸点\s+写笔记\s+写代码\s+草稿",
+        r"^首页\s+沸点\s+课程\s+APP\s+搜索历史\s+清空\s+创作者中心\s+写文章\s+发沸点\s+写笔记\s+写代码\s+草稿",
+    )
+    for prefix in navigation_prefixes:
+        text = re.sub(prefix, " ", text, count=1, flags=re.I)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
