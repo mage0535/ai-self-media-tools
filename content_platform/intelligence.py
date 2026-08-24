@@ -87,7 +87,8 @@ def collect_reference_posts(brief, limit=3):
                 for row in rows:
                     title = str(row.get("title", ""))
                     url = str(row.get("url", ""))
-                    if not url:
+                    source_ref = str(row.get("source", ""))
+                    if not url or _is_non_content_endpoint(url) or _is_non_content_endpoint(source_ref):
                         continue
                     if keywords and not any(word in title.casefold() for word in keywords):
                         continue
