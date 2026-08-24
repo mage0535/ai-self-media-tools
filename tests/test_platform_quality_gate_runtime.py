@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,18 @@ from content_platform.workflow_runtime import WorkflowBlocked, WorkflowStepRunne
 
 
 class PlatformQualityGateRuntimeTests(unittest.TestCase):
+    def test_workflow_step_emits_heartbeat_while_provider_work_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            job = store.create_job("heartbeat", ["kuaishou"], {})
+            runner = WorkflowStepRunner(store, "wf_heartbeat", job["id"], heartbeat_interval_seconds=0.01)
+
+            runner.run("generate_content", lambda: (time.sleep(0.06), {"ok": True})[1], require_output=True)
+
+            events = [row["event"] for row in store.events(job["id"])]
+            self.assertIn("workflow_step_heartbeat", events)
+
     def test_enforced_platform_quality_gate_flags_incomplete_wechat_packet(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / "state.db")

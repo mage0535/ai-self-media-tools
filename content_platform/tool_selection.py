@@ -47,6 +47,35 @@ VIDEO_TOOL_GROUPS = {
     "publisher_or_handoff",
 }
 
+VIDEO_PLATFORMS = {
+    "bilibili",
+    "douyin",
+    "douyin_ai",
+    "douyin_pet",
+    "kuaishou",
+    "shipinhao",
+    "tiktok",
+    "youtube",
+}
+
+
+def resolve_content_type(platform: str, content_type: str = "", *, stage: str = "") -> str:
+    """Resolve the format before tool selection; never silently use article for video work."""
+    normalized_platform = str(platform or "").casefold().strip()
+    normalized_type = str(content_type or "").casefold().strip()
+    normalized_stage = str(stage or "").casefold().strip()
+    if "video" in normalized_type or normalized_type in {"short", "reel"}:
+        return normalized_type
+    video_stage = "video" in normalized_stage or normalized_stage in {"render", "handoff_video"}
+    if normalized_platform in VIDEO_PLATFORMS or video_stage:
+        if normalized_type in {"", "article", "long_article", "note"}:
+            return "short_video"
+        raise ValueError(
+            f"content_type_mismatch: platform={normalized_platform or 'unknown'} "
+            f"stage={normalized_stage or 'unknown'} content_type={normalized_type or 'missing'}"
+        )
+    return normalized_type or "article"
+
 
 def build_tools_capability_analysis(
     *,

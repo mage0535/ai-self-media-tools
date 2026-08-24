@@ -58,6 +58,12 @@ def _thumbnail_path(manifest: dict[str, Any]) -> str:
     return str(raw or "").strip()
 
 
+def cover_binding_valid(manifest: dict[str, Any]) -> bool:
+    """Require a readable cover explicitly bound to the upload packet."""
+    path = _thumbnail_path(manifest)
+    return bool(path and Path(path).is_file())
+
+
 def _run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -153,6 +159,8 @@ def main() -> int:
         errors.append("title_missing")
     if not schedule:
         errors.append("schedule_time_missing")
+    if not cover_binding_valid(manifest):
+        errors.append("cover_missing_or_not_bound_to_packet")
     if errors:
         print(json.dumps({"ok": False, "stage": "input_validation", "errors": errors}, ensure_ascii=False, indent=2))
         return 2

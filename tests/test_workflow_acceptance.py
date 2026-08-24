@@ -132,3 +132,43 @@ def test_compiled_run_rejects_duplicate_asset_provenance(tmp_path: Path):
 
     result = evaluate_job_acceptance(store, job["id"], "tiktok", artifacts_dir=render)
     assert "asset_quality_gate_failed" in result["failures"]
+
+
+def test_acceptance_rejects_scene_asset_with_unrelated_observed_subject(tmp_path: Path):
+    from content_platform.workflow_acceptance import evaluate_job_acceptance
+    import hashlib
+    import json
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("AI API workflow", ["tiktok"], {
+        "platform_source_matrix": _real_matrix("tiktok"),
+        "run_contract": build_run_contract("tiktok"),
+    })
+    store.save_draft(job["id"], "title", "body", "pass", {}, draft_meta={"quality_gate": {"passed": True}})
+    render = tmp_path / "artifacts" / job["id"]
+    render.mkdir(parents=True)
+    image = render / "scene-01.png"
+    Image.new("RGB", (1080, 1920), "navy").save(image)
+    (render / "final.mp4").write_bytes(b"video")
+    Image.new("RGB", (1080, 1920), "black").save(render / "cover.jpg")
+    (render / "cover_quality_evidence.json").write_text(
+        '{"platform":"tiktok","layout_key":"hero_conflict","hook":"AI API",'
+        '"conflict_or_payoff":"verify first","focal_subjects":["cat"],'
+        '"content_match_reason":"matches script","safe_zone_verified":true,"degraded":false}',
+        encoding="utf-8",
+    )
+    sha = hashlib.sha256(image.read_bytes()).hexdigest()
+    (render / "scene_manifest.json").write_text(json.dumps({"scenes": [{
+        "scene_id": "s01", "asset_search_terms": ["api", "developer"],
+    }]}), encoding="utf-8")
+    (render / "asset_provenance.json").write_text(json.dumps({"scenes": [{
+        "scene_id": "s01", "path": str(image), "sha256": sha,
+        "observed_subjects": ["robot sports"], "semantic_match_score": 0.95,
+        "match_reason": "matches script", "source_url": "https://example.test/scene",
+        "license": "licensed", "semantic_tags": ["robot sports"],
+    }]}), encoding="utf-8")
+
+    result = evaluate_job_acceptance(store, job["id"], "tiktok", artifacts_dir=render)
+
+    assert result["passed"] is False
+    assert "scene_asset_semantic_gate_failed" in result["failures"]
