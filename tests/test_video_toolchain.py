@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from PIL import Image
+
 from content_platform.media import MediaBridge
 from content_platform.generator import DraftGenerator
 from content_platform.strategy_router import choose_content_strategy
@@ -218,7 +220,8 @@ class VideoToolchainTests(unittest.TestCase):
                 if command[1] == str(image_script):
                     output = Path(command[command.index("--output") + 1])
                     output.parent.mkdir(parents=True, exist_ok=True)
-                    output.write_bytes(f"image:{output.name}".encode())
+                    index = 0 if output.name == "cover.png" else int(output.stem.rsplit("-", 1)[-1])
+                    Image.new("RGB", (1200, 1200), (24 + index, 42 + index, 64 + index)).save(output)
                     return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
                 output_dir = Path(kwargs["env"]["VIDEO_OUTPUT_DIR"])
                 assets_path = Path(kwargs["env"]["VIDEO_VISUAL_ASSETS_PATH"])

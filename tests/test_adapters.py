@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from PIL import Image
+
 from content_platform.media import MediaBridge
 from content_platform.notify import Notifier
 from content_platform.publishers import FileDraftPublisher, TelegraphPublisher
@@ -142,7 +144,7 @@ class AdapterTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             output = Path(command[command.index("--output") + 1])
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_bytes(b"image")
+            Image.new("RGB", (1200, 1200), (24, 42, 64)).save(output)
             return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
 
         with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
@@ -166,7 +168,7 @@ class AdapterTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             output = Path(command[command.index("--output") + 1])
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_bytes(b"image")
+            Image.new("RGB", (1200, 1200), (24, 42, 64)).save(output)
             return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
 
         with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
@@ -190,7 +192,7 @@ class AdapterTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             output = Path(command[command.index("--output") + 1])
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_bytes(f"image:{output.name}".encode())
+            Image.new("RGB", (1200, 1200), (24, 42, 64)).save(output)
             return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
 
         with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run):
@@ -218,7 +220,7 @@ class AdapterTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             output = Path(command[command.index("--output") + 1])
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_bytes(f"image:{output.name}".encode())
+            Image.new("RGB", (1200, 1200), (24, 42, 64)).save(output)
             return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
 
         with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run):
@@ -243,7 +245,7 @@ class AdapterTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             output = Path(command[command.index("--output") + 1])
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_bytes(f"image:{output.name}".encode())
+            Image.new("RGB", (1200, 1200), (24, 42, 64)).save(output)
             return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
 
         with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run):

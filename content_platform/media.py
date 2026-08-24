@@ -210,7 +210,8 @@ class MediaBridge:
         video_platforms = platforms.intersection(
             {"kuaishou", "douyin", "douyin_ai", "tiktok", "shipinhao", "youtube", "youtube_shorts", "bilibili"}
         )
-        if (not video_platforms and vr.get("auto") and vr.get("route_order")
+        if (not video_platforms and not job.get("_video_asset_generation")
+                and vr.get("auto") and vr.get("route_order")
                 and vr["route_order"][0] == "content-driven-cards"):
             try:
                 scripts_dir = agent_scripts_dir()
@@ -649,7 +650,11 @@ class MediaBridge:
         required_count = max(1, int(self.config.get("video", {}).get("visual_image_count", 8)))
         if not image_paths and image_cfg.get("enabled", False):
             image_cfg.setdefault("min_count", required_count)
-            image_artifact = self._generate_image(job, output_dir, image_cfg)
+            job["_video_asset_generation"] = True
+            try:
+                image_artifact = self._generate_image(job, output_dir, image_cfg)
+            finally:
+                job.pop("_video_asset_generation", None)
             image_paths = [item["path"] for item in image_artifact.get("images", []) if Path(item.get("path", "")).is_file()]
         if not image_paths:
             return {}
