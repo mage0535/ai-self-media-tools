@@ -1,4 +1,5 @@
 import time
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -206,9 +207,22 @@ def strict_workflow_lock(store, owner, workflow_id, ttl_seconds=1800, enabled=Tr
         return
     if not store.acquire_workflow_lock(owner, workflow_id, ttl_seconds):
         raise RuntimeError("another ai-self-media-tools workflow is already running")
+    stop = threading.Event()
+    interval = max(0.01, min(float(ttl_seconds) / 3.0, 30.0))
+    def renew():
+        while not stop.wait(interval):
+            try:
+                if not store.heartbeat_workflow_lock(owner, ttl_seconds):
+                    break
+            except Exception:
+                break
+    heartbeat = threading.Thread(target=renew, name=f"workflow-lock-heartbeat-{workflow_id}", daemon=True)
+    heartbeat.start()
     try:
         yield
     finally:
+        stop.set()
+        heartbeat.join(timeout=max(interval * 2, 0.1))
         store.release_workflow_lock(owner)
 
 
