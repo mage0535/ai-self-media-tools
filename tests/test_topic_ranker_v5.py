@@ -25,3 +25,10 @@ def test_cross_platform_official_identity_is_rejected():
     result = score_topic_candidate(row, {"platform": "douyin_ai", "keywords": ["ai", "工具"]})
     assert result["eligible"] is False
     assert "hotspot_platform_mismatch" in result["reasons"]
+
+
+def test_rank_trends_v2_uses_platform_native_scoring():
+    from content_platform.trends import rank_trends
+    rows = [{"title": "AI工具教程", "source": "kuaishou:official", "platform": "kuaishou", "points": 10, "official_reference_only": True, "associated_hotspot": {"platform": "kuaishou", "hotspot_id": "ks", "title": "AI工具", "native_verified": True, "heat_score": .9, "lane_fit_score": .9, "semantic_fit_score": .9}}]
+    result = rank_trends(rows, {"platform": "kuaishou", "keywords": ["ai", "工具"], "topic_scoring_mode": "v2"})
+    assert result[0]["score_breakdown"]["official_signal"] == 1.0
