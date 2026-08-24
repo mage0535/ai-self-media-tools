@@ -3,8 +3,10 @@
 set -euo pipefail
 
 root="${CONTENT_PLATFORM_HOME:?CONTENT_PLATFORM_HOME is required}"
+data_root="${CONTENT_PLATFORM_DATA_DIR:-$root/data}"
+config_path="${CONTENT_PLATFORM_CONFIG:-$root/config.json}"
 day="$(date +%F)"
-out="$root/data/overnight/$day"
+out="$data_root/overnight/$day"
 state="$out/state.json"
 heartbeat="$out/heartbeat.json"
 report="$out/supervisor-report.json"
@@ -21,10 +23,10 @@ run_platform() {
 
 # Always reconcile terminal snapshots too: state vocabulary changes must not
 # wait for a future stale-heartbeat incident before becoming operator-visible.
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
+run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-sync-state --state "$state" --output "$out/acceptance_summary.json" > "$out/supervisor-sync.json"
 
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
+run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-supervise --state "$state" --heartbeat "$heartbeat" \
   --stale-after-seconds "${OVERNIGHT_HEARTBEAT_STALE_SECONDS:-1800}" > "$report"
 
@@ -41,13 +43,13 @@ fi
 
 # A stale service may own browser or publisher state. Recover only durable
 # leases and reconcile facts; a new batch is never started from this watcher.
-run_platform --config "$root/config.json" --db "$root/data/state.db" recover > "$out/supervisor-recover.json" || true
+run_platform --config "$config_path" --db "$data_root/state.db" recover > "$out/supervisor-recover.json" || true
 if [[ -f "$out/plan.json" ]]; then
   notify "progress" "automatic_recovery_started; see $report"
-  if run_platform --config "$root/config.json" --db "$root/data/state.db" \
+  if run_platform --config "$config_path" --db "$data_root/state.db" \
     overnight-run --plan "$out/plan.json" --state "$state" --events "$out/events.jsonl" \
     > "$out/supervisor-recovery-result.json"; then
-    run_platform --config "$root/config.json" --db "$root/data/state.db" \
+    run_platform --config "$config_path" --db "$data_root/state.db" \
       overnight-sync-state --state "$state" --output "$out/acceptance_summary.json" \
       > "$out/supervisor-recovery-sync.json"
     notify "resolved" "automatic_recovery_completed; see $out/supervisor-recovery-result.json"

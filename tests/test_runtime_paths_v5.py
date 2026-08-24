@@ -28,3 +28,9 @@ def test_overnight_entrypoint_uses_external_runtime_roots():
     assert 'data_root="${CONTENT_PLATFORM_DATA_DIR:-$root/data}"' in script
     assert 'secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$root/secrets}"' in script
     assert 'out="$data_root/overnight/$day"' in script
+
+
+def test_supervisor_entrypoint_uses_external_runtime_roots():
+    script = Path("scripts/run_overnight_supervisor.sh").read_text(encoding="utf-8")
+    assert "data_root=\"${CONTENT_PLATFORM_DATA_DIR:-$root/data}\"" in script
+    assert "out=\"$data_root/overnight/$day\"" in script
