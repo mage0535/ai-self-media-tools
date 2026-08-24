@@ -12,6 +12,7 @@ from .claim_ledger import sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
+from .capability_runtime import execute_generation_capabilities
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
 from .generator import DraftGenerator
@@ -164,6 +165,34 @@ class Pipeline:
                                     "same_lane_intelligence": latest_same_lane_playbook(self.store, platform_name),
                                 },
                             )
+                if len(platform_contexts) == 1:
+                    platform_name = str(next(iter(platform_contexts)))
+                    from .capability_context import build_generation_capability_context
+                    capability_context = build_generation_capability_context(
+                        platform_name,
+                        brief.get("content_blueprint") or {
+                            "topic": job.get("topic") or "",
+                            "content_form": brief.get("content_form") or "",
+                        },
+                    )
+                    brief["content_profile"] = capability_context["profile"]
+                    brief["capability_plan"] = capability_context["capability_plan"]
+                    brief["tool_selection"] = capability_context["tool_selection"]
+                    brief["compiled_skill_rules"] = capability_context["compiled_skill_rules"]
+                    contract = brief.get("run_contract")
+                    if isinstance(contract, dict):
+                        from .run_contract import bound_stage_payload
+                        brief["bounded_model_input"] = bound_stage_payload(
+                            contract,
+                            "generate",
+                            {
+                                **dict(brief.get("bounded_model_input") or {}),
+                                "content_profile": capability_context["profile"],
+                                "capability_plan": capability_context["capability_plan"],
+                                "tool_selection": capability_context["tool_selection"],
+                                "compiled_skill_rules": capability_context["compiled_skill_rules"],
+                            },
+                        )
                 runner.succeeded("run_operation_strategy", {"historical_feedback": bool(brief.get("historical_feedback"))}, depends_on=["load_content_strategy"])
                 # Check if job has pre-populated body content (manually written, not a stub)
                 existing_body = (job.get("body") or "").strip()
@@ -221,6 +250,21 @@ class Pipeline:
                     }, depends_on=["run_operation_strategy"])
                 else:
                     draft = runner.run("generate_content", lambda: self.generator.generate(job["topic"], brief), depends_on=["run_operation_strategy"], require_output=True)
+                capability_execution = runner.run(
+                    "execute_generation_capabilities",
+                    lambda: execute_generation_capabilities(draft, brief),
+                    depends_on=["generate_content"],
+                    require_output=True,
+                )
+                draft.setdefault("draft_meta", {})["capability_execution"] = capability_execution
+                if brief.get("automated_workflow") and not capability_execution.get("passed"):
+                    runner.block(
+                        "execute_generation_capabilities",
+                        "required_capability_not_executed",
+                        "automated workflow selected capabilities without valid execution evidence",
+                        capability_execution,
+                        depends_on=["generate_content"],
+                    )
                 if requires_wechat_toolchain(self.config, job["platforms"]):
                     draft = runner.run(
                         "prepare_wechat_professional_toolchain",
