@@ -33,7 +33,9 @@ def infer_content_language(brief):
 
 
 def _plain(text):
-    text = re.sub(r"<[^>]+>", " ", str(text))
+    text = re.sub(r"<script\b[^>]*>.*?</script\s*>", " ", str(text), flags=re.I | re.S)
+    text = re.sub(r"<style\b[^>]*>.*?</style\s*>", " ", text, flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", text)
     text = unescape(text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
