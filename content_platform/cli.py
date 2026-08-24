@@ -754,6 +754,21 @@ def execute(args):
         for source in report.get("sources", []):
             if isinstance(source, dict):
                 source.setdefault("collected_at", collected_at)
+        from .official_reference_signals import build_reference_items
+        official_reference_evidence = {}
+        official_reference_items = []
+        data_dir = Path(config.get("data_dir", Path(args.db).parent))
+        for slot in slots:
+            platform = str(slot.get("platform") or "").casefold() if isinstance(slot, dict) else ""
+            if not platform or platform in official_reference_evidence:
+                continue
+            evidence, items = build_reference_items(platform, data_dir=data_dir)
+            official_reference_evidence[platform] = evidence
+            official_reference_items.extend(items)
+        if official_reference_items:
+            report.setdefault("items", []).extend(official_reference_items)
+        report["official_reference_signals"] = official_reference_evidence
+        report.setdefault("sources", []).extend({"source": f"{platform}:official_reference", "status": "ok" if evidence.get("status") == "ready" else "insufficient", "count": len(evidence.get("signals") or []), "collected_at": evidence.get("captured_at") or collected_at, "official_url": evidence.get("official_url") or "", "evidence_sha256": evidence.get("evidence_sha256") or "", "reference_only": True} for platform, evidence in official_reference_evidence.items())
         snapshot_path = trend_cache_dir() / f"trend_snapshot_{datetime.now().date().isoformat()}.json"
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         snapshot_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
