@@ -47,6 +47,11 @@ def _plain(text):
     return text.strip()
 
 
+def _is_non_content_endpoint(url):
+    path = str(url or "").casefold()
+    return any(marker in path for marker in ("/creator/content", "/creator/", "/dashboard", "/admin/", "/login"))
+
+
 def _fetch_url(url, timeout=15):
     request = urllib.request.Request(url, headers={"User-Agent": "HermesContentPlatform/3.0"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -57,6 +62,8 @@ def collect_reference_posts(brief, limit=3):
     brief = brief or {}
     posts = []
     for row in brief.get("reference_posts", []):
+        if isinstance(row, dict) and _is_non_content_endpoint(row.get("url") or row.get("source")):
+            continue
         if isinstance(row, dict) and (row.get("title") or row.get("body")):
             posts.append(
                 {
@@ -113,6 +120,8 @@ def collect_reference_posts(brief, limit=3):
             except Exception:
                 pass
     for url in brief.get("sources", [])[:limit]:
+        if _is_non_content_endpoint(url):
+            continue
         try:
             html = _fetch_url(url)
         except Exception:
