@@ -257,6 +257,11 @@ class Pipeline:
                     require_output=True,
                 )
                 draft.setdefault("draft_meta", {})["capability_execution"] = capability_execution
+                for context_key in ("content_profile", "capability_plan", "tool_selection", "compiled_skill_rules"):
+                    if brief.get(context_key) is not None:
+                        draft["draft_meta"][context_key] = brief[context_key]
+                tool_selection = brief.get("tool_selection") if isinstance(brief.get("tool_selection"), dict) else {}
+                draft["draft_meta"]["tool_selection_plan"] = tool_selection.get("tool_selection_plan") or brief.get("tool_selection_plan") or {}
                 workflow_invocations = {
                     "load_platform_workflow_context": {"status": "ok", "evidence": "workflow_step_succeeded"},
                     "load_content_strategy": {"status": "ok", "evidence": "workflow_step_succeeded"},
