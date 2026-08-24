@@ -11,6 +11,7 @@ from .resource import ResourceGuard
 from .tool_adapters import ScriptVideoProvider
 from .tool_registry import ToolRegistry
 from .paths import agent_scripts_dir
+from .cover_quality import normalize_cover_resolution
 
 
 class MediaBridge:
@@ -275,6 +276,10 @@ class MediaBridge:
             provider.run(item["prompt"], output, extra_args)
             if not output.is_file():
                 raise RuntimeError("image provider produced no output file")
+            if item["role"] == "cover":
+                cover_gate = normalize_cover_resolution(output)
+                if not cover_gate.get("passed"):
+                    raise RuntimeError("cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
             checksum = hashlib.sha256(output.read_bytes()).hexdigest()
             images.append(
                 {

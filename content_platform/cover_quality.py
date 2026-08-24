@@ -54,3 +54,21 @@ def validate_cover(cover: str | Path, evidence: dict[str, Any] | str | Path | No
         "layout_key": evidence.get("layout_key"),
         "failures": failures,
     }
+
+
+def normalize_cover_resolution(cover: str | Path, minimum: int = 1200) -> dict[str, Any]:
+    path = Path(cover)
+    try:
+        with Image.open(path) as image:
+            width, height = image.size
+            if min(width, height) >= minimum:
+                return {"passed": True, "dimensions": [width, height], "resized": False}
+            scale = minimum / min(width, height)
+            size = (max(minimum, round(width * scale)), max(minimum, round(height * scale)))
+            resized = image.convert("RGB").resize(size, Image.Resampling.LANCZOS)
+            temp = path.with_suffix(path.suffix + ".normalized")
+            resized.save(temp, format="PNG" if path.suffix.casefold() == ".png" else None)
+        temp.replace(path)
+        return {"passed": True, "dimensions": list(size), "resized": True}
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        return {"passed": False, "dimensions": [], "resized": False, "error": str(exc)[:200]}
