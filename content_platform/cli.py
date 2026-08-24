@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,11 +88,31 @@ def _load_collector_config(path: str | Path | None = None) -> tuple[dict, str]:
     return {}, ""
 
 
+def _rewrite_runtime_paths(value, code_root, data_root, secrets_root):
+    if isinstance(value, dict):
+        return {key: _rewrite_runtime_paths(item, code_root, data_root, secrets_root) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_rewrite_runtime_paths(item, code_root, data_root, secrets_root) for item in value]
+    if not isinstance(value, str):
+        return value
+    match = re.match(r"^/root/\.ai-self-media-tools-releases/[^/]+/(data|secrets|scripts)(/.*)?$", value)
+    if not match:
+        return value
+    root, suffix = match.group(1), match.group(2) or ""
+    base = {"data": data_root, "secrets": secrets_root, "scripts": str(Path(code_root) / "scripts")} [root]
+    return str(Path(base + suffix))
+
+
 def load_config(path, db_path):
     config = {}
     if path and Path(path).is_file():
         config = json.loads(Path(path).read_text(encoding="utf-8"))
-    config.setdefault("data_dir", str(Path(db_path).parent))
+    db_parent = str(Path(db_path).parent)
+    data_root = os.environ.get("CONTENT_PLATFORM_DATA_DIR", "").strip() or str(config.get("data_dir") or db_parent)
+    secrets_root = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", "").strip() or str(Path(data_root).parent / "secrets")
+    code_root = os.environ.get("CONTENT_PLATFORM_HOME", "").strip() or str(project_home())
+    config = _rewrite_runtime_paths(config, code_root, data_root, secrets_root)
+    config["data_dir"] = data_root
     config.setdefault("generator", {"allow_fallback": True})
     config.setdefault("publishers", {"default": {"type": "file"}})
     return config

@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "version": "content_assets_v1",
+    "source_sha256": "de63885d07a6da79d77160b2b48a34b5fb71346e5c7075e8c5b74d7605572419"
+  },
+  "structures": [
+    "pain_reversal_tutorial",
+    "failure_case_postmortem",
+    "before_after_test",
+    "tool_demo",
+    "controversial_viewpoint",
+    "saveable_checklist",
+    "micro_story_case"
+  ]
+}

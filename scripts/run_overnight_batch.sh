@@ -8,9 +8,12 @@ export US_PROXY="${US_PROXY:-http://127.0.0.1:2080}"
 export CN_PROXY="${CN_PROXY:-socks5://127.0.0.1:1080}"
 
 root="${CONTENT_PLATFORM_HOME:?CONTENT_PLATFORM_HOME is required}"
+data_root="${CONTENT_PLATFORM_DATA_DIR:-$root/data}"
+secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$root/secrets}"
+config_path="${CONTENT_PLATFORM_CONFIG:-$root/config.json}"
 day="$(date +%F)"
-out="$root/data/overnight/$day"
-slots="$root/secrets/overnight-slots.json"
+out="$data_root/overnight/$day"
+slots="$secrets_root/overnight-slots.json"
 mkdir -p "$out"
 
 notify() {
@@ -25,7 +28,7 @@ handle_error() {
     printf '{"status":"failed","reason":"batch_failed_before_result","exit_code":%s}\n' "$status" > "$out/result.json"
   fi
   if [[ -f "$out/state.json" ]]; then
-    run_platform --config "$root/config.json" --db "$root/data/state.db" \
+    run_platform --config "$config_path" --db "$data_root/state.db" \
       overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/error-sync-state-result.json"
   fi
   notify "failed" "batch_failed_before_result_exit_${status}"
@@ -65,12 +68,12 @@ notify "progress" "provider_smoke_complete"
 
 # Run the checked-out module, not a stale globally installed console script.
 # The timer must execute exactly the Git revision that was audited and deployed.
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
-  performance-cycle --output-dir "$root/data/performance/daily" \
+run_platform --config "$config_path" --db "$data_root/state.db" \
+  performance-cycle --output-dir "$data_root/performance/daily" \
   --hermes-platform-scraper > "$out/performance-cycle-result.json"
 notify "progress" "performance_cycle_complete"
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
-  health-refresh --output "$root/data/delivery_health_state.json" > "$out/delivery-health-result.json"
+run_platform --config "$config_path" --db "$data_root/state.db" \
+  health-refresh --output "$data_root/delivery_health_state.json" > "$out/delivery-health-result.json"
 notify "progress" "delivery_health_refreshed"
 hot_work_args=(
   hot-works-collect
@@ -86,23 +89,23 @@ hot_work_args=(
   --query "douyin_pet=猫咪治愈"
   --output-dir "$out/hot-works"
 )
-for sample in "$root"/data/intel/hot_works_multiplatform_*/hot_works_raw_enriched_v2.json "$root"/data/intel/hot_works_multiplatform_*/*logged_samples.json; do
+for sample in "$data_root"/intel/hot_works_multiplatform_*/hot_works_raw_enriched_v2.json "$data_root"/intel/hot_works_multiplatform_*/*logged_samples.json; do
   if [[ -f "$sample" ]]; then
     hot_work_args+=(--sample-file "$sample")
   fi
 done
-if [[ -f "$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json" ]]; then
+if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json" ]]; then
   hot_work_args+=(--state-file "kuaishou=$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json")
 fi
-if [[ -f "$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json" ]]; then
+if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json" ]]; then
   hot_work_args+=(--state-file "douyin=$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json")
 fi
-if run_platform --config "$root/config.json" --db "$root/data/state.db" "${hot_work_args[@]}" > "$out/hot-works-result.json"; then
+if run_platform --config "$config_path" --db "$data_root/state.db" "${hot_work_args[@]}" > "$out/hot-works-result.json"; then
   notify "progress" "hot_work_strategy_refreshed"
 else
   notify "action_required" "hot_work_strategy_refresh_failed; continuing_with_previous_pack"
 fi
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
+run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-prepare --slots "$slots" --output "$out/prepared.json" --refresh > "$out/prepare-result.json"
 notify "progress" "overnight_prepare_complete"
 shadow_failures="$(python3 - "$out/prepared.json" <<'PY'
@@ -121,13 +124,13 @@ PY
 if (( shadow_failures > 0 )); then
   notify "action_required" "trend_evidence_shadow_failures_${shadow_failures}; enforcement_not_enabled"
 fi
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
+run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-plan --tasks "$out/prepared.json" --output "$out/plan.json" \
   --start-minute 0 --deadline-minute 290 --finalization-minutes 10 > "$out/plan-result.json"
 notify "progress" "overnight_plan_complete"
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
+run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-run --plan "$out/plan.json" --state "$out/state.json" --events "$out/events.jsonl" > "$out/result.json"
-run_platform --config "$root/config.json" --db "$root/data/state.db" \
+run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/sync-state-result.json"
 if ! run_platform overnight-acceptance --result "$out/result.json" --state "$out/state.json" --output "$out/acceptance_report.json" > "$out/acceptance-result.json"; then
   notify "failed" "overnight_acceptance_failed"

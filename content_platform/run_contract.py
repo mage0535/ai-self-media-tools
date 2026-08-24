@@ -29,7 +29,7 @@ STAGE_FIELDS = {
     "collect": {"platform", "source_report", "strategy_status"},
     "select": {"candidates", "reserved_topics", "lane_keywords", "editorial_fallback"},
     "blueprint": {"selected_topic", "platform_source_matrix", "account_context", "strategy"},
-    "generate": {"content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "same_lane_intelligence"},
+    "generate": {"content_blueprint", "content_profile", "capability_plan", "tool_selection", "compiled_skill_rules", "associated_hotspot", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "distilled_per_account", "hot_work_parameter_pack", "same_lane_intelligence"},
     "assets": {"scene_manifest", "asset_requirements", "claim_ledger", "cover_brief"},
     "render": {"scene_manifest", "voice_plan", "bgm_plan", "cover_brief"},
     "deliver": {"artifacts", "gate_results", "publish_info"},
@@ -134,6 +134,51 @@ def validate_run_contract(contract: dict[str, Any] | None, *, rulebook_path: str
     return {"passed": not failures, "failures": failures}
 
 
+_GENERATION_OPTIONAL_FIELDS = (
+    "compiled_skill_rules",
+    "tool_selection_plan",
+    "content_quality_reference_pack",
+    "runtime_capabilities",
+    "distilled_per_account",
+    "hot_work_parameter_pack",
+    "same_lane_intelligence",
+)
+
+
+def _compact_json_value(value: Any, *, max_items: int, max_string: int, depth: int = 0) -> Any:
+    """Bound verbose advisory context without dropping core generation fields."""
+    if isinstance(value, str):
+        return value[:max_string]
+    if isinstance(value, list):
+        return [
+            _compact_json_value(item, max_items=max_items, max_string=max_string, depth=depth + 1)
+            for item in value[:max_items]
+        ]
+    if isinstance(value, dict):
+        items = list(value.items())
+        if depth >= 5:
+            return {str(key): str(item)[:max_string] for key, item in items[:max_items]}
+        return {
+            str(key): _compact_json_value(item, max_items=max_items, max_string=max_string, depth=depth + 1)
+            for key, item in items[: max_items * 2]
+        }
+    return value
+
+
+def _compact_generation_payload(payload: dict[str, Any], limit: int) -> dict[str, Any]:
+    """Shrink only optional advisory fields when real strategy context is large."""
+    candidate = dict(payload)
+    for max_items, max_string in ((6, 240), (3, 160), (2, 100)):
+        for field in _GENERATION_OPTIONAL_FIELDS:
+            if field in candidate:
+                candidate[field] = _compact_json_value(
+                    candidate[field], max_items=max_items, max_string=max_string
+                )
+        if len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= limit:
+            return candidate
+    return candidate
+
+
 def bound_stage_payload(
     contract: dict[str, Any],
     stage: str,
@@ -152,6 +197,9 @@ def bound_stage_payload(
         raise RunContractError("unknown stage fields: " + ",".join(unknown))
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     limit = int((contract.get("bounds") or {}).get("stage_payload_bytes") or BOUNDS["stage_payload_bytes"])
+    if stage == "generate" and len(encoded) > limit:
+        payload = _compact_generation_payload(payload, limit)
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if len(encoded) > limit:
         raise RunContractError(f"payload exceeds {limit} bytes")
     return json.loads(encoded.decode("utf-8"))

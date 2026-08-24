@@ -1,0 +1,202 @@
+{
+  "version": "1.0",
+  "updated": "2026-08-23",
+  "capabilities": [
+    {
+      "id": "cinema_dna_composition",
+      "source": "dacnay816y62-hub/cinema-dna-21x9x3",
+      "capability_kind": "methodology",
+      "applies_to": [
+        "cover",
+        "poster",
+        "image_generation",
+        "short_video",
+        "long_video"
+      ],
+      "required_inputs": [
+        "script_text",
+        "scene_purpose"
+      ],
+      "adapter": null,
+      "output_contract": "composition_rules_injected_into_prompt",
+      "gate_id": null,
+      "fallback": "default_composition_rules",
+      "license": "unverified",
+      "trigger_keywords": [
+        "电影感",
+        "构图",
+        "封面",
+        "海报",
+        "视觉质量",
+        "cinematic"
+      ]
+    },
+    {
+      "id": "life_force_portrait_upgrade",
+      "source": "dacnay816y62-hub/fantasy-life-force-portrait-photography",
+      "capability_kind": "prompt_compiler",
+      "applies_to": [
+        "image_generation",
+        "portrait"
+      ],
+      "required_inputs": [
+        "source_image_or_description"
+      ],
+      "adapter": null,
+      "output_contract": "enhanced_portrait_prompt",
+      "gate_id": null,
+      "fallback": "standard_portrait_prompt",
+      "license": "unverified",
+      "trigger_keywords": [
+        "人像",
+        "照片升级",
+        "氛围感",
+        "portrait"
+      ]
+    },
+    {
+      "id": "regional_culture_poster_gen",
+      "source": "dacnay816y62-hub/regional-culture-poster",
+      "capability_kind": "prompt_compiler",
+      "applies_to": [
+        "poster",
+        "cover",
+        "knowledge_card"
+      ],
+      "required_inputs": [
+        "region_name",
+        "cultural_elements"
+      ],
+      "adapter": null,
+      "output_contract": "culture_poster_prompt",
+      "gate_id": null,
+      "fallback": "generic_poster_prompt",
+      "license": "unverified",
+      "trigger_keywords": [
+        "地域文化",
+        "城市海报",
+        "文化视觉",
+        "大字海报"
+      ]
+    },
+    {
+      "id": "photography_style_simulation",
+      "source": "dacnay816y62-hub/fantasy-photography-simulation-github",
+      "capability_kind": "prompt_compiler",
+      "applies_to": [
+        "image_generation",
+        "carousel"
+      ],
+      "required_inputs": [
+        "camera_type",
+        "location_or_topic"
+      ],
+      "adapter": null,
+      "output_contract": "photo_collage_prompt_set",
+      "gate_id": null,
+      "fallback": "standard_photo_prompt",
+      "license": "unverified",
+      "trigger_keywords": [
+        "摄影模拟",
+        "徕卡",
+        "哈苏",
+        "理光",
+        "街拍",
+        "城市漫游"
+      ]
+    },
+    {
+      "id": "emotion_hooks_expansion",
+      "source": "douyin_notes_batch2",
+      "capability_kind": "methodology",
+      "applies_to": [
+        "article",
+        "short_video",
+        "carousel"
+      ],
+      "required_inputs": [
+        "content_topic",
+        "target_audience"
+      ],
+      "adapter": null,
+      "output_contract": "selected_hook_with_rationale",
+      "gate_id": null,
+      "fallback": "existing_content_hooks",
+      "license": "public_knowledge",
+      "trigger_keywords": [
+        "钩子",
+        "开头",
+        "情绪",
+        "爆款",
+        "框架"
+      ]
+    },
+    {
+      "id": "copywriting_structure_matcher",
+      "source": "douyin_notes_batch2",
+      "capability_kind": "analyzer",
+      "applies_to": [
+        "short_video",
+        "article"
+      ],
+      "required_inputs": [
+        "script_text"
+      ],
+      "stage": "generation",
+      "adapter": "python:content_platform.adapters.structure:execute",
+      "output_contract": "structure_match_v1",
+      "gate_id": "video_script_gate",
+      "fallback": "no_structure_check",
+      "license": "public_knowledge",
+      "trigger_keywords": [
+        "文案结构",
+        "爆款结构",
+        "脚本结构"
+      ]
+    },
+    {
+      "id": "ai_script_six_step",
+      "source": "douyin_notes_batch2",
+      "capability_kind": "methodology",
+      "applies_to": [
+        "short_video",
+        "long_video"
+      ],
+      "required_inputs": [
+        "genre_preference",
+        "target_platform"
+      ],
+      "adapter": null,
+      "output_contract": "complete_script_draft",
+      "gate_id": null,
+      "fallback": "manual_script_writing",
+      "license": "public_knowledge",
+      "trigger_keywords": [
+        "剧本",
+        "短剧",
+        "漫剧",
+        "AI创作剧本"
+      ]
+    },
+    {
+      "id": "bgm_fingerprint_gate",
+      "source": "internal",
+      "capability_kind": "quality_gate",
+      "stage": "gate",
+      "applies_to": [
+        "short_video",
+        "long_video"
+      ],
+      "required_inputs": [
+        "bgm_file_path",
+        "platform"
+      ],
+      "adapter": "scripts/gen_bgm_history_check.py",
+      "output_contract": "bgm_history_check_v1",
+      "gate_id": "bgm_history_check",
+      "fallback": null,
+      "license": "internal",
+      "trigger_keywords": []
+    }
+  ]
+}

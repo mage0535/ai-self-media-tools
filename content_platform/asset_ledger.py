@@ -118,6 +118,14 @@ def validate_asset_set(
 ) -> dict[str, Any]:
     failures: list[str] = []
     normalized: list[dict[str, Any]] = []
+    if not records:
+        return {
+            "passed": False,
+            "platform": str(platform),
+            "work_id": str(work_id),
+            "assets": [],
+            "failures": ["assets_missing"],
+        }
     for index, record in enumerate(records, 1):
         path = Path(str(record.get("path") or "")).expanduser().resolve()
         prefix = str(record.get("scene_id") or f"asset_{index}")
