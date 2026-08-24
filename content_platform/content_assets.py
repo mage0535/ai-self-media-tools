@@ -62,6 +62,13 @@ def select_content_asset_ids(profile: dict[str, Any], assets: dict[str, Any]) ->
     content_format = str((profile or {}).get("content_format") or "article")
     structures = list((assets.get("structures") or {}).get("structures") or [])
     formulas = list((assets.get("formulas") or {}).get("formulas") or [])
+    seed = hashlib.sha256(f"{profile.get('platform','')}:{profile.get('topic','')}:{content_format}".encode()).hexdigest()
+    def choose(rows, preference, offset=0):
+        if not rows:
+            return ""
+        if preference in rows:
+            return preference
+        return rows[(int(seed[offset:offset + 8], 16) + offset) % len(rows)]
     structure_preference = {
         "carousel": "saveable_checklist",
         "short_video": "before_after_test",
@@ -78,11 +85,14 @@ def select_content_asset_ids(profile: dict[str, Any], assets: dict[str, Any]) ->
     hooks = assets.get("hooks") or {}
     for key in ("title", "opening", "ending"):
         rows = hooks.get(key) if isinstance(hooks.get(key), list) else []
-        if rows and isinstance(rows[0], dict) and rows[0].get("id"):
-            hook_ids.append(str(rows[0]["id"]))
+        if rows:
+            index = int(seed[16 + len(hook_ids) * 8:24 + len(hook_ids) * 8], 16) % len(rows)
+            selected = rows[index]
+            if isinstance(selected, dict) and selected.get("id"):
+                hook_ids.append(str(selected["id"]))
     return {
-        "structure_id": structure_preference if structure_preference in structures else (structures[0] if structures else ""),
-        "formula_id": formula_preference if formula_preference in formulas else (formulas[0] if formulas else ""),
+        "structure_id": choose(structures, structure_preference, 0),
+        "formula_id": choose(formulas, formula_preference, 8),
         "hook_ids": hook_ids,
         "selection_reason": f"format-aware selection for {content_format}",
     }
