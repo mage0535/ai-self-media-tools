@@ -577,7 +577,10 @@ class Pipeline:
         if job["state"] not in {"review_required", "approved", "partial", "published"}:
             raise PermissionError(f"job must be reviewable before draft staging, got: {job['state']}")
         for platform in job["platforms"]:
-            self.store.enqueue_delivery(job_id, platform, "stage", {"state": job["state"]})
+            # Explicit staging is a recovery request. Requeue stale completed
+            # records, while process_delivery_queue still enforces idempotency
+            # against an existing published/drafted receipt.
+            self.store.enqueue_delivery(job_id, platform, "stage", {"state": job["state"], "retry": True})
         self.process_delivery_queue(owner=owner, already_locked=already_locked, limit=1)
         return self._hydrate(self.store.get_job(job_id))
 
