@@ -394,7 +394,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert set(task["brief"]["bounded_model_input"]) <= {
         "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "same_lane_intelligence", "hot_work_parameter_pack"
     }
-    assert task["brief"]["bounded_model_input"]["same_lane_intelligence", "hot_work_parameter_pack"]["topic_patterns"] == ["tool_workflow_tutorial"]
+    assert task["brief"]["bounded_model_input"]["same_lane_intelligence"]["topic_patterns"] == ["tool_workflow_tutorial"]
     assert task["brief"]["content_blueprint_gate"]["passed"] is True
     assert task["brief"]["content_quality_reference_gate"]["passed"] is True
     assert task["brief"]["bounded_model_input"]["content_quality_reference_pack"]["loaded"] is True
