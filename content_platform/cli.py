@@ -820,12 +820,40 @@ def execute(args):
                 and candidate_matches_platform_language(platform, candidate)
             )
 
+        def requery_for_platform(platform, existing_items, slot, round_number):
+            query_platform = "douyin" if platform in {"douyin_ai", "douyin_pet"} else platform
+            keywords = topic_keywords_for_slot(platform, slot, profile)
+            query = " ".join(str(item) for item in keywords[:8] if str(item).strip())
+            trend_cfg = dict(config.get("trends", {}) or {})
+            trend_cfg.update({"limit": 30, "timeout": min(int(trend_cfg.get("timeout", 15)), 15), "query": query})
+            started = datetime.now()
+            try:
+                rows = DirectTrendSource(query_platform, trend_cfg).collect()
+                status = "ok" if rows else "empty"
+                error = ""
+            except Exception as exc:
+                rows, status, error = [], "failed", str(exc)[:240]
+            report.setdefault("sources", []).append({
+                "source": f"{platform}:recapture",
+                "platform": platform,
+                "status": status,
+                "count": len(rows),
+                "round": round_number,
+                "query": query,
+                "error": error,
+                "collected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000),
+            })
+            return rows
+
         prepared = build_due_tasks(
             slots,
             items=report.get("items", []),
             source_report=report.get("sources", []),
             rank_for_platform=rank_for_platform,
             candidate_filter=candidate_filter,
+            requery_for_platform=requery_for_platform,
+            max_research_rounds=2,
             growth_strategy_status=strategy_status,
             weekday=weekday,
             strict_trend_evidence=(
