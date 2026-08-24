@@ -758,6 +758,7 @@ def execute(args):
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         snapshot_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         profile = resolve_profile(config.get("profiles", {}), args.profile)
+        profile["topic_scoring_mode"] = str((config.get("feature_flags") or {}).get("topic_scoring_mode") or "legacy").casefold()
         weekday = datetime.now().weekday() if args.weekday is None else args.weekday
         # Pet transport requires its own verified source.  A generic AI trend
         # feed must never be repurposed into a pet-account assignment.
