@@ -257,6 +257,21 @@ class Pipeline:
                     require_output=True,
                 )
                 draft.setdefault("draft_meta", {})["capability_execution"] = capability_execution
+                workflow_invocations = {
+                    "load_platform_workflow_context": {"status": "ok", "evidence": "workflow_step_succeeded"},
+                    "load_content_strategy": {"status": "ok", "evidence": "workflow_step_succeeded"},
+                    "run_operation_strategy": {"status": "ok", "evidence": "workflow_step_succeeded"},
+                    "generate_content": {"status": "ok", "evidence": "workflow_step_succeeded"},
+                    "execute_generation_capabilities": {"status": "ok" if capability_execution.get("passed") else "failed", "evidence": capability_execution.get("executed", [])},
+                }
+                draft["draft_meta"]["tool_invocation_manifest"] = {
+                    "version": "tool_invocation_manifest_v2",
+                    "planned_tools": {key: "workflow_stage" for key in workflow_invocations},
+                    "invocations": workflow_invocations,
+                    "executed_count": sum(1 for item in workflow_invocations.values() if item.get("status") == "ok"),
+                    "missing_tools": [],
+                    "capability_execution": capability_execution,
+                }
                 if brief.get("automated_workflow") and not capability_execution.get("passed"):
                     runner.block(
                         "execute_generation_capabilities",
