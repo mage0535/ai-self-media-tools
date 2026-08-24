@@ -79,3 +79,11 @@ def audit_topic(topic, candidates, config=None):
         "canonical_title": best.get("title") or best.get("topic", ""),
         "matches": top_matches,
     }
+
+
+def validate_generated_text(text):
+    value = str(text or "")
+    head = value[:4000].casefold()
+    code_markers = ("<script", "</script", "function ()", "function()", "var options", "bdms:", "verifycenter:", "growth_api/v1", "interact_api/v1")
+    hits = [marker for marker in code_markers if marker in head]
+    return {"passed": not hits, "reason": "source_page_code_contamination" if hits else "", "markers": hits}
