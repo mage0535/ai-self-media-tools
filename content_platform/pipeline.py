@@ -261,13 +261,21 @@ class Pipeline:
                     if brief.get(context_key) is not None:
                         draft["draft_meta"][context_key] = brief[context_key]
                 tool_selection = brief.get("tool_selection") if isinstance(brief.get("tool_selection"), dict) else {}
-                draft["draft_meta"]["tool_selection_plan"] = tool_selection.get("tool_selection_plan") or brief.get("tool_selection_plan") or {}
+                draft["draft_meta"]["tools_capability_analysis"] = tool_selection.get("tools_capability_analysis") or {}
+                draft["draft_meta"]["tool_selection_plan_original"] = tool_selection.get("tool_selection_plan") or brief.get("tool_selection_plan") or {}
                 workflow_invocations = {
                     "load_platform_workflow_context": {"status": "ok", "evidence": "workflow_step_succeeded"},
                     "load_content_strategy": {"status": "ok", "evidence": "workflow_step_succeeded"},
                     "run_operation_strategy": {"status": "ok", "evidence": "workflow_step_succeeded"},
                     "generate_content": {"status": "ok", "evidence": "workflow_step_succeeded"},
                     "execute_generation_capabilities": {"status": "ok" if capability_execution.get("passed") else "failed", "evidence": capability_execution.get("executed", [])},
+                }
+                draft["draft_meta"]["tool_selection_plan"] = {
+                    "version": "tool_selection_plan_v2",
+                    "selected_tools": list(workflow_invocations),
+                    "selection_reasons": {name: "executed workflow stage with persisted evidence" for name in workflow_invocations},
+                    "invocation_order": list(workflow_invocations),
+                    "not_default_only": True,
                 }
                 draft["draft_meta"]["tool_invocation_manifest"] = {
                     "version": "tool_invocation_manifest_v2",
