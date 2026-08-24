@@ -50,7 +50,8 @@ def score_topic_candidate(candidate: dict[str, Any], profile: dict[str, Any] | N
         reasons.append("hotspot_expired")
     official_signal=1.0 if official and not reasons else 0.0
     keyword_hits=sum(1 for word in keywords if word in text)
-    lane_fit=max(_float(candidate.get("platform_fit_score")), min(1.0, keyword_hits / max(1, min(3, len(keywords)))))
+    hotspot_fit = max(_float(hotspot.get("lane_fit_score")), _float(hotspot.get("semantic_fit_score")))
+    lane_fit=max(_float(candidate.get("platform_fit_score")), hotspot_fit, min(1.0, keyword_hits / max(1, min(3, len(keywords)))))
     heat=_float(candidate.get("heat_score"), min(1.0, math.log1p(max(0.0,float(candidate.get("points") or 0))) / 12.0))
     utility=0.85 if any(x in text for x in ("教程","步骤","方法","实测","清单","workflow","how to")) else 0.45
     proof=1.0 if any(candidate.get(k) for k in ("evidence_refs","source_url","demo_asset","screenshot_path","claim_ledger")) else 0.25

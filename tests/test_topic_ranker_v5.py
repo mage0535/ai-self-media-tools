@@ -32,3 +32,10 @@ def test_rank_trends_v2_uses_platform_native_scoring():
     rows = [{"title": "AI工具教程", "source": "kuaishou:official", "platform": "kuaishou", "points": 10, "official_reference_only": True, "associated_hotspot": {"platform": "kuaishou", "hotspot_id": "ks", "title": "AI工具", "native_verified": True, "heat_score": .9, "lane_fit_score": .9, "semantic_fit_score": .9}}]
     result = rank_trends(rows, {"platform": "kuaishou", "keywords": ["ai", "工具"], "topic_scoring_mode": "v2"})
     assert result[0]["score_breakdown"]["official_signal"] == 1.0
+
+
+def test_native_chinese_keyword_uses_hotspot_lane_fit_without_english_keyword_match():
+    row = {"title": "人工智能", "source": "kuaishou:official", "platform": "kuaishou", "official_reference_only": True, "associated_hotspot": {"platform": "kuaishou", "hotspot_id": "ks-ai-cn", "title": "人工智能", "native_verified": True, "heat_score": .9, "lane_fit_score": .9, "semantic_fit_score": .9}}
+    result = score_topic_candidate(row, {"platform": "kuaishou", "keywords": ["AI", "workflow"]})
+    assert result["eligible"] is True
+    assert result["score_breakdown"]["lane_fit"] >= .8
