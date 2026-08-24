@@ -377,7 +377,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
         growth_strategy_status={
             "douyin_ai": {
                 "status": "ok",
-                "same_lane_intelligence": {
+                "same_lane_intelligence", "hot_work_parameter_pack": {
                     "version": "same_lane_playbook_compact_v1",
                     "topic_patterns": ["tool_workflow_tutorial"],
                 },
@@ -392,9 +392,9 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["run_contract"]["publish_boundary"] == "manual_handoff_only"
     assert task["brief"]["bounded_model_input"]["content_blueprint"]["topic"] == "AI workflow"
     assert set(task["brief"]["bounded_model_input"]) <= {
-        "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "same_lane_intelligence"
+        "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "same_lane_intelligence", "hot_work_parameter_pack"
     }
-    assert task["brief"]["bounded_model_input"]["same_lane_intelligence"]["topic_patterns"] == ["tool_workflow_tutorial"]
+    assert task["brief"]["bounded_model_input"]["same_lane_intelligence", "hot_work_parameter_pack"]["topic_patterns"] == ["tool_workflow_tutorial"]
     assert task["brief"]["content_blueprint_gate"]["passed"] is True
     assert task["brief"]["content_quality_reference_gate"]["passed"] is True
     assert task["brief"]["bounded_model_input"]["content_quality_reference_pack"]["loaded"] is True
