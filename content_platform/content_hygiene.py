@@ -85,5 +85,13 @@ def validate_generated_text(text):
     value = str(text or "")
     head = value[:4000].casefold()
     code_markers = ("<script", "</script", "function ()", "function()", "var options", "bdms:", "verifycenter:", "growth_api/v1", "interact_api/v1")
-    hits = [marker for marker in code_markers if marker in head]
-    return {"passed": not hits, "reason": "source_page_code_contamination" if hits else "", "markers": hits}
+    chrome_markers = (
+        "首页 沸点 课程 app 搜索历史 清空 创作者中心 写文章",
+        "首页 沸点 课程 app 搜索历史 清空 创作者中心",
+        "写文章 发沸点 写笔记 写代码 草稿",
+    )
+    code_hits = [marker for marker in code_markers if marker in head]
+    chrome_hits = [marker for marker in chrome_markers if marker in head]
+    hits = code_hits + chrome_hits
+    reason = "source_page_code_contamination" if code_hits else ("source_page_navigation_contamination" if chrome_hits else "")
+    return {"passed": not hits, "reason": reason, "markers": hits}
