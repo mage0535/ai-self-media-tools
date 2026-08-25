@@ -336,6 +336,18 @@ shared_trend_only: false
         self.assertIn("runtime_release_audit.py", text)
         self.assertIn('CONTENT_PLATFORM_CODE_ROOT="$release_root"', text)
         self.assertIn('--release-root "$release_root"', text)
+        self.assertNotIn('"$root/scripts/', text)
+        self.assertIn('PYTHONPATH="$release_root', text)
+        self.assertIn('smoke_provider.sh" "$release_root/config.json', text)
+
+    def test_release_deploy_and_overnight_share_runtime_release_lock(self):
+        overnight = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+        deploy = Path("scripts/deploy_release.py").read_text(encoding="utf-8")
+
+        self.assertIn("runtime-release.lock", overnight)
+        self.assertIn("flock -s", overnight)
+        self.assertIn("runtime-release.lock", deploy)
+        self.assertIn("LOCK_EX", deploy)
 
     def test_background_systemd_services_use_notification_wrappers(self):
         growth = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
