@@ -1,5 +1,6 @@
 import time
 import threading
+import copy
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -30,6 +31,109 @@ WORKFLOW_STEPS = [
     "generate_platform_report",
     "send_completion_report",
 ]
+
+# Business-facing checkpoints are deliberately smaller than the legacy step
+# list.  They are the durable recovery contract used by overnight workers and
+# read-only reporters.
+WORKFLOW_STAGES = (
+    "planned",
+    "collecting",
+    "selecting",
+    "generating",
+    "rendering",
+    "gating",
+    "delivering",
+    "postchecking",
+    "completed",
+)
+WORKFLOW_EXCEPTIONAL_STATES = {"retry_pending", "blocked", "failed"}
+
+
+class WorkflowStateMachine:
+    """Small durable state machine for one serial batch's platform work."""
+
+    def __init__(self, state=None):
+        source = copy.deepcopy(state) if isinstance(state, dict) else {}
+        self._state = source if "platforms" in source else {"platforms": {}}
+        self._state.setdefault("platforms", {})
+        self._state.setdefault("active_platform", "")
+
+    @property
+    def active_platform(self):
+        return str(self._state.get("active_platform") or "")
+
+    def begin_platform(self, platform):
+        platform = str(platform or "").strip()
+        if not platform:
+            raise ValueError("platform is required")
+        if self.active_platform and self.active_platform != platform:
+            raise RuntimeError("one active platform is allowed")
+        current = self._state["platforms"].setdefault(
+            platform,
+            {"state": "planned", "completed_stages": ["planned"], "stage_outputs": {}, "repair_rounds": 0},
+        )
+        current.setdefault("completed_stages", ["planned"])
+        if "planned" not in current["completed_stages"]:
+            current["completed_stages"].insert(0, "planned")
+        current.setdefault("stage_outputs", {})
+        current.setdefault("repair_rounds", 0)
+        self._state["active_platform"] = platform
+        return current
+
+    def platform_state(self, platform):
+        return self._state["platforms"].get(str(platform), {})
+
+    def complete_stage(self, stage, output=None):
+        stage = str(stage or "").strip()
+        if stage not in WORKFLOW_STAGES[1:]:
+            raise ValueError(f"invalid workflow stage: {stage}")
+        platform = self.active_platform
+        if not platform:
+            raise RuntimeError("no active platform")
+        current = self._state["platforms"][platform]
+        completed = current.setdefault("completed_stages", ["planned"])
+        if stage in completed:
+            return current.get("stage_outputs", {}).get(stage)
+        expected = WORKFLOW_STAGES[len(completed)] if len(completed) < len(WORKFLOW_STAGES) else ""
+        if stage != expected:
+            raise RuntimeError(f"invalid workflow transition: {current.get('state')} -> {stage}")
+        completed.append(stage)
+        current["state"] = stage
+        if output is not None:
+            current.setdefault("stage_outputs", {})[stage] = copy.deepcopy(output)
+        if stage == "completed":
+            self._state["active_platform"] = ""
+        return output
+
+    def run_checkpointed(self, stage, action):
+        """Run an unfinished stage once and persist its compact result."""
+        platform = self.active_platform
+        if not platform:
+            raise RuntimeError("no active platform")
+        current = self._state["platforms"][platform]
+        if stage in current.get("completed_stages", []):
+            return current.get("stage_outputs", {}).get(stage)
+        result = action()
+        self.complete_stage(stage, result)
+        return result
+
+    def mark_exception(self, state, reason="", *, repair_round=None):
+        state = str(state or "")
+        if state not in WORKFLOW_EXCEPTIONAL_STATES:
+            raise ValueError(f"invalid exceptional state: {state}")
+        platform = self.active_platform
+        if not platform:
+            raise RuntimeError("no active platform")
+        current = self._state["platforms"][platform]
+        current["state"] = state
+        if reason:
+            current["reason"] = str(reason)[:500]
+        if repair_round is not None:
+            current["repair_rounds"] = int(repair_round)
+        return current
+
+    def to_dict(self):
+        return copy.deepcopy(self._state)
 
 STEP_SUCCEEDED = "SUCCEEDED"
 STEP_RUNNING = "RUNNING"

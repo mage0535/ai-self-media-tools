@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from .risk import redact_secrets
 from .trends import normalize_topic
 from .trend_candidate import build_trend_candidate, validate_trend_candidate
+from .workflow_runtime import WORKFLOW_STAGES, WorkflowStateMachine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -831,6 +833,34 @@ def _is_transient_failure(exc: Exception) -> bool:
     return any(marker in message for marker in TRANSIENT_FAILURE_MARKERS)
 
 
+def _workflow_for_task(task: dict[str, Any], platform: str) -> WorkflowStateMachine:
+    workflow = task.get("workflow") if isinstance(task.get("workflow"), dict) else {}
+    machine = WorkflowStateMachine({"active_platform": platform, "platforms": {platform: workflow}})
+    machine.begin_platform(platform)
+    task["workflow"] = machine.platform_state(platform)
+    return machine
+
+
+def _workflow_stage_done(task: dict[str, Any], stage: str) -> bool:
+    workflow = task.get("workflow") if isinstance(task.get("workflow"), dict) else {}
+    return stage in (workflow.get("completed_stages") or [])
+
+
+def _checkpoint_stage(task: dict[str, Any], platform: str, stage: str, journal: "BatchEventJournal", detail=None) -> None:
+    machine = _workflow_for_task(task, platform)
+    if stage in machine.platform_state(platform).get("completed_stages", []):
+        return
+    machine.complete_stage(stage, detail or {})
+    task["workflow"] = machine.platform_state(platform)
+    journal.append("platform_stage_completed", platform, {"stage": stage, **(detail or {})})
+
+
+def _mark_workflow_exception(task: dict[str, Any], platform: str, state: str, reason: str, repair_round=None) -> None:
+    machine = _workflow_for_task(task, platform)
+    machine.mark_exception(state, reason, repair_round=repair_round)
+    task["workflow"] = machine.platform_state(platform)
+
+
 def execute_batch(
     pipeline: Any,
     plan: dict[str, Any],
@@ -855,7 +885,16 @@ def execute_batch(
         return state
 
     state["status"] = "running"
+    state.setdefault(
+        "worker",
+        {
+            "pid": os.getpid(),
+            "owner": f"overnight-{os.getpid()}",
+            "lease_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(microsecond=0).isoformat(),
+        },
+    )
     _write_state(state_file, state)
+    stop_batch = False
     for task in state.get("tasks", []):
         platform = str(task.get("platform") or "")
         if not platform or task.get("state") in TERMINAL_TASK_STATES:
@@ -863,106 +902,119 @@ def execute_batch(
         if task.get("state") == "blocked":
             continue
 
-        journal.append("platform_started", platform, {"stage": task.get("stage"), "action": task.get("action", "handoff")})
+        journal.append("platform_started", platform, {"stage": "planned", "action": task.get("action", "handoff")})
         task["state"] = "running"
         _write_state(state_file, state)
-        try:
-            job = pipeline.create(
-                str(task.get("topic") or ""),
-                [platform],
-                dict(task.get("brief") or {}),
-                str(task.get("profile") or "default"),
-            )
-            task["job_id"] = str(job["id"])
-            journal.append(
-                "platform_job_created",
-                platform,
-                {"job_id": task["job_id"], "stage": task.get("stage"), "action": task.get("action", "handoff")},
-            )
-            result = pipeline.run(task["job_id"])
-            result_state = str(result.get("state") or "failed")
-            task["pipeline_state"] = result_state
-            artifact_kinds = sorted(
-                {
-                    str(artifact.get("kind") or "")
-                    for artifact in (result.get("artifacts") or [])
-                    if isinstance(artifact, dict) and str(artifact.get("kind") or "")
-                }
-            )
-            journal.append(
-                "platform_generation_complete",
-                platform,
-                {"job_id": task["job_id"], "pipeline_state": result_state, "artifact_kinds": artifact_kinds},
-            )
+        while True:
+            try:
+                _checkpoint_stage(task, platform, "collecting", journal, {
+                    "action": "读取已采集的平台证据",
+                    "candidate_count": task.get("candidate_count", 0),
+                })
+                _checkpoint_stage(task, platform, "selecting", journal, {
+                    "action": "确认平台选题",
+                    "selected_topic": task.get("topic", ""),
+                    "selection_reason": task.get("selection_reason") or task.get("reason", "计划内选题"),
+                    "candidate_count": task.get("candidate_count", 0),
+                })
+                if not task.get("job_id"):
+                    _workflow_for_task(task, platform)
+                    job = pipeline.create(
+                        str(task.get("topic") or ""),
+                        [platform],
+                        dict(task.get("brief") or {}),
+                        str(task.get("profile") or "default"),
+                    )
+                    task["job_id"] = str(job["id"])
+                    journal.append("platform_job_created", platform, {"job_id": task["job_id"], "stage": "generating", "action": task.get("action", "handoff")})
+                result = task.get("pipeline_result") if _workflow_stage_done(task, "generating") else pipeline.run(task["job_id"])
+                result = result if isinstance(result, dict) else {}
+                task["pipeline_result"] = result
+                result_state = str(result.get("state") or "failed")
+                task["pipeline_state"] = result_state
+                artifact_kinds = sorted({str(a.get("kind") or "") for a in (result.get("artifacts") or []) if isinstance(a, dict) and str(a.get("kind") or "")})
+                journal.append("platform_generation_complete", platform, {"job_id": task["job_id"], "stage": "generating", "pipeline_state": result_state, "artifact_kinds": artifact_kinds})
+                if result_state in {"blocked", "failed", "rejected"}:
+                    task["state"] = "blocked" if result_state == "blocked" else "failed"
+                    task["reason"] = str(result.get("last_error") or "pipeline did not produce a reviewable artifact")
+                    _mark_workflow_exception(task, platform, task["state"], task["reason"])
+                    journal.append("platform_failed" if task["state"] == "failed" else "platform_blocked", platform, {"job_id": task["job_id"], "stage": "generating", "reason": task["reason"]})
+                    stop_batch = True
+                    break
+                _checkpoint_stage(task, platform, "generating", journal, {"job_id": task["job_id"], "action": "生成内容", "tool_calls": ["pipeline.run"]})
+                _checkpoint_stage(task, platform, "rendering", journal, {"job_id": task["job_id"], "action": "确认 TTS、素材和渲染产物", "artifact_count": len(result.get("artifacts") or [])})
 
-            if require_acceptance and result_state not in {"blocked", "failed", "rejected"}:
-                from .workflow_acceptance import evaluate_job_acceptance
-
-                acceptance = evaluate_job_acceptance(store, task["job_id"], platform)
-                task["acceptance"] = acceptance
-                if not acceptance["passed"]:
-                    task["state"] = "blocked"
-                    task["reason"] = "workflow acceptance failed: " + ",".join(acceptance["failures"])
-                    journal.append("platform_blocked", platform, {"job_id": task["job_id"], "reason": task["reason"]})
-                    continue
-
-            if result_state in {"blocked", "failed", "rejected"}:
-                task["state"] = result_state
-                task["reason"] = str(result.get("last_error") or "pipeline did not produce a reviewable artifact")
-                journal.append("platform_blocked", platform, {"job_id": task["job_id"], "state": result_state, "reason": task["reason"]})
-            elif platform.casefold() in MANUAL_HANDOFF_PLATFORMS:
-                handoff_problem = _handoff_media_problem(platform, result)
-                if handoff_problem:
-                    task["state"] = "blocked"
-                    task["reason"] = handoff_problem
-                    journal.append("platform_blocked", platform, {"job_id": task["job_id"], "reason": handoff_problem})
-                else:
+                if require_acceptance:
+                    from .workflow_acceptance import evaluate_job_acceptance
+                    acceptance = evaluate_job_acceptance(store, task["job_id"], platform)
+                    task["acceptance"] = acceptance
+                    if not acceptance["passed"]:
+                        task["state"] = "blocked"
+                        task["reason"] = "workflow acceptance failed: " + ",".join(acceptance["failures"])
+                        _mark_workflow_exception(task, platform, "blocked", task["reason"])
+                        journal.append("platform_blocked", platform, {"job_id": task["job_id"], "stage": "gating", "reason": task["reason"], "gate": {"passed": False}})
+                        stop_batch = True
+                        break
+                _checkpoint_stage(task, platform, "gating", journal, {"job_id": task["job_id"], "action": "执行质量门禁", "gate": {"passed": True}})
+                if platform.casefold() in MANUAL_HANDOFF_PLATFORMS:
+                    handoff_problem = _handoff_media_problem(platform, result)
+                    if handoff_problem:
+                        task["state"] = "blocked"
+                        task["reason"] = handoff_problem
+                        _mark_workflow_exception(task, platform, "blocked", handoff_problem)
+                        journal.append("platform_blocked", platform, {"job_id": task["job_id"], "stage": "gating", "reason": handoff_problem, "gate": {"passed": False}})
+                        stop_batch = True
+                        break
+                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "生成可人工交接的交付包"})
                     task["state"] = "handoff_ready"
-                    journal.append("handoff_ready", platform, {"job_id": task["job_id"], "pipeline_state": result_state})
-            elif str(task.get("action") or "stage") == "stage":
-                journal.append("platform_staging_started", platform, {"job_id": task["job_id"]})
-                staged = pipeline.stage_drafts(task["job_id"])
-                task["pipeline_state"] = str(staged.get("state") or result_state)
-                # ``partial`` is Pipeline's aggregate delivery result.  In a
-                # single-platform overnight task it means a draft was staged,
-                # not that the task should be retried indefinitely.
-                delivered_state = "staged" if task["pipeline_state"] in {"partial", "drafted"} else task["pipeline_state"]
-                task["state"] = normalize_delivery_boundary(platform, delivered_state)
-                journal.append("platform_finished", platform, {"job_id": task["job_id"], "state": task["state"]})
-            else:
-                # Approval and live publication are separate, auditable actions.
-                task["state"] = "awaiting_review"
-                task["reason"] = "live publication requires an explicit approved workflow"
-                journal.append("platform_awaiting_review", platform, {"job_id": task["job_id"], "state": result_state})
-            if store is not None and task.get("state") in {"staged", "handoff_ready", "awaiting_review"}:
-                fingerprint = str(task.get("topic_fingerprint") or _topic_identity({"title": task.get("topic", "")})).strip()
-                if fingerprint:
-                    brief = dict(task.get("brief") or {})
-                    store.mark_topic_used(fingerprint, str(task.get("topic") or ""), str(brief.get("source") or ""), task["job_id"], platform=platform)
-                    journal.append("topic_reserved", platform, {"job_id": task["job_id"], "topic_fingerprint": fingerprint})
-        except Exception as exc:  # Keep unrelated channels recoverable.
-            task["reason"] = redact_secrets(str(exc))
-            if not _retry_pass and _is_transient_failure(exc):
-                task["state"] = "retry_pending"
-                task["retry_count"] = int(task.get("retry_count") or 0) + 1
-                journal.append("platform_retry_scheduled", platform, {"reason": task["reason"], "retry_count": task["retry_count"]})
-            else:
+                    journal.append("handoff_ready", platform, {"job_id": task["job_id"], "stage": "delivering", "pipeline_state": result_state, "delivery_receipt": task.get("job_id")})
+                elif str(task.get("action") or "stage") == "stage":
+                    delivering_done = _workflow_stage_done(task, "delivering")
+                    if not delivering_done:
+                        journal.append("platform_staging_started", platform, {"job_id": task["job_id"], "stage": "delivering"})
+                        task["staged_result"] = pipeline.stage_drafts(task["job_id"])
+                        _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "准备交付草稿"})
+                    staged = task.get("staged_result") if isinstance(task.get("staged_result"), dict) else {}
+                    task["pipeline_state"] = str(staged.get("state") or result_state)
+                    delivered_state = "staged" if task["pipeline_state"] in {"partial", "drafted"} else task["pipeline_state"]
+                    task["state"] = normalize_delivery_boundary(platform, delivered_state)
+                else:
+                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "等待人工审批，禁止直接发布"})
+                    task["state"] = "awaiting_review"
+                    task["reason"] = "live publication requires an explicit approved workflow"
+                _checkpoint_stage(task, platform, "postchecking", journal, {"job_id": task["job_id"], "delivery_receipt": task.get("job_id"), "action": "核对交付回执"})
+                _checkpoint_stage(task, platform, "completed", journal, {"job_id": task["job_id"], "delivery_receipt": task.get("job_id")})
+                journal.append("platform_finished", platform, {"job_id": task["job_id"], "stage": "completed", "state": task["state"], "delivery_receipt": task.get("job_id")})
+                if store is not None and task.get("state") in {"staged", "handoff_ready", "awaiting_review"}:
+                    fingerprint = str(task.get("topic_fingerprint") or _topic_identity({"title": task.get("topic", "")})).strip()
+                    if fingerprint:
+                        brief = dict(task.get("brief") or {})
+                        store.mark_topic_used(fingerprint, str(task.get("topic") or ""), str(brief.get("source") or ""), task["job_id"], platform=platform)
+                        journal.append("topic_reserved", platform, {"job_id": task["job_id"], "topic_fingerprint": fingerprint, "stage": "postchecking"})
+                break
+            except Exception as exc:
+                task["reason"] = redact_secrets(str(exc))
+                repair_rounds = int(task.get("repair_rounds") or 0)
+                if repair_rounds < 2:
+                    repair_rounds += 1
+                    task["repair_rounds"] = repair_rounds
+                    task["retry_count"] = int(task.get("retry_count") or 0) + 1
+                    task["state"] = "retry_pending"
+                    _mark_workflow_exception(task, platform, "retry_pending", task["reason"], repair_round=repair_rounds)
+                    journal.append("platform_retry_scheduled", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "retry_count": task["retry_count"]})
+                    journal.append("platform_repair_started", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "repair_round": repair_rounds, "fix": "复用同一平台 job 重试当前阶段"})
+                    _write_state(state_file, state)
+                    task["state"] = "running"
+                    continue
                 task["state"] = "failed"
-                journal.append("platform_failed", platform, {"reason": task["reason"]})
-        finally:
-            _write_state(state_file, state)
-
-    if not _retry_pass and any(task.get("state") == "retry_pending" for task in state.get("tasks", [])):
-        _write_state(state_file, state)
-        return execute_batch(
-            pipeline,
-            plan,
-            state_path=state_file,
-            journal=journal,
-            store=store,
-            require_acceptance=require_acceptance,
-            _retry_pass=True,
-        )
+                _mark_workflow_exception(task, platform, "failed", task["reason"], repair_round=repair_rounds)
+                journal.append("platform_failed", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "repair_round": repair_rounds, "root_cause": task["reason"]})
+                stop_batch = True
+                break
+            finally:
+                _write_state(state_file, state)
+        if stop_batch:
+            break
 
     tasks = state.get("tasks", [])
     failed = [task for task in tasks if task.get("state") == "failed"]
