@@ -7,14 +7,24 @@ from content_platform.generator import DraftGenerator, GenerationTimeoutError
 
 
 class FakeProcess:
-    def __init__(self, outcomes):
+    def __init__(self, outcomes, *, terminate_exits=True, kill_exits=True, events=None):
         self.outcomes = iter(outcomes)
         self.returncode = None
         self.stdout = ""
         self.stderr = ""
         self.terminated = False
+        self.killed = False
+        self.terminate_exits = terminate_exits
+        self.kill_exits = kill_exits
+        self.events = events if events is not None else []
 
     def poll(self):
+        if self.terminated and self.terminate_exits:
+            self.returncode = -15
+            return self.returncode
+        if self.killed and self.kill_exits:
+            self.returncode = -9
+            return self.returncode
         try:
             state = next(self.outcomes)
         except StopIteration:
@@ -25,10 +35,19 @@ class FakeProcess:
         return self.returncode
 
     def terminate(self):
+        self.events.append("terminate")
         self.terminated = True
 
     def kill(self):
+        self.events.append("kill")
+        self.killed = True
         self.terminated = True
+
+    def wait(self, timeout=None):
+        self.events.append(("wait", timeout))
+        if self.poll() is None:
+            raise __import__("subprocess").TimeoutExpired("fake", timeout)
+        return self.returncode
 
     def communicate(self):
         return self.stdout, self.stderr
@@ -266,3 +285,112 @@ def test_hard_timeout_stops_heartbeats_and_terminates_process(monkeypatch, tmp_p
     assert process.terminated
     assert checkpoints[-1]["status"] == "hard_timeout"
     assert len([row for row in checkpoints if row["status"] == "running_after_soft_deadline"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("process", "grace", "expected_events"),
+    [
+        (FakeProcess([None] * 20), 5, ["terminate", ("wait", 5)]),
+        (FakeProcess([None] * 20, terminate_exits=False), 5, ["terminate", ("wait", 5), "kill", ("wait", 5)]),
+        (FakeProcess([None] * 20), 7, ["terminate", ("wait", 7)]),
+    ],
+)
+def test_hard_timeout_confirms_exit_before_terminal_checkpoint(monkeypatch, tmp_path, process, grace, expected_events):
+    class FakeClock:
+        now = 0
+
+        def time(self):
+            return self.now
+
+        def sleep(self, seconds):
+            self.now += seconds
+
+    fake_clock = FakeClock()
+    checkpoints = []
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: process)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "clock": fake_clock.time, "sleep": lambda _: fake_clock.sleep(1),
+        "soft_deadline": 1, "heartbeat_interval": 2, "hard_deadline": 5,
+        **({"termination_grace": grace} if grace != 5 else {}),
+    })
+    generator._write_generation_checkpoint = lambda payload: checkpoints.append(payload)
+
+    with pytest.raises(GenerationTimeoutError):
+        generator._hermes_attempt(
+            "topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""},
+            retry=False, language_instruction="", factual_boundary="", body_requirement="", style_limit=100,
+        )
+
+    assert process.events == expected_events
+    assert checkpoints[-1]["status"] == "hard_timeout"
+
+
+def test_hard_timeout_kill_failure_is_not_retried_and_preserves_checkpoint(monkeypatch, tmp_path):
+    class KillFailureProcess(FakeProcess):
+        def kill(self):
+            self.events.append("kill")
+            raise OSError("kill failed")
+
+    process = KillFailureProcess([None] * 20, terminate_exits=False)
+    checkpoints = []
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: process)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(tmp_path / "generation_attempts.json"),
+        "clock": lambda: 0, "sleep": lambda _: None, "hard_deadline": 0,
+    })
+    generator._write_generation_checkpoint = lambda payload: checkpoints.append(payload)
+
+    with pytest.raises(RuntimeError, match="process termination failed"):
+        generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+
+    assert len([item for item in checkpoints if item["status"] == "process_termination_failed"]) == 1
+    attempts = json.loads((tmp_path / "generation_attempts.json").read_text(encoding="utf-8"))
+    assert attempts[-1]["error_class"] == "process_termination_failed"
+    assert len(attempts) == 1
+
+
+def test_hard_timeout_terminate_failure_is_not_retried(monkeypatch, tmp_path):
+    class TerminateFailureProcess(FakeProcess):
+        def terminate(self):
+            self.events.append("terminate")
+            raise OSError("terminate failed")
+
+    process = TerminateFailureProcess([None] * 20)
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: process)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(tmp_path / "generation_attempts.json"),
+        "clock": lambda: 0, "sleep": lambda _: None, "hard_deadline": 0,
+    })
+
+    with pytest.raises(RuntimeError, match="process termination failed"):
+        generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+
+    attempts = json.loads((tmp_path / "generation_attempts.json").read_text(encoding="utf-8"))
+    assert len(attempts) == 1
+    assert attempts[0]["error_class"] == "process_termination_failed"
+
+
+def test_old_process_exit_is_confirmed_before_second_attempt(monkeypatch, tmp_path):
+    events = []
+    old_process = FakeProcess([None] * 20, terminate_exits=False, events=events)
+    new_process = FakeProcess([(0, '{"title":"T","body":"' + 'body ' * 80 + '"}')], events=events)
+    processes = [old_process, new_process]
+
+    def popen(*args, **kwargs):
+        events.append("popen")
+        return processes.pop(0)
+
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", popen)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "clock": lambda: 0, "sleep": lambda _: None, "hard_deadline": 0,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    result = generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+
+    assert result["title"] == "T"
+    assert events.index(("wait", 5)) < events.index("popen", 1)
