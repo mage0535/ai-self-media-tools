@@ -406,7 +406,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert tool_plan["selection_reasons"]
 
 
-def test_due_task_builder_accepts_native_url_from_platform_search_transport():
+def test_due_task_builder_treats_platform_web_search_as_discovery_only():
     report = [
         {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
         for index in range(7)
@@ -427,11 +427,11 @@ def test_due_task_builder_accepts_native_url_from_platform_search_transport():
     )
 
     task = prepared["tasks"][0]
-    assert task["state"] == "ready_for_plan"
-    assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is True
+    assert task["state"] == "blocked"
+    assert task["reason"] == "no independently evidenced same-platform topic candidate"
 
 
-def test_platform_source_preference_promotes_native_url_search_candidate():
+def test_platform_source_preference_does_not_promote_web_search_discovery():
     from content_platform.overnight_batch import prefer_platform_source_candidates
 
     candidates = [
@@ -443,7 +443,7 @@ def test_platform_source_preference_promotes_native_url_search_candidate():
         candidates,
         [{"source": "kuaishou", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}],
     )
-    assert ordered[0]["title"] == "Native"
+    assert ordered[0]["title"] == "External"
 
 
 def test_due_task_builder_uses_editorial_fallback_after_invalid_native_candidate():
