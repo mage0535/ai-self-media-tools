@@ -172,6 +172,27 @@ def test_only_strong_metric_backed_same_lane_work_enters_selection(tmp_path):
     assert items[0]["collector"] == "youtube_api"
 
 
+def test_same_lane_selection_accepts_compiled_strong_evidence_and_suffix_metrics(tmp_path):
+    from content_platform.overnight_batch import build_same_lane_selection_items
+
+    pack = {"platforms": {"youtube": {"ready": True, "strong_sample_count": 1, "top_samples": [{
+        "title": "AI workflow automation tutorial",
+        "engagement": "24.9K",
+        "evidence_strength": "strong_logged_search_result",
+        "collector": "youtube_logged_search",
+        "source": "youtube_logged_search",
+        "url": "https://www.youtube.com/watch?v=verified",
+        "captured_at": NOW.isoformat(),
+    }]}}}
+    path = tmp_path / "hot_work_parameter_pack_latest.json"
+    path.write_text(json.dumps(pack), encoding="utf-8")
+
+    _evidence, items = build_same_lane_selection_items("youtube", ["AI", "workflow"], path=path)
+
+    assert len(items) == 1
+    assert items[0]["points"] == 24900
+
+
 def test_official_reference_cannot_satisfy_native_due_task_evidence():
     candidate = _candidate(
         "wechat", "official_keyword", source="wechat:official_reference",
