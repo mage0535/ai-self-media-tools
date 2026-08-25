@@ -66,3 +66,22 @@ def test_selected_rules_deduplicate_normalized_text_and_keep_first_provenance():
     assert [rule["id"] for rule in rules] == ["project:1", "project:2"]
     assert rules[0]["source"] == "skill:project"
     assert rules[0]["rule_id"] == "project:1"
+
+
+def test_selected_rules_include_stable_hash_and_hash_changes_when_text_is_tampered():
+    brief = {
+        "compiled_skill_rules": {
+            "rules": [{"id": "project:1", "source": "skill:project", "text": "Keep a stable rule."}]
+        }
+    }
+    original = json.loads(compile_generation_context(
+        platform="wechat", content_format="article", stage="generate", brief=brief
+    )["text"])["selected_rule_ids"][0]
+
+    brief["compiled_skill_rules"]["rules"][0]["text"] = "Keep a tampered rule."
+    tampered = json.loads(compile_generation_context(
+        platform="wechat", content_format="article", stage="generate", brief=brief
+    )["text"])["selected_rule_ids"][0]
+
+    assert len(original["sha256"]) == 64
+    assert original["sha256"] != tampered["sha256"]

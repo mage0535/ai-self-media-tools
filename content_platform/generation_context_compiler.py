@@ -21,11 +21,18 @@ def _selected_rules(brief: dict[str, Any], platform: str) -> list[dict[str, str]
             continue
         source = str(rule.get("source") or rule.get("id") or "").casefold()
         rule_id = _short(rule.get("rule_id") or rule.get("id"), 180)
+        source_id = _short(rule.get("source"), 180)
+        text = _short(rule.get("text"), 220)
+        identity = json.dumps(
+            {"rule_id": rule_id, "source": source_id, "text": " ".join(text.split())},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
         result.append({
             "id": rule_id,
             "rule_id": rule_id,
-            "source": _short(rule.get("source"), 180),
-            "text": _short(rule.get("text"), 220),
+            "source": source_id,
+            "text": text,
+            "sha256": hashlib.sha256(identity.encode("utf-8")).hexdigest(),
         })
     return result
 
