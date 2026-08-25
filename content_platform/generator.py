@@ -2,12 +2,15 @@ import json
 import hashlib
 import os
 import subprocess
+import tempfile
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .humanize import naturalize_copy
 from .intelligence import build_generation_context, prompt_brief
+from .generation_context_compiler import compile_generation_context
 from .paths import style_guide_path
 from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
@@ -66,6 +69,12 @@ def strip_web_residue(text: str) -> str:
 
 class ProviderAuthError(RuntimeError):
     """A provider returned an authentication or service-level failure."""
+
+
+class GenerationTimeoutError(RuntimeError):
+    """Hermes exceeded the hard deadline."""
+
+    error_class = "hard_timeout"
 
 
 class DraftGenerator:
@@ -897,6 +906,23 @@ class DraftGenerator:
             "Write recommendations and clearly labelled hypothetical steps only; do not imply they happened. "
             if editorial_facts_only else ""
         )
+        try:
+            return self._hermes_attempt(topic, brief, context, retry=False, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+        except GenerationTimeoutError:
+            return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+        except RuntimeError as exc:
+            if str(exc) != "transient provider error":
+                raise
+            return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+
+    def _hermes_attempt(self, topic, brief, context, *, retry, language_instruction, factual_boundary, body_requirement, style_limit):
+        platform = str(brief.get("platform") or context.get("platform") or "wechat")
+        language = context.get("language") or "zh"
+        compiled = compile_generation_context(
+            platform=platform,
+            content_format=str(brief.get("content_form") or (brief.get("content_blueprint") or {}).get("content_form") or "article"),
+            stage="generate", brief=brief, context=context, retry=retry,
+        )
         prompt = (
             "Return only JSON. Do not use markdown fences. "
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
@@ -914,28 +940,38 @@ class DraftGenerator:
             f"Platform rules (must follow for this channel):\n{context.get('platform_rules', '')[:800]}\n\n"
             f"Viral hook templates (pick one and adapt for your title/opening):\n{context.get('hook_samples', '')[:600]}\n\n"
             f"Style guide:\n{self._style_guide(style_limit)}\n\n"
-            f"Planning context:\n{prompt_brief(topic, self._provider_brief(brief))}"
+            f"Generation context (compiled, bounded):\n{compiled['text']}"
         )
         command = [self.config.get("hermes_command", "hermes")]
-        provider = str(self.config.get("hermes_provider") or "").strip()
-        model = str(self.config.get("hermes_model") or "").strip()
-        if provider:
-            command.extend(["--provider", provider])
-        if model:
-            command.extend(["--model", model])
         command.extend(["-z", prompt, "--cli"])
-        proc = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=int(self.config.get("timeout", 180)),
-            check=False,
-        )
+        clock = self.config.get("clock", time.time)
+        started = clock()
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        soft = int(self.config.get("soft_deadline", 240))
+        hard = int(self.config.get("hard_deadline", 420))
+        soft_written = False
+        while proc.poll() is None:
+            elapsed = clock() - started
+            if elapsed >= hard:
+                self._write_generation_checkpoint({"attempt": 2 if retry else 1, "status": "hard_timeout", "prompt_hash": compiled["sha256"]})
+                proc.terminate()
+                self._record_generation_attempt({"attempt": 2 if retry else 1, "prompt_hash": compiled["sha256"], "prompt_length": len(prompt), "started": started, "finished": clock(), "status": "hard_timeout", "error_class": "hard_timeout"})
+                raise GenerationTimeoutError("Hermes hard deadline exceeded")
+            if elapsed >= soft and not soft_written:
+                self._write_generation_checkpoint({"attempt": 2 if retry else 1, "status": "soft_deadline", "prompt_hash": compiled["sha256"]})
+                soft_written = True
+            self.config.get("sleep", time.sleep)(0.05)
+        stdout, stderr = proc.communicate()
+        self._record_generation_attempt({"attempt": 2 if retry else 1, "prompt_hash": compiled["sha256"], "prompt_length": len(prompt), "started": started, "finished": clock(), "status": "completed" if proc.returncode == 0 else "failed", "error_class": "transient_provider" if self._is_transient_provider_error(stdout or stderr) else ("provider_error" if proc.returncode else "")})
         if proc.returncode != 0:
+            if self._is_transient_provider_error(stdout or stderr):
+                raise RuntimeError("transient provider error")
             raise RuntimeError("Hermes generation command failed")
-        content = self._bounded_provider_content(proc.stdout, brief).strip()
+        content = self._bounded_provider_content(stdout, brief).strip()
         provider_error = self._provider_error(content)
         if provider_error:
+            if provider_error.startswith("provider_http_5") or provider_error == "provider_http_429":
+                raise RuntimeError("transient provider error")
             raise ProviderAuthError(provider_error)
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -943,6 +979,44 @@ class DraftGenerator:
         if not draft.get("title") or not draft.get("body"):
             raise ValueError("Hermes returned an incomplete draft")
         return self._normalize(draft, context, "hermes-cli", topic, brief)
+
+    def _is_transient_provider_error(self, content):
+        text = str(content or "").casefold()
+        transient_markers = ("429", "500", "502", "503", "504", "rate limit", "temporarily unavailable", "timeout", "timed out")
+        return any(marker in text for marker in transient_markers) and not any(code in text for code in ("401", "403"))
+
+    def _write_generation_checkpoint(self, payload):
+        directory = Path(self.config.get("checkpoint_dir") or Path.cwd())
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / "generation_checkpoint.json"
+        fd, temp_name = tempfile.mkstemp(prefix="generation_checkpoint.", suffix=".tmp", dir=directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, sort_keys=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, target)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+        return target
+
+    def _record_generation_attempt(self, payload):
+        path = self.config.get("generation_attempts_path")
+        if not path:
+            return
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        rows = []
+        if target.is_file():
+            try:
+                rows = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                rows = []
+        rows.append({key: value for key, value in payload.items() if key != "prompt"})
+        temp = target.with_suffix(target.suffix + ".tmp")
+        temp.write_text(json.dumps(rows, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        os.replace(temp, target)
 
     def _fallback(self, topic, brief, context):
         audience = brief.get("audience", "builders")

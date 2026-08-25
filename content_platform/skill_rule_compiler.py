@@ -9,6 +9,22 @@ from pathlib import Path
 from typing import Any
 
 
+def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[dict[str, Any]]:
+    """Keep shared rules and rules named for the active platform only."""
+    active = str(platform or "").casefold()
+    active_names = {active}
+    if active in {"douyin_ai", "douyin_pet"}:
+        active_names.add("douyin")
+    platforms = {"douyin", "xiaohongshu", "zhihu", "juejin", "wechat", "kuaishou", "tiktok", "youtube"}
+    selected = []
+    for rule in rules:
+        source = str(rule.get("source") or rule.get("id") or "").casefold()
+        if any(name in source and name not in active_names for name in platforms):
+            continue
+        selected.append(rule)
+    return selected
+
+
 def _relative(path: Path, root: Path) -> str:
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()

@@ -128,6 +128,8 @@ class Pipeline:
                     )
                 runner.succeeded("run_content_hygiene", hygiene, depends_on=["initialize_task"])
                 brief = runner.run("load_content_strategy", lambda: self._enrich_brief(job, hygiene), depends_on=["run_content_hygiene"], require_output=True)
+                self.generator.config["generation_attempts_path"] = str(self.data_dir / "jobs" / job_id / "generation_attempts.json")
+                self.generator.config.setdefault("checkpoint_dir", str(self.data_dir / "jobs" / job_id))
                 if len(platform_contexts) == 1:
                     platform_name = str(next(iter(platform_contexts)))
                     platform_context = next(iter(platform_contexts.values()))
