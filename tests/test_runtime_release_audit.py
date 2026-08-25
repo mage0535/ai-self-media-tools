@@ -584,6 +584,27 @@ def test_verify_metadata_rejects_missing_metadata_and_tampered_evidence(tmp_path
         verify_metadata(destination)
 
 
+def test_verify_metadata_rejects_tampered_commit(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+    tampered = json.loads(destination.read_text(encoding="utf-8"))
+    tampered["commit"] = "0" * 40
+    destination.write_text(json.dumps(tampered), encoding="utf-8")
+
+    with pytest.raises(ReleaseAuditError, match="commit|HEAD|source"):
+        verify_metadata(destination)
+
+
 def test_verify_metadata_rejects_release_or_config_drift(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
@@ -640,6 +661,31 @@ def test_verify_metadata_successfully_checks_current_release_and_rollback(tmp_pa
 
     verified = verify_metadata(destination, current_release_root=release_root)
     assert verified["rollback_target"] == str(rollback_target.resolve())
+
+
+def test_verify_metadata_succeeds_for_release_reached_through_current_symlink(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    current_link = tmp_path / "current"
+    try:
+        current_link.symlink_to(release_root, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+
+    verified = verify_metadata(destination, current_release_root=Path(os.path.realpath(current_link)))
+    assert verified["commit"] == subprocess.run(
+        ["git", "-C", str(source_root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
 
 
 def test_verify_metadata_cli_mode_returns_success(tmp_path: Path, monkeypatch):
