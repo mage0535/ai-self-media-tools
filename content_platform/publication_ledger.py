@@ -170,7 +170,21 @@ class PublicationLedger:
                     window_id INTEGER NOT NULL REFERENCES metric_windows(id),
                     state TEXT NOT NULL,
                     error TEXT NOT NULL,
-                    attempted_at TEXT NOT NULL
+                    attempted_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL DEFAULT ''
+                );
+                CREATE TABLE IF NOT EXISTS metric_collection_leases (
+                    window_id INTEGER PRIMARY KEY REFERENCES metric_windows(id),
+                    attempt_id INTEGER NOT NULL REFERENCES metric_collection_attempts(id),
+                    owner TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS metric_collection_retries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    window_id INTEGER NOT NULL REFERENCES metric_windows(id),
+                    reason TEXT NOT NULL,
+                    eligible_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL
                 );
                 """
             )
@@ -185,6 +199,7 @@ class PublicationLedger:
     def _migrate(self, conn):
         self._ensure_column(conn, "publication_identities", "internal_account_alias", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column(conn, "metric_windows", "invalidated_reason", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column(conn, "metric_collection_attempts", "finished_at", "TEXT NOT NULL DEFAULT ''")
         for name, definition in {
             "platform": "TEXT NOT NULL DEFAULT ''",
             "internal_account_alias": "TEXT NOT NULL DEFAULT ''",
@@ -265,17 +280,25 @@ class PublicationLedger:
     get_intent = get_delivery_intent
 
     def begin_attempt(self, intent_id: str, owner: str, lease_seconds: int = 300, now: datetime | str | None = None) -> dict[str, Any]:
-        intent = self.get_delivery_intent(intent_id)
-        if intent["status"] not in {"created", "retry_eligible"}:
-            raise ValueError(f"delivery intent is not retryable: {intent['status']}")
         started = _now(now)
         attempt_id = f"da_{uuid.uuid4().hex}"
         expires = _iso(started + timedelta(seconds=int(lease_seconds)))
         with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            intent = conn.execute("SELECT * FROM delivery_intents WHERE intent_id=?", (intent_id,)).fetchone()
+            if not intent:
+                raise KeyError(f"delivery intent not found: {intent_id}")
+            if intent["status"] not in {"created", "retry_eligible"}:
+                raise ValueError(f"delivery intent is not retryable: {intent['status']}")
+            lease = conn.execute("SELECT * FROM delivery_leases WHERE intent_id=?", (intent_id,)).fetchone()
+            if lease and _now(lease["expires_at"]) > started:
+                raise ValueError(f"delivery intent is already leased by {lease['owner']}")
+            if lease:
+                conn.execute("DELETE FROM delivery_leases WHERE intent_id=?", (intent_id,))
             row = conn.execute("SELECT COALESCE(MAX(attempt_no), 0) + 1 AS next_no FROM delivery_attempts WHERE intent_id=?", (intent_id,)).fetchone()
             attempt_no = int(row["next_no"])
             conn.execute("INSERT INTO delivery_attempts(attempt_id,intent_id,attempt_no,state,started_at) VALUES(?,?,?,?,?)", (attempt_id, intent_id, attempt_no, "started", _iso(started)))
-            conn.execute("INSERT INTO delivery_leases(intent_id,attempt_id,owner,expires_at) VALUES(?,?,?,?) ON CONFLICT(intent_id) DO UPDATE SET attempt_id=excluded.attempt_id,owner=excluded.owner,expires_at=excluded.expires_at", (intent_id, attempt_id, str(owner), expires))
+            conn.execute("INSERT INTO delivery_leases(intent_id,attempt_id,owner,expires_at) VALUES(?,?,?,?)", (intent_id, attempt_id, str(owner), expires))
             conn.execute("UPDATE delivery_intents SET status='in_flight', retry_allowed=0, updated_at=? WHERE intent_id=?", (_iso(started), intent_id))
         return {"attempt_id": attempt_id, "intent_id": intent_id, "attempt_no": attempt_no, "owner": str(owner), "expires_at": expires}
 
@@ -317,6 +340,8 @@ class PublicationLedger:
         if state in REVIEW_RESULTS or state in {"unknown", "error"}:
             return self._set_review(intent_id, state, str(result.get("reason") or "polling inconclusive"))
         if state in {"present", "found", "published", "scheduled", "drafted"}:
+            if state == "published" and result.get("verification"):
+                return self.record_delivery_result(intent_id, result)
             with self._connect() as conn:
                 conn.execute("UPDATE delivery_intents SET status=?,retry_allowed=0,updated_at=? WHERE intent_id=?", (state, _iso(now), intent_id))
             return self.get_delivery_intent(intent_id)
@@ -334,6 +359,19 @@ class PublicationLedger:
 
     poll_intent = poll_delivery
 
+    def poll_unknown_deliveries(self, poller: Callable[[dict[str, Any]], dict[str, Any]], now: datetime | str | None = None) -> dict[str, Any]:
+        with self._connect() as conn:
+            intents = [dict(row) for row in conn.execute("SELECT * FROM delivery_intents WHERE status='unknown' ORDER BY updated_at").fetchall()]
+        report = {"status": "ok", "polled": 0, "retry_eligible": 0, "requires_review": 0}
+        for intent in intents:
+            result = self.poll_delivery(intent["intent_id"], poller, now=now)
+            report["polled"] += 1
+            if result["status"] == "retry_eligible":
+                report["retry_eligible"] += 1
+            elif result["status"] == "unknown_requires_review":
+                report["requires_review"] += 1
+        return report
+
     def _set_review(self, intent_id: str, reason: str, error: str) -> dict[str, Any]:
         with self._connect() as conn:
             conn.execute("UPDATE delivery_intents SET status='unknown_requires_review',retry_allowed=0,review_reason=?,updated_at=? WHERE intent_id=?", (f"{reason}:{error}"[:500], _iso(), intent_id))
@@ -350,6 +388,8 @@ class PublicationLedger:
             return self.get_delivery_intent(intent_id)
         if status == "published" and result.get("verification"):
             identity = self.register_verified_publication({"intent_id": intent_id, **result["verification"]})
+            if not identity.get("passed"):
+                return self._set_review(intent_id, "publication_verification_failed", str(identity.get("reason") or "invalid publication identity"))
             return {"status": "published", "identity": identity, "intent_id": intent_id}
         if status in REVIEW_RESULTS:
             return self._set_review(intent_id, status, str(result.get("error") or ""))
@@ -455,6 +495,36 @@ class PublicationLedger:
     def invalidate_window(self, window_id: int, reason: str) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE metric_windows SET state='invalidated',invalidated_reason=? WHERE id=?", (str(reason), int(window_id)))
+
+    def begin_metric_collection(self, window_id: int, owner: str = "metric-collector", lease_seconds: int = 300, now: datetime | str | None = None) -> dict[str, Any]:
+        started = _now(now)
+        expires = _iso(started + timedelta(seconds=int(lease_seconds)))
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            window = conn.execute("SELECT * FROM metric_windows WHERE id=?", (int(window_id),)).fetchone()
+            if not window:
+                raise KeyError(f"metric window not found: {window_id}")
+            if window["state"] != "pending":
+                raise ValueError(f"metric window is not pending: {window['state']}")
+            lease = conn.execute("SELECT * FROM metric_collection_leases WHERE window_id=?", (int(window_id),)).fetchone()
+            if lease and _now(lease["expires_at"]) > started:
+                raise ValueError(f"metric window is already leased by {lease['owner']}")
+            if lease:
+                conn.execute("DELETE FROM metric_collection_leases WHERE window_id=?", (int(window_id),))
+            conn.execute("INSERT INTO metric_collection_attempts(window_id,state,error,attempted_at) VALUES(?,?,?,?)", (int(window_id), "started", "", _iso(started)))
+            attempt_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            conn.execute("INSERT INTO metric_collection_leases(window_id,attempt_id,owner,expires_at) VALUES(?,?,?,?)", (int(window_id), attempt_id, str(owner), expires))
+        return {"attempt_id": attempt_id, "window_id": int(window_id), "owner": str(owner), "expires_at": expires}
+
+    def finish_metric_collection(self, window_id: int, attempt_id: int, state: str, error: str = "", now: datetime | str | None = None) -> None:
+        finished = _iso(now)
+        with self._connect() as conn:
+            updated = conn.execute("UPDATE metric_collection_attempts SET state=?,error=?,finished_at=? WHERE id=? AND window_id=?", (str(state), str(error or ""), finished, int(attempt_id), int(window_id)))
+            if updated.rowcount != 1:
+                raise KeyError(f"metric collection attempt not found: {attempt_id}")
+            conn.execute("DELETE FROM metric_collection_leases WHERE window_id=? AND attempt_id=?", (int(window_id), int(attempt_id)))
+            if str(error or ""):
+                conn.execute("INSERT INTO metric_collection_retries(window_id,reason,eligible_at,created_at) VALUES(?,?,?,?)", (int(window_id), str(error)[:300], finished, finished))
 
     @staticmethod
     def validate_kuaishou_scheduled_postcheck(intent: dict[str, Any], evidence: dict[str, Any] | None) -> dict[str, Any]:

@@ -912,18 +912,20 @@ class Pipeline:
         if not result.ok and result.status not in {"blocked", "drafted", "handoff_pending", "review_required", "scheduled"}:
             status = self._unknown_status(RuntimeError(result.error or result.status))
             result = DeliveryResult(False, status, result.external_id, result.error)
+        verified_identity = None
         if result.status == "published" and not metadata.get("verification"):
             result = DeliveryResult(False, "unknown_requires_review", result.external_id, "publisher returned published without URL/content/account/time verification")
+        elif result.status == "published":
+            verified_identity = self.publication_ledger.register_verified_publication({"intent_id": intent_id, "platform": platform, **metadata["verification"]})
+            if not verified_identity.get("passed"):
+                result = DeliveryResult(False, "unknown_requires_review", result.external_id, "publisher returned invalid publication verification: " + str(verified_identity.get("reason") or "unknown"))
         if platform.casefold() == "kuaishou" and result.status == "scheduled":
             postcheck = self.publication_ledger.validate_kuaishou_scheduled_postcheck(intent, metadata.get("postcheck") or metadata)
             if not postcheck["passed"]:
                 result = DeliveryResult(False, "unknown_requires_review", result.external_id, "Kuaishou scheduled management-page postcheck failed")
                 metadata = {"postcheck": postcheck}
         self.publication_ledger.finish_attempt(intent_id, attempt["attempt_id"], result.status, external_id=result.external_id, error=result.error, metadata=metadata)
-        verification = metadata.get("verification")
-        if result.status == "published" and verification:
-            self.publication_ledger.register_verified_publication({"intent_id": intent_id, "platform": platform, **verification})
-        else:
+        if not (result.status == "published" and verified_identity and verified_identity.get("passed")):
             self.publication_ledger.record_delivery_result(intent_id, {"status": result.status, "external_id": result.external_id, "error": result.error})
         return result
 

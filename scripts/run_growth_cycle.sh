@@ -21,3 +21,12 @@ else
   notify "failed" "performance_cycle_exit_${status}"
   exit "$status"
 fi
+
+if "$bin" --config "$root/config.json" --db "$root/data/state.db" \
+  metric-collect-due > "$out/metric-collect-due.json"; then
+  notify "completed" "publication_metric_windows_processed"
+else
+  status=$?
+  notify "failed" "publication_metric_windows_exit_${status}"
+  exit "$status"
+fi
