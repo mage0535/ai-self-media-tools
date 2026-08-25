@@ -949,7 +949,8 @@ class DraftGenerator:
         proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         soft = int(self.config.get("soft_deadline", 240))
         hard = int(self.config.get("hard_deadline", 420))
-        soft_written = False
+        heartbeat_interval = max(1, int(self.config.get("heartbeat_interval", 30)))
+        next_heartbeat_at = started + soft
         while proc.poll() is None:
             elapsed = clock() - started
             if elapsed >= hard:
@@ -964,12 +965,14 @@ class DraftGenerator:
                     prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
                 ))
                 raise GenerationTimeoutError("Hermes hard deadline exceeded")
-            if elapsed >= soft and not soft_written:
+            if elapsed >= next_heartbeat_at:
+                heartbeat_at = clock()
                 self._write_generation_checkpoint(self._checkpoint_payload(
-                    attempt=2 if retry else 1, status="soft_timeout", error_class="soft_timeout",
-                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=clock(),
+                    attempt=2 if retry else 1, status="running_after_soft_deadline", error_class="soft_deadline",
+                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=heartbeat_at,
+                    elapsed=heartbeat_at - started, heartbeat_at=heartbeat_at,
                 ))
-                soft_written = True
+                next_heartbeat_at += heartbeat_interval
             self.config.get("sleep", time.sleep)(0.05)
         stdout, stderr = proc.communicate()
         finished = clock()
@@ -1019,6 +1022,18 @@ class DraftGenerator:
         directory = Path(self.config.get("checkpoint_dir") or Path.cwd())
         directory.mkdir(parents=True, exist_ok=True)
         target = directory / "generation_checkpoint.json"
+        previous = {}
+        if target.is_file():
+            try:
+                previous = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                previous = {}
+        transitions = list(previous.get("transitions") or [])
+        previous_status = previous.get("status")
+        if previous_status != payload.get("status"):
+            transitions.append({"status": payload.get("status"), "at": payload.get("heartbeat_at") or payload.get("finished_at")})
+        payload = dict(payload)
+        payload["transitions"] = transitions[-8:]
         fd, temp_name = tempfile.mkstemp(prefix="generation_checkpoint.", suffix=".tmp", dir=directory)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -1032,8 +1047,8 @@ class DraftGenerator:
         return target
 
     @staticmethod
-    def _checkpoint_payload(*, attempt, status, error_class, prompt_hash, prompt_length, started_at, finished_at):
-        return {
+    def _checkpoint_payload(*, attempt, status, error_class, prompt_hash, prompt_length, started_at, finished_at, elapsed=None, heartbeat_at=None):
+        payload = {
             "attempt": attempt,
             "status": status,
             "prompt_hash": prompt_hash,
@@ -1042,6 +1057,11 @@ class DraftGenerator:
             "started_at": started_at,
             "finished_at": finished_at,
         }
+        if elapsed is not None:
+            payload["elapsed"] = elapsed
+        if heartbeat_at is not None:
+            payload["heartbeat_at"] = heartbeat_at
+        return payload
 
     def _record_generation_attempt(self, payload):
         path = self.config.get("generation_attempts_path")
