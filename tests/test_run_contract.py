@@ -101,6 +101,13 @@ def test_generate_payload_compacts_server_scale_capability_context(tmp_path: Pat
             "same_lane_intelligence": {
                 "version": "same_lane_playbook_compact_v1",
                 "own_data_status": "insufficient",
+                "strategy_claim_boundary": "competitor_inspired_not_auto_tuned",
+                "generation_rules": [
+                    "如果自有指标不足，必须标注为竞品启发，不得写成自有数据结论",
+                    "不得把跨平台样本改标为本平台原生证据",
+                ],
+                "source_label": "same_lane_competitor_sample",
+                "evidence_label": "platform_native_work",
                 "topic_patterns": ["tool_workflow_tutorial"],
                 "proof_requirements": ["screen_or_tool_stack_demo"],
                 "recommended_content_moves": ["show a concrete tool stack"],
@@ -113,5 +120,9 @@ def test_generate_payload_compacts_server_scale_capability_context(tmp_path: Pat
     assert bounded["content_blueprint"]["topic"] == "AI workflow"
     assert bounded["claim_ledger"][0]["claim"] == "verified claim"
     assert bounded["strategy"]["account_identity"] == "tiktok-ai"
+    assert bounded["same_lane_intelligence"]["strategy_claim_boundary"] == "competitor_inspired_not_auto_tuned"
+    assert "竞品启发" in bounded["same_lane_intelligence"]["generation_rules"][0]
+    assert bounded["same_lane_intelligence"]["source_label"] == "same_lane_competitor_sample"
+    assert bounded["same_lane_intelligence"]["evidence_label"] == "platform_native_work"
     assert bounded["same_lane_intelligence"]["topic_patterns"] == ["tool_workflow_tutorial"]
     assert len(json.dumps(bounded, ensure_ascii=False).encode("utf-8")) <= 16_384

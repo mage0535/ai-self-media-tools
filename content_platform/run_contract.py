@@ -146,6 +146,20 @@ _GENERATION_OPTIONAL_FIELDS = (
     "hot_work_parameter_pack",
     "same_lane_intelligence",
 )
+_SAME_LANE_GUARD_FIELDS = (
+    "strategy_claim_boundary",
+    "generation_rules",
+    "evidence_quality",
+    "source",
+    "source_type",
+    "source_label",
+    "source_labels",
+    "evidence",
+    "evidence_type",
+    "evidence_label",
+    "evidence_labels",
+    "provenance_kind",
+)
 
 
 def _compact_json_value(value: Any, *, max_items: int, max_string: int, depth: int = 0) -> Any:
@@ -180,6 +194,7 @@ def _compact_generation_payload(payload: dict[str, Any], limit: int) -> dict[str
                         for key in (
                             "version", "platform", "own_data_status", "topic_patterns",
                             "proof_requirements", "recommended_content_moves", "top_accounts", "top_works",
+                            *_SAME_LANE_GUARD_FIELDS,
                         )
                         if key in candidate[field]
                     }
