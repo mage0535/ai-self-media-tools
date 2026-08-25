@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
-from typing import Any, Callable
+from typing import Any
 
 
-CONTENT_MCP_ALLOWLIST: dict[str, frozenset[str]] = {
-    "content-search": frozenset({"search", "web_search", "zhihu_open_search", "trends_query"}),
-    "memory-context": frozenset({"retrieve", "search", "session_search", "get_context"}),
-    "ai-self-media": frozenset({"build_content_recipe", "build_tool_selection_plan", "validate_content_package", "seo_geo_check", "generate_audio"}),
-}
 _FORBIDDEN = frozenset({"trading", "trade", "stock", "stocks", "financial", "finance", "forex", "crypto"})
 
 
@@ -22,20 +18,34 @@ def _blocked(value: str) -> bool:
     return bool(tokens.intersection(_FORBIDDEN)) or any(token in value.casefold() for token in _FORBIDDEN)
 
 
-def _allowed(namespace: str, tool: str) -> bool:
-    if not namespace or not tool or _blocked(namespace) or _blocked(tool):
-        return False
-    return tool in CONTENT_MCP_ALLOWLIST.get(namespace, frozenset())
+def _allowed(capability: dict[str, Any], namespace: str, tool: str) -> bool:
+    configured_namespace = str(capability.get("mcp_namespace") or "")
+    configured_tool = str(capability.get("mcp_tool") or "")
+    return bool(
+        configured_namespace
+        and configured_tool
+        and namespace == configured_namespace
+        and tool == configured_tool
+        and not _blocked(configured_namespace)
+    )
+
+
+def _caller(inputs: dict[str, Any]) -> Any:
+    return inputs.get("mcp_caller") or inputs.get("mcp_call")
+
+
+def _runtime(inputs: dict[str, Any]) -> Any:
+    return inputs.get("mcp_runtime") or inputs.get("runtime_context") or inputs.get("runtime")
 
 
 def probe(capability: dict[str, Any], inputs: dict[str, Any]) -> tuple[bool, str]:
-    namespace = str(inputs.get("mcp_namespace") or capability.get("mcp_namespace") or "")
-    tool = str(inputs.get("mcp_tool") or capability.get("mcp_tool") or "")
-    if not _allowed(namespace, tool):
+    namespace = str(capability.get("mcp_namespace") or "")
+    tool = str(capability.get("mcp_tool") or "")
+    if not _allowed(capability, namespace, tool):
         return False, "mcp_tool_not_allowlisted"
-    if namespace != str(capability.get("mcp_namespace") or namespace) or tool != str(capability.get("mcp_tool") or tool):
+    if inputs.get("mcp_namespace", namespace) != namespace or inputs.get("mcp_tool", tool) != tool:
         return False, "mcp_not_configured_for_capability"
-    if callable(inputs.get("mcp_call")):
+    if callable(_caller(inputs)):
         return True, "configured"
     return False, "mcp_unavailable:invoker_not_configured"
 
@@ -58,6 +68,27 @@ def _safe_value(value: Any, key: str = "") -> Any:
 def _hash(value: Any) -> str:
     payload = json.dumps(_safe_value(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _invoke(caller: Any, namespace: str, tool: str, payload: Any, runtime: Any) -> Any:
+    target = caller if callable(caller) else getattr(caller, "call", None)
+    if not callable(target):
+        raise TypeError("mcp_caller_not_callable")
+    try:
+        signature = inspect.signature(target)
+    except (TypeError, ValueError):
+        return target(namespace, tool, payload, runtime)
+    if _can_bind(signature, namespace, tool, payload, runtime):
+        return target(namespace, tool, payload, runtime)
+    return target(namespace, tool, payload)
+
+
+def _can_bind(signature: inspect.Signature, *args: Any) -> bool:
+    try:
+        signature.bind(*args)
+    except TypeError:
+        return False
+    return True
 
 
 def _evidence(namespace: str, tool: str, input_hash: str, status: str, affected: str, started: float, *, output_hash: str = "", reason: str = "", fallback_used: bool = False) -> dict[str, Any]:
@@ -83,23 +114,23 @@ def execute(inputs: dict[str, Any]) -> dict[str, Any]:
     namespace = str(inputs.get("mcp_namespace") or "")
     tool = str(inputs.get("mcp_tool") or "")
     capability = inputs.get("_capability") or {}
-    expected_namespace = str(capability.get("mcp_namespace") or namespace)
-    expected_tool = str(capability.get("mcp_tool") or tool)
     payload = inputs.get("mcp_input") or {}
     input_hash = _hash(payload)
     affected = str(inputs.get("affected_output") or "content_context")
-    if not _allowed(namespace, tool):
+    if not _allowed(capability, namespace, tool):
         return _evidence(namespace, tool, input_hash, "skipped", affected, started, reason="mcp_tool_not_allowlisted")
+    expected_namespace = str(capability.get("mcp_namespace") or "")
+    expected_tool = str(capability.get("mcp_tool") or "")
     if namespace != expected_namespace or tool != expected_tool:
         return _evidence(namespace, tool, input_hash, "skipped", affected, started, reason="mcp_not_configured_for_capability")
-    call = inputs.get("mcp_call")
+    call = _caller(inputs)
     fallback = inputs.get("mcp_fallback")
     if not callable(call):
         return _evidence(namespace, tool, input_hash, "skipped", affected, started, reason="mcp_unavailable:invoker_not_configured")
     timeout = max(0.001, float(inputs.get("mcp_timeout_seconds") or 10.0))
     executor = ThreadPoolExecutor(max_workers=1)
     try:
-        future = executor.submit(call, namespace, tool, payload)
+        future = executor.submit(_invoke, call, namespace, tool, payload, _runtime(inputs))
         raw_output = future.result(timeout=timeout)
         return _evidence(namespace, tool, input_hash, "executed", affected, started, output_hash=_hash(raw_output))
     except FutureTimeout:
