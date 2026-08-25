@@ -19,6 +19,13 @@ from .generator import DraftGenerator
 from .humanize import naturalize_copy
 from .intelligence import GLOBAL_EN_PLATFORMS, build_generation_context
 from .media import MediaBridge
+from .adapters.media import (
+    probe_final_video,
+    validate_bgm_contract,
+    validate_handoff_contract,
+    validate_scene_manifest_contract,
+    validate_tts_fingerprint,
+)
 from .media_quality import (
     validate_bilibili_auto_packet,
     validate_douyin_auto_packet,
@@ -644,6 +651,30 @@ class Pipeline:
                         self.store.complete_delivery(item["id"], owner, "queued", result.error)
                         processed += 1
                         continue
+                    if result.status == "handoff_pending":
+                        handoff_gate = self._post_delivery_handoff_gate(delivery_job, platform)
+                        if not handoff_gate.get("passed", True):
+                            result = DeliveryResult(False, "blocked", result.external_id, error="handoff contract gate failed: " + json.dumps(handoff_gate, ensure_ascii=False))
+                            self._save_delivery_result(item["job_id"], platform, result)
+                            runner.store.save_workflow_step(
+                                runner.workflow_id,
+                                runner.job_id,
+                                runner.platform,
+                                "publish_or_create_draft",
+                                "BLOCKED",
+                                required=True,
+                                depends_on=["run_platform_pre_publish_gate"],
+                                reason_code="handoff_contract_failed",
+                                message=result.error,
+                                gate_result=handoff_gate,
+                            )
+                            report = write_platform_report(self.store, self.data_dir, f"wf_{item['job_id']}", job, platform, "blocked", result.__dict__, result.error)
+                            runner.succeeded("generate_platform_report", report, depends_on=["publish_or_create_draft"])
+                            self._send_platform_report(job, platform, report)
+                            runner.succeeded("send_completion_report", {"report_path": report["path"]}, depends_on=["generate_platform_report"])
+                            self.store.complete_delivery(item["id"], owner, "queued", result.error)
+                            processed += 1
+                            continue
                     runner.succeeded("publish_or_create_draft", {"status": result.status, "external_id_present": bool(result.external_id)}, depends_on=["run_platform_pre_publish_gate"])
                     self._save_delivery_result(item["job_id"], platform, result)
                     runner.succeeded("verify_publish_result", {"status": result.status, "requires_postcheck": result.status in {"drafted", "handoff_pending"}}, depends_on=["publish_or_create_draft"])
@@ -742,6 +773,10 @@ class Pipeline:
             if contract_path.is_file():
                 try:
                     contract = json.loads(contract_path.read_text(encoding="utf-8"))
+                    handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
+                    pre_delivery = validate_handoff_contract(handoff, require_target_renderer=False)
+                    if not pre_delivery.get("passed"):
+                        return DeliveryResult(False, "blocked", error="juejin media pre-delivery gate failed: " + json.dumps(pre_delivery, ensure_ascii=False))
                     by_path = {str(row.get("path")): row for row in contract.get("assets") or [] if isinstance(row, dict)}
                     delivery_job = dict(job)
                     artifacts = []
@@ -755,10 +790,17 @@ class Pipeline:
                     metadata = dict(job.get("draft_meta") or {})
                     metadata["section_image_map"] = contract.get("section_image_map") or []
                     metadata["article_media_contract"] = contract
+                    metadata["article_media_contract_path"] = str(contract_path)
                     delivery_job["draft_meta"] = metadata
                     if isinstance(job.get("platform_payload"), dict):
                         payload = dict(job["platform_payload"])
                         payload["section_image_map"] = metadata["section_image_map"]
+                        public_artifacts = delivery_job.get("artifacts") or []
+                        cover = next((item.get("public_url") for item in public_artifacts if item.get("kind") == "cover" and item.get("public_url")), "")
+                        inline = [item.get("public_url") for item in public_artifacts if item.get("kind") == "image" and item.get("public_url")]
+                        payload["cover_image"] = cover
+                        payload["inline_image_urls"] = inline
+                        payload["public_inline_image_urls"] = inline
                         delivery_job["platform_payload"] = payload
                     job = delivery_job
                 except (OSError, json.JSONDecodeError):
@@ -776,6 +818,18 @@ class Pipeline:
             except Exception as exc:
                 result = DeliveryResult(False, "failed", error=redact_secrets(exc))
             if result.ok or result.status == "blocked":
+                if str(platform).casefold() == "juejin" and result.ok:
+                    contract_path = self.data_dir / "artifacts" / str(job.get("id") or "") / "article_media_contract.json"
+                    try:
+                        in_memory = (job.get("draft_meta") or {}).get("article_media_contract")
+                        contract = in_memory if isinstance(in_memory, dict) else json.loads(contract_path.read_text(encoding="utf-8"))
+                        handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
+                        post_delivery = validate_handoff_contract(handoff)
+                        contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
+                    except (OSError, json.JSONDecodeError) as exc:
+                        post_delivery = {"passed": False, "failures": [f"handoff_contract_unreadable:{type(exc).__name__}"]}
+                    if not post_delivery.get("passed"):
+                        return DeliveryResult(False, "blocked", error="juejin renderer visibility gate failed: " + json.dumps(post_delivery, ensure_ascii=False))
                 return result
             if attempt + 1 < max_attempts and backoff:
                 time.sleep(backoff * (2**attempt))
@@ -1048,6 +1102,9 @@ class Pipeline:
         else:
             growth = validate_growth_recipe(dm.get("growth_recipe"))
         gate["gates"]["G7_growth_recipe"] = growth
+        media_contract = self._media_contract_quality_gate(job_id, draft, list(platforms), phase=phase)
+        if media_contract:
+            gate["gates"]["G6_media_contracts"] = media_contract
         platform_quality = self._generation_platform_quality_gate(job_id, draft, list(platforms), phase=phase)
         if platform_quality:
             gate["gates"]["G6_platform_quality"] = platform_quality
@@ -1055,6 +1112,65 @@ class Pipeline:
         gate["score"] = sum(1 for g in gate["gates"].values() if g["passed"])
         gate["total"] = len(gate["gates"])
         return gate
+
+    def _media_contract_quality_gate(self, job_id, draft, platforms, *, phase="generation"):
+        """Run renderer and handoff validators on the production delivery path."""
+        if phase != "rendered":
+            return None
+        meta = draft.get("draft_meta") or {}
+        normalized = {str(item).casefold() for item in platforms}
+        checks = {}
+        artifact_dir = self.data_dir / "artifacts" / str(job_id)
+
+        if "juejin" in normalized:
+            contract_path = artifact_dir / "article_media_contract.json"
+            contract = {}
+            try:
+                contract = json.loads(contract_path.read_text(encoding="utf-8")) if contract_path.is_file() else {}
+            except (OSError, json.JSONDecodeError):
+                contract = {}
+            handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
+            checks["handoff_contract"] = validate_handoff_contract(handoff, require_target_renderer=False)
+
+        plan = meta.get("video_toolchain_plan") if isinstance(meta.get("video_toolchain_plan"), dict) else {}
+        video_artifact = meta.get("video_artifact") if isinstance(meta.get("video_artifact"), dict) else {}
+        video_required = bool(plan.get("required") or video_artifact or meta.get("scene_manifest"))
+        if video_required:
+            manifest = meta.get("scene_manifest") if isinstance(meta.get("scene_manifest"), dict) else {}
+            if not manifest:
+                manifest_path = artifact_dir / "scene_manifest.json"
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
+                except (OSError, json.JSONDecodeError):
+                    manifest = {}
+            observed = meta.get("observed_scene_evidence") if isinstance(meta.get("observed_scene_evidence"), dict) else {}
+            if not observed:
+                observed_path = artifact_dir / "scene_observed_evidence.json"
+                try:
+                    observed = json.loads(observed_path.read_text(encoding="utf-8")) if observed_path.is_file() else {}
+                except (OSError, json.JSONDecodeError):
+                    observed = {}
+            checks["scene_manifest"] = validate_scene_manifest_contract(manifest, observed=observed)
+            bgm = meta.get("bgm_source") or meta.get("bgm") or {}
+            checks["bgm"] = validate_bgm_contract(bgm, recent_fingerprints=meta.get("recent_bgm_fingerprints") or [])
+            checks["tts"] = validate_tts_fingerprint(meta.get("tts_fingerprint") or meta.get("tts_config"))
+            video_path = str(video_artifact.get("path") or manifest.get("output") or "")
+            checks["ffprobe"] = probe_final_video(video_path)
+
+        if not checks:
+            return None
+        failures = {name: value for name, value in checks.items() if not value.get("passed")}
+        return {"passed": not failures, "phase": phase, "checks": checks, "failures": failures}
+
+    @staticmethod
+    def _post_delivery_handoff_gate(job, platform):
+        if str(platform).casefold() != "juejin":
+            return {"passed": True, "skipped": True}
+        contract = (job.get("draft_meta") or {}).get("article_media_contract")
+        if not isinstance(contract, dict):
+            return {"passed": False, "failures": ["article_media_contract_missing"]}
+        handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
+        return validate_handoff_contract(handoff)
 
     def _recover_video_render_evidence(self, job_id, draft):
         """Recover renderer evidence when an optional later media step fails."""
@@ -1217,6 +1333,7 @@ class Pipeline:
             },
             "visual_backgrounds": {"passed": isinstance(backgrounds, list) and len(backgrounds) >= 4},
             "platform_binding": {"passed": str(platform).casefold() in {str(item).casefold() for item in plan.get("platforms") or []}},
+            "cinematic_fallback": {"passed": not bool(meta.get("degraded") or meta.get("fallback_used"))},
         }
         failures = [name for name, value in gates.items() if not value["passed"]]
         return {"passed": not failures, "phase": "rendered", "gates": gates, "failed_dimensions": failures}
@@ -1239,6 +1356,9 @@ class Pipeline:
             manifest = renderer_packet.get("tool_invocation_manifest")
             if isinstance(manifest, dict) and manifest:
                 meta["tool_invocation_manifest"] = manifest
+        for key in ("degraded", "fallback_used", "fallback_reason", "quality_gate", "scene_manifest", "observed_scene_evidence", "tts_fingerprint"):
+            if key in artifact:
+                meta[key] = artifact[key]
         # 2026-08-17 修复：visual_route（内容驱动路由）从 artifact 写回 draft_meta，
         # 否则 job 里永远 None（media.generate 修改的是局部 job 副本，未持久化）
         vr = artifact.get("visual_route")

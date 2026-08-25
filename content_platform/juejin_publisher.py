@@ -57,6 +57,54 @@ def _mapped_public_urls(section_map, artifacts):
     return urls
 
 
+def _renderer_visibility_evidence(response, expected_urls):
+    response = response if isinstance(response, dict) else {}
+    data = response.get("data") if isinstance(response.get("data"), dict) else {}
+    evidence = data.get("target_renderer_evidence") or response.get("target_renderer_evidence") or {}
+    if not isinstance(evidence, dict):
+        evidence = {}
+    observed_urls = list(
+        evidence.get("public_inline_image_urls")
+        or evidence.get("inline_image_urls")
+        or data.get("public_inline_image_urls")
+        or data.get("inline_image_urls")
+        or data.get("rendered_image_urls")
+        or []
+    )
+    visible = evidence.get("verified") is True or data.get("editor_visible") is True
+    mapping_count = int(evidence.get("mapping_count") or data.get("mapping_count") or len(observed_urls))
+    passed = visible and mapping_count >= 3 and set(expected_urls).issubset(set(str(url) for url in observed_urls))
+    return {
+        "renderer": str(evidence.get("renderer") or data.get("target_renderer") or "juejin_markdown_editor"),
+        "verified": passed,
+        "mapping_count": mapping_count,
+        "public_inline_image_urls": [str(url) for url in observed_urls],
+        "response_evidence": evidence,
+        "failure": "editor visibility response missing or incomplete" if not passed else "",
+    }
+
+
+def _record_renderer_evidence(job, evidence):
+    metadata = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
+    contract = metadata.get("article_media_contract")
+    contract_path = None
+    if isinstance(contract, str):
+        contract_path = Path(contract)
+        try:
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            contract = None
+    if not isinstance(contract, dict):
+        return
+    handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
+    handoff["target_renderer_evidence"] = evidence
+    handoff["state"] = "handoff_ready" if evidence.get("verified") is True else "handoff_blocked"
+    if contract_path is None and metadata.get("article_media_contract_path"):
+        contract_path = Path(str(metadata["article_media_contract_path"]))
+    if contract_path:
+        contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _article_guard(job, title, body_text, platform_payload):
     artifacts = job.get("artifacts") or []
     draft_meta = job.get("draft_meta") or {}
@@ -180,14 +228,11 @@ class JuejinPublisher:
                 continue
             return DeliveryResult(False, "blocked", error="juejin article image markers do not match section_image_map")
 
-        # Extract cover — only use if empty or already a juejin URL
-        cover = ""
-        for item in job.get("artifacts", []):
-            if item.get("kind") == "cover":
-                url = item.get("url") or ""
-                if "juejin" in url or "zhimg" in url:
-                    cover = url
-                    break
+        # The production contract supplies the adaptive public cover directly.
+        cover = str(formatted.get("cover_image") or "")
+        if not cover:
+            cover = next((_public_url(item) for item in job.get("artifacts", []) if item.get("kind") == "cover"), "")
+        inline_urls = list(formatted.get("public_inline_image_urls") or formatted.get("inline_image_urls") or mapped_urls)
 
         # 1) Create draft
         brief = body_text[:100].replace("\n", " ") if body_text else title[:50]
@@ -199,9 +244,15 @@ class JuejinPublisher:
             "tag_ids": ["6809640405535096840"],
             "edit_type": 10,
             "cover_image": cover,
+            "inline_image_urls": inline_urls,
+            "public_inline_image_urls": inline_urls,
         })
         if result.get("err_no") != 0:
             return DeliveryResult(False, "failed", error=f"juejin create draft failed: {result.get('err_msg','')[:200]}")
+        renderer_evidence = _renderer_visibility_evidence(result, mapped_urls)
+        _record_renderer_evidence(job, renderer_evidence)
+        if not renderer_evidence["verified"]:
+            return DeliveryResult(False, "blocked", f"juejin:{result.get('data', {}).get('id', '')}", error="juejin editor visibility response missing or incomplete")
         draft_id = result["data"]["id"]
 
         if self.save_as_draft:

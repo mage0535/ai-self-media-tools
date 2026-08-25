@@ -54,7 +54,15 @@ def test_juejin_blocks_incomplete_article_before_api_call():
 def test_juejin_accepts_complete_public_image_package_to_draft(tmp_path):
     publisher = JuejinPublisher()
     with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
-        publisher, "_api", return_value={"err_no": 0, "data": {"id": "draft-1"}}
+        publisher, "_api", return_value={
+            "err_no": 0,
+            "data": {
+                "id": "draft-1",
+                "editor_visible": True,
+                "inline_image_urls": [f"https://cdn.example/inline-{i}.jpg" for i in range(3)],
+                "mapping_count": 3,
+            },
+        }
     ) as api:
         result = publisher.deliver(_article_job(tmp_path, public_images=True), "juejin")
 
