@@ -379,6 +379,36 @@ def test_verbose_hermes_output_is_stopped_at_the_combined_file_limit(monkeypatch
     assert checkpoint["error_class"] == "provider_output_limit"
 
 
+def test_exited_oversized_hermes_output_records_a_terminal_checkpoint(monkeypatch, tmp_path):
+    class ExitedVerboseProcess:
+        returncode = 0
+
+        def poll(self):
+            return self.returncode
+
+    def popen(command, **kwargs):
+        kwargs["stdout"].write(b"x" * 700)
+        kwargs["stderr"].write(b"y" * 700)
+        return ExitedVerboseProcess()
+
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", popen)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(tmp_path / "attempts.json"),
+        "clock": lambda: 10, "sleep": lambda _: None,
+    })
+
+    with pytest.raises(ValueError, match="output exceeds 1024 bytes"):
+        generator._hermes("topic", {
+            "platform": "wechat",
+            "run_contract": {"bounds": {"provider_response_bytes": 1024}},
+        }, {"language": "zh", "platform_rules": ""})
+
+    checkpoint = json.loads((tmp_path / "generation_checkpoint.json").read_text(encoding="utf-8"))
+    assert checkpoint["status"] == "provider_error"
+    assert checkpoint["error_class"] == "provider_output_limit"
+
+
 def test_hard_timeout_stops_heartbeats_and_terminates_process(monkeypatch, tmp_path):
     class FakeClock:
         now = 0

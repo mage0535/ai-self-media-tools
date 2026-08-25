@@ -979,7 +979,16 @@ class DraftGenerator:
                 elapsed = clock() - started
                 if self._generation_output_size(stdout_file, stderr_file) > output_limit:
                     finished = clock()
-                    self._terminate_generation_process(proc)
+                    try:
+                        self._terminate_generation_process(proc)
+                    except Exception as exc:
+                        payload = self._checkpoint_payload(
+                            attempt=2 if retry else 1, status="process_termination_failed", error_class="process_termination_failed",
+                            prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+                        )
+                        self._write_generation_checkpoint(payload)
+                        self._record_generation_attempt(payload)
+                        raise RuntimeError("Hermes process termination failed") from exc
                     payload = self._checkpoint_payload(
                         attempt=2 if retry else 1, status="provider_error", error_class="provider_output_limit",
                         prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
@@ -1017,6 +1026,13 @@ class DraftGenerator:
                     next_heartbeat_at += heartbeat_interval
                 self.config.get("sleep", time.sleep)(0.05)
             if self._generation_output_size(stdout_file, stderr_file) > output_limit:
+                finished = clock()
+                payload = self._checkpoint_payload(
+                    attempt=2 if retry else 1, status="provider_error", error_class="provider_output_limit",
+                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+                )
+                self._write_generation_checkpoint(payload)
+                self._record_generation_attempt(payload)
                 raise ValueError(f"Hermes output exceeds {output_limit} bytes")
             stdout, stderr = self._read_generation_output(proc, stdout_file, stderr_file, output_limit)
         finally:
@@ -1122,6 +1138,8 @@ class DraftGenerator:
 
     @staticmethod
     def _generation_output_size(stdout_file, stderr_file):
+        stdout_file.flush()
+        stderr_file.flush()
         return os.fstat(stdout_file.fileno()).st_size + os.fstat(stderr_file.fileno()).st_size
 
     @staticmethod
