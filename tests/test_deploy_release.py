@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import deploy_release as deploy_release_module
 from scripts.deploy_release import _tracked_modes, deploy_release, deploy_release as _deploy_release, init_signing_key, rollback_release
 from scripts.runtime_release_audit import ReleaseAuditError, audit_release, verify_metadata, write_metadata
 
@@ -165,6 +166,88 @@ def test_deploy_runs_source_evidence_commands_and_binds_manifest(tmp_path: Path,
     assert all(item["returncode"] == 0 and item["sha256"] for item in saved["evidence"])
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     assert metadata["evidence_manifest_hash"]
+
+
+def test_deploy_freezes_commit_a_across_source_b_and_post_audit_source_change(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    commit_a = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=source, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    calls = []
+
+    def runner(argv, cwd, stdout_path):
+        calls.append(Path(cwd))
+        if argv[2] == "pytest":
+            (source / "README.md").write_text("release B\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=source, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "release-b"],
+                cwd=source, check=True, capture_output=True,
+            )
+            junit = Path(next(item.split("=", 1)[1] for item in argv if item.startswith("--junitxml=")))
+            junit.parent.mkdir(parents=True, exist_ok=True)
+            junit.write_text("<testsuite tests='900' failures='0' errors='0'/>", encoding="utf-8")
+        else:
+            stdout_path.write_text(json.dumps({"ok": True, "issues": []}), encoding="utf-8")
+        return type("Result", (), {"returncode": 0, "stdout": ""})()
+
+    original_audit = deploy_release_module.audit_release
+
+    def audit_then_change_source(**kwargs):
+        metadata = original_audit(**kwargs)
+        (source / "README.md").write_text("post-audit source change\n", encoding="utf-8")
+        return metadata
+
+    monkeypatch.setattr(deploy_release_module, "audit_release", audit_then_change_source)
+    result = _deploy_release(
+        source_root=source,
+        releases_root=tmp_path / "releases",
+        current_link=tmp_path / ".ai-self-media-tools-current",
+        config_path=config,
+        rollback_target=rollback,
+        data_root=tmp_path / "data",
+        secrets_root=tmp_path / "secrets",
+        evidence_runner=runner,
+        release_name="race-safe",
+    )
+
+    release = Path(result["release_root"])
+    manifest = json.loads((tmp_path / "data" / "release-evidence" / "race-safe" / "evidence_manifest.json").read_text(encoding="utf-8"))
+    metadata = json.loads((release / "release-metadata.json").read_text(encoding="utf-8"))
+    assert len(set(calls)) == 1
+    assert calls[0] != source
+    assert manifest["commit"] == commit_a
+    assert metadata["commit"] == commit_a
+    assert (release / "README.md").read_text(encoding="utf-8") == "release\n"
+
+
+def test_deploy_rejects_dirty_staging_worktree_and_cleans_it(tmp_path: Path):
+    source, config, report, rollback = _case(tmp_path)
+
+    def runner(argv, cwd, stdout_path):
+        (Path(cwd) / "staging-dirty.txt").write_text("dirty\n", encoding="utf-8")
+        if argv[2] == "pytest":
+            junit = Path(next(item.split("=", 1)[1] for item in argv if item.startswith("--junitxml=")))
+            junit.parent.mkdir(parents=True, exist_ok=True)
+            junit.write_text("<testsuite tests='900' failures='0' errors='0'/>", encoding="utf-8")
+        else:
+            stdout_path.write_text(json.dumps({"ok": True, "issues": []}), encoding="utf-8")
+        return type("Result", (), {"returncode": 0, "stdout": ""})()
+
+    with pytest.raises(ReleaseAuditError, match="dirty|uncommitted"):
+        _deploy_release(
+            source_root=source,
+            releases_root=tmp_path / "releases",
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            config_path=config,
+            rollback_target=rollback,
+            data_root=tmp_path / "data",
+            secrets_root=tmp_path / "secrets",
+            evidence_runner=runner,
+            release_name="dirty-staging",
+        )
+
+    assert not list(source.parent.glob(f"{source.name}-release-staging-*"))
 
 
 def test_deploy_requires_successful_junit(tmp_path: Path, monkeypatch):
