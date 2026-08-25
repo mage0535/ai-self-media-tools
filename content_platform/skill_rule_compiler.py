@@ -15,7 +15,10 @@ _BLOCKED_SKILL_TOKENS = frozenset({
     ".archive", "_archive", "archive", "duplicate", "duplicates", "finance", "financial",
     "trading", "trade", "stock", "stocks", "forex", "crypto", "investment", "investing",
 })
-_PLATFORMS = frozenset({"douyin", "xiaohongshu", "zhihu", "juejin", "wechat", "kuaishou", "tiktok", "youtube"})
+_PLATFORMS = frozenset({
+    "douyin", "xiaohongshu", "rednote", "zhihu", "juejin", "wechat", "kuaishou",
+    "tiktok", "youtube", "bilibili", "shipinhao", "x", "twitter",
+})
 
 
 def _blocked_skill(relative: str) -> bool:
@@ -103,7 +106,7 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
         records.append((relative, path))
     for relative, path in sorted(records, key=lambda item: item[0].casefold()):
         text = path.read_text(encoding="utf-8", errors="replace")
-        rule_path = relative.removeprefix("skills/").removesuffix("/SKILL.md")
+        rule_path = relative.removeprefix("hermes/").removeprefix("skills/").removesuffix("/SKILL.md")
         source_id = f"skill:{rule_path}"
         source_hash = hashlib.sha256(path.read_bytes()).hexdigest()
         sources.append({"id": source_id, "path": relative, "sha256": source_hash})
