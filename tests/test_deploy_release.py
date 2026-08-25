@@ -1,19 +1,23 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from scripts.deploy_release import deploy_release
+from scripts.deploy_release import _tracked_modes, deploy_release, rollback_release
 
 
 def _git_source(root: Path) -> None:
     (root / "scripts").mkdir(parents=True)
-    (root / "scripts" / "run.py").write_text("print('release')\n", encoding="utf-8")
+    run = root / "scripts" / "run.py"
+    run.write_text("print('release')\n", encoding="utf-8")
+    run.chmod(0o755)
     (root / "README.md").write_text("release\n", encoding="utf-8")
     subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
     subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "update-index", "--chmod=+x", "scripts/run.py"], cwd=root, check=True, capture_output=True)
     subprocess.run(
         ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "release"],
         cwd=root,
@@ -40,7 +44,7 @@ def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: 
     source, config, report, rollback = _case(tmp_path)
     releases = tmp_path / "releases"
     data = tmp_path / "data"
-    current = tmp_path / "current"
+    current = tmp_path / ".ai-self-media-tools-current"
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
 
     result = deploy_release(
@@ -62,7 +66,10 @@ def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: 
     assert json.loads((release / "release-metadata.json").read_text(encoding="utf-8"))["attestation_path"] == str(attestation.resolve())
     assert current.is_symlink()
     assert current.resolve() == release.resolve()
-    assert not (release / "README.md").stat().st_mode & 0o222
+    assert _tracked_modes(source)["scripts/run.py"] == "100755"
+    if os.name != "nt":
+        assert (release / "scripts" / "run.py").stat().st_mode & 0o777 == 0o555
+    assert (release / "README.md").stat().st_mode & 0o777 == 0o444
 
 
 def test_deploy_requires_successful_junit(tmp_path: Path, monkeypatch):
@@ -74,10 +81,87 @@ def test_deploy_requires_successful_junit(tmp_path: Path, monkeypatch):
         deploy_release(
             source_root=source,
             releases_root=tmp_path / "releases",
-            current_link=tmp_path / "current",
+            current_link=tmp_path / ".ai-self-media-tools-current",
             config_path=config,
             test_report_path=report,
             rollback_target=rollback,
             data_root=tmp_path / "data",
             release_name="failed",
         )
+
+
+def test_rollback_verifies_target_and_atomically_switches_current(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    releases = tmp_path / "releases"
+    data = tmp_path / "data"
+    current = tmp_path / ".ai-self-media-tools-current"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    deployed = deploy_release(
+        source_root=source,
+        releases_root=releases,
+        current_link=current,
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=data,
+        release_name="good",
+    )
+
+    result = rollback_release(
+        target_release=deployed["release_root"],
+        current_link=current,
+        data_root=data,
+    )
+
+    assert result["release_root"] == deployed["release_root"]
+    assert current.resolve() == Path(deployed["release_root"]).resolve()
+
+
+def test_rollback_rejects_target_without_audited_metadata(tmp_path: Path):
+    target = tmp_path / "unaudited"
+    target.mkdir()
+    with pytest.raises(Exception, match="metadata|attestation|audit|exist"):
+        rollback_release(
+            target_release=target,
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            data_root=tmp_path / "data",
+        )
+
+
+def test_rollback_cli_verifies_and_switches_audited_target(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    releases = tmp_path / "releases"
+    data = tmp_path / "data"
+    current = tmp_path / ".ai-self-media-tools-current"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    deployed = deploy_release(
+        source_root=source,
+        releases_root=releases,
+        current_link=current,
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=data,
+        release_name="cli-good",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/deploy_release.py",
+            "rollback",
+            "--target-release",
+            deployed["release_root"],
+            "--current-link",
+            str(current),
+            "--data-root",
+            str(data),
+        ],
+        cwd=Path(__file__).parents[1],
+        env={**os.environ, "CONTENT_PLATFORM_CODE_ROOT": str(source)},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert current.resolve() == Path(deployed["release_root"]).resolve()
