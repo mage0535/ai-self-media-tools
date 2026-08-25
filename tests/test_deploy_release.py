@@ -61,9 +61,15 @@ def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: 
 
     release = releases / "abc123"
     attestation = data / "release-attestations" / "abc123.sha256"
+    signing_key = data / "release-signing.key"
     assert result["release_root"] == str(release.resolve())
     assert (release / "release-metadata.json").is_file()
     assert attestation.is_file()
+    assert signing_key.is_file()
+    assert signing_key.stat().st_size == 32
+    if os.name != "nt":
+        assert signing_key.stat().st_mode & 0o777 == 0o600
+    assert set(json.loads(attestation.read_text(encoding="ascii"))) == {"release_digest", "hmac_sha256"}
     assert json.loads((release / "release-metadata.json").read_text(encoding="utf-8"))["attestation_path"] == str(attestation.resolve())
     assert current.is_symlink()
     assert current.resolve() == release.resolve()
@@ -88,6 +94,82 @@ def test_deploy_requires_successful_junit(tmp_path: Path, monkeypatch):
             rollback_target=rollback,
             data_root=tmp_path / "data",
             release_name="failed",
+        )
+
+
+def test_verify_requires_hmac_key_and_rejects_plaintext_or_tampered_signature(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    data = tmp_path / "data"
+    current = tmp_path / ".ai-self-media-tools-current"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    deployed = deploy_release(
+        source_root=source,
+        releases_root=tmp_path / "releases",
+        current_link=current,
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=data,
+        release_name="signed",
+    )
+    release = Path(deployed["release_root"])
+    metadata = release / "release-metadata.json"
+    attestation = data / "release-attestations" / "signed.sha256"
+    key = data / "release-signing.key"
+    original_attestation = json.loads(attestation.read_text(encoding="ascii"))
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release))
+
+    key.unlink()
+    with pytest.raises(ReleaseAuditError, match="key|signing|attestation"):
+        verify_metadata(metadata, current_release_root=release)
+
+    key.write_bytes(b"k" * 32)
+    attestation.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(ReleaseAuditError, match="HMAC|signature|attestation|JSON"):
+        verify_metadata(metadata, current_release_root=release)
+
+    payload = original_attestation
+    payload["hmac_sha256"] = "0" * 64
+    attestation.write_text(json.dumps(payload), encoding="ascii")
+    with pytest.raises(ReleaseAuditError, match="HMAC|signature|attestation"):
+        verify_metadata(metadata, current_release_root=release)
+
+
+def test_deploy_rewrites_old_internal_config_paths_and_rejects_external_script(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    old_release = tmp_path / ".ai-self-media-tools-releases" / "old"
+    old_script = old_release / "scripts" / "run.py"
+    config.write_text(
+        json.dumps({"data_dir": str(old_release / "data"), "media": {"script": str(old_script)}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    result = deploy_release(
+        source_root=source,
+        releases_root=tmp_path / "releases",
+        current_link=tmp_path / ".ai-self-media-tools-current",
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=tmp_path / "data",
+        release_name="rewritten",
+    )
+    assert result["ok"] is True
+
+    config.write_text(
+        json.dumps({"media": {"script": str(tmp_path / "legacy-release" / "scripts" / "run.py")}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ReleaseAuditError, match="config|script|release|path"):
+        deploy_release(
+            source_root=source,
+            releases_root=tmp_path / "releases-2",
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            config_path=config,
+            test_report_path=report,
+            rollback_target=rollback,
+            data_root=tmp_path / "data-2",
+            release_name="rejected",
         )
 
 
