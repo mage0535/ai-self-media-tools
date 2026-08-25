@@ -1,4 +1,4 @@
-"""Secure allowlisted adapter executor."""
+"""Execute only verified, allowlisted Python capability adapters."""
 
 from __future__ import annotations
 
@@ -6,44 +6,86 @@ import hashlib
 import importlib
 import json
 import time
+from typing import Any
 
 
-def execute_capability(capability: dict, inputs: dict) -> dict:
+_SUPPORTED_ADAPTERS = frozenset({"python:content_platform.adapters.structure:execute"})
+
+
+def supported_adapter_targets() -> frozenset[str]:
+    return _SUPPORTED_ADAPTERS
+
+
+def _failure(reason: str) -> dict[str, Any]:
+    return {"status": "failed", "reason": reason, "contract_valid": False}
+
+
+def capability_available(capability: dict[str, Any]) -> tuple[bool, str]:
+    """Probe the adapter module without calling the capability adapter."""
+    if capability.get("lifecycle") != "executable":
+        return False, "inventory_only"
+    adapter = str(capability.get("adapter") or "")
+    if adapter not in _SUPPORTED_ADAPTERS:
+        return False, "adapter_not_allowlisted"
+    probe = str(capability.get("availability_probe") or "")
+    if not probe.startswith("module:"):
+        return False, "availability_probe_not_allowlisted"
+    module_name = probe.removeprefix("module:")
+    if not module_name.startswith("content_platform.adapters."):
+        return False, "availability_probe_not_allowlisted"
+    try:
+        module = importlib.import_module(module_name)
+        if not callable(getattr(module, "execute", None)):
+            return False, "availability_probe_missing_callable"
+    except Exception as exc:
+        return False, f"availability_probe_error:{type(exc).__name__}"
+    return True, "available"
+
+
+def execute_capability(capability: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
     started = time.perf_counter()
+    if capability.get("kind") == "methodology":
+        return {"status": "consulted", "contract_valid": True, "duration_ms": 0}
     for required in capability.get("required_inputs", []):
         if required not in inputs or inputs[required] in (None, "", []):
-            return {"status": "failed", "reason": f"missing_input:{required}", "contract_valid": False}
-    kind = capability.get("capability_kind")
-    if kind == "methodology":
-        return {"status": "consulted", "contract_valid": True, "duration_ms": 0}
-    adapter = str(capability.get("adapter") or "")
-    if not adapter.startswith("python:"):
-        return {"status": "failed", "reason": "adapter_not_allowlisted", "contract_valid": False}
+            return _failure(f"missing_input:{required}")
+    available, reason = capability_available(capability)
+    if not available:
+        return {"status": "skipped", "reason": reason, "contract_valid": False}
+    adapter = str(capability["adapter"])
     target = adapter.removeprefix("python:")
     module_name, separator, function_name = target.rpartition(":")
     if not separator or not module_name.startswith("content_platform.adapters."):
-        return {"status": "failed", "reason": "adapter_target_not_allowlisted", "contract_valid": False}
+        return _failure("adapter_target_not_allowlisted")
     try:
         module = importlib.import_module(module_name)
-        fn = getattr(module, function_name)
-        output = fn(inputs)
-        if not isinstance(output, dict) or not output:
-            raise ValueError("adapter output must be a non-empty object")
-        valid = _validate_contract(output, str(capability.get("output_contract") or ""))
-        serialized = json.dumps(output, ensure_ascii=False, sort_keys=True).encode()
-        return {
-            "status": "executed" if valid else "failed",
-            "output": output,
-            "duration_ms": int((time.perf_counter() - started) * 1000),
-            "output_hash": "sha256:" + hashlib.sha256(serialized).hexdigest(),
-            "contract_valid": valid,
-            **({} if valid else {"reason": "output_contract_invalid"}),
-        }
+        function = getattr(module, function_name)
+        output = function(inputs)
     except Exception as exc:
-        return {"status": "failed", "reason": f"adapter_error:{type(exc).__name__}:{exc}", "contract_valid": False}
+        return _failure(f"adapter_error:{type(exc).__name__}:{exc}")
+    if not isinstance(output, dict) or not output:
+        return _failure("adapter_output_empty")
+    contract_valid = _validate_contract(output, str(capability.get("output_contract") or ""))
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    if not contract_valid:
+        return {
+            "status": "failed",
+            "reason": "output_contract_invalid",
+            "output": output,
+            "contract_valid": False,
+            "duration_ms": duration_ms,
+        }
+    serialized = json.dumps(output, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {
+        "status": "executed",
+        "output": output,
+        "duration_ms": duration_ms,
+        "output_hash": "sha256:" + hashlib.sha256(serialized).hexdigest(),
+        "contract_valid": True,
+    }
 
 
-def _validate_contract(output: dict, contract: str) -> bool:
+def _validate_contract(output: dict[str, Any], contract: str) -> bool:
     if contract == "structure_match_v1":
         return output.get("version") == contract and isinstance(output.get("matched_structures"), list)
-    return bool(output)
+    return False
