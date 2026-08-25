@@ -274,15 +274,19 @@ def audit_release(
     evidence_manifest_path: Path | str | None = None,
     expected_commit: str | None = None,
     min_tests: int = 900,
+    bootstrap: bool = False,
 ) -> dict:
-    if config_path is None or test_report_path is None or rollback_target is None:
+    if config_path is None or test_report_path is None or (rollback_target is None and not bootstrap):
         raise ReleaseAuditError("config_path, test_report_path, and rollback_target are required evidence")
+    if not isinstance(bootstrap, bool):
+        raise ReleaseAuditError("bootstrap must be boolean")
     _validate_raw_path(source_root, "source_root")
     _validate_raw_path(release_root, "release_root")
     _validate_raw_path(configured_script_root, "configured_script_root")
     _validate_raw_path(config_path, "config_path")
     _validate_raw_path(test_report_path, "test_report_path")
-    _validate_raw_path(rollback_target, "rollback_target")
+    if rollback_target is not None and rollback_target:
+        _validate_raw_path(rollback_target, "rollback_target")
     if attestation_path is not None:
         _validate_raw_path(attestation_path, "attestation_path")
     if signing_key_path is not None:
@@ -298,7 +302,7 @@ def audit_release(
     script_root = _resolve(configured_script_root)
     config = _resolve(config_path)
     test_report = _resolve(test_report_path)
-    rollback = _resolve(rollback_target)
+    rollback = _resolve(rollback_target) if rollback_target else None
     attestation = _resolve(attestation_path) if attestation_path is not None else _default_attestation_path(release)
     signing_key = _resolve(signing_key_path) if signing_key_path is not None else _default_signing_key_path(release)
     trusted_secrets = _resolve(trusted_secrets_root) if trusted_secrets_root is not None else signing_key.parent
@@ -346,7 +350,15 @@ def audit_release(
     _assert_release_has_no_symlinks(release)
     _assert_release_matches(release, source_hashes)
     _assert_release_has_no_untracked_files(release, source_hashes)
-    _validate_rollback_target(release, rollback)
+    if bootstrap:
+        if rollback is not None and rollback != Path.cwd().resolve():
+            raise ReleaseAuditError("bootstrap release must have an empty rollback target")
+        rollback_value = ""
+    else:
+        if rollback is None:
+            raise ReleaseAuditError("rollback target is required for signed releases")
+        _validate_rollback_target(release, rollback)
+        rollback_value = str(rollback)
     metadata = {
         "commit": commit,
         "source_root": str(source),
@@ -361,7 +373,7 @@ def audit_release(
         "test_report": str(test_report),
         "test_report_hash": _sha256(test_report),
         "junit_tests": junit_tests,
-        "rollback_target": str(rollback),
+        "rollback_target": rollback_value,
         "attestation_path": str(attestation),
         "signing_key_id": f"sha256:{_sha256(signing_key)[:16]}",
         "signing_key_hash": _sha256(signing_key),
@@ -372,6 +384,8 @@ def audit_release(
     if evidence_manifest is not None:
         metadata["evidence_manifest"] = str(evidence_manifest)
         metadata["evidence_manifest_hash"] = _sha256(evidence_manifest)
+    if bootstrap:
+        metadata["bootstrap"] = True
     return metadata
 
 
@@ -447,6 +461,9 @@ def verify_metadata(
         raise ReleaseAuditError("release metadata must be a JSON object")
 
     try:
+        bootstrap = metadata.get("bootstrap", False)
+        if not isinstance(bootstrap, bool):
+            raise ReleaseAuditError("release metadata bootstrap flag is invalid")
         raw_paths = {
             "release": metadata["release_root"],
             "script_root": metadata["configured_script_root"],
@@ -463,7 +480,13 @@ def verify_metadata(
     except (KeyError, TypeError, ValueError) as exc:
         raise ReleaseAuditError("release metadata is incomplete") from exc
 
+    if bootstrap and raw_paths["rollback"] != "":
+        raise ReleaseAuditError("bootstrap release must have an empty rollback target")
+    if not bootstrap and not raw_paths["rollback"]:
+        raise ReleaseAuditError("signed release must have a rollback target")
     for name, raw_path in raw_paths.items():
+        if name == "rollback" and bootstrap:
+            continue
         if not isinstance(raw_path, (str, Path)):
             raise ReleaseAuditError(f"metadata {name} path is invalid")
         _validate_raw_path(raw_path, f"metadata {name}")
@@ -471,7 +494,7 @@ def verify_metadata(
     script_root = _resolve(raw_paths["script_root"])
     config = _resolve(raw_paths["config"])
     test_report = _resolve(raw_paths["test_report"])
-    rollback = _resolve(raw_paths["rollback"])
+    rollback = _resolve(raw_paths["rollback"]) if not bootstrap else None
     attestation = _resolve(raw_paths["attestation"])
     if signing_key_path is None:
         secrets_root = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", "").strip()
@@ -553,7 +576,8 @@ def verify_metadata(
         _assert_evidence_manifest(manifest_path, Path(metadata.get("source_root", "")), metadata["commit"], test_report, project_path)
         if _sha256(manifest_path) != metadata.get("evidence_manifest_hash"):
             raise ReleaseAuditError("evidence manifest hash mismatch")
-    _validate_rollback_target(release, rollback)
+    if not bootstrap:
+        _validate_rollback_target(release, rollback)
     _require_file(attestation, "release attestation")
     _require_file(signing_key, "release signing key")
     key = signing_key.read_bytes()

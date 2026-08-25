@@ -242,6 +242,133 @@ def _generate_evidence(source: Path, data: Path, name: str, commit: str, runner=
     return {"manifest": manifest_path, "junit": junit_path, "project_audit": project_path}
 
 
+def attest_existing_release(
+    *,
+    source_root: Path | str,
+    target_release: Path | str,
+    current_link: Path | str | None = None,
+    config_path: Path | str,
+    data_root: Path | str,
+    secrets_root: Path | str | None = None,
+    signing_key: Path | str | None = None,
+    min_tests: int = 900,
+    evidence_runner=None,
+) -> dict:
+    """Adopt the current unmetadataed release as a signed bootstrap release."""
+    _validate_raw_path(source_root, "source_root")
+    _validate_raw_path(target_release, "target_release")
+    _validate_raw_path(config_path, "config_path")
+    _validate_raw_path(data_root, "data_root")
+    source = Path(source_root).expanduser().resolve()
+    target = Path(target_release).expanduser().resolve()
+    current = _current_path(current_link)
+    config = Path(config_path).expanduser().resolve()
+    data = Path(data_root).expanduser().resolve()
+    if signing_key is not None:
+        key = Path(signing_key).expanduser().resolve()
+        secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else key.parent
+    else:
+        secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else data.parent / "secrets"
+        key = secrets / "release-signing.key"
+    _validate_signing_key_boundary(key, secrets, data, target.parent, current, target)
+    metadata_path = target / "release-metadata.json"
+    attestation = data / "release-attestations" / f"{target.name}.sha256"
+    lock_path = data / "runtime-release.lock"
+
+    with _exclusive_lock(lock_path):
+        if not source.is_dir() or not target.is_dir():
+            raise ReleaseAuditError("source and target release must be directories")
+        if not current.is_symlink() or current.resolve() != target:
+            raise ReleaseAuditError("target release must be the current_link resolved target")
+        if metadata_path.exists() or metadata_path.is_symlink():
+            raise ReleaseAuditError(f"release metadata already exists: {metadata_path}")
+        existing_attestations = list(attestation.parent.glob("*.sha256")) if attestation.parent.exists() else []
+        if existing_attestations:
+            raise ReleaseAuditError("attestation directory already contains a signed release")
+        if _git(source, "status", "--porcelain").strip():
+            raise ReleaseAuditError("source root is dirty or has uncommitted changes")
+        commit = _git(source, "rev-parse", "HEAD").strip()
+        staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
+        try:
+            _git(source, "worktree", "add", "--detach", str(staging), commit)
+            evidence = _generate_evidence(staging, data, target.name, commit, runner=evidence_runner)
+            source_hashes = {}
+            staging_hashes = {}
+            for root, hashes in ((source, source_hashes), (staging, staging_hashes)):
+                for relative in _tracked_paths(root):
+                    path = root / relative
+                    if path.is_symlink() or not path.is_file():
+                        raise ReleaseAuditError(f"tracked source file is not a regular file: {relative}")
+                    hashes[relative.as_posix()] = _sha256(path)
+            if source_hashes != staging_hashes:
+                raise ReleaseAuditError("source and detached staging tracked file hashes do not match")
+            for root, directories, files in os.walk(target, followlinks=False):
+                for name in (*directories, *files):
+                    candidate = Path(root) / name
+                    if candidate.is_symlink():
+                        raise ReleaseAuditError(f"existing release contains forbidden symlink: {candidate.relative_to(target)}")
+            for relative, expected in source_hashes.items():
+                candidate = target / relative
+                if not candidate.is_file() or candidate.is_symlink() or _sha256(candidate) != expected:
+                    raise ReleaseAuditError(f"existing release content hash mismatch: {relative}")
+            allowed = set(source_hashes) | {"release-metadata.json"}
+            for path in target.rglob("*"):
+                if path.is_file() and path.relative_to(target).as_posix() not in allowed:
+                    raise ReleaseAuditError(f"existing release contains extra code: {path.relative_to(target)}")
+            previous_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT")
+            previous_data = os.environ.get("CONTENT_PLATFORM_DATA_DIR")
+            previous_secrets = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR")
+            os.environ["CONTENT_PLATFORM_CODE_ROOT"] = str(target)
+            os.environ["CONTENT_PLATFORM_DATA_DIR"] = str(data)
+            os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = str(secrets)
+            try:
+                _validate_runtime_config(config, target, data, secrets)
+                metadata = audit_release(
+                    source_root=staging,
+                    release_root=target,
+                    configured_script_root=target / "scripts",
+                    config_path=config,
+                    test_report_path=evidence["junit"],
+                    rollback_target="",
+                    attestation_path=attestation,
+                    signing_key_path=key,
+                    trusted_secrets_root=secrets,
+                    project_audit_report_path=evidence["project_audit"],
+                    evidence_manifest_path=evidence["manifest"],
+                    expected_commit=commit,
+                    min_tests=min_tests,
+                    bootstrap=True,
+                )
+                write_metadata(metadata, metadata_path, signing_key_path=key)
+            finally:
+                if previous_root is None:
+                    os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
+                else:
+                    os.environ["CONTENT_PLATFORM_CODE_ROOT"] = previous_root
+                if previous_data is None:
+                    os.environ.pop("CONTENT_PLATFORM_DATA_DIR", None)
+                else:
+                    os.environ["CONTENT_PLATFORM_DATA_DIR"] = previous_data
+                if previous_secrets is None:
+                    os.environ.pop("CONTENT_PLATFORM_SECRETS_DIR", None)
+                else:
+                    os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = previous_secrets
+            _freeze_release(target)
+            return {
+                "ok": True,
+                "operation": "attest-existing",
+                "release_root": str(target),
+                "metadata_path": str(metadata_path),
+                "attestation_path": str(attestation),
+                "signing_key_path": str(key),
+                "commit": commit,
+            }
+        finally:
+            if staging.exists() or staging.is_symlink():
+                _git(source, "worktree", "remove", "--force", str(staging))
+            _git(source, "worktree", "prune")
+
+
 def deploy_release(
     *,
     source_root: Path | str,
@@ -423,7 +550,7 @@ def rollback_release(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", nargs="?", choices=("deploy", "rollback", "init-signing-key"), default="deploy")
+    parser.add_argument("operation", nargs="?", choices=("deploy", "rollback", "attest-existing", "init-signing-key"), default="deploy")
     parser.add_argument("--source-root")
     parser.add_argument("--releases-root")
     parser.add_argument("--current-link")
@@ -444,7 +571,7 @@ def main() -> int:
         print(init_signing_key(args.secrets_root))
         return 0
     if not args.data_root:
-        parser.error("deploy/rollback requires --data-root")
+        parser.error("deploy/rollback/attest-existing requires --data-root")
     if args.operation == "rollback":
         if not args.target_release:
             parser.error("rollback requires --target-release")
@@ -456,6 +583,27 @@ def main() -> int:
             data_root=args.data_root,
             signing_key=args.signing_key,
             secrets_root=args.secrets_root,
+        )
+    elif args.operation == "attest-existing":
+        required = {
+            "source_root": args.source_root,
+            "target_release": args.target_release,
+            "config_path": args.config_path,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            parser.error(f"attest-existing requires: {', '.join(missing)}")
+        if not args.signing_key and not args.secrets_root:
+            parser.error("attest-existing requires --signing-key or --secrets-root")
+        result = attest_existing_release(
+            source_root=args.source_root,
+            target_release=args.target_release,
+            current_link=args.current_link,
+            config_path=args.config_path,
+            data_root=args.data_root,
+            secrets_root=args.secrets_root,
+            signing_key=args.signing_key,
+            min_tests=args.min_tests,
         )
     else:
         required = {
