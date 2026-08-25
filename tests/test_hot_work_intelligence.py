@@ -157,7 +157,7 @@ AI 办公助手效率起飞
 AI 工作流作者主页
 397
 ComfyUI AI 工作流实战
-2024
+· 2024-04-22
 播放 1888
 """
     rows = parse_platform_search_evidence(
@@ -172,6 +172,22 @@ ComfyUI AI 工作流实战
     )
     assert [row["title"] for row in rows] == ["ComfyUI AI 工作流实战"]
     assert rows[0]["engagement"] == "1888"
+
+
+def test_platform_anchor_parser_deduplicates_same_content_url():
+    url = "https://juejin.cn/post/123?searchId=abc"
+    text = "AI 工作流实战\n赞 140\nAI 工作流实战的详细摘要和实现步骤\n赞 140"
+    rows = parse_platform_search_evidence(
+        text,
+        anchors=[
+            {"text": "AI 工作流实战", "href": url},
+            {"text": "AI 工作流实战的详细摘要和实现步骤", "href": url},
+        ],
+        platform="juejin",
+        query="AI 工作流",
+    )
+    assert len(rows) == 1
+    assert rows[0]["title"] == "AI 工作流实战"
 
 
 def test_parameter_pack_only_exposes_contract_complete_top_samples():

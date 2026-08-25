@@ -284,7 +284,8 @@ def _nearby_metric(lines: list[str], title: str) -> str:
     except ValueError:
         return ""
     for line in lines[index + 1:index + 7]:
-        if re.fullmatch(r"20\d{2}(?:[-/.]\d{1,2})?(?:[-/.]\d{1,2})?", line.strip()):
+        normalized = line.strip().lstrip("·• ")
+        if re.fullmatch(r"20\d{2}(?:[-/.]\d{1,2})?(?:[-/.]\d{1,2})?", normalized):
             continue
         match = re.search(r"(?:赞同|点赞|播放|观看|喜欢|收藏|评论)?\s*(\d+(?:\.\d+)?(?:K|M|万)?)", line, re.I)
         if match and _metric_number(match.group(1)) > 0:
@@ -308,6 +309,7 @@ def parse_platform_search_evidence(
     blocked_titles = {"ai works", "首页", "综合", "视频", "用户", "热榜", "创作中心", "内容发现"}
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
+    seen_urls: set[str] = set()
     for anchor in anchors:
         title = strip_markup(str(anchor.get("text") or ""))
         href = str(anchor.get("href") or "").strip()
@@ -316,12 +318,16 @@ def parse_platform_search_evidence(
             continue
         if not _is_content_url(platform, href):
             continue
+        canonical_url = urllib.parse.urlunsplit((*urllib.parse.urlsplit(href)[:3], "", ""))
+        if canonical_url in seen_urls:
+            continue
         if not _looks_like_content_line(title, query):
             continue
         metric = _nearby_metric(lines, title)
         if _metric_number(metric) <= 0:
             continue
         seen.add(key)
+        seen_urls.add(canonical_url)
         rows.append(_work(platform, f"{platform}_logged_search", query, title, url=href, engagement=metric, evidence_strength="strong_logged_search_result"))
         if len(rows) >= limit:
             break
