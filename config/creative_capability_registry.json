@@ -1,202 +1,84 @@
 {
-  "version": "1.0",
-  "updated": "2026-08-23",
+  "version": "creative_capability_registry_v2",
+  "updated": "2026-08-25",
+  "groups": [
+    {"id":"ops_strategy","applies_to":["article","carousel","short_video","long_video"],"required_policy":"optional","candidate_ids":["hermes_operating_strategy","growth_strategy_latest"]},
+    {"id":"trend_collection","applies_to":["article","carousel","short_video","long_video"],"required_policy":"optional","candidate_ids":["platform_source_matrix","trend_collector","same_lane_hot_analysis"]},
+    {"id":"account_data","applies_to":["article","carousel","short_video","long_video"],"required_policy":"optional","candidate_ids":["performance_cycle","historical_feedback"]},
+    {"id":"topic_dedup","applies_to":["article","carousel","short_video","long_video"],"required_policy":"required","candidate_ids":["duplication_policy","anti_spam_similarity_gate"]},
+    {"id":"article_recipe","applies_to":["article","carousel"],"required_policy":"required","candidate_ids":["content_platform.content_recipe"]},
+    {"id":"image_text_card_recipe","applies_to":["article","carousel"],"required_policy":"required","candidate_ids":["content_platform.content_recipe","wechat_image_post_cards","carousel_design_patterns"]},
+    {"id":"knowledge_card","applies_to":["article","carousel"],"required_policy":"optional","candidate_ids":["knowledge-card-designer"]},
+    {"id":"image_generation","applies_to":["article","carousel","short_video","long_video"],"required_policy":"required","candidate_ids":["cloudflare_workers_ai","pollinations","image_gen_engine"]},
+    {"id":"image_retrieval","applies_to":["article","carousel"],"required_policy":"optional","candidate_ids":["pexels","pixabay","unsplash"]},
+    {"id":"image_editing","applies_to":["article","carousel"],"required_policy":"optional","candidate_ids":["knowledge_card_renderer","cover_renderer"]},
+    {"id":"seo_geo","applies_to":["article","carousel"],"required_policy":"required","candidate_ids":["seo_geo_check","ai_seo"]},
+    {"id":"visual_recipe","applies_to":["short_video","long_video"],"required_policy":"required","candidate_ids":["content_platform.video_recipe"]},
+    {"id":"source_material","applies_to":["short_video","long_video"],"required_policy":"required","candidate_ids":["same_lane_hot_video_analysis","yt_dlp","source_asset_matcher"]},
+    {"id":"video_template","applies_to":["short_video","long_video"],"required_policy":"required","candidate_ids":["video_toolchain_runner","template_family_registry"]},
+    {"id":"motion_effects","applies_to":["short_video","long_video"],"required_policy":"required","candidate_ids":["shotcraft_moves","cinema_composition"]},
+    {"id":"transitions","applies_to":["short_video","long_video"],"required_policy":"optional","candidate_ids":["animated_card_pipeline","css_motion_transitions"]},
+    {"id":"tts","applies_to":["short_video","long_video"],"required_policy":"required","candidate_ids":["voice_engine","edge_tts","kokoro"]},
+    {"id":"subtitles","applies_to":["short_video","long_video"],"required_policy":"required","candidate_ids":["lower_third_subtitle_renderer","subtitle_burner"]},
+    {"id":"bgm","applies_to":["short_video","long_video"],"required_policy":"optional","candidate_ids":["online_real_instrument_bgm_resolver","bgm_fingerprint_gate"]},
+    {"id":"audio_mix","applies_to":["short_video","long_video"],"required_policy":"required","candidate_ids":["mix_bgm_with_gate","loudness_probe"]},
+    {"id":"quality_gate","applies_to":["article","carousel","short_video","long_video"],"required_policy":"required","candidate_ids":["media_quality","preflight_manifest"]},
+    {"id":"publisher_or_handoff","applies_to":["article","carousel","short_video","long_video"],"required_policy":"required","candidate_ids":["pipeline_publisher","handoff_package_builder","postcheck"]}
+  ],
   "capabilities": [
-    {
-      "id": "cinema_dna_composition",
-      "source": "dacnay816y62-hub/cinema-dna-21x9x3",
-      "capability_kind": "methodology",
-      "applies_to": [
-        "cover",
-        "poster",
-        "image_generation",
-        "short_video",
-        "long_video"
-      ],
-      "required_inputs": [
-        "script_text",
-        "scene_purpose"
-      ],
-      "adapter": null,
-      "output_contract": "composition_rules_injected_into_prompt",
-      "gate_id": null,
-      "fallback": "default_composition_rules",
-      "license": "unverified",
-      "trigger_keywords": [
-        "电影感",
-        "构图",
-        "封面",
-        "海报",
-        "视觉质量",
-        "cinematic"
-      ]
-    },
-    {
-      "id": "life_force_portrait_upgrade",
-      "source": "dacnay816y62-hub/fantasy-life-force-portrait-photography",
-      "capability_kind": "prompt_compiler",
-      "applies_to": [
-        "image_generation",
-        "portrait"
-      ],
-      "required_inputs": [
-        "source_image_or_description"
-      ],
-      "adapter": null,
-      "output_contract": "enhanced_portrait_prompt",
-      "gate_id": null,
-      "fallback": "standard_portrait_prompt",
-      "license": "unverified",
-      "trigger_keywords": [
-        "人像",
-        "照片升级",
-        "氛围感",
-        "portrait"
-      ]
-    },
-    {
-      "id": "regional_culture_poster_gen",
-      "source": "dacnay816y62-hub/regional-culture-poster",
-      "capability_kind": "prompt_compiler",
-      "applies_to": [
-        "poster",
-        "cover",
-        "knowledge_card"
-      ],
-      "required_inputs": [
-        "region_name",
-        "cultural_elements"
-      ],
-      "adapter": null,
-      "output_contract": "culture_poster_prompt",
-      "gate_id": null,
-      "fallback": "generic_poster_prompt",
-      "license": "unverified",
-      "trigger_keywords": [
-        "地域文化",
-        "城市海报",
-        "文化视觉",
-        "大字海报"
-      ]
-    },
-    {
-      "id": "photography_style_simulation",
-      "source": "dacnay816y62-hub/fantasy-photography-simulation-github",
-      "capability_kind": "prompt_compiler",
-      "applies_to": [
-        "image_generation",
-        "carousel"
-      ],
-      "required_inputs": [
-        "camera_type",
-        "location_or_topic"
-      ],
-      "adapter": null,
-      "output_contract": "photo_collage_prompt_set",
-      "gate_id": null,
-      "fallback": "standard_photo_prompt",
-      "license": "unverified",
-      "trigger_keywords": [
-        "摄影模拟",
-        "徕卡",
-        "哈苏",
-        "理光",
-        "街拍",
-        "城市漫游"
-      ]
-    },
-    {
-      "id": "emotion_hooks_expansion",
-      "source": "douyin_notes_batch2",
-      "capability_kind": "methodology",
-      "applies_to": [
-        "article",
-        "short_video",
-        "carousel"
-      ],
-      "required_inputs": [
-        "content_topic",
-        "target_audience"
-      ],
-      "adapter": null,
-      "output_contract": "selected_hook_with_rationale",
-      "gate_id": null,
-      "fallback": "existing_content_hooks",
-      "license": "public_knowledge",
-      "trigger_keywords": [
-        "钩子",
-        "开头",
-        "情绪",
-        "爆款",
-        "框架"
-      ]
-    },
-    {
-      "id": "copywriting_structure_matcher",
-      "source": "douyin_notes_batch2",
-      "capability_kind": "analyzer",
-      "applies_to": [
-        "short_video",
-        "article"
-      ],
-      "required_inputs": [
-        "script_text"
-      ],
-      "stage": "generation",
-      "adapter": "python:content_platform.adapters.structure:execute",
-      "output_contract": "structure_match_v1",
-      "gate_id": "video_script_gate",
-      "fallback": "no_structure_check",
-      "license": "public_knowledge",
-      "trigger_keywords": [
-        "文案结构",
-        "爆款结构",
-        "脚本结构"
-      ]
-    },
-    {
-      "id": "ai_script_six_step",
-      "source": "douyin_notes_batch2",
-      "capability_kind": "methodology",
-      "applies_to": [
-        "short_video",
-        "long_video"
-      ],
-      "required_inputs": [
-        "genre_preference",
-        "target_platform"
-      ],
-      "adapter": null,
-      "output_contract": "complete_script_draft",
-      "gate_id": null,
-      "fallback": "manual_script_writing",
-      "license": "public_knowledge",
-      "trigger_keywords": [
-        "剧本",
-        "短剧",
-        "漫剧",
-        "AI创作剧本"
-      ]
-    },
-    {
-      "id": "bgm_fingerprint_gate",
-      "source": "internal",
-      "capability_kind": "quality_gate",
-      "stage": "gate",
-      "applies_to": [
-        "short_video",
-        "long_video"
-      ],
-      "required_inputs": [
-        "bgm_file_path",
-        "platform"
-      ],
-      "adapter": "scripts/gen_bgm_history_check.py",
-      "output_contract": "bgm_history_check_v1",
-      "gate_id": "bgm_history_check",
-      "fallback": null,
-      "license": "internal",
-      "trigger_keywords": []
-    }
+    {"id":"hermes_operating_strategy","source":"legacy_tool_group:ops_strategy","kind":"methodology","lifecycle":"inventory_only","stage":"blueprint","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"consulted_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"growth_strategy_latest","source":"legacy_tool_group:ops_strategy","kind":"methodology","lifecycle":"inventory_only","stage":"blueprint","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"consulted_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"platform_source_matrix","source":"legacy_tool_group:trend_collection","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"trend_collector","source":"legacy_tool_group:trend_collection","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"same_lane_hot_analysis","source":"legacy_tool_group:trend_collection","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"performance_cycle","source":"legacy_tool_group:account_data","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"historical_feedback","source":"legacy_tool_group:account_data","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"duplication_policy","source":"legacy_tool_group:topic_dedup","kind":"quality_gate","lifecycle":"inventory_only","stage":"selection","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"anti_spam_similarity_gate","source":"legacy_tool_group:topic_dedup","kind":"quality_gate","lifecycle":"inventory_only","stage":"selection","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"content_platform.content_recipe","source":"legacy_tool_group:article_recipe","kind":"tool","lifecycle":"inventory_only","stage":"generation","applies_to":["article","carousel"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"wechat_image_post_cards","source":"legacy_tool_group:image_text_card_recipe","kind":"tool","lifecycle":"inventory_only","stage":"generation","applies_to":["article","carousel"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"carousel_design_patterns","source":"legacy_tool_group:image_text_card_recipe","kind":"methodology","lifecycle":"inventory_only","stage":"generation","applies_to":["article","carousel"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"consulted_only_v1","fallback_chain":[],"license":"public_knowledge"},
+    {"id":"knowledge-card-designer","source":"legacy_tool_group:knowledge_card","kind":"methodology","lifecycle":"inventory_only","stage":"generation","applies_to":["article","carousel"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"consulted_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"cloudflare_workers_ai","source":"legacy_tool_group:image_generation","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"pollinations","source":"legacy_tool_group:image_generation","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"image_gen_engine","source":"legacy_tool_group:image_generation","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"pexels","source":"legacy_tool_group:image_retrieval","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"pixabay","source":"legacy_tool_group:image_retrieval","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"unsplash","source":"legacy_tool_group:image_retrieval","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"knowledge_card_renderer","source":"legacy_tool_group:image_editing","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"cover_renderer","source":"legacy_tool_group:image_editing","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["article","carousel"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"seo_geo_check","source":"legacy_tool_group:seo_geo","kind":"quality_gate","lifecycle":"inventory_only","stage":"generation","applies_to":["article","carousel"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"ai_seo","source":"legacy_tool_group:seo_geo","kind":"methodology","lifecycle":"inventory_only","stage":"generation","applies_to":["article","carousel"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"consulted_only_v1","fallback_chain":[],"license":"public_knowledge"},
+    {"id":"content_platform.video_recipe","source":"legacy_tool_group:visual_recipe","kind":"tool","lifecycle":"inventory_only","stage":"blueprint","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"same_lane_hot_video_analysis","source":"legacy_tool_group:source_material","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"yt_dlp","source":"legacy_tool_group:source_material","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"source_asset_matcher","source":"legacy_tool_group:source_material","kind":"tool","lifecycle":"inventory_only","stage":"collection","applies_to":["short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"video_toolchain_runner","source":"legacy_tool_group:video_template","kind":"tool","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"template_family_registry","source":"legacy_tool_group:video_template","kind":"tool","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"shotcraft_moves","source":"legacy_tool_group:motion_effects","kind":"methodology","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"consulted_only_v1","fallback_chain":[],"license":"public_knowledge"},
+    {"id":"cinema_composition","source":"legacy_tool_group:motion_effects","kind":"methodology","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"consulted_only_v1","quality_gate":"consulted_only_v1","fallback_chain":[],"license":"public_knowledge"},
+    {"id":"animated_card_pipeline","source":"legacy_tool_group:transitions","kind":"tool","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"css_motion_transitions","source":"legacy_tool_group:transitions","kind":"tool","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"voice_engine","source":"legacy_tool_group:tts","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"edge_tts","source":"legacy_tool_group:tts","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"kokoro","source":"legacy_tool_group:tts","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"lower_third_subtitle_renderer","source":"legacy_tool_group:subtitles","kind":"tool","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"subtitle_burner","source":"legacy_tool_group:subtitles","kind":"tool","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"online_real_instrument_bgm_resolver","source":"legacy_tool_group:bgm","kind":"tool","lifecycle":"inventory_only","stage":"assets","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"unverified"},
+    {"id":"bgm_fingerprint_gate","source":"internal","kind":"quality_gate","lifecycle":"inventory_only","stage":"gate","applies_to":["short_video","long_video"],"required_inputs":["bgm_file_path","platform"],"availability_probe":"never","adapter":null,"output_contract":"bgm_history_check_v1","quality_gate":"bgm_history_check","fallback_chain":[],"license":"internal"},
+    {"id":"mix_bgm_with_gate","source":"legacy_tool_group:audio_mix","kind":"tool","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"loudness_probe","source":"legacy_tool_group:audio_mix","kind":"quality_gate","lifecycle":"inventory_only","stage":"render","applies_to":["short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"media_quality","source":"legacy_tool_group:quality_gate","kind":"quality_gate","lifecycle":"inventory_only","stage":"gate","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"preflight_manifest","source":"legacy_tool_group:quality_gate","kind":"quality_gate","lifecycle":"inventory_only","stage":"gate","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"pipeline_publisher","source":"legacy_tool_group:publisher_or_handoff","kind":"tool","lifecycle":"inventory_only","stage":"delivery","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"handoff_package_builder","source":"legacy_tool_group:publisher_or_handoff","kind":"tool","lifecycle":"inventory_only","stage":"delivery","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"postcheck","source":"legacy_tool_group:publisher_or_handoff","kind":"quality_gate","lifecycle":"inventory_only","stage":"delivery","applies_to":["article","carousel","short_video","long_video"],"required_inputs":["content_profile","content_blueprint"],"availability_probe":"never","adapter":null,"output_contract":"inventory_only_v1","quality_gate":"inventory_only_v1","fallback_chain":[],"license":"internal"},
+    {"id":"cinema_dna_composition","source":"dacnay816y62-hub/cinema-dna-21x9x3","kind":"methodology","lifecycle":"inventory_only","stage":"blueprint","applies_to":["cover","poster","image_generation","short_video","long_video"],"required_inputs":["script_text","scene_purpose"],"availability_probe":"never","adapter":null,"output_contract":"composition_rules_injected_into_prompt","quality_gate":"consulted_only_v1","fallback_chain":["default_composition_rules"],"license":"unverified"},
+    {"id":"life_force_portrait_upgrade","source":"dacnay816y62-hub/fantasy-life-force-portrait-photography","kind":"prompt_compiler","lifecycle":"inventory_only","stage":"generation","applies_to":["image_generation","portrait"],"required_inputs":["source_image_or_description"],"availability_probe":"never","adapter":null,"output_contract":"enhanced_portrait_prompt","quality_gate":"consulted_only_v1","fallback_chain":["standard_portrait_prompt"],"license":"unverified"},
+    {"id":"regional_culture_poster_gen","source":"dacnay816y62-hub/regional-culture-poster","kind":"prompt_compiler","lifecycle":"inventory_only","stage":"generation","applies_to":["poster","cover","knowledge_card"],"required_inputs":["region_name","cultural_elements"],"availability_probe":"never","adapter":null,"output_contract":"culture_poster_prompt","quality_gate":"consulted_only_v1","fallback_chain":["generic_poster_prompt"],"license":"unverified"},
+    {"id":"photography_style_simulation","source":"dacnay816y62-hub/fantasy-photography-simulation-github","kind":"prompt_compiler","lifecycle":"inventory_only","stage":"generation","applies_to":["image_generation","carousel"],"required_inputs":["camera_type","location_or_topic"],"availability_probe":"never","adapter":null,"output_contract":"photo_collage_prompt_set","quality_gate":"consulted_only_v1","fallback_chain":["standard_photo_prompt"],"license":"unverified"},
+    {"id":"emotion_hooks_expansion","source":"douyin_notes_batch2","kind":"methodology","lifecycle":"inventory_only","stage":"blueprint","applies_to":["article","short_video","carousel"],"required_inputs":["content_topic","target_audience"],"availability_probe":"never","adapter":null,"output_contract":"selected_hook_with_rationale","quality_gate":"consulted_only_v1","fallback_chain":["existing_content_hooks"],"license":"public_knowledge"},
+    {"id":"copywriting_structure_matcher","source":"douyin_notes_batch2","kind":"analyzer","lifecycle":"executable","stage":"generation","applies_to":["short_video","article"],"required_inputs":["script_text"],"availability_probe":"module:content_platform.adapters.structure","adapter":"python:content_platform.adapters.structure:execute","output_contract":"structure_match_v1","quality_gate":"video_script_gate","fallback_chain":["no_structure_check"],"license":"public_knowledge"},
+    {"id":"ai_script_six_step","source":"douyin_notes_batch2","kind":"methodology","lifecycle":"inventory_only","stage":"blueprint","applies_to":["short_video","long_video"],"required_inputs":["genre_preference","target_platform"],"availability_probe":"never","adapter":null,"output_contract":"complete_script_draft","quality_gate":"consulted_only_v1","fallback_chain":["manual_script_writing"],"license":"public_knowledge"}
   ]
 }
