@@ -67,3 +67,10 @@ def process_due_schedules(store, pipeline):
                               last_run=now, next_run=_cron_next(row["cron"]).isoformat())
         executed += 1
     return {"executed": executed}
+
+
+def process_due_metric_windows(store, collector, *, now=None):
+    """Run the publication-ledger collector without creating synthetic zeros."""
+    from .performance_collector import collect_due_metric_windows
+
+    return collect_due_metric_windows(store.publication_ledger, collector, now=now)

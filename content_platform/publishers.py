@@ -21,6 +21,7 @@ from .juejin_publisher import JuejinPublisher
 from .media_quality import validate_article_packet
 from .models import DeliveryResult
 from .paths import project_home, social_auto_upload_home
+from .publication_ledger import PublicationLedger
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, packet_uses_current_policy
 from .wechat_toolchain import TOOLCHAIN_META_KEYS
 from .xiaohongshu_policy import build_recovery_strategy
@@ -432,6 +433,7 @@ class SocialAutoUploadPublisher:
         video_extra_args=None,
         note_extra_args=None,
         schedule_delay_hours=2,
+        postcheck_callback=None,
     ):
         self.platform_name = platform_name
         self.account_name = account_name
@@ -442,6 +444,19 @@ class SocialAutoUploadPublisher:
         self.extra_args = list(extra_args or [])
         self.video_extra_args = list(video_extra_args or [])
         self.note_extra_args = list(note_extra_args or [])
+        self.postcheck_callback = postcheck_callback
+        self.delivery_callback = None
+
+    def set_delivery_callback(self, callback):
+        self.delivery_callback = callback
+
+    def set_postcheck_callback(self, callback):
+        self.postcheck_callback = callback
+
+    def _emit_delivery(self, event):
+        if callable(self.delivery_callback):
+            return self.delivery_callback(dict(event))
+        return None
 
     def _run(self, args):
         command = [self.python_bin, "sau_cli.py", self.platform_name, *args]
@@ -513,6 +528,24 @@ class SocialAutoUploadPublisher:
         upload = self._run(args)
         if upload.returncode == 0:
             info = (upload.stdout or "").strip()[:300]
+            if self.platform_name.casefold() == "kuaishou":
+                schedule = self._schedule_at()
+                description = str(formatted.get("caption") or formatted.get("description") or job.get("body") or "")
+                intent = {
+                    "platform": "kuaishou",
+                    "internal_account_alias": self.account_name,
+                    "expected_title": title,
+                    "expected_description": description,
+                    "expected_description_digest": hashlib.sha256(description.encode("utf-8")).hexdigest(),
+                    "scheduled_at": schedule,
+                }
+                evidence = self.postcheck_callback(intent) if callable(self.postcheck_callback) else {}
+                check = PublicationLedger.validate_kuaishou_scheduled_postcheck(intent, evidence)
+                event = {"status": "scheduled" if check["passed"] else "unknown_requires_review", "postcheck": check, "external_id": f"{self.platform_name}:{self.account_name}"}
+                self._emit_delivery(event)
+                if not check["passed"]:
+                    return DeliveryResult(False, "unknown_requires_review", event["external_id"], error="Kuaishou management-page postcheck is required")
+                return DeliveryResult(True, "scheduled", event["external_id"], error=f"scheduled via social-auto-upload: {info}")
             return DeliveryResult(True, "drafted", f"{self.platform_name}:{self.account_name}", error=f"scheduled via social-auto-upload: {info}")
         return DeliveryResult(False, "failed", error=(upload.stderr or upload.stdout)[:300])
 
@@ -1436,6 +1469,7 @@ def build_publisher(platform, config, data_dir):
             python_bin=cfg.get("python_bin", str(social_auto_upload_home() / "venv/bin/python")),
             schedule_at=cfg.get("schedule_at", "2099-12-31 23:59"),
             schedule_delay_hours=cfg.get("schedule_delay_hours", 2),
+            postcheck_callback=cfg.get("postcheck_callback"),
             extra_args=cfg.get("extra_args", []),
             video_extra_args=cfg.get("video_extra_args", []),
             note_extra_args=cfg.get("note_extra_args", []),

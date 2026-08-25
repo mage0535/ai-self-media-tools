@@ -39,6 +39,7 @@ from .media_quality import (
 from .models import ContentPackage, DeliveryResult, PublishReceipt, new_content_package_id
 from .notify import Notifier
 from .performance_collector import register_review_tasks
+from .publication_ledger import PublicationLedger
 from .profiles import resolve_profile
 from .publishers import build_publisher
 from .resource import ResourceGuard
@@ -60,6 +61,7 @@ class Pipeline:
     def __init__(self, store, config=None):
         self.store = store
         self.config = config or {}
+        self.publication_ledger = getattr(store, "publication_ledger", PublicationLedger(store.path))
         self.data_dir = Path(self.config.get("data_dir", store.path.parent))
         self.generator = DraftGenerator(self.config.get("generator", {}))
         self.compliance = ComplianceChecker()
@@ -764,7 +766,58 @@ class Pipeline:
         self.store.record_event(job["id"], "content_hygiene_checked", {"content_hygiene": hygiene})
         return hygiene
 
-    def _deliver(self, platform, job, action="publish"):
+    def _publisher_config(self, platform):
+        publishers = self.config.get("publishers", {}) or {}
+        return (publishers.get("platforms", {}) or {}).get(platform) or publishers.get("default", {}) or {}
+
+    def _delivery_intent_payload(self, platform, job, action):
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        cfg = self._publisher_config(platform)
+        alias = str(cfg.get("account_name") or cfg.get("account_id") or cfg.get("account") or "default")
+        media_hashes = []
+        for artifact in job.get("artifacts") or []:
+            checksum = str(artifact.get("checksum") or "")
+            path = Path(str(artifact.get("path") or ""))
+            if not checksum and path.is_file():
+                checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+            if checksum:
+                media_hashes.append(checksum)
+        description = str(formatted.get("description") or formatted.get("caption") or formatted.get("text") or formatted.get("markdown") or job.get("body") or "")
+        scheduled_at = str(
+            job.get("scheduled_at")
+            or job.get("schedule_at")
+            or (job.get("brief") or {}).get("scheduled_at")
+            or cfg.get("scheduled_at")
+            or cfg.get("schedule_at")
+            or ""
+        )
+        return {
+            "job_id": str(job.get("id") or ""),
+            "platform": platform,
+            "internal_account_alias": alias,
+            "action": action,
+            "payload": formatted,
+            "media_hashes": media_hashes,
+            "expected_title": str(formatted.get("title") or job.get("title") or ""),
+            "expected_description": description,
+            "scheduled_at": scheduled_at,
+            "idempotency_key": f"delivery:{job.get('id', '')}:{platform}:{action}",
+            "absence_window_seconds": int((self.config.get("delivery") or {}).get("absence_window_seconds", 3600)),
+        }
+
+    @staticmethod
+    def _result_metadata(result):
+        metadata = getattr(result, "metadata", None) or getattr(result, "details", None) or {}
+        return metadata if isinstance(metadata, dict) else {}
+
+    @staticmethod
+    def _unknown_status(exc):
+        text = str(exc).casefold()
+        if any(token in text for token in ("auth", "login", "cookie", "conflict", "inconclusive")):
+            return "unknown_requires_review"
+        return "unknown"
+
+    def _deliver(self, platform, job, action="publish", intent=None):
         if str(platform).casefold() == "juejin":
             # The store keeps local paths/checksums; merge the renderer-written
             # public URLs only at delivery time so the publisher receives the
@@ -805,34 +858,71 @@ class Pipeline:
                     job = delivery_job
                 except (OSError, json.JSONDecodeError):
                     pass
+        intent = intent or self.publication_ledger.create_delivery_intent(self._delivery_intent_payload(platform, job, action))
+        intent_id = intent["intent_id"]
+        if intent.get("status") == "unknown_requires_review":
+            return DeliveryResult(False, "unknown_requires_review", error=intent.get("review_reason") or "delivery requires review")
+        if intent.get("status") == "unknown" and not intent.get("retry_allowed"):
+            return DeliveryResult(False, "unknown", error="delivery outcome is unknown; poll immutable identity before retry")
         decision = delivery_health_decision(platform, self.config, action)
         if not decision.ok:
+            self.publication_ledger.record_delivery_result(intent_id, {"status": "blocked", "error": decision.error()})
             return DeliveryResult(False, "blocked", error=decision.error())
-        cfg = self.config.get("delivery", {})
-        max_attempts = max(1, int(cfg.get("max_attempts", 2)))
-        backoff = float(cfg.get("backoff_seconds", 0.2))
-        result = DeliveryResult(False, "failed", error="delivery not attempted")
-        for attempt in range(max_attempts):
+        attempt = self.publication_ledger.begin_attempt(intent_id, self._worker_id())
+        publisher = build_publisher(platform, self.config, self.data_dir)
+        callback_events = {}
+        callback = getattr(publisher, "set_delivery_callback", None)
+        if callable(callback):
+            def on_delivery_event(event):
+                if isinstance(event, dict):
+                    callback_events.update(event)
+                return self.publication_ledger.record_delivery_callback(intent_id, event)
+
+            callback(on_delivery_event)
+        try:
+            result = publisher.deliver(job, platform)
+        except Exception as exc:
+            status = self._unknown_status(exc)
+            message = redact_secrets(exc)
+            self.publication_ledger.finish_attempt(intent_id, attempt["attempt_id"], status, error=message)
+            return DeliveryResult(False, status, error=message)
+        metadata = dict(callback_events)
+        metadata.update(self._result_metadata(result))
+        if str(platform).casefold() == "juejin" and result.ok:
+            contract_path = self.data_dir / "artifacts" / str(job.get("id") or "") / "article_media_contract.json"
             try:
-                result = build_publisher(platform, self.config, self.data_dir).deliver(job, platform)
-            except Exception as exc:
-                result = DeliveryResult(False, "failed", error=redact_secrets(exc))
-            if result.ok or result.status == "blocked":
-                if str(platform).casefold() == "juejin" and result.ok:
-                    contract_path = self.data_dir / "artifacts" / str(job.get("id") or "") / "article_media_contract.json"
-                    try:
-                        in_memory = (job.get("draft_meta") or {}).get("article_media_contract")
-                        contract = in_memory if isinstance(in_memory, dict) else json.loads(contract_path.read_text(encoding="utf-8"))
-                        handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
-                        post_delivery = validate_handoff_contract(handoff)
-                        contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
-                    except (OSError, json.JSONDecodeError) as exc:
-                        post_delivery = {"passed": False, "failures": [f"handoff_contract_unreadable:{type(exc).__name__}"]}
-                    if not post_delivery.get("passed"):
-                        return DeliveryResult(False, "blocked", error="juejin renderer visibility gate failed: " + json.dumps(post_delivery, ensure_ascii=False))
-                return result
-            if attempt + 1 < max_attempts and backoff:
-                time.sleep(backoff * (2**attempt))
+                in_memory = (job.get("draft_meta") or {}).get("article_media_contract")
+                contract = in_memory if isinstance(in_memory, dict) else json.loads(contract_path.read_text(encoding="utf-8"))
+                handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
+                renderer_evidence = metadata.get("target_renderer_evidence") or metadata.get("editor_postcheck")
+                if isinstance(renderer_evidence, dict):
+                    handoff["target_renderer_evidence"] = renderer_evidence
+                post_delivery = validate_handoff_contract(handoff)
+                contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
+            except (OSError, json.JSONDecodeError) as exc:
+                post_delivery = {"passed": False, "failures": [f"handoff_contract_unreadable:{type(exc).__name__}"]}
+            if not post_delivery.get("passed"):
+                result = DeliveryResult(
+                    False, "blocked", result.external_id,
+                    "juejin renderer visibility gate failed: " + json.dumps(post_delivery, ensure_ascii=False),
+                )
+                metadata["postcheck"] = post_delivery
+        if not result.ok and result.status not in {"blocked", "drafted", "handoff_pending", "review_required", "scheduled"}:
+            status = self._unknown_status(RuntimeError(result.error or result.status))
+            result = DeliveryResult(False, status, result.external_id, result.error)
+        if result.status == "published" and not metadata.get("verification"):
+            result = DeliveryResult(False, "unknown_requires_review", result.external_id, "publisher returned published without URL/content/account/time verification")
+        if platform.casefold() == "kuaishou" and result.status == "scheduled":
+            postcheck = self.publication_ledger.validate_kuaishou_scheduled_postcheck(intent, metadata.get("postcheck") or metadata)
+            if not postcheck["passed"]:
+                result = DeliveryResult(False, "unknown_requires_review", result.external_id, "Kuaishou scheduled management-page postcheck failed")
+                metadata = {"postcheck": postcheck}
+        self.publication_ledger.finish_attempt(intent_id, attempt["attempt_id"], result.status, external_id=result.external_id, error=result.error, metadata=metadata)
+        verification = metadata.get("verification")
+        if result.status == "published" and verification:
+            self.publication_ledger.register_verified_publication({"intent_id": intent_id, "platform": platform, **verification})
+        else:
+            self.publication_ledger.record_delivery_result(intent_id, {"status": result.status, "external_id": result.external_id, "error": result.error})
         return result
 
     def _save_delivery_result(self, job_id, platform, result):
