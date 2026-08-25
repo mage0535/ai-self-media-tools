@@ -190,6 +190,16 @@ def test_platform_anchor_parser_deduplicates_same_content_url():
     assert rows[0]["title"] == "AI 工作流实战"
 
 
+def test_platform_anchor_parser_does_not_extract_year_from_excerpt():
+    rows = parse_platform_search_evidence(
+        "AI 编程工作流实践\n根据 2025 年报告效率提高\n作者\n1年前\n前端 AI编程",
+        anchors=[{"text": "AI 编程工作流实践", "href": "https://juejin.cn/post/123"}],
+        platform="juejin",
+        query="AI 工作流",
+    )
+    assert rows == []
+
+
 def test_parameter_pack_only_exposes_contract_complete_top_samples():
     complete = {"platform": "youtube", "title": "AI workflow demo", "engagement": "100", "url": "https://www.youtube.com/watch?v=1", "captured_at": "2026-08-26T00:00:00+00:00", "collector": "youtube_logged_search", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI workflow demo")}
     incomplete = {"platform": "youtube", "title": "AI profile", "engagement": "999", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI profile")}
