@@ -113,12 +113,26 @@ hot_work_args=(
   --platform kuaishou
   --platform douyin_ai
   --platform douyin_pet
+  --platform bilibili
+  --platform zhihu
+  --platform juejin
+  --platform xiaohongshu
+  --platform youtube
+  --platform tiktok
+  --platform twitter
   --query "wechat=AI工具 自动化 工作流 效率"
   --query "wechat=Claude Code Codex AI效率"
   --query "kuaishou=AI工具"
   --query "kuaishou=Claude Code Codex"
   --query "douyin_ai=AI工具"
   --query "douyin_pet=猫咪治愈"
+  --query "bilibili=AI工具 工作流 效率"
+  --query "zhihu=AI工具 工作流 效率"
+  --query "juejin=AI工程 工作流 实践"
+  --query "xiaohongshu=AI工具 效率 工作流"
+  --query "youtube=AI workflow automation productivity"
+  --query "tiktok=AI workflow automation productivity"
+  --query "twitter=AI workflow automation productivity"
   --output-dir "$out/hot-works"
 )
 for sample in "$data_root"/intel/hot_works_multiplatform_*/hot_works_raw_enriched_v2.json "$data_root"/intel/hot_works_multiplatform_*/*logged_samples.json; do
@@ -131,6 +145,25 @@ if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/kuaisho
 fi
 if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json" ]]; then
   hot_work_args+=(--state-file "douyin=$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json")
+fi
+browser_state_registry="$secrets_root/platform-browser-states.json"
+if [[ -f "$browser_state_registry" ]]; then
+  while IFS=$'\t' read -r platform state_file; do
+    if [[ -n "$platform" && -f "$state_file" ]]; then
+      hot_work_args+=(--state-file "$platform=$state_file")
+    fi
+  done < <(python3 - "$browser_state_registry" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+for platform, path in sorted((payload.get("platforms") or payload).items()):
+    if isinstance(path, dict):
+        path = path.get("state_file") or path.get("path") or ""
+    if path:
+        print(f"{platform}\t{path}")
+PY
+)
 fi
 if run_platform --config "$config_path" --db "$data_root/state.db" "${hot_work_args[@]}" > "$out/hot-works-result.json"; then
   notify "progress" "hot_work_strategy_refreshed"

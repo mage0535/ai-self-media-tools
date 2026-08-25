@@ -703,7 +703,10 @@ def execute(args):
                         statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "ok", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
                     except Exception as exc:
                         statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
-            for platform in sorted(live_platforms.intersection({"douyin", "douyin_ai", "douyin_pet", "kuaishou"})):
+            for platform in sorted(live_platforms.intersection({
+                "douyin", "douyin_ai", "douyin_pet", "kuaishou", "xiaohongshu",
+                "tiktok", "youtube", "bilibili", "zhihu", "juejin", "twitter",
+            })):
                 state_file = state_files.get(platform) or state_files.get("douyin" if platform.startswith("douyin") else platform)
                 if not state_file:
                     continue

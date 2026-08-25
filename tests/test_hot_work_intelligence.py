@@ -11,6 +11,18 @@ from content_platform.hot_work_intelligence import (
 )
 
 
+def test_save_collection_writes_latest_to_mutable_data_root(tmp_path, monkeypatch):
+    from pathlib import Path
+    from content_platform.hot_work_intelligence import save_collection
+
+    mutable = tmp_path / "mutable"
+    monkeypatch.setenv("CONTENT_PLATFORM_DATA_DIR", str(mutable))
+    paths = save_collection([], [], tmp_path / "run")
+
+    assert Path(paths["latest"]) == mutable / "intel" / "hot_work_parameter_pack_latest.json"
+    assert Path(paths["latest"]).is_file()
+
+
 def test_normalize_browser_cookies_converts_extension_exports_to_playwright_state():
     cookies = [{
         "domain": ".tiktok.com",

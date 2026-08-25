@@ -296,6 +296,13 @@ def collect_logged_short_video_search(
         "douyin_ai": f"https://www.douyin.com/search/{encoded}?type=video",
         "douyin_pet": f"https://www.douyin.com/search/{encoded}?type=video",
         "kuaishou": f"https://www.kuaishou.com/search/video?searchKey={encoded}",
+        "xiaohongshu": f"https://www.xiaohongshu.com/search_result?keyword={encoded}",
+        "tiktok": f"https://www.tiktok.com/search?q={encoded}",
+        "youtube": f"https://www.youtube.com/results?search_query={encoded}",
+        "bilibili": f"https://search.bilibili.com/all?keyword={encoded}",
+        "zhihu": f"https://www.zhihu.com/search?q={encoded}",
+        "juejin": f"https://juejin.cn/search?query={encoded}",
+        "twitter": f"https://x.com/search?q={encoded}&src=typed_query",
     }
     if platform not in urls:
         raise ValueError(f"unsupported logged short-video platform: {platform}")
@@ -522,7 +529,8 @@ def save_collection(items: list[dict[str, Any]], statuses: list[dict[str, Any]],
     pack_path = base / "hot_work_parameter_pack.json"
     pack_path.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
     report_path = save_hot_work_strategy_report(pack, base / "hot_work_strategy_report.md")
-    latest = Path("data/intel/hot_work_parameter_pack_latest.json")
+    mutable_root = Path(os.environ.get("CONTENT_PLATFORM_DATA_DIR") or os.environ.get("AI_SELF_MEDIA_DATA_DIR") or "data")
+    latest = mutable_root / "intel" / "hot_work_parameter_pack_latest.json"
     latest.parent.mkdir(parents=True, exist_ok=True)
     latest.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"raw": str(raw_path), "pack": str(pack_path), "report": str(report_path), "latest": str(latest)}
