@@ -7,7 +7,7 @@ from pathlib import Path
 from .capability_router import build_capability_plan
 from .content_profile import classify_content_profile
 from .tool_selection import build_tool_selection_evidence
-from .skill_rule_compiler import compile_skill_rules, default_skill_paths
+from .skill_rule_compiler import compile_skill_rules, default_skill_paths, select_platform_rules
 from .content_assets import load_compiled_assets, select_content_asset_ids
 
 
@@ -28,7 +28,7 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
     ]
     compiled_skill_rules["rules"] = [
         {"id": rule["id"], "source": rule["source"], "section": rule["section"], "text": str(rule.get("text") or "")[:160]}
-        for rule in compiled_skill_rules.get("rules", [])[:32]
+        for rule in select_platform_rules(compiled_skill_rules.get("rules", []), platform)[:32]
     ]
     assets = load_compiled_assets(project_root / "config" / "content_assets")
     selected_assets = select_content_asset_ids(profile, assets)
@@ -73,5 +73,6 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         "capability_plan": plan,
         "tool_selection": tool_selection,
         "compiled_skill_rules": compiled_skill_rules,
+        "selected_capability": list(full_plan.get("executed", [])),
         "ready_for_generation": not bool(plan.get("skipped")),
     }
