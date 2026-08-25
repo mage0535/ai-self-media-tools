@@ -17,6 +17,7 @@ from .content_quality_reference import load_content_quality_reference_pack, vali
 from .runtime_capabilities import build_runtime_capability_snapshot
 from .tool_selection import build_tool_selection_evidence
 from .overnight_batch import load_hot_work_parameter_pack_compact
+from .preflight_manifest import REQUIRED_SKILLS_BY_CHANNEL, required_workflow_skills
 
 ROOT = Path(__file__).resolve().parents[1]
 RULEBOOK = ROOT / "config" / "channel_content_rulebook.json"
@@ -25,25 +26,10 @@ PUBLIC_RULES_FILE = ROOT / "config" / "platform_rules_2026.md"
 STRATEGY_DIR = ROOT / "data"
 PUBLIC_STRATEGY_DIR = ROOT / "config"
 
-GENERIC_SKILLS = [
-    "content/channel-operations-workflow",
-    "content/visual-quality-standards",
-]
+GENERIC_SKILLS = sorted(set.intersection(*(set(required_workflow_skills(name)) for name in REQUIRED_SKILLS_BY_CHANNEL)))
 PLATFORM_SKILLS = {
-    "kuaishou": ["content/kuaishou-content-publishing", "content/kuaishou-publishing-workflow"],
-    "tiktok": ["content/intl-short-video-pipeline"],
-    "youtube": ["content/intl-short-video-pipeline"],
-    "bilibili": ["content/channel-operations-workflow"],
-    "shipinhao": ["content/kuaishou-content-publishing"],
-    "xiaohongshu": ["content/xiaohongshu-content-enhancer"],
-    "wechat": ["wechat-pipeline-v2"],
-    "zhihu": ["content/zhihu-publishing-workflow"],
-    "juejin": ["content/juejin-publishing-workflow"],
-    "douyin": ["douyin-repost-workflow"],
-    "douyin_ai": ["douyin-daily-analysis-workflow"],
-    "douyin_pet": ["douyin-repost-workflow"],
-    "x": ["social-media/x-twitter-autopublish"],
-    "twitter": ["social-media/x-twitter-autopublish"],
+    name: [skill for skill in required_workflow_skills(name) if skill not in GENERIC_SKILLS]
+    for name in REQUIRED_SKILLS_BY_CHANNEL
 }
 PUBLISH_MODES = {
     "kuaishou": "automatic_scheduled",
@@ -175,7 +161,7 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
         strategy_gate = validate_compiled_strategy(compiled_strategy)
         if not strategy_gate["passed"]:
             raise ValueError("compiled growth strategy invalid: " + ", ".join(strategy_gate["failures"]))
-    required_skills = list(dict.fromkeys(GENERIC_SKILLS + PLATFORM_SKILLS.get(platform, [])))
+    required_skills = required_workflow_skills(platform)
     skill_records = []
     missing = []
     for skill in required_skills:

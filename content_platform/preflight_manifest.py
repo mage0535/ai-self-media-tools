@@ -28,20 +28,47 @@ COMMON_REQUIRED_KEYS = [
     "run_contract",
 ]
 
-REQUIRED_SKILLS_BY_CHANNEL = {
-    "wechat": {"meta/content-preflight", "content/content-strategy-workflow", "content/wechat-operational-strategy", "content/visual-quality-standards", "content/wechat-full-workflow", "wewrite", "no-ai-slop"},
-    "weixin": {"meta/content-preflight", "content/content-strategy-workflow", "content/wechat-operational-strategy", "content/visual-quality-standards", "content/wechat-full-workflow", "wewrite", "no-ai-slop"},
-    "wechat_official": {"meta/content-preflight", "content/content-strategy-workflow", "content/wechat-operational-strategy", "content/visual-quality-standards", "content/wechat-full-workflow", "wewrite", "no-ai-slop"},
-    "kuaishou": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-    "douyin": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-    "shipinhao": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-    "bilibili": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-    "xiaohongshu": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-    "rednote": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-
-    "juejin": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
-    "zhihu": {"meta/content-preflight", "content/content-strategy-workflow", "content/knowledge-card-designer", "content/visual-quality-standards"},
+_PREFLIGHT_BASE_SKILLS = {"meta/content-preflight", "content/content-strategy-workflow"}
+_WORKFLOW_BASE_SKILLS = {"content/channel-operations-workflow", "content/visual-quality-standards"}
+_KNOWLEDGE_CARD_SKILL = {"content/knowledge-card-designer"}
+_PREFLIGHT_ONLY_SKILLS = _PREFLIGHT_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {
+    "content/wechat-operational-strategy",
+    "content/wechat-full-workflow",
+    "wewrite",
+    "no-ai-slop",
 }
+
+# This is the only hand-maintained channel-to-skill mapping. Runtime consumers
+# derive their file-backed subset through required_workflow_skills().
+REQUIRED_SKILLS_BY_CHANNEL = {
+    "wechat": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
+    "weixin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
+    "wechat_official": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
+    "kuaishou": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/kuaishou-content-publishing", "content/kuaishou-publishing-workflow"},
+    "douyin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"douyin-repost-workflow"},
+    "douyin_ai": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"douyin-daily-analysis-workflow"},
+    "douyin_pet": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"douyin-repost-workflow"},
+    "shipinhao": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/kuaishou-content-publishing"},
+    "bilibili": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL,
+    "xiaohongshu": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/xiaohongshu-content-enhancer"},
+    "rednote": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/xiaohongshu-content-enhancer"},
+    "juejin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/juejin-publishing-workflow"},
+    "zhihu": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/zhihu-publishing-workflow"},
+    "tiktok": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/intl-short-video-pipeline"},
+    "youtube": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/intl-short-video-pipeline"},
+    "x": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"social-media/x-twitter-autopublish"},
+    "twitter": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"social-media/x-twitter-autopublish"},
+}
+
+
+def required_skills_for_channel(channel: str) -> set[str]:
+    """Return a copy of the canonical requirements for a normalized channel."""
+    return set(REQUIRED_SKILLS_BY_CHANNEL.get(str(channel or "").casefold(), _PREFLIGHT_BASE_SKILLS))
+
+
+def required_workflow_skills(channel: str) -> list[str]:
+    """Return deterministic file-backed workflow skills derived from the canonical map."""
+    return sorted(required_skills_for_channel(channel) - _PREFLIGHT_ONLY_SKILLS)
 
 KNOWLEDGE_CARD_CONTENT_HINTS = {"knowledge_card", "card", "infographic", "image_card"}
 
@@ -72,7 +99,7 @@ def build_preflight_manifest(
     """Build the canonical manifest that generators should attach to packets."""
     normalized_channel = str(channel or "").casefold()
     skills = sorted(
-        set(REQUIRED_SKILLS_BY_CHANNEL.get(normalized_channel, {"meta/content-preflight", "content/content-strategy-workflow"}))
+        required_skills_for_channel(normalized_channel)
         | set(extra_skills or [])
     )
     from .run_contract import build_run_contract
@@ -233,7 +260,7 @@ def validate_preflight_manifest(packet: dict[str, Any], channel: str | None = No
         failures.append("preflight_manifest.strategy_missing")
 
     skills = _skill_set(manifest.get("skills_loaded"))
-    required_skills = set(REQUIRED_SKILLS_BY_CHANNEL.get(normalized_channel, {"meta/content-preflight", "content/content-strategy-workflow"}))
+    required_skills = required_skills_for_channel(normalized_channel)
     if _content_uses_knowledge_cards(packet, manifest):
         required_skills.add("content/knowledge-card-designer")
     missing_skills = sorted(required_skills - skills)
