@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .publication_ledger import PublicationLedger
+
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -46,6 +48,7 @@ def _performance_has_growth_signal(row):
 class Store:
     def __init__(self, path):
         self.path = Path(path)
+        self.publication_ledger = PublicationLedger(self.path)
         self.init()
 
     @contextmanager
@@ -1401,7 +1404,25 @@ class Store:
                 (fingerprint, str(platform or ""), title, source or "", job_id, utc_now()),
             )
 
-    def record_manual_publication(self, platform, topic, *, topic_fingerprint="", external_id="", source="manual_publish"):
+    def create_delivery_intent(self, payload):
+        return self.publication_ledger.create_delivery_intent(payload)
+
+    def get_delivery_intent(self, intent_id):
+        return self.publication_ledger.get_delivery_intent(intent_id)
+
+    def record_manual_publication(
+        self,
+        platform,
+        topic,
+        *,
+        topic_fingerprint="",
+        external_id="",
+        source="manual_publish",
+        verification=None,
+        account_alias="",
+        url="",
+        published_at="",
+    ):
         """Create a first-class receipt so manual work participates in deduplication."""
         normalized_platform = str(platform or "").strip()
         normalized_topic = str(topic or "").strip()
@@ -1418,7 +1439,29 @@ class Store:
         self.transition(job["id"], {"created"}, "published", "manual_publication_recorded", {"source": source})
         self.save_delivery(job["id"], normalized_platform, "published", external_id, "manual publication recorded")
         self.mark_topic_used(fingerprint, normalized_topic, source, job["id"], platform=normalized_platform)
-        return {"job_id": job["id"], "platform": normalized_platform, "status": "published", "topic_fingerprint": fingerprint}
+        result = {"job_id": job["id"], "platform": normalized_platform, "status": "published", "topic_fingerprint": fingerprint}
+        verified = dict(verification or {})
+        if account_alias or url or published_at or external_id:
+            verified.setdefault("account_alias", account_alias)
+            verified.setdefault("content_id", external_id)
+            verified.setdefault("url", url)
+            verified.setdefault("published_at", published_at)
+            verified.setdefault("source", source)
+        if all(str(verified.get(key) or "").strip() for key in ("account_alias", "content_id", "url", "published_at")):
+            identity = self.publication_ledger.register_verified_publication({
+                "platform": normalized_platform,
+                "internal_account_alias": verified["account_alias"],
+                "platform_content_id": verified["content_id"],
+                "canonical_url": verified["url"],
+                "published_at": verified["published_at"],
+                "identity_source": verified.get("source") or source,
+                "verification_level": "manual_verified",
+                "verification": verified,
+            })
+            result["publication_identity"] = identity
+        else:
+            result["publication_identity"] = {"passed": False, "reason": "manual_publication_verification_required"}
+        return result
 
     def protected_paths(self):
         with self.connect() as conn:
