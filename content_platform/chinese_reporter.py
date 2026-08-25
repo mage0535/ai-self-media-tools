@@ -115,8 +115,8 @@ class ChineseReporter:
             parts.append(f"根因：{_safe(detail['root_cause'])}")
         if detail.get("fix"):
             parts.append(f"修复：{_safe(detail['fix'])}")
-        if detail.get("repair_round") is not None or detail.get("retry_count") is not None:
-            retry = detail.get("repair_round", detail.get("retry_count"))
+        if any(detail.get(key) is not None for key in ("repair_attempts", "repair_round", "retry_count")):
+            retry = detail.get("repair_attempts", detail.get("repair_round", detail.get("retry_count")))
             parts.append(f"重试/修复轮次：{_safe(retry, 30)}")
         gate = detail.get("gate")
         if isinstance(gate, dict) and "passed" in gate:

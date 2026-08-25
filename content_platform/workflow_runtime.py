@@ -70,13 +70,17 @@ class WorkflowStateMachine:
             raise RuntimeError("one active platform is allowed")
         current = self._state["platforms"].setdefault(
             platform,
-            {"state": "planned", "completed_stages": ["planned"], "stage_outputs": {}, "repair_rounds": 0},
+            {"state": "planned", "completed_stages": ["planned"], "stage_outputs": {}, "repair_attempts": 0},
         )
         current.setdefault("completed_stages", ["planned"])
         if "planned" not in current["completed_stages"]:
             current["completed_stages"].insert(0, "planned")
         current.setdefault("stage_outputs", {})
-        current.setdefault("repair_rounds", 0)
+        legacy_attempts = current.pop("repair_rounds", None)
+        if "repair_attempts" not in current:
+            current["repair_attempts"] = int(legacy_attempts or 0)
+        current.pop("retry_count", None)
+        current.pop("recovery_count", None)
         self._state["active_platform"] = platform
         return current
 
@@ -117,7 +121,7 @@ class WorkflowStateMachine:
         self.complete_stage(stage, result)
         return result
 
-    def mark_exception(self, state, reason="", *, repair_round=None):
+    def mark_exception(self, state, reason="", *, repair_attempts=None):
         state = str(state or "")
         if state not in WORKFLOW_EXCEPTIONAL_STATES:
             raise ValueError(f"invalid exceptional state: {state}")
@@ -128,8 +132,8 @@ class WorkflowStateMachine:
         current["state"] = state
         if reason:
             current["reason"] = str(reason)[:500]
-        if repair_round is not None:
-            current["repair_rounds"] = int(repair_round)
+        if repair_attempts is not None:
+            current["repair_attempts"] = int(repair_attempts)
         return current
 
     def to_dict(self):

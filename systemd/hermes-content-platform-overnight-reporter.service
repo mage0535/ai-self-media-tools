@@ -1,0 +1,16 @@
+[Unit]
+Description=Consume durable overnight events and report Chinese business updates
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=%h
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
+Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
+Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
+EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
+ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run_overnight_reporter.sh
+WorkingDirectory=%h/.ai-self-media-tools-current
+MemoryMax=64M
+TimeoutStartSec=60

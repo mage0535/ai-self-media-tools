@@ -6,6 +6,7 @@ import copy
 import json
 import os
 import re
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -837,7 +838,10 @@ def _workflow_for_task(task: dict[str, Any], platform: str) -> WorkflowStateMach
     workflow = task.get("workflow") if isinstance(task.get("workflow"), dict) else {}
     machine = WorkflowStateMachine({"active_platform": platform, "platforms": {platform: workflow}})
     machine.begin_platform(platform)
-    task["workflow"] = machine.platform_state(platform)
+    current = machine.platform_state(platform)
+    current["repair_attempts"] = max(int(current.get("repair_attempts") or 0), int(task.get("repair_attempts") or 0))
+    task["workflow"] = current
+    task["repair_attempts"] = current["repair_attempts"]
     return machine
 
 
@@ -846,22 +850,116 @@ def _workflow_stage_done(task: dict[str, Any], stage: str) -> bool:
     return stage in (workflow.get("completed_stages") or [])
 
 
-def _checkpoint_stage(task: dict[str, Any], platform: str, stage: str, journal: "BatchEventJournal", detail=None) -> None:
+def _checkpoint_stage(task: dict[str, Any], platform: str, stage: str, journal: "BatchEventJournal", detail=None, *, persist=None) -> None:
     machine = _workflow_for_task(task, platform)
     if stage in machine.platform_state(platform).get("completed_stages", []):
         return
     machine.complete_stage(stage, detail or {})
     task["workflow"] = machine.platform_state(platform)
+    if persist is not None:
+        persist()
     journal.append("platform_stage_completed", platform, {"stage": stage, **(detail or {})})
 
 
-def _mark_workflow_exception(task: dict[str, Any], platform: str, state: str, reason: str, repair_round=None) -> None:
+def _mark_workflow_exception(task: dict[str, Any], platform: str, state: str, reason: str, repair_attempts=None) -> None:
     machine = _workflow_for_task(task, platform)
-    machine.mark_exception(state, reason, repair_round=repair_round)
+    machine.mark_exception(state, reason, repair_attempts=repair_attempts)
     task["workflow"] = machine.platform_state(platform)
+    task["repair_attempts"] = int(task["workflow"].get("repair_attempts") or 0)
+
+
+@contextmanager
+def exclusive_batch_owner(lock_path: str | Path):
+    """Acquire a portable atomic owner lock and reject a live second worker."""
+    lock = Path(lock_path)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = None
+    for _attempt in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.write(fd, str(os.getpid()).encode("ascii"))
+            os.close(fd)
+            fd = None
+            break
+        except FileExistsError as exc:
+            if _lock_owner_running(lock):
+                raise RuntimeError("another overnight worker holds the owner lease") from exc
+            lock.unlink(missing_ok=True)
+    if fd is not None:
+        os.close(fd)
+    if not lock.is_file():
+        raise RuntimeError("unable to acquire overnight owner lease")
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _lock_owner_running(lock: Path) -> bool:
+    try:
+        pid = int(lock.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    try:
+        os.kill(pid, 0)
+    except (OSError, ProcessLookupError):
+        return False
+    return True
+
+
+def _state_owner_running(path: Path) -> bool:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict) or payload.get("status") != "running":
+        return False
+    worker = payload.get("worker") if isinstance(payload.get("worker"), dict) else {}
+    try:
+        pid = int(worker.get("pid") or 0)
+    except (TypeError, ValueError):
+        return False
+    return bool(pid and pid != os.getpid() and _pid_running(pid))
+
+
+def _pid_running(pid: int) -> bool:
+    try:
+        os.kill(int(pid), 0)
+    except (OSError, ProcessLookupError):
+        return False
+    return True
 
 
 def execute_batch(
+    pipeline: Any,
+    plan: dict[str, Any],
+    *,
+    state_path: str | Path,
+    journal: "BatchEventJournal",
+    store: Any | None = None,
+    require_acceptance: bool = False,
+    _retry_pass: bool = False,
+) -> dict[str, Any]:
+    state_file = Path(state_path)
+    if _state_owner_running(state_file):
+        raise RuntimeError("another overnight worker owns the running batch")
+    with exclusive_batch_owner(state_file.with_name(state_file.name + ".owner.lock")):
+        return _execute_batch_locked(
+            pipeline,
+            plan,
+            state_path=state_file,
+            journal=journal,
+            store=store,
+            require_acceptance=require_acceptance,
+            _retry_pass=_retry_pass,
+        )
+
+
+def _execute_batch_locked(
     pipeline: Any,
     plan: dict[str, Any],
     *,
@@ -885,15 +983,19 @@ def execute_batch(
         return state
 
     state["status"] = "running"
-    state.setdefault(
-        "worker",
-        {
-            "pid": os.getpid(),
-            "owner": f"overnight-{os.getpid()}",
-            "lease_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(microsecond=0).isoformat(),
-        },
-    )
+    state["worker"] = {
+        "pid": os.getpid(),
+        "owner": f"overnight-{os.getpid()}",
+        "lease_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(microsecond=0).isoformat(),
+    }
     _write_state(state_file, state)
+
+    def persist_state() -> None:
+        worker = state.get("worker") if isinstance(state.get("worker"), dict) else {}
+        worker["lease_expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(microsecond=0).isoformat()
+        state["worker"] = worker
+        _write_state(state_file, state)
+
     stop_batch = False
     for task in state.get("tasks", []):
         platform = str(task.get("platform") or "")
@@ -910,13 +1012,13 @@ def execute_batch(
                 _checkpoint_stage(task, platform, "collecting", journal, {
                     "action": "读取已采集的平台证据",
                     "candidate_count": task.get("candidate_count", 0),
-                })
+                }, persist=persist_state)
                 _checkpoint_stage(task, platform, "selecting", journal, {
                     "action": "确认平台选题",
                     "selected_topic": task.get("topic", ""),
                     "selection_reason": task.get("selection_reason") or task.get("reason", "计划内选题"),
                     "candidate_count": task.get("candidate_count", 0),
-                })
+                }, persist=persist_state)
                 if not task.get("job_id"):
                     _workflow_for_task(task, platform)
                     job = pipeline.create(
@@ -926,6 +1028,7 @@ def execute_batch(
                         str(task.get("profile") or "default"),
                     )
                     task["job_id"] = str(job["id"])
+                    persist_state()
                     journal.append("platform_job_created", platform, {"job_id": task["job_id"], "stage": "generating", "action": task.get("action", "handoff")})
                 result = task.get("pipeline_result") if _workflow_stage_done(task, "generating") else pipeline.run(task["job_id"])
                 result = result if isinstance(result, dict) else {}
@@ -933,16 +1036,18 @@ def execute_batch(
                 result_state = str(result.get("state") or "failed")
                 task["pipeline_state"] = result_state
                 artifact_kinds = sorted({str(a.get("kind") or "") for a in (result.get("artifacts") or []) if isinstance(a, dict) and str(a.get("kind") or "")})
+                persist_state()
                 journal.append("platform_generation_complete", platform, {"job_id": task["job_id"], "stage": "generating", "pipeline_state": result_state, "artifact_kinds": artifact_kinds})
                 if result_state in {"blocked", "failed", "rejected"}:
                     task["state"] = "blocked" if result_state == "blocked" else "failed"
                     task["reason"] = str(result.get("last_error") or "pipeline did not produce a reviewable artifact")
-                    _mark_workflow_exception(task, platform, task["state"], task["reason"])
+                    _mark_workflow_exception(task, platform, task["state"], task["reason"], repair_attempts=task.get("repair_attempts", 0))
+                    persist_state()
                     journal.append("platform_failed" if task["state"] == "failed" else "platform_blocked", platform, {"job_id": task["job_id"], "stage": "generating", "reason": task["reason"]})
                     stop_batch = True
                     break
-                _checkpoint_stage(task, platform, "generating", journal, {"job_id": task["job_id"], "action": "生成内容", "tool_calls": ["pipeline.run"]})
-                _checkpoint_stage(task, platform, "rendering", journal, {"job_id": task["job_id"], "action": "确认 TTS、素材和渲染产物", "artifact_count": len(result.get("artifacts") or [])})
+                _checkpoint_stage(task, platform, "generating", journal, {"job_id": task["job_id"], "action": "生成内容", "tool_calls": ["pipeline.run"]}, persist=persist_state)
+                _checkpoint_stage(task, platform, "rendering", journal, {"job_id": task["job_id"], "action": "确认 TTS、素材和渲染产物", "artifact_count": len(result.get("artifacts") or [])}, persist=persist_state)
 
                 if require_acceptance:
                     from .workflow_acceptance import evaluate_job_acceptance
@@ -951,21 +1056,23 @@ def execute_batch(
                     if not acceptance["passed"]:
                         task["state"] = "blocked"
                         task["reason"] = "workflow acceptance failed: " + ",".join(acceptance["failures"])
-                        _mark_workflow_exception(task, platform, "blocked", task["reason"])
+                        _mark_workflow_exception(task, platform, "blocked", task["reason"], repair_attempts=task.get("repair_attempts", 0))
+                        persist_state()
                         journal.append("platform_blocked", platform, {"job_id": task["job_id"], "stage": "gating", "reason": task["reason"], "gate": {"passed": False}})
                         stop_batch = True
                         break
-                _checkpoint_stage(task, platform, "gating", journal, {"job_id": task["job_id"], "action": "执行质量门禁", "gate": {"passed": True}})
+                _checkpoint_stage(task, platform, "gating", journal, {"job_id": task["job_id"], "action": "执行质量门禁", "gate": {"passed": True}}, persist=persist_state)
                 if platform.casefold() in MANUAL_HANDOFF_PLATFORMS:
                     handoff_problem = _handoff_media_problem(platform, result)
                     if handoff_problem:
                         task["state"] = "blocked"
                         task["reason"] = handoff_problem
-                        _mark_workflow_exception(task, platform, "blocked", handoff_problem)
+                        _mark_workflow_exception(task, platform, "blocked", handoff_problem, repair_attempts=task.get("repair_attempts", 0))
+                        persist_state()
                         journal.append("platform_blocked", platform, {"job_id": task["job_id"], "stage": "gating", "reason": handoff_problem, "gate": {"passed": False}})
                         stop_batch = True
                         break
-                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "生成可人工交接的交付包"})
+                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "生成可人工交接的交付包"}, persist=persist_state)
                     task["state"] = "handoff_ready"
                     journal.append("handoff_ready", platform, {"job_id": task["job_id"], "stage": "delivering", "pipeline_state": result_state, "delivery_receipt": task.get("job_id")})
                 elif str(task.get("action") or "stage") == "stage":
@@ -973,17 +1080,17 @@ def execute_batch(
                     if not delivering_done:
                         journal.append("platform_staging_started", platform, {"job_id": task["job_id"], "stage": "delivering"})
                         task["staged_result"] = pipeline.stage_drafts(task["job_id"])
-                        _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "准备交付草稿"})
+                        _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "准备交付草稿"}, persist=persist_state)
                     staged = task.get("staged_result") if isinstance(task.get("staged_result"), dict) else {}
                     task["pipeline_state"] = str(staged.get("state") or result_state)
                     delivered_state = "staged" if task["pipeline_state"] in {"partial", "drafted"} else task["pipeline_state"]
                     task["state"] = normalize_delivery_boundary(platform, delivered_state)
                 else:
-                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "等待人工审批，禁止直接发布"})
+                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "等待人工审批，禁止直接发布"}, persist=persist_state)
                     task["state"] = "awaiting_review"
                     task["reason"] = "live publication requires an explicit approved workflow"
-                _checkpoint_stage(task, platform, "postchecking", journal, {"job_id": task["job_id"], "delivery_receipt": task.get("job_id"), "action": "核对交付回执"})
-                _checkpoint_stage(task, platform, "completed", journal, {"job_id": task["job_id"], "delivery_receipt": task.get("job_id")})
+                _checkpoint_stage(task, platform, "postchecking", journal, {"job_id": task["job_id"], "delivery_receipt": task.get("job_id"), "action": "核对交付回执"}, persist=persist_state)
+                _checkpoint_stage(task, platform, "completed", journal, {"job_id": task["job_id"], "delivery_receipt": task.get("job_id")}, persist=persist_state)
                 journal.append("platform_finished", platform, {"job_id": task["job_id"], "stage": "completed", "state": task["state"], "delivery_receipt": task.get("job_id")})
                 if store is not None and task.get("state") in {"staged", "handoff_ready", "awaiting_review"}:
                     fingerprint = str(task.get("topic_fingerprint") or _topic_identity({"title": task.get("topic", "")})).strip()
@@ -994,21 +1101,22 @@ def execute_batch(
                 break
             except Exception as exc:
                 task["reason"] = redact_secrets(str(exc))
-                repair_rounds = int(task.get("repair_rounds") or 0)
-                if repair_rounds < 2:
-                    repair_rounds += 1
-                    task["repair_rounds"] = repair_rounds
-                    task["retry_count"] = int(task.get("retry_count") or 0) + 1
+                repair_attempts = int(task.get("repair_attempts") or 0)
+                if repair_attempts < 2:
+                    repair_attempts += 1
+                    task["repair_attempts"] = repair_attempts
                     task["state"] = "retry_pending"
-                    _mark_workflow_exception(task, platform, "retry_pending", task["reason"], repair_round=repair_rounds)
-                    journal.append("platform_retry_scheduled", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "retry_count": task["retry_count"]})
-                    journal.append("platform_repair_started", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "repair_round": repair_rounds, "fix": "复用同一平台 job 重试当前阶段"})
-                    _write_state(state_file, state)
+                    _mark_workflow_exception(task, platform, "retry_pending", task["reason"], repair_attempts=repair_attempts)
+                    persist_state()
+                    journal.append("platform_retry_scheduled", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "repair_attempts": repair_attempts})
+                    journal.append("platform_repair_started", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "repair_attempts": repair_attempts, "fix": "复用同一平台 job 重试当前阶段"})
                     task["state"] = "running"
+                    persist_state()
                     continue
                 task["state"] = "failed"
-                _mark_workflow_exception(task, platform, "failed", task["reason"], repair_round=repair_rounds)
-                journal.append("platform_failed", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "repair_round": repair_rounds, "root_cause": task["reason"]})
+                _mark_workflow_exception(task, platform, "failed", task["reason"], repair_attempts=repair_attempts)
+                persist_state()
+                journal.append("platform_failed", platform, {"stage": task.get("workflow", {}).get("state", "generating"), "reason": task["reason"], "repair_attempts": repair_attempts, "root_cause": task["reason"]})
                 stop_batch = True
                 break
             finally:
@@ -1032,7 +1140,7 @@ def execute_batch(
     if store is not None:
         sync_batch_state(state, store, summary_path=state_file.parent / "acceptance_summary.json")
         _write_state(state_file, state)
-    return state
+    return _compatibility_summary(state)
 
 
 def _handoff_media_problem(platform: str, result: dict[str, Any]) -> str:
@@ -1065,13 +1173,18 @@ def _load_state(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
                 if task.get("state") == "review_required":
                     task["state"] = "awaiting_review"
                     task.setdefault("legacy_state", "review_required")
+                legacy_attempts = task.pop("repair_rounds", None)
+                if "repair_attempts" not in task:
+                    task["repair_attempts"] = int(legacy_attempts or 0)
+                task.pop("retry_count", None)
+                task.pop("recovery_count", None)
             if state.get("status") == "running":
                 interrupted = False
                 for task in state.get("tasks") or []:
                     if task.get("state") == "running":
-                        recovery_count = int(task.get("recovery_count") or 0) + 1
-                        task["recovery_count"] = recovery_count
-                        if recovery_count <= 2:
+                        repair_attempts = int(task.get("repair_attempts") or 0) + 1
+                        task["repair_attempts"] = repair_attempts
+                        if repair_attempts <= 2:
                             task["state"] = "retry_pending"
                             task["reason"] = "automatic_recovery_after_interrupted_batch"
                         else:
@@ -1084,6 +1197,17 @@ def _load_state(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
         except (OSError, json.JSONDecodeError):
             pass
     return copy.deepcopy(plan)
+
+
+def _compatibility_summary(state: dict[str, Any]) -> dict[str, Any]:
+    """Expose legacy read-only aliases without persisting duplicate counters."""
+    result = copy.deepcopy(state)
+    for task in result.get("tasks") or []:
+        attempts = int(task.get("repair_attempts") or 0)
+        task.setdefault("repair_rounds", attempts)
+        task.setdefault("retry_count", attempts)
+        task.setdefault("recovery_count", attempts)
+    return result
 
 
 def _write_state(path: Path, state: dict[str, Any]) -> None:

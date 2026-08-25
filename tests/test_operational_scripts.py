@@ -361,6 +361,34 @@ shared_trend_only: false
         self.assertIn("runtime-release.lock", deploy)
         self.assertIn("LOCK_EX", deploy)
 
+    def test_overnight_batch_uses_an_exclusive_worker_lock(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+        self.assertIn("overnight-batch.lock", text)
+        self.assertIn("flock -n", text)
+        self.assertNotIn("flock -s 9", text)
+
+    def test_overnight_supervisor_gates_recovery_on_owner_proof(self):
+        text = Path("scripts/run_overnight_supervisor.sh").read_text(encoding="utf-8")
+        self.assertIn("recovery_authorized", text)
+        self.assertIn('[[ "$recovery_authorized" != "true" ]]', text)
+        self.assertLess(text.index('[[ "$recovery_authorized" != "true" ]]'), text.index(" recover >"))
+
+    def test_overnight_scripts_invoke_the_independent_chinese_reporter_sidecar(self):
+        for name in ("scripts/run_overnight_batch.sh", "scripts/run_overnight_supervisor.sh"):
+            text = Path(name).read_text(encoding="utf-8")
+            self.assertIn("run_overnight_reporter.sh", text)
+            self.assertIn("reporter.cursor.json", text)
+        sidecar = Path("scripts/run_overnight_reporter.sh").read_text(encoding="utf-8")
+        self.assertIn("overnight_reporter.py", sidecar)
+        self.assertIn("flock -n 8", sidecar)
+        self.assertIn("notify_hermes_progress.sh", sidecar)
+        self.assertIn("ChineseReporter", Path("scripts/overnight_reporter.py").read_text(encoding="utf-8"))
+        service = Path("systemd/hermes-content-platform-overnight-reporter.service").read_text(encoding="utf-8")
+        timer = Path("systemd/hermes-content-platform-overnight-reporter.timer").read_text(encoding="utf-8")
+        self.assertIn("run_overnight_reporter.sh", service)
+        self.assertIn("notifications.env", service)
+        self.assertIn("*:0/3", timer)
+
     def test_overnight_supervisor_resolves_canonical_release_and_verifies_before_state_writes(self):
         text = Path("scripts/run_overnight_supervisor.sh").read_text(encoding="utf-8")
 
