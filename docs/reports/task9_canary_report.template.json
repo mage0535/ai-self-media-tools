@@ -1,0 +1,16 @@
+{
+  "schema": "task9_canary_report_v1",
+  "execution": "serial",
+  "git_commit": "",
+  "models": {
+    "active": {"status": "unavailable", "provider": "", "model": ""},
+    "weak": {"status": "dual_model_pending", "reason": ""}
+  },
+  "cases": [],
+  "delivery_scenarios": {"passed": false, "scenarios": {}},
+  "audits": {"full_pytest": {"passed": false, "path": ""}, "privacy_audit": {"passed": false, "path": ""}, "license_audit": {"passed": false, "path": ""}},
+  "commit_parity": {"source": "", "release": "", "hermes": ""},
+  "rollback_rehearsal": {"passed": false},
+  "shadow_batches": [],
+  "passed": false
+}

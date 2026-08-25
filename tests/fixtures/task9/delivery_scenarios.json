@@ -1,0 +1,12 @@
+{
+  "schema": "task9_delivery_scenarios_v1",
+  "scenarios": [
+    "crash_boundary_unknown",
+    "delayed_visibility",
+    "unknown_requires_review",
+    "duplicate_schedule_prevention",
+    "kuaishou_exact_management_postcheck",
+    "full_handoff_render_contract"
+  ],
+  "forbidden": ["automatic_retry_before_absence_window", "published_from_uploader_exit_code", "handoff_as_published"]
+}

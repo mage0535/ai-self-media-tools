@@ -1,0 +1,11 @@
+{
+  "schema": "task9_shadow_batch_report_v1",
+  "batch_id": "",
+  "passed": false,
+  "code_edits": 0,
+  "manual_recovery": false,
+  "serial_platforms": 12,
+  "delivery_mode": "shadow",
+  "report_path": "",
+  "failure_reason": ""
+}
