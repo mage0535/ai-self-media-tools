@@ -152,6 +152,9 @@ def _validate_contract(output: dict[str, Any], contract: str) -> bool:
         "visual_recipe_v1",
         "video_template_plan_v1",
         "shotcraft_plan_v1",
+        "tts_plan_v1",
+        "subtitle_plan_v1",
+        "audio_mix_plan_v1",
         "media_quality_v1",
         "preflight_manifest_v1",
     }
