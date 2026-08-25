@@ -368,6 +368,7 @@ def build_due_tasks(
                 "selection_mode": selection_mode,
                 "research_attempts": research_attempts,
                 **({"topic_reservation": reservation} if reservation else {}),
+                **({"topic_reservation_path": str(topic_reservation_path)} if reservation and topic_reservation_path else {}),
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
                 "state": "ready_for_plan",
             })
@@ -1063,18 +1064,24 @@ def _execute_batch_locked(
                         break
                 _checkpoint_stage(task, platform, "gating", journal, {"job_id": task["job_id"], "action": "执行质量门禁", "gate": {"passed": True}}, persist=persist_state)
                 if platform.casefold() in MANUAL_HANDOFF_PLATFORMS:
-                    handoff_problem = _handoff_media_problem(platform, result)
-                    if handoff_problem:
+                    if not _workflow_stage_done(task, "delivering"):
+                        task["staged_result"] = pipeline.stage_drafts(task["job_id"])
+                    staged = task.get("staged_result") if isinstance(task.get("staged_result"), dict) else {}
+                    receipt = next(
+                        (row for row in staged.get("deliveries") or [] if str(row.get("platform") or "").casefold() == platform.casefold()),
+                        {},
+                    )
+                    if str(receipt.get("status") or "") != "handoff_pending":
                         task["state"] = "blocked"
-                        task["reason"] = handoff_problem
-                        _mark_workflow_exception(task, platform, "blocked", handoff_problem, repair_attempts=task.get("repair_attempts", 0))
+                        task["reason"] = str(receipt.get("error") or "verified handoff package was not produced")
+                        _mark_workflow_exception(task, platform, "blocked", task["reason"], repair_attempts=task.get("repair_attempts", 0))
                         persist_state()
-                        journal.append("platform_blocked", platform, {"job_id": task["job_id"], "stage": "gating", "reason": handoff_problem, "gate": {"passed": False}})
+                        journal.append("platform_blocked", platform, {"job_id": task["job_id"], "stage": "delivering", "reason": task["reason"], "gate": {"passed": False}})
                         stop_batch = True
                         break
-                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "生成可人工交接的交付包"}, persist=persist_state)
+                    _checkpoint_stage(task, platform, "delivering", journal, {"job_id": task["job_id"], "action": "生成并验证可人工交接的交付包", "delivery_receipt": receipt.get("external_id")}, persist=persist_state)
                     task["state"] = "handoff_ready"
-                    journal.append("handoff_ready", platform, {"job_id": task["job_id"], "stage": "delivering", "pipeline_state": result_state, "delivery_receipt": task.get("job_id")})
+                    journal.append("handoff_ready", platform, {"job_id": task["job_id"], "stage": "delivering", "pipeline_state": result_state, "delivery_receipt": receipt.get("external_id")})
                 elif str(task.get("action") or "stage") == "stage":
                     delivering_done = _workflow_stage_done(task, "delivering")
                     if not delivering_done:
@@ -1098,6 +1105,12 @@ def _execute_batch_locked(
                         brief = dict(task.get("brief") or {})
                         store.mark_topic_used(fingerprint, str(task.get("topic") or ""), str(brief.get("source") or ""), task["job_id"], platform=platform)
                         journal.append("topic_reserved", platform, {"job_id": task["job_id"], "topic_fingerprint": fingerprint, "stage": "postchecking"})
+                reservation_path = str(task.get("topic_reservation_path") or "")
+                reservation = task.get("topic_reservation") if isinstance(task.get("topic_reservation"), dict) else {}
+                if reservation_path and reservation.get("fingerprint"):
+                    from .trend_intelligence import complete_topic_reservation
+                    completed = complete_topic_reservation(reservation_path, str(reservation["fingerprint"]))
+                    journal.append("topic_reservation_completed", platform, {"job_id": task["job_id"], "completed": completed, "fingerprint": reservation["fingerprint"]})
                 break
             except Exception as exc:
                 task["reason"] = redact_secrets(str(exc))

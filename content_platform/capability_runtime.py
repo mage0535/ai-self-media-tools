@@ -87,4 +87,38 @@ def _build_runtime_context(brief: dict) -> dict:
         caller = context.get("mcp_caller")
     if caller is None and context is not None:
         caller = getattr(context, "mcp_caller", None)
+    if caller is None:
+        caller = _project_mcp_caller(brief)
     return {"mcp_caller": caller, "mcp_runtime": context}
+
+
+def _project_mcp_caller(brief: dict):
+    """Dispatch the checked-in content MCP namespaces without model-selected tools."""
+    def call(namespace, tool, payload, _runtime=None):
+        if (namespace, tool) == ("content-search", "search"):
+            from .adapters.search import execute
+            documents = []
+            for key in ("same_lane_intelligence", "hot_work_parameter_pack", "historical_feedback"):
+                value = brief.get(key)
+                if isinstance(value, dict):
+                    documents.append({"id": key, "title": key, "text": str(value)[:4000]})
+            return execute({"query": (payload or {}).get("query", ""), "documents": documents})
+        if (namespace, tool) == ("memory-context", "retrieve"):
+            return {
+                "version": "memory_context_v1",
+                "historical_feedback": brief.get("historical_feedback") or {},
+                "compiled_skill_rule_ids": [
+                    str(row.get("id") or "")
+                    for row in ((brief.get("compiled_skill_rules") or {}).get("rules") or [])
+                    if isinstance(row, dict) and row.get("id")
+                ][:64],
+            }
+        if (namespace, tool) == ("ai-self-media", "build_content_recipe"):
+            return {
+                "version": "content_recipe_context_v1",
+                "content_blueprint": brief.get("content_blueprint") or {},
+                "tool_selection_plan": brief.get("tool_selection_plan") or {},
+                "strategy": brief.get("compiled_strategy") or brief.get("strategy") or {},
+            }
+        raise ValueError("unsupported content MCP namespace/tool")
+    return call

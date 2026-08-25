@@ -650,7 +650,9 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
             }
 
         def stage_drafts(self, job_id):
-            return {"id": job_id, "state": "partial"}
+            if job_id == "job-2":
+                return {"id": job_id, "state": "partial", "deliveries": [{"platform": "youtube", "status": "handoff_pending", "external_id": "handoff:youtube"}]}
+            return {"id": job_id, "state": "partial", "deliveries": [{"platform": "wechat", "status": "drafted", "external_id": "draft:wechat"}]}
 
     plan = build_batch_plan(
         [
@@ -821,9 +823,12 @@ def test_manual_video_handoff_is_blocked_when_the_pipeline_returns_no_video_or_c
         def run(self, _job_id):
             return {"id": "job-video", "state": "review_required", "artifacts": []}
 
+        def stage_drafts(self, _job_id):
+            return {"id": "job-video", "state": "partial", "deliveries": []}
+
     plan = build_batch_plan([{"platform": "douyin_ai", "topic": "topic", "brief": {}, "estimate_minutes": 10}], deadline_minute=280, finalization_minutes=20)
     summary = execute_batch(Pipeline(), plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(tmp_path / "events.jsonl"))
 
     assert summary["status"] == "partial"
     assert summary["tasks"][0]["state"] == "blocked"
-    assert summary["tasks"][0]["reason"] == "handoff_media_missing"
+    assert summary["tasks"][0]["reason"] == "verified handoff package was not produced"

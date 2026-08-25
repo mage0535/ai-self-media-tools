@@ -71,6 +71,13 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                                 "project_dir": tmp,
                                 "python_bin": "python",
                                 "video_extra_args": ["--tid", "171"],
+                                "postcheck_callback": lambda intent: {
+                                    "account_alias": intent["internal_account_alias"],
+                                    "title": intent["expected_title"],
+                                    "description_digest": intent["expected_description_digest"],
+                                    "scheduled_at": intent["scheduled_at"],
+                                    "dom": "<div data-status='scheduled'></div>",
+                                },
                             }
                         }
                     }

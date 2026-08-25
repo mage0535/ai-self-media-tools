@@ -281,20 +281,41 @@ class Pipeline:
                     "generate_content": {"status": "ok", "evidence": "workflow_step_succeeded"},
                     "execute_generation_capabilities": {"status": "ok" if capability_execution.get("passed") else "failed", "evidence": capability_execution.get("executed", [])},
                 }
+                capability_planned = [
+                    str(item.get("capability_id") or "")
+                    for item in capability_execution.get("planned") or []
+                    if isinstance(item, dict) and str(item.get("capability_id") or "")
+                ]
+                executed_by_id = {
+                    str(item.get("capability_id")): item
+                    for item in capability_execution.get("executed") or []
+                    if isinstance(item, dict) and item.get("capability_id")
+                }
                 draft["draft_meta"]["tool_selection_plan"] = {
-                    "version": "tool_selection_plan_v2",
-                    "selected_tools": list(workflow_invocations),
-                    "selection_reasons": {name: "executed workflow stage with persisted evidence" for name in workflow_invocations},
-                    "invocation_order": list(workflow_invocations),
+                    "version": "tool_selection_plan_v3",
+                    "selected_tools": capability_planned,
+                    "selection_reasons": {name: "selected by the registry for the generation-stage capability DAG" for name in capability_planned},
+                    "invocation_order": capability_planned,
                     "not_default_only": True,
                 }
                 draft["draft_meta"]["tool_invocation_manifest"] = {
-                    "version": "tool_invocation_manifest_v2",
-                    "planned_tools": {key: "workflow_stage" for key in workflow_invocations},
-                    "invocations": workflow_invocations,
-                    "executed_count": sum(1 for item in workflow_invocations.values() if item.get("status") == "ok"),
-                    "missing_tools": [],
+                    "version": "tool_invocation_manifest_v3",
+                    "planned_tools": {name: "capability_registry" for name in capability_planned},
+                    "invocations": {
+                        name: {
+                            "status": "ok" if name in executed_by_id else "failed",
+                            "output_hash": (executed_by_id.get(name) or {}).get("output_hash", ""),
+                            "evidence": executed_by_id.get(name) or {},
+                        }
+                        for name in capability_planned
+                    },
+                    "executed_count": len(executed_by_id),
+                    "missing_tools": [name for name in capability_planned if name not in executed_by_id],
                     "capability_execution": capability_execution,
+                }
+                draft["draft_meta"]["workflow_stage_manifest"] = {
+                    "version": "workflow_stage_manifest_v1",
+                    "stages": workflow_invocations,
                 }
                 generated_hygiene = validate_generated_text(str(draft.get("title") or "") + "\n" + str(draft.get("body") or ""))
                 draft.setdefault("draft_meta", {})["generated_text_hygiene"] = generated_hygiene

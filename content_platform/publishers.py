@@ -522,6 +522,19 @@ class SocialAutoUploadPublisher:
                 files.append(item["path"])
         return files
 
+    def poll_delivery_intent(self, intent):
+        if self.platform_name.casefold() != "kuaishou":
+            return {"status": "inconclusive", "reason": "publisher has no immutable-identity postcheck"}
+        evidence = self.postcheck_callback(intent) if callable(self.postcheck_callback) else self._management_page_postcheck(intent)
+        check = PublicationLedger.validate_kuaishou_scheduled_postcheck(intent, evidence)
+        if check["passed"]:
+            return {"status": "scheduled", "postcheck": check}
+        report = evidence.get("postcheck_report") if isinstance(evidence, dict) else {}
+        report_status = str((report or {}).get("status") or evidence.get("postcheck_status") or "").casefold() if isinstance(evidence, dict) else ""
+        if report_status in {"not_found", "absent"} and (evidence.get("screenshot_path") or evidence.get("dom")):
+            return {"status": "absent", "postcheck": check}
+        return {"status": "inconclusive", "reason": "management-page postcheck did not prove presence or absence", "postcheck": check}
+
     def deliver(self, job, platform):
         if self.platform_name.casefold() in {"xiaohongshu", "xhs", "rednote"}:
             return DeliveryResult(

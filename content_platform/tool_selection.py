@@ -41,13 +41,18 @@ def build_tools_capability_analysis(
     video_effect_registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Inventory all registry candidates and fail closed for required groups."""
-    del video_effect_registry
     registry = load_capability_registry()
     groups = _groups_for_content(content_type, registry)
     capabilities = _capability_index(registry)
     status = capability_status if isinstance(capability_status, dict) else {}
     probed = status.get("capabilities") if isinstance(status.get("capabilities"), dict) else {}
     analyzed_groups = {group["id"]: list(group["candidate_ids"]) for group in groups}
+    runtime_tools = status.get("tools") if isinstance(status.get("tools"), dict) else {}
+    if runtime_tools:
+        analyzed_groups["runtime_probe"] = sorted(runtime_tools)
+    effect_modules = (video_effect_registry or {}).get("modules") if isinstance(video_effect_registry, dict) else {}
+    if isinstance(effect_modules, dict) and effect_modules:
+        analyzed_groups["video_effect_modules"] = sorted(effect_modules)
     available: set[str] = set()
     group_status: dict[str, dict[str, Any]] = {}
     failures: list[str] = []

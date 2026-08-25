@@ -114,8 +114,8 @@ class CliV2Tests(unittest.TestCase):
         slots.write_text(json.dumps([{"platform": "wechat", "estimate_minutes": 15}]), encoding="utf-8")
         Store(self.db).save_tool_inventory("growth_strategy:wechat:latest", {"policy_id": "growth_quality_policy_v1"})
         report = {
-            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
-            "sources": [{"source": "github", "status": "ok", "count": 1}],
+            "items": [{"title": "AI workflow", "platform": "wechat", "source": "wechat", "points": 10, "url": "https://mp.weixin.qq.com/s/example"}],
+            "sources": [{"source": "wechat", "status": "ok", "count": 1, "collected_at": "2026-08-25T00:00:00+00:00"}],
             "summary": {"items": 1},
         }
         with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
@@ -161,9 +161,9 @@ class CliV2Tests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
-        self.assertEqual(task["state"], "ready_for_plan")
-        self.assertEqual(task["trend_evidence_gate"]["mode"], "shadow")
-        self.assertFalse(task["trend_evidence_gate"]["passed"])
+        self.assertEqual(task["state"], "blocked")
+        self.assertEqual(task["reason"], "no independently evidenced same-platform topic candidate")
+        self.assertNotIn("topic", task)
 
     def test_overnight_sync_state_reconciles_existing_job_without_replaying_work(self):
         job = Store(self.db).create_job("topic", ["wechat"])
