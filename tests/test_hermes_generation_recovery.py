@@ -221,7 +221,8 @@ def test_each_generation_checkpoint_has_uniform_safe_attempt_fields(monkeypatch,
 
 def test_soft_deadline_writes_bounded_periodic_heartbeats_until_success(monkeypatch, tmp_path):
     class FakeClock:
-        now = 0
+        # A non-zero monotonic origin catches relative/absolute clock mixing.
+        now = 10000
 
         def time(self):
             return self.now
