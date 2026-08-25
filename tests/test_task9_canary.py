@@ -1,4 +1,5 @@
 import json
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -19,18 +20,19 @@ def _write(path: Path, value: str | bytes) -> Path:
 
 
 def test_canary_matrix_is_serial_and_covers_required_platform_forms_and_languages():
-    from scripts.task9_canary import build_canary_matrix
+    from scripts.task9_canary import EXPECTED_CANARY_PLATFORMS, build_canary_matrix
 
     matrix = build_canary_matrix()
 
     assert len(matrix) == 12
     assert [case["order"] for case in matrix] == list(range(1, 13))
-    assert len({case["platform"] for case in matrix}) == 12
+    assert {case["platform"] for case in matrix} == set(EXPECTED_CANARY_PLATFORMS)
     assert {case["content_form"] for case in matrix} >= {"article", "carousel", "vertical_video", "horizontal_video"}
     assert {case["language"] for case in matrix} >= {"zh", "en"}
     assert any(case["delivery_policy"] == "manual_handoff_only" for case in matrix)
     assert any(case["dry_run"] for case in matrix)
     assert all(case["hotspot_mode"] == "official_native" for case in matrix)
+    assert all(case["entrypoint_kind"] == "pipeline" for case in matrix)
 
 
 def test_canary_artifact_probe_uses_actual_file_hashes_and_contract_evidence(tmp_path: Path):
@@ -87,6 +89,67 @@ def test_acceptance_requires_all_evidence_before_production_ready(tmp_path: Path
     assert result["failures"] == []
 
 
+def test_acceptance_rejects_fake_platform_set_and_requires_pipeline_evidence(tmp_path: Path):
+    from scripts.task9_acceptance import evaluate_acceptance
+
+    report = _valid_acceptance_report(tmp_path)
+    report["cases"] = [
+        {"platform": f"platform-{index}", "artifact_policy_passed": True, "evidence_level": "artifact_verified",
+         "pipeline_evidence": {"create_called": True, "run_called": True, "serial_index": index}}
+        for index in range(12)
+    ]
+    result = evaluate_acceptance(report, repo_root=ROOT)
+
+    assert result["production_ready"] is False
+    assert "exact_platform_matrix_required" in result["failures"]
+    assert any(value.startswith("pipeline_evidence_missing:") for value in result["failures"])
+
+
+def test_runner_calls_real_pipeline_methods_serially_and_does_not_accept_user_model_reports(tmp_path: Path):
+    from scripts.task9_canary import build_canary_matrix, run_canaries
+
+    calls = []
+
+    class PipelineBoundary:
+        def __init__(self, store, config):
+            self.store = store
+            self.config = config
+
+        def create(self, topic, platforms, brief, profile="default", topic_fingerprint=""):
+            calls.append(("create", platforms[0]))
+            return {"id": f"job-{platforms[0]}"}
+
+        def run(self, job_id, force=False):
+            calls.append(("run", job_id))
+            return {"id": job_id, "state": "review_required", "deliveries": [], "draft_meta": {}}
+
+        def stage_drafts(self, job_id, owner=None, already_locked=False):
+            calls.append(("stage_drafts", job_id))
+            return {"id": job_id, "state": "review_required", "deliveries": []}
+
+    class StoreBoundary:
+        def __init__(self, path):
+            self.path = Path(path)
+
+    def factory(store, config):
+        return PipelineBoundary(store, config)
+
+    report = run_canaries(
+        tmp_path / "artifacts",
+        repo_root=ROOT,
+        pipeline_factory=factory,
+        store_factory=StoreBoundary,
+        model_runner=lambda role, case, root: {"status": "pending", "reason": "test_provider_boundary"},
+    )
+
+    assert [kind for kind, _ in calls].count("create") == len(build_canary_matrix())
+    assert [kind for kind, _ in calls].count("run") == len(build_canary_matrix())
+    assert all(calls[index][0] == "create" and calls[index + 1][0] == "run" for index in range(0, len(calls), 3))
+    assert report["models"]["active"]["status"] == "pending"
+    assert report["models"]["weak"]["status"] == "pending"
+    assert report["model_reports_used"] == []
+
+
 def test_rollback_dry_run_preserves_db_cookies_and_media(tmp_path: Path):
     from scripts.task9_rollback import rehearse_rollback
 
@@ -112,9 +175,24 @@ def _valid_acceptance_report(tmp_path: Path) -> dict:
     for name in ("full_pytest", "privacy_audit", "license_audit"):
         path = _write(tmp_path / f"{name}.json", json.dumps({"passed": True}))
         evidence[name] = {"passed": True, "path": str(path)}
+    from scripts.task9_canary import build_canary_matrix, EXPECTED_CANARY_PLATFORMS
+    matrix = build_canary_matrix()
     cases = [
-        {"platform": f"platform-{index}", "artifact_policy_passed": True, "evidence_level": "artifact_verified"}
-        for index in range(12)
+        {
+            "platform": platform["platform"],
+            "artifact_policy_passed": True,
+            "evidence_level": "artifact_verified",
+            "pipeline_evidence": {"create_called": True, "run_called": True, "serial_index": index},
+            "probes": {
+                "capabilities": {"passed": True, "evidence_level": "artifact_verified"},
+                "hotspot": {"passed": True, "evidence_level": "artifact_verified"},
+            },
+            "content_form": platform["content_form"],
+            "language": platform["language"],
+            "delivery_policy": platform["delivery_policy"],
+            "order": index,
+        }
+        for index, platform in enumerate(matrix, 1)
     ]
     return {
         "cases": cases,
@@ -130,4 +208,6 @@ def _valid_acceptance_report(tmp_path: Path) -> dict:
             "weak": {"status": "verified", "provider": "dynamic", "model": "dynamic", "gate_passed": True, "gate_contract_hash": gate_hash},
         },
         "deterministic_gate_contract": {"sha256": gate_hash},
+        "execution": {"mode": "serial", "overlap_detected": False, "entrypoint": "pipeline"},
+        "model_reports_used": [],
     }
