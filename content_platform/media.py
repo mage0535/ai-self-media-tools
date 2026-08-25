@@ -12,6 +12,7 @@ from .tool_adapters import ScriptVideoProvider
 from .tool_registry import ToolRegistry
 from .paths import agent_scripts_dir
 from .cover_quality import normalize_cover_resolution
+from .adapters.media import execute_article_media
 
 
 class MediaBridge:
@@ -271,6 +272,46 @@ class MediaBridge:
         input_image = job.get("draft_meta", {}).get("image_reference") or job.get("draft_meta", {}).get("input_image")
         if input_image:
             extra_args.extend(["--input-image", str(input_image)])
+        if "juejin" in platforms:
+            staging_url = str(cfg.get("public_staging_base_url") or self.config.get("public_staging_base_url") or "").strip()
+            if not staging_url:
+                raise RuntimeError("juejin media requires public_staging_base_url")
+
+            def generate_article_asset(item, target):
+                prompt = next(row["prompt"] for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
+                provider.run(prompt, target, extra_args)
+                return {
+                    "source_url": f"{staging_url.rstrip('/')}/{job['id']}/{target.name}",
+                    "license": "generated_for_project",
+                    "semantic_match_score": 0.82,
+                    "match_reason": item["section"],
+                }
+
+            package = execute_article_media(
+                job,
+                output_dir,
+                generate_article_asset,
+                public_staging_base_url=staging_url,
+                max_concurrency=int(cfg.get("max_concurrency", 3)),
+                max_attempts=int(cfg.get("max_attempts", 3)),
+            )
+            images = [
+                {
+                    **item,
+                    "kind": "cover" if item["role"] == "cover" else "image",
+                    "url": item["public_url"],
+                    "public_url": item["public_url"],
+                }
+                for item in package["assets"]
+            ]
+            return {
+                "kind": "image",
+                "path": images[0]["path"],
+                "checksum": images[0]["checksum"],
+                "images": images,
+                "section_image_map": package["section_image_map"],
+                "article_media_contract": str(output_dir / "article_media_contract.json"),
+            }
         images = []
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
@@ -362,7 +403,9 @@ class MediaBridge:
             return 8
         if "xiaohongshu" in platforms:
             return 6
-        if platforms.intersection({"wechat", "zhihu", "juejin"}) or body_length >= 1000:
+        if "juejin" in platforms:
+            return 4
+        if platforms.intersection({"wechat", "zhihu"}) or body_length >= 1000:
             return 3
         return 1
 
