@@ -73,7 +73,7 @@ def _default_attestation_path(release_root: Path) -> Path:
 
 
 def _default_signing_key_path(release_root: Path) -> Path:
-    return release_root.parent / "release-signing.key"
+    return release_root.parent / "secrets" / "release-signing.key"
 
 
 def _ensure_signing_key(path: Path) -> Path:
@@ -275,6 +275,9 @@ def audit_release(
         pass
     else:
         raise ReleaseAuditError("signing key path must be outside release")
+    if signing_key.parent.name != "secrets":
+        raise ReleaseAuditError("signing key parent must be the stable secrets boundary")
+    _ensure_signing_key(signing_key)
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
     _assert_release_has_no_symlinks(release)
@@ -296,12 +299,13 @@ def audit_release(
         "test_report_hash": _sha256(test_report),
         "rollback_target": str(rollback),
         "attestation_path": str(attestation),
-        "signing_key_path": str(signing_key),
+        "signing_key_id": f"sha256:{_sha256(signing_key)[:16]}",
+        "signing_key_hash": _sha256(signing_key),
     }
     return metadata
 
 
-def write_metadata(metadata: dict, path: Path | str) -> Path:
+def write_metadata(metadata: dict, path: Path | str, signing_key_path: Path | str | None = None) -> Path:
     _validate_raw_path(path, "metadata_path")
     destination = _resolve(path)
     release = _resolve(metadata.get("release_root", ""))
@@ -317,7 +321,7 @@ def write_metadata(metadata: dict, path: Path | str) -> Path:
     except FileExistsError as exc:
         raise ReleaseAuditError(f"release metadata already exists: {destination}") from exc
     attestation = _resolve(metadata.get("attestation_path", ""))
-    signing_key = _resolve(metadata.get("signing_key_path", ""))
+    signing_key = _resolve(signing_key_path) if signing_key_path is not None else _default_signing_key_path(release)
     try:
         attestation.relative_to(release)
     except ValueError:
@@ -330,7 +334,12 @@ def write_metadata(metadata: dict, path: Path | str) -> Path:
         pass
     else:
         raise ReleaseAuditError("signing key path must be outside release")
+    if signing_key.parent.name != "secrets":
+        raise ReleaseAuditError("signing key parent must be the stable secrets boundary")
     _ensure_signing_key(signing_key)
+    key_hash = _sha256(signing_key)
+    if metadata.get("signing_key_hash") != key_hash or metadata.get("signing_key_id") != f"sha256:{key_hash[:16]}":
+        raise ReleaseAuditError("metadata signing key hint does not match stable secrets key")
     attestation.parent.mkdir(parents=True, exist_ok=True)
     try:
         with attestation.open("x", encoding="ascii", newline="\n") as handle:
@@ -373,7 +382,6 @@ def verify_metadata(
             "test_report": metadata["test_report"],
             "rollback": metadata["rollback_target"],
             "attestation": attestation_path if attestation_path is not None else metadata["attestation_path"],
-            "signing_key": signing_key_path if signing_key_path is not None else metadata["signing_key_path"],
         }
         source_hashes = metadata["source_hashes"]
         expected_commit = metadata["commit"]
@@ -393,7 +401,18 @@ def verify_metadata(
     test_report = _resolve(raw_paths["test_report"])
     rollback = _resolve(raw_paths["rollback"])
     attestation = _resolve(raw_paths["attestation"])
-    signing_key = _resolve(raw_paths["signing_key"])
+    if signing_key_path is None:
+        secrets_root = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", "").strip()
+        candidates = [Path(secrets_root) / "release-signing.key"] if secrets_root else []
+        candidates.extend(
+            [
+                release.parent / "secrets" / "release-signing.key",
+                release.parent.parent / "secrets" / "release-signing.key",
+            ]
+        )
+        signing_key_path = next((candidate for candidate in candidates if candidate.is_file()), candidates[-1])
+    _validate_raw_path(signing_key_path, "signing_key")
+    signing_key = _resolve(signing_key_path)
     _assert_contained(metadata_file, release, "release metadata")
     try:
         attestation.relative_to(release)
@@ -407,6 +426,8 @@ def verify_metadata(
         pass
     else:
         raise ReleaseAuditError("signing key path must be outside release")
+    if signing_key.parent.name != "secrets":
+        raise ReleaseAuditError("signing key parent must be the stable secrets boundary")
     if not release.is_dir() or script_root != release / "scripts":
         raise ReleaseAuditError("metadata current release root is invalid")
 
@@ -447,6 +468,9 @@ def verify_metadata(
     key = signing_key.read_bytes()
     if len(key) != 32:
         raise ReleaseAuditError("release signing key must contain exactly 32 bytes")
+    key_hash = hashlib.sha256(key).hexdigest()
+    if metadata.get("signing_key_hash") != key_hash or metadata.get("signing_key_id") != f"sha256:{key_hash[:16]}":
+        raise ReleaseAuditError("metadata signing key hint does not match signing key")
     try:
         payload = json.loads(attestation.read_text(encoding="ascii"))
         actual_digest = payload["release_digest"]

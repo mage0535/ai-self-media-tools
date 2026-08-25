@@ -61,7 +61,7 @@ def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: 
 
     release = releases / "abc123"
     attestation = data / "release-attestations" / "abc123.sha256"
-    signing_key = data / "release-signing.key"
+    signing_key = tmp_path / "secrets" / "release-signing.key"
     assert result["release_root"] == str(release.resolve())
     assert (release / "release-metadata.json").is_file()
     assert attestation.is_file()
@@ -70,7 +70,11 @@ def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: 
     if os.name != "nt":
         assert signing_key.stat().st_mode & 0o777 == 0o600
     assert set(json.loads(attestation.read_text(encoding="ascii"))) == {"release_digest", "hmac_sha256"}
-    assert json.loads((release / "release-metadata.json").read_text(encoding="utf-8"))["attestation_path"] == str(attestation.resolve())
+    saved_metadata = json.loads((release / "release-metadata.json").read_text(encoding="utf-8"))
+    assert saved_metadata["attestation_path"] == str(attestation.resolve())
+    assert saved_metadata["signing_key_id"]
+    assert saved_metadata["signing_key_hash"]
+    assert "signing_key_path" not in saved_metadata
     assert current.is_symlink()
     assert current.resolve() == release.resolve()
     assert _tracked_modes(source)["scripts/run.py"] == "100755"
@@ -115,7 +119,8 @@ def test_verify_requires_hmac_key_and_rejects_plaintext_or_tampered_signature(tm
     release = Path(deployed["release_root"])
     metadata = release / "release-metadata.json"
     attestation = data / "release-attestations" / "signed.sha256"
-    key = data / "release-signing.key"
+    key = tmp_path / "secrets" / "release-signing.key"
+    original_key = key.read_bytes()
     original_attestation = json.loads(attestation.read_text(encoding="ascii"))
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release))
 
@@ -123,7 +128,7 @@ def test_verify_requires_hmac_key_and_rejects_plaintext_or_tampered_signature(tm
     with pytest.raises(ReleaseAuditError, match="key|signing|attestation"):
         verify_metadata(metadata, current_release_root=release)
 
-    key.write_bytes(b"k" * 32)
+    key.write_bytes(original_key)
     attestation.write_text("0" * 64 + "\n", encoding="ascii")
     with pytest.raises(ReleaseAuditError, match="HMAC|signature|attestation|JSON"):
         verify_metadata(metadata, current_release_root=release)
@@ -133,6 +138,54 @@ def test_verify_requires_hmac_key_and_rejects_plaintext_or_tampered_signature(tm
     attestation.write_text(json.dumps(payload), encoding="ascii")
     with pytest.raises(ReleaseAuditError, match="HMAC|signature|attestation"):
         verify_metadata(metadata, current_release_root=release)
+
+
+def test_data_attestation_replacement_without_stable_secrets_key_fails(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    data = tmp_path / "data"
+    secrets = tmp_path / "secrets"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    deployed = deploy_release(
+        source_root=source,
+        releases_root=tmp_path / "releases",
+        current_link=tmp_path / ".ai-self-media-tools-current",
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=data,
+        secrets_root=secrets,
+        release_name="stable-key",
+    )
+    release = Path(deployed["release_root"])
+    attestation = data / "release-attestations" / "stable-key.sha256"
+    (secrets / "release-signing.key").unlink()
+    attestation.write_text('{"release_digest":"' + "0" * 64 + '","hmac_sha256":"' + "0" * 64 + '"}\n', encoding="ascii")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release))
+
+    with pytest.raises(ReleaseAuditError, match="key|signing|attestation"):
+        verify_metadata(release / "release-metadata.json", current_release_root=release, signing_key_path=secrets / "release-signing.key")
+
+
+@pytest.mark.parametrize("location", ["data", "release"])
+def test_deploy_rejects_signing_key_outside_stable_secrets_boundary(tmp_path: Path, monkeypatch, location: str):
+    source, config, report, rollback = _case(tmp_path)
+    data = tmp_path / "data"
+    releases = tmp_path / "releases"
+    key = data / "release-signing.key" if location == "data" else releases / "release-signing.key"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    with pytest.raises(ReleaseAuditError, match="signing|secret|boundary|data|release"):
+        deploy_release(
+            source_root=source,
+            releases_root=releases,
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            config_path=config,
+            test_report_path=report,
+            rollback_target=rollback,
+            data_root=data,
+            signing_key=key,
+            release_name="bad-key",
+        )
 
 
 def test_deploy_rewrites_old_internal_config_paths_and_rejects_external_script(tmp_path: Path, monkeypatch):
@@ -203,7 +256,7 @@ def test_rollback_verifies_target_and_atomically_switches_current(tmp_path: Path
 def test_rollback_rejects_target_without_audited_metadata(tmp_path: Path):
     target = tmp_path / "unaudited"
     target.mkdir()
-    with pytest.raises(Exception, match="metadata|attestation|audit|exist"):
+    with pytest.raises(Exception, match="metadata|attestation|audit|exist|signing|secret"):
         rollback_release(
             target_release=target,
             current_link=tmp_path / ".ai-self-media-tools-current",
@@ -239,6 +292,8 @@ def test_rollback_cli_verifies_and_switches_audited_target(tmp_path: Path, monke
             str(current),
             "--data-root",
             str(data),
+            "--secrets-root",
+            str(tmp_path / "secrets"),
         ],
         cwd=Path(__file__).parents[1],
         env={**os.environ, "CONTENT_PLATFORM_CODE_ROOT": str(source)},
