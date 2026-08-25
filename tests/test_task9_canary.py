@@ -63,6 +63,7 @@ def test_hotspot_provenance_uses_external_snapshot_and_rejects_tampering(tmp_pat
         "observed_title": "DeepSeek", "fetched_at": "2026-08-25T00:00:00Z", "status": 200,
         "snapshot_path": snapshot_rel, "snapshot_sha256": snapshot_hash, "provenance_hash": provenance_hash,
         "evidence_type": "native", "native_verified": True, "association_mode": "auto_browser",
+        "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
     }))
     hotspot = _load_verified_hotspot(tmp_path, case)
     manifest = {
@@ -103,6 +104,7 @@ def test_official_activity_is_verified_without_being_relabelled_native(tmp_path:
         "observed_title": "AI 效率挑战", "fetched_at": "2026-08-25T00:00:00Z", "status": 200,
         "snapshot_path": snapshot_rel, "snapshot_sha256": snapshot_hash, "provenance_hash": provenance_hash,
         "evidence_type": "official_activity", "native_verified": False, "association_mode": "manual_handoff",
+        "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
     }))
 
     hotspot = _load_verified_hotspot(tmp_path, case)
@@ -136,6 +138,7 @@ def test_hotspot_evidence_type_and_association_mode_must_match_matrix(tmp_path: 
         "observed_title": "official activity", "fetched_at": "2026-08-25T00:00:00Z", "status": 200,
         "snapshot_path": snapshot_rel, "snapshot_sha256": snapshot_hash, "provenance_hash": provenance_hash,
         "evidence_type": "native", "native_verified": True, "association_mode": "auto_api",
+        "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
     }))
 
     with pytest.raises(ValueError, match="hotspot_evidence_type_not_allowed|hotspot_association_mode_not_allowed"):
