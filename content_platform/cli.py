@@ -95,7 +95,10 @@ def _rewrite_runtime_paths(value, code_root, data_root, secrets_root):
         return [_rewrite_runtime_paths(item, code_root, data_root, secrets_root) for item in value]
     if not isinstance(value, str):
         return value
-    match = re.match(r"^/root/\.ai-self-media-tools-releases/[^/]+/(data|secrets|scripts)(/.*)?$", value)
+    match = re.match(
+        r"^.*[\\/]\.ai-self-media-tools-releases[\\/][^\\/]+[\\/](data|secrets|scripts)([\\/].*)?$",
+        value,
+    )
     if not match:
         return value
     root, suffix = match.group(1), match.group(2) or ""
@@ -110,7 +113,8 @@ def load_config(path, db_path):
     db_parent = str(Path(db_path).parent)
     data_root = os.environ.get("CONTENT_PLATFORM_DATA_DIR", "").strip() or str(config.get("data_dir") or db_parent)
     secrets_root = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", "").strip() or str(Path(data_root).parent / "secrets")
-    release_root = Path("/root/.ai-self-media-tools-current")
+    home_root = project_home()
+    release_root = home_root.parent / f"{home_root.name}-current"
     code_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip() or (str(release_root) if release_root.exists() else str(project_home()))
     config = _rewrite_runtime_paths(config, code_root, data_root, secrets_root)
     config["data_dir"] = data_root

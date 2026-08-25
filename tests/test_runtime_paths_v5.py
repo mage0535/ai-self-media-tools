@@ -6,7 +6,16 @@ from content_platform.cli import load_config
 
 def test_environment_data_dir_overrides_legacy_config_path(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
-    config_path.write_text(json.dumps({"data_dir": "/root/.ai-self-media-tools-releases/aebd7a9/data", "media": {"video": {"script": "/root/.ai-self-media-tools-releases/aebd7a9/scripts/video_toolchain_runner.py"}}}), encoding="utf-8")
+    legacy_release = tmp_path / ".ai-self-media-tools-releases" / "aebd7a9"
+    config_path.write_text(
+        json.dumps(
+            {
+                "data_dir": str(legacy_release / "data"),
+                "media": {"video": {"script": str(legacy_release / "scripts" / "video_toolchain_runner.py")}},
+            }
+        ),
+        encoding="utf-8",
+    )
     runtime_data = tmp_path / "runtime-data"
     monkeypatch.setenv("CONTENT_PLATFORM_DATA_DIR", str(runtime_data))
     result = load_config(str(config_path), str(runtime_data / "state.db"))
