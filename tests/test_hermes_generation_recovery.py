@@ -256,6 +256,81 @@ def test_soft_deadline_writes_bounded_periodic_heartbeats_until_success(monkeypa
     assert checkpoints[-1]["status"] == "success"
 
 
+def test_hermes_launch_uses_files_and_an_isolated_process_group(monkeypatch, tmp_path):
+    process = FakeProcess([(0, '{"title":"T","body":"body"}')])
+    launch = {}
+
+    def popen(command, **kwargs):
+        launch.update(kwargs)
+        return process
+
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", popen)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "clock": lambda: 10, "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    generator._hermes("topic", {"platform": "wechat"}, {
+        "language": "zh", "platform_rules": "中文规则" * 5000,
+        "hook_samples": "中文钩子" * 5000,
+    })
+
+    assert launch["stdout"] is not __import__("subprocess").PIPE
+    assert launch["stderr"] is not __import__("subprocess").PIPE
+    if __import__("os").name == "nt":
+        assert launch["creationflags"] & __import__("subprocess").CREATE_NEW_PROCESS_GROUP
+    else:
+        assert launch["start_new_session"] is True
+
+
+def test_final_hermes_prompt_obeys_utf8_stage_payload_budget(monkeypatch, tmp_path):
+    process = FakeProcess([(0, '{"title":"T","body":"body"}')])
+    commands = []
+    monkeypatch.setattr(
+        "content_platform.generator.subprocess.Popen",
+        lambda command, **kwargs: (commands.append(command) or process),
+    )
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "clock": lambda: 10, "sleep": lambda _: None,
+        "stage_payload_bytes": 16384,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    generator._hermes("topic", {
+        "platform": "wechat",
+        "content_blueprint": {f"section_{index}": "中文蓝图" * 500 for index in range(12)},
+    }, {
+        "language": "zh", "platform_rules": "中文规则" * 5000,
+        "hook_samples": "中文钩子" * 5000,
+    })
+
+    prompt = commands[0][commands[0].index("-z") + 1]
+    assert len(prompt.encode("utf-8")) <= 16384
+
+
+def test_posix_timeout_terminates_the_isolated_process_group(monkeypatch):
+    class GroupProcess:
+        pid = 4321
+
+        def wait(self, timeout=None):
+            return 0
+
+    signals = []
+    monkeypatch.setattr(
+        __import__("content_platform.generator", fromlist=["os"]).os,
+        "killpg", lambda pid, sent_signal: signals.append((pid, sent_signal)),
+        raising=False,
+    )
+
+    generator = DraftGenerator({"termination_grace": 1})
+    generator._platform_name = lambda: "posix"
+    generator._terminate_generation_process(GroupProcess())
+
+    assert signals == [(4321, __import__("signal").SIGTERM)]
+
+
 def test_hard_timeout_stops_heartbeats_and_terminates_process(monkeypatch, tmp_path):
     class FakeClock:
         now = 0
