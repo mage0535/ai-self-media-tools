@@ -80,3 +80,29 @@ def test_stage_payload_rejects_oversized_provider_input(tmp_path: Path) -> None:
     contract = build_run_contract("tiktok", rulebook_path=rulebook)
     with pytest.raises(RunContractError, match="payload exceeds"):
         bound_stage_payload(contract, "blueprint", {"selected_topic": "x" * 20_000}, rulebook_path=rulebook)
+
+
+def test_generate_payload_compacts_server_scale_capability_context(tmp_path: Path) -> None:
+    rulebook = _rulebook(tmp_path)
+    contract = build_run_contract("tiktok", rulebook_path=rulebook)
+    verbose = {f"capability_{index}": {"rules": ["中文规则" * 80] * 8} for index in range(80)}
+
+    bounded = bound_stage_payload(
+        contract,
+        "generate",
+        {
+            "content_blueprint": {"topic": "AI workflow", "content_form": "short_video"},
+            "claim_ledger": [{"claim": "verified claim", "source": "evidence"}],
+            "strategy": {"account_identity": "tiktok-ai"},
+            "content_profile": verbose,
+            "capability_plan": verbose,
+            "tool_selection": verbose,
+            "compiled_skill_rules": verbose,
+        },
+        rulebook_path=rulebook,
+    )
+
+    assert bounded["content_blueprint"]["topic"] == "AI workflow"
+    assert bounded["claim_ledger"][0]["claim"] == "verified claim"
+    assert bounded["strategy"]["account_identity"] == "tiktok-ai"
+    assert len(json.dumps(bounded, ensure_ascii=False).encode("utf-8")) <= 16_384
