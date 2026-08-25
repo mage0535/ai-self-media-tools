@@ -368,6 +368,8 @@ shared_trend_only: false
             text = Path(name).read_text(encoding="utf-8")
             self.assertIn('signing_key="${CONTENT_PLATFORM_RELEASE_SIGNING_KEY:-$secrets_root/release-signing.key}"', text)
             self.assertIn('--signing-key "$signing_key"', text)
+            self.assertIn('trusted_secrets_root="$secrets_root"', text)
+            self.assertIn('--trusted-secrets-root "$trusted_secrets_root"', text)
 
     def test_deploy_cli_requires_explicit_signing_key_or_secrets_root(self):
         text = Path("scripts/deploy_release.py").read_text(encoding="utf-8")

@@ -19,6 +19,7 @@ config_path="${CONTENT_PLATFORM_CONFIG:-$release_root/config.json}"
 metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$release_root/release-metadata.json}"
 attestation_path="${CONTENT_PLATFORM_RELEASE_ATTESTATION:-$data_root/release-attestations/$(basename -- "$release_root").sha256}"
 signing_key="${CONTENT_PLATFORM_RELEASE_SIGNING_KEY:-$secrets_root/release-signing.key}"
+trusted_secrets_root="$secrets_root"
 day="$(date +%F)"
 out="$data_root/overnight/$day"
 slots="$secrets_root/overnight-slots.json"
@@ -32,6 +33,7 @@ CONTENT_PLATFORM_CODE_ROOT="$release_root" \
   python3 "$release_root/scripts/runtime_release_audit.py" --verify-metadata \
   --metadata-path "$metadata_path" --attestation-path "$attestation_path" \
   --signing-key "$signing_key" \
+  --trusted-secrets-root "$trusted_secrets_root" \
   --release-root "$release_root"
 
 mkdir -p "$out"

@@ -76,20 +76,28 @@ def _default_signing_key_path(release_root: Path) -> Path:
     return release_root.parent / "secrets" / "release-signing.key"
 
 
-def _ensure_signing_key(path: Path) -> Path:
+def _create_signing_key(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
     try:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
         descriptor = os.open(path, flags, 0o600)
-    except FileExistsError:
-        pass
-    else:
-        try:
-            os.write(descriptor, secrets.token_bytes(32))
-        finally:
-            os.close(descriptor)
+    except FileExistsError as exc:
+        raise ReleaseAuditError(f"signing key already exists: {path}") from exc
+    try:
+        os.write(descriptor, secrets.token_bytes(32))
+    finally:
+        os.close(descriptor)
     path.chmod(0o600)
     if not path.is_file() or len(path.read_bytes()) != 32:
+        raise ReleaseAuditError(f"signing key must contain exactly 32 bytes: {path}")
+    return path
+
+
+def _prepare_signing_key(path: Path) -> Path:
+    if not path.is_file():
+        raise ReleaseAuditError(f"required signing key does not exist: {path}")
+    path.chmod(0o600)
+    if len(path.read_bytes()) != 32:
         raise ReleaseAuditError(f"signing key must contain exactly 32 bytes: {path}")
     return path
 
@@ -98,7 +106,7 @@ def _hmac_release_digest(release_digest: str, key: bytes) -> str:
     return hmac.new(key, release_digest.encode("ascii"), hashlib.sha256).hexdigest()
 
 
-def _assert_successful_junit(path: Path) -> None:
+def _assert_successful_junit(path: Path, min_tests: int = 900) -> int:
     try:
         root = ET.parse(path).getroot()
         suites = [root] if root.tag.rsplit("}", 1)[-1] == "testsuite" else list(root.iter())
@@ -110,10 +118,20 @@ def _assert_successful_junit(path: Path) -> None:
         errors = sum(int(item.attrib.get("errors", "0")) for item in suites)
     except (ET.ParseError, OSError, TypeError, ValueError) as exc:
         raise ReleaseAuditError(f"JUnit report is invalid: {path}") from exc
-    if tests <= 0 or failures != 0 or errors != 0:
+    if tests < min_tests or failures != 0 or errors != 0:
         raise ReleaseAuditError(
-            f"JUnit report is not successful: tests={tests}, failures={failures}, errors={errors}"
+            f"JUnit report is not successful: tests={tests}, minimum={min_tests}, failures={failures}, errors={errors}"
         )
+    return tests
+
+
+def _assert_project_audit(path: Path) -> None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ReleaseAuditError(f"project audit report is invalid: {path}") from exc
+    if payload.get("ok") is not True or payload.get("issues") != []:
+        raise ReleaseAuditError("project audit report must have ok=true and issues=[]")
 
 
 def _tracked_hashes(source_root: Path) -> dict[str, str]:
@@ -228,6 +246,9 @@ def audit_release(
     rollback_target: str | None = None,
     attestation_path: Path | str | None = None,
     signing_key_path: Path | str | None = None,
+    trusted_secrets_root: Path | str | None = None,
+    project_audit_report_path: Path | str | None = None,
+    min_tests: int = 900,
 ) -> dict:
     if config_path is None or test_report_path is None or rollback_target is None:
         raise ReleaseAuditError("config_path, test_report_path, and rollback_target are required evidence")
@@ -241,6 +262,10 @@ def audit_release(
         _validate_raw_path(attestation_path, "attestation_path")
     if signing_key_path is not None:
         _validate_raw_path(signing_key_path, "signing_key_path")
+    if trusted_secrets_root is not None:
+        _validate_raw_path(trusted_secrets_root, "trusted_secrets_root")
+    if project_audit_report_path is not None:
+        _validate_raw_path(project_audit_report_path, "project_audit_report_path")
     source = _resolve(source_root)
     release = _resolve(release_root)
     script_root = _resolve(configured_script_root)
@@ -249,6 +274,8 @@ def audit_release(
     rollback = _resolve(rollback_target)
     attestation = _resolve(attestation_path) if attestation_path is not None else _default_attestation_path(release)
     signing_key = _resolve(signing_key_path) if signing_key_path is not None else _default_signing_key_path(release)
+    trusted_secrets = _resolve(trusted_secrets_root) if trusted_secrets_root is not None else signing_key.parent
+    project_audit_report = _resolve(project_audit_report_path) if project_audit_report_path is not None else None
     expected_script_root = (release / "scripts").resolve()
     if not source.is_dir() or not release.is_dir() or script_root != expected_script_root:
         raise ReleaseAuditError("source, release, and configured script roots do not match")
@@ -262,7 +289,10 @@ def audit_release(
     _assert_clean(source)
     _require_file(config, "config_path")
     _require_file(test_report, "test_report_path")
-    _assert_successful_junit(test_report)
+    junit_tests = _assert_successful_junit(test_report, min_tests=min_tests)
+    if project_audit_report is not None:
+        _require_file(project_audit_report, "project_audit_report_path")
+        _assert_project_audit(project_audit_report)
     try:
         attestation.relative_to(release)
     except ValueError:
@@ -277,7 +307,9 @@ def audit_release(
         raise ReleaseAuditError("signing key path must be outside release")
     if signing_key.parent.name != "secrets":
         raise ReleaseAuditError("signing key parent must be the stable secrets boundary")
-    _ensure_signing_key(signing_key)
+    if signing_key.parent != trusted_secrets or signing_key.name != "release-signing.key":
+        raise ReleaseAuditError("signing key must equal trusted_secrets_root/release-signing.key")
+    _prepare_signing_key(signing_key)
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
     _assert_release_has_no_symlinks(release)
@@ -297,11 +329,15 @@ def audit_release(
         "config_hash": _sha256(config),
         "test_report": str(test_report),
         "test_report_hash": _sha256(test_report),
+        "junit_tests": junit_tests,
         "rollback_target": str(rollback),
         "attestation_path": str(attestation),
         "signing_key_id": f"sha256:{_sha256(signing_key)[:16]}",
         "signing_key_hash": _sha256(signing_key),
     }
+    if project_audit_report is not None:
+        metadata["project_audit_report"] = str(project_audit_report)
+        metadata["project_audit_report_hash"] = _sha256(project_audit_report)
     return metadata
 
 
@@ -336,7 +372,7 @@ def write_metadata(metadata: dict, path: Path | str, signing_key_path: Path | st
         raise ReleaseAuditError("signing key path must be outside release")
     if signing_key.parent.name != "secrets":
         raise ReleaseAuditError("signing key parent must be the stable secrets boundary")
-    _ensure_signing_key(signing_key)
+    _prepare_signing_key(signing_key)
     key_hash = _sha256(signing_key)
     if metadata.get("signing_key_hash") != key_hash or metadata.get("signing_key_id") != f"sha256:{key_hash[:16]}":
         raise ReleaseAuditError("metadata signing key hint does not match stable secrets key")
@@ -362,6 +398,8 @@ def verify_metadata(
     current_release_root: Path | str | None = None,
     attestation_path: Path | str | None = None,
     signing_key_path: Path | str | None = None,
+    trusted_secrets_root: Path | str | None = None,
+    min_tests: int = 900,
 ) -> dict:
     """Verify immutable release metadata and all evidence it names."""
     _validate_raw_path(metadata_path, "metadata_path")
@@ -413,6 +451,7 @@ def verify_metadata(
         signing_key_path = next((candidate for candidate in candidates if candidate.is_file()), candidates[-1])
     _validate_raw_path(signing_key_path, "signing_key")
     signing_key = _resolve(signing_key_path)
+    trusted_secrets = _resolve(trusted_secrets_root) if trusted_secrets_root is not None else signing_key.parent
     _assert_contained(metadata_file, release, "release metadata")
     try:
         attestation.relative_to(release)
@@ -428,6 +467,8 @@ def verify_metadata(
         raise ReleaseAuditError("signing key path must be outside release")
     if signing_key.parent.name != "secrets":
         raise ReleaseAuditError("signing key parent must be the stable secrets boundary")
+    if signing_key.parent != trusted_secrets or signing_key.name != "release-signing.key":
+        raise ReleaseAuditError("signing key must equal trusted_secrets_root/release-signing.key")
     if not release.is_dir() or script_root != release / "scripts":
         raise ReleaseAuditError("metadata current release root is invalid")
 
@@ -461,7 +502,16 @@ def verify_metadata(
         raise ReleaseAuditError("config hash mismatch")
     if not test_report.is_file() or _sha256(test_report) != expected_report_hash:
         raise ReleaseAuditError("JUnit test report hash mismatch")
-    _assert_successful_junit(test_report)
+    junit_tests = _assert_successful_junit(test_report, min_tests=min_tests)
+    if metadata.get("junit_tests") != junit_tests:
+        raise ReleaseAuditError("metadata JUnit count mismatch")
+    project_audit_report = metadata.get("project_audit_report")
+    if project_audit_report:
+        project_path = _resolve(project_audit_report)
+        _require_file(project_path, "project audit report")
+        _assert_project_audit(project_path)
+        if _sha256(project_path) != metadata.get("project_audit_report_hash"):
+            raise ReleaseAuditError("project audit report hash mismatch")
     _validate_rollback_target(release, rollback)
     _require_file(attestation, "release attestation")
     _require_file(signing_key, "release signing key")
@@ -482,6 +532,13 @@ def verify_metadata(
         actual_hmac, _hmac_release_digest(expected_digest, key)
     ):
         raise ReleaseAuditError("release attestation hash mismatch")
+    rehearsal = metadata.get("rollback_rehearsal")
+    if rehearsal is not None:
+        if not isinstance(rehearsal, dict) or rehearsal.get("passed") is not True:
+            raise ReleaseAuditError("signed rollback rehearsal did not pass")
+        rehearsal_target = _resolve(rehearsal.get("target_release", ""))
+        if rehearsal.get("release_digest") != _release_digest(rehearsal_target):
+            raise ReleaseAuditError("signed rollback rehearsal digest mismatch")
     return metadata
 
 
@@ -497,6 +554,9 @@ def main() -> int:
     parser.add_argument("--rollback-target")
     parser.add_argument("--attestation-path")
     parser.add_argument("--signing-key")
+    parser.add_argument("--trusted-secrets-root")
+    parser.add_argument("--project-audit-report")
+    parser.add_argument("--min-tests", type=int, default=900)
     parser.add_argument("--metadata-path", required=True)
     args = parser.parse_args()
     if args.verify_metadata or args.mode == "verify_metadata":
@@ -505,6 +565,8 @@ def main() -> int:
             current_release_root=args.release_root,
             attestation_path=args.attestation_path,
             signing_key_path=args.signing_key,
+            trusted_secrets_root=args.trusted_secrets_root,
+            min_tests=args.min_tests,
         ), sort_keys=True))
         return 0
     required = {
@@ -527,6 +589,9 @@ def main() -> int:
         rollback_target=args.rollback_target,
         attestation_path=args.attestation_path,
         signing_key_path=args.signing_key,
+        trusted_secrets_root=args.trusted_secrets_root,
+        project_audit_report_path=args.project_audit_report,
+        min_tests=args.min_tests,
     )
     print(write_metadata(metadata, args.metadata_path))
     return 0
