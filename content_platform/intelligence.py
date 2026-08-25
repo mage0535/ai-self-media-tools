@@ -299,6 +299,7 @@ def build_generation_context(topic, brief):
 
 def _load_platform_rules(strategy: dict) -> str:
     """按策略主平台加载 2026 规则浓缩文本；失败时静默返回空串（不阻断生成）。"""
+    platform = ""
     try:
         from .platform_rules import platform_rules_brief
 
