@@ -734,6 +734,35 @@ class Pipeline:
         return hygiene
 
     def _deliver(self, platform, job, action="publish"):
+        if str(platform).casefold() == "juejin":
+            # The store keeps local paths/checksums; merge the renderer-written
+            # public URLs only at delivery time so the publisher receives the
+            # same versioned article media contract that was generated.
+            contract_path = self.data_dir / "artifacts" / str(job.get("id") or "") / "article_media_contract.json"
+            if contract_path.is_file():
+                try:
+                    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+                    by_path = {str(row.get("path")): row for row in contract.get("assets") or [] if isinstance(row, dict)}
+                    delivery_job = dict(job)
+                    artifacts = []
+                    for artifact in job.get("artifacts") or []:
+                        enriched = dict(artifact)
+                        source = by_path.get(str(artifact.get("path")))
+                        if source:
+                            enriched.update({"url": source.get("public_url"), "public_url": source.get("public_url"), "source_url": source.get("source_url"), "license": source.get("license"), "kind": "cover" if source.get("role") == "cover" else "image"})
+                        artifacts.append(enriched)
+                    delivery_job["artifacts"] = artifacts
+                    metadata = dict(job.get("draft_meta") or {})
+                    metadata["section_image_map"] = contract.get("section_image_map") or []
+                    metadata["article_media_contract"] = contract
+                    delivery_job["draft_meta"] = metadata
+                    if isinstance(job.get("platform_payload"), dict):
+                        payload = dict(job["platform_payload"])
+                        payload["section_image_map"] = metadata["section_image_map"]
+                        delivery_job["platform_payload"] = payload
+                    job = delivery_job
+                except (OSError, json.JSONDecodeError):
+                    pass
         decision = delivery_health_decision(platform, self.config, action)
         if not decision.ok:
             return DeliveryResult(False, "blocked", error=decision.error())
@@ -871,7 +900,7 @@ class Pipeline:
             return artifact
         if kind == "image" and artifact.get("images"):
             for item in artifact.get("images", []):
-                self.store.add_artifact(job_id, "image", item.get("path", ""), item.get("checksum", ""))
+                self.store.add_artifact(job_id, item.get("kind") or "image", item.get("path", ""), item.get("checksum", ""))
             mapping_path = Path(artifact["path"]).parent / "section_image_map.json"
             if mapping_path.is_file():
                 self.store.add_artifact(job_id, "section_image_map", mapping_path, "")
