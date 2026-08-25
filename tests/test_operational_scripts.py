@@ -312,10 +312,22 @@ shared_trend_only: false
         self.assertIn("overnight-supervise", script)
         self.assertIn("overnight-sync-state", script)
         self.assertLess(script.index("overnight-sync-state"), script.index('if [[ "$status" != "stale" ]]'))
-        self.assertIn("overnight-run", script)
-        self.assertIn("automatic_recovery", script)
+        self.assertNotIn("overnight-run", script)
+        self.assertIn("recovery_pending", script)
         self.assertIn("run_overnight_supervisor.sh", service)
         self.assertIn("*:0/3", timer)
+
+    def test_stale_plan_keeps_recovery_pending_without_running_or_entering_delivery(self):
+        script = Path("scripts/run_overnight_supervisor.sh").read_text(encoding="utf-8")
+
+        self.assertIn("overnight-sync-state", script)
+        self.assertIn("overnight-supervise", script)
+        self.assertIn("recover", script)
+        self.assertIn("recovery_pending", script)
+        self.assertIn('notify "action_required"', script)
+        self.assertNotIn("overnight-run", script)
+        self.assertNotIn("automatic_recovery_started", script)
+        self.assertNotIn("automatic_recovery_completed", script)
 
     def test_overnight_script_writes_a_failed_outcome_before_notifying_on_unhandled_error(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")

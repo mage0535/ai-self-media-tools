@@ -64,18 +64,30 @@ fi
 # A stale service may own browser or publisher state. Recover only durable
 # leases and reconcile facts; a new batch is never started from this watcher.
 run_platform --config "$config_path" --db "$data_root/state.db" recover > "$out/supervisor-recover.json" || true
-if [[ -f "$out/plan.json" ]]; then
-  notify "progress" "automatic_recovery_started; see $report"
-  if run_platform --config "$config_path" --db "$data_root/state.db" \
-    overnight-run --plan "$out/plan.json" --state "$state" --events "$out/events.jsonl" \
-    > "$out/supervisor-recovery-result.json"; then
-    run_platform --config "$config_path" --db "$data_root/state.db" \
-      overnight-sync-state --state "$state" --output "$out/acceptance_summary.json" \
-      > "$out/supervisor-recovery-sync.json"
-    notify "resolved" "automatic_recovery_completed; see $out/supervisor-recovery-result.json"
-  else
-    notify "action_required" "automatic_recovery_failed; see $out/supervisor-recovery-result.json"
-  fi
-else
-  notify "action_required" "heartbeat_stale_reconciled_without_plan; see $report"
-fi
+recovery_pending="$out/recovery-pending.json"
+python3 - "$recovery_pending" "$state" "$report" "$out/supervisor-recover.json" "$out/plan.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+output, state, report, lease_recovery, plan = map(Path, sys.argv[1:])
+output.write_text(
+    json.dumps(
+        {
+            "status": "recovery_pending",
+            "reason": "stale_heartbeat",
+            "state": str(state),
+            "supervisor_report": str(report),
+            "lease_recovery": str(lease_recovery),
+            "plan": str(plan) if plan.exists() else None,
+            "automatic_execution": False,
+            "delivery": False,
+        },
+        ensure_ascii=True,
+        indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+notify "action_required" "recovery_pending; automatic execution and delivery disabled; see $recovery_pending and $report"
