@@ -331,6 +331,54 @@ def test_posix_timeout_terminates_the_isolated_process_group(monkeypatch):
     assert signals == [(4321, __import__("signal").SIGTERM)]
 
 
+def test_verbose_hermes_output_is_stopped_at_the_combined_file_limit(monkeypatch, tmp_path):
+    class VerboseProcess:
+        returncode = None
+        pid = None
+        terminated = False
+
+        def __init__(self, stdout_file, stderr_file):
+            self.stdout_file = stdout_file
+            self.stderr_file = stderr_file
+
+        def poll(self):
+            if self.terminated:
+                self.returncode = -15
+                return self.returncode
+            self.stdout_file.write(b"x" * 700)
+            self.stderr_file.write(b"y" * 700)
+            self.stdout_file.flush()
+            self.stderr_file.flush()
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            self.returncode = -15
+            return self.returncode
+
+    def popen(command, **kwargs):
+        return VerboseProcess(kwargs["stdout"], kwargs["stderr"])
+
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", popen)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(tmp_path / "attempts.json"),
+        "clock": lambda: 10, "sleep": lambda _: None,
+    })
+    brief = {
+        "platform": "wechat",
+        "run_contract": {"bounds": {"provider_response_bytes": 1024}},
+    }
+
+    with pytest.raises(ValueError, match="output exceeds 1024 bytes"):
+        generator._hermes("topic", brief, {"language": "zh", "platform_rules": ""})
+
+    checkpoint = json.loads((tmp_path / "generation_checkpoint.json").read_text(encoding="utf-8"))
+    assert checkpoint["error_class"] == "provider_output_limit"
+
+
 def test_hard_timeout_stops_heartbeats_and_terminates_process(monkeypatch, tmp_path):
     class FakeClock:
         now = 0

@@ -971,11 +971,22 @@ class DraftGenerator:
         soft = int(self.config.get("soft_deadline", 240))
         hard = int(self.config.get("hard_deadline", 420))
         heartbeat_interval = max(1, int(self.config.get("heartbeat_interval", 30)))
+        output_limit = self._provider_response_limit(brief)
         # elapsed is relative to started, so keep heartbeat thresholds relative too.
         next_heartbeat_at = soft
         try:
             while proc.poll() is None:
                 elapsed = clock() - started
+                if self._generation_output_size(stdout_file, stderr_file) > output_limit:
+                    finished = clock()
+                    self._terminate_generation_process(proc)
+                    payload = self._checkpoint_payload(
+                        attempt=2 if retry else 1, status="provider_error", error_class="provider_output_limit",
+                        prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+                    )
+                    self._write_generation_checkpoint(payload)
+                    self._record_generation_attempt(payload)
+                    raise ValueError(f"Hermes output exceeds {output_limit} bytes")
                 if elapsed >= hard:
                     finished = clock()
                     attempt = 2 if retry else 1
@@ -1005,7 +1016,9 @@ class DraftGenerator:
                     ))
                     next_heartbeat_at += heartbeat_interval
                 self.config.get("sleep", time.sleep)(0.05)
-            stdout, stderr = self._read_generation_output(proc, stdout_file, stderr_file)
+            if self._generation_output_size(stdout_file, stderr_file) > output_limit:
+                raise ValueError(f"Hermes output exceeds {output_limit} bytes")
+            stdout, stderr = self._read_generation_output(proc, stdout_file, stderr_file, output_limit)
         finally:
             stdout_file.close()
             stderr_file.close()
@@ -1094,11 +1107,11 @@ class DraftGenerator:
         return os.name
 
     @staticmethod
-    def _read_generation_output(proc, stdout_file, stderr_file):
+    def _read_generation_output(proc, stdout_file, stderr_file, max_bytes):
         def read(file):
             file.flush()
             file.seek(0)
-            return file.read().decode("utf-8", errors="replace")
+            return file.read(max_bytes + 1).decode("utf-8", errors="replace")
 
         stdout, stderr = read(stdout_file), read(stderr_file)
         if not stdout and not stderr and hasattr(proc, "communicate"):
@@ -1106,6 +1119,15 @@ class DraftGenerator:
             stdout = str(fallback_stdout or "")
             stderr = str(fallback_stderr or "")
         return stdout, stderr
+
+    @staticmethod
+    def _generation_output_size(stdout_file, stderr_file):
+        return os.fstat(stdout_file.fileno()).st_size + os.fstat(stderr_file.fileno()).st_size
+
+    @staticmethod
+    def _provider_response_limit(brief):
+        contract = brief.get("run_contract") if isinstance(brief, dict) else None
+        return max(1024, int(((contract or {}).get("bounds") or {}).get("provider_response_bytes") or 1_048_576))
 
     @staticmethod
     def _truncate_utf8(value, max_bytes):
