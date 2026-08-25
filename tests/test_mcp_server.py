@@ -8,10 +8,27 @@ from pathlib import Path
 from unittest.mock import patch
 
 from content_platform import mcp_server
+from content_platform.capability_catalog import load_capability_registry
 from content_platform.store import Store
 
 
 class McpServerTests(unittest.TestCase):
+    def test_capability_status_reconciles_registered_and_registry_mcp_tools(self):
+        tools = {name: handler for handler, name, _, _ in mcp_server._tools()}
+        capability = asyncio.run(tools["capability_status"]())
+        registry_tools = {
+            item["mcp_tool"]
+            for item in load_capability_registry()["capabilities"]
+            if item.get("kind") == "mcp_tool"
+        }
+
+        self.assertEqual(capability["mcp_tools"], list(tools))
+        self.assertEqual(set(capability["registry_mcp_tools"]), registry_tools)
+        self.assertEqual(
+            set(capability["non_registry_mcp_tools"]),
+            set(tools) - registry_tools,
+        )
+
     def test_reddit_channel_status_tool_reports_management_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)

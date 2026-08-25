@@ -18,6 +18,15 @@ except ImportError:
     HAS_MCP = False
 
 
+_CONTENT_PRODUCTION_MCP_TOOLS = frozenset(
+    {
+        "build_content_recipe",
+        "content_search",
+        "memory_context",
+    }
+)
+
+
 def _get_db_path():
     configured_home = os.environ.get("CONTENT_PLATFORM_HOME")
     home = Path(configured_home) if configured_home else Path.home() / ".ai-self-media-tools"
@@ -131,11 +140,18 @@ def _tools():
         return {"audio": result.get("audio", ""), "subtitle": result.get("subtitle", "")}
 
     async def mcp_capability_status() -> dict:
+        from content_platform.capability_catalog import load_capability_registry
         from content_platform.runtime_capabilities import build_runtime_capability_snapshot
 
         snapshot = build_runtime_capability_snapshot()
         modules = snapshot["video_effect_modules"].get("modules") or {}
         families = snapshot["video_effect_modules"].get("template_families") or {}
+        inventory = mcp_tool_inventory()
+        registry_tools = [
+            item["mcp_tool"]
+            for item in load_capability_registry()["capabilities"]
+            if item.get("kind") == "mcp_tool"
+        ]
         return {
             "tools": snapshot["tools"],
             "video_effect_modules": {
@@ -143,18 +159,10 @@ def _tools():
                 "module_count": len(modules or {}),
                 "template_family_count": len(families or {}),
             },
-            "mcp_tools": [
-                "capability_status",
-                "build_content_recipe",
-                "build_tool_selection_plan",
-                "validate_content_package",
-                "zhihu_open_search",
-                "zhihu_open_ask",
-                "zhihu_open_user_contents",
-                "zhihu_open_user_followees",
-                "zhihu_open_user_collections",
-                "zhihu_open_trending",
-                "zhihu_open_quota",
+            "mcp_tools": [item["name"] for item in inventory],
+            "registry_mcp_tools": registry_tools,
+            "non_registry_mcp_tools": [
+                item["name"] for item in inventory if item["name"] not in registry_tools
             ],
         }
 
@@ -328,6 +336,17 @@ def _tools():
         (mcp_content_search, "content_search", "Search bounded content-production context", {"query": str, "documents": str}),
         (mcp_memory_context, "memory_context", "Retrieve bounded workflow memory context", {"context": str}),
         (mcp_validate_content_package, "validate_content_package", "Validate article, video, Xiaohongshu, or platform article package gates", {"packet": str, "platform": str}),
+    ]
+
+
+def mcp_tool_inventory() -> list[dict[str, str]]:
+    """Return the registered MCP names and their registry eligibility."""
+    return [
+        {
+            "name": name,
+            "registry_scope": "content_production" if name in _CONTENT_PRODUCTION_MCP_TOOLS else "endpoint_only",
+        }
+        for _handler, name, _description, _params in _tools()
     ]
 
 
