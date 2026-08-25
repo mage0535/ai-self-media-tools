@@ -845,7 +845,13 @@ def execute(args):
                 return None
             row["platform"] = target
             row.setdefault("captured_at", collected_at)
-            row.setdefault("evidence_type", "official_keyword" if row.get("official_reference_only") else "native")
+            source_name = str(row.get("source") or "").casefold()
+            row.setdefault(
+                "evidence_type",
+                "official_keyword" if row.get("official_reference_only")
+                else "discovery" if source_name.endswith(":web_search") or source_name.endswith(":search")
+                else "native",
+            )
             matched = candidate_matches_topic_keywords(row, keywords)
             row.setdefault("lane_fit_score", 0.85 if matched else 0.0)
             row.setdefault("semantic_fit_score", 0.8 if matched else 0.0)
