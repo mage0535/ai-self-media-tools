@@ -13,6 +13,7 @@ from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
 from .capability_runtime import execute_generation_capabilities
+from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
 from .generator import DraftGenerator
@@ -484,6 +485,18 @@ class Pipeline:
                         depends_on=["validate_image_requirements"],
                     )
                 runner.succeeded("run_final_platform_quality_gate", final_gate, depends_on=["validate_image_requirements"])
+                current_job = self.store.get_job(job_id)
+                artifacts = self.store.artifacts(job_id)
+                image_required = self._media_required("image", self.config.get("media", {}).get("image", {}), current_job)
+                video_required = self._media_required("video", self.config.get("media", {}).get("video", {}), current_job)
+                draft["draft_meta"]["execution_trace"] = build_pre_delivery_trace(
+                    capability_execution=capability_execution,
+                    artifacts=artifacts,
+                    assets_required=bool(image_required or video_required),
+                    render_manifest=(draft.get("draft_meta") or {}).get("render_manifest") or {},
+                    render_required=bool(video_required),
+                    quality_gate=final_gate,
+                )
                 self.store.save_draft(
                     job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
                 )
@@ -700,6 +713,7 @@ class Pipeline:
                             continue
                     runner.succeeded("publish_or_create_draft", {"status": result.status, "external_id_present": bool(result.external_id)}, depends_on=["run_platform_pre_publish_gate"])
                     self._save_delivery_result(item["job_id"], platform, result)
+                    self._complete_execution_trace(job, platform, result)
                     runner.succeeded("verify_publish_result", {"status": result.status, "requires_postcheck": result.status in {"drafted", "handoff_pending"}}, depends_on=["publish_or_create_draft"])
                     runner.succeeded("record_publish_receipt", {"status": result.status}, depends_on=["verify_publish_result"])
                     if result.status == "handoff_pending":
@@ -970,6 +984,24 @@ class Pipeline:
                 )
                 if result.status in {"handoff_pending", "drafted"}:
                     register_review_tasks(self.store, package_id, platform, job_id=job_id)
+
+    def _complete_execution_trace(self, job, platform, result):
+        meta = dict(job.get("draft_meta") or {})
+        pending = meta.get("execution_trace") if isinstance(meta.get("execution_trace"), dict) else {}
+        if not pending:
+            return
+        trace = complete_delivery_trace(
+            pending,
+            platform=platform,
+            result={"ok": result.ok, "status": result.status, "external_id": result.external_id, "error": result.error},
+        )
+        meta["execution_trace"] = trace
+        self.store.save_draft(
+            job["id"], job.get("title") or "", job.get("body") or "", job.get("risk_level") or "pass",
+            job.get("risk") or {}, job.get("prompt_version") or "", meta,
+        )
+        if (job.get("brief") or {}).get("automated_workflow") and not trace.get("passed"):
+            raise RuntimeError("canonical execution trace failed: " + ", ".join(trace.get("failures") or []))
 
     def _send_platform_report(self, job, platform, report):
         payload = dict(job)
