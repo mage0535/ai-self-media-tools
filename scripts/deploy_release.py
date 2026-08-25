@@ -256,7 +256,10 @@ def query_systemd_unit_states(unit_names: list[str], runner=None) -> dict[str, d
         if enabled_result.returncode not in (0, 1, 3, 5) or active_result.returncode not in (0, 1, 3, 5):
             raise ReleaseAuditError(f"could not inspect systemd unit state: {unit}")
         states[unit] = {
-            "enabled": enabled_result.returncode == 0,
+            # `systemctl is-enabled` also exits 0 for static/alias units. Only
+            # states that represent an explicit enablement may be restored via
+            # `systemctl enable`; static services are restored by active state.
+            "enabled": (getattr(enabled_result, "stdout", "") or "").strip() in {"enabled", "enabled-runtime"},
             "active": active_result.returncode == 0,
             "enabled_state": (getattr(enabled_result, "stdout", "") or "").strip() or "unknown",
             "active_state": (getattr(active_result, "stdout", "") or "").strip() or "unknown",
