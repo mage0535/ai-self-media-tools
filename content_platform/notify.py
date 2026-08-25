@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
+from .chinese_reporter import ChineseReporter
+
 
 class Notifier:
     def __init__(self, config=None):
@@ -29,6 +31,8 @@ class Notifier:
             "step_name": job.get("step_name", ""),
             "reason_code": job.get("reason_code", ""),
             "message": job.get("message", ""),
+            "stage": job.get("stage") or job.get("workflow_stage", ""),
+            "detail": job.get("detail") if isinstance(job.get("detail"), dict) else {},
         }
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -66,6 +70,8 @@ class Notifier:
 
     @staticmethod
     def _message(row):
+        if row.get("stage") or row.get("detail") or str(row.get("event") or "").startswith(("platform_", "stage_")):
+            return ChineseReporter.format_event(row)
         text = f"[{row['event']}] {row['title']}\njob={row['job_id']} state={row['state']}"
         platforms = [str(item) for item in row.get("platforms", []) if str(item)]
         if platforms:
