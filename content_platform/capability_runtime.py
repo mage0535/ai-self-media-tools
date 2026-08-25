@@ -6,14 +6,29 @@ from .adapter_executor import execute_capability
 from .capability_router import load_registry, match_capabilities
 from .content_profile import classify_content_profile
 from .execution_dag import execute_capability_dag
+from .execution_trace import merge_execution_manifests, record_execution_stage
 
 
 def validate_generation_execution(result: dict, *, required: bool = True) -> dict:
     result = dict(result or {})
     executed = [item for item in result.get("executed", []) if isinstance(item, dict) and item.get("output_hash")]
+    executed_ids = {str(item.get("capability_id") or "") for item in executed}
+    selected_required = [
+        str(item.get("capability_id") or "")
+        for item in result.get("selected", [])
+        if isinstance(item, dict)
+        and str(item.get("required_or_optional") or "required") != "optional"
+        and item.get("capability_id")
+    ]
+    missing_required = [capability_id for capability_id in selected_required if capability_id not in executed_ids]
     if required and not executed:
         result["passed"] = False
         result["failures"] = list(result.get("failures") or []) + ["required_capability_not_executed"]
+    elif required and missing_required:
+        result["passed"] = False
+        result["failures"] = list(result.get("failures") or []) + [
+            f"required_capability_not_executed:{capability_id}" for capability_id in missing_required
+        ]
     else:
         result["passed"] = not bool(result.get("failures"))
     return result
