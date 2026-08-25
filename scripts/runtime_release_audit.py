@@ -1,11 +1,13 @@
 """Create and validate auditable runtime release metadata."""
 
 import argparse
+import hmac
 import hashlib
 import json
 import os
 import py_compile
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -68,6 +70,32 @@ def _release_digest(release_root: Path) -> str:
 
 def _default_attestation_path(release_root: Path) -> Path:
     return release_root.parent / "release-attestations" / f"{release_root.name}.sha256"
+
+
+def _default_signing_key_path(release_root: Path) -> Path:
+    return release_root.parent / "release-signing.key"
+
+
+def _ensure_signing_key(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(path, flags, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        try:
+            os.write(descriptor, secrets.token_bytes(32))
+        finally:
+            os.close(descriptor)
+    path.chmod(0o600)
+    if not path.is_file() or len(path.read_bytes()) != 32:
+        raise ReleaseAuditError(f"signing key must contain exactly 32 bytes: {path}")
+    return path
+
+
+def _hmac_release_digest(release_digest: str, key: bytes) -> str:
+    return hmac.new(key, release_digest.encode("ascii"), hashlib.sha256).hexdigest()
 
 
 def _assert_successful_junit(path: Path) -> None:
@@ -199,6 +227,7 @@ def audit_release(
     test_report_path: Path | str | None = None,
     rollback_target: str | None = None,
     attestation_path: Path | str | None = None,
+    signing_key_path: Path | str | None = None,
 ) -> dict:
     if config_path is None or test_report_path is None or rollback_target is None:
         raise ReleaseAuditError("config_path, test_report_path, and rollback_target are required evidence")
@@ -210,6 +239,8 @@ def audit_release(
     _validate_raw_path(rollback_target, "rollback_target")
     if attestation_path is not None:
         _validate_raw_path(attestation_path, "attestation_path")
+    if signing_key_path is not None:
+        _validate_raw_path(signing_key_path, "signing_key_path")
     source = _resolve(source_root)
     release = _resolve(release_root)
     script_root = _resolve(configured_script_root)
@@ -217,6 +248,7 @@ def audit_release(
     test_report = _resolve(test_report_path)
     rollback = _resolve(rollback_target)
     attestation = _resolve(attestation_path) if attestation_path is not None else _default_attestation_path(release)
+    signing_key = _resolve(signing_key_path) if signing_key_path is not None else _default_signing_key_path(release)
     expected_script_root = (release / "scripts").resolve()
     if not source.is_dir() or not release.is_dir() or script_root != expected_script_root:
         raise ReleaseAuditError("source, release, and configured script roots do not match")
@@ -237,6 +269,12 @@ def audit_release(
         pass
     else:
         raise ReleaseAuditError("attestation path must be outside release")
+    try:
+        signing_key.relative_to(release)
+    except ValueError:
+        pass
+    else:
+        raise ReleaseAuditError("signing key path must be outside release")
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
     _assert_release_has_no_symlinks(release)
@@ -258,6 +296,7 @@ def audit_release(
         "test_report_hash": _sha256(test_report),
         "rollback_target": str(rollback),
         "attestation_path": str(attestation),
+        "signing_key_path": str(signing_key),
     }
     return metadata
 
@@ -278,16 +317,31 @@ def write_metadata(metadata: dict, path: Path | str) -> Path:
     except FileExistsError as exc:
         raise ReleaseAuditError(f"release metadata already exists: {destination}") from exc
     attestation = _resolve(metadata.get("attestation_path", ""))
+    signing_key = _resolve(metadata.get("signing_key_path", ""))
     try:
         attestation.relative_to(release)
     except ValueError:
         pass
     else:
         raise ReleaseAuditError("attestation path must be outside release")
+    try:
+        signing_key.relative_to(release)
+    except ValueError:
+        pass
+    else:
+        raise ReleaseAuditError("signing key path must be outside release")
+    _ensure_signing_key(signing_key)
     attestation.parent.mkdir(parents=True, exist_ok=True)
     try:
         with attestation.open("x", encoding="ascii", newline="\n") as handle:
-            handle.write(f"{_release_digest(release)}  {release.name}\n")
+            digest = _release_digest(release)
+            json.dump(
+                {"release_digest": digest, "hmac_sha256": _hmac_release_digest(digest, signing_key.read_bytes())},
+                handle,
+                ensure_ascii=True,
+                sort_keys=True,
+            )
+            handle.write("\n")
     except FileExistsError as exc:
         raise ReleaseAuditError(f"release attestation already exists: {attestation}") from exc
     return destination
@@ -298,6 +352,7 @@ def verify_metadata(
     *,
     current_release_root: Path | str | None = None,
     attestation_path: Path | str | None = None,
+    signing_key_path: Path | str | None = None,
 ) -> dict:
     """Verify immutable release metadata and all evidence it names."""
     _validate_raw_path(metadata_path, "metadata_path")
@@ -318,6 +373,7 @@ def verify_metadata(
             "test_report": metadata["test_report"],
             "rollback": metadata["rollback_target"],
             "attestation": attestation_path if attestation_path is not None else metadata["attestation_path"],
+            "signing_key": signing_key_path if signing_key_path is not None else metadata["signing_key_path"],
         }
         source_hashes = metadata["source_hashes"]
         expected_commit = metadata["commit"]
@@ -337,6 +393,7 @@ def verify_metadata(
     test_report = _resolve(raw_paths["test_report"])
     rollback = _resolve(raw_paths["rollback"])
     attestation = _resolve(raw_paths["attestation"])
+    signing_key = _resolve(raw_paths["signing_key"])
     _assert_contained(metadata_file, release, "release metadata")
     try:
         attestation.relative_to(release)
@@ -344,6 +401,12 @@ def verify_metadata(
         pass
     else:
         raise ReleaseAuditError("attestation path must be outside release")
+    try:
+        signing_key.relative_to(release)
+    except ValueError:
+        pass
+    else:
+        raise ReleaseAuditError("signing key path must be outside release")
     if not release.is_dir() or script_root != release / "scripts":
         raise ReleaseAuditError("metadata current release root is invalid")
 
@@ -380,11 +443,20 @@ def verify_metadata(
     _assert_successful_junit(test_report)
     _validate_rollback_target(release, rollback)
     _require_file(attestation, "release attestation")
+    _require_file(signing_key, "release signing key")
+    key = signing_key.read_bytes()
+    if len(key) != 32:
+        raise ReleaseAuditError("release signing key must contain exactly 32 bytes")
     try:
-        actual_attestation = attestation.read_text(encoding="ascii").strip().split()[0]
-    except (OSError, UnicodeError, IndexError) as exc:
+        payload = json.loads(attestation.read_text(encoding="ascii"))
+        actual_digest = payload["release_digest"]
+        actual_hmac = payload["hmac_sha256"]
+    except (OSError, UnicodeError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ReleaseAuditError("release attestation is invalid") from exc
-    if actual_attestation != _release_digest(release):
+    expected_digest = _release_digest(release)
+    if actual_digest != expected_digest or not isinstance(actual_hmac, str) or not hmac.compare_digest(
+        actual_hmac, _hmac_release_digest(expected_digest, key)
+    ):
         raise ReleaseAuditError("release attestation hash mismatch")
     return metadata
 
@@ -400,6 +472,7 @@ def main() -> int:
     parser.add_argument("--test-report-path")
     parser.add_argument("--rollback-target")
     parser.add_argument("--attestation-path")
+    parser.add_argument("--signing-key")
     parser.add_argument("--metadata-path", required=True)
     args = parser.parse_args()
     if args.verify_metadata or args.mode == "verify_metadata":
@@ -407,6 +480,7 @@ def main() -> int:
             args.metadata_path,
             current_release_root=args.release_root,
             attestation_path=args.attestation_path,
+            signing_key_path=args.signing_key,
         ), sort_keys=True))
         return 0
     required = {
@@ -428,6 +502,7 @@ def main() -> int:
         test_report_path=args.test_report_path,
         rollback_target=args.rollback_target,
         attestation_path=args.attestation_path,
+        signing_key_path=args.signing_key,
     )
     print(write_metadata(metadata, args.metadata_path))
     return 0

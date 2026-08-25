@@ -363,6 +363,12 @@ shared_trend_only: false
         self.assertNotIn('"$root/scripts/', text)
         self.assertIn('PYTHONPATH="$release_root', text)
 
+    def test_batch_and_supervisor_verify_with_the_stable_signing_key(self):
+        for name in ("scripts/run_overnight_batch.sh", "scripts/run_overnight_supervisor.sh"):
+            text = Path(name).read_text(encoding="utf-8")
+            self.assertIn('signing_key="${CONTENT_PLATFORM_RELEASE_SIGNING_KEY:-$data_root/release-signing.key}"', text)
+            self.assertIn('--signing-key "$signing_key"', text)
+
     def test_overnight_units_use_current_code_and_stable_runtime_roots_consistently(self):
         batch = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
         supervisor = Path("systemd/hermes-content-platform-overnight-supervisor.service").read_text(encoding="utf-8")
