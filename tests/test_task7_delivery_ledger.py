@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
+from unittest.mock import patch
 
 from content_platform.publication_ledger import PublicationLedger
 from content_platform.models import DeliveryResult
 from content_platform.pipeline import Pipeline
 from content_platform.performance_collector import collect_due_metric_windows
 from content_platform.publishers import SocialAutoUploadPublisher
+from content_platform import scheduler
 from content_platform.store import Store
 
 
@@ -125,9 +128,9 @@ def test_store_migration_exposes_task7_tables_and_manual_record_needs_verificati
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"delivery_intents", "delivery_attempts", "delivery_leases", "publication_identities", "metric_windows", "metric_observations"} <= tables
 
-    receipt = store.record_manual_publication("xiaohongshu", "Manual topic", external_id="manual-1")
-    assert receipt["status"] == "published"
-    assert store.publication_ledger.due_windows() == []
+    with pytest.raises(ValueError, match="required"):
+        store.record_manual_publication("xiaohongshu", "Manual topic", external_id="manual-1")
+    assert store.publication_ledger.identities() == []
 
 
 def test_pipeline_persists_intent_before_publisher_and_timeout_is_not_retried(tmp_path, monkeypatch):
@@ -167,6 +170,38 @@ def test_pipeline_does_not_accept_published_result_without_verification(tmp_path
     result = pipeline._deliver("bilibili", {"id": "job-verified", "title": "Title", "body": "Body", "platform_payload": {"title": "Title", "text": "Body"}, "artifacts": []})
     assert result.status == "unknown_requires_review"
     assert store.publication_ledger.identities() == []
+
+
+def test_pipeline_rejects_invalid_verified_identity_before_persisting_published(tmp_path, monkeypatch):
+    store = Store(tmp_path / "state.db")
+    pipeline = Pipeline(store, {"data_dir": str(tmp_path), "delivery_health": {"allow_unknown_health": True}, "publishers": {"default": {"type": "file"}}})
+
+    class Publisher:
+        def set_delivery_callback(self, callback):
+            self.callback = callback
+
+        def deliver(self, job, platform):
+            self.callback({
+                "status": "published",
+                "verification": {
+                    "account_alias": "default",
+                    "content_id": "content-1",
+                    "url": "not-a-url",
+                    "published_at": "2026-08-25T12:00:00+00:00",
+                    "source": "management_page",
+                },
+            })
+            return DeliveryResult(True, "published", "content-1")
+
+    monkeypatch.setattr("content_platform.pipeline.build_publisher", lambda *args, **kwargs: Publisher())
+    result = pipeline._deliver("bilibili", {"id": "job-invalid", "title": "Title", "body": "Body", "platform_payload": {"title": "Title", "text": "Body"}, "artifacts": []})
+
+    assert result.status == "unknown_requires_review"
+    assert store.publication_ledger.identities() == []
+    assert store.publication_ledger.due_windows() == []
+    with store.connect() as conn:
+        assert conn.execute("SELECT status FROM delivery_intents").fetchone()[0] == "unknown_requires_review"
+        assert conn.execute("SELECT state FROM delivery_attempts").fetchone()[0] == "unknown_requires_review"
 
 
 def test_pipeline_converts_failed_external_auth_to_review_without_retry(tmp_path, monkeypatch):
@@ -253,3 +288,90 @@ def test_kuaishou_adapter_never_calls_scheduled_success_without_management_postc
         postcheck_callback=lambda intent: {"account_alias": "kuaishou_main", "title": "A title", "description": "A full description", "scheduled_at": "2026-08-25 12:00", "screenshot_path": "proof.png"},
     )
     assert with_postcheck.deliver(base_job, "kuaishou").status == "scheduled"
+
+
+def test_kuaishou_adapter_uses_management_postcheck_script_by_default(tmp_path):
+    video = tmp_path / "demo.mp4"
+    video.write_bytes(b"video")
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if any("kuaishou_postcheck_manifest.py" in str(item) for item in command):
+            out_dir = Path(command[-1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "postcheck.json").write_text(
+                '{"passed": true, "status": "management_postcheck_found", "evidence_path": "proof.png"}',
+                encoding="utf-8",
+            )
+        return type("Result", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
+
+    job = {
+        "id": "job-ks-default",
+        "title": "A title",
+        "body": "A full description",
+        "platform_payload": {"kind": "video", "title": "A title", "caption": "A full description"},
+        "artifacts": [{"kind": "video", "path": str(video)}],
+    }
+    with patch("content_platform.publishers.subprocess.run", side_effect=run):
+        result = SocialAutoUploadPublisher(
+            "kuaishou", "kuaishou_main", project_dir=tmp_path, python_bin="python", schedule_at="2026-08-25 12:00"
+        ).deliver(job, "kuaishou")
+
+    assert result.status == "scheduled"
+    assert any("kuaishou_postcheck_manifest.py" in str(item) for command in calls for item in command)
+
+
+def test_delivery_lease_cannot_be_overwritten_by_second_live_worker(tmp_path):
+    ledger = PublicationLedger(tmp_path / "state.db")
+    intent = ledger.create_delivery_intent(_intent(job_id="lease-race"))
+
+    results = []
+    for owner in ("worker-1", "worker-2"):
+        try:
+            results.append(ledger.begin_attempt(intent["intent_id"], owner, now="2026-08-25T12:00:00+00:00"))
+        except ValueError as exc:
+            results.append(str(exc))
+
+    assert sum(isinstance(result, dict) for result in results) == 1
+    assert sum(not isinstance(result, dict) for result in results) == 1
+    with ledger._connect() as conn:
+        assert conn.execute("SELECT count(*) FROM delivery_attempts").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM delivery_leases").fetchone()[0] == 1
+
+
+def test_unknown_delivery_polling_is_available_to_scheduler(tmp_path):
+    ledger = PublicationLedger(tmp_path / "state.db")
+    intent = ledger.create_delivery_intent(_intent(job_id="poll-me"))
+    attempt = ledger.begin_attempt(intent["intent_id"], "worker-1")
+    ledger.finish_attempt(intent["intent_id"], attempt["attempt_id"], "unknown", error="timeout")
+
+    seen = []
+    report = scheduler.process_unknown_deliveries(
+        Store(tmp_path / "state.db"),
+        lambda immutable: seen.append(immutable) or {"status": "absent"},
+        now=datetime(2026, 8, 25, 13, 0, tzinfo=timezone.utc),
+    )
+
+    assert report["polled"] == 1
+    assert seen[0]["expected_description_digest"] == intent["expected_description_digest"]
+
+
+def test_metric_collection_persists_attempt_and_releases_lease(tmp_path):
+    store = Store(tmp_path / "state.db")
+    published_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    identity = store.publication_ledger.register_verified_publication({
+        "platform": "wechat",
+        "internal_account_alias": "wechat_main",
+        "platform_content_id": "wx-attempt",
+        "canonical_url": "https://wechat.test/wx-attempt",
+        "published_at": published_at.isoformat(),
+        "verification": {"account_alias": "wechat_main", "content_id": "wx-attempt", "url": "https://wechat.test/wx-attempt", "published_at": published_at.isoformat(), "source": "management_page"},
+    })
+    report = collect_due_metric_windows(store.publication_ledger, lambda _: {"status": "unavailable", "reason": "backend down"})
+
+    assert report["insufficient"] == 1
+    with store.connect() as conn:
+        assert conn.execute("SELECT count(*) FROM metric_collection_attempts").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM metric_collection_leases").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM metric_collection_retries").fetchone()[0] == 1

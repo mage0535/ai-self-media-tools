@@ -32,7 +32,7 @@ def collect_due_metric_windows(ledger: Any, collector: Any, *, now: datetime | N
     """Collect only due windows and preserve unavailable data as insufficient."""
     checked_at = now or datetime.now(timezone.utc)
     identities = {row["id"]: row for row in ledger.identities()}
-    report = {"status": "ok", "collected": 0, "insufficient": 0, "invalidated": 0}
+    report = {"status": "ok", "collected": 0, "insufficient": 0, "invalidated": 0, "leased": 0}
     for window in ledger.due_windows():
         due_at = datetime.fromisoformat(str(window["due_at"]).replace("Z", "+00:00"))
         if due_at.tzinfo is None:
@@ -43,6 +43,11 @@ def collect_due_metric_windows(ledger: Any, collector: Any, *, now: datetime | N
         if not identity:
             ledger.invalidate_window(window["id"], "publication_identity_missing")
             report["invalidated"] += 1
+            continue
+        try:
+            attempt = ledger.begin_metric_collection(window["id"], now=checked_at)
+        except ValueError:
+            report["leased"] += 1
             continue
         try:
             result = collector(dict(identity)) or {}
@@ -60,5 +65,6 @@ def collect_due_metric_windows(ledger: Any, collector: Any, *, now: datetime | N
             platform_content_id=str(identity.get("platform_content_id") or ""),
             observed_at=checked_at,
         )
+        ledger.finish_metric_collection(window["id"], attempt["attempt_id"], observation["state"], str(result.get("reason") or "") if status not in {"ok", "success", "collected"} else "", now=checked_at)
         report["collected" if observation["state"] == "collected" else "insufficient"] += 1
     return report

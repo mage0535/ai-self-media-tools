@@ -55,6 +55,11 @@ run_platform() {
 run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-sync-state --state "$state" --output "$out/acceptance_summary.json" > "$out/supervisor-sync.json"
 
+# Poll durable unknown delivery outcomes; the command is evidence-driven and
+# skips cleanly when no collector result file has been produced.
+run_platform --config "$config_path" --db "$data_root/state.db" \
+  delivery-poll > "$out/delivery-poll.json"
+
 run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-supervise --state "$state" --heartbeat "$heartbeat" \
   --stale-after-seconds "${OVERNIGHT_HEARTBEAT_STALE_SECONDS:-1800}" > "$report"

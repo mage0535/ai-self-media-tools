@@ -199,7 +199,12 @@ def parser():
     manual_publication.add_argument("--topic", required=True)
     manual_publication.add_argument("--topic-fingerprint", default="")
     manual_publication.add_argument("--external-id", default="")
-    manual_publication.add_argument("--source", default="manual_publish")
+    manual_publication.add_argument("--content-id", default="", help="Real platform content ID")
+    manual_publication.add_argument("--account-alias", "--internal-account-alias", dest="account_alias", default="", help="Internal account alias")
+    manual_publication.add_argument("--canonical-url", dest="url", default="", help="Canonical public platform URL")
+    manual_publication.add_argument("--published-at", default="", help="Verified publication timestamp")
+    manual_publication.add_argument("--verification-source", dest="verification_source", default="", help="Evidence source, such as management_page")
+    manual_publication.add_argument("--source", default="", help="Legacy alias for --verification-source")
     notification_redact = sub.add_parser("notification-redact", help="Remove credential-like fields from notification logs")
     notification_redact.add_argument("--path", default="")
     review_token = sub.add_parser("review-token")
@@ -323,6 +328,10 @@ def parser():
     sc.add_argument("--platform", action="append", required=True)
     sc.add_argument("--cron", default="@daily")
     sc.add_argument("--label", default="")
+    delivery_poll = sub.add_parser("delivery-poll", help="Poll durable unknown deliveries from an evidence result file")
+    delivery_poll.add_argument("--results", default="", help="JSON object mapping intent_id to poll result")
+    metric_due = sub.add_parser("metric-collect-due", help="Collect due publication metric windows from an evidence result file")
+    metric_due.add_argument("--results", default="", help="JSON object mapping platform:account:content_id to collector result")
     # v0.2 — Newsletter
     nl = sub.add_parser("newsletter")
     nl.add_argument("feeds", nargs="+", help="RSS feed URLs")
@@ -955,12 +964,24 @@ def execute(args):
         from .overnight_supervisor import inspect_batch_health
         return inspect_batch_health(args.state, args.heartbeat, stale_after_seconds=args.stale_after_seconds)
     if args.command == "record-manual-publication":
+        content_id = args.content_id or args.external_id
+        verification_source = args.verification_source or args.source
         return store.record_manual_publication(
             args.platform,
             args.topic,
             topic_fingerprint=args.topic_fingerprint,
-            external_id=args.external_id,
-            source=args.source,
+            external_id=content_id,
+            source=verification_source,
+            verification={
+                "account_alias": args.account_alias,
+                "content_id": content_id,
+                "url": args.url,
+                "published_at": args.published_at,
+                "source": verification_source,
+            },
+            account_alias=args.account_alias,
+            url=args.url,
+            published_at=args.published_at,
         )
     if args.command == "notification-redact":
         from .notify import Notifier
@@ -1190,6 +1211,27 @@ def execute(args):
     if args.command == "schedule-create":
         from .scheduler import schedule_job
         return schedule_job(store, args.topic, args.platform, cron=args.cron, label=args.label or args.topic)
+    if args.command == "delivery-poll":
+        from .scheduler import process_unknown_deliveries
+        result_path = Path(args.results or os.environ.get("CONTENT_PLATFORM_DELIVERY_POLL_RESULTS", "") or Path(config.get("data_dir", Path(args.db).parent)) / "delivery-poll-results.json")
+        if not result_path.is_file():
+            return {"status": "skipped", "reason": "delivery poll evidence file missing", "polled": 0}
+        records = json.loads(result_path.read_text(encoding="utf-8"))
+        if not isinstance(records, dict):
+            raise ValueError("delivery poll results must be a JSON object")
+        return process_unknown_deliveries(store, lambda intent: records.get(intent["intent_id"]) or {"status": "inconclusive", "reason": "poll result missing for immutable intent"})
+    if args.command == "metric-collect-due":
+        from .scheduler import process_due_metric_windows
+        result_path = Path(args.results or os.environ.get("CONTENT_PLATFORM_METRIC_RESULTS", "") or Path(config.get("data_dir", Path(args.db).parent)) / "metric-collection-results.json")
+        if not result_path.is_file():
+            return {"status": "skipped", "reason": "metric collection evidence file missing", "collected": 0}
+        records = json.loads(result_path.read_text(encoding="utf-8"))
+        if not isinstance(records, dict):
+            raise ValueError("metric collection results must be a JSON object")
+        def collector(identity):
+            key = ":".join(str(identity.get(field) or "") for field in ("platform", "internal_account_alias", "platform_content_id"))
+            return records.get(key) or {"status": "unavailable", "source": "runtime_results", "reason": "collector result missing"}
+        return process_due_metric_windows(store, collector)
     if args.command == "newsletter":
         from .newsletter import pipeline as newsletter_pipeline
         from .paths import project_home

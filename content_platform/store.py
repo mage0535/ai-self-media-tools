@@ -1429,6 +1429,26 @@ class Store:
         fingerprint = str(topic_fingerprint or normalized_topic.casefold()).strip()
         if not normalized_platform or not normalized_topic or not fingerprint:
             raise ValueError("manual publication requires platform, topic, and topic fingerprint")
+        verified = dict(verification or {})
+        verified.setdefault("account_alias", account_alias)
+        verified.setdefault("content_id", external_id)
+        verified.setdefault("url", url)
+        verified.setdefault("published_at", published_at)
+        verified.setdefault("source", source)
+        if not all(str(verified.get(key) or "").strip() for key in ("account_alias", "content_id", "url", "published_at", "source")):
+            raise ValueError("manual publication verification is required: account alias, real content ID, canonical URL, published_at, and verification source")
+        identity = self.publication_ledger.register_verified_publication({
+            "platform": normalized_platform,
+            "internal_account_alias": verified["account_alias"],
+            "platform_content_id": verified["content_id"],
+            "canonical_url": verified["url"],
+            "published_at": verified["published_at"],
+            "identity_source": verified["source"],
+            "verification_level": "manual_verified",
+            "verification": verified,
+        })
+        if not identity.get("passed"):
+            raise ValueError("manual publication verification failed: " + str(identity.get("reason") or "invalid identity"))
         job = self.create_job(
             normalized_topic,
             [normalized_platform],
@@ -1440,27 +1460,7 @@ class Store:
         self.save_delivery(job["id"], normalized_platform, "published", external_id, "manual publication recorded")
         self.mark_topic_used(fingerprint, normalized_topic, source, job["id"], platform=normalized_platform)
         result = {"job_id": job["id"], "platform": normalized_platform, "status": "published", "topic_fingerprint": fingerprint}
-        verified = dict(verification or {})
-        if account_alias or url or published_at or external_id:
-            verified.setdefault("account_alias", account_alias)
-            verified.setdefault("content_id", external_id)
-            verified.setdefault("url", url)
-            verified.setdefault("published_at", published_at)
-            verified.setdefault("source", source)
-        if all(str(verified.get(key) or "").strip() for key in ("account_alias", "content_id", "url", "published_at")):
-            identity = self.publication_ledger.register_verified_publication({
-                "platform": normalized_platform,
-                "internal_account_alias": verified["account_alias"],
-                "platform_content_id": verified["content_id"],
-                "canonical_url": verified["url"],
-                "published_at": verified["published_at"],
-                "identity_source": verified.get("source") or source,
-                "verification_level": "manual_verified",
-                "verification": verified,
-            })
-            result["publication_identity"] = identity
-        else:
-            result["publication_identity"] = {"passed": False, "reason": "manual_publication_verification_required"}
+        result["publication_identity"] = identity
         return result
 
     def protected_paths(self):

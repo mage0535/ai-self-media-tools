@@ -63,12 +63,29 @@ class CliV2Tests(unittest.TestCase):
             "--platform", "kuaishou",
             "--topic", "A practical AI workflow",
             "--topic-fingerprint", "ai-workflow-practical",
-            "--external-id", "platform:123",
+            "--account-alias", "kuaishou_main",
+            "--content-id", "ks-123",
+            "--canonical-url", "https://kuaishou.test/ks-123",
+            "--published-at", "2026-08-25T12:00:00+00:00",
+            "--verification-source", "management_page",
         )
 
         self.assertEqual(code, 0)
         self.assertEqual(receipt["status"], "published")
         self.assertIn("ai-workflow-practical", Store(self.db).used_topics(lookback_days=7))
+
+    def test_insufficient_manual_publication_command_cannot_mark_published(self):
+        code, result = self.call(
+            "record-manual-publication",
+            "--platform", "kuaishou",
+            "--topic", "Unverified topic",
+            "--external-id", "platform:123",
+        )
+
+        self.assertEqual(code, 2)
+        self.assertIn("required", result["error"])
+        with Store(self.db).connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM jobs WHERE state='published'").fetchone()[0], 0)
 
     def test_notification_redact_removes_legacy_review_actions(self):
         path = self.root / "notifications.jsonl"

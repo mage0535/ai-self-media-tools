@@ -6,6 +6,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -467,6 +468,47 @@ class SocialAutoUploadPublisher:
             return self.schedule_at
         return time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + self.schedule_delay_hours * 3600))
 
+    def _management_page_postcheck(self, intent):
+        """Use the checked-in browser postcheck unless a test callback is injected."""
+        description = str(intent.get("expected_description") or "")
+        with tempfile.TemporaryDirectory(prefix="kuaishou-postcheck-") as tmp:
+            out_dir = Path(tmp)
+            manifest = out_dir / "manifest.json"
+            manifest.write_text(json.dumps({
+                "account": intent["internal_account_alias"],
+                "title": intent["expected_title"],
+                "description": description,
+                "schedule_time": intent["scheduled_at"],
+            }, ensure_ascii=False), encoding="utf-8")
+            script = Path(__file__).resolve().parents[1] / "scripts" / "kuaishou_postcheck_manifest.py"
+            try:
+                process = subprocess.run(
+                    [self.python_bin, str(script), str(manifest), str(out_dir / "postcheck")],
+                    cwd=str(script.parents[1]), capture_output=True, text=True, timeout=180,
+                )
+            except Exception as exc:
+                return {"postcheck_status": "postcheck_failed", "error": str(exc)[:300]}
+            report_path = out_dir / "postcheck" / "postcheck.json"
+            if not report_path.is_file():
+                return {"postcheck_status": "postcheck_missing", "error": (process.stderr or process.stdout or "postcheck report missing")[:300]}
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                return {"postcheck_status": "postcheck_invalid", "error": str(exc)[:300]}
+            if not report.get("passed") or process.returncode != 0:
+                return {"postcheck_status": str(report.get("status") or "postcheck_failed"), "report": report}
+            evidence_path = str(report.get("evidence_path") or "")
+            if evidence_path and not Path(evidence_path).is_absolute():
+                evidence_path = str((out_dir / "postcheck" / evidence_path).resolve())
+            return {
+                "account_alias": intent["internal_account_alias"],
+                "title": intent["expected_title"],
+                "description_digest": hashlib.sha256(description.encode("utf-8")).hexdigest(),
+                "scheduled_at": intent["scheduled_at"],
+                "screenshot_path": evidence_path,
+                "postcheck_report": report,
+            }
+
     def _video_file(self, job):
         for item in job.get("artifacts", []):
             if item.get("kind") == "video" and Path(item.get("path", "")).is_file():
@@ -539,7 +581,7 @@ class SocialAutoUploadPublisher:
                     "expected_description_digest": hashlib.sha256(description.encode("utf-8")).hexdigest(),
                     "scheduled_at": schedule,
                 }
-                evidence = self.postcheck_callback(intent) if callable(self.postcheck_callback) else {}
+                evidence = self.postcheck_callback(intent) if callable(self.postcheck_callback) else self._management_page_postcheck(intent)
                 check = PublicationLedger.validate_kuaishou_scheduled_postcheck(intent, evidence)
                 event = {"status": "scheduled" if check["passed"] else "unknown_requires_review", "postcheck": check, "external_id": f"{self.platform_name}:{self.account_name}"}
                 self._emit_delivery(event)

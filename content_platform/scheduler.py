@@ -74,3 +74,18 @@ def process_due_metric_windows(store, collector, *, now=None):
     from .performance_collector import collect_due_metric_windows
 
     return collect_due_metric_windows(store.publication_ledger, collector, now=now)
+
+
+def process_unknown_deliveries(store, poller, *, now=None):
+    """Poll durable unknown deliveries without replaying the publisher call."""
+    return store.publication_ledger.poll_unknown_deliveries(poller, now=now)
+
+
+def process_runtime_cycle(store, pipeline, *, poller=None, collector=None, now=None):
+    """Run scheduler-owned recovery and metric work in one production cycle."""
+    report = {"schedules": process_due_schedules(store, pipeline)}
+    if poller is not None:
+        report["unknown_deliveries"] = process_unknown_deliveries(store, poller, now=now)
+    if collector is not None:
+        report["metric_windows"] = process_due_metric_windows(store, collector, now=now)
+    return report
