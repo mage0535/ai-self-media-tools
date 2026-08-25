@@ -75,7 +75,7 @@ def build_tools_capability_analysis(
         "version": "tools_capability_analysis_v2",
         "platform": platform,
         "content_type": content_type,
-        "required_tool_groups": sorted(group["id"] for group in groups),
+        "required_tool_groups": [group["id"] for group in groups],
         "analyzed_tool_groups": analyzed_groups,
         "candidate_tool_count": sum(len(items) for items in analyzed_groups.values()),
         "available_tool_ids": sorted(available),
@@ -98,15 +98,57 @@ def build_tool_selection_plan(
 ) -> dict[str, Any]:
     """Select only availability-confirmed executable capabilities."""
     analysis = capability_analysis or build_tools_capability_analysis(platform=platform, content_type=content_type)
-    planned = (planned_manifest or {}).get("planned_tools") if isinstance((planned_manifest or {}).get("planned_tools"), dict) else {}
+    registry = load_capability_registry()
+    capabilities = _capability_index(registry)
+    aliases = {
+        str(alias): capability["id"]
+        for capability in registry["capabilities"]
+        if capability.get("lifecycle") == "executable"
+        for alias in (capability.get("aliases") or [])
+        if str(alias).strip()
+    }
     available = set(analysis.get("available_tool_ids") or [])
-    requested = list(planned) if planned else []
-    selected = [name for name in requested if name in available]
-    rejected = [
-        {"tool": name, "reason": "capability is not an availability-confirmed executable adapter"}
-        for name in requested
-        if name not in available
-    ]
+    has_manifest = isinstance(planned_manifest, dict) and "planned_tools" in planned_manifest
+    planned_value = planned_manifest.get("planned_tools") if has_manifest else None
+    if isinstance(planned_value, dict):
+        requested = list(planned_value)
+    elif isinstance(planned_value, list):
+        requested = [str(item) for item in planned_value]
+    else:
+        requested = []
+    use_manifest = has_manifest
+    selected: list[str] = []
+    selected_canonical: list[str] = []
+    rejected: list[dict[str, str]] = []
+
+    def resolve(name: str) -> str | None:
+        canonical = name if name in capabilities else aliases.get(name)
+        if not canonical:
+            return None
+        capability = capabilities.get(canonical)
+        if not capability or capability.get("lifecycle") != "executable" or canonical not in available:
+            return None
+        return canonical
+
+    if use_manifest:
+        for name in requested:
+            canonical = resolve(name)
+            if canonical is None:
+                reason = "unknown registry capability or declared alias" if name not in capabilities and name not in aliases else "capability is not an availability-confirmed executable adapter"
+                rejected.append({"tool": name, "reason": reason})
+                continue
+            selected.append(name)
+            selected_canonical.append(canonical)
+    else:
+        for group_id in analysis.get("required_tool_groups") or []:
+            candidates = ((analysis.get("group_status") or {}).get(group_id) or {}).get("executable_candidates") or []
+            for candidate in candidates:
+                canonical = resolve(str(candidate))
+                if canonical is None or canonical in selected_canonical:
+                    continue
+                selected.append(canonical)
+                selected_canonical.append(canonical)
+                break
     failures = list(analysis.get("failures") or [])
     selection_status = "blocked" if failures else ("ready" if selected else "empty")
     return {
@@ -120,17 +162,25 @@ def build_tool_selection_plan(
         "selection_status": selection_status,
         "failures": failures,
         "selection_reasons": {
-            name: "selected because the registry adapter probe confirmed executable availability"
-            for name in selected
+            name: (
+                "selected because the registry adapter probe confirmed executable availability"
+                if name == canonical
+                else f"selected as declared alias for registry capability {canonical}"
+            )
+            for name, canonical in zip(selected, selected_canonical)
         },
         "unselected_tools": [
             {"tool_group": group, "reason": "no executable registry candidate is available for this group"}
             for group in analysis.get("required_tool_groups") or []
-            if not any(name in selected for name in (analysis.get("analyzed_tool_groups") or {}).get(group, []))
+            if not any(
+                resolve(str(name)) in selected_canonical
+                for name in (analysis.get("analyzed_tool_groups") or {}).get(group, [])
+            )
         ],
         "invocation_order": selected,
         "fallback_plan": "record failure and follow the registry fallback_chain; never promote inventory-only candidates",
         "not_default_only": True,
+        "resolved_capability_ids": selected_canonical,
     }
 
 
