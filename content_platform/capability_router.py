@@ -33,7 +33,11 @@ def _matches(capability: dict[str, Any], profile: dict[str, Any]) -> bool:
     return str(profile.get("content_format") or "") in applies
 
 
-def match_capabilities(profile: dict[str, Any], registry: dict[str, Any] | None = None) -> dict[str, Any]:
+def match_capabilities(
+    profile: dict[str, Any],
+    registry: dict[str, Any] | None = None,
+    runtime_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     registry = registry or load_registry(str(profile.get("platform") or ""))
     consulted: list[dict[str, Any]] = []
     candidates: list[dict[str, Any]] = []
@@ -56,7 +60,11 @@ def match_capabilities(profile: dict[str, Any], registry: dict[str, Any] | None 
         if capability.get("lifecycle") != "executable":
             inventory.append({"capability_id": capability["id"], "reason": "inventory_only"})
             continue
-        available, reason = capability_available(capability)
+        probe_inputs = dict(runtime_context or {})
+        if capability.get("kind") == "mcp_tool":
+            probe_inputs.setdefault("mcp_namespace", capability.get("mcp_namespace"))
+            probe_inputs.setdefault("mcp_tool", capability.get("mcp_tool"))
+        available, reason = capability_available(capability, probe_inputs)
         if not available:
             skipped.append({"capability_id": capability["id"], "reason": reason})
             continue
