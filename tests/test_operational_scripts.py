@@ -326,11 +326,16 @@ shared_trend_only: false
     def test_overnight_script_verifies_release_metadata_before_any_task(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
 
+        resolve = text.index('release_root=$(readlink -f -- "$root")')
         verify = text.index("--verify-metadata")
         mkdir = text.index("mkdir -p")
+        self.assertLess(resolve, verify)
         self.assertLess(verify, mkdir)
+        self.assertIn('[[ -n "$release_root" && -d "$release_root" ]]', text)
+        self.assertIn('metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$release_root/release-metadata.json}"', text)
         self.assertIn("runtime_release_audit.py", text)
-        self.assertIn("CONTENT_PLATFORM_CODE_ROOT", text)
+        self.assertIn('CONTENT_PLATFORM_CODE_ROOT="$release_root"', text)
+        self.assertIn('--release-root "$release_root"', text)
 
     def test_background_systemd_services_use_notification_wrappers(self):
         growth = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")

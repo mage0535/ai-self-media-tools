@@ -8,18 +8,23 @@ export US_PROXY="${US_PROXY:-http://127.0.0.1:2080}"
 export CN_PROXY="${CN_PROXY:-socks5://127.0.0.1:1080}"
 
 root="${CONTENT_PLATFORM_HOME:?CONTENT_PLATFORM_HOME is required}"
+release_root=$(readlink -f -- "$root")
+if ! [[ -n "$release_root" && -d "$release_root" ]]; then
+  printf '%s\n' 'CONTENT_PLATFORM_HOME must resolve to a non-empty existing release root' >&2
+  exit 1
+fi
 data_root="${CONTENT_PLATFORM_DATA_DIR:-$root/data}"
 secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$root/secrets}"
 config_path="${CONTENT_PLATFORM_CONFIG:-$root/config.json}"
-metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$root/release-metadata.json}"
+metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$release_root/release-metadata.json}"
 day="$(date +%F)"
 out="$data_root/overnight/$day"
 slots="$secrets_root/overnight-slots.json"
 
 # Do not create state or invoke any batch task until the audited release is verified.
-CONTENT_PLATFORM_CODE_ROOT="${CONTENT_PLATFORM_CODE_ROOT:-$root}" \
+CONTENT_PLATFORM_CODE_ROOT="$release_root" \
   python3 "$root/scripts/runtime_release_audit.py" --verify-metadata \
-  --metadata-path "$metadata_path" --release-root "$root"
+  --metadata-path "$metadata_path" --release-root "$release_root"
 
 mkdir -p "$out"
 

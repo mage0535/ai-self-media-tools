@@ -259,6 +259,7 @@ def verify_metadata(
             "rollback": metadata["rollback_target"],
         }
         source_hashes = metadata["source_hashes"]
+        expected_commit = metadata["commit"]
         expected_source_hash = metadata["source_hash"]
         expected_config_hash = metadata["config_hash"]
         expected_report_hash = metadata["test_report_hash"]
@@ -292,7 +293,12 @@ def verify_metadata(
 
     if not isinstance(source_hashes, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in source_hashes.items()):
         raise ReleaseAuditError("release metadata source hashes are invalid")
+    if not isinstance(expected_commit, str) or not expected_commit:
+        raise ReleaseAuditError("release metadata commit is invalid")
     _assert_clean(source)
+    current_commit = _git(source, "rev-parse", "HEAD").strip()
+    if current_commit != expected_commit:
+        raise ReleaseAuditError("metadata commit does not match source HEAD")
     current_source_hashes = _tracked_hashes(source)
     current_source_hash = hashlib.sha256(
         "\n".join(f"{name}:{digest}" for name, digest in sorted(current_source_hashes.items())).encode()
