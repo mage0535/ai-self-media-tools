@@ -39,7 +39,7 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
     if active in {"douyin_ai", "douyin_pet"}:
         active_names.add("douyin")
     allowed_sources = {f"skill:{name}" for name in required_workflow_skills(active)}
-    selected = []
+    selected_by_source: dict[str, list[dict[str, Any]]] = {}
     seen_text_hashes: set[str] = set()
     candidates = sorted(
         (item for item in rules if isinstance(item, dict)),
@@ -64,7 +64,30 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
         if text_hash in seen_text_hashes:
             continue
         seen_text_hashes.add(text_hash)
-        selected.append(rule)
+        selected_by_source.setdefault(source, []).append(rule)
+    ordered_sources = sorted(
+        selected_by_source,
+        key=lambda source: (
+            0 if source in allowed_sources else
+            1 if _source_platforms(source).intersection(active_names) else
+            2 if "project" in source else 3,
+            source,
+        ),
+    )
+    # Interleave sources so a verbose shared skill cannot consume the bounded
+    # model-input budget before every required platform skill contributes.
+    selected: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        added = False
+        for source in ordered_sources:
+            rows = selected_by_source[source]
+            if offset < len(rows):
+                selected.append(rows[offset])
+                added = True
+        if not added:
+            break
+        offset += 1
     return selected
 
 
