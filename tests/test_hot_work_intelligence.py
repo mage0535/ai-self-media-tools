@@ -150,6 +150,38 @@ def test_platform_anchor_parser_rejects_server_error_page():
     assert rows == []
 
 
+def test_platform_anchor_parser_rejects_ads_profiles_and_year_as_metric():
+    text = """
+AI 办公助手效率起飞
+9000
+AI 工作流作者主页
+397
+ComfyUI AI 工作流实战
+2024
+播放 1888
+"""
+    rows = parse_platform_search_evidence(
+        text,
+        anchors=[
+            {"text": "AI 办公助手效率起飞", "href": "https://cm.bilibili.com/cm/api/fees/pc/sync"},
+            {"text": "AI 工作流作者主页", "href": "https://www.bilibili.com/12345"},
+            {"text": "ComfyUI AI 工作流实战", "href": "https://www.bilibili.com/video/BV123"},
+        ],
+        platform="bilibili",
+        query="AI 工作流",
+    )
+    assert [row["title"] for row in rows] == ["ComfyUI AI 工作流实战"]
+    assert rows[0]["engagement"] == "1888"
+
+
+def test_parameter_pack_only_exposes_contract_complete_top_samples():
+    complete = {"platform": "youtube", "title": "AI workflow demo", "engagement": "100", "url": "https://www.youtube.com/watch?v=1", "captured_at": "2026-08-26T00:00:00+00:00", "collector": "youtube_logged_search", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI workflow demo")}
+    incomplete = {"platform": "youtube", "title": "AI profile", "engagement": "999", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI profile")}
+    pack = build_hot_work_parameter_pack([incomplete, complete], platforms=["youtube"], min_strong_samples=1)
+    assert pack["platforms"]["youtube"]["sample_count"] == 2
+    assert [row["title"] for row in pack["platforms"]["youtube"]["top_samples"]] == ["AI workflow demo"]
+
+
 def test_load_samples_accepts_platform_grouped_logged_exports(tmp_path):
     path = tmp_path / "samples.json"
     path.write_text('{"xiaohongshu":[{"title":"AI效率卡片","evidence_strength":"strong_logged_search_result"}],"tiktok":[{"title":"AI workflow demo","platform":"tiktok"}]}', encoding="utf-8")
