@@ -16,7 +16,10 @@ if str(ROOT) not in sys.path:
 
 from scripts.runtime_release_audit import (
     ReleaseAuditError,
+    _create_signing_key,
     _git,
+    _release_digest,
+    _assert_project_audit,
     _validate_raw_path,
     audit_release,
     verify_metadata,
@@ -159,6 +162,38 @@ def _validate_signing_key_boundary(
         raise ReleaseAuditError("signing key must not be inside release")
 
 
+def init_signing_key(secrets_root: Path | str) -> Path:
+    secrets = Path(secrets_root).expanduser().resolve()
+    _validate_raw_path(secrets, "secrets_root")
+    if secrets.name != "secrets":
+        raise ReleaseAuditError("secrets_root must be the stable secrets directory")
+    return _create_signing_key(secrets / "release-signing.key")
+
+
+def _signed_rollback_dry_run(target: Path, key: Path, secrets: Path) -> dict:
+    previous_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT")
+    previous_secrets = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR")
+    os.environ["CONTENT_PLATFORM_CODE_ROOT"] = str(target)
+    os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = str(secrets)
+    try:
+        verify_metadata(
+            target / "release-metadata.json",
+            current_release_root=target,
+            signing_key_path=key,
+            trusted_secrets_root=secrets,
+        )
+        return {"target_release": str(target), "release_digest": _release_digest(target), "passed": True}
+    finally:
+        if previous_root is None:
+            os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
+        else:
+            os.environ["CONTENT_PLATFORM_CODE_ROOT"] = previous_root
+        if previous_secrets is None:
+            os.environ.pop("CONTENT_PLATFORM_SECRETS_DIR", None)
+        else:
+            os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = previous_secrets
+
+
 def deploy_release(
     *,
     source_root: Path | str,
@@ -171,6 +206,8 @@ def deploy_release(
     release_name: str | None = None,
     secrets_root: Path | str | None = None,
     signing_key: Path | str | None = None,
+    project_audit_report: Path | str | None = None,
+    min_tests: int = 900,
 ) -> dict:
     """Deploy one clean source revision while holding the runtime release lock."""
     _validate_raw_path(source_root, "source_root")
@@ -184,6 +221,7 @@ def deploy_release(
     current = _current_path(current_link)
     config = Path(config_path).expanduser().resolve()
     report = Path(test_report_path).expanduser().resolve()
+    project_audit_report_path = Path(project_audit_report).expanduser().resolve() if project_audit_report is not None else config.parent / "project-audit.json"
     rollback = Path(rollback_target).expanduser().resolve()
     data = Path(data_root).expanduser().resolve()
     if signing_key is not None:
@@ -198,7 +236,11 @@ def deploy_release(
     with _exclusive_lock(lock_path):
         if _git(source, "status", "--porcelain").strip():
             raise ReleaseAuditError("source root is dirty or has uncommitted changes")
+        if not project_audit_report_path.is_file():
+            raise ReleaseAuditError(f"required project audit report does not exist: {project_audit_report_path}")
+        _assert_project_audit(project_audit_report_path)
         commit = _git(source, "rev-parse", "HEAD").strip()
+        rollback_rehearsal = _signed_rollback_dry_run(rollback, signing_key_path, secrets)
         name = release_name or commit[:12]
         if not name or name in {".", ".."} or Path(name).name != name:
             raise ReleaseAuditError("release_name must be a single non-empty path component")
@@ -237,7 +279,11 @@ def deploy_release(
                     rollback_target=rollback,
                     attestation_path=attestation,
                     signing_key_path=signing_key_path,
+                    trusted_secrets_root=secrets,
+                    project_audit_report_path=project_audit_report_path,
+                    min_tests=min_tests,
                 )
+                metadata["rollback_rehearsal"] = rollback_rehearsal
                 write_metadata(metadata, release / "release-metadata.json", signing_key_path=signing_key_path)
             finally:
                 if previous_root is None:
@@ -301,6 +347,7 @@ def rollback_release(
                 metadata_path,
                 current_release_root=target,
                 signing_key_path=key,
+                trusted_secrets_root=secrets,
             )
         finally:
             if previous_root is None:
@@ -320,7 +367,7 @@ def rollback_release(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", nargs="?", choices=("deploy", "rollback"), default="deploy")
+    parser.add_argument("operation", nargs="?", choices=("deploy", "rollback", "init-signing-key"), default="deploy")
     parser.add_argument("--source-root")
     parser.add_argument("--releases-root")
     parser.add_argument("--current-link")
@@ -328,11 +375,20 @@ def main() -> int:
     parser.add_argument("--test-report-path")
     parser.add_argument("--rollback-target")
     parser.add_argument("--target-release")
-    parser.add_argument("--data-root", required=True)
+    parser.add_argument("--data-root")
     parser.add_argument("--release-name")
     parser.add_argument("--secrets-root")
     parser.add_argument("--signing-key")
+    parser.add_argument("--project-audit-report")
+    parser.add_argument("--min-tests", type=int, default=900)
     args = parser.parse_args()
+    if args.operation == "init-signing-key":
+        if not args.secrets_root:
+            parser.error("init-signing-key requires --secrets-root")
+        print(init_signing_key(args.secrets_root))
+        return 0
+    if not args.data_root:
+        parser.error("deploy/rollback requires --data-root")
     if args.operation == "rollback":
         if not args.target_release:
             parser.error("rollback requires --target-release")
@@ -358,6 +414,8 @@ def main() -> int:
             parser.error(f"deploy requires: {', '.join(missing)}")
         if not args.signing_key and not args.secrets_root:
             parser.error("deploy requires --signing-key or --secrets-root")
+        if not args.project_audit_report:
+            parser.error("deploy requires --project-audit-report")
         result = deploy_release(
             source_root=args.source_root,
             releases_root=args.releases_root,
@@ -369,6 +427,8 @@ def main() -> int:
             release_name=args.release_name,
             secrets_root=args.secrets_root,
             signing_key=args.signing_key,
+            project_audit_report=args.project_audit_report,
+            min_tests=args.min_tests,
         )
     print(result)
     return 0

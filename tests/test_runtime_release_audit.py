@@ -44,7 +44,9 @@ def _valid_case(tmp_path: Path):
     config_path = tmp_path / "config.json"
     report_path = tmp_path / "junit.xml"
     config_path.write_text(json.dumps({"mode": "safe"}), encoding="utf-8")
-    report_path.write_text("<testsuite tests='1' failures='0'/>", encoding="utf-8")
+    report_path.write_text("<testsuite tests='900' failures='0' errors='0'/>", encoding="utf-8")
+    (tmp_path / "secrets").mkdir()
+    (tmp_path / "secrets" / "release-signing.key").write_bytes(b"k" * 32)
     return source_root, release_root, config_path, report_path, rollback_target
 
 

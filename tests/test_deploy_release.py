@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts.deploy_release import _tracked_modes, deploy_release, rollback_release
-from scripts.runtime_release_audit import ReleaseAuditError, verify_metadata
+from scripts.deploy_release import _tracked_modes, deploy_release, init_signing_key, rollback_release
+from scripts.runtime_release_audit import ReleaseAuditError, audit_release, verify_metadata, write_metadata
 
 
 def _git_source(root: Path) -> None:
@@ -34,10 +34,38 @@ def _case(tmp_path: Path):
     config = tmp_path / "config.json"
     config.write_text('{"mode":"safe"}\n', encoding="utf-8")
     report = tmp_path / "junit.xml"
-    report.write_text("<testsuite tests='1' failures='0' errors='0'/>", encoding="utf-8")
+    report.write_text("<testsuite tests='900' failures='0' errors='0'/>", encoding="utf-8")
+    (tmp_path / "project-audit.json").write_text(json.dumps({"ok": True, "issues": []}), encoding="utf-8")
+    secrets = tmp_path / "secrets"
+    init_signing_key(secrets)
     rollback = tmp_path / "rollback"
     (rollback / "scripts").mkdir(parents=True)
-    (rollback / "scripts" / "run.py").write_text("print('rollback')\n", encoding="utf-8")
+    (rollback / "README.md").write_text("release\n", encoding="utf-8")
+    (rollback / "scripts" / "run.py").write_text("print('release')\n", encoding="utf-8")
+    validation = tmp_path / "rollback-validation"
+    (validation / "scripts").mkdir(parents=True)
+    (validation / "scripts" / "run.py").write_text("print('validation')\n", encoding="utf-8")
+    previous_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT")
+    os.environ["CONTENT_PLATFORM_CODE_ROOT"] = str(rollback)
+    try:
+        rollback_metadata = audit_release(
+            source_root=source,
+            release_root=rollback,
+            configured_script_root=rollback / "scripts",
+            config_path=config,
+            test_report_path=report,
+            rollback_target=validation,
+            attestation_path=tmp_path / "data" / "release-attestations" / "rollback.sha256",
+            signing_key_path=secrets / "release-signing.key",
+            trusted_secrets_root=secrets,
+            project_audit_report_path=tmp_path / "project-audit.json",
+        )
+        write_metadata(rollback_metadata, rollback / "release-metadata.json", signing_key_path=secrets / "release-signing.key")
+    finally:
+        if previous_root is None:
+            os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
+        else:
+            os.environ["CONTENT_PLATFORM_CODE_ROOT"] = previous_root
     return source, config, report, rollback
 
 
@@ -74,7 +102,11 @@ def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: 
     assert saved_metadata["attestation_path"] == str(attestation.resolve())
     assert saved_metadata["signing_key_id"]
     assert saved_metadata["signing_key_hash"]
+    assert saved_metadata["junit_tests"] == 900
+    assert saved_metadata["project_audit_report_hash"]
     assert "signing_key_path" not in saved_metadata
+    assert saved_metadata["rollback_rehearsal"]["target_release"] == str((tmp_path / "rollback").resolve())
+    assert saved_metadata["rollback_rehearsal"]["passed"] is True
     assert current.is_symlink()
     assert current.resolve() == release.resolve()
     assert _tracked_modes(source)["scripts/run.py"] == "100755"
@@ -98,6 +130,96 @@ def test_deploy_requires_successful_junit(tmp_path: Path, monkeypatch):
             rollback_target=rollback,
             data_root=tmp_path / "data",
             release_name="failed",
+        )
+
+
+def test_init_signing_key_is_explicit_and_does_not_rotate(tmp_path: Path):
+    secrets = tmp_path / "secrets"
+    key = init_signing_key(secrets)
+    original = key.read_bytes()
+    assert len(original) == 32
+    with pytest.raises(ReleaseAuditError, match="exists|rotate|overwrite"):
+        init_signing_key(secrets)
+    assert key.read_bytes() == original
+
+
+def test_deploy_rejects_missing_signing_key(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    (tmp_path / "secrets" / "release-signing.key").unlink()
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    with pytest.raises(ReleaseAuditError, match="key|signing|exist"):
+        deploy_release(
+            source_root=source,
+            releases_root=tmp_path / "releases",
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            config_path=config,
+            test_report_path=report,
+            rollback_target=rollback,
+            data_root=tmp_path / "data",
+            secrets_root=tmp_path / "secrets",
+            release_name="missing-key",
+        )
+
+
+def test_deploy_rejects_arbitrary_secrets_directory(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    arbitrary = tmp_path / "arbitrary-secrets"
+    (arbitrary / "release-signing.key").parent.mkdir(parents=True)
+    (arbitrary / "release-signing.key").write_bytes(b"k" * 32)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    with pytest.raises(ReleaseAuditError, match="stable|secrets|boundary"):
+        deploy_release(
+            source_root=source,
+            releases_root=tmp_path / "releases",
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            config_path=config,
+            test_report_path=report,
+            rollback_target=rollback,
+            data_root=tmp_path / "data",
+            secrets_root=arbitrary,
+            release_name="bad-secrets",
+        )
+
+
+def test_deploy_rejects_failed_project_audit_report(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    audit_report = tmp_path / "project-audit.json"
+    audit_report.write_text(json.dumps({"ok": False, "issues": ["bad"]}), encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    with pytest.raises(ReleaseAuditError, match="project audit|issues|audit"):
+        deploy_release(
+            source_root=source,
+            releases_root=tmp_path / "releases",
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            config_path=config,
+            test_report_path=report,
+            project_audit_report=audit_report,
+            rollback_target=rollback,
+            data_root=tmp_path / "data",
+            secrets_root=tmp_path / "secrets",
+            release_name="bad-audit",
+        )
+
+
+def test_deploy_rejects_junit_below_production_threshold(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    report.write_text("<testsuite tests='899' failures='0' errors='0'/>", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    with pytest.raises(ReleaseAuditError, match="tests|900|JUnit"):
+        deploy_release(
+            source_root=source,
+            releases_root=tmp_path / "releases",
+            current_link=tmp_path / ".ai-self-media-tools-current",
+            config_path=config,
+            test_report_path=report,
+            rollback_target=rollback,
+            data_root=tmp_path / "data",
+            secrets_root=tmp_path / "secrets",
+            release_name="few-tests",
         )
 
 
@@ -190,9 +312,10 @@ def test_deploy_rejects_signing_key_outside_stable_secrets_boundary(tmp_path: Pa
 
 def test_deploy_rewrites_old_internal_config_paths_and_rejects_external_script(tmp_path: Path, monkeypatch):
     source, config, report, rollback = _case(tmp_path)
+    deploy_config = tmp_path / "deploy-config.json"
     old_release = tmp_path / ".ai-self-media-tools-releases" / "old"
     old_script = old_release / "scripts" / "run.py"
-    config.write_text(
+    deploy_config.write_text(
         json.dumps({"data_dir": str(old_release / "data"), "media": {"script": str(old_script)}}),
         encoding="utf-8",
     )
@@ -201,7 +324,7 @@ def test_deploy_rewrites_old_internal_config_paths_and_rejects_external_script(t
         source_root=source,
         releases_root=tmp_path / "releases",
         current_link=tmp_path / ".ai-self-media-tools-current",
-        config_path=config,
+        config_path=deploy_config,
         test_report_path=report,
         rollback_target=rollback,
         data_root=tmp_path / "data",
@@ -209,7 +332,7 @@ def test_deploy_rewrites_old_internal_config_paths_and_rejects_external_script(t
     )
     assert result["ok"] is True
 
-    config.write_text(
+    deploy_config.write_text(
         json.dumps({"media": {"script": str(tmp_path / "legacy-release" / "scripts" / "run.py")}}),
         encoding="utf-8",
     )
@@ -218,7 +341,7 @@ def test_deploy_rewrites_old_internal_config_paths_and_rejects_external_script(t
             source_root=source,
             releases_root=tmp_path / "releases-2",
             current_link=tmp_path / ".ai-self-media-tools-current",
-            config_path=config,
+            config_path=deploy_config,
             test_report_path=report,
             rollback_target=rollback,
             data_root=tmp_path / "data-2",
