@@ -8,6 +8,7 @@ import py_compile
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -51,6 +52,39 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _release_digest(release_root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(path for path in release_root.rglob("*") if path.is_file()):
+        relative = path.relative_to(release_root).as_posix().encode("utf-8")
+        digest.update(relative)
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(_sha256(path)))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def _default_attestation_path(release_root: Path) -> Path:
+    return release_root.parent / "release-attestations" / f"{release_root.name}.sha256"
+
+
+def _assert_successful_junit(path: Path) -> None:
+    try:
+        root = ET.parse(path).getroot()
+        suites = [root] if root.tag.rsplit("}", 1)[-1] == "testsuite" else list(root.iter())
+        suites = [item for item in suites if item.tag.rsplit("}", 1)[-1] == "testsuite"]
+        if not suites:
+            raise ValueError("no testsuite elements")
+        tests = sum(int(item.attrib.get("tests", "0")) for item in suites)
+        failures = sum(int(item.attrib.get("failures", "0")) for item in suites)
+        errors = sum(int(item.attrib.get("errors", "0")) for item in suites)
+    except (ET.ParseError, OSError, TypeError, ValueError) as exc:
+        raise ReleaseAuditError(f"JUnit report is invalid: {path}") from exc
+    if tests <= 0 or failures != 0 or errors != 0:
+        raise ReleaseAuditError(
+            f"JUnit report is not successful: tests={tests}, failures={failures}, errors={errors}"
+        )
 
 
 def _tracked_hashes(source_root: Path) -> dict[str, str]:
@@ -163,6 +197,7 @@ def audit_release(
     config_path: Path | str | None = None,
     test_report_path: Path | str | None = None,
     rollback_target: str | None = None,
+    attestation_path: Path | str | None = None,
 ) -> dict:
     if config_path is None or test_report_path is None or rollback_target is None:
         raise ReleaseAuditError("config_path, test_report_path, and rollback_target are required evidence")
@@ -172,12 +207,15 @@ def audit_release(
     _validate_raw_path(config_path, "config_path")
     _validate_raw_path(test_report_path, "test_report_path")
     _validate_raw_path(rollback_target, "rollback_target")
+    if attestation_path is not None:
+        _validate_raw_path(attestation_path, "attestation_path")
     source = _resolve(source_root)
     release = _resolve(release_root)
     script_root = _resolve(configured_script_root)
     config = _resolve(config_path)
     test_report = _resolve(test_report_path)
     rollback = _resolve(rollback_target)
+    attestation = _resolve(attestation_path) if attestation_path is not None else _default_attestation_path(release)
     expected_script_root = (release / "scripts").resolve()
     if not source.is_dir() or not release.is_dir() or script_root != expected_script_root:
         raise ReleaseAuditError("source, release, and configured script roots do not match")
@@ -191,6 +229,13 @@ def audit_release(
     _assert_clean(source)
     _require_file(config, "config_path")
     _require_file(test_report, "test_report_path")
+    _assert_successful_junit(test_report)
+    try:
+        attestation.relative_to(release)
+    except ValueError:
+        pass
+    else:
+        raise ReleaseAuditError("attestation path must be outside release")
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
     _assert_release_has_no_symlinks(release)
@@ -211,6 +256,7 @@ def audit_release(
         "test_report": str(test_report),
         "test_report_hash": _sha256(test_report),
         "rollback_target": str(rollback),
+        "attestation_path": str(attestation),
     }
     return metadata
 
@@ -230,6 +276,19 @@ def write_metadata(metadata: dict, path: Path | str) -> Path:
             handle.write("\n")
     except FileExistsError as exc:
         raise ReleaseAuditError(f"release metadata already exists: {destination}") from exc
+    attestation = _resolve(metadata.get("attestation_path", ""))
+    try:
+        attestation.relative_to(release)
+    except ValueError:
+        pass
+    else:
+        raise ReleaseAuditError("attestation path must be outside release")
+    attestation.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with attestation.open("x", encoding="ascii", newline="\n") as handle:
+            handle.write(f"{_release_digest(release)}  {release.name}\n")
+    except FileExistsError as exc:
+        raise ReleaseAuditError(f"release attestation already exists: {attestation}") from exc
     return destination
 
 
@@ -237,6 +296,7 @@ def verify_metadata(
     metadata_path: Path | str,
     *,
     current_release_root: Path | str | None = None,
+    attestation_path: Path | str | None = None,
 ) -> dict:
     """Verify immutable release metadata and all evidence it names."""
     _validate_raw_path(metadata_path, "metadata_path")
@@ -257,6 +317,7 @@ def verify_metadata(
             "config": metadata["config_path"],
             "test_report": metadata["test_report"],
             "rollback": metadata["rollback_target"],
+            "attestation": attestation_path if attestation_path is not None else metadata["attestation_path"],
         }
         source_hashes = metadata["source_hashes"]
         expected_commit = metadata["commit"]
@@ -276,7 +337,14 @@ def verify_metadata(
     config = _resolve(raw_paths["config"])
     test_report = _resolve(raw_paths["test_report"])
     rollback = _resolve(raw_paths["rollback"])
+    attestation = _resolve(raw_paths["attestation"])
     _assert_contained(metadata_file, release, "release metadata")
+    try:
+        attestation.relative_to(release)
+    except ValueError:
+        pass
+    else:
+        raise ReleaseAuditError("attestation path must be outside release")
     if not release.is_dir() or script_root != release / "scripts":
         raise ReleaseAuditError("metadata current release root is invalid")
 
@@ -312,7 +380,15 @@ def verify_metadata(
         raise ReleaseAuditError("config hash mismatch")
     if not test_report.is_file() or _sha256(test_report) != expected_report_hash:
         raise ReleaseAuditError("JUnit test report hash mismatch")
+    _assert_successful_junit(test_report)
     _validate_rollback_target(release, rollback)
+    _require_file(attestation, "release attestation")
+    try:
+        actual_attestation = attestation.read_text(encoding="ascii").strip().split()[0]
+    except (OSError, UnicodeError, IndexError) as exc:
+        raise ReleaseAuditError("release attestation is invalid") from exc
+    if actual_attestation != _release_digest(release):
+        raise ReleaseAuditError("release attestation hash mismatch")
     return metadata
 
 
@@ -326,10 +402,15 @@ def main() -> int:
     parser.add_argument("--config-path")
     parser.add_argument("--test-report-path")
     parser.add_argument("--rollback-target")
+    parser.add_argument("--attestation-path")
     parser.add_argument("--metadata-path", required=True)
     args = parser.parse_args()
     if args.verify_metadata or args.mode == "verify_metadata":
-        print(json.dumps(verify_metadata(args.metadata_path, current_release_root=args.release_root), sort_keys=True))
+        print(json.dumps(verify_metadata(
+            args.metadata_path,
+            current_release_root=args.release_root,
+            attestation_path=args.attestation_path,
+        ), sort_keys=True))
         return 0
     required = {
         "source_root": args.source_root,
@@ -349,6 +430,7 @@ def main() -> int:
         config_path=args.config_path,
         test_report_path=args.test_report_path,
         rollback_target=args.rollback_target,
+        attestation_path=args.attestation_path,
     )
     print(write_metadata(metadata, args.metadata_path))
     return 0

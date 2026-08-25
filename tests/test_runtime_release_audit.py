@@ -6,7 +6,12 @@ import subprocess
 
 import pytest
 
-from scripts.runtime_release_audit import ReleaseAuditError, audit_release, verify_metadata, write_metadata
+from scripts.runtime_release_audit import (
+    ReleaseAuditError,
+    audit_release,
+    verify_metadata,
+    write_metadata,
+)
 
 
 def _git_repo(root: Path) -> None:
@@ -605,6 +610,23 @@ def test_verify_metadata_rejects_tampered_commit(tmp_path: Path, monkeypatch):
         verify_metadata(destination)
 
 
+@pytest.mark.parametrize("junit", ["<testsuite tests='0' failures='0' errors='0'/>", "<testsuite tests='1' failures='1' errors='0'/>", "<testsuite tests='1' failures='0' errors='1'/>"])
+def test_audit_rejects_junit_without_successful_tests(tmp_path: Path, monkeypatch, junit: str):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    report_path.write_text(junit, encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="JUnit|tests|failures|errors"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
 def test_verify_metadata_rejects_release_or_config_drift(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
@@ -661,6 +683,32 @@ def test_verify_metadata_successfully_checks_current_release_and_rollback(tmp_pa
 
     verified = verify_metadata(destination, current_release_root=release_root)
     assert verified["rollback_target"] == str(rollback_target.resolve())
+
+
+def test_verify_metadata_rejects_missing_or_tampered_attestation(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+    attestation = Path(metadata["attestation_path"])
+    assert attestation.is_file()
+
+    attestation.unlink()
+    with pytest.raises(ReleaseAuditError, match="attestation|exist"):
+        verify_metadata(destination)
+
+    attestation.parent.mkdir(parents=True, exist_ok=True)
+    attestation.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(ReleaseAuditError, match="attestation|hash|mismatch"):
+        verify_metadata(destination)
 
 
 def test_verify_metadata_succeeds_for_release_reached_through_current_symlink(tmp_path: Path, monkeypatch):

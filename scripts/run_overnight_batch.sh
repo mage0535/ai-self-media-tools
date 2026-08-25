@@ -13,23 +13,29 @@ if ! [[ -n "$release_root" && -d "$release_root" ]]; then
   printf '%s\n' 'CONTENT_PLATFORM_HOME must resolve to a non-empty existing release root' >&2
   exit 1
 fi
-data_root="${CONTENT_PLATFORM_DATA_DIR:-$root/data}"
-secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$root/secrets}"
-config_path="${CONTENT_PLATFORM_CONFIG:-$root/config.json}"
+data_root="${CONTENT_PLATFORM_DATA_DIR:-$(dirname -- "$release_root")/data}"
+secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$release_root/secrets}"
+config_path="${CONTENT_PLATFORM_CONFIG:-$release_root/config.json}"
 metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$release_root/release-metadata.json}"
+attestation_path="${CONTENT_PLATFORM_RELEASE_ATTESTATION:-$data_root/release-attestations/$(basename -- "$release_root").sha256}"
 day="$(date +%F)"
 out="$data_root/overnight/$day"
 slots="$secrets_root/overnight-slots.json"
 
+install -d "$data_root"
+exec 9>"$data_root/runtime-release.lock"
+flock -s 9
+
 # Do not create state or invoke any batch task until the audited release is verified.
 CONTENT_PLATFORM_CODE_ROOT="$release_root" \
-  python3 "$root/scripts/runtime_release_audit.py" --verify-metadata \
-  --metadata-path "$metadata_path" --release-root "$release_root"
+  python3 "$release_root/scripts/runtime_release_audit.py" --verify-metadata \
+  --metadata-path "$metadata_path" --attestation-path "$attestation_path" \
+  --release-root "$release_root"
 
 mkdir -p "$out"
 
 notify() {
-  "$root/scripts/notify_hermes_progress.sh" "overnight" "$1" "${2:-}" || true
+  "$release_root/scripts/notify_hermes_progress.sh" "overnight" "$1" "${2:-}" || true
 }
 
 handle_error() {
@@ -68,10 +74,10 @@ fi
 notify "started" "batch_started"
 
 run_platform() {
-  PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" python3 -m content_platform "$@"
+  PYTHONPATH="$release_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m content_platform "$@"
 }
 
-if ! "$root/scripts/smoke_provider.sh" "$root/config.json"; then
+if ! "$release_root/scripts/smoke_provider.sh" "$release_root/config.json"; then
   printf '%s\n' '{"status":"blocked","reason":"provider_preflight_failed"}' > "$out/result.json"
   notify "failed" "provider_preflight_failed"
   exit 1
@@ -107,10 +113,10 @@ for sample in "$data_root"/intel/hot_works_multiplatform_*/hot_works_raw_enriche
   fi
 done
 if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json" ]]; then
-  hot_work_args+=(--state-file "kuaishou=$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json")
+  hot_work_args+=(--state-file "kuaishou=$release_root/data/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json")
 fi
 if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json" ]]; then
-  hot_work_args+=(--state-file "douyin=$root/data/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json")
+  hot_work_args+=(--state-file "douyin=$release_root/data/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json")
 fi
 if run_platform --config "$config_path" --db "$data_root/state.db" "${hot_work_args[@]}" > "$out/hot-works-result.json"; then
   notify "progress" "hot_work_strategy_refreshed"
