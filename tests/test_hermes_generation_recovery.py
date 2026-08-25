@@ -44,7 +44,7 @@ def test_hermes_command_uses_active_model_and_retries_hard_timeout_once(monkeypa
         return processes.pop(0)
 
     monkeypatch.setattr("content_platform.generator.subprocess.Popen", popen)
-    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path), "clock": lambda: next(clock), "sleep": lambda _: None})
+    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path), "generation_attempts_path": str(tmp_path / "generation_attempts.json"), "clock": lambda: next(clock), "sleep": lambda _: None})
     generator._normalize = lambda draft, context, provider, topic, brief: draft
     brief = {
         "platform": "wechat",
@@ -57,8 +57,9 @@ def test_hermes_command_uses_active_model_and_retries_hard_timeout_once(monkeypa
     assert all("--provider" not in commands[0] and "--model" not in commands[0] for _ in [0])
     assert commands[0][-1] == "--cli"
     assert len(commands) == 2
-    checkpoint = next(tmp_path.glob("*checkpoint*.json"))
-    assert json.loads(checkpoint.read_text(encoding="utf-8"))["status"] == "hard_timeout"
+    attempts = json.loads((tmp_path / "generation_attempts.json").read_text(encoding="utf-8"))
+    assert [row["status"] for row in attempts] == ["hard_timeout", "success"]
+    assert all("prompt" not in row for row in attempts)
 
 
 def test_non_transient_error_is_not_retried(monkeypatch, tmp_path):
@@ -87,7 +88,7 @@ def test_transient_provider_error_retries_once_with_reduced_context(monkeypatch,
         "platform": "wechat",
         "content_blueprint": {"topic": "topic", "background": "x" * 5000},
         "claim_ledger": [{"claim": "y" * 5000, "evidence_path": "e"}],
-        "compiled_skill_rules": {"rules": [{"id": f"r{i}", "text": "z" * 1000} for i in range(30)]},
+        "compiled_skill_rules": {"rules": [{"id": f"r{i}", "text": f"z{i}" * 500} for i in range(30)]},
     }
     result = generator._hermes("topic", brief, {"language": "zh", "platform_rules": ""})
     assert result["title"] == "T"
@@ -101,3 +102,20 @@ def test_checkpoint_is_atomic_and_recovery_has_evidence(tmp_path):
     assert path.is_file()
     assert not list(tmp_path.glob("*.tmp"))
     assert json.loads(path.read_text(encoding="utf-8"))["status"] == "hard_timeout"
+
+
+def test_each_generation_checkpoint_has_uniform_safe_attempt_fields(monkeypatch, tmp_path):
+    checkpoints = []
+    output = '{"title":"T","body":"' + "body " * 80 + '"}'
+    process = FakeProcess([(0, output)])
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: process)
+    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path), "clock": lambda: 10, "sleep": lambda _: None})
+    generator._write_generation_checkpoint = lambda payload: checkpoints.append(payload)
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+
+    assert checkpoints[-1]["status"] == "success"
+    assert set(("attempt", "status", "prompt_hash", "prompt_length", "error_class", "started_at", "finished_at")) <= checkpoints[-1].keys()
+    assert "prompt" not in checkpoints[-1]
+    assert all("secret" not in json.dumps(item).casefold() for item in checkpoints)

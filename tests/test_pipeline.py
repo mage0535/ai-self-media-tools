@@ -41,6 +41,15 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(draft["draft_meta"]["tool_invocation_manifest"], manifest)
 
+    def test_each_job_overwrites_generator_checkpoint_dir(self):
+        first = self.pipeline.create("First topic", ["wechat"], {"audience": "operators"})
+        second = self.pipeline.create("Second topic", ["wechat"], {"audience": "operators"})
+        for job in (first, second):
+            with self.store.connect() as conn:
+                conn.execute("UPDATE jobs SET body=? WHERE id=?", ("Prepared body " * 20, job["id"]))
+            self.pipeline.run(job["id"])
+            assert self.pipeline.generator.config["checkpoint_dir"] == str(self.pipeline.data_dir / "jobs" / job["id"])
+
     def test_rendered_gate_recovers_manifest_after_later_optional_media_failure(self):
         import json
 

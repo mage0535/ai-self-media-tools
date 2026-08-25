@@ -15,13 +15,18 @@ def _short(value: Any, limit: int) -> str:
 
 def _selected_rules(brief: dict[str, Any], platform: str) -> list[dict[str, str]]:
     rules = select_platform_rules(((brief.get("compiled_skill_rules") or {}).get("rules") or []), platform)
-    wanted = str(platform).casefold()
     result = []
     for rule in rules:
         if not isinstance(rule, dict):
             continue
         source = str(rule.get("source") or rule.get("id") or "").casefold()
-        result.append({"id": _short(rule.get("id"), 180), "text": _short(rule.get("text"), 220)})
+        rule_id = _short(rule.get("rule_id") or rule.get("id"), 180)
+        result.append({
+            "id": rule_id,
+            "rule_id": rule_id,
+            "source": _short(rule.get("source"), 180),
+            "text": _short(rule.get("text"), 220),
+        })
     return result
 
 

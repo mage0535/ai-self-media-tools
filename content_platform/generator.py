@@ -953,16 +953,37 @@ class DraftGenerator:
         while proc.poll() is None:
             elapsed = clock() - started
             if elapsed >= hard:
-                self._write_generation_checkpoint({"attempt": 2 if retry else 1, "status": "hard_timeout", "prompt_hash": compiled["sha256"]})
+                finished = clock()
+                self._write_generation_checkpoint(self._checkpoint_payload(
+                    attempt=2 if retry else 1, status="hard_timeout", error_class="hard_timeout",
+                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+                ))
                 proc.terminate()
-                self._record_generation_attempt({"attempt": 2 if retry else 1, "prompt_hash": compiled["sha256"], "prompt_length": len(prompt), "started": started, "finished": clock(), "status": "hard_timeout", "error_class": "hard_timeout"})
+                self._record_generation_attempt(self._checkpoint_payload(
+                    attempt=2 if retry else 1, status="hard_timeout", error_class="hard_timeout",
+                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+                ))
                 raise GenerationTimeoutError("Hermes hard deadline exceeded")
             if elapsed >= soft and not soft_written:
-                self._write_generation_checkpoint({"attempt": 2 if retry else 1, "status": "soft_deadline", "prompt_hash": compiled["sha256"]})
+                self._write_generation_checkpoint(self._checkpoint_payload(
+                    attempt=2 if retry else 1, status="soft_timeout", error_class="soft_timeout",
+                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=clock(),
+                ))
                 soft_written = True
             self.config.get("sleep", time.sleep)(0.05)
         stdout, stderr = proc.communicate()
-        self._record_generation_attempt({"attempt": 2 if retry else 1, "prompt_hash": compiled["sha256"], "prompt_length": len(prompt), "started": started, "finished": clock(), "status": "completed" if proc.returncode == 0 else "failed", "error_class": "transient_provider" if self._is_transient_provider_error(stdout or stderr) else ("provider_error" if proc.returncode else "")})
+        finished = clock()
+        if proc.returncode != 0:
+            error_class = "provider_error"
+            self._write_generation_checkpoint(self._checkpoint_payload(
+                attempt=2 if retry else 1, status="provider_error", error_class=error_class,
+                prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+            ))
+        self._record_generation_attempt(self._checkpoint_payload(
+            attempt=2 if retry else 1, status="success" if proc.returncode == 0 else "provider_error",
+            error_class="" if proc.returncode == 0 else "provider_error",
+            prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+        ))
         if proc.returncode != 0:
             if self._is_transient_provider_error(stdout or stderr):
                 raise RuntimeError("transient provider error")
@@ -970,6 +991,11 @@ class DraftGenerator:
         content = self._bounded_provider_content(stdout, brief).strip()
         provider_error = self._provider_error(content)
         if provider_error:
+            finished = clock()
+            self._write_generation_checkpoint(self._checkpoint_payload(
+                attempt=2 if retry else 1, status="provider_error", error_class="provider_error",
+                prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+            ))
             if provider_error.startswith("provider_http_5") or provider_error == "provider_http_429":
                 raise RuntimeError("transient provider error")
             raise ProviderAuthError(provider_error)
@@ -978,6 +1004,10 @@ class DraftGenerator:
         draft = self._coerce_provider_draft(content, topic)
         if not draft.get("title") or not draft.get("body"):
             raise ValueError("Hermes returned an incomplete draft")
+        self._write_generation_checkpoint(self._checkpoint_payload(
+            attempt=2 if retry else 1, status="success", error_class="",
+            prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+        ))
         return self._normalize(draft, context, "hermes-cli", topic, brief)
 
     def _is_transient_provider_error(self, content):
@@ -1000,6 +1030,18 @@ class DraftGenerator:
             if os.path.exists(temp_name):
                 os.unlink(temp_name)
         return target
+
+    @staticmethod
+    def _checkpoint_payload(*, attempt, status, error_class, prompt_hash, prompt_length, started_at, finished_at):
+        return {
+            "attempt": attempt,
+            "status": status,
+            "prompt_hash": prompt_hash,
+            "prompt_length": prompt_length,
+            "error_class": error_class,
+            "started_at": started_at,
+            "finished_at": finished_at,
+        }
 
     def _record_generation_attempt(self, payload):
         path = self.config.get("generation_attempts_path")
