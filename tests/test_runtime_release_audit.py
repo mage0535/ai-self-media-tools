@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -754,7 +755,7 @@ def test_verify_metadata_cli_mode_returns_success(tmp_path: Path, monkeypatch):
 
     result = subprocess.run(
         [
-            os.environ.get("PYTHON", "python"),
+            sys.executable,
             "scripts/runtime_release_audit.py",
             "verify_metadata",
             "--metadata-path",

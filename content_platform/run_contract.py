@@ -174,9 +174,19 @@ def _compact_generation_payload(payload: dict[str, Any], limit: int) -> dict[str
     for max_items, max_string in ((6, 240), (3, 160), (2, 100)):
         for field in _GENERATION_OPTIONAL_FIELDS:
             if field in candidate:
-                candidate[field] = _compact_json_value(
-                    candidate[field], max_items=max_items, max_string=max_string
-                )
+                if field == "same_lane_intelligence" and isinstance(candidate[field], dict):
+                    candidate[field] = {
+                        key: _compact_json_value(candidate[field][key], max_items=max_items, max_string=max_string)
+                        for key in (
+                            "version", "platform", "own_data_status", "topic_patterns",
+                            "proof_requirements", "recommended_content_moves", "top_accounts", "top_works",
+                        )
+                        if key in candidate[field]
+                    }
+                else:
+                    candidate[field] = _compact_json_value(
+                        candidate[field], max_items=max_items, max_string=max_string
+                    )
         if len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= limit:
             return candidate
     return candidate

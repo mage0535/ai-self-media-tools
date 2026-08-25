@@ -98,6 +98,14 @@ def test_generate_payload_compacts_server_scale_capability_context(tmp_path: Pat
             "capability_plan": verbose,
             "tool_selection": verbose,
             "compiled_skill_rules": verbose,
+            "same_lane_intelligence": {
+                "version": "same_lane_playbook_compact_v1",
+                "own_data_status": "insufficient",
+                "topic_patterns": ["tool_workflow_tutorial"],
+                "proof_requirements": ["screen_or_tool_stack_demo"],
+                "recommended_content_moves": ["show a concrete tool stack"],
+                "verbose_rows": verbose,
+            },
         },
         rulebook_path=rulebook,
     )
@@ -105,4 +113,5 @@ def test_generate_payload_compacts_server_scale_capability_context(tmp_path: Pat
     assert bounded["content_blueprint"]["topic"] == "AI workflow"
     assert bounded["claim_ledger"][0]["claim"] == "verified claim"
     assert bounded["strategy"]["account_identity"] == "tiktok-ai"
+    assert bounded["same_lane_intelligence"]["topic_patterns"] == ["tool_workflow_tutorial"]
     assert len(json.dumps(bounded, ensure_ascii=False).encode("utf-8")) <= 16_384
