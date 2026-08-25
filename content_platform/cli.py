@@ -631,6 +631,7 @@ def execute(args):
         from collections import defaultdict
 
         data_dir = Path(config.get("data_dir", Path(args.db).parent))
+        os.environ.setdefault("CONTENT_PLATFORM_DATA_DIR", str(data_dir))
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         output_dir = Path(args.output_dir) if args.output_dir else data_dir / "intel" / f"hot_works_{stamp}"
         items = []
@@ -772,13 +773,18 @@ def execute(args):
         official_reference_evidence = {}
         official_reference_items = []
         data_dir = Path(config.get("data_dir", Path(args.db).parent))
+        evidence_data_dir = Path(
+            config.get("evidence_data_dir")
+            or os.environ.get("CONTENT_PLATFORM_EVIDENCE_DATA_DIR")
+            or data_dir
+        )
         from .trend_intelligence import expire_abandoned_reservations
         expired_reservations = expire_abandoned_reservations(data_dir / "topic-reservations.json")
         for slot in slots:
             platform = str(slot.get("platform") or "").casefold() if isinstance(slot, dict) else ""
             if not platform or platform in official_reference_evidence:
                 continue
-            evidence, items = build_reference_items(platform, data_dir=data_dir)
+            evidence, items = build_reference_items(platform, data_dir=evidence_data_dir)
             official_reference_evidence[platform] = evidence
             official_reference_items.extend(items)
         if official_reference_items:
@@ -827,6 +833,46 @@ def execute(args):
             store,
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
         )
+        from .official_reference_signals import build_selection_items
+        from .overnight_batch import build_same_lane_selection_items
+        official_selection_seen = set()
+        for slot in slots:
+            if not isinstance(slot, dict):
+                continue
+            platform = str(slot.get("platform") or "").casefold()
+            if not platform or platform in official_selection_seen:
+                continue
+            official_selection_seen.add(platform)
+            keywords = topic_keywords_for_slot(platform, slot, profile)
+            selection_evidence, selection_items = build_selection_items(platform, keywords, data_dir=evidence_data_dir)
+            if selection_items:
+                report.setdefault("items", []).extend(selection_items)
+                report.setdefault("sources", []).append({
+                    "source": f"{platform}:official_signal",
+                    "platform": platform,
+                    "status": "ok",
+                    "count": len(selection_items),
+                    "collected_at": selection_evidence.get("captured_at") or collected_at,
+                    "evidence_type": selection_evidence.get("evidence_type"),
+                    "official_url": selection_evidence.get("official_url"),
+                    "evidence_sha256": selection_evidence.get("evidence_sha256"),
+                })
+            hot_pack, hot_items = build_same_lane_selection_items(
+                platform,
+                keywords,
+                path=evidence_data_dir / "intel" / "hot_work_parameter_pack_latest.json",
+            )
+            if hot_items:
+                report.setdefault("items", []).extend(hot_items)
+                report.setdefault("sources", []).append({
+                    "source": f"{platform}:same_lane_hot_work",
+                    "platform": platform,
+                    "status": "ok",
+                    "count": len(hot_items),
+                    "collected_at": max(str(item.get("captured_at") or "") for item in hot_items),
+                    "evidence_type": "same_lane_hot_work",
+                    "strong_sample_count": hot_pack.get("strong_sample_count", 0),
+                })
         from .trend_intelligence import rank_platform_candidates
 
         def bind_collected_candidate(platform, candidate, keywords):

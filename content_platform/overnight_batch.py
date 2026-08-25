@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import re
@@ -51,7 +52,8 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
     needs the platform-specific patterns, requirements, and top evidence
     snippets, so keep this bounded and path-free for providers.
     """
-    source = Path(path) if path else ROOT / "data" / "intel" / "hot_work_parameter_pack_latest.json"
+    mutable_root = Path(os.environ.get("CONTENT_PLATFORM_DATA_DIR") or os.environ.get("AI_SELF_MEDIA_DATA_DIR") or ROOT / "data")
+    source = Path(path) if path else mutable_root / "intel" / "hot_work_parameter_pack_latest.json"
     if not source.is_file():
         return {"version": "hot_work_parameter_pack_compact_v1", "status": "missing"}
     try:
@@ -71,8 +73,14 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
             "title": str(sample.get("title") or "")[:120],
             "author": str(sample.get("author") or "")[:60],
             "metric": sample.get("views") or sample.get("likes") or sample.get("favorites") or sample.get("engagement") or "",
+            "views": sample.get("views") or 0,
+            "likes": sample.get("likes") or 0,
+            "engagement": sample.get("engagement") or sample.get("favorites") or 0,
             "evidence_strength": sample.get("evidence_strength", ""),
             "source": sample.get("source", ""),
+            "url": sample.get("url") or sample.get("source_url") or sample.get("work_url") or "",
+            "captured_at": sample.get("captured_at") or sample.get("collected_at") or "",
+            "collector": sample.get("collector") or sample.get("source") or "",
             "analysis": sample.get("analysis", {}),
         })
     return {
@@ -83,6 +91,67 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
         "generation_requirements": data.get("generation_requirements") or [],
         "top_samples": samples,
     }
+
+
+def build_same_lane_selection_items(
+    platform: str,
+    lane_keywords: list[str] | tuple[str, ...],
+    *,
+    path: str | Path | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Promote only strongly evidenced hot works into the candidate pool."""
+    pack = load_hot_work_parameter_pack_compact(platform, path=path)
+    if pack.get("status") != "ready":
+        return pack, []
+    words = [str(word).casefold().strip() for word in lane_keywords if str(word).strip()]
+    items = []
+    for index, sample in enumerate(pack.get("top_samples") or []):
+        if not isinstance(sample, dict):
+            continue
+        title = str(sample.get("title") or "").strip()
+        url = str(sample.get("url") or "").strip()
+        captured_at = str(sample.get("captured_at") or "").strip()
+        collector = str(sample.get("collector") or "").strip()
+        strength = str(sample.get("evidence_strength") or "").casefold()
+        metric = max(
+            float(sample.get("views") or 0),
+            float(sample.get("likes") or 0),
+            float(sample.get("engagement") or 0),
+            float(sample.get("metric") or 0) if str(sample.get("metric") or "").replace(".", "", 1).isdigit() else 0,
+        )
+        matched = [word for word in words if word in title.casefold()]
+        if (
+            not title or not url.startswith(("https://", "http://"))
+            or not captured_at or not collector or metric <= 0
+            or strength not in {"strong", "verified", "high"}
+            or (words and not matched)
+        ):
+            continue
+        lane_score = min(1.0, max(0.55, len(matched) / max(1, min(4, len(words)))))
+        evidence_hash = hashlib.sha256(json.dumps(sample, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        items.append({
+            "platform": str(platform).casefold(),
+            "title": title[:180],
+            "source": f"{str(platform).casefold()}:same_lane_hot_work",
+            "url": url,
+            "points": metric,
+            "views": sample.get("views") or 0,
+            "likes": sample.get("likes") or 0,
+            "engagement": sample.get("engagement") or 0,
+            "rank": index + 1,
+            "observed_rank": index + 1,
+            "evidence_type": "same_lane_hot_work",
+            "native_verified": False,
+            "captured_at": captured_at,
+            "collector": collector,
+            "lane_fit_score": lane_score,
+            "semantic_fit_score": lane_score,
+            "content_value_score": 0.8,
+            "actionability_score": 0.75,
+            "saturation_score": 0.3,
+            "evidence_hash": evidence_hash,
+        })
+    return pack, items
 
 
 def normalize_delivery_boundary(platform: str, requested_state: str) -> str:
@@ -400,8 +469,29 @@ def _candidate_has_native_source(platform: str, candidate: dict[str, Any]) -> bo
     """
     source = str(candidate.get("source") or "").casefold().strip()
     evidence_type = str(candidate.get("evidence_type") or "native").casefold().strip()
-    if candidate.get("official_reference_only") is True or evidence_type in {"official_activity", "official_keyword", "official_reference"}:
+    if candidate.get("official_reference_only") is True or evidence_type == "official_reference":
         return False
+    if evidence_type in {"official_activity", "official_keyword"}:
+        return bool(
+            str(candidate.get("platform") or "").casefold() == str(platform or "").casefold()
+            and str(candidate.get("url") or "").startswith(("https://", "http://"))
+            and str(candidate.get("captured_at") or "")
+            and len(str(candidate.get("evidence_hash") or "")) == 64
+            and float(candidate.get("lane_fit_score") or 0) >= 0.55
+            and float(candidate.get("semantic_fit_score") or 0) >= 0.55
+            and candidate.get("native_verified") is not True
+        )
+    if evidence_type == "same_lane_hot_work":
+        popularity = max(float(candidate.get("points") or 0), float(candidate.get("views") or 0), float(candidate.get("engagement") or 0))
+        return bool(
+            str(candidate.get("platform") or "").casefold() == str(platform or "").casefold()
+            and str(candidate.get("url") or "").startswith(("https://", "http://"))
+            and str(candidate.get("captured_at") or "")
+            and str(candidate.get("collector") or "")
+            and popularity > 0
+            and float(candidate.get("lane_fit_score") or 0) >= 0.55
+            and float(candidate.get("semantic_fit_score") or 0) >= 0.55
+        )
     canonical = {str(platform or "").casefold().strip()}
     if platform in {"douyin_ai", "douyin_pet", "douyin"}:
         canonical.add("douyin")

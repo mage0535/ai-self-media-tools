@@ -87,6 +87,91 @@ def test_official_reference_is_scoring_context_not_native_identity(tmp_path):
     assert items[0]["evidence_type"] == "official_keyword"
 
 
+def test_verified_official_activity_can_enter_selection_without_native_relabel(tmp_path):
+    from content_platform.official_reference_signals import build_selection_items
+
+    matrix = {"platforms": [{
+        "platform": "kuaishou",
+        "status": "verified",
+        "signal_type": "official_creator_activity",
+        "signals": ["AI 工作流创作挑战"],
+        "official_url": "https://cp.kuaishou.com/activity",
+        "captured_at": NOW.isoformat(),
+        "expires_at": "2099-08-25T14:00:00+00:00",
+        "evidence_sha256": "a" * 64,
+    }]}
+    path = tmp_path / "overnight" / NOW.date().isoformat() / "official-platform-signal-matrix-v3.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(matrix), encoding="utf-8")
+
+    evidence, items = build_selection_items("kuaishou", ["AI", "工作流"], data_dir=tmp_path)
+
+    assert evidence["evidence_type"] == "official_activity"
+    assert len(items) == 1
+    candidate = items[0]
+    assert candidate["official_reference_only"] is False
+    assert candidate["native_verified"] is False
+    assert candidate["evidence_type"] == "official_activity"
+    sources = [{
+        "source": "kuaishou:official_signal" if index == 0 else f"support-{index}",
+        "status": "ok" if index < 5 else "empty",
+        "count": 1 if index < 5 else 0,
+        "collected_at": NOW.isoformat(),
+    } for index in range(8)]
+    prepared = build_due_tasks(
+        [{"platform": "kuaishou", "content_form": "short_video"}],
+        items=items,
+        source_report=sources,
+        rank_for_platform=lambda *_: items,
+        trend_evidence_mode="enforce",
+    )
+    assert prepared["tasks"][0]["state"] == "ready_for_plan"
+    assert prepared["tasks"][0]["brief"]["associated_hotspot"]["evidence_type"] == "official_activity"
+
+
+def test_only_strong_metric_backed_same_lane_work_enters_selection(tmp_path):
+    from content_platform.overnight_batch import build_same_lane_selection_items
+
+    pack = {
+        "platforms": {
+            "youtube": {
+                "ready": True,
+                "strong_sample_count": 1,
+                "top_samples": [
+                    {
+                        "title": "AI workflow automation tutorial",
+                        "author": "Verified creator",
+                        "views": 120000,
+                        "evidence_strength": "strong",
+                        "source": "youtube_api",
+                        "collector": "youtube_api",
+                        "url": "https://www.youtube.com/watch?v=verified",
+                        "captured_at": NOW.isoformat(),
+                    },
+                    {
+                        "title": "AI workflow unverified",
+                        "views": 0,
+                        "evidence_strength": "weak",
+                        "source": "search_snippet",
+                        "url": "https://www.youtube.com/watch?v=weak",
+                        "captured_at": NOW.isoformat(),
+                    },
+                ],
+            }
+        }
+    }
+    path = tmp_path / "hot_work_parameter_pack_latest.json"
+    path.write_text(json.dumps(pack), encoding="utf-8")
+
+    evidence, items = build_same_lane_selection_items("youtube", ["AI", "workflow"], path=path)
+
+    assert evidence["status"] == "ready"
+    assert len(items) == 1
+    assert items[0]["evidence_type"] == "same_lane_hot_work"
+    assert items[0]["points"] == 120000
+    assert items[0]["collector"] == "youtube_api"
+
+
 def test_official_reference_cannot_satisfy_native_due_task_evidence():
     candidate = _candidate(
         "wechat", "official_keyword", source="wechat:official_reference",
