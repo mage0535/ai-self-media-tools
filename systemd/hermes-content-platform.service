@@ -5,9 +5,13 @@ After=network-online.target
 [Service]
 Type=oneshot
 Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
+Environment=PYTHONPATH=%h/.ai-self-media-tools-current
+Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
+Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
+Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json
 Environment=HERMES_PLATFORM_SCRAPER=%h/.hermes/scripts/platform_scraper.py
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
-ExecStart=/bin/sh -lc '%h/.local/bin/content-platform --config %h/.ai-self-media-tools/config.json --db %h/.ai-self-media-tools/data/state.db performance-cycle --platform wechat --platform xiaohongshu --output-dir %h/.ai-self-media-tools/data/performance/daily --hermes-platform-scraper > %h/.ai-self-media-tools/data/performance/daily/auto-preflight.json && %h/.local/bin/content-platform --config %h/.ai-self-media-tools/config.json --db %h/.ai-self-media-tools/data/state.db auto --limit 3 --platform wechat --platform xiaohongshu --profile default --refresh'
+ExecStart=/bin/sh -lc '/usr/bin/python3 -m content_platform --config %h/.ai-self-media-tools/config.json --db %h/.ai-self-media-tools/data/state.db performance-cycle --platform wechat --platform xiaohongshu --output-dir %h/.ai-self-media-tools/data/performance/daily --hermes-platform-scraper > %h/.ai-self-media-tools/data/performance/daily/auto-preflight.json && /usr/bin/python3 -m content_platform --config %h/.ai-self-media-tools/config.json --db %h/.ai-self-media-tools/data/state.db auto --limit 3 --platform wechat --platform xiaohongshu --profile default --refresh'
 WorkingDirectory=%h/.ai-self-media-tools-current
 Nice=10
 MemoryMax=1200M

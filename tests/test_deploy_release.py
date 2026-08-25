@@ -43,6 +43,9 @@ def _git_source(root: Path) -> None:
     (root / "systemd" / "hermes-content-platform.service").write_text(
         "[Service]\n"
         "Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current\n"
+        "Environment=PYTHONPATH=%h/.ai-self-media-tools-current\n"
+        "Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data\n"
+        "Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets\n"
         "WorkingDirectory=%h/.ai-self-media-tools-current\n"
         "ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run.py\n",
         encoding="utf-8",

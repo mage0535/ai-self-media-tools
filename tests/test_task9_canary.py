@@ -163,6 +163,8 @@ def test_acceptance_rejects_fake_platform_set_and_requires_pipeline_evidence(tmp
     result = evaluate_acceptance(report, repo_root=ROOT)
 
     assert result["production_ready"] is False
+    assert "exact_platform_matrix_required" in result["failures"]
+    assert any(value.startswith("pipeline_evidence_missing:") for value in result["failures"])
 
 
 def test_deployment_acceptance_rejects_enabled_or_active_timer(monkeypatch, tmp_path):
@@ -197,8 +199,6 @@ def test_deployment_acceptance_rejects_enabled_or_active_timer(monkeypatch, tmp_
     result = json.loads(output.read_text(encoding="utf-8"))
     assert result["timers_safe"] is False
     assert result["production_ready"] is False
-    assert "exact_platform_matrix_required" in result["failures"]
-    assert any(value.startswith("pipeline_evidence_missing:") for value in result["failures"])
 
 
 def test_runner_calls_real_pipeline_methods_serially_and_does_not_accept_user_model_reports(tmp_path: Path):

@@ -26,6 +26,13 @@ def query_timer_states(timer_names: list[str] | None = None, systemd_runner=None
     return query_systemd_timer_states(names, runner=systemd_runner)
 
 
+def timers_are_safe(timer_states: dict[str, dict[str, object]]) -> bool:
+    return bool(timer_states) and all(
+        not bool(state.get("enabled")) and not bool(state.get("active"))
+        for state in timer_states.values()
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", required=True)
@@ -41,22 +48,26 @@ def main() -> int:
     try:
         timer_states = query_timer_states()
         timers_enabled = bool(timer_states) and all(state["enabled"] for state in timer_states.values())
+        timers_safe = timers_are_safe(timer_states)
         timer_error = ""
     except Exception as exc:
         timer_states = {}
         timers_enabled = False
+        timers_safe = False
         timer_error = str(exc)
     result = {
         "acceptance": acceptance,
         "rollback_rehearsal": rollback,
         "systemd_timers": timer_states,
         "timers_enabled": timers_enabled,
+        "timers_safe": timers_safe,
         "timer_error": timer_error,
         "deployment_performed": False,
     }
+    production_ready = acceptance["production_ready"] and rollback["passed"] and timers_safe
+    result["production_ready"] = production_ready
     Path(args.output).write_text(json.dumps(result, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    production_ready = acceptance["production_ready"] and rollback["passed"] and timers_enabled
-    print(json.dumps({"production_ready": production_ready, "rollback_passed": rollback["passed"], "timers_enabled": timers_enabled}, ensure_ascii=True))
+    print(json.dumps({"production_ready": production_ready, "rollback_passed": rollback["passed"], "timers_safe": timers_safe}, ensure_ascii=True))
     return 0 if production_ready else 2
 
 
