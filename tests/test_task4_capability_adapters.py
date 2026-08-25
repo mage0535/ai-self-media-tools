@@ -95,7 +95,7 @@ def test_methodology_unknown_rule_source_fails_contract_and_is_not_consulted():
     assert result["reason"] == "output_contract_invalid"
 
 
-def _mcp_capability(capability_id="mcp_content_search", namespace="content-search", tool="search"):
+def _mcp_capability(capability_id="mcp_content_search", namespace="content-platform", tool="content_search"):
     return next(
         item
         for item in load_capability_registry(ROOT / "config" / "creative_capability_registry.json")["capabilities"]
@@ -110,12 +110,12 @@ def test_mcp_registry_declared_tool_is_the_only_allowlist():
 
     def call(namespace, tool, payload, runtime):
         called.append((namespace, tool, payload, runtime))
-        return {"items": ["ok"]}
+        return {"_mcp_transport": "test_registered_mcp", "_mcp_session_id": "session-1", "items": ["ok"]}
 
     result = execute_capability(
         capability,
         {
-            "mcp_namespace": "content-search",
+            "mcp_namespace": "content-platform",
             "mcp_tool": "registry_only_tool",
             "mcp_input": {"query": "AI workflow"},
             "mcp_caller": call,
@@ -126,19 +126,19 @@ def test_mcp_registry_declared_tool_is_the_only_allowlist():
 
     assert "CONTENT_MCP_ALLOWLIST" not in inspect.getsource(mcp_adapter)
     assert result["status"] == "executed"
-    assert called == [("content-search", "registry_only_tool", {"query": "AI workflow"}, {"request_id": "runtime-1"})]
+    assert called == [("content-platform", "registry_only_tool", {"query": "AI workflow"}, {"request_id": "runtime-1"})]
 
 
 def test_content_mcp_allowlist_produces_sanitized_hash_evidence():
     capability = _mcp_capability()
 
     def call(namespace, tool, payload, _runtime):
-        assert (namespace, tool) == ("content-search", "search")
-        return {"items": [{"id": "result-1", "title": payload["query"]}], "secret": "do-not-leak"}
+        assert (namespace, tool) == ("content-platform", "content_search")
+        return {"_mcp_transport": "test_registered_mcp", "_mcp_session_id": "session-2", "items": [{"id": "result-1", "title": payload["query"]}], "secret": "do-not-leak"}
 
     inputs = {
-        "mcp_namespace": "content-search",
-        "mcp_tool": "search",
+        "mcp_namespace": "content-platform",
+        "mcp_tool": "content_search",
         "mcp_input": {"query": "AI workflow", "cookie": "private-cookie"},
         "mcp_caller": call,
         "affected_output": "trend_evidence",
@@ -148,8 +148,10 @@ def test_content_mcp_allowlist_produces_sanitized_hash_evidence():
 
     assert first["status"] == "executed"
     evidence = first["output"]
-    assert evidence["server_name"] == "content-search"
-    assert evidence["tool_name"] == "search"
+    assert evidence["server_name"] == "content-platform"
+    assert evidence["tool_name"] == "content_search"
+    assert evidence["transport"] == "test_registered_mcp"
+    assert evidence["session_id"] == "session-2"
     assert evidence["status"] == "executed"
     assert evidence["affected_output"] == "trend_evidence"
     assert evidence["input_hash"].startswith("sha256:")
@@ -179,12 +181,12 @@ def test_mcp_rejects_trading_namespace_without_calling_it():
 
 
 def test_mcp_unavailable_and_timeout_preserve_truthful_fallback_evidence():
-    capability = _mcp_capability(capability_id="mcp_memory_context", namespace="memory-context", tool="retrieve")
+    capability = _mcp_capability(capability_id="mcp_memory_context", namespace="content-platform", tool="memory_context")
     unavailable = execute_capability(
         capability,
         {
-            "mcp_namespace": "memory-context",
-            "mcp_tool": "retrieve",
+            "mcp_namespace": "content-platform",
+            "mcp_tool": "memory_context",
             "mcp_input": {"query": "prior context"},
             "affected_output": "memory_context",
         },
@@ -202,8 +204,8 @@ def test_mcp_unavailable_and_timeout_preserve_truthful_fallback_evidence():
     timeout = execute_capability(
         capability,
         {
-            "mcp_namespace": "memory-context",
-            "mcp_tool": "retrieve",
+            "mcp_namespace": "content-platform",
+            "mcp_tool": "memory_context",
             "mcp_input": {"query": "prior context"},
             "mcp_caller": slow_call,
             "mcp_timeout_seconds": 0.001,
@@ -216,8 +218,8 @@ def test_mcp_unavailable_and_timeout_preserve_truthful_fallback_evidence():
     fallback = execute_capability(
         capability,
         {
-            "mcp_namespace": "memory-context",
-            "mcp_tool": "retrieve",
+            "mcp_namespace": "content-platform",
+            "mcp_tool": "memory_context",
             "mcp_input": {"query": "prior context"},
             "mcp_caller": slow_call,
             "mcp_timeout_seconds": 0.001,
@@ -256,7 +258,7 @@ def test_capability_runtime_injects_mcp_caller_and_runtime_context():
 
     def caller(namespace, tool, payload, runtime):
         calls.append((namespace, tool, payload, runtime))
-        return {"recipe": "verified"}
+        return {"_mcp_transport": "test_registered_mcp", "_mcp_session_id": "session-3", "recipe": "verified"}
 
     runtime = {"request_id": "runtime-2"}
     result = execute_generation_capabilities(
@@ -272,7 +274,26 @@ def test_capability_runtime_injects_mcp_caller_and_runtime_context():
 
     evidence = [item for item in result["executed"] if item["capability_id"] == "mcp_ai_self_media_content"]
     assert len(evidence) == 1
-    assert calls == [("ai-self-media", "build_content_recipe", {"query": "AI workflow"}, runtime)]
+    assert calls == [("content-platform", "build_content_recipe", {"query": "AI workflow"}, runtime)]
+
+
+def test_capability_runtime_uses_the_checked_in_registered_mcp_by_default():
+    result = execute_generation_capabilities(
+        {"title": "AI workflow", "body": "A practical workflow body with three concrete sections."},
+        {
+            "content_profile": {"content_format": "article", "platform": "juejin"},
+            "platform": "juejin",
+            "content_blueprint": {
+                "platform": "juejin", "title": "AI workflow", "body": "A practical workflow body.",
+                "content_form": "article", "sections": ["problem", "method", "proof"],
+            },
+        },
+    )
+
+    evidence = next(item for item in result["executed"] if item["capability_id"] == "mcp_ai_self_media_content")
+    assert evidence["output"]["server_name"] == "content-platform"
+    assert evidence["output"]["transport"] == "in_process_registered_mcp"
+    assert evidence["output"]["session_id"]
 
 
 def test_fallback_never_becomes_executed_or_artifact_verified_and_required_fails_closed():

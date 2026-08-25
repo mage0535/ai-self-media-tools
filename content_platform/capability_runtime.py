@@ -93,19 +93,20 @@ def _build_runtime_context(brief: dict) -> dict:
 
 
 def _project_mcp_caller(brief: dict):
-    """Dispatch the checked-in content MCP namespaces without model-selected tools."""
+    """Invoke only handlers registered by the checked-in content MCP server."""
     def call(namespace, tool, payload, _runtime=None):
-        if (namespace, tool) == ("content-search", "search"):
-            from .adapters.search import execute
+        if namespace != "content-platform":
+            raise ValueError("unsupported content MCP namespace")
+        from .mcp_server import invoke_registered_tool
+        if tool == "content_search":
             documents = []
             for key in ("same_lane_intelligence", "hot_work_parameter_pack", "historical_feedback"):
                 value = brief.get(key)
                 if isinstance(value, dict):
                     documents.append({"id": key, "title": key, "text": str(value)[:4000]})
-            return execute({"query": (payload or {}).get("query", ""), "documents": documents})
-        if (namespace, tool) == ("memory-context", "retrieve"):
-            return {
-                "version": "memory_context_v1",
+            return invoke_registered_tool("content_search", {"query": (payload or {}).get("query", ""), "documents": __import__("json").dumps(documents, ensure_ascii=False)})
+        if tool == "memory_context":
+            context = {
                 "historical_feedback": brief.get("historical_feedback") or {},
                 "compiled_skill_rule_ids": [
                     str(row.get("id") or "")
@@ -113,12 +114,9 @@ def _project_mcp_caller(brief: dict):
                     if isinstance(row, dict) and row.get("id")
                 ][:64],
             }
-        if (namespace, tool) == ("ai-self-media", "build_content_recipe"):
-            return {
-                "version": "content_recipe_context_v1",
-                "content_blueprint": brief.get("content_blueprint") or {},
-                "tool_selection_plan": brief.get("tool_selection_plan") or {},
-                "strategy": brief.get("compiled_strategy") or brief.get("strategy") or {},
-            }
+            return invoke_registered_tool("memory_context", {"context": __import__("json").dumps(context, ensure_ascii=False)})
+        if tool == "build_content_recipe":
+            packet = {"platform": brief.get("platform") or "", **(brief.get("content_blueprint") or {})}
+            return invoke_registered_tool("build_content_recipe", {"packet": __import__("json").dumps(packet, ensure_ascii=False), "platform": packet["platform"]})
         raise ValueError("unsupported content MCP namespace/tool")
     return call
