@@ -53,8 +53,8 @@ def test_juejin_blocks_incomplete_article_before_api_call():
 
 def test_juejin_accepts_complete_public_image_package_to_draft(tmp_path):
     publisher = JuejinPublisher()
-    with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
-        publisher, "_api", return_value={
+    create = {"err_no": 0, "data": {"id": "draft-1"}}
+    detail = {
             "err_no": 0,
             "data": {
                 "id": "draft-1",
@@ -63,12 +63,14 @@ def test_juejin_accepts_complete_public_image_package_to_draft(tmp_path):
                 "mapping_count": 3,
             },
         }
+    with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
+        publisher, "_api", side_effect=[create, detail]
     ) as api:
         result = publisher.deliver(_article_job(tmp_path, public_images=True), "juejin")
 
     assert result.ok is True
     assert result.status == "drafted"
-    api.assert_called_once()
+    assert api.call_count == 2
 
 
 def test_zhihu_blocks_incomplete_article_before_cookie_lookup():

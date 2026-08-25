@@ -402,7 +402,7 @@ class Pipeline:
                     risk["level"] = "review"
                 if risk["level"] == "block":
                     runner.block("run_safety_gate", "safety_gate_blocked", "content safety gate blocked this job", risk)
-                gate = self._quality_gate(job_id, draft, risk, geo, phase="generation")
+                gate = self._quality_gate(job_id, draft, risk, geo, phase="generation", platforms=job.get("platforms"))
                 draft["draft_meta"]["geo_score"] = geo["score"]
                 draft["draft_meta"]["geo_details"] = geo
                 draft["draft_meta"]["quality_gate"] = gate
@@ -452,7 +452,7 @@ class Pipeline:
                     artifact = self._generate_optional_media(job_id, kind, runner, ["validate_image_requirements"])
                     if kind == "video" and artifact:
                         self._attach_video_render_evidence(draft, artifact)
-                final_gate = self._quality_gate(job_id, draft, risk, geo, phase="rendered")
+                final_gate = self._quality_gate(job_id, draft, risk, geo, phase="rendered", platforms=job.get("platforms"))
                 draft["draft_meta"]["quality_gate"] = final_gate
                 if self.require_gate_pass and not final_gate.get("passed", True):
                     runner.block(
@@ -823,6 +823,8 @@ class Pipeline:
             # public URLs only at delivery time so the publisher receives the
             # same versioned article media contract that was generated.
             contract_path = self.data_dir / "artifacts" / str(job.get("id") or "") / "article_media_contract.json"
+            if not contract_path.is_file():
+                return DeliveryResult(False, "blocked", error="juejin article media contract missing")
             if contract_path.is_file():
                 try:
                     contract = json.loads(contract_path.read_text(encoding="utf-8"))
@@ -856,8 +858,8 @@ class Pipeline:
                         payload["public_inline_image_urls"] = inline
                         delivery_job["platform_payload"] = payload
                     job = delivery_job
-                except (OSError, json.JSONDecodeError):
-                    pass
+                except (OSError, json.JSONDecodeError) as exc:
+                    return DeliveryResult(False, "blocked", error=f"juejin article media contract unreadable:{type(exc).__name__}")
         intent = intent or self.publication_ledger.create_delivery_intent(self._delivery_intent_payload(platform, job, action))
         intent_id = intent["intent_id"]
         if intent.get("status") == "unknown_requires_review":
@@ -1094,14 +1096,14 @@ class Pipeline:
             runner.block("validate_image_requirements", "image_gate_failed", "required image validation failed", gate, depends_on=["generate_or_collect_images"])
         runner.succeeded("validate_image_requirements", gate, depends_on=["generate_or_collect_images"])
 
-    def _quality_gate(self, job_id, draft, risk, geo, *, phase="rendered"):
+    def _quality_gate(self, job_id, draft, risk, geo, *, phase="rendered", platforms=None):
         if phase == "rendered":
             self._recover_video_render_evidence(job_id, draft)
         dm = draft.get("draft_meta", {})
         gate = {"passed": True, "gates": {}}
         g1 = risk.get("level", "pass") != "block"
         gate["gates"]["G1_risk_compliance"] = {"passed": g1, "level": risk.get("level", "pass")}
-        platforms = dm.get("strategy", {}).get("primary_platforms", [])
+        platforms = list(platforms or dm.get("strategy", {}).get("primary_platforms", []))
         short_video = (
             str(dm.get("content_form") or "").casefold() in {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video", "short_post", "micro_post", "tweet"}
             or bool({str(platform).casefold() for platform in platforms} & (SHORT_VIDEO_PLATFORMS | {"twitter", "x", "threads", "bluesky"}))
