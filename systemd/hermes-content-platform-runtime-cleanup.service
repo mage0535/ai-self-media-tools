@@ -5,6 +5,7 @@ After=local-fs.target
 [Service]
 Type=oneshot
 Environment=HOME=%h
-ExecStart=/usr/bin/python3 %h/.ai-self-media-tools/scripts/cleanup_runtime_artifacts.py --data-dir %h/.ai-self-media-tools/data --retention-days 14 --apply
-WorkingDirectory=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
+ExecStart=/usr/bin/python3 %h/.ai-self-media-tools-current/scripts/cleanup_runtime_artifacts.py --data-dir %h/.ai-self-media-tools/data --retention-days 14 --apply
+WorkingDirectory=%h/.ai-self-media-tools-current
 MemoryMax=256M

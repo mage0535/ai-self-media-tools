@@ -4,11 +4,11 @@ After=network-online.target china-tunnel.service hermes-us-proxy.service
 
 [Service]
 Type=oneshot
-Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
-Environment=PYTHONPATH=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
+Environment=PYTHONPATH=%h/.ai-self-media-tools-current
 Environment=SOCIAL_AUTO_UPLOAD_HOME=%h/social-auto-upload
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
 ExecStart=/usr/bin/python3 -m content_platform --config %h/.ai-self-media-tools/config.json --db %h/.ai-self-media-tools/data/state.db health-refresh
-WorkingDirectory=%h/.ai-self-media-tools
+WorkingDirectory=%h/.ai-self-media-tools-current
 MemoryMax=512M
 TimeoutStartSec=300

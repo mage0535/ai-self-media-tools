@@ -4,8 +4,7 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
-Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
 ExecStart=%h/.local/bin/content-platform maintenance --retention-days 14
-WorkingDirectory=%h/.ai-self-media-tools
+WorkingDirectory=%h/.ai-self-media-tools-current
 MemoryMax=256M
-

@@ -32,6 +32,13 @@ from scripts.runtime_release_audit import (
 from content_platform.cli import load_config
 
 CURRENT_LINK_NAME = ".ai-self-media-tools-current"
+SYSTEMD_CURRENT_ROOT = "%h/.ai-self-media-tools-current"
+SYSTEMD_MUTABLE_ROOT = "%h/.ai-self-media-tools"
+SYSTEMD_UNIT_PREFIXES = ("ai-self-media", "hermes-content-platform")
+
+
+def default_systemd_unit_dir() -> Path:
+    return Path.home() / ".config" / "systemd" / "user"
 
 
 @contextlib.contextmanager
@@ -109,6 +116,183 @@ def _activate(current_link: Path, release_root: Path) -> None:
     finally:
         if temporary.is_symlink() or temporary.exists():
             temporary.unlink()
+
+
+def _systemd_run(argv: list[str], runner=None, *, allow_failure: bool = False):
+    command = ["systemctl", "--user", *argv]
+    result = runner(command) if runner is not None else subprocess.run(command, capture_output=True, text=True)
+    if result.returncode and not allow_failure:
+        detail = (getattr(result, "stderr", "") or getattr(result, "stdout", "")).strip()
+        raise ReleaseAuditError(f"systemd command failed ({' '.join(command)}): {detail}")
+    return result
+
+
+def _systemd_unit_paths(release_root: Path) -> tuple[list[Path], list[Path]]:
+    unit_root = release_root / "systemd"
+    if not unit_root.is_dir():
+        raise ReleaseAuditError(f"release systemd directory does not exist: {unit_root}")
+    services = sorted(
+        path for path in unit_root.glob("*.service") if path.stem.startswith(SYSTEMD_UNIT_PREFIXES)
+    )
+    timers = sorted(
+        path for path in unit_root.glob("*.timer") if path.stem.startswith(SYSTEMD_UNIT_PREFIXES)
+    )
+    if not services or not timers:
+        raise ReleaseAuditError("release systemd units must include at least one service and timer")
+    return services, timers
+
+
+def _validate_systemd_unit(path: Path, text: str) -> None:
+    required = (
+        f"WorkingDirectory={SYSTEMD_CURRENT_ROOT}",
+        f"Environment=CONTENT_PLATFORM_HOME={SYSTEMD_CURRENT_ROOT}",
+    )
+    missing = [value for value in required if value not in text]
+    if missing:
+        raise ReleaseAuditError(f"systemd unit {path.name} is missing current release paths: {', '.join(missing)}")
+    lines = text.splitlines()
+    forbidden = {
+        f"WorkingDirectory={SYSTEMD_MUTABLE_ROOT}",
+        f"Environment=CONTENT_PLATFORM_HOME={SYSTEMD_MUTABLE_ROOT}",
+        f"Environment=PYTHONPATH={SYSTEMD_MUTABLE_ROOT}",
+    }
+    if any(line in forbidden for line in lines):
+        raise ReleaseAuditError(f"systemd unit {path.name} still points code at the mutable runtime root")
+    if any(line.startswith("ExecStart=") and f"{SYSTEMD_MUTABLE_ROOT}/scripts/" in line for line in lines):
+        raise ReleaseAuditError(f"systemd unit {path.name} still points a script at the mutable runtime root")
+    for line in lines:
+        if line.startswith("Environment=CONTENT_PLATFORM_DATA_DIR=") or line.startswith("Environment=CONTENT_PLATFORM_SECRETS_DIR="):
+            if SYSTEMD_CURRENT_ROOT in line:
+                raise ReleaseAuditError(f"systemd unit {path.name} points mutable runtime data at the release root")
+
+
+def _install_systemd_units(release_root: Path, unit_dir: Path, runner=None) -> tuple[list[str], list[str]]:
+    services, timers = _systemd_unit_paths(release_root)
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    for path in [*services, *timers]:
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".service":
+            _validate_systemd_unit(path, text)
+        destination = unit_dir / path.name
+        shutil.copy2(path, destination)
+        destination.chmod(0o644)
+    _systemd_run(["daemon-reload"], runner)
+    return [path.name for path in services], [path.name for path in timers]
+
+
+def _timer_enabled(timer: str, runner=None) -> bool:
+    result = _systemd_run(["is-enabled", timer], runner, allow_failure=True)
+    if result.returncode not in (0, 1, 3):
+        raise ReleaseAuditError(f"could not inspect systemd timer state: {timer}")
+    return result.returncode == 0
+
+
+def query_systemd_timer_states(timer_names: list[str], runner=None) -> dict[str, dict[str, object]]:
+    states = {}
+    for timer in timer_names:
+        enabled_result = _systemd_run(["is-enabled", timer], runner, allow_failure=True)
+        active_result = _systemd_run(["is-active", timer], runner, allow_failure=True)
+        if enabled_result.returncode not in (0, 1, 3) or active_result.returncode not in (0, 1, 3):
+            raise ReleaseAuditError(f"could not inspect systemd timer state: {timer}")
+        states[timer] = {
+            "enabled": enabled_result.returncode == 0,
+            "active": active_result.returncode == 0,
+            "enabled_state": (getattr(enabled_result, "stdout", "") or "").strip() or "unknown",
+            "active_state": (getattr(active_result, "stdout", "") or "").strip() or "unknown",
+        }
+    return states
+
+
+def _disable_systemd_timers(timer_names: list[str], runner=None) -> None:
+    if timer_names:
+        _systemd_run(["disable", "--now", *timer_names], runner)
+
+
+def _restore_systemd_timers(timer_states: dict[str, dict[str, object]], runner=None) -> None:
+    for timer, state in timer_states.items():
+        if state["enabled"]:
+            _systemd_run(["enable", "--now", timer], runner)
+
+
+def _verify_effective_systemd_units(
+    release_root: Path,
+    unit_dir: Path,
+    service_names: list[str],
+    runner=None,
+) -> None:
+    for name in service_names:
+        path = unit_dir / name
+        text = path.read_text(encoding="utf-8")
+        _validate_systemd_unit(path, text)
+        result = _systemd_run(
+            ["show", name, "--property=ExecStart", "--property=WorkingDirectory", "--property=Environment"],
+            runner,
+        )
+        values = {}
+        for line in (getattr(result, "stdout", "") or "").splitlines():
+            key, separator, value = line.partition("=")
+            if separator:
+                values[key] = value
+        if values.get("WorkingDirectory") != SYSTEMD_CURRENT_ROOT:
+            raise ReleaseAuditError(f"systemd unit {name} has the wrong effective WorkingDirectory")
+        environment = values.get("Environment", "")
+        if f"CONTENT_PLATFORM_HOME={SYSTEMD_CURRENT_ROOT}" not in environment:
+            raise ReleaseAuditError(f"systemd unit {name} has the wrong effective CONTENT_PLATFORM_HOME")
+        if f"{SYSTEMD_MUTABLE_ROOT}/scripts/" in values.get("ExecStart", ""):
+            raise ReleaseAuditError(f"systemd unit {name} has a stale effective script path")
+        if "/scripts/" in text and SYSTEMD_CURRENT_ROOT not in values.get("ExecStart", ""):
+            raise ReleaseAuditError(f"systemd unit {name} did not resolve its script from the current release")
+
+
+def _prepare_systemd_switch(
+    release_root: Path,
+    unit_dir: Path,
+    runner=None,
+) -> tuple[list[str], list[str], dict[str, dict[str, object]]]:
+    services, timers = _install_systemd_units(release_root, unit_dir, runner)
+    timer_states = query_systemd_timer_states(timers, runner)
+    _disable_systemd_timers(timers, runner)
+    return services, timers, timer_states
+
+
+def _finish_systemd_switch(
+    release_root: Path,
+    unit_dir: Path,
+    service_names: list[str],
+    timer_states: dict[str, dict[str, object]],
+    runner=None,
+) -> None:
+    _systemd_run(["daemon-reload"], runner)
+    _verify_effective_systemd_units(release_root, unit_dir, service_names, runner)
+    _restore_systemd_timers(timer_states, runner)
+
+
+def _systemd_switch(
+    release_root: Path,
+    unit_dir: Path | str | None,
+    runner=None,
+    activate=None,
+    current: Path | None = None,
+    previous_release: Path | None = None,
+) -> dict:
+    if unit_dir is None:
+        if activate is not None:
+            activate(current, release_root)
+        return {"verified": False, "skipped": True}
+    unit_path = Path(unit_dir).expanduser().resolve()
+    services, timers, timer_states = _prepare_systemd_switch(release_root, unit_path, runner)
+    switched = False
+    try:
+        if activate is not None:
+            activate(current, release_root)
+            switched = True
+        _finish_systemd_switch(release_root, unit_path, services, timer_states, runner)
+    except Exception:
+        if switched and activate is not None and previous_release is not None:
+            activate(current, previous_release)
+        _restore_systemd_timers(timer_states, runner)
+        raise
+    return {"verified": True, "services": services, "timers": timers, "timer_states": timer_states}
 
 
 def _validate_runtime_config(config_path: Path, release_root: Path, data_root: Path, secrets_root: Path) -> None:
@@ -384,6 +568,8 @@ def deploy_release(
     project_audit_report: Path | str | None = None,
     min_tests: int = 900,
     evidence_runner=None,
+    systemd_unit_dir: Path | str | None = None,
+    systemd_runner=None,
 ) -> dict:
     """Deploy one clean source revision while holding the runtime release lock."""
     _validate_raw_path(source_root, "source_root")
@@ -479,7 +665,15 @@ def deploy_release(
                 else:
                     os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = previous_secrets
             _freeze_release(release)
-            _activate(current, release)
+            previous_release = current.resolve() if current.is_symlink() else None
+            systemd = _systemd_switch(
+                release,
+                systemd_unit_dir,
+                systemd_runner,
+                activate=_activate,
+                current=current,
+                previous_release=previous_release,
+            )
             return {
                 "ok": True,
                 "release_root": str(release),
@@ -487,6 +681,7 @@ def deploy_release(
                 "attestation_path": str(attestation),
                 "signing_key_path": str(signing_key_path),
                 "commit": commit,
+                "systemd": systemd,
             }
         except Exception:
             if release.exists() and not release.is_symlink():
@@ -507,6 +702,8 @@ def rollback_release(
     data_root: Path | str,
     signing_key: Path | str | None = None,
     secrets_root: Path | str | None = None,
+    systemd_unit_dir: Path | str | None = None,
+    systemd_runner=None,
 ) -> dict:
     """Verify an audited frozen release and atomically activate it as current."""
     _validate_raw_path(target_release, "target_release")
@@ -537,7 +734,15 @@ def rollback_release(
                 os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
             else:
                 os.environ["CONTENT_PLATFORM_CODE_ROOT"] = previous_root
-        _activate(current, target)
+        previous_release = current.resolve() if current.is_symlink() else None
+        systemd = _systemd_switch(
+            target,
+            systemd_unit_dir,
+            systemd_runner,
+            activate=_activate,
+            current=current,
+            previous_release=previous_release,
+        )
         return {
             "ok": True,
             "operation": "rollback",
@@ -545,6 +750,7 @@ def rollback_release(
             "metadata_path": str(metadata_path),
             "attestation_path": metadata["attestation_path"],
             "commit": metadata["commit"],
+            "systemd": systemd,
         }
 
 
@@ -564,6 +770,7 @@ def main() -> int:
     parser.add_argument("--signing-key")
     parser.add_argument("--project-audit-report")
     parser.add_argument("--min-tests", type=int, default=900)
+    parser.add_argument("--systemd-unit-dir", default=str(default_systemd_unit_dir()))
     args = parser.parse_args()
     if args.operation == "init-signing-key":
         if not args.secrets_root:
@@ -583,6 +790,7 @@ def main() -> int:
             data_root=args.data_root,
             signing_key=args.signing_key,
             secrets_root=args.secrets_root,
+            systemd_unit_dir=args.systemd_unit_dir or None,
         )
     elif args.operation == "attest-existing":
         required = {
@@ -630,6 +838,7 @@ def main() -> int:
             signing_key=args.signing_key,
             project_audit_report=args.project_audit_report,
             min_tests=args.min_tests,
+            systemd_unit_dir=args.systemd_unit_dir or None,
         )
     print(result)
     return 0

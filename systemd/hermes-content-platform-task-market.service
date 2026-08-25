@@ -4,9 +4,9 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
 ExecStart=%h/.local/bin/content-platform task-market-auto --env cn --page-size 20
-WorkingDirectory=%h/.ai-self-media-tools
+WorkingDirectory=%h/.ai-self-media-tools-current
 Nice=10
 MemoryMax=768M
 CPUQuota=120%
