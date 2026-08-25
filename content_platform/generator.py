@@ -340,7 +340,11 @@ class DraftGenerator:
         if not match:
             return ""
         code = match.group(1)
-        return "provider_auth_failed" if code in {"401", "403"} else f"provider_http_{code}"
+        if code in {"401", "403"}:
+            return "provider_auth_failed"
+        if code == "429":
+            return "provider_429"
+        return "provider_5xx"
 
     def _style_guide(self, limit=5000):
         path = Path(self.config.get("style_guide_path", str(style_guide_path())))
@@ -976,42 +980,68 @@ class DraftGenerator:
             self.config.get("sleep", time.sleep)(0.05)
         stdout, stderr = proc.communicate()
         finished = clock()
+        attempt = 2 if retry else 1
+        prompt_evidence = {
+            "prompt_hash": compiled["sha256"],
+            "prompt_length": len(prompt),
+            "started_at": started,
+            "finished_at": finished,
+        }
         if proc.returncode != 0:
-            error_class = "provider_error"
-            self._write_generation_checkpoint(self._checkpoint_payload(
-                attempt=2 if retry else 1, status="provider_error", error_class=error_class,
-                prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
-            ))
-        self._record_generation_attempt(self._checkpoint_payload(
-            attempt=2 if retry else 1, status="success" if proc.returncode == 0 else "provider_error",
-            error_class="" if proc.returncode == 0 else "provider_error",
-            prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
-        ))
-        if proc.returncode != 0:
+            error_text = stdout or stderr
+            is_transient = self._is_transient_provider_error(error_text)
+            error_class = self._transient_error_class(error_text) if is_transient else self._persistent_error_class(error_text)
+            status = "transient_provider_error" if is_transient else "provider_error"
+            payload = self._checkpoint_payload(attempt=attempt, status=status, error_class=error_class, **prompt_evidence)
+            self._write_generation_checkpoint(payload)
+            self._record_generation_attempt(payload)
             if self._is_transient_provider_error(stdout or stderr):
                 raise RuntimeError("transient provider error")
             raise RuntimeError("Hermes generation command failed")
         content = self._bounded_provider_content(stdout, brief).strip()
         provider_error = self._provider_error(content)
         if provider_error:
-            finished = clock()
-            self._write_generation_checkpoint(self._checkpoint_payload(
-                attempt=2 if retry else 1, status="provider_error", error_class="provider_error",
-                prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
-            ))
-            if provider_error.startswith("provider_http_5") or provider_error == "provider_http_429":
+            status = "transient_provider_error" if provider_error in {"provider_429", "provider_5xx"} else "provider_error"
+            payload = self._checkpoint_payload(attempt=attempt, status=status, error_class=provider_error, **prompt_evidence)
+            self._write_generation_checkpoint(payload)
+            self._record_generation_attempt(payload)
+            if status == "transient_provider_error":
                 raise RuntimeError("transient provider error")
             raise ProviderAuthError(provider_error)
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
-        draft = self._coerce_provider_draft(content, topic)
+        try:
+            draft = self._coerce_provider_draft(content, topic)
+        except ValueError:
+            payload = self._checkpoint_payload(attempt=attempt, status="provider_error", error_class="invalid_json", **prompt_evidence)
+            self._write_generation_checkpoint(payload)
+            self._record_generation_attempt(payload)
+            raise
         if not draft.get("title") or not draft.get("body"):
+            payload = self._checkpoint_payload(attempt=attempt, status="provider_error", error_class="invalid_json", **prompt_evidence)
+            self._write_generation_checkpoint(payload)
+            self._record_generation_attempt(payload)
             raise ValueError("Hermes returned an incomplete draft")
-        self._write_generation_checkpoint(self._checkpoint_payload(
-            attempt=2 if retry else 1, status="success", error_class="",
-            prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
-        ))
+        payload = self._checkpoint_payload(attempt=attempt, status="success", error_class="", **prompt_evidence)
+        self._write_generation_checkpoint(payload)
+        self._record_generation_attempt(payload)
         return self._normalize(draft, context, "hermes-cli", topic, brief)
+
+    @staticmethod
+    def _transient_error_class(content):
+        text = str(content or "").casefold()
+        if "429" in text or "rate limit" in text:
+            return "provider_429"
+        if any(code in text for code in ("500", "502", "503", "504", "5xx")):
+            return "provider_5xx"
+        return "provider_error"
+
+    @staticmethod
+    def _persistent_error_class(content):
+        text = str(content or "").casefold()
+        if any(marker in text for marker in ("permission denied", "access denied", "permissionerror")):
+            return "permission_denied"
+        return "provider_error"
 
     def _is_transient_provider_error(self, content):
         text = str(content or "").casefold()
@@ -1029,11 +1059,16 @@ class DraftGenerator:
             except (OSError, ValueError):
                 previous = {}
         transitions = list(previous.get("transitions") or [])
-        previous_status = previous.get("status")
-        if previous_status != payload.get("status"):
-            transitions.append({"status": payload.get("status"), "at": payload.get("heartbeat_at") or payload.get("finished_at")})
+        transitions.append({
+            "attempt": payload.get("attempt"),
+            "status": payload.get("status"),
+            "error_class": payload.get("error_class", ""),
+            "started_at": payload.get("started_at"),
+            "finished_at": payload.get("finished_at"),
+            "at": payload.get("heartbeat_at") or payload.get("finished_at"),
+        })
         payload = dict(payload)
-        payload["transitions"] = transitions[-8:]
+        payload["transitions"] = transitions
         fd, temp_name = tempfile.mkstemp(prefix="generation_checkpoint.", suffix=".tmp", dir=directory)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
