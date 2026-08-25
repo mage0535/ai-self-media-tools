@@ -21,6 +21,7 @@ def _write(path: Path, value: str | bytes) -> Path:
 
 def test_canary_matrix_is_serial_and_covers_required_platform_forms_and_languages():
     from scripts.task9_canary import EXPECTED_CANARY_PLATFORMS, build_canary_matrix
+    from content_platform.associated_hotspot import load_hotspot_support_matrix
 
     matrix = build_canary_matrix()
 
@@ -31,7 +32,13 @@ def test_canary_matrix_is_serial_and_covers_required_platform_forms_and_language
     assert {case["language"] for case in matrix} >= {"zh", "en"}
     assert any(case["delivery_policy"] == "manual_handoff_only" for case in matrix)
     assert any(case["dry_run"] for case in matrix)
-    assert all(case["hotspot_mode"] == "official_native" for case in matrix)
+    support_matrix = load_hotspot_support_matrix()
+    for case in matrix:
+        record = support_matrix["platforms"][case["platform"]]
+        contract = case["hotspot_contract"]
+        assert contract["allowed_evidence_types"] == record["allowed_evidence_types"]
+        assert contract["allowed_association_modes"] == record["allowed_association_modes"]
+        assert "official_native" not in contract["allowed_evidence_types"]
     assert all(case["entrypoint_kind"] == "pipeline" for case in matrix)
 
 
@@ -55,15 +62,18 @@ def test_hotspot_provenance_uses_external_snapshot_and_rejects_tampering(tmp_pat
         "platform": "kuaishou", "native_source_url": "https://www.kuaishou.com/hot",
         "observed_title": "DeepSeek", "fetched_at": "2026-08-25T00:00:00Z", "status": 200,
         "snapshot_path": snapshot_rel, "snapshot_sha256": snapshot_hash, "provenance_hash": provenance_hash,
+        "evidence_type": "native", "native_verified": True, "association_mode": "auto_browser",
     }))
     hotspot = _load_verified_hotspot(tmp_path, case)
     manifest = {
         "hotspot": hotspot,
         "source_evidence": [{
             "platform": "kuaishou",
-            "url": hotspot["source_url"],
-            "title": hotspot["observed_title"],
-            "provenance_hash": hotspot["provenance_hash"],
+                "url": hotspot["source_url"],
+                "title": hotspot["observed_title"],
+                "evidence_type": hotspot["evidence_type"],
+                "association_mode": hotspot["association_mode"],
+                "provenance_hash": hotspot["provenance_hash"],
         }],
     }
 
@@ -74,6 +84,62 @@ def test_hotspot_provenance_uses_external_snapshot_and_rejects_tampering(tmp_pat
     result = _validate_hotspot_provenance(case, tampered)
     assert result["passed"] is False
     assert "hotspot_source_provenance_not_independently_verified" in result["failures"]
+
+
+def test_official_activity_is_verified_without_being_relabelled_native(tmp_path: Path):
+    from scripts.task9_canary import _hotspot_source_hash, _load_verified_hotspot, _validate_hotspot_provenance
+
+    case = {"platform": "xiaohongshu", "delivery_policy": "manual_handoff_only"}
+    snapshot = _write(tmp_path / "_inputs" / "hotspots" / "xiaohongshu.txt", "官方活动 AI 效率挑战")
+    snapshot_rel = "hotspots/xiaohongshu.txt"
+    snapshot_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    provenance_hash = _hotspot_source_hash(
+        "xiaohongshu", "https://www.xiaohongshu.com/explore/activity", "AI 效率挑战",
+        fetched_at="2026-08-25T00:00:00Z", status=200,
+        snapshot_path=snapshot_rel, snapshot_sha256=snapshot_hash,
+    )
+    _write(tmp_path / "_inputs" / "hotspots" / "xiaohongshu.json", json.dumps({
+        "platform": "xiaohongshu", "source_url": "https://www.xiaohongshu.com/explore/activity",
+        "observed_title": "AI 效率挑战", "fetched_at": "2026-08-25T00:00:00Z", "status": 200,
+        "snapshot_path": snapshot_rel, "snapshot_sha256": snapshot_hash, "provenance_hash": provenance_hash,
+        "evidence_type": "official_activity", "native_verified": False, "association_mode": "manual_handoff",
+    }))
+
+    hotspot = _load_verified_hotspot(tmp_path, case)
+    assert hotspot["evidence_type"] == "official_activity"
+    assert hotspot["native_verified"] is False
+    assert hotspot["mode"] == "official_activity"
+    manifest = {
+        "hotspot": hotspot,
+        "source_evidence": [{
+            "platform": "xiaohongshu", "url": hotspot["source_url"], "title": hotspot["observed_title"],
+            "evidence_type": "official_activity", "association_mode": "manual_handoff",
+            "provenance_hash": hotspot["provenance_hash"],
+        }],
+    }
+    assert _validate_hotspot_provenance(case, manifest)["passed"] is True
+
+
+def test_hotspot_evidence_type_and_association_mode_must_match_matrix(tmp_path: Path):
+    from scripts.task9_canary import _hotspot_source_hash, _load_verified_hotspot
+
+    snapshot = _write(tmp_path / "_inputs" / "hotspots" / "xiaohongshu.txt", "official activity")
+    snapshot_rel = "hotspots/xiaohongshu.txt"
+    snapshot_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    provenance_hash = _hotspot_source_hash(
+        "xiaohongshu", "https://www.xiaohongshu.com/activity", "official activity",
+        fetched_at="2026-08-25T00:00:00Z", status=200,
+        snapshot_path=snapshot_rel, snapshot_sha256=snapshot_hash,
+    )
+    _write(tmp_path / "_inputs" / "hotspots" / "xiaohongshu.json", json.dumps({
+        "platform": "xiaohongshu", "source_url": "https://www.xiaohongshu.com/activity",
+        "observed_title": "official activity", "fetched_at": "2026-08-25T00:00:00Z", "status": 200,
+        "snapshot_path": snapshot_rel, "snapshot_sha256": snapshot_hash, "provenance_hash": provenance_hash,
+        "evidence_type": "native", "native_verified": True, "association_mode": "auto_api",
+    }))
+
+    with pytest.raises(ValueError, match="hotspot_evidence_type_not_allowed|hotspot_association_mode_not_allowed"):
+        _load_verified_hotspot(tmp_path, {"platform": "xiaohongshu", "delivery_policy": "manual_handoff_only"})
 
 
 def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Path):
@@ -116,6 +182,28 @@ def test_runtime_identity_requires_successful_cli_output_not_environment_fallbac
     assert runtime["active"]["provider"] == ""
     assert runtime["active"]["model"] == ""
     assert runtime["weak"]["status"] == "dual_model_pending"
+
+
+def test_runtime_identity_uses_hermes_config_and_same_provider_cache(tmp_path: Path, monkeypatch):
+    from scripts import task9_canary
+
+    _write(tmp_path / "provider_models_cache.json", json.dumps({
+        "opencode-go": {"models": ["mimo-v2.5", "ox-alpha-free", "deepseek-v4-flash"]},
+    }))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setattr(task9_canary.shutil, "which", lambda _: "/usr/bin/hermes")
+    monkeypatch.setattr(task9_canary, "_hermes_help", lambda _: "--provider PROVIDER --model MODEL")
+    monkeypatch.setattr(task9_canary, "_hermes_text", lambda command: (
+        "Model: {'default': 'mimo-v2.5', 'provider': 'opencode-go'}\n"
+        if command[1:] == ["config", "show"] else ""
+    ))
+
+    runtime = task9_canary.discover_hermes_runtime()
+
+    assert runtime["active"]["provider"] == "opencode-go"
+    assert runtime["active"]["model"] == "mimo-v2.5"
+    assert runtime["weak"]["provider"] == "opencode-go"
+    assert runtime["weak"]["model"] == "ox-alpha-free"
 
 
 def test_generation_attempt_evidence_requires_matching_provider_model_and_session(tmp_path: Path):
@@ -308,12 +396,20 @@ def _valid_acceptance_report(tmp_path: Path) -> dict:
     cases = [
         {
             "platform": platform["platform"],
+            "hotspot_contract": platform["hotspot_contract"],
             "artifact_policy_passed": True,
             "evidence_level": "artifact_verified",
             "pipeline_evidence": {"create_called": True, "run_called": True, "serial_index": index},
             "probes": {
                 "capabilities": {"passed": True, "evidence_level": "artifact_verified"},
-                "hotspot": {"passed": True, "evidence_level": "artifact_verified"},
+                "hotspot": {
+                    "passed": True,
+                    "evidence_level": "artifact_verified",
+                    "details": {
+                        "evidence_type": platform["hotspot_contract"]["allowed_evidence_types"][0],
+                        "association_mode": platform["hotspot_contract"]["allowed_association_modes"][0],
+                    },
+                },
             },
             "content_form": platform["content_form"],
             "language": platform["language"],

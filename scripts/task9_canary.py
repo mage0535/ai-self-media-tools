@@ -8,6 +8,7 @@ It never publishes, edits timers, or treats planned metadata as artifact proof.
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
 import os
 import shlex
@@ -35,6 +36,7 @@ from content_platform.cover_quality import validate_cover
 from content_platform.publication_ledger import PublicationLedger
 from content_platform.pipeline import Pipeline
 from content_platform.store import Store
+from content_platform.associated_hotspot import load_hotspot_support_matrix
 
 
 CANARY_PLATFORMS = (
@@ -64,6 +66,7 @@ DETERMINISTIC_GATE_NAMES = (
 
 def build_canary_matrix() -> list[dict[str, Any]]:
     """Return the only accepted serial matrix for production canaries."""
+    support = load_hotspot_support_matrix()
     return [
         {
             "order": index,
@@ -72,7 +75,10 @@ def build_canary_matrix() -> list[dict[str, Any]]:
             "language": language,
             "delivery_policy": policy,
             "dry_run": dry_run,
-            "hotspot_mode": "official_native",
+            "hotspot_contract": {
+                "allowed_evidence_types": list((support.get("platforms") or {}).get(platform, {}).get("allowed_evidence_types") or []),
+                "allowed_association_modes": list((support.get("platforms") or {}).get(platform, {}).get("allowed_association_modes") or []),
+            },
             "entrypoint_kind": "pipeline",
             "entrypoint": [sys.executable, "-m", "content_platform.pipeline"],
         }
@@ -109,6 +115,17 @@ def _hotspot_source_hash(platform: Any, source_url: Any, observed_title: Any, **
     return _json_hash(_canonical_hotspot_provenance(platform, source_url, observed_title, **kwargs))
 
 
+def _case_hotspot_contract(case: dict[str, Any]) -> dict[str, list[str]]:
+    supplied = case.get("hotspot_contract") if isinstance(case.get("hotspot_contract"), dict) else {}
+    if supplied:
+        return supplied
+    record = (load_hotspot_support_matrix().get("platforms") or {}).get(str(case.get("platform") or ""), {})
+    return {
+        "allowed_evidence_types": list(record.get("allowed_evidence_types") or []),
+        "allowed_association_modes": list(record.get("allowed_association_modes") or []),
+    }
+
+
 def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
     """Load collector output; never manufacture platform-native evidence."""
     inputs_root = (root / "_inputs").resolve()
@@ -120,6 +137,10 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
     record = _load_json(evidence_path)
     platform = str(record.get("platform") or "").strip()
     source_url = str(record.get("native_source_url") or record.get("source_url") or "").strip()
+    evidence_type = str(record.get("evidence_type") or "").casefold().strip()
+    association_mode = str(record.get("association_mode") or "").strip()
+    native_verified = record.get("native_verified") is True
+    contract = _case_hotspot_contract(case)
     observed_title = str(record.get("observed_title") or "").strip()
     fetched_at = str(record.get("fetched_at") or "").strip()
     status = record.get("status", record.get("status_code"))
@@ -130,7 +151,15 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
     if platform != str(case["platform"]):
         failures.append("hotspot_platform_mismatch")
     if not source_url.startswith(("https://", "http://")):
-        failures.append("hotspot_native_source_url_missing")
+        failures.append("hotspot_source_url_missing")
+    if evidence_type not in set(contract.get("allowed_evidence_types") or []):
+        failures.append("hotspot_evidence_type_not_allowed")
+    if association_mode not in set(contract.get("allowed_association_modes") or []):
+        failures.append("hotspot_association_mode_not_allowed")
+    if evidence_type == "native" and not native_verified:
+        failures.append("hotspot_native_verification_missing")
+    if evidence_type != "native" and native_verified:
+        failures.append("non_native_hotspot_relabelled_native")
     if not observed_title or not fetched_at:
         failures.append("hotspot_observation_incomplete")
     try:
@@ -162,8 +191,10 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(";".join(sorted(set(failures))))
     return {
         "platform": platform,
-        "mode": "official_native",
-        "native_verified": True,
+        "mode": evidence_type,
+        "evidence_type": evidence_type,
+        "association_mode": association_mode,
+        "native_verified": native_verified,
         "source_url": source_url,
         "observed_title": observed_title,
         "fetched_at": fetched_at,
@@ -187,8 +218,17 @@ def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any])
         snapshot_path=hotspot.get("snapshot_path"), snapshot_sha256=hotspot.get("snapshot_sha256"),
     ) if source_url and observed_title else ""
     failures: list[str] = []
-    if hotspot.get("mode") != "official_native" or hotspot.get("platform") != platform:
-        failures.append("hotspot_not_platform_native")
+    contract = _case_hotspot_contract(case)
+    if hotspot.get("platform") != platform:
+        failures.append("hotspot_platform_mismatch")
+    if hotspot.get("evidence_type") not in set(contract.get("allowed_evidence_types") or []):
+        failures.append("hotspot_evidence_type_not_allowed")
+    if hotspot.get("association_mode") not in set(contract.get("allowed_association_modes") or []):
+        failures.append("hotspot_association_mode_not_allowed")
+    if hotspot.get("evidence_type") == "native" and hotspot.get("native_verified") is not True:
+        failures.append("hotspot_native_verification_missing")
+    if hotspot.get("evidence_type") != "native" and hotspot.get("native_verified") is True:
+        failures.append("non_native_hotspot_relabelled_native")
     if not source_url.startswith(("https://", "http://")):
         failures.append("hotspot_source_missing")
     if not observed_title.strip():
@@ -206,6 +246,8 @@ def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any])
         and str(row.get("platform") or "") == platform
         and str(row.get("url") or "") == source_url
         and str(row.get("title") or "") == observed_title
+        and str(row.get("evidence_type") or "") == str(hotspot.get("evidence_type") or "")
+        and str(row.get("association_mode") or "") == str(hotspot.get("association_mode") or "")
         and str(row.get("provenance_hash") or row.get("source_hash") or "") == expected
     ]
     if not matching:
@@ -478,6 +520,40 @@ def _hermes_json(command: list[str]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _hermes_text(command: list[str]) -> str:
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _active_model_from_config_show(executable: str) -> dict[str, str]:
+    text = _hermes_text([executable, "config", "show"])
+    for line in text.splitlines():
+        if "Model:" not in line:
+            continue
+        try:
+            value = ast.literal_eval(line.split("Model:", 1)[1].strip())
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(value, dict):
+            provider = str(value.get("provider") or "")
+            model = str(value.get("default") or value.get("model") or "")
+            if provider and model:
+                return {"provider": provider, "model": model, "identity_source": "hermes_config_show"}
+    return {}
+
+
+def _weak_model_from_hermes_cache(provider: str, active_model: str) -> dict[str, str]:
+    home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+    cache = _load_json(home / "provider_models_cache.json")
+    record = cache.get(provider) if isinstance(cache.get(provider), dict) else {}
+    models = [str(item) for item in record.get("models") or [] if str(item) and str(item) != active_model]
+    weak = next((item for item in models if "free" in item.casefold()), models[0] if models else "")
+    return {"provider": provider, "model": weak, "identity_source": "hermes_provider_models_cache"} if weak else {}
+
+
 def _hermes_help(executable: str) -> str:
     try:
         result = subprocess.run([executable, "--help"], capture_output=True, text=True, timeout=20, check=False)
@@ -506,18 +582,15 @@ def discover_hermes_runtime() -> dict[str, Any]:
     executable = os.environ.get("HERMES_CLI", "hermes").strip() or "hermes"
     if not shutil.which(executable) and not Path(executable).is_file():
         return {"active": {"status": "unavailable", "provider": "", "model": "", "reason": "hermes_cli_unavailable"}, "weak": {"status": "dual_model_pending", "reason": "hermes_cli_unavailable"}}
-    status = _hermes_json([executable, "status", "--json"])
-    models = _hermes_json([executable, "models", "--json"])
     selection = _model_selection_capability(executable)
-    active = status.get("active") if isinstance(status.get("active"), dict) else status
-    provider = str(active.get("provider") or status.get("provider") or "")
-    model = str(active.get("model") or active.get("model_id") or status.get("model") or "")
+    active = _active_model_from_config_show(executable)
+    provider = str(active.get("provider") or "")
+    model = str(active.get("model") or "")
     active_status = "available" if provider and model else "unavailable"
     result = {"active": {"status": active_status, "provider": provider, "model": model, "executable": executable, "selection": selection, "gate_passed": False, "gate_reason": "model_gate_pending"}}
-    candidates = models.get("models") if isinstance(models.get("models"), list) else []
-    weak = next((item for item in candidates if isinstance(item, dict) and str(item.get("id") or item.get("model") or "") not in {model, ""} and str(item.get("provider") or "")), None)
+    weak = _weak_model_from_hermes_cache(provider, model) if provider and model else {}
     if weak:
-        result["weak"] = {"status": "available", "provider": str(weak.get("provider") or ""), "model": str(weak.get("id") or weak.get("model") or ""), "executable": executable, "selection": selection, "gate_passed": False, "gate_reason": "model_gate_pending"}
+        result["weak"] = {"status": "available", "provider": weak["provider"], "model": weak["model"], "identity_source": weak["identity_source"], "executable": executable, "selection": selection, "gate_passed": False, "gate_reason": "model_gate_pending"}
     else:
         result["weak"] = {"status": "dual_model_pending", "reason": "no_available_second_model", "executable": executable, "selection": selection, "gate_passed": False}
     if not selection.get("available"):
@@ -650,6 +723,15 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
     artifacts = _actual_files(root)
     source_rows = store.source_items(job_id) if job_id and hasattr(store, "source_items") else []
     source_rows = [dict(row) for row in source_rows if hasattr(row, "keys")]
+    if verified_hotspot:
+        source_rows.append({
+            "platform": verified_hotspot.get("platform"),
+            "url": verified_hotspot.get("source_url"),
+            "title": verified_hotspot.get("observed_title"),
+            "evidence_type": verified_hotspot.get("evidence_type"),
+            "association_mode": verified_hotspot.get("association_mode"),
+            "provenance_hash": verified_hotspot.get("provenance_hash"),
+        })
     hotspot = verified_hotspot or draft_meta.get("associated_hotspot") or draft_meta.get("hotspot")
     if not isinstance(hotspot, dict) and source_rows:
         first = source_rows[0]
