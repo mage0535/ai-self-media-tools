@@ -140,6 +140,11 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
     evidence_type = str(record.get("evidence_type") or "").casefold().strip()
     association_mode = str(record.get("association_mode") or "").strip()
     native_verified = record.get("native_verified") is True
+    try:
+        lane_fit_score = float(record.get("lane_fit_score"))
+        semantic_fit_score = float(record.get("semantic_fit_score"))
+    except (TypeError, ValueError):
+        lane_fit_score = semantic_fit_score = 0.0
     contract = _case_hotspot_contract(case)
     observed_title = str(record.get("observed_title") or "").strip()
     fetched_at = str(record.get("fetched_at") or "").strip()
@@ -160,6 +165,10 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
         failures.append("hotspot_native_verification_missing")
     if evidence_type != "native" and native_verified:
         failures.append("non_native_hotspot_relabelled_native")
+    if lane_fit_score < 0.55:
+        failures.append("hotspot_lane_fit_too_low")
+    if semantic_fit_score < 0.55:
+        failures.append("hotspot_semantic_fit_too_low")
     if not observed_title or not fetched_at:
         failures.append("hotspot_observation_incomplete")
     try:
@@ -195,6 +204,8 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
         "evidence_type": evidence_type,
         "association_mode": association_mode,
         "native_verified": native_verified,
+        "lane_fit_score": lane_fit_score,
+        "semantic_fit_score": semantic_fit_score,
         "source_url": source_url,
         "observed_title": observed_title,
         "fetched_at": fetched_at,
@@ -229,6 +240,10 @@ def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any])
         failures.append("hotspot_native_verification_missing")
     if hotspot.get("evidence_type") != "native" and hotspot.get("native_verified") is True:
         failures.append("non_native_hotspot_relabelled_native")
+    if float(hotspot.get("lane_fit_score") or 0) < 0.55:
+        failures.append("hotspot_lane_fit_too_low")
+    if float(hotspot.get("semantic_fit_score") or 0) < 0.55:
+        failures.append("hotspot_semantic_fit_too_low")
     if not source_url.startswith(("https://", "http://")):
         failures.append("hotspot_source_missing")
     if not observed_title.strip():
