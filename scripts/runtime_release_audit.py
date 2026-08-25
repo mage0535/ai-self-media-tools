@@ -4,7 +4,9 @@ import argparse
 import hashlib
 import json
 import os
+import py_compile
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -64,8 +66,28 @@ def _validate_rollback_target(release_root: Path, rollback_target: Path) -> None
     if not rollback_target.is_dir() or rollback_target == release_root:
         raise ReleaseAuditError("rollback target must be an existing directory different from current release")
     scripts = rollback_target / "scripts"
-    if not scripts.is_dir() or not any(path.is_file() for path in scripts.rglob("*")):
+    if not scripts.is_dir():
         raise ReleaseAuditError("rollback target must contain runnable scripts")
+    entries = [path for path in scripts.rglob("*") if path.is_file() and path.suffix.lower() in {".py", ".sh"}]
+    if not entries:
+        raise ReleaseAuditError("rollback target has no safe verifiable entrypoint")
+    for entry in entries:
+        if entry.suffix.lower() == ".py":
+            temporary_pyc = tempfile.NamedTemporaryFile(suffix=".pyc", delete=False)
+            temporary_pyc.close()
+            try:
+                py_compile.compile(str(entry), cfile=temporary_pyc.name, doraise=True)
+            except py_compile.PyCompileError as exc:
+                raise ReleaseAuditError(f"rollback Python entrypoint syntax error: {entry}") from exc
+            finally:
+                Path(temporary_pyc.name).unlink(missing_ok=True)
+        else:
+            try:
+                result = subprocess.run(["bash", "-n", str(entry)], capture_output=True, text=True)
+            except OSError as exc:
+                raise ReleaseAuditError("bash is required to validate rollback shell entrypoints") from exc
+            if result.returncode != 0:
+                raise ReleaseAuditError(f"rollback shell entrypoint syntax error: {entry}")
 
 
 def audit_release(
@@ -89,7 +111,9 @@ def audit_release(
     if not source.is_dir() or not release.is_dir() or script_root != expected_script_root:
         raise ReleaseAuditError("source, release, and configured script roots do not match")
     environment_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip()
-    if environment_root and _resolve(environment_root) != release:
+    if not environment_root:
+        raise ReleaseAuditError("CONTENT_PLATFORM_CODE_ROOT is required")
+    if _resolve(environment_root) != release:
         raise ReleaseAuditError("CONTENT_PLATFORM_CODE_ROOT does not match release code root")
 
     _assert_clean(source)
