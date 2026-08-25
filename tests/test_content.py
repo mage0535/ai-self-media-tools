@@ -71,20 +71,37 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(remote.call_args.args[3], "file-key")
 
     def test_generator_can_use_hermes_cli_provider(self):
-        completed = type("Result", (), {"returncode": 0, "stdout": '{"title":"Remote title","body":"Remote body"}', "stderr": ""})()
+        class CompletedProcess:
+            returncode = 0
+
+            def poll(self):
+                return self.returncode
+
+            def communicate(self):
+                return '{"title":"Remote title","body":"Remote body"}', ""
+
         generator = DraftGenerator({"provider": "hermes-cli", "allow_fallback": False, "hermes_provider": "opencode-go", "hermes_model": "deepseek-v4-flash"})
-        with patch("content_platform.generator.subprocess.run", return_value=completed) as run:
+        with patch("content_platform.generator.subprocess.Popen", return_value=CompletedProcess()) as popen:
             draft = generator.generate("topic", {"audience": "builders"})
         self.assertEqual(draft["provider"], "hermes-cli")
-        self.assertTrue(any("Return only JSON" in item for item in run.call_args.args[0]))
-        self.assertIn("same-track", next(item for item in run.call_args.args[0] if "Return only JSON" in item))
-        self.assertIn("--provider", run.call_args.args[0])
-        self.assertIn("opencode-go", run.call_args.args[0])
+        command = popen.call_args.args[0]
+        self.assertTrue(any("Return only JSON" in item for item in command))
+        self.assertIn("same-track", next(item for item in command if "Return only JSON" in item))
+        self.assertNotIn("--provider", command)
+        self.assertNotIn("--model", command)
 
     def test_generator_classifies_provider_auth_text_instead_of_non_json(self):
-        completed = type("Result", (), {"returncode": 0, "stdout": "HTTP 401: Invalid API key.", "stderr": ""})()
+        class AuthFailureProcess:
+            returncode = 0
+
+            def poll(self):
+                return self.returncode
+
+            def communicate(self):
+                return "HTTP 401: Invalid API key.", ""
+
         generator = DraftGenerator({"provider": "hermes-cli", "allow_fallback": False, "hermes_provider": "opencode-go", "hermes_model": "deepseek-v4-flash"})
-        with patch("content_platform.generator.subprocess.run", return_value=completed):
+        with patch("content_platform.generator.subprocess.Popen", return_value=AuthFailureProcess()):
             with self.assertRaisesRegex(ProviderAuthError, "provider_auth_failed"):
                 generator.generate("topic", {"audience": "builders"})
 
