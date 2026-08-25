@@ -111,7 +111,7 @@ def test_manual_handoff_platform_cannot_be_normalized_to_published():
 
 def test_due_task_builder_selects_a_distinct_topic_for_each_due_platform():
     def rank(platform, _items, _slot):
-        return [{"title": f"{platform} topic", "source": platform, "score": 3, "fingerprint": platform}]
+        return [{"title": f"{platform} topic", "platform": platform, "source": platform, "score": 3, "fingerprint": platform}]
 
     prepared = build_due_tasks(
         [{"platform": "wechat", "estimate_minutes": 20}, {"platform": "youtube", "estimate_minutes": 50}],
@@ -126,10 +126,10 @@ def test_due_task_builder_selects_a_distinct_topic_for_each_due_platform():
 
 
 def test_due_task_builder_uses_the_next_candidate_when_the_top_topic_is_already_reserved():
-    def rank(_platform, _items, _slot):
+    def rank(platform, _items, _slot):
         return [
-            {"title": "Shared topic", "source": "github", "score": 5, "fingerprint": "shared-topic"},
-            {"title": "Distinct topic", "source": "github", "score": 4, "fingerprint": "distinct-topic"},
+            {"title": "Shared topic", "platform": platform, "source": "github", "score": 5, "fingerprint": "shared-topic"},
+            {"title": "Distinct topic", "platform": platform, "source": "github", "score": 4, "fingerprint": "distinct-topic"},
         ]
 
     prepared = build_due_tasks(
@@ -143,8 +143,8 @@ def test_due_task_builder_uses_the_next_candidate_when_the_top_topic_is_already_
 
 
 def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_it():
-    def rank(_platform, _items, _slot):
-        return [{"title": "Shared topic", "source": "github", "score": 5, "fingerprint": "shared-topic"}]
+    def rank(platform, _items, _slot):
+        return [{"title": "Shared topic", "platform": platform, "source": "github", "score": 5, "fingerprint": "shared-topic"}]
 
     prepared = build_due_tasks(
         [{"platform": "wechat"}, {"platform": "kuaishou"}],
@@ -154,7 +154,7 @@ def test_due_task_builder_blocks_a_duplicate_only_candidate_instead_of_reusing_i
     )
 
     assert prepared["tasks"][1]["state"] == "blocked"
-    assert prepared["tasks"][1]["reason"] == "no independently evidenced cross-platform topic candidate"
+    assert prepared["tasks"][1]["reason"] == "no independently evidenced same-platform topic candidate"
 
 
 def test_due_task_builder_blocks_a_topic_reserved_by_a_prior_manual_publication():
@@ -162,7 +162,7 @@ def test_due_task_builder_blocks_a_topic_reserved_by_a_prior_manual_publication(
         [{"platform": "kuaishou"}],
         items=[],
         source_report=[{"source": "kuaishou", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}],
-        rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "kuaishou", "fingerprint": "ai-workflow", "score": 1.0}],
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "platform": "kuaishou", "source": "kuaishou", "fingerprint": "ai-workflow", "score": 1.0}],
         reserved_topic_fingerprints={"ai-workflow"},
     )
 
@@ -173,7 +173,7 @@ def test_due_task_builder_blocks_a_topic_reserved_by_a_prior_manual_publication(
 
 def test_due_task_builder_allows_evidenced_natural_overlap_with_distinct_execution_angles():
     def rank(platform, _items, _slot):
-        return [{"title": "Shared topic", "source": platform, "score": 5, "fingerprint": "shared-topic"}]
+        return [{"title": "Shared topic", "platform": platform, "source": platform, "score": 5, "fingerprint": "shared-topic"}]
 
     report = [
         {"source": source, "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
@@ -233,7 +233,7 @@ def test_due_task_builder_researches_the_lane_before_blocking():
     def requery(platform, _items, _slot, round_number):
         rounds.append((platform, round_number))
         if round_number == 2:
-            return [{"title": "AI meeting workflow", "source": "tiktok", "fingerprint": "meeting", "score": 2.0}]
+            return [{"title": "AI meeting workflow", "platform": "tiktok", "source": "tiktok", "fingerprint": "meeting", "score": 2.0}]
         return []
 
     report = [
@@ -299,13 +299,13 @@ def test_due_task_builder_blocks_when_strict_trend_evidence_is_incomplete():
         [{"platform": "zhihu"}],
         items=[],
         source_report=[{"source": "github", "status": "ok"}],
-        rank_for_platform=lambda *_args: [{"title": "AI workflow", "fingerprint": "ai-workflow", "score": 1.0}],
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "platform": "zhihu", "fingerprint": "ai-workflow", "score": 1.0}],
         strict_trend_evidence=True,
     )
 
     task = prepared["tasks"][0]
     assert task["state"] == "blocked"
-    assert task["trend_candidate"]["sources_attempted"] == 1
+    assert task["rejected_matrix"]["sources_attempted"] == 1
 
 
 def test_due_task_builder_does_not_fabricate_platform_evidence_from_generic_sources():
@@ -314,16 +314,16 @@ def test_due_task_builder_does_not_fabricate_platform_evidence_from_generic_sour
         [{"platform": "zhihu"}],
         items=[],
         source_report=report,
-        rank_for_platform=lambda *_args: [{"title": "Agent workflow", "fingerprint": "agent-workflow", "score": 1.0}],
+        rank_for_platform=lambda *_args: [{"title": "Agent workflow", "platform": "zhihu", "fingerprint": "agent-workflow", "score": 1.0}],
         growth_strategy_status={"zhihu": {"status": "ok", "key": "growth_strategy:zhihu:latest"}},
         strict_trend_evidence=True,
     )
 
     task = prepared["tasks"][0]
-    matrix = task["brief"]["platform_source_matrix"]
+    matrix = task["rejected_matrix"]
     assert task["state"] == "blocked"
     assert matrix["platform_internal_verified"] is False
-    assert task["reason"] == "platform-specific real trend collection missing"
+    assert task["reason"] == "no independently evidenced same-platform topic candidate"
 
 
 def test_due_task_builder_rejects_a_platform_named_candidate_without_real_collection_evidence():
@@ -335,14 +335,14 @@ def test_due_task_builder_rejects_a_platform_named_candidate_without_real_collec
         [{"platform": "zhihu"}],
         items=[],
         source_report=report,
-        rank_for_platform=lambda *_args: [{"title": "Agent workflow", "source": "zhihu_hot", "fingerprint": "agent-workflow", "score": 1.0}],
+        rank_for_platform=lambda *_args: [{"title": "Agent workflow", "platform": "zhihu", "source": "zhihu_hot", "fingerprint": "agent-workflow", "score": 1.0}],
         growth_strategy_status={"zhihu": {"status": "ok", "key": "growth_strategy:zhihu:latest"}},
         strict_trend_evidence=True,
     )
 
     task = prepared["tasks"][0]
     assert task["state"] == "blocked"
-    assert task["reason"] == "platform-specific real trend collection missing"
+    assert task["reason"] == "no independently evidenced same-platform topic candidate"
 
 
 def test_due_task_builder_rejects_a_web_search_candidate_as_native_platform_evidence():
@@ -354,13 +354,13 @@ def test_due_task_builder_rejects_a_web_search_candidate_as_native_platform_evid
         [{"platform": "douyin_ai"}],
         items=[],
         source_report=report,
-        rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "douyin:web_search", "fingerprint": "ai-workflow", "score": 1.0}],
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "platform": "douyin_ai", "source": "douyin:web_search", "fingerprint": "ai-workflow", "score": 1.0}],
         strict_trend_evidence=True,
     )
 
     task = prepared["tasks"][0]
     assert task["state"] == "blocked"
-    assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is False
+    assert task["rejected_matrix"]["real_platform_collection_verified"] is False
 
 
 def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_was_collected():
@@ -372,7 +372,7 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
         [{"platform": "douyin_ai"}],
         items=[],
         source_report=report,
-        rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "douyin", "fingerprint": "ai-workflow", "score": 1.0}],
+        rank_for_platform=lambda *_args: [{"title": "AI workflow", "platform": "douyin_ai", "source": "douyin", "fingerprint": "ai-workflow", "score": 1.0}],
         strict_trend_evidence=True,
         growth_strategy_status={
             "douyin_ai": {
@@ -417,6 +417,7 @@ def test_due_task_builder_accepts_native_url_from_platform_search_transport():
         source_report=report,
         rank_for_platform=lambda *_args: [{
             "title": "快手 AI 开放平台",
+            "platform": "kuaishou",
             "source": "kuaishou:web_search",
             "url": "https://ai.kuaishou.com/creation",
             "fingerprint": "kuaishou-ai",

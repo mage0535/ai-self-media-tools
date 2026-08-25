@@ -223,16 +223,17 @@ def build_due_tasks(
                     break
             if not selected:
                 if editorial is None:
-                    if rejected_candidate is not None:
-                        selected = rejected_candidate
-                        selected_matrix = rejected_matrix
-                    else:
-                        row.update({
-                            "state": "blocked",
-                            "reason": "topic already reserved by recent delivery" if any(_topic_identity(candidate) in reserved_topic_fingerprints for candidate in candidates) else "no independently evidenced cross-platform topic candidate",
-                        })
-                        tasks.append(row)
-                        continue
+                    row.update({
+                        "state": "blocked",
+                        "reason": (
+                            "topic already reserved by recent delivery"
+                            if any(_topic_identity(candidate) in reserved_topic_fingerprints for candidate in candidates)
+                            else "no independently evidenced same-platform topic candidate"
+                        ),
+                        **({"rejected_candidate": rejected_candidate, "rejected_matrix": rejected_matrix} if rejected_candidate else {}),
+                    })
+                    tasks.append(row)
+                    continue
                 else:
                     selected = editorial
                     selection_mode = "editorial_calendar"
@@ -254,6 +255,20 @@ def build_due_tasks(
                     row.update({"state": "blocked", "reason": reservation.get("reason", "topic reservation failed"), "topic_reservation": reservation})
                     tasks.append(row)
                     continue
+            if selection_mode == "native_trend" and not isinstance(selected.get("associated_hotspot"), dict):
+                from .associated_hotspot import (
+                    build_associated_hotspot,
+                    hotspot_mode_for_platform,
+                    persist_associated_hotspot,
+                )
+                hotspot = build_associated_hotspot(
+                    selected,
+                    platform=platform,
+                    association_mode=hotspot_mode_for_platform(platform),
+                )
+                selected = {**selected, "associated_hotspot": hotspot}
+                if topic_reservation_path:
+                    persist_associated_hotspot(Path(topic_reservation_path).with_name("associated-hotspots.json"), hotspot)
             trend_candidate = build_trend_candidate(
                 platform=platform,
                 topic=selected["title"],
@@ -380,6 +395,9 @@ def _candidate_has_native_source(platform: str, candidate: dict[str, Any]) -> bo
     borrowing the platform's successful collection count.
     """
     source = str(candidate.get("source") or "").casefold().strip()
+    evidence_type = str(candidate.get("evidence_type") or "native").casefold().strip()
+    if candidate.get("official_reference_only") is True or evidence_type in {"official_activity", "official_keyword", "official_reference"}:
+        return False
     canonical = {str(platform or "").casefold().strip()}
     if platform in {"douyin_ai", "douyin_pet", "douyin"}:
         canonical.add("douyin")
@@ -394,7 +412,7 @@ def _candidate_has_native_source(platform: str, candidate: dict[str, Any]) -> bo
         from .trend_intelligence import _candidate_source_url_is_native
 
         return _candidate_source_url_is_native(platform, candidate)
-    return suffix not in {"github", "source_fallback", "external"}
+    return suffix not in {"github", "source_fallback", "external", "official_reference", "official_activity", "official_keyword"}
 
 
 def _bind_candidate_platform(platform: str, candidate: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -404,9 +422,8 @@ def _bind_candidate_platform(platform: str, candidate: dict[str, Any] | None) ->
     row = dict(candidate)
     explicit = str(row.get("platform") or "").casefold().strip()
     target = str(platform or "").casefold().strip()
-    if explicit and explicit != target:
+    if explicit != target:
         return None
-    row["platform"] = target
     from .trend_intelligence import validate_platform_candidate
     if not validate_platform_candidate(row, target)["passed"]:
         return None

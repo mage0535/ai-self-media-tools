@@ -87,6 +87,29 @@ def test_official_reference_is_scoring_context_not_native_identity(tmp_path):
     assert items[0]["evidence_type"] == "official_keyword"
 
 
+def test_official_reference_cannot_satisfy_native_due_task_evidence():
+    candidate = _candidate(
+        "wechat", "official_keyword", source="wechat:official_reference",
+        official_reference_only=True, native_verified=False,
+    )
+    result = build_due_tasks(
+        [{"platform": "wechat"}], items=[candidate], source_report=[{
+            "source": "wechat:official_reference", "status": "ok", "count": 1,
+            "collected_at": NOW.isoformat(),
+        }], rank_for_platform=lambda *_: [candidate], trend_evidence_mode="shadow",
+    )
+    assert result["tasks"][0]["state"] == "blocked"
+
+
+def test_unlabelled_candidate_is_not_rebound_to_the_target_platform():
+    candidate = {key: value for key, value in _candidate("wechat", "native").items() if key != "platform"}
+    result = build_due_tasks(
+        [{"platform": "wechat"}], items=[candidate], source_report=[],
+        rank_for_platform=lambda *_: [candidate], trend_evidence_mode="enforce",
+    )
+    assert result["tasks"][0]["state"] == "blocked"
+
+
 def test_ranking_rejects_expired_and_cross_platform_candidates_and_records_breakdown():
     rows = [
         _candidate("wechat", "native", "Native useful workflow"),
@@ -128,6 +151,10 @@ def test_topic_reservation_is_global_semantic_and_expiration_is_explicit(tmp_pat
     assert first["reserved"] is True
     duplicate = reserve_topic_atomically(ledger, "AI workflow checklists", "tiktok", "job-2", now=NOW)
     assert duplicate["reserved"] is False
+    chinese = reserve_topic_atomically(ledger, "AI 工作流自动化清单", "wechat", "job-cn-1", now=NOW)
+    assert chinese["reserved"] is True
+    chinese_duplicate = reserve_topic_atomically(ledger, "AI工作流自动化检查清单", "douyin_ai", "job-cn-2", now=NOW)
+    assert chinese_duplicate["reserved"] is False
     stale = reserve_topic_atomically(ledger, "Old topic", "twitter", "job-3", now=NOW - timedelta(days=8), ttl_hours=1)
     assert stale["reserved"] is True
     expired = expire_abandoned_reservations(ledger, now=NOW)
@@ -151,6 +178,28 @@ def test_hotspot_persistence_contains_identity_evidence_validity_lane_mode_and_p
     assert saved["semantic_fit_score"] == 0.85
     assert saved["association_mode"] == "manual_handoff"
     assert saved["postcheck_state"] == "pending"
+
+
+def test_due_task_runtime_reserves_topic_and_persists_hotspot(tmp_path):
+    candidate = _candidate("zhihu", "native", "A verified Zhihu workflow topic", native_verified=True)
+    reservation_path = tmp_path / "topic-reservations.json"
+    result = build_due_tasks(
+        [{"platform": "zhihu", "job_id": "job-runtime"}],
+        items=[candidate],
+        source_report=[{
+            "source": "zhihu" if index == 0 else f"support-{index}",
+            "status": "ok" if index < 5 else "empty", "count": 1 if index < 5 else 0,
+            "collected_at": NOW.isoformat(),
+        } for index in range(8)],
+        rank_for_platform=lambda *_: [candidate],
+        trend_evidence_mode="enforce",
+        topic_reservation_path=reservation_path,
+    )
+    task = result["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["topic_reservation"]["reserved"] is True
+    assert task["brief"]["associated_hotspot"]["platform"] == "zhihu"
+    assert (tmp_path / "associated-hotspots.json").is_file()
 
 
 def test_due_tasks_fallback_is_labeled_and_keeps_scheduled_platform():
