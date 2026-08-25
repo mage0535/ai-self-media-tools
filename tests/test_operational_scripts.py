@@ -7,6 +7,15 @@ from unittest.mock import patch
 
 
 class OperationalScriptTests(unittest.TestCase):
+    def test_overnight_hot_work_collection_covers_all_scheduled_lanes(self):
+        script = (Path(__file__).parents[1] / "scripts" / "run_overnight_batch.sh").read_text(encoding="utf-8")
+        for platform in (
+            "wechat", "kuaishou", "douyin_ai", "douyin_pet", "bilibili", "zhihu",
+            "juejin", "xiaohongshu", "youtube", "tiktok", "twitter",
+        ):
+            self.assertIn(f"--platform {platform}", script)
+        self.assertIn("platform-browser-states.json", script)
+
     def test_bgm_uniqueness_fails_closed_without_source_or_fingerprint(self):
         from scripts.check_bgm_uniqueness import check
 
