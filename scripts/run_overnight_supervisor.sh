@@ -3,22 +3,38 @@
 set -euo pipefail
 
 root="${CONTENT_PLATFORM_HOME:?CONTENT_PLATFORM_HOME is required}"
-data_root="${CONTENT_PLATFORM_DATA_DIR:-$root/data}"
-config_path="${CONTENT_PLATFORM_CONFIG:-$root/config.json}"
+release_root=$(readlink -f -- "$root")
+if ! [[ -n "$release_root" && -d "$release_root" ]]; then
+  printf '%s\n' 'CONTENT_PLATFORM_HOME must resolve to a non-empty existing release root' >&2
+  exit 1
+fi
+data_root="${CONTENT_PLATFORM_DATA_DIR:-$(dirname -- "$release_root")/data}"
+secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$release_root/secrets}"
+config_path="${CONTENT_PLATFORM_CONFIG:-$release_root/config.json}"
+metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$release_root/release-metadata.json}"
+attestation_path="${CONTENT_PLATFORM_RELEASE_ATTESTATION:-$data_root/release-attestations/$(basename -- "$release_root").sha256}"
 day="$(date +%F)"
 out="$data_root/overnight/$day"
 state="$out/state.json"
 heartbeat="$out/heartbeat.json"
 report="$out/supervisor-report.json"
 
+install -d "$data_root"
+exec 9>"$data_root/runtime-release.lock"
+flock -s 9
+CONTENT_PLATFORM_CODE_ROOT="$release_root" \
+  python3 "$release_root/scripts/runtime_release_audit.py" --verify-metadata \
+  --metadata-path "$metadata_path" --attestation-path "$attestation_path" \
+  --release-root "$release_root"
+
 [[ -f "$state" ]] || exit 0
 
 notify() {
-  "$root/scripts/notify_hermes_progress.sh" "overnight-supervisor" "$1" "${2:-}" || true
+  "$release_root/scripts/notify_hermes_progress.sh" "overnight-supervisor" "$1" "${2:-}" || true
 }
 
 run_platform() {
-  PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" python3 -m content_platform "$@"
+  PYTHONPATH="$release_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m content_platform "$@"
 }
 
 # Always reconcile terminal snapshots too: state vocabulary changes must not

@@ -6,9 +6,12 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=HOME=%h
-Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
+Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
+Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
+Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
-ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/run_overnight_supervisor.sh
-WorkingDirectory=%h/.ai-self-media-tools
+ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run_overnight_supervisor.sh
+WorkingDirectory=%h/.ai-self-media-tools-current
 MemoryMax=128M
 TimeoutStartSec=120

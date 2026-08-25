@@ -34,12 +34,12 @@ def test_load_config_uses_db_parent_when_no_data_dir(tmp_path, monkeypatch):
 
 def test_overnight_entrypoint_uses_external_runtime_roots():
     script = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
-    assert 'data_root="${CONTENT_PLATFORM_DATA_DIR:-$root/data}"' in script
-    assert 'secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$root/secrets}"' in script
+    assert 'data_root="${CONTENT_PLATFORM_DATA_DIR:-$(dirname -- "$release_root")/data}"' in script
+    assert 'secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$release_root/secrets}"' in script
     assert 'out="$data_root/overnight/$day"' in script
 
 
 def test_supervisor_entrypoint_uses_external_runtime_roots():
     script = Path("scripts/run_overnight_supervisor.sh").read_text(encoding="utf-8")
-    assert "data_root=\"${CONTENT_PLATFORM_DATA_DIR:-$root/data}\"" in script
+    assert "data_root=\"${CONTENT_PLATFORM_DATA_DIR:-$(dirname -- \"$release_root\")/data}\"" in script
     assert "out=\"$data_root/overnight/$day\"" in script

@@ -5,17 +5,25 @@ import contextlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from scripts.runtime_release_audit import (
     ReleaseAuditError,
     _git,
     _validate_raw_path,
     audit_release,
+    verify_metadata,
     write_metadata,
 )
+
+CURRENT_LINK_NAME = ".ai-self-media-tools-current"
 
 
 @contextlib.contextmanager
@@ -49,13 +57,32 @@ def _tracked_paths(source_root: Path) -> list[Path]:
     return [Path(item) for item in output.split("\0") if item]
 
 
+def _tracked_modes(source_root: Path) -> dict[str, str]:
+    output = _git(source_root, "ls-files", "--stage", "-z")
+    modes = {}
+    for record in output.split("\0"):
+        if not record:
+            continue
+        header, relative = record.split("\t", 1)
+        modes[relative] = header.split()[0]
+    return modes
+
+
 def _freeze_release(release_root: Path) -> None:
     for path in sorted(release_root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
         if path.is_dir() and not path.is_symlink():
             path.chmod(0o555)
         elif path.is_file():
-            path.chmod(0o444)
+            mode = path.stat().st_mode & 0o777
+            path.chmod(0o555 if mode & 0o111 else 0o444)
     release_root.chmod(0o555)
+
+
+def _current_path(current_link: Path | str | None) -> Path:
+    current = Path(current_link).expanduser() if current_link is not None else Path.home() / CURRENT_LINK_NAME
+    if current.name != CURRENT_LINK_NAME:
+        raise ReleaseAuditError(f"current_link must use the systemd runtime root name: {CURRENT_LINK_NAME}")
+    return current
 
 
 def _activate(current_link: Path, release_root: Path) -> None:
@@ -63,7 +90,14 @@ def _activate(current_link: Path, release_root: Path) -> None:
     temporary = current_link.parent / f".{current_link.name}.{uuid.uuid4().hex}.tmp"
     try:
         os.symlink(str(release_root), str(temporary), target_is_directory=True)
-        os.replace(temporary, current_link)
+        try:
+            os.replace(temporary, current_link)
+        except PermissionError:
+            if os.name != "nt" or not current_link.is_symlink():
+                raise
+            # Windows cannot atomically replace an existing directory symlink.
+            current_link.unlink()
+            os.replace(temporary, current_link)
     finally:
         if temporary.is_symlink() or temporary.exists():
             temporary.unlink()
@@ -73,7 +107,7 @@ def deploy_release(
     *,
     source_root: Path | str,
     releases_root: Path | str,
-    current_link: Path | str,
+    current_link: Path | str | None = None,
     config_path: Path | str,
     test_report_path: Path | str,
     rollback_target: Path | str,
@@ -89,7 +123,7 @@ def deploy_release(
     _validate_raw_path(data_root, "data_root")
     source = Path(source_root).expanduser().resolve()
     releases = Path(releases_root).expanduser().resolve()
-    current = Path(current_link).expanduser()
+    current = _current_path(current_link)
     config = Path(config_path).expanduser().resolve()
     report = Path(test_report_path).expanduser().resolve()
     rollback = Path(rollback_target).expanduser().resolve()
@@ -109,6 +143,7 @@ def deploy_release(
         releases.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=str(releases)))
         try:
+            tracked_modes = _tracked_modes(source)
             for relative in _tracked_paths(source):
                 source_path = source / relative
                 if source_path.is_symlink() or not source_path.is_file():
@@ -116,6 +151,7 @@ def deploy_release(
                 destination = temporary / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source_path, destination)
+                destination.chmod(0o755 if tracked_modes.get(relative.as_posix()) == "100755" else 0o644)
             os.replace(temporary, release)
             temporary = None
             attestation = data / "release-attestations" / f"{name}.sha256"
@@ -155,18 +191,86 @@ def deploy_release(
                 shutil.rmtree(temporary)
 
 
+def rollback_release(
+    *,
+    target_release: Path | str,
+    current_link: Path | str | None = None,
+    data_root: Path | str,
+) -> dict:
+    """Verify an audited frozen release and atomically activate it as current."""
+    _validate_raw_path(target_release, "target_release")
+    _validate_raw_path(data_root, "data_root")
+    target = Path(target_release).expanduser().resolve()
+    data = Path(data_root).expanduser().resolve()
+    current = _current_path(current_link)
+    with _exclusive_lock(data / "runtime-release.lock"):
+        metadata_path = target / "release-metadata.json"
+        previous_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT")
+        os.environ["CONTENT_PLATFORM_CODE_ROOT"] = str(target)
+        try:
+            metadata = verify_metadata(
+                metadata_path,
+                current_release_root=target,
+            )
+        finally:
+            if previous_root is None:
+                os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
+            else:
+                os.environ["CONTENT_PLATFORM_CODE_ROOT"] = previous_root
+        _activate(current, target)
+        return {
+            "ok": True,
+            "operation": "rollback",
+            "release_root": str(target),
+            "metadata_path": str(metadata_path),
+            "attestation_path": metadata["attestation_path"],
+            "commit": metadata["commit"],
+        }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-root", required=True)
-    parser.add_argument("--releases-root", required=True)
-    parser.add_argument("--current-link", required=True)
-    parser.add_argument("--config-path", required=True)
-    parser.add_argument("--test-report-path", required=True)
-    parser.add_argument("--rollback-target", required=True)
+    parser.add_argument("operation", nargs="?", choices=("deploy", "rollback"), default="deploy")
+    parser.add_argument("--source-root")
+    parser.add_argument("--releases-root")
+    parser.add_argument("--current-link")
+    parser.add_argument("--config-path")
+    parser.add_argument("--test-report-path")
+    parser.add_argument("--rollback-target")
+    parser.add_argument("--target-release")
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--release-name")
     args = parser.parse_args()
-    print(deploy_release(**vars(args)))
+    if args.operation == "rollback":
+        if not args.target_release:
+            parser.error("rollback requires --target-release")
+        result = rollback_release(
+            target_release=args.target_release,
+            current_link=args.current_link,
+            data_root=args.data_root,
+        )
+    else:
+        required = {
+            "source_root": args.source_root,
+            "releases_root": args.releases_root,
+            "config_path": args.config_path,
+            "test_report_path": args.test_report_path,
+            "rollback_target": args.rollback_target,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            parser.error(f"deploy requires: {', '.join(missing)}")
+        result = deploy_release(
+            source_root=args.source_root,
+            releases_root=args.releases_root,
+            current_link=args.current_link,
+            config_path=args.config_path,
+            test_report_path=args.test_report_path,
+            rollback_target=args.rollback_target,
+            data_root=args.data_root,
+            release_name=args.release_name,
+        )
+    print(result)
     return 0
 
 

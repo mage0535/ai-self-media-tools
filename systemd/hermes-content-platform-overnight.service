@@ -6,7 +6,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=HOME=%h
-Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
+Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
+Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
+Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json
 Environment=CONTENT_PLATFORM_BIN=%h/.local/bin/content-platform
 Environment=HERMES_PLATFORM_SCRAPER=%h/.hermes/scripts/platform_scraper.py
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
@@ -15,7 +18,7 @@ Environment=BGM_LIBRARY_DIR=%h/.ai-self-media-tools/data
 Environment=BGM_LIBRARY_MANIFEST=%h/.ai-self-media-tools/data/bgm_library/bgm_manifest.json
 # The private slots file selects only channels due tonight. It must not contain
 # credentials and is deliberately separate from the public repository.
-ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/run_overnight_batch.sh
-WorkingDirectory=%h/.ai-self-media-tools
+ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run_overnight_batch.sh
+WorkingDirectory=%h/.ai-self-media-tools-current
 MemoryMax=768M
 TimeoutStartSec=17400

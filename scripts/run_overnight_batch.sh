@@ -77,7 +77,7 @@ run_platform() {
   PYTHONPATH="$release_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m content_platform "$@"
 }
 
-if ! "$release_root/scripts/smoke_provider.sh" "$release_root/config.json"; then
+if ! "$release_root/scripts/smoke_provider.sh" "$config_path"; then
   printf '%s\n' '{"status":"blocked","reason":"provider_preflight_failed"}' > "$out/result.json"
   notify "failed" "provider_preflight_failed"
   exit 1
@@ -113,10 +113,10 @@ for sample in "$data_root"/intel/hot_works_multiplatform_*/hot_works_raw_enriche
   fi
 done
 if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json" ]]; then
-  hot_work_args+=(--state-file "kuaishou=$release_root/data/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json")
+  hot_work_args+=(--state-file "kuaishou=$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/kuaishou_playwright_state.json")
 fi
 if [[ -f "$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json" ]]; then
-  hot_work_args+=(--state-file "douyin=$release_root/data/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json")
+  hot_work_args+=(--state-file "douyin=$data_root/intel/hot_works_multiplatform_20260822/cookie_probe/douyin_playwright_state.json")
 fi
 if run_platform --config "$config_path" --db "$data_root/state.db" "${hot_work_args[@]}" > "$out/hot-works-result.json"; then
   notify "progress" "hot_work_strategy_refreshed"

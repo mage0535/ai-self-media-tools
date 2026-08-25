@@ -338,7 +338,7 @@ shared_trend_only: false
         self.assertIn('--release-root "$release_root"', text)
         self.assertNotIn('"$root/scripts/', text)
         self.assertIn('PYTHONPATH="$release_root', text)
-        self.assertIn('smoke_provider.sh" "$release_root/config.json', text)
+        self.assertIn('smoke_provider.sh" "$config_path', text)
 
     def test_release_deploy_and_overnight_share_runtime_release_lock(self):
         overnight = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
@@ -348,6 +348,32 @@ shared_trend_only: false
         self.assertIn("flock -s", overnight)
         self.assertIn("runtime-release.lock", deploy)
         self.assertIn("LOCK_EX", deploy)
+
+    def test_overnight_supervisor_resolves_canonical_release_and_verifies_before_state_writes(self):
+        text = Path("scripts/run_overnight_supervisor.sh").read_text(encoding="utf-8")
+
+        resolve = text.index('release_root=$(readlink -f -- "$root")')
+        verify = text.index("--verify-metadata")
+        state_check = text.index('[[ -f "$state" ]]')
+        self.assertLess(resolve, verify)
+        self.assertLess(verify, state_check)
+        self.assertIn('CONTENT_PLATFORM_CODE_ROOT="$release_root"', text)
+        self.assertIn("flock -s", text)
+        self.assertIn("runtime-release.lock", text)
+        self.assertNotIn('"$root/scripts/', text)
+        self.assertIn('PYTHONPATH="$release_root', text)
+
+    def test_overnight_units_use_current_code_and_stable_runtime_roots_consistently(self):
+        batch = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
+        supervisor = Path("systemd/hermes-content-platform-overnight-supervisor.service").read_text(encoding="utf-8")
+
+        for text, script in ((batch, "run_overnight_batch.sh"), (supervisor, "run_overnight_supervisor.sh")):
+            self.assertIn("Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current", text)
+            self.assertIn("Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data", text)
+            self.assertIn("Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets", text)
+            self.assertIn("Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json", text)
+            self.assertIn(f"ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/{script}", text)
+            self.assertNotIn("ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/", text)
 
     def test_background_systemd_services_use_notification_wrappers(self):
         growth = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
