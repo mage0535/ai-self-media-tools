@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import py_compile
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -50,6 +51,10 @@ def _assert_clean(source_root: Path) -> None:
 def _assert_release_matches(source_root: Path, release_root: Path, source_hashes: dict[str, str]) -> None:
     for relative, expected in source_hashes.items():
         candidate = release_root / relative
+        try:
+            candidate.resolve(strict=True).relative_to(release_root)
+        except (FileNotFoundError, ValueError) as exc:
+            raise ReleaseAuditError(f"release tracked file resolves outside release root: {relative}") from exc
         if not candidate.is_file():
             raise ReleaseAuditError(f"release file missing: {relative}")
         actual = _sha256(candidate)
@@ -63,10 +68,18 @@ def _assert_release_has_no_untracked_files(release_root: Path, source_hashes: di
         if not path.is_file():
             continue
         relative = path.relative_to(release_root)
-        if path.name == "release-metadata.json" or "__pycache__" in relative.parts or path.suffix.lower() == ".pyc":
+        if path.name == "release-metadata.json":
             continue
         if relative.as_posix() not in tracked:
             raise ReleaseAuditError(f"release file is not tracked by source: {relative.as_posix()}")
+
+
+def _assert_release_has_no_symlinks(release_root: Path) -> None:
+    for root, directories, files in os.walk(release_root, followlinks=False):
+        for name in (*directories, *files):
+            candidate = Path(root) / name
+            if candidate.is_symlink():
+                raise ReleaseAuditError(f"release contains forbidden symlink: {candidate.relative_to(release_root)}")
 
 
 def _require_file(path: Path, label: str) -> None:
@@ -83,6 +96,15 @@ def _validate_rollback_target(release_root: Path, rollback_target: Path) -> None
     entries = [path for path in scripts.rglob("*") if path.is_file() and path.suffix.lower() in {".py", ".sh"}]
     if not entries:
         raise ReleaseAuditError("rollback target has no safe verifiable entrypoint")
+    bash_entries = [entry for entry in entries if entry.suffix.lower() == ".sh"]
+    bash_validator = None
+    if bash_entries:
+        configured_bash = os.environ.get("CONTENT_PLATFORM_BASH", "").strip()
+        bash_validator = shutil.which(configured_bash or "bash")
+        if not bash_validator and configured_bash and Path(configured_bash).is_file():
+            bash_validator = configured_bash
+        if not bash_validator:
+            raise ReleaseAuditError("validator_unavailable: bash validator is not available")
     for entry in entries:
         if entry.suffix.lower() == ".py":
             temporary_pyc = tempfile.NamedTemporaryFile(suffix=".pyc", delete=False)
@@ -95,9 +117,9 @@ def _validate_rollback_target(release_root: Path, rollback_target: Path) -> None
                 Path(temporary_pyc.name).unlink(missing_ok=True)
         else:
             try:
-                result = subprocess.run(["bash", "-n", str(entry)], capture_output=True, text=True)
+                result = subprocess.run([bash_validator, "-n", str(entry)], capture_output=True, text=True)
             except OSError as exc:
-                raise ReleaseAuditError("bash is required to validate rollback shell entrypoints") from exc
+                raise ReleaseAuditError("validator_unavailable: bash validator could not be started") from exc
             if result.returncode != 0:
                 raise ReleaseAuditError(f"rollback shell entrypoint syntax error: {entry}")
 
@@ -133,6 +155,7 @@ def audit_release(
     _require_file(test_report, "test_report_path")
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
+    _assert_release_has_no_symlinks(release)
     _assert_release_matches(source, release, source_hashes)
     _assert_release_has_no_untracked_files(release, source_hashes)
     _validate_rollback_target(release, rollback)
