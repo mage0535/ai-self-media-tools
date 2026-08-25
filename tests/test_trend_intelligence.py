@@ -193,13 +193,13 @@ def test_overnight_prepare_uses_snapshot_and_platform_specific_matrix(tmp_path, 
     slots.write_text(json.dumps({"slots": [{"platform": "zhihu", "topic_keywords": ["agent"]}]}), encoding="utf-8")
     output = tmp_path / "prepared.json"
     report = {
-        "items": [{"title": "Agent workflow guide", "source": "zhihu_hot", "points": 50}],
+        "items": [{"title": "Agent workflow guide", "platform": "zhihu", "source": "zhihu", "points": 50, "url": "https://www.zhihu.com/question/1"}],
         "sources": [
-            {"source": "zhihu_hot", "status": "ok", "count": 1},
-            {"source": "github", "status": "ok", "count": 1},
-            {"source": "bilibili", "status": "ok", "count": 1},
-            {"source": "hackernews", "status": "ok", "count": 1},
-            {"source": "account_history", "status": "ok", "count": 1},
+            {"source": "zhihu", "status": "ok", "count": 1, "collected_at": "2026-08-25T00:00:00+00:00"},
+            {"source": "github", "status": "ok", "count": 1, "collected_at": "2026-08-25T00:00:00+00:00"},
+            {"source": "bilibili", "status": "ok", "count": 1, "collected_at": "2026-08-25T00:00:00+00:00"},
+            {"source": "hackernews", "status": "ok", "count": 1, "collected_at": "2026-08-25T00:00:00+00:00"},
+            {"source": "account_history", "status": "ok", "count": 1, "collected_at": "2026-08-25T00:00:00+00:00"},
         ],
     }
 

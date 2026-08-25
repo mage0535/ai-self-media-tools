@@ -772,6 +772,8 @@ def execute(args):
         official_reference_evidence = {}
         official_reference_items = []
         data_dir = Path(config.get("data_dir", Path(args.db).parent))
+        from .trend_intelligence import expire_abandoned_reservations
+        expired_reservations = expire_abandoned_reservations(data_dir / "topic-reservations.json")
         for slot in slots:
             platform = str(slot.get("platform") or "").casefold() if isinstance(slot, dict) else ""
             if not platform or platform in official_reference_evidence:
@@ -782,6 +784,7 @@ def execute(args):
         if official_reference_items:
             report.setdefault("items", []).extend(official_reference_items)
         report["official_reference_signals"] = official_reference_evidence
+        report["expired_topic_reservations"] = expired_reservations
         report.setdefault("sources", []).extend({"source": f"{platform}:official_reference", "status": "ok" if evidence.get("status") == "ready" else "insufficient", "count": len(evidence.get("signals") or []), "collected_at": evidence.get("captured_at") or collected_at, "official_url": evidence.get("official_url") or "", "evidence_sha256": evidence.get("evidence_sha256") or "", "reference_only": True} for platform, evidence in official_reference_evidence.items())
         snapshot_path = trend_cache_dir() / f"trend_snapshot_{datetime.now().date().isoformat()}.json"
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1214,12 +1217,21 @@ def execute(args):
     if args.command == "delivery-poll":
         from .scheduler import process_unknown_deliveries
         result_path = Path(args.results or os.environ.get("CONTENT_PLATFORM_DELIVERY_POLL_RESULTS", "") or Path(config.get("data_dir", Path(args.db).parent)) / "delivery-poll-results.json")
-        if not result_path.is_file():
-            return {"status": "skipped", "reason": "delivery poll evidence file missing", "polled": 0}
-        records = json.loads(result_path.read_text(encoding="utf-8"))
-        if not isinstance(records, dict):
-            raise ValueError("delivery poll results must be a JSON object")
-        return process_unknown_deliveries(store, lambda intent: records.get(intent["intent_id"]) or {"status": "inconclusive", "reason": "poll result missing for immutable intent"})
+        if result_path.is_file():
+            records = json.loads(result_path.read_text(encoding="utf-8"))
+            if not isinstance(records, dict):
+                raise ValueError("delivery poll results must be a JSON object")
+            poller = lambda intent: records.get(intent["intent_id"]) or {"status": "inconclusive", "reason": "poll result missing for immutable intent"}
+        else:
+            from .publishers import build_publisher
+            data_dir = Path(config.get("data_dir", Path(args.db).parent))
+            def poller(intent):
+                publisher = build_publisher(str(intent.get("platform") or ""), config, data_dir)
+                callback = getattr(publisher, "poll_delivery_intent", None)
+                if not callable(callback):
+                    return {"status": "inconclusive", "reason": "publisher has no immutable-identity poller"}
+                return callback(intent)
+        return process_unknown_deliveries(store, poller)
     if args.command == "metric-collect-due":
         from .scheduler import process_due_metric_windows
         result_path = Path(args.results or os.environ.get("CONTENT_PLATFORM_METRIC_RESULTS", "") or Path(config.get("data_dir", Path(args.db).parent)) / "metric-collection-results.json")

@@ -111,7 +111,17 @@ class StoreTests(unittest.TestCase):
             "kuaishou",
             "AI automation pitfalls",
             topic_fingerprint="ai-automation-pitfalls",
-            external_id="manual:demo",
+            external_id="123456789",
+            account_alias="kuaishou_main",
+            url="https://www.kuaishou.com/short-video/123456789",
+            published_at="2026-08-25T12:00:00+08:00",
+            verification={
+                "account_alias": "kuaishou_main",
+                "content_id": "123456789",
+                "url": "https://www.kuaishou.com/short-video/123456789",
+                "published_at": "2026-08-25T12:00:00+08:00",
+                "source": "management_page_postcheck",
+            },
         )
 
         self.assertEqual(receipt["status"], "published")
