@@ -57,6 +57,8 @@
 
 - [ ] Add fixtures for all 12 platforms covering native, activity, keyword, same-lane, unavailable, and expired evidence.
 - [ ] Implement bounded same-platform recapture and labeled evergreen fallback.
+- [ ] Enforce global seven-day semantic dedupe and atomically reserve the selected topic before generation.
+- [ ] Permit follow-up reuse only with `follow_up_to`, `difference_angle`, and `recap_reason`; expire abandoned reservations explicitly.
 - [ ] Persist hotspot identity, validity, lane/semantic fit, association mode, and postcheck state.
 - [ ] Verify one independent candidate or truthful block per scheduled platform.
 - [ ] Commit as `feat: complete platform-native topic intelligence`.
@@ -67,6 +69,7 @@
 
 - [ ] Write failing contract tests for Juejin cover plus three mapped inline images and public asset URLs.
 - [ ] Add bounded within-platform asset concurrency, per-asset checkpointing, semantic/SHA gates, and public staging.
+- [ ] Define `handoff_ready` as version-bound copy/media with checksums, source/license evidence, target-renderer evidence, editor-visible image mapping, and encoded motion/background evidence for video.
 - [ ] Verify scene-level motion, subtitles, audio, BGM license/source, and final MP4 probes.
 - [ ] Reject NC/ND production BGM and missing source URLs.
 - [ ] Commit as `feat: execute and verify complete media contracts`.
@@ -76,6 +79,9 @@
 **Files:** integrate `publication_ledger.py` with `store.py`, `pipeline.py`, publisher adapters, scheduler, and collectors; add migrations and tests.
 
 - [ ] Test verified and unverified publication identities for automatic and manual channels.
+- [ ] Persist an immutable delivery intent before external calls, including account, action, payload/media hashes, expected copy, and schedule.
+- [ ] Treat timeout/crash as an unknown result; run postcheck first and retry only when absence is proven.
+- [ ] Require Kuaishou management-page account, title, full-description or digest, exact-time, and screenshot/DOM evidence before `scheduled`.
 - [ ] Add idempotent 1h/24h/72h windows, attempts, leases, retry, insufficient, and invalidated states.
 - [ ] Bind observations to platform, internal account alias, content ID, source, and confidence.
 - [ ] Verify drafts/handoffs/review items never create metric windows.
@@ -97,9 +103,9 @@
 
 - [ ] Run full pytest, privacy audit, license audit, compile, and diff checks.
 - [ ] Execute 12 serial real canaries with platform-policy delivery states.
+- [ ] Include crash-boundary delivery recovery, duplicate-schedule prevention, exact Kuaishou management-page postcheck, and complete handoff-render contracts in Canary acceptance.
 - [ ] Run Hermes active-model and available weak-model cases against identical deterministic gates.
 - [ ] Rehearse rollback and verify database/cookie/media preservation.
 - [ ] Run two shadow batches without code edits or manual recovery.
 - [ ] Enable timers only after every acceptance condition passes.
 - [ ] Commit reports and deploy the audited immutable release.
-

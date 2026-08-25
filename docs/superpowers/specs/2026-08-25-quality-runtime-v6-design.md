@@ -34,6 +34,8 @@ Runtime evidence uses distinct states: `planned`, `consulted`, `executed`, `arti
 
 Platform-native official topics, activities, keywords, and same-lane works are preferred. An irrelevant candidate triggers bounded same-platform recapture instead of dropping the platform. Cross-platform evidence is contextual only and never inherits native identity. Strategy-allowed evergreen fallback remains explicitly labeled.
 
+The selected topic is checked against a global seven-day semantic dedupe window before generation and reserved atomically for the platform and batch. A cross-format follow-up is allowed only with recorded `follow_up_to`, `difference_angle`, and `recap_reason`. Failed or abandoned reservations expire through an explicit terminal-state policy; they are never silently reused.
+
 ## Media Contracts
 
 Article and video contracts are evaluated before generation and again against actual artifacts. Juejin requires a public cover plus three public inline images mapped to sections. Video uses `scene_manifest.json` as the only timeline and verifies actual encoded motion, subtitles, audio, BGM, scene assets, and final media probes. Commercial production BGM rejects NC/ND licenses.
@@ -42,6 +44,12 @@ Article and video contracts are evaluated before generation and again against ac
 
 Delivery health is refreshed before queue admission. Draft, scheduled, review, handoff, and published remain distinct. Xiaohongshu is permanently manual-handoff-only. Verified publication identities create idempotent 1h/24h/72h metric windows; insufficient data is never written as zero.
 
+Before an external delivery call, the runtime persists an immutable delivery intent containing account alias, action, payload hash, media hashes, expected title/description, and schedule. A timeout or process crash is an unknown result, not a retryable failure: recovery must query the platform or management page first and may retry only after proving that no matching item exists.
+
+Kuaishou `scheduled` requires a management-page postcheck matching the account alias, title, complete description or collision-resistant description digest, exact scheduled time, and screenshot or DOM evidence. Uploader exit code alone is never success.
+
+`handoff_ready` requires version-bound copy and media, checksums, source/license evidence, target renderer or editor evidence, and platform-specific artifact probes. Video handoff additionally requires independently hashed backgrounds and encoded motion evidence; article handoff requires editor-visible inline image mapping.
+
 ## Observability
 
 A Chinese reporter consumes structured events and reports the platform, stage, evidence, candidate decisions, selected/executed capabilities, error, repair, gate results, and receipt. The reporter is independent from the worker and never mutates content state.
@@ -49,4 +57,3 @@ A Chinese reporter consumes structured events and reports the platform, stage, e
 ## Release Boundary
 
 No timer is enabled until full tests, privacy/license audits, 12 serial platform canaries, active-model and weak-model runs, rollback rehearsal, and source/release SHA consistency pass. Two consecutive shadow batches must complete without code edits or manual recovery before production activation.
-
