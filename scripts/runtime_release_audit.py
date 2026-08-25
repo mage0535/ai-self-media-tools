@@ -19,6 +19,12 @@ def _resolve(path: Path | str) -> Path:
     return Path(path).expanduser().resolve()
 
 
+def _reject_symlink_root(path: Path | str, label: str) -> None:
+    original = Path(path).expanduser()
+    if original.is_symlink():
+        raise ReleaseAuditError(f"{label} must not be a symlink")
+
+
 def _git(source_root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", "-C", str(source_root), *args],
@@ -135,6 +141,8 @@ def audit_release(
 ) -> dict:
     if config_path is None or test_report_path is None or rollback_target is None:
         raise ReleaseAuditError("config_path, test_report_path, and rollback_target are required evidence")
+    _reject_symlink_root(source_root, "source_root")
+    _reject_symlink_root(release_root, "release_root")
     source = _resolve(source_root)
     release = _resolve(release_root)
     script_root = _resolve(configured_script_root)

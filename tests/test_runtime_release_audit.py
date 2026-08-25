@@ -233,6 +233,27 @@ def test_rejects_release_symlink_escape(tmp_path: Path, monkeypatch):
         )
 
 
+def test_rejects_symlink_release_root(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    real_release = tmp_path / "real-release"
+    release_root.rename(real_release)
+    try:
+        release_root.symlink_to(real_release, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="release_root|symlink"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
 def test_rejects_environment_code_root_that_differs_from_release(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(tmp_path / "another-release"))
