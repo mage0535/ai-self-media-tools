@@ -112,6 +112,8 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
                 failures.append(f"{capability_id}.output_contract_missing")
             if not str(capability.get("quality_gate") or ""):
                 failures.append(f"{capability_id}.quality_gate_missing")
+            if not str(capability.get("runtime_evidence") or ""):
+                failures.append(f"{capability_id}.runtime_evidence_missing")
             if "fallback_chain" not in capability:
                 failures.append(f"{capability_id}.fallback_chain_missing")
 

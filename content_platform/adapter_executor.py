@@ -15,6 +15,7 @@ _SUPPORTED_ADAPTERS = frozenset(
         "python:content_platform.adapters.methodology:execute",
         "python:content_platform.adapters.search:execute",
         "python:content_platform.adapters.mcp:execute",
+        "python:content_platform.adapters.runtime:execute",
     }
 )
 
@@ -141,6 +142,30 @@ def _stable_hash_value(value: Any) -> Any:
 
 
 def _validate_contract(output: dict[str, Any], contract: str) -> bool:
+    runtime_contracts = {
+        "compiled_strategy_v1",
+        "platform_source_matrix_v2",
+        "performance_evidence_v1",
+        "topic_dedup_evidence_v1",
+        "content_recipe_v1",
+        "seo_geo_v1",
+        "visual_recipe_v1",
+        "video_template_plan_v1",
+        "shotcraft_plan_v1",
+        "media_quality_v1",
+        "preflight_manifest_v1",
+    }
+    if contract in runtime_contracts:
+        return (
+            output.get("version") == contract
+            and output.get("status") == "failed"
+            and isinstance(output.get("runtime_evidence"), dict)
+        ) or (
+            output.get("version") == contract
+            and output.get("status") == "verified"
+            and isinstance(output.get("runtime_evidence"), dict)
+            and isinstance(output.get("evidence"), dict)
+        )
     if contract == "structure_match_v1":
         return output.get("version") == contract and isinstance(output.get("matched_structures"), list)
     if contract == "reference_compilation_v1":
