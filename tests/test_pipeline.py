@@ -39,7 +39,8 @@ class PipelineTests(unittest.TestCase):
             draft,
             {"render_manifest": {"tool_invocation_manifest": manifest}, "render_packet": {}},
         )
-        self.assertEqual(draft["draft_meta"]["tool_invocation_manifest"], manifest)
+        self.assertEqual(draft["draft_meta"]["renderer_tool_invocation_manifest"], manifest)
+        self.assertNotIn("tool_invocation_manifest", draft["draft_meta"])
 
     def test_each_job_overwrites_generator_checkpoint_dir(self):
         first = self.pipeline.create("First topic", ["wechat"], {"audience": "operators"})
@@ -74,7 +75,7 @@ class PipelineTests(unittest.TestCase):
 
         self.assertEqual(draft["draft_meta"]["render_manifest"]["status"], "rendered")
         self.assertEqual(
-            draft["draft_meta"]["tool_invocation_manifest"]["invocations"]["video_toolchain_runner"]["status"],
+            draft["draft_meta"]["renderer_tool_invocation_manifest"]["invocations"]["video_toolchain_runner"]["status"],
             "ok",
         )
 
