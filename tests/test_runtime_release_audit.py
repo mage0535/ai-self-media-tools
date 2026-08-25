@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import shutil
 import subprocess
 
@@ -42,7 +43,7 @@ def _valid_case(tmp_path: Path):
     return source_root, release_root, config_path, report_path, rollback_target
 
 
-def test_rejects_mismatched_source_release_and_configured_script_roots(tmp_path: Path):
+def test_rejects_mismatched_source_release_and_configured_script_roots(tmp_path: Path, monkeypatch):
     source_root = tmp_path / "source"
     release_root = tmp_path / "releases" / "abc123"
     configured_script_root = tmp_path / "releases" / "other456" / "scripts"
@@ -56,6 +57,7 @@ def test_rejects_mismatched_source_release_and_configured_script_roots(tmp_path:
     (rollback_target / "scripts" / "run.py").write_text("rollback\n", encoding="utf-8")
     config_path.write_text("{}", encoding="utf-8")
     report_path.write_text("<testsuite/>", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     with pytest.raises(ReleaseAuditError, match="source.*release.*script"):
         audit_release(
@@ -68,7 +70,7 @@ def test_rejects_mismatched_source_release_and_configured_script_roots(tmp_path:
         )
 
 
-def test_rejects_dirty_source_root(tmp_path: Path):
+def test_rejects_dirty_source_root(tmp_path: Path, monkeypatch):
     source_root = tmp_path / "source"
     source_root.mkdir()
     _git_repo(source_root)
@@ -82,6 +84,7 @@ def test_rejects_dirty_source_root(tmp_path: Path):
     (rollback_target / "scripts" / "run.py").write_text("rollback\n", encoding="utf-8")
     config_path.write_text("{}", encoding="utf-8")
     report_path.write_text("<testsuite/>", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     with pytest.raises(ReleaseAuditError, match="dirty|uncommitted"):
         audit_release(
@@ -94,8 +97,9 @@ def test_rejects_dirty_source_root(tmp_path: Path):
         )
 
 
-def test_writes_immutable_release_metadata_with_hashes_and_rollback_target(tmp_path: Path):
+def test_writes_immutable_release_metadata_with_hashes_and_rollback_target(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     metadata = audit_release(
         source_root=source_root,
@@ -121,9 +125,10 @@ def test_writes_immutable_release_metadata_with_hashes_and_rollback_target(tmp_p
         write_metadata(metadata, destination)
 
 
-def test_rejects_release_content_that_differs_from_source(tmp_path: Path):
+def test_rejects_release_content_that_differs_from_source(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     (release_root / "README.md").write_text("tampered\n", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     with pytest.raises(ReleaseAuditError, match="hash|content"):
         audit_release(
@@ -136,9 +141,10 @@ def test_rejects_release_content_that_differs_from_source(tmp_path: Path):
         )
 
 
-def test_rejects_release_missing_a_tracked_file(tmp_path: Path):
+def test_rejects_release_missing_a_tracked_file(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     (release_root / "README.md").unlink()
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     with pytest.raises(ReleaseAuditError, match="missing|release"):
         audit_release(
@@ -166,8 +172,23 @@ def test_rejects_environment_code_root_that_differs_from_release(tmp_path: Path,
         )
 
 
+def test_rejects_missing_environment_code_root(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.delenv("CONTENT_PLATFORM_CODE_ROOT", raising=False)
+
+    with pytest.raises(ReleaseAuditError, match="CONTENT_PLATFORM_CODE_ROOT"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
 @pytest.mark.parametrize("missing", ["config_path", "test_report_path", "rollback_target"])
-def test_rejects_missing_required_release_evidence(tmp_path: Path, missing: str):
+def test_rejects_missing_required_release_evidence(tmp_path: Path, missing: str, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     values = {
         "config_path": config_path,
@@ -175,6 +196,7 @@ def test_rejects_missing_required_release_evidence(tmp_path: Path, missing: str)
         "rollback_target": rollback_target,
     }
     values[missing] = None
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     with pytest.raises(ReleaseAuditError, match="required|evidence"):
         audit_release(
@@ -186,7 +208,7 @@ def test_rejects_missing_required_release_evidence(tmp_path: Path, missing: str)
 
 
 @pytest.mark.parametrize("missing", ["config_path", "test_report_path"])
-def test_rejects_required_evidence_path_that_does_not_exist(tmp_path: Path, missing: str):
+def test_rejects_required_evidence_path_that_does_not_exist(tmp_path: Path, missing: str, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     values = {
         "config_path": config_path,
@@ -194,6 +216,7 @@ def test_rejects_required_evidence_path_that_does_not_exist(tmp_path: Path, miss
         "rollback_target": rollback_target,
     }
     values[missing] = tmp_path / "does-not-exist"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     with pytest.raises(ReleaseAuditError, match="required evidence"):
         audit_release(
@@ -204,8 +227,9 @@ def test_rejects_required_evidence_path_that_does_not_exist(tmp_path: Path, miss
         )
 
 
-def test_rejects_invalid_rollback_target(tmp_path: Path):
+def test_rejects_invalid_rollback_target(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, _ = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     with pytest.raises(ReleaseAuditError, match="rollback"):
         audit_release(
@@ -218,8 +242,59 @@ def test_rejects_invalid_rollback_target(tmp_path: Path):
         )
 
 
-def test_rejects_metadata_path_outside_release(tmp_path: Path):
+def test_rejects_rollback_target_without_safe_entrypoint(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    (rollback_target / "scripts" / "run.py").unlink()
+    (rollback_target / "scripts" / "README.txt").write_text("not executable\n", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="entry|runnable|syntax"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_rejects_rollback_target_with_invalid_python_entrypoint(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    (rollback_target / "scripts" / "run.py").write_text("def broken(:\n", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="syntax|compile|rollback"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_rejects_rollback_target_with_invalid_shell_entrypoint(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    (rollback_target / "scripts" / "broken.sh").write_text("if then\n", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    monkeypatch.setenv("PATH", f"C:\\Program Files\\Git\\bin{os.pathsep}{os.environ['PATH']}")
+
+    with pytest.raises(ReleaseAuditError, match="shell|syntax|rollback"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_rejects_metadata_path_outside_release(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
     metadata = audit_release(
         source_root=source_root,
         release_root=release_root,
@@ -233,8 +308,9 @@ def test_rejects_metadata_path_outside_release(tmp_path: Path):
         write_metadata(metadata, tmp_path / "outside.json")
 
 
-def test_accepts_consistent_release_and_all_evidence(tmp_path: Path):
+def test_accepts_consistent_release_and_all_evidence(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
     metadata = audit_release(
         source_root=source_root,
         release_root=release_root,
