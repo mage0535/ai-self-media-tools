@@ -25,8 +25,13 @@ out="$data_root/overnight/$day"
 slots="$secrets_root/overnight-slots.json"
 
 install -d "$data_root"
-exec 9>"$data_root/runtime-release.lock"
-flock -s 9
+exec 8>"$data_root/runtime-release.lock"
+flock -s 8
+exec 9>"$data_root/overnight-batch.lock"
+if ! flock -n 9; then
+  printf '%s\n' '{"status":"rejected","reason":"another overnight worker is live"}' >&2
+  exit 75
+fi
 
 # Do not create state or invoke any batch task until the audited release is verified.
 CONTENT_PLATFORM_CODE_ROOT="$release_root" \
@@ -42,6 +47,10 @@ notify() {
   "$release_root/scripts/notify_hermes_progress.sh" "overnight" "$1" "${2:-}" || true
 }
 
+report_events() {
+  "$release_root/scripts/run_overnight_reporter.sh" "$out" "$out/events.jsonl" "$out/reporter.cursor.json" || true
+}
+
 handle_error() {
   local status="$1"
   trap - ERR
@@ -53,6 +62,7 @@ handle_error() {
     run_platform --config "$config_path" --db "$data_root/state.db" \
       overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/error-sync-state-result.json"
   fi
+  report_events
   notify "failed" "batch_failed_before_result_exit_${status}"
   exit "$status"
 }
@@ -152,12 +162,14 @@ run_platform --config "$config_path" --db "$data_root/state.db" \
 notify "progress" "overnight_plan_complete"
 run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-run --plan "$out/plan.json" --state "$out/state.json" --events "$out/events.jsonl" > "$out/result.json"
+report_events
 run_platform --config "$config_path" --db "$data_root/state.db" \
   overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/sync-state-result.json"
 if ! run_platform overnight-acceptance --result "$out/result.json" --state "$out/state.json" --output "$out/acceptance_report.json" > "$out/acceptance-result.json"; then
   notify "failed" "overnight_acceptance_failed"
   exit 1
 fi
+report_events
 notify "progress" "overnight_acceptance_complete"
 batch_status="$(python3 - "$out/result.json" <<'PY'
 import json

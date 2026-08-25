@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from content_platform.chinese_reporter import ChineseReporter
-from content_platform.overnight_batch import BatchEventJournal, build_batch_plan, execute_batch
+from content_platform.overnight_batch import (
+    BatchEventJournal,
+    build_batch_plan,
+    execute_batch,
+    exclusive_batch_owner,
+)
 from content_platform.overnight_supervisor import inspect_batch_health
 from content_platform.workflow_runtime import WORKFLOW_STAGES, WorkflowStateMachine
 
@@ -63,6 +68,136 @@ def test_execute_batch_stops_after_same_platform_repair_limit(tmp_path: Path):
     assert pipeline.runs == ["job-wechat"] * 3
 
 
+def test_recovery_and_runtime_retry_share_one_persisted_repair_counter(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "status": "running",
+                "tasks": [
+                    {
+                        "platform": "wechat",
+                        "state": "running",
+                        "topic": "topic-a",
+                        "repair_attempts": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            return {"id": "job-wechat"}
+
+        def run(self, _job_id):
+            raise RuntimeError("provider timeout")
+
+    result = execute_batch(
+        Pipeline(),
+        build_batch_plan([{"platform": "wechat", "topic": "topic-a", "brief": {}, "estimate_minutes": 10}]),
+        state_path=state_path,
+        journal=BatchEventJournal(tmp_path / "events.jsonl"),
+    )
+
+    assert result["status"] == "failed"
+    assert result["tasks"][0]["repair_attempts"] == 2
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["tasks"][0]["repair_attempts"] == 2
+    assert "retry_count" not in persisted["tasks"][0]
+    assert "recovery_count" not in persisted["tasks"][0]
+
+
+def test_batch_owner_lease_rejects_a_second_live_worker(tmp_path: Path):
+    lock_path = tmp_path / "overnight.owner.lock"
+    with exclusive_batch_owner(lock_path):
+        with pytest.raises(RuntimeError, match="another overnight worker"):
+            with exclusive_batch_owner(lock_path):
+                pass
+
+
+def test_execute_batch_persists_job_and_stage_before_next_runtime_call(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    observed = []
+
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            observed.append((saved["tasks"][0].get("job_id"), saved["tasks"][0]["workflow"]["completed_stages"]))
+            return {"id": "job-wechat"}
+
+        def run(self, job_id):
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            observed.append((job_id, saved["tasks"][0].get("job_id"), saved["tasks"][0]["workflow"]["completed_stages"]))
+            return {"id": job_id, "state": "review_required", "artifacts": []}
+
+        def stage_drafts(self, _job_id):
+            return {"state": "partial"}
+
+    result = execute_batch(
+        Pipeline(),
+        build_batch_plan([{"platform": "wechat", "topic": "topic-a", "brief": {}, "action": "stage", "estimate_minutes": 10}]),
+        state_path=state_path,
+        journal=BatchEventJournal(tmp_path / "events.jsonl"),
+    )
+
+    assert result["status"] == "completed"
+    assert observed[0][0] is None
+    assert observed[0][1] == ["planned", "collecting", "selecting"]
+    assert observed[1][0:2] == ("job-wechat", "job-wechat")
+    assert "generating" not in observed[1][2]
+
+
+def test_resume_uses_persisted_job_and_completed_stages_without_repeating_them(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    workflow = {
+        "state": "rendering",
+        "completed_stages": ["planned", "collecting", "selecting", "generating", "rendering"],
+        "stage_outputs": {},
+        "repair_attempts": 0,
+    }
+    state_path.write_text(
+        json.dumps(
+            {
+                "status": "partial",
+                "tasks": [
+                    {
+                        "platform": "wechat",
+                        "state": "retry_pending",
+                        "topic": "topic-a",
+                        "action": "stage",
+                        "job_id": "job-existing",
+                        "pipeline_result": {"id": "job-existing", "state": "review_required", "artifacts": []},
+                        "workflow": workflow,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class Pipeline:
+        def create(self, *_args, **_kwargs):
+            raise AssertionError("resume must not recreate an existing job")
+
+        def run(self, _job_id):
+            raise AssertionError("resume must not rerun a completed generation stage")
+
+        def stage_drafts(self, job_id):
+            return {"id": job_id, "state": "partial"}
+
+    result = execute_batch(
+        Pipeline(),
+        build_batch_plan([{"platform": "wechat", "topic": "topic-a", "brief": {}, "action": "stage", "estimate_minutes": 10}]),
+        state_path=state_path,
+        journal=BatchEventJournal(tmp_path / "events.jsonl"),
+    )
+
+    assert result["status"] == "completed"
+    assert result["tasks"][0]["job_id"] == "job-existing"
+
+
 def test_workflow_checkpoint_skips_completed_collection_tts_assets_and_render():
     machine = WorkflowStateMachine()
     machine.begin_platform("wechat")
@@ -108,6 +243,24 @@ def test_supervisor_authorizes_stale_recovery_only_with_dead_pid_and_expired_lea
     assert report["recovery_authorized"] is True
     assert report["proof"]["pid_dead"] is True
     assert report["proof"]["lease_expired"] is True
+
+
+def test_supervisor_does_not_authorize_or_mutate_a_living_owner(tmp_path: Path):
+    now = datetime(2026, 8, 25, 1, 0, tzinfo=timezone.utc)
+    state = tmp_path / "state.json"
+    heartbeat = tmp_path / "heartbeat.json"
+    original = {
+        "status": "running",
+        "worker": {"pid": 4321, "owner": "worker-a", "lease_expires_at": (now - timedelta(minutes=5)).isoformat()},
+        "tasks": [{"platform": "wechat", "state": "generating"}],
+    }
+    state.write_text(json.dumps(original), encoding="utf-8")
+    heartbeat.write_text(json.dumps({"at": (now - timedelta(minutes=31)).isoformat(), "platform": "wechat"}), encoding="utf-8")
+
+    report = inspect_batch_health(state, heartbeat, now=now, pid_checker=lambda _pid: True)
+
+    assert report["recovery_authorized"] is False
+    assert json.loads(state.read_text(encoding="utf-8")) == original
 
 
 def test_chinese_reporter_describes_business_fields_without_raw_event_syntax_or_secrets(tmp_path: Path):
