@@ -175,12 +175,28 @@ def test_rejects_release_file_not_in_source_tracked_files(tmp_path: Path, monkey
         )
 
 
-def test_allows_release_metadata_and_python_cache_files(tmp_path: Path, monkeypatch):
+def test_rejects_release_python_cache_and_bytecode_files(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
-    (release_root / "release-metadata.json").write_text("{}\n", encoding="utf-8")
     cache = release_root / "scripts" / "__pycache__"
     cache.mkdir()
     (cache / "run.cpython-314.pyc").write_bytes(b"cache")
+    (release_root / "injected.pyc").write_bytes(b"bytecode")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="not tracked|unexpected|bytecode|cache"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_allows_release_metadata_file(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    (release_root / "release-metadata.json").write_text("{}\n", encoding="utf-8")
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
 
     metadata = audit_release(
@@ -193,6 +209,28 @@ def test_allows_release_metadata_and_python_cache_files(tmp_path: Path, monkeypa
     )
 
     assert metadata["release_root"] == str(release_root.resolve())
+
+
+def test_rejects_release_symlink_escape(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    outside = tmp_path / "outside.py"
+    outside.write_text("outside = True\n", encoding="utf-8")
+    link = release_root / "scripts" / "escape.py"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="symlink|release root|outside"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
 
 
 def test_rejects_environment_code_root_that_differs_from_release(tmp_path: Path, monkeypatch):
@@ -320,6 +358,23 @@ def test_rejects_rollback_target_with_invalid_shell_entrypoint(tmp_path: Path, m
     monkeypatch.setenv("PATH", f"C:\\Program Files\\Git\\bin{os.pathsep}{os.environ['PATH']}")
 
     with pytest.raises(ReleaseAuditError, match="shell|syntax|rollback"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_rejects_shell_entrypoint_when_bash_validator_unavailable(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    (rollback_target / "scripts" / "run.sh").write_text("echo ok\n", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    monkeypatch.setenv("CONTENT_PLATFORM_BASH", str(tmp_path / "missing-bash"))
+
+    with pytest.raises(ReleaseAuditError, match="validator_unavailable"):
         audit_release(
             source_root=source_root,
             release_root=release_root,
