@@ -133,6 +133,32 @@ def _validate_runtime_config(config_path: Path, release_root: Path, data_root: P
     visit(loaded)
 
 
+def _validate_signing_key_boundary(
+    signing_key: Path,
+    secrets_root: Path,
+    data_root: Path,
+    releases_root: Path,
+    current_link: Path,
+    release_root: Path | None = None,
+) -> None:
+    key = signing_key.resolve()
+    secrets = secrets_root.resolve()
+    if secrets.name != "secrets" or key.parent != secrets:
+        raise ReleaseAuditError("signing key must be directly under the stable secrets boundary")
+    for label, boundary in (("data root", data_root), ("releases root", releases_root), ("current root", current_link)):
+        try:
+            key.relative_to(boundary.resolve())
+        except ValueError:
+            continue
+        raise ReleaseAuditError(f"signing key must not be inside {label}")
+    if release_root is not None:
+        try:
+            key.relative_to(release_root.resolve())
+        except ValueError:
+            return
+        raise ReleaseAuditError("signing key must not be inside release")
+
+
 def deploy_release(
     *,
     source_root: Path | str,
@@ -160,8 +186,13 @@ def deploy_release(
     report = Path(test_report_path).expanduser().resolve()
     rollback = Path(rollback_target).expanduser().resolve()
     data = Path(data_root).expanduser().resolve()
-    secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else data.parent / "secrets"
-    signing_key_path = Path(signing_key).expanduser().resolve() if signing_key is not None else data / "release-signing.key"
+    if signing_key is not None:
+        signing_key_path = Path(signing_key).expanduser().resolve()
+        secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else signing_key_path.parent
+    else:
+        secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else data.parent / "secrets"
+        signing_key_path = secrets / "release-signing.key"
+    _validate_signing_key_boundary(signing_key_path, secrets, data, releases, current)
     lock_path = data / "runtime-release.lock"
 
     with _exclusive_lock(lock_path):
@@ -207,7 +238,7 @@ def deploy_release(
                     attestation_path=attestation,
                     signing_key_path=signing_key_path,
                 )
-                write_metadata(metadata, release / "release-metadata.json")
+                write_metadata(metadata, release / "release-metadata.json", signing_key_path=signing_key_path)
             finally:
                 if previous_root is None:
                     os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
@@ -246,6 +277,7 @@ def rollback_release(
     current_link: Path | str | None = None,
     data_root: Path | str,
     signing_key: Path | str | None = None,
+    secrets_root: Path | str | None = None,
 ) -> dict:
     """Verify an audited frozen release and atomically activate it as current."""
     _validate_raw_path(target_release, "target_release")
@@ -253,6 +285,13 @@ def rollback_release(
     target = Path(target_release).expanduser().resolve()
     data = Path(data_root).expanduser().resolve()
     current = _current_path(current_link)
+    if signing_key is not None:
+        key = Path(signing_key).expanduser().resolve()
+        secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else key.parent
+    else:
+        secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else data.parent / "secrets"
+        key = secrets / "release-signing.key"
+    _validate_signing_key_boundary(key, secrets, data, target.parent, current, target)
     with _exclusive_lock(data / "runtime-release.lock"):
         metadata_path = target / "release-metadata.json"
         previous_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT")
@@ -261,7 +300,7 @@ def rollback_release(
             metadata = verify_metadata(
                 metadata_path,
                 current_release_root=target,
-                signing_key_path=signing_key,
+                signing_key_path=key,
             )
         finally:
             if previous_root is None:
@@ -297,11 +336,14 @@ def main() -> int:
     if args.operation == "rollback":
         if not args.target_release:
             parser.error("rollback requires --target-release")
+        if not args.signing_key and not args.secrets_root:
+            parser.error("rollback requires --signing-key or --secrets-root")
         result = rollback_release(
             target_release=args.target_release,
             current_link=args.current_link,
             data_root=args.data_root,
             signing_key=args.signing_key,
+            secrets_root=args.secrets_root,
         )
     else:
         required = {
@@ -314,6 +356,8 @@ def main() -> int:
         missing = [name for name, value in required.items() if not value]
         if missing:
             parser.error(f"deploy requires: {', '.join(missing)}")
+        if not args.signing_key and not args.secrets_root:
+            parser.error("deploy requires --signing-key or --secrets-root")
         result = deploy_release(
             source_root=args.source_root,
             releases_root=args.releases_root,

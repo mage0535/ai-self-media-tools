@@ -366,8 +366,15 @@ shared_trend_only: false
     def test_batch_and_supervisor_verify_with_the_stable_signing_key(self):
         for name in ("scripts/run_overnight_batch.sh", "scripts/run_overnight_supervisor.sh"):
             text = Path(name).read_text(encoding="utf-8")
-            self.assertIn('signing_key="${CONTENT_PLATFORM_RELEASE_SIGNING_KEY:-$data_root/release-signing.key}"', text)
+            self.assertIn('signing_key="${CONTENT_PLATFORM_RELEASE_SIGNING_KEY:-$secrets_root/release-signing.key}"', text)
             self.assertIn('--signing-key "$signing_key"', text)
+
+    def test_deploy_cli_requires_explicit_signing_key_or_secrets_root(self):
+        text = Path("scripts/deploy_release.py").read_text(encoding="utf-8")
+
+        self.assertIn("--signing-key", text)
+        self.assertIn("--secrets-root", text)
+        self.assertIn("release-signing.key", text)
 
     def test_overnight_units_use_current_code_and_stable_runtime_roots_consistently(self):
         batch = Path("systemd/hermes-content-platform-overnight.service").read_text(encoding="utf-8")
