@@ -954,7 +954,8 @@ class DraftGenerator:
         soft = int(self.config.get("soft_deadline", 240))
         hard = int(self.config.get("hard_deadline", 420))
         heartbeat_interval = max(1, int(self.config.get("heartbeat_interval", 30)))
-        next_heartbeat_at = started + soft
+        # elapsed is relative to started, so keep heartbeat thresholds relative too.
+        next_heartbeat_at = soft
         while proc.poll() is None:
             elapsed = clock() - started
             if elapsed >= hard:
