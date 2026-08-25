@@ -254,6 +254,54 @@ def test_rejects_symlink_release_root(tmp_path: Path, monkeypatch):
         )
 
 
+def test_rejects_parent_directory_symlink_in_config_path(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    outside = tmp_path / "outside-config"
+    outside.mkdir()
+    linked_parent = tmp_path / "linked-config"
+    try:
+        linked_parent.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    linked_config = linked_parent / config_path.name
+    shutil.copy2(config_path, outside / config_path.name)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="symlink|path boundary"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=linked_config,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_rejects_symlink_child_parent_traversal_path(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    outside = tmp_path / "outside-config"
+    outside.mkdir()
+    linked_parent = tmp_path / "linked-config"
+    try:
+        linked_parent.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    shutil.copy2(config_path, outside / config_path.name)
+    traversing_config = linked_parent / "child" / ".." / config_path.name
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match=r"\.\.|symlink|path boundary"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=traversing_config,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
 def test_rejects_environment_code_root_that_differs_from_release(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(tmp_path / "another-release"))
