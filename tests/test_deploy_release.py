@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -7,7 +8,14 @@ from pathlib import Path
 import pytest
 
 from scripts import deploy_release as deploy_release_module
-from scripts.deploy_release import _tracked_modes, deploy_release, deploy_release as _deploy_release, init_signing_key, rollback_release
+from scripts.deploy_release import (
+    _tracked_modes,
+    attest_existing_release as attest_existing_release_module,
+    deploy_release,
+    deploy_release as _deploy_release,
+    init_signing_key,
+    rollback_release,
+)
 from scripts.runtime_release_audit import ReleaseAuditError, audit_release, verify_metadata, write_metadata
 
 
@@ -83,6 +91,115 @@ def _case(tmp_path: Path):
         else:
             os.environ["CONTENT_PLATFORM_CODE_ROOT"] = previous_root
     return source, config, report, rollback
+
+
+def _existing_release_case(tmp_path: Path):
+    source, config, report, rollback = _case(tmp_path)
+    (tmp_path / "data" / "release-attestations" / "rollback.sha256").unlink()
+    releases = tmp_path / "releases"
+    release = releases / "legacy"
+    for relative in ("README.md", "scripts/run.py"):
+        destination = release / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / relative, destination)
+    current = tmp_path / ".ai-self-media-tools-current"
+    current.symlink_to(release, target_is_directory=True)
+    return source, config, report, rollback, releases, release, current
+
+
+def attest_existing_release(**kwargs):
+    kwargs.setdefault("evidence_runner", _fixture_evidence_runner)
+    return attest_existing_release_module(**kwargs)
+
+
+def test_attest_existing_rejects_source_release_mismatch(tmp_path: Path):
+    source, config, report, rollback, _, release, current = _existing_release_case(tmp_path)
+    (source / "README.md").write_text("different\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=source, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "different"],
+        cwd=source, check=True, capture_output=True,
+    )
+
+    with pytest.raises(ReleaseAuditError, match="hash|mismatch|tracked"):
+        attest_existing_release(
+            source_root=source, target_release=release, current_link=current,
+            config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        )
+
+
+def test_attest_existing_rejects_non_current_release(tmp_path: Path):
+    source, config, report, rollback, releases, release, current = _existing_release_case(tmp_path)
+    other = releases / "other"
+    shutil.copytree(release, other)
+
+    with pytest.raises(ReleaseAuditError, match="current"):
+        attest_existing_release(
+            source_root=source, target_release=other, current_link=current,
+            config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        )
+
+
+def test_attest_existing_rejects_existing_attestation(tmp_path: Path):
+    source, config, report, rollback, _, release, current = _existing_release_case(tmp_path)
+    attestation = tmp_path / "data" / "release-attestations" / "legacy.sha256"
+    attestation.parent.mkdir(parents=True, exist_ok=True)
+    attestation.write_text("already adopted\n", encoding="ascii")
+
+    with pytest.raises(ReleaseAuditError, match="attestation|adopted|exists"):
+        attest_existing_release(
+            source_root=source, target_release=release, current_link=current,
+            config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        )
+
+
+def test_attest_existing_creates_bootstrap_attestation_and_freezes_release(tmp_path: Path, monkeypatch):
+    source, config, report, rollback, _, release, current = _existing_release_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release))
+
+    result = attest_existing_release(
+        source_root=source, target_release=release, current_link=current,
+        config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+    )
+
+    metadata = json.loads((release / "release-metadata.json").read_text(encoding="utf-8"))
+    assert result["operation"] == "attest-existing"
+    assert metadata["bootstrap"] is True
+    assert metadata["rollback_target"] == ""
+    assert Path(result["attestation_path"]).is_file()
+    assert current.resolve() == release.resolve()
+    assert (release / "README.md").stat().st_mode & 0o222 == 0
+    assert verify_metadata(
+        release / "release-metadata.json",
+        current_release_root=release,
+        signing_key_path=tmp_path / "secrets" / "release-signing.key",
+        trusted_secrets_root=tmp_path / "secrets",
+    )["bootstrap"] is True
+
+
+def test_deploy_can_use_bootstrap_release_as_signed_rollback(tmp_path: Path, monkeypatch):
+    source, config, report, rollback, releases, release, current = _existing_release_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release))
+    attest_existing_release(
+        source_root=source, target_release=release, current_link=current,
+        config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+    )
+
+    (source / "README.md").write_text("release B\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=source, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "release-b"],
+        cwd=source, check=True, capture_output=True,
+    )
+    deploy_release(
+        source_root=source, releases_root=releases, current_link=current,
+        config_path=config, rollback_target=release, data_root=tmp_path / "data",
+        secrets_root=tmp_path / "secrets", release_name="release-b",
+    )
+
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(releases / "release-b"))
+    rollback_release(target_release=release, current_link=current, data_root=tmp_path / "data")
+    assert current.resolve() == release.resolve()
 
 
 def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: Path, monkeypatch):
