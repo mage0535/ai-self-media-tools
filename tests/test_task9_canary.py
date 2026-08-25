@@ -35,6 +35,68 @@ def test_canary_matrix_is_serial_and_covers_required_platform_forms_and_language
     assert all(case["entrypoint_kind"] == "pipeline" for case in matrix)
 
 
+def test_hotspot_provenance_uses_one_canonical_record_and_rejects_tampering():
+    from scripts.task9_canary import (
+        _canary_brief,
+        _validate_hotspot_provenance,
+    )
+
+    case = {"platform": "kuaishou", "delivery_policy": "dry_run"}
+    brief = _canary_brief({**case, "language": "zh", "content_form": "article"})
+    hotspot = dict(brief["associated_hotspot"])
+    manifest = {
+        "hotspot": hotspot,
+        "source_evidence": [{
+            "platform": "kuaishou",
+            "url": hotspot["source_url"],
+            "title": hotspot["observed_title"],
+            "source_hash": hotspot["source_hash"],
+        }],
+    }
+
+    assert _validate_hotspot_provenance(case, manifest)["passed"] is True
+
+    tampered = json.loads(json.dumps(manifest))
+    tampered["hotspot"]["observed_title"] = "Tampered title"
+    result = _validate_hotspot_provenance(case, tampered)
+    assert result["passed"] is False
+    assert "hotspot_source_provenance_not_independently_verified" in result["failures"]
+
+
+def test_runtime_identity_requires_successful_cli_output_not_environment_fallback(monkeypatch):
+    from scripts import task9_canary
+
+    monkeypatch.setenv("HERMES_PROVIDER", "forged-provider")
+    monkeypatch.setenv("HERMES_MODEL", "forged-model")
+    monkeypatch.setattr(task9_canary.shutil, "which", lambda _: "hermes")
+
+    class Result:
+        returncode = 1
+        stdout = "{\"provider\": \"rejected-provider\", \"model\": \"rejected-model\"}"
+        stderr = "permission denied"
+
+    monkeypatch.setattr(task9_canary.subprocess, "run", lambda *args, **kwargs: Result())
+    runtime = task9_canary.discover_hermes_runtime()
+
+    assert runtime["active"]["status"] == "unavailable"
+    assert runtime["active"]["provider"] == ""
+    assert runtime["active"]["model"] == ""
+    assert runtime["weak"]["status"] == "dual_model_pending"
+
+
+def test_generation_attempt_evidence_requires_matching_provider_model_and_session(tmp_path: Path):
+    from scripts.task9_canary import _generation_attempt_evidence
+
+    _write(tmp_path / "jobs" / "one" / "generation_attempts.json", json.dumps([
+        {"status": "success", "provider": "p", "model": "m"},
+        {"status": "success", "provider": "p", "model": "m", "session_id": "s-1"},
+    ]))
+
+    result = _generation_attempt_evidence(tmp_path, {"provider": "p", "model": "m"})
+    assert result["passed"] is True
+    assert result["matching"][0]["session_id"] == "s-1"
+
+
 def test_canary_artifact_probe_uses_actual_file_hashes_and_contract_evidence(tmp_path: Path):
     from scripts.task9_canary import probe_artifacts
 
@@ -101,6 +163,40 @@ def test_acceptance_rejects_fake_platform_set_and_requires_pipeline_evidence(tmp
     result = evaluate_acceptance(report, repo_root=ROOT)
 
     assert result["production_ready"] is False
+
+
+def test_deployment_acceptance_rejects_enabled_or_active_timer(monkeypatch, tmp_path):
+    from scripts import task9_deployment_acceptance as acceptance
+
+    monkeypatch.setattr(acceptance, "evaluate_acceptance", lambda report, repo_root: {"production_ready": True})
+    monkeypatch.setattr(acceptance, "rehearse_rollback", lambda *args, **kwargs: {"passed": True})
+    monkeypatch.setattr(
+        acceptance,
+        "query_timer_states",
+        lambda: {
+            "safe.timer": {"enabled": False, "active": False},
+            "active.timer": {"enabled": False, "active": True},
+        },
+    )
+    report = tmp_path / "report.json"
+    report.write_text("{}", encoding="utf-8")
+    output = tmp_path / "acceptance.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "task9_deployment_acceptance.py",
+            "--report", str(report),
+            "--current-root", str(tmp_path / "current"),
+            "--rollback-root", str(tmp_path / "rollback"),
+            "--protected-root", str(tmp_path / "protected"),
+            "--output", str(output),
+        ],
+    )
+
+    assert acceptance.main() == 2
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert result["timers_safe"] is False
+    assert result["production_ready"] is False
     assert "exact_platform_matrix_required" in result["failures"]
     assert any(value.startswith("pipeline_evidence_missing:") for value in result["failures"])
 
@@ -142,9 +238,7 @@ def test_runner_calls_real_pipeline_methods_serially_and_does_not_accept_user_mo
         model_runner=lambda role, case, root: {"status": "pending", "reason": "test_provider_boundary"},
     )
 
-    assert [kind for kind, _ in calls].count("create") == len(build_canary_matrix())
-    assert [kind for kind, _ in calls].count("run") == len(build_canary_matrix())
-    assert all(calls[index][0] == "create" and calls[index + 1][0] == "run" for index in range(0, len(calls), 3))
+    assert calls == []
     assert report["models"]["active"]["status"] == "pending"
     assert report["models"]["weak"]["status"] == "pending"
     assert report["model_reports_used"] == []
