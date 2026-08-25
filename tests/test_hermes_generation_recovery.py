@@ -78,6 +78,24 @@ def test_non_transient_error_is_not_retried(monkeypatch, tmp_path):
     assert len(calls) == 1
 
 
+def test_permission_error_is_persisted_as_non_transient_and_not_retried(monkeypatch, tmp_path):
+    process = FakeProcess([(1, "permission denied")])
+    calls = []
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: (calls.append(1) or process))
+    attempts_path = tmp_path / "generation_attempts.json"
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(attempts_path), "clock": lambda: 10, "sleep": lambda _: None,
+    })
+
+    with pytest.raises(RuntimeError, match="Hermes generation command failed"):
+        generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+    assert len(calls) == 1
+    attempts = json.loads(attempts_path.read_text(encoding="utf-8"))
+    assert attempts[-1]["status"] == "provider_error"
+    assert attempts[-1]["error_class"] == "permission_denied"
+
+
 def test_transient_provider_error_retries_once_with_reduced_context(monkeypatch, tmp_path):
     commands = []
     outputs = [FakeProcess([(1, "HTTP 503 unavailable")]), FakeProcess([(0, '{"title":"T","body":"' + 'body ' * 80 + '"}')])]
@@ -94,6 +112,67 @@ def test_transient_provider_error_retries_once_with_reduced_context(monkeypatch,
     assert result["title"] == "T"
     assert len(commands) == 2
     assert len(commands[1][2]) < len(commands[0][2])
+
+
+def test_exit_zero_http503_is_persisted_as_transient_and_retries(monkeypatch, tmp_path):
+    output = '{"title":"T","body":"' + "body " * 80 + '"}'
+    processes = [FakeProcess([(0, "HTTP 503 unavailable")]), FakeProcess([(0, output)])]
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: processes.pop(0))
+    attempts_path = tmp_path / "generation_attempts.json"
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(attempts_path), "clock": lambda: 10, "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    assert generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})["title"] == "T"
+    attempts = json.loads(attempts_path.read_text(encoding="utf-8"))
+    assert [(row["attempt"], row["status"], row["error_class"]) for row in attempts] == [
+        (1, "transient_provider_error", "provider_5xx"), (2, "success", "")
+    ]
+    checkpoint = json.loads((tmp_path / "generation_checkpoint.json").read_text(encoding="utf-8"))
+    assert checkpoint["status"] == "success"
+    assert [(row["attempt"], row["error_class"]) for row in checkpoint["transitions"]] == [
+        (1, "provider_5xx"), (2, "")
+    ]
+
+
+def test_exit_zero_http429_is_transient_and_retries_with_attempt_evidence(monkeypatch, tmp_path):
+    output = '{"title":"T","body":"' + "body " * 80 + '"}'
+    processes = [FakeProcess([(0, "HTTP 429 rate limit")]), FakeProcess([(0, output)])]
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: processes.pop(0))
+    attempts_path = tmp_path / "generation_attempts.json"
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(attempts_path), "clock": lambda: 10, "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+    attempts = json.loads(attempts_path.read_text(encoding="utf-8"))
+    assert attempts[0]["status"] == "transient_provider_error"
+    assert attempts[0]["error_class"] == "provider_429"
+    assert attempts[0]["prompt_hash"] and attempts[0]["prompt_length"] > 0
+    assert attempts[0]["started_at"] == attempts[0]["finished_at"] == 10
+
+
+def test_invalid_json_is_persisted_and_not_retried(monkeypatch, tmp_path):
+    process = FakeProcess([(0, "not json")])
+    calls = []
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: (calls.append(1) or process))
+    attempts_path = tmp_path / "generation_attempts.json"
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(attempts_path), "clock": lambda: 10, "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    with pytest.raises(ValueError, match="non-JSON"):
+        generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+    assert len(calls) == 1
+    attempts = json.loads(attempts_path.read_text(encoding="utf-8"))
+    assert attempts[-1]["status"] == "provider_error"
+    assert attempts[-1]["error_class"] == "invalid_json"
 
 
 def test_checkpoint_is_atomic_and_recovery_has_evidence(tmp_path):
