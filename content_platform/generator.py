@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import signal
 import subprocess
 import tempfile
 import time
@@ -922,12 +923,7 @@ class DraftGenerator:
     def _hermes_attempt(self, topic, brief, context, *, retry, language_instruction, factual_boundary, body_requirement, style_limit):
         platform = str(brief.get("platform") or context.get("platform") or "wechat")
         language = context.get("language") or "zh"
-        compiled = compile_generation_context(
-            platform=platform,
-            content_format=str(brief.get("content_form") or (brief.get("content_blueprint") or {}).get("content_form") or "article"),
-            stage="generate", brief=brief, context=context, retry=retry,
-        )
-        prompt = (
+        prompt_prefix = (
             "Return only JSON. Do not use markdown fences. "
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
             f"Target language: {language}. {language_instruction} "
@@ -941,53 +937,78 @@ class DraftGenerator:
             "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting. "
             f"{factual_boundary}"
             f"{body_requirement}\n"
-            f"Platform rules (must follow for this channel):\n{context.get('platform_rules', '')[:800]}\n\n"
-            f"Viral hook templates (pick one and adapt for your title/opening):\n{context.get('hook_samples', '')[:600]}\n\n"
-            f"Style guide:\n{self._style_guide(style_limit)}\n\n"
-            f"Generation context (compiled, bounded):\n{compiled['text']}"
+            f"Platform rules (must follow for this channel):\n{self._truncate_utf8(context.get('platform_rules', ''), 1600)}\n\n"
+            f"Viral hook templates (pick one and adapt for your title/opening):\n{self._truncate_utf8(context.get('hook_samples', ''), 1200)}\n\n"
+            f"Style guide:\n{self._truncate_utf8(self._style_guide(style_limit), 1600)}\n\n"
+            "Generation context (compiled, bounded):\n"
         )
+        stage_payload_bytes = max(4096, int(self.config.get("stage_payload_bytes", 16384)))
+        available_context_bytes = stage_payload_bytes - len(prompt_prefix.encode("utf-8"))
+        compiled = compile_generation_context(
+            platform=platform,
+            content_format=str(brief.get("content_form") or (brief.get("content_blueprint") or {}).get("content_form") or "article"),
+            stage="generate", brief=brief, context=context, retry=retry,
+            byte_limit=max(512, available_context_bytes),
+        )
+        prompt = prompt_prefix + compiled["text"]
+        if len(prompt.encode("utf-8")) > stage_payload_bytes:
+            raise ValueError("Hermes prompt exceeds the generate-stage UTF-8 byte budget")
         command = [self.config.get("hermes_command", "hermes")]
         command.extend(["-z", prompt, "--cli"])
         clock = self.config.get("clock", time.time)
         started = clock()
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout_file = tempfile.TemporaryFile(mode="w+b")
+        stderr_file = tempfile.TemporaryFile(mode="w+b")
+        try:
+            proc = subprocess.Popen(
+                command, stdout=stdout_file, stderr=stderr_file,
+                **self._generation_process_group_options(),
+            )
+        except BaseException:
+            stdout_file.close()
+            stderr_file.close()
+            raise
         soft = int(self.config.get("soft_deadline", 240))
         hard = int(self.config.get("hard_deadline", 420))
         heartbeat_interval = max(1, int(self.config.get("heartbeat_interval", 30)))
         # elapsed is relative to started, so keep heartbeat thresholds relative too.
         next_heartbeat_at = soft
-        while proc.poll() is None:
-            elapsed = clock() - started
-            if elapsed >= hard:
-                finished = clock()
-                attempt = 2 if retry else 1
-                try:
-                    self._terminate_generation_process(proc)
-                except Exception as exc:
+        try:
+            while proc.poll() is None:
+                elapsed = clock() - started
+                if elapsed >= hard:
+                    finished = clock()
+                    attempt = 2 if retry else 1
+                    try:
+                        self._terminate_generation_process(proc)
+                    except Exception as exc:
+                        payload = self._checkpoint_payload(
+                            attempt=attempt, status="process_termination_failed", error_class="process_termination_failed",
+                            prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+                        )
+                        self._write_generation_checkpoint(payload)
+                        self._record_generation_attempt(payload)
+                        raise RuntimeError("Hermes process termination failed") from exc
                     payload = self._checkpoint_payload(
-                        attempt=attempt, status="process_termination_failed", error_class="process_termination_failed",
+                        attempt=attempt, status="hard_timeout", error_class="hard_timeout",
                         prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
                     )
                     self._write_generation_checkpoint(payload)
                     self._record_generation_attempt(payload)
-                    raise RuntimeError("Hermes process termination failed") from exc
-                payload = self._checkpoint_payload(
-                    attempt=attempt, status="hard_timeout", error_class="hard_timeout",
-                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
-                )
-                self._write_generation_checkpoint(payload)
-                self._record_generation_attempt(payload)
-                raise GenerationTimeoutError("Hermes hard deadline exceeded")
-            if elapsed >= next_heartbeat_at:
-                heartbeat_at = clock()
-                self._write_generation_checkpoint(self._checkpoint_payload(
-                    attempt=2 if retry else 1, status="running_after_soft_deadline", error_class="soft_deadline",
-                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=heartbeat_at,
-                    elapsed=heartbeat_at - started, heartbeat_at=heartbeat_at,
-                ))
-                next_heartbeat_at += heartbeat_interval
-            self.config.get("sleep", time.sleep)(0.05)
-        stdout, stderr = proc.communicate()
+                    raise GenerationTimeoutError("Hermes hard deadline exceeded")
+                if elapsed >= next_heartbeat_at:
+                    heartbeat_at = clock()
+                    self._write_generation_checkpoint(self._checkpoint_payload(
+                        attempt=2 if retry else 1, status="running_after_soft_deadline", error_class="soft_deadline",
+                        prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=heartbeat_at,
+                        elapsed=heartbeat_at - started, heartbeat_at=heartbeat_at,
+                    ))
+                    next_heartbeat_at += heartbeat_interval
+                self.config.get("sleep", time.sleep)(0.05)
+            stdout, stderr = self._read_generation_output(proc, stdout_file, stderr_file)
+        finally:
+            stdout_file.close()
+            stderr_file.close()
         finished = clock()
         attempt = 2 if retry else 1
         prompt_evidence = {
@@ -1038,12 +1059,60 @@ class DraftGenerator:
 
     def _terminate_generation_process(self, proc):
         grace = float(self.config.get("termination_grace", self.config.get("process_termination_grace", 5)))
-        proc.terminate()
+        pid = getattr(proc, "pid", None)
+        platform_name = self._platform_name()
+        if platform_name == "nt" and pid:
+            result = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+            )
+            if result.returncode != 0 and proc.poll() is None:
+                raise RuntimeError("Hermes process tree termination failed")
+        elif pid:
+            try:
+                os.killpg(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                return
+        else:
+            proc.terminate()
         try:
             proc.wait(timeout=grace)
         except subprocess.TimeoutExpired:
-            proc.kill()
+            if platform_name != "nt" and pid:
+                os.killpg(pid, signal.SIGKILL)
+            else:
+                proc.kill()
             proc.wait(timeout=grace)
+
+    def _generation_process_group_options(self):
+        if self._platform_name() == "nt":
+            return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        return {"start_new_session": True}
+
+    @staticmethod
+    def _platform_name():
+        return os.name
+
+    @staticmethod
+    def _read_generation_output(proc, stdout_file, stderr_file):
+        def read(file):
+            file.flush()
+            file.seek(0)
+            return file.read().decode("utf-8", errors="replace")
+
+        stdout, stderr = read(stdout_file), read(stderr_file)
+        if not stdout and not stderr and hasattr(proc, "communicate"):
+            fallback_stdout, fallback_stderr = proc.communicate()
+            stdout = str(fallback_stdout or "")
+            stderr = str(fallback_stderr or "")
+        return stdout, stderr
+
+    @staticmethod
+    def _truncate_utf8(value, max_bytes):
+        encoded = str(value or "").encode("utf-8")
+        if len(encoded) <= max_bytes:
+            return encoded.decode("utf-8")
+        return encoded[:max_bytes].decode("utf-8", errors="ignore")
 
     @staticmethod
     def _transient_error_class(content):

@@ -46,6 +46,30 @@ def test_retry_context_uses_reduced_budget_and_no_full_inventory():
     assert len(result["text"]) == result["char_count"]
 
 
+def test_context_budget_is_measured_in_utf8_bytes_for_chinese_content():
+    result = compile_generation_context(
+        platform="wechat",
+        content_format="long_article",
+        stage="generate",
+        brief={
+            "content_blueprint": {f"section_{index}": "中文内容" * 500 for index in range(12)},
+            "claim_ledger": [
+                {"claim": "中文事实" * 200, "evidence_path": "证据路径" * 100}
+                for _ in range(12)
+            ],
+            "compiled_skill_rules": {
+                "rules": [
+                    {"id": f"rule:{index}", "source": "skill:test", "text": "中文规则" * 100}
+                    for index in range(30)
+                ]
+            },
+        },
+    )
+
+    assert result["byte_count"] == len(result["text"].encode("utf-8"))
+    assert result["byte_count"] <= 12000
+
+
 def test_selected_rules_deduplicate_normalized_text_and_keep_first_provenance():
     result = compile_generation_context(
         platform="wechat",
