@@ -4,6 +4,7 @@ from content_platform.capability_runtime import (
     merge_execution_manifests,
     record_execution_stage,
 )
+from content_platform.execution_trace import build_pre_delivery_trace, complete_delivery_trace
 
 
 STAGES = ("generation", "assets", "render", "gate", "delivery")
@@ -138,3 +139,54 @@ def test_recorder_rejects_noncanonical_stage_names(stage):
 def test_recorder_rejects_invalid_manifest_hashes(manifest_hash):
     with pytest.raises(ValueError, match="manifest_hash"):
         record_execution_stage("generation", manifest_hash=manifest_hash)
+
+
+def test_pre_delivery_trace_is_pending_not_failed_when_real_prior_stages_pass():
+    trace = build_pre_delivery_trace(
+        capability_execution={
+            "selected": [{"capability_id": "writer", "required_or_optional": "required"}],
+            "consulted": [{"capability_id": "guide"}],
+            "executed": [{"capability_id": "writer", "output_hash": "sha256:x"}],
+        },
+        artifacts=[{"kind": "image", "path": "image.png", "checksum": "abc"}],
+        assets_required=True,
+        render_manifest={},
+        render_required=False,
+        quality_gate={"passed": True, "score": 5},
+    )
+    assert trace["passed"] is None
+    assert trace["status"] == "pending_delivery"
+    assert [row["stage"] for row in trace["stages"]] == ["generation", "assets", "render", "gate"]
+
+
+def test_delivery_completion_makes_canonical_trace_pass():
+    pending = build_pre_delivery_trace(
+        capability_execution={
+            "selected": [{"capability_id": "writer", "required_or_optional": "required"}],
+            "executed": [{"capability_id": "writer", "output_hash": "sha256:x"}],
+        },
+        artifacts=[],
+        assets_required=False,
+        render_manifest={},
+        render_required=False,
+        quality_gate={"passed": True},
+    )
+    trace = complete_delivery_trace(
+        pending,
+        platform="xiaohongshu",
+        result={"ok": True, "status": "handoff_pending", "external_id": "handoff.json"},
+    )
+    assert trace["passed"] is True
+    assert trace["status"] == "completed"
+
+
+def test_multiple_platform_deliveries_share_one_delivery_stage():
+    pending = build_pre_delivery_trace(
+        capability_execution={"selected": [], "executed": []}, artifacts=[], assets_required=False,
+        render_manifest={}, render_required=False, quality_gate={"passed": True},
+    )
+    first = complete_delivery_trace(pending, platform="wechat", result={"ok": True, "status": "drafted", "external_id": "draft-1"})
+    second = complete_delivery_trace(first, platform="zhihu", result={"ok": True, "status": "drafted", "external_id": "draft-2"})
+    assert [row["stage"] for row in second["stages"]].count("delivery") == 1
+    delivery = next(row for row in second["stages"] if row["stage"] == "delivery")
+    assert {row["node_id"] for row in delivery["executed"]} == {"delivery:wechat", "delivery:zhihu"}
