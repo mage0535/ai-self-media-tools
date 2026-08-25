@@ -53,7 +53,8 @@ def test_juejin_article_media_executes_four_real_assets_with_checkpointed_resume
         tmp_path,
         generate,
         public_staging_base_url="https://staging.example/media",
-        public_staging_verifier=lambda url: {"passed": True, "status": 200, "url": url},
+        public_staging_uploader=lambda path, url: {"passed": True, "checksum": hashlib.sha256(path.read_bytes()).hexdigest(), "url": url},
+        public_staging_verifier=lambda url, checksum: {"passed": True, "status": 200, "url": url, "checksum": checksum},
         max_concurrency=2,
         max_attempts=2,
     )
@@ -73,7 +74,8 @@ def test_juejin_article_media_executes_four_real_assets_with_checkpointed_resume
         tmp_path,
         lambda *_: (_ for _ in ()).throw(AssertionError("checkpointed asset was regenerated")),
         public_staging_base_url="https://staging.example/media",
-        public_staging_verifier=lambda url: {"passed": True, "status": 200, "url": url},
+        public_staging_uploader=lambda path, url: {"passed": True, "checksum": hashlib.sha256(path.read_bytes()).hexdigest(), "url": url},
+        public_staging_verifier=lambda url, checksum: {"passed": True, "status": 200, "url": url, "checksum": checksum},
         max_concurrency=2,
         max_attempts=2,
     )
@@ -136,7 +138,8 @@ def test_article_media_records_staging_failure_and_fails_closed(tmp_path):
             tmp_path,
             generate,
             public_staging_base_url="https://staging.example/media",
-            public_staging_verifier=lambda url: {"passed": False, "status": 503, "url": url},
+            public_staging_uploader=lambda path, url: {"passed": True, "checksum": hashlib.sha256(path.read_bytes()).hexdigest(), "url": url},
+            public_staging_verifier=lambda url, checksum: {"passed": False, "status": 503, "url": url, "checksum": checksum},
         )
 
     contract = json.loads((tmp_path / "article_media_contract.json").read_text(encoding="utf-8"))
@@ -172,7 +175,7 @@ def test_juejin_publisher_requires_renderer_visibility_response(tmp_path):
     assert result.ok is False
     assert result.status == "blocked"
     assert "editor visibility" in result.error
-    payload = api.call_args.args[1]
+    payload = api.call_args_list[0].args[1]
     assert payload["cover_image"] == "https://cdn.example/cover.jpg"
     assert all(url in payload["mark_content"] for url in [f"https://cdn.example/inline-{i}.jpg" for i in range(3)])
 

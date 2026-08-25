@@ -296,6 +296,7 @@ class MediaBridge:
                 output_dir,
                 generate_article_asset,
                 public_staging_base_url=staging_url,
+                public_staging_uploader=cfg.get("public_staging_uploader"),
                 public_staging_verifier=cfg.get("public_staging_verifier"),
                 staging_timeout_seconds=float(cfg.get("staging_timeout_seconds", 5)),
                 max_concurrency=int(cfg.get("max_concurrency", 3)),
@@ -589,7 +590,7 @@ class MediaBridge:
             and (meta.get("allow_degraded") is True or video_cfg.get("allow_degraded") is True or os.environ.get("FILM_ALLOW_DEGRADED") == "1")
         )
         cinematic_fallback = ""
-        if vr.get("auto") and vr.get("route_order") and vr["route_order"][0] == "cinema-video":
+        if requested_cinematic:
             try:
                 import subprocess as _sp
                 cinema_dir = output_dir / "cinema"

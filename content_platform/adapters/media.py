@@ -34,45 +34,55 @@ def _write_json_atomic(path: Path, payload: Any) -> None:
     os.replace(temporary, path)
 
 
-def _probe_public_url(url: str, timeout: float) -> dict[str, Any]:
-    """Probe one staged asset without downloading more than one byte."""
-    last_error = ""
-    for method in ("HEAD", "GET"):
-        request = urllib.request.Request(url, method=method)
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                status = int(response.getcode() or 0)
-                if method == "GET":
-                    response.read(1)
-                if 200 <= status < 400:
-                    return {"passed": True, "method": method, "status": status, "url": url}
-                last_error = f"http_status:{status}"
-        except urllib.error.HTTPError as exc:
-            last_error = f"http_status:{exc.code}"
-            if method == "GET" or exc.code not in {405, 501}:
-                break
-        except (OSError, urllib.error.URLError) as exc:
-            last_error = f"{type(exc).__name__}:{exc}"
-            break
-    return {"passed": False, "method": method, "status": 0, "url": url, "error": last_error or "probe_failed"}
+def _probe_public_url(url: str, timeout: float, expected_checksum: str) -> dict[str, Any]:
+    """Download the staged object and prove it is the generated local asset."""
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            status = int(response.getcode() or 0)
+            body = response.read(32 * 1024 * 1024 + 1)
+        checksum = hashlib.sha256(body).hexdigest()
+        passed = 200 <= status < 400 and len(body) <= 32 * 1024 * 1024 and checksum == expected_checksum
+        return {"passed": passed, "method": "GET", "status": status, "url": url, "checksum": checksum}
+    except (OSError, urllib.error.URLError) as exc:
+        return {"passed": False, "method": "GET", "status": 0, "url": url, "error": f"{type(exc).__name__}:{exc}"}
+
+
+def _stage_public_asset(path: Path, url: str, uploader: Callable[[Path, str], Any] | None, timeout: float) -> dict[str, Any]:
+    checksum = _sha256(path)
+    if callable(uploader):
+        raw = uploader(path, url)
+        result = dict(raw) if isinstance(raw, dict) else {"passed": raw is True}
+        result.setdefault("checksum", checksum)
+        result.setdefault("url", url)
+        result["passed"] = result.get("passed") is True and result.get("checksum") == checksum
+        return result
+    request = urllib.request.Request(url, data=path.read_bytes(), method="PUT", headers={"Content-Type": "application/octet-stream"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            status = int(response.getcode() or 0)
+        return {"passed": 200 <= status < 300, "status": status, "url": url, "checksum": checksum, "method": "PUT"}
+    except (OSError, urllib.error.URLError) as exc:
+        return {"passed": False, "status": 0, "url": url, "checksum": checksum, "error": f"{type(exc).__name__}:{exc}"}
 
 
 def verify_public_staging(
     urls: list[str],
     *,
-    verifier: Callable[[str], Any] | None = None,
+    expected_checksums: dict[str, str],
+    verifier: Callable[..., Any] | None = None,
     timeout_seconds: float = 5.0,
 ) -> dict[str, Any]:
     """Verify every public asset URL with bounded HTTP or an injected probe."""
     results = []
     for url in urls:
         try:
-            raw = verifier(url) if callable(verifier) else _probe_public_url(url, timeout_seconds)
+            raw = verifier(url, expected_checksums[url]) if callable(verifier) else _probe_public_url(url, timeout_seconds, expected_checksums[url])
             result = dict(raw) if isinstance(raw, dict) else {"passed": raw is True}
         except Exception as exc:
             result = {"passed": False, "error": f"{type(exc).__name__}:{exc}"}
         result.setdefault("url", url)
-        result["passed"] = result.get("passed") is True
+        result["passed"] = result.get("passed") is True and str(result.get("checksum") or "") == expected_checksums[url]
         results.append(result)
     return {"passed": bool(urls) and all(item["passed"] for item in results), "urls": results}
 
@@ -98,7 +108,8 @@ def execute_article_media(
     generator: Callable[[dict[str, str], Path], dict[str, Any]],
     *,
     public_staging_base_url: str,
-    public_staging_verifier: Callable[[str], Any] | None = None,
+    public_staging_uploader: Callable[[Path, str], Any] | None = None,
+    public_staging_verifier: Callable[..., Any] | None = None,
     staging_timeout_seconds: float = 5.0,
     max_concurrency: int = 3,
     max_attempts: int = 3,
@@ -186,8 +197,15 @@ def execute_article_media(
         raise RuntimeError("article media contains duplicate asset checksums")
     if len(set(sources)) != len(sources):
         raise RuntimeError("article media contains duplicate source URLs")
+    staging_uploads = [
+        _stage_public_asset(Path(row["path"]), row["public_url"], public_staging_uploader, staging_timeout_seconds)
+        for row in records
+    ]
+    if not all(row.get("passed") is True for row in staging_uploads):
+        raise RuntimeError("public staging upload failed: " + json.dumps(staging_uploads, ensure_ascii=False))
     public_staging_evidence = verify_public_staging(
         [row["public_url"] for row in records],
+        expected_checksums={row["public_url"]: row["checksum"] for row in records},
         verifier=public_staging_verifier,
         timeout_seconds=staging_timeout_seconds,
     )
@@ -212,6 +230,7 @@ def execute_article_media(
         ).hexdigest(),
         "artifacts": records,
         "source_license_evidence": [{"source_url": row["source_url"], "license": row["license"]} for row in records],
+        "public_staging_uploads": staging_uploads,
         "public_staging_evidence": public_staging_evidence,
         "target_renderer_evidence": {"renderer": "juejin_markdown_editor", "mapping_count": len(mapping), "verified": False},
     }

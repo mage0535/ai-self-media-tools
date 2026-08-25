@@ -249,12 +249,14 @@ class JuejinPublisher:
         })
         if result.get("err_no") != 0:
             return DeliveryResult(False, "failed", error=f"juejin create draft failed: {result.get('err_msg','')[:200]}")
-        renderer_evidence = _renderer_visibility_evidence(result, mapped_urls)
+        draft_id = result["data"]["id"]
+        detail = self._api("/content_api/v1/article_draft/detail", {"draft_id": draft_id})
+        if detail.get("err_no") != 0:
+            return DeliveryResult(False, "blocked", f"juejin:{draft_id}", error="juejin editor postcheck failed")
+        renderer_evidence = _renderer_visibility_evidence(detail, mapped_urls)
         _record_renderer_evidence(job, renderer_evidence)
         if not renderer_evidence["verified"]:
             return DeliveryResult(False, "blocked", f"juejin:{result.get('data', {}).get('id', '')}", error="juejin editor visibility response missing or incomplete")
-        draft_id = result["data"]["id"]
-
         if self.save_as_draft:
             return DeliveryResult(True, "drafted", f"juejin:{draft_id}",
                                  error=f"juejin draft created: {draft_id}")
