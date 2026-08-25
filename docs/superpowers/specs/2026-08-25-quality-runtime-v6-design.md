@@ -44,7 +44,7 @@ Article and video contracts are evaluated before generation and again against ac
 
 Delivery health is refreshed before queue admission. Draft, scheduled, review, handoff, and published remain distinct. Xiaohongshu is permanently manual-handoff-only. Verified publication identities create idempotent 1h/24h/72h metric windows; insufficient data is never written as zero.
 
-Before an external delivery call, the runtime persists an immutable delivery intent containing account alias, action, payload hash, media hashes, expected title/description, and schedule. A timeout or process crash is an unknown result, not a retryable failure: recovery must query the platform or management page first and may retry only after proving that no matching item exists.
+Before an external delivery call, the runtime persists an immutable delivery intent containing account alias, action, payload hash, media hashes, expected title/description, and schedule. A timeout or process crash is an unknown result, not a retryable failure. Recovery performs bounded polling using the immutable account, copy digest, media hashes, and schedule. A retry is allowed only when the full polling window proves absence. Query failure, expired login, conflicting matches, or an inconclusive window enters `unknown_requires_review` and permanently forbids automatic retry for that intent.
 
 Kuaishou `scheduled` requires a management-page postcheck matching the account alias, title, complete description or collision-resistant description digest, exact scheduled time, and screenshot or DOM evidence. Uploader exit code alone is never success.
 

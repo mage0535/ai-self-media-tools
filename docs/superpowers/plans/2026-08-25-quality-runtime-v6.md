@@ -80,7 +80,8 @@
 
 - [ ] Test verified and unverified publication identities for automatic and manual channels.
 - [ ] Persist an immutable delivery intent before external calls, including account, action, payload/media hashes, expected copy, and schedule.
-- [ ] Treat timeout/crash as an unknown result; run postcheck first and retry only when absence is proven.
+- [ ] Treat timeout/crash as an unknown result; poll by immutable account/copy/media/schedule identity and retry only when the full window proves absence.
+- [ ] Persist `unknown_requires_review` for failed authentication, conflicting matches, or inconclusive polling, and forbid automatic retry for that intent.
 - [ ] Require Kuaishou management-page account, title, full-description or digest, exact-time, and screenshot/DOM evidence before `scheduled`.
 - [ ] Add idempotent 1h/24h/72h windows, attempts, leases, retry, insufficient, and invalidated states.
 - [ ] Bind observations to platform, internal account alias, content ID, source, and confidence.
@@ -103,7 +104,7 @@
 
 - [ ] Run full pytest, privacy audit, license audit, compile, and diff checks.
 - [ ] Execute 12 serial real canaries with platform-policy delivery states.
-- [ ] Include crash-boundary delivery recovery, duplicate-schedule prevention, exact Kuaishou management-page postcheck, and complete handoff-render contracts in Canary acceptance.
+- [ ] Include crash-boundary delivery recovery, delayed visibility where the first poll misses and a later poll finds the item, `unknown_requires_review`, duplicate-schedule prevention, exact Kuaishou management-page postcheck, and complete handoff-render contracts in Canary acceptance.
 - [ ] Run Hermes active-model and available weak-model cases against identical deterministic gates.
 - [ ] Rehearse rollback and verify database/cookie/media preservation.
 - [ ] Run two shadow batches without code edits or manual recovery.
