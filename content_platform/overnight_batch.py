@@ -151,6 +151,8 @@ def build_due_tasks(
     report_path: str = "runtime:overnight_trend_collection",
     reserved_topic_fingerprints: set[str] | None = None,
     runtime_capabilities: dict[str, Any] | None = None,
+    topic_reservation_path: str | Path | None = None,
+    reservation_owner: str = "overnight",
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
     tasks: list[dict[str, Any]] = []
@@ -176,13 +178,15 @@ def build_due_tasks(
             row.update({"state": "blocked", "reason": f"growth strategy snapshot {strategy['status']}", "growth_strategy_key": strategy.get("key", "")})
             tasks.append(row)
             continue
-        candidates = list(rank_for_platform(platform, items, raw) or [])
+        candidates = [_bind_candidate_platform(platform, candidate) for candidate in (rank_for_platform(platform, items, raw) or [])]
+        candidates = [candidate for candidate in candidates if candidate is not None]
         if candidate_filter is not None:
             candidates = [candidate for candidate in candidates if candidate_filter(platform, candidate, raw)]
         research_attempts: list[dict[str, int]] = []
         if not candidates and requery_for_platform is not None:
             for round_number in range(1, max(0, int(max_research_rounds)) + 1):
-                researched = list(requery_for_platform(platform, items, raw, round_number) or [])
+                researched = [_bind_candidate_platform(platform, candidate) for candidate in (requery_for_platform(platform, items, raw, round_number) or [])]
+                researched = [candidate for candidate in researched if candidate is not None]
                 if candidate_filter is not None:
                     researched = [candidate for candidate in researched if candidate_filter(platform, candidate, raw)]
                 research_attempts.append({"round": round_number, "candidate_count": len(researched)})
@@ -234,6 +238,22 @@ def build_due_tasks(
                     selection_mode = "editorial_calendar"
             adaptation = str(raw.get("platform_adaptation_reason") or f"adapt {selected['title']} to {platform} with a platform-specific format and CTA")
             signal = str(raw.get("platform_signal") or f"{platform} source matrix contains current platform and cross-platform evidence")
+            reservation = None
+            if topic_reservation_path:
+                from .trend_intelligence import reserve_topic_atomically
+                reservation = reserve_topic_atomically(
+                    topic_reservation_path,
+                    str(selected["title"]),
+                    platform,
+                    str(raw.get("job_id") or f"{reservation_owner}:{platform}"),
+                    follow_up_to=str(raw.get("follow_up_to") or ""),
+                    difference_angle=str(raw.get("difference_angle") or ""),
+                    recap_reason=str(raw.get("recap_reason") or ""),
+                )
+                if not reservation.get("reserved"):
+                    row.update({"state": "blocked", "reason": reservation.get("reason", "topic reservation failed"), "topic_reservation": reservation})
+                    tasks.append(row)
+                    continue
             trend_candidate = build_trend_candidate(
                 platform=platform,
                 topic=selected["title"],
@@ -306,11 +326,12 @@ def build_due_tasks(
             )
             row.update({
                 "topic": selected["title"],
-                "topic_fingerprint": selected.get("fingerprint", ""),
+                "topic_fingerprint": selected.get("fingerprint") or normalize_topic(selected["title"]),
                 "brief": {
                     "source": selected.get("source"),
                     "sources": [selected["url"]] if selected.get("url") else [],
                     "platform_source_matrix": matrix,
+                    **({"associated_hotspot": selected["associated_hotspot"]} if isinstance(selected.get("associated_hotspot"), dict) else {}),
                     "topic_decision": {
                         "score": selected.get("score", 0),
                         "growth_signals": ["timeliness", "user_benefit"],
@@ -328,6 +349,7 @@ def build_due_tasks(
                 "trend_candidate_gate": trend_gate,
                 "selection_mode": selection_mode,
                 "research_attempts": research_attempts,
+                **({"topic_reservation": reservation} if reservation else {}),
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
                 "state": "ready_for_plan",
             })
@@ -373,6 +395,22 @@ def _candidate_has_native_source(platform: str, candidate: dict[str, Any]) -> bo
 
         return _candidate_source_url_is_native(platform, candidate)
     return suffix not in {"github", "source_fallback", "external"}
+
+
+def _bind_candidate_platform(platform: str, candidate: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Bind an unlabelled result to its task without accepting foreign identity."""
+    if not isinstance(candidate, dict):
+        return None
+    row = dict(candidate)
+    explicit = str(row.get("platform") or "").casefold().strip()
+    target = str(platform or "").casefold().strip()
+    if explicit and explicit != target:
+        return None
+    row["platform"] = target
+    from .trend_intelligence import validate_platform_candidate
+    if not validate_platform_candidate(row, target)["passed"]:
+        return None
+    return row
 
 
 def _editorial_fallback_candidate(slot: dict[str, Any]) -> dict[str, Any] | None:

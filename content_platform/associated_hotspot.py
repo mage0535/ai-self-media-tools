@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
 from typing import Any
 from urllib.parse import urlparse
 from pathlib import Path
@@ -42,8 +43,6 @@ def validate_associated_hotspot(hotspot: dict[str, Any] | None, *, now: datetime
     if expires and expires <= reference:
         failures.append("hotspot_expired")
     native = hotspot.get("native_verified") is True
-    if not native:
-        failures.append("native_verification_required")
     if mode in {"auto_api", "auto_browser"} and not native:
         failures.append("auto_association_requires_native_verification")
     for field in ("heat_score", "lane_fit_score", "semantic_fit_score"):
@@ -91,3 +90,58 @@ def hotspot_mode_for_platform(platform: str, matrix: dict[str, Any] | None = Non
     matrix = matrix or load_hotspot_support_matrix()
     record = (matrix.get("platforms") or {}).get(str(platform).casefold(), {})
     return str(record.get("association_mode") or matrix.get("default_mode") or "unsupported_or_unverified")
+
+
+def build_associated_hotspot(candidate: dict[str, Any], *, platform: str, association_mode: str, now: datetime | None = None, validity_hours: float = 6, postcheck_state: str = "pending") -> dict[str, Any]:
+    """Materialize one auditable, platform-bound hotspot record."""
+    now = now or datetime.now(timezone.utc)
+    now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
+    target = str(platform or "").casefold().strip()
+    candidate_platform = str(candidate.get("platform") or "").casefold().strip()
+    if candidate_platform and candidate_platform != target:
+        raise ValueError("associated hotspot platform mismatch")
+    title = str(candidate.get("title") or "").strip()
+    url = str(candidate.get("url") or candidate.get("canonical_url") or "").strip()
+    hotspot_id = str(candidate.get("hotspot_id") or "").strip() or hashlib.sha256(f"{target}|{title}|{url}".encode("utf-8")).hexdigest()[:24]
+    expires = candidate.get("expires_at") or (now + timedelta(hours=float(validity_hours))).isoformat()
+    evidence_type = str(candidate.get("evidence_type") or "native").casefold()
+    native = evidence_type == "native" and candidate.get("native_verified", True) is True
+    expiry_dt = _parse_time(expires)
+    validity = "valid" if expiry_dt and expiry_dt > now else "expired" if expiry_dt else "invalid"
+    return {
+        "version": "associated_hotspot_v2", "platform": target, "hotspot_id": hotspot_id, "title": title,
+        "canonical_url": url, "source": str(candidate.get("source") or ""),
+        "captured_at": str(candidate.get("captured_at") or now.isoformat()), "expires_at": str(expires), "validity": validity,
+        "native_verified": native, "native_evidence": native, "evidence_type": evidence_type,
+        "official_activity": evidence_type == "official_activity", "official_keyword": evidence_type == "official_keyword",
+        "lane": str(candidate.get("lane") or "").strip(), "lane_fit_score": _bounded_score(candidate.get("lane_fit_score")),
+        "semantic_fit_score": _bounded_score(candidate.get("semantic_fit_score")), "heat_score": _bounded_score(candidate.get("heat_score")),
+        "association_mode": association_mode, "postcheck_state": str(postcheck_state or "pending"),
+        "evidence_hash": str(candidate.get("evidence_hash") or hashlib.sha256(repr(sorted(candidate.items())).encode("utf-8")).hexdigest()),
+    }
+
+
+def persist_associated_hotspot(path: str | Path, hotspot: dict[str, Any]) -> dict[str, Any]:
+    """Upsert hotspot evidence without losing prior platform records."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    rows = []
+    if target.is_file():
+        try:
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            rows = payload.get("hotspots", []) if isinstance(payload, dict) else payload
+        except (OSError, json.JSONDecodeError):
+            rows = []
+    rows = [row for row in rows if isinstance(row, dict) and row.get("hotspot_id") != hotspot.get("hotspot_id")]
+    rows.append(dict(hotspot))
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(json.dumps({"version": "associated_hotspots_v2", "hotspots": rows}, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(target)
+    return dict(hotspot)
+
+
+def _bounded_score(value: Any) -> float:
+    try:
+        return round(max(0.0, min(1.0, float(value))), 3)
+    except (TypeError, ValueError):
+        return 0.0

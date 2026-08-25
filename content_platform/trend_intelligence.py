@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+import hashlib
+import os
+import time
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -13,6 +16,10 @@ from .trends import normalize_topic
 
 SUCCESS_STATUSES = {"ok", "success", "saved", "usable"}
 SNAPSHOT_GLOB = "trend_snapshot_*.json"
+SCHEDULED_PLATFORM_INTELLIGENCE_PLATFORMS = (
+    "wechat", "xiaohongshu", "douyin_ai", "douyin_pet", "kuaishou", "bilibili",
+    "shipinhao", "zhihu", "juejin", "youtube", "tiktok", "twitter",
+)
 
 
 def collect_daily_snapshot(
@@ -115,6 +122,220 @@ def calibrate_candidates(items: list[dict[str, Any]], learned: dict[str, Any] | 
             }
         )
     return sorted(calibrated, key=lambda row: (-_number(row.get("calibrated_score")), str(row.get("title") or "")))
+
+
+def validate_platform_candidate(candidate: dict[str, Any] | None, platform: str, *, now: datetime | None = None) -> dict[str, Any]:
+    """Validate identity and freshness before a platform can select a topic."""
+    now = _utc_now(now)
+    target = str(platform or "").casefold().strip()
+    row = dict(candidate or {})
+    failures = []
+    candidate_platform = str(row.get("platform") or "").casefold().strip()
+    if candidate_platform and candidate_platform != target:
+        failures.append("candidate_platform_mismatch")
+    if not target:
+        failures.append("task_platform_missing")
+    if not str(row.get("title") or "").strip():
+        failures.append("candidate_title_missing")
+    expiry = _parse_candidate_time(row.get("expires_at") or row.get("valid_until"))
+    if expiry and expiry <= now:
+        failures.append("candidate_expired")
+    if str(row.get("validity") or "").casefold() in {"expired", "invalid"}:
+        failures.append("candidate_invalidity")
+    evidence = str(row.get("evidence_type") or "native").casefold()
+    if evidence not in {"native", "official_activity", "official_keyword", "same_lane_hot_work", "unavailable"}:
+        failures.append("evidence_type_invalid")
+    if evidence == "unavailable" or row.get("source_unavailable") is True:
+        failures.append("candidate_unavailable")
+    if evidence in {"official_activity", "official_keyword", "official_reference"}:
+        row["native_verified"] = False
+        row["native_evidence"] = False
+    if row.get("official_reference_only") and row.get("native_verified") is True:
+        failures.append("official_reference_marked_native")
+    if not failures:
+        row["platform"] = target
+    return {"passed": not failures, "failures": sorted(set(failures)), "candidate": row}
+
+
+def rank_platform_candidates(candidates: list[dict[str, Any]], platform: str, *, lane_keywords: list[str] | tuple[str, ...] = (), account_history: dict[str, Any] | None = None, used_topics: set[str] | None = None, now: datetime | None = None, limit: int = 10) -> list[dict[str, Any]]:
+    """Rank valid same-platform evidence with an inspectable score breakdown."""
+    now = _utc_now(now)
+    used = {normalize_topic(value) for value in (used_topics or set())}
+    ranked = []
+    for candidate in candidates or []:
+        checked = validate_platform_candidate(candidate, platform, now=now)
+        if not checked["passed"]:
+            continue
+        row = checked["candidate"]
+        if normalize_topic(row.get("title")) in used:
+            continue
+        if row.get("lane_match") is False or _bounded(row.get("semantic_fit_score"), 0.0) < 0.45:
+            continue
+        text = str(row.get("title") or "").casefold()
+        keyword_fit = min(1.0, sum(str(word).casefold() in text for word in lane_keywords) / max(1, len(lane_keywords)))
+        breakdown = {
+            "native_priority": 1.0 if row.get("evidence_type", "native") == "native" and not row.get("official_reference_only") else 0.65,
+            "heat": _bounded(row.get("heat_score"), _heat(row)), "rank": _rank_score(row.get("rank")),
+            "velocity": _bounded(row.get("velocity_score"), 0.0), "validity": 1.0,
+            "lane_fit": max(_bounded(row.get("lane_fit_score"), 0.0), keyword_fit),
+            "semantic_fit": _bounded(row.get("semantic_fit_score"), 0.0), "content_value": _bounded(row.get("content_value_score"), 0.0),
+            "actionability": _bounded(row.get("actionability_score"), 0.0), "saturation": _bounded(row.get("saturation_score"), 0.0),
+            "account_history": _bounded(row.get("account_history_score"), _bounded((account_history or {}).get(platform), 0.0)),
+        }
+        score = sum(breakdown[key] * weight for key, weight in {
+            "native_priority": .18, "heat": .14, "rank": .07, "velocity": .10, "validity": .10,
+            "lane_fit": .12, "semantic_fit": .10, "content_value": .07, "actionability": .06,
+            "saturation": -.05, "account_history": .06,
+        }.items())
+        ranked.append({**row, "platform": platform.casefold(), "score": round(score, 6), "score_breakdown": breakdown, "evidence": _evidence_record(row, platform)})
+    return sorted(ranked, key=lambda row: (-row["score"], str(row.get("title") or "")))[: int(limit)]
+
+
+def bounded_same_platform_recapture(platform: str, recapture: Callable[[str, int], list[dict[str, Any]]], *, max_attempts: int = 3, now: datetime | None = None) -> dict[str, Any]:
+    attempts = []
+    evidence = []
+    for attempt in range(1, max(0, int(max_attempts)) + 1):
+        rows = []
+        for candidate in recapture(platform, attempt) or []:
+            checked = validate_platform_candidate(candidate, platform, now=now)
+            if checked["passed"]:
+                rows.append(checked["candidate"])
+        attempts.append({"attempt": attempt, "candidate_count": len(rows)})
+        evidence.append({"attempt": attempt, "sources": sorted({str(row.get("source") or "") for row in rows if row.get("source")})})
+        if rows:
+            return {"platform": str(platform).casefold(), "candidates": rows, "attempts": attempts, "attempt_evidence": evidence, "exhausted": False}
+    return {"platform": str(platform).casefold(), "candidates": [], "attempts": attempts, "attempt_evidence": evidence, "exhausted": True}
+
+
+def reserve_topic_atomically(path: str | Path, topic: str, platform: str, job_id: str, *, now: datetime | None = None, ttl_hours: float = 6, lookback_days: int = 7, copy_text: str = "", follow_up_to: str = "", difference_angle: str = "", recap_reason: str = "") -> dict[str, Any]:
+    now = _utc_now(now)
+    fingerprint = normalize_topic(topic)
+    if not fingerprint:
+        return {"reserved": False, "reason": "topic_missing", "fingerprint": ""}
+    if any((follow_up_to, difference_angle, recap_reason)) and not all((follow_up_to, difference_angle, recap_reason)):
+        return {"reserved": False, "reason": "follow_up_metadata_incomplete", "fingerprint": fingerprint}
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock = target.with_name(target.name + ".lock")
+    for _ in range(50):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            break
+        except FileExistsError:
+            time.sleep(0.01)
+    else:
+        return {"reserved": False, "reason": "reservation_lock_busy", "fingerprint": fingerprint}
+    try:
+        payload = {"version": "topic_reservations_v2", "reservations": []}
+        if target.is_file():
+            try:
+                loaded = json.loads(target.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    payload.update(loaded)
+            except (OSError, json.JSONDecodeError):
+                pass
+        active = []
+        for row in payload.get("reservations") or []:
+            expiry = _parse_candidate_time(row.get("expires_at")) if isinstance(row, dict) else None
+            used_at = _parse_candidate_time(row.get("used_at")) if isinstance(row, dict) else None
+            recent_used = used_at and used_at >= now - timedelta(days=max(0, int(lookback_days)))
+            if isinstance(row, dict) and ((row.get("status") == "reserved" and expiry and expiry > now) or (row.get("status") == "consumed" and recent_used)):
+                active.append(row)
+        copy_fingerprint = normalize_topic(copy_text)
+        duplicates = [row for row in active if _semantic_duplicate(fingerprint, row.get("fingerprint", "")) or (copy_fingerprint and _semantic_duplicate(copy_fingerprint, row.get("copy_fingerprint", "")))]
+        if duplicates:
+            permitted_follow_up = all((follow_up_to, difference_angle, recap_reason)) and any(_semantic_duplicate(normalize_topic(follow_up_to), row.get("fingerprint", "")) for row in duplicates)
+            if not permitted_follow_up:
+                return {"reserved": False, "reason": "semantic_topic_duplicate", "fingerprint": fingerprint}
+        reservation = {
+            "fingerprint": fingerprint, "topic": str(topic).strip(), "platform": str(platform).casefold(), "job_id": str(job_id),
+            "status": "reserved", "reserved_at": now.isoformat(), "expires_at": (now + timedelta(hours=float(ttl_hours))).isoformat(),
+            "copy_fingerprint": copy_fingerprint, "follow_up_to": str(follow_up_to), "difference_angle": str(difference_angle), "recap_reason": str(recap_reason),
+        }
+        payload["reservations"] = active + [reservation]
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(target)
+        return {"reserved": True, **reservation}
+    finally:
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def expire_abandoned_reservations(path: str | Path, *, now: datetime | None = None) -> list[dict[str, Any]]:
+    now = _utc_now(now)
+    target = Path(path)
+    if not target.is_file():
+        return []
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    expired = []
+    for row in payload.get("reservations", []):
+        expiry = _parse_candidate_time(row.get("expires_at"))
+        if row.get("status") == "reserved" and expiry and expiry <= now:
+            row["status"] = "expired"; row["expired_at"] = now.isoformat(); row["expiration_reason"] = "abandoned_reservation_ttl"; expired.append(dict(row))
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return expired
+
+
+def complete_topic_reservation(path: str | Path, fingerprint: str, *, now: datetime | None = None) -> bool:
+    """Move a reservation to consumed so it remains in the seven-day ledger."""
+    target = Path(path)
+    if not target.is_file():
+        return False
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    for row in payload.get("reservations", []):
+        if row.get("fingerprint") == normalize_topic(fingerprint) and row.get("status") == "reserved":
+            row["status"] = "consumed"; row["used_at"] = _utc_now(now).isoformat()
+            target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            return True
+    return False
+
+
+def _evidence_record(row: dict[str, Any], platform: str) -> dict[str, Any]:
+    raw = json.dumps({key: row.get(key) for key in ("platform", "title", "source", "url", "captured_at", "evidence_type")}, ensure_ascii=False, sort_keys=True)
+    return {"platform": platform, "url": str(row.get("url") or ""), "captured_at": str(row.get("captured_at") or ""), "source": str(row.get("source") or ""), "evidence_hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(), "confidence": round(_bounded(row.get("confidence"), 0.8), 3)}
+
+
+def _parse_candidate_time(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _bounded(value: Any, default: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _heat(row: dict[str, Any]) -> float:
+    import math
+    return min(1.0, math.log1p(max(0.0, _number(row.get("points")))) / 12.0)
+
+
+def _rank_score(value: Any) -> float:
+    try:
+        rank = float(value)
+        return 1.0 if rank <= 1 else max(0.0, 1.0 - (rank - 1) / 20.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _semantic_duplicate(left: str, right: str) -> bool:
+    left_tokens = {_semantic_token(token) for token in left.split()}
+    right_tokens = {_semantic_token(token) for token in str(right).split()}
+    return bool(left_tokens and right_tokens and len(left_tokens & right_tokens) / max(1, len(left_tokens | right_tokens)) >= 0.8)
+
+
+def _semantic_token(token: str) -> str:
+    token = str(token).strip()
+    return token[:-1] if len(token) > 4 and token.endswith("s") else token
 
 
 def build_platform_matrix(
