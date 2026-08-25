@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 READY_STATUSES = {"verified", "verified_via_shared_douyin_source", "backend_loaded"}
+OFFICIAL_EVIDENCE_TYPES = {"official_activity", "official_keyword", "official_reference"}
 _NOISE_WORDS = {
     "登录", "首页", "关注", "朋友", "我的", "消息", "通知", "投稿", "搜索",
     "精选", "推荐", "读屏", "客户端", "创作中心", "数据中心", "活动中心",
@@ -64,11 +65,14 @@ def load_official_reference_signals(platform: str, *, data_dir: str | Path | Non
             continue
         row = rows[0]
         status = str(row.get("status") or "").casefold()
-        signal_type = str(row.get("signal_type") or "official_reference")
+        raw_signal_type = str(row.get("signal_type") or "official_reference").casefold()
+        evidence_type = str(row.get("evidence_type") or raw_signal_type).casefold()
+        if evidence_type not in OFFICIAL_EVIDENCE_TYPES:
+            evidence_type = "official_reference"
         raw_signals = [str(item).strip() for item in (row.get("reference_topics") or row.get("signals") or [])]
-        if signal_type == "creator_metrics":
+        if raw_signal_type == "creator_metrics":
             raw_signals = []
-        elif signal_type == "creator_metrics_and_search_queries":
+        elif raw_signal_type == "creator_metrics_and_search_queries":
             raw_signals = [
                 item for item in raw_signals
                 if not any(token in item for token in ("观看次数", "主页访问量", "赞", "评论", "分享", "过去 7 天", "预估奖励", "流量来源"))
@@ -76,25 +80,24 @@ def load_official_reference_signals(platform: str, *, data_dir: str | Path | Non
         return {
             "status": "ready" if status in READY_STATUSES else "insufficient",
             "source_status": status,
-            "signal_type": signal_type,
+            "signal_type": raw_signal_type,
+            "evidence_type": evidence_type,
             "official_url": str(row.get("official_url") or ""),
             "final_url": str(row.get("final_url") or row.get("official_url") or ""),
             "captured_at": str(row.get("captured_at") or ""),
-            "native_verified": row.get("native_verified") is True,
+            "native_verified": False,
+            "validity": _validity(row, datetime.now(timezone.utc)),
+            "expires_at": str(row.get("expires_at") or row.get("valid_until") or ""),
             "signals": [item for item in raw_signals if _is_topic_text(item)][:80],
             "evidence_sha256": str(row.get("evidence_sha256") or ""),
             "reason": str(row.get("reason") or ""),
             "matrix_path": str(path),
         }
-    return {"status": "insufficient", "source_status": "missing", "signal_type": "official_reference", "signals": [], "reason": "official platform signal matrix not found"}
+    return {"status": "insufficient", "source_status": "missing", "signal_type": "official_reference", "evidence_type": "official_reference", "signals": [], "reason": "official platform signal matrix not found"}
 
 
 def build_reference_items(platform: str, *, data_dir: str | Path | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     evidence = load_official_reference_signals(platform, data_dir=data_dir)
-    if str(platform or "").casefold() == "douyin_pet" and not evidence.get("signals"):
-        evidence = load_official_reference_signals("douyin_ai", data_dir=data_dir)
-        if evidence.get("status") == "ready":
-            evidence["shared_base_platform"] = "douyin_ai"
     if evidence.get("status") != "ready":
         return evidence, []
     source = f"{str(platform).casefold()}:official_reference"
@@ -104,9 +107,13 @@ def build_reference_items(platform: str, *, data_dir: str | Path | None = None) 
             continue
         signal = {
             "signal_type": evidence.get("signal_type"),
+            "evidence_type": evidence.get("evidence_type", evidence.get("signal_type")),
             "official_url": evidence.get("official_url"),
             "captured_at": evidence.get("captured_at"),
-            "native_verified": evidence.get("native_verified"),
+            "native_verified": False,
+            "native_evidence": False,
+            "validity": evidence.get("validity", "unknown"),
+            "expires_at": evidence.get("expires_at", ""),
             "evidence_sha256": evidence.get("evidence_sha256"),
             "source_status": evidence.get("source_status"),
         }
@@ -114,8 +121,24 @@ def build_reference_items(platform: str, *, data_dir: str | Path | None = None) 
             "title": title[:180], "source": source, "url": evidence.get("official_url") or "",
             "points": max(1, 80 - index), "score": round(max(0.35, 0.78 - index * 0.01), 3),
             "platform": str(platform).casefold(), "official_reference_only": True,
+            "native_verified": False, "native_evidence": False,
+            "evidence_type": evidence.get("evidence_type", evidence.get("signal_type")),
+            "validity": evidence.get("validity", "unknown"), "expires_at": evidence.get("expires_at", ""),
             "official_reference_signal": signal,
         }
         item["reference_evidence_sha256"] = hashlib.sha256(json.dumps(signal, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         items.append(item)
     return evidence, items
+
+
+def _validity(row: dict[str, Any], now: datetime) -> str:
+    raw = str(row.get("expires_at") or row.get("valid_until") or "").strip()
+    if not raw:
+        return "unknown"
+    try:
+        expiry = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return "valid" if expiry > now else "expired"
+    except ValueError:
+        return "invalid"

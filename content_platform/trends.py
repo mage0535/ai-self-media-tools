@@ -46,8 +46,17 @@ def _has_native_result(source: str, items: list[dict]) -> bool:
 def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     profile, used = profile or {}, {normalize_topic(item) for item in (used or set())}
     if str(profile.get("topic_scoring_mode") or "").casefold() in {"v2", "enforce"}:
-        candidates = [item for item in (items or []) if normalize_topic(item.get("title", "")) not in used]
-        return rank_topic_candidates(candidates, profile)[: int(limit)]
+        requested_platform = str(profile.get("platform") or "").casefold().strip()
+        candidates = [
+            item for item in (items or [])
+            if normalize_topic(item.get("title", "")) not in used
+            and (not requested_platform or not item.get("platform") or str(item.get("platform")).casefold() == requested_platform)
+        ]
+        ranked = rank_topic_candidates(candidates, profile)[: int(limit)]
+        for row in ranked:
+            if requested_platform:
+                row["platform"] = requested_platform
+        return ranked
     learned = learned or {}
     keywords = [str(word).casefold() for word in profile.get("keywords", [])]
     source_weights = profile.get("source_weights", {})

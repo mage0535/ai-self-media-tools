@@ -1,0 +1,17 @@
+{
+  "platforms": [
+    {"platform": "wechat", "lane": "practical_article", "evidence_type": "native"},
+    {"platform": "xiaohongshu", "lane": "saveable_note", "evidence_type": "official_activity"},
+    {"platform": "douyin_ai", "lane": "ai_workflow_video", "evidence_type": "official_keyword"},
+    {"platform": "douyin_pet", "lane": "pet_knowledge_video", "evidence_type": "same_lane_hot_work"},
+    {"platform": "kuaishou", "lane": "plainspoken_case", "evidence_type": "native"},
+    {"platform": "bilibili", "lane": "deep_tutorial", "evidence_type": "official_activity"},
+    {"platform": "shipinhao", "lane": "shareable_card_video", "evidence_type": "official_keyword"},
+    {"platform": "zhihu", "lane": "reasoned_answer", "evidence_type": "same_lane_hot_work"},
+    {"platform": "juejin", "lane": "engineering_implementation", "evidence_type": "native"},
+    {"platform": "youtube", "lane": "english_tutorial", "evidence_type": "official_activity"},
+    {"platform": "tiktok", "lane": "english_micro_payoff", "evidence_type": "official_keyword"},
+    {"platform": "twitter", "lane": "one_point_post", "evidence_type": "same_lane_hot_work"}
+  ],
+  "negative_outcomes": ["unavailable", "expired"]
+}
