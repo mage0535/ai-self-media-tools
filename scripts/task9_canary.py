@@ -14,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -91,12 +92,67 @@ def _json_hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, ensure_ascii=True, sort_keys=True).encode("utf-8")).hexdigest()
 
 
+def _canonical_hotspot_provenance(platform: Any, source_url: Any, observed_title: Any) -> dict[str, str]:
+    """Return the one stable record used for hotspot hash and source matching."""
+    return {
+        "platform": str(platform or "").strip(),
+        "source_url": str(source_url or "").strip(),
+        "observed_title": str(observed_title or "").strip(),
+    }
+
+
+def _hotspot_source_hash(platform: Any, source_url: Any, observed_title: Any) -> str:
+    return _json_hash(_canonical_hotspot_provenance(platform, source_url, observed_title))
+
+
+def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
+    hotspot = manifest.get("hotspot") if isinstance(manifest.get("hotspot"), dict) else {}
+    platform = str(case.get("platform") or "")
+    source_url = str(hotspot.get("source_url") or "")
+    observed_title = str(hotspot.get("observed_title") or "")
+    expected = _hotspot_source_hash(platform, source_url, observed_title) if source_url and observed_title else ""
+    failures: list[str] = []
+    if hotspot.get("mode") != "official_native" or hotspot.get("platform") != platform:
+        failures.append("hotspot_not_platform_native")
+    if not source_url.startswith(("https://", "http://")):
+        failures.append("hotspot_source_missing")
+    if not observed_title.strip():
+        failures.append("hotspot_observation_missing")
+    if str(hotspot.get("source_hash") or "") != expected:
+        failures.append("hotspot_source_provenance_not_independently_verified")
+    source_rows = manifest.get("source_evidence") if isinstance(manifest.get("source_evidence"), list) else []
+    matching = [
+        row for row in source_rows
+        if isinstance(row, dict)
+        and str(row.get("platform") or "") == platform
+        and str(row.get("url") or "") == source_url
+        and str(row.get("title") or "") == observed_title
+        and str(row.get("source_hash") or "") == expected
+    ]
+    if not matching:
+        failures.append("hotspot_source_provenance_not_independently_verified")
+    return {
+        "passed": not failures,
+        "failures": sorted(set(failures)),
+        "canonical_record": _canonical_hotspot_provenance(platform, source_url, observed_title),
+        "source_hash": expected,
+        "matching_sources": len(matching),
+    }
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _load_json_value(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
 
 
 def _relative_file(root: Path, raw: Any) -> Path | None:
@@ -285,28 +341,10 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
     failures.extend(capability_failures)
 
     hotspot = manifest.get("hotspot") if isinstance(manifest.get("hotspot"), dict) else {}
-    hotspot_failures = []
-    if hotspot.get("mode") != "official_native" or hotspot.get("platform") != case.get("platform"):
-        hotspot_failures.append("hotspot_not_platform_native")
-    if not str(hotspot.get("source_url") or "").startswith(("https://", "http://")):
-        hotspot_failures.append("hotspot_source_missing")
-    if not str(hotspot.get("observed_title") or "").strip():
-        hotspot_failures.append("hotspot_observation_missing")
-    source_rows = manifest.get("source_evidence") if isinstance(manifest.get("source_evidence"), list) else []
-    source_url = str(hotspot.get("source_url") or "")
-    source_title = str(hotspot.get("observed_title") or "")
-    matching_sources = [
-        row for row in source_rows
-        if isinstance(row, dict)
-        and str(row.get("platform") or "") == str(case.get("platform") or "")
-        and str(row.get("url") or "") == source_url
-        and str(row.get("title") or "") == source_title
-    ]
-    expected_source_hash = _json_hash({"url": source_url, "title": source_title}) if source_url and source_title else ""
-    if not matching_sources or str(hotspot.get("source_hash") or "") != expected_source_hash:
-        hotspot_failures.append("hotspot_source_provenance_not_independently_verified")
-    probes["hotspot"] = _probe("hotspot", not hotspot_failures, details=hotspot, failures=hotspot_failures, level="artifact_verified" if not hotspot_failures else "declared")
-    failures.extend(hotspot_failures)
+    hotspot_result = _validate_hotspot_provenance(case, manifest)
+    hotspot_level = "artifact_verified" if hotspot_result["passed"] else "declared"
+    probes["hotspot"] = _probe("hotspot", hotspot_result["passed"], details={**hotspot, **hotspot_result}, failures=hotspot_result["failures"], level=hotspot_level)
+    failures.extend(hotspot_result["failures"])
 
     policy = manifest.get("delivery_policy") if isinstance(manifest.get("delivery_policy"), dict) else {}
     policy_state = str(policy.get("state") or "")
@@ -348,6 +386,8 @@ def _hermes_json(command: list[str]) -> dict[str, Any]:
         result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=False)
     except (OSError, subprocess.SubprocessError):
         return {}
+    if result.returncode != 0:
+        return {}
     try:
         value = json.loads(result.stdout or "{}")
     except json.JSONDecodeError:
@@ -355,23 +395,52 @@ def _hermes_json(command: list[str]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _hermes_help(executable: str) -> str:
+    try:
+        result = subprocess.run([executable, "--help"], capture_output=True, text=True, timeout=20, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if result.returncode != 0:
+        return ""
+    return f"{result.stdout or ''}\n{result.stderr or ''}"
+
+
+def _model_selection_capability(executable: str) -> dict[str, Any]:
+    """Describe only selectors proven by the successful CLI help output."""
+    help_text = _hermes_help(executable)
+    if not help_text:
+        return {"available": False, "reason": "hermes_cli_capability_check_failed"}
+    lowered = help_text.casefold()
+    if "hermes_model" in lowered and "hermes_provider" in lowered:
+        return {"available": True, "mode": "environment", "evidence": "hermes_help"}
+    if "--model" in lowered and "--provider" in lowered:
+        return {"available": True, "mode": "flags", "evidence": "hermes_help"}
+    return {"available": False, "reason": "model_selection_not_supported_by_hermes_cli"}
+
+
 def discover_hermes_runtime() -> dict[str, Any]:
-    """Discover runtime identity; never supplies a pinned fallback identity."""
+    """Discover identity from successful Hermes CLI output only."""
     executable = os.environ.get("HERMES_CLI", "hermes").strip() or "hermes"
     if not shutil.which(executable) and not Path(executable).is_file():
         return {"active": {"status": "unavailable", "provider": "", "model": "", "reason": "hermes_cli_unavailable"}, "weak": {"status": "dual_model_pending", "reason": "hermes_cli_unavailable"}}
     status = _hermes_json([executable, "status", "--json"])
     models = _hermes_json([executable, "models", "--json"])
+    selection = _model_selection_capability(executable)
     active = status.get("active") if isinstance(status.get("active"), dict) else status
-    provider = str(active.get("provider") or status.get("provider") or os.environ.get("HERMES_PROVIDER", ""))
-    model = str(active.get("model") or active.get("model_id") or status.get("model") or os.environ.get("HERMES_MODEL", ""))
-    result = {"active": {"status": "verified" if provider or model else "unavailable", "provider": provider, "model": model, "gate_passed": False, "gate_reason": "model_gate_report_missing"}}
+    provider = str(active.get("provider") or status.get("provider") or "")
+    model = str(active.get("model") or active.get("model_id") or status.get("model") or "")
+    active_status = "available" if provider and model else "unavailable"
+    result = {"active": {"status": active_status, "provider": provider, "model": model, "executable": executable, "selection": selection, "gate_passed": False, "gate_reason": "model_gate_pending"}}
     candidates = models.get("models") if isinstance(models.get("models"), list) else []
-    weak = next((item for item in candidates if isinstance(item, dict) and str(item.get("id") or item.get("model") or "") not in {model, ""}), None)
+    weak = next((item for item in candidates if isinstance(item, dict) and str(item.get("id") or item.get("model") or "") not in {model, ""} and str(item.get("provider") or "")), None)
     if weak:
-        result["weak"] = {"status": "available", "provider": str(weak.get("provider") or ""), "model": str(weak.get("id") or weak.get("model") or ""), "gate_passed": False, "gate_reason": "model_gate_report_missing"}
+        result["weak"] = {"status": "available", "provider": str(weak.get("provider") or ""), "model": str(weak.get("id") or weak.get("model") or ""), "executable": executable, "selection": selection, "gate_passed": False, "gate_reason": "model_gate_pending"}
     else:
-        result["weak"] = {"status": "dual_model_pending", "reason": "no_available_second_model", "gate_passed": False}
+        result["weak"] = {"status": "dual_model_pending", "reason": "no_available_second_model", "executable": executable, "selection": selection, "gate_passed": False}
+    if not selection.get("available"):
+        for role in ("active", "weak"):
+            if result[role].get("status") in {"available", "verified"}:
+                result[role]["selection_reason"] = selection.get("reason", "model_selection_unavailable")
     return result
 
 
@@ -399,14 +468,16 @@ def _canary_brief(case: dict[str, Any]) -> dict[str, Any]:
     platform = str(case["platform"])
     title = f"Task9 verified workflow for {platform}"
     source_url = f"https://official.example.invalid/{platform}/canary"
+    observed_title = f"Official {platform} workflow signal"
+    provenance = _canonical_hotspot_provenance(platform, source_url, observed_title)
     hotspot = {
         "platform": platform,
         "mode": "official_native",
         "native_verified": True,
         "source_url": source_url,
-        "observed_title": f"Official {platform} workflow signal",
+        "observed_title": observed_title,
         "observed_at": datetime.now(timezone.utc).isoformat(),
-        "source_hash": _json_hash({"url": source_url, "title": title}),
+        "source_hash": _json_hash(provenance),
     }
     return {
         "platform": platform,
@@ -589,6 +660,48 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
         return {"passed": False, "pipeline_evidence": evidence, "job": job, "manifest": manifest, "error": f"{type(exc).__name__}: {exc}"}
 
 
+def _generation_attempt_evidence(root: Path, expected: dict[str, Any]) -> dict[str, Any]:
+    """Read observed provider/model/session data emitted by the real generator."""
+    expected_provider = str(expected.get("provider") or "")
+    expected_model = str(expected.get("model") or "")
+    attempts: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("generation_attempts.json")):
+        raw_rows = _load_json_value(path)
+        raw_rows = raw_rows if isinstance(raw_rows, list) else []
+        for row in raw_rows:
+            if isinstance(row, dict):
+                attempts.append({**row, "_path": path.relative_to(root).as_posix()})
+    successful = [row for row in attempts if row.get("status") == "success"]
+    matching = []
+    for row in successful:
+        provider = str(row.get("provider") or row.get("provider_name") or "")
+        model = str(row.get("model") or row.get("model_id") or "")
+        session = str(row.get("session_id") or row.get("session") or row.get("hermes_session_id") or "")
+        if provider == expected_provider and model == expected_model and session:
+            matching.append({"provider": provider, "model": model, "session_id": session, "path": row.get("_path", "")})
+    return {
+        "passed": bool(matching),
+        "attempt_count": len(attempts),
+        "successful_count": len(successful),
+        "matching": matching,
+        "failures": [] if matching else ["generation_attempt_identity_evidence_missing"],
+    }
+
+
+def _blocked_model_matrix(matrix: list[dict[str, Any]], reason: str) -> list[dict[str, Any]]:
+    return [
+        {
+            **case,
+            "passed": False,
+            "artifact_policy_passed": False,
+            "failure_reason": reason,
+            "pipeline_evidence": {"create_called": False, "run_called": False, "serial_index": case["order"], "job_id": ""},
+            "generation_evidence": {"passed": False, "failures": [reason]},
+        }
+        for case in matrix
+    ]
+
+
 class _null_context:
     def __enter__(self):
         return self
@@ -599,23 +712,54 @@ class _null_context:
 
 def _run_model_matrix(role: str, model: dict[str, Any], matrix: list[dict[str, Any]], root: Path, *, pipeline_factory=None, store_factory=None) -> dict[str, Any]:
     """Execute the same real Pipeline matrix for a discovered model identity."""
+    selection = model.get("selection") if isinstance(model.get("selection"), dict) else {}
+    if model.get("status") not in {"available", "verified"}:
+        reason = str(model.get("reason") or "model_identity_unavailable")
+        return {"status": "dual_model_pending" if role == "weak" else "blocked", "provider": "", "model": "", "gate_passed": False, "executed_cases": 0, "case_results": _blocked_model_matrix(matrix, reason), "reason": reason}
     model_id = str(model.get("model") or "")
-    if not model_id:
-        return {"status": "dual_model_pending", "reason": "model_identity_missing", "executed_cases": 0}
-    previous = os.environ.get("HERMES_MODEL")
+    provider = str(model.get("provider") or "")
+    if not model_id or not provider:
+        reason = "model_identity_missing"
+        return {"status": "dual_model_pending" if role == "weak" else "blocked", "provider": provider, "model": model_id, "gate_passed": False, "executed_cases": 0, "case_results": _blocked_model_matrix(matrix, reason), "reason": reason}
+    if selection.get("available") is not True:
+        reason = str(selection.get("reason") or "model_selection_unavailable")
+        return {"status": "dual_model_pending" if role == "weak" else "blocked", "provider": provider, "model": model_id, "gate_passed": False, "executed_cases": 0, "case_results": _blocked_model_matrix(matrix, reason), "reason": reason}
+    previous = {key: os.environ.get(key) for key in ("HERMES_PROVIDER", "HERMES_MODEL", "HERMES_CANARY_SESSION")}
+    os.environ["HERMES_PROVIDER"] = provider
     os.environ["HERMES_MODEL"] = model_id
+    canary_session = f"task9-{role}-{uuid.uuid4().hex}"
+    os.environ["HERMES_CANARY_SESSION"] = canary_session
     results = []
     try:
         for case in matrix:
-            result = _run_pipeline_case(case, root / "_models" / role / case["platform"], pipeline_factory=pipeline_factory, store_factory=store_factory)
-            results.append({"platform": case["platform"], "passed": result.get("passed") is True, "job_id": (result.get("pipeline_evidence") or {}).get("job_id", "")})
+            artifact_dir = root / "_models" / role / case["platform"]
+            result = _run_pipeline_case(case, artifact_dir, pipeline_factory=pipeline_factory, store_factory=store_factory)
+            probe = probe_artifacts(case, artifact_dir)
+            pipeline_evidence = result.get("pipeline_evidence") or {}
+            generation_evidence = _generation_attempt_evidence(artifact_dir, model)
+            passed = bool(result.get("passed") is True and probe.get("passed") is True and generation_evidence["passed"] is True and pipeline_evidence.get("create_called") is True and pipeline_evidence.get("run_called") is True)
+            failures = list(probe.get("failures") or []) + list(generation_evidence.get("failures") or [])
+            if not result.get("passed"):
+                failures.append("pipeline_execution_failed")
+            results.append({
+                **case,
+                "passed": passed,
+                "artifact_policy_passed": passed,
+                "job_id": pipeline_evidence.get("job_id", ""),
+                "pipeline_evidence": pipeline_evidence,
+                "generation_evidence": generation_evidence,
+                "probes": probe.get("probes", {}),
+                "failure_reason": ";".join(sorted(set(failures))),
+                "evidence_level": "artifact_verified" if passed else "declared",
+            })
     finally:
-        if previous is None:
-            os.environ.pop("HERMES_MODEL", None)
-        else:
-            os.environ["HERMES_MODEL"] = previous
-    passed = bool(results) and all(item["passed"] for item in results)
-    return {"status": "verified" if passed else "blocked", "provider": model.get("provider", ""), "model": model_id, "gate_passed": passed, "executed_cases": len(results), "case_results": results, "reason": "" if passed else "weak_model_pipeline_failed"}
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    passed = len(results) == len(matrix) and bool(results) and all(item["passed"] for item in results)
+    return {"status": "verified" if passed else "blocked", "provider": provider, "model": model_id, "selection": selection, "gate_passed": passed, "executed_cases": len(results), "case_results": results, "reason": "" if passed else "model_pipeline_or_evidence_failed", "session_id": canary_session}
 
 
 def _git_commit(repo_root: Path) -> str:
@@ -696,49 +840,48 @@ def run_canaries(
     root.mkdir(parents=True, exist_ok=True)
     matrix = build_canary_matrix()
     runtime = discover_hermes_runtime()
-    cases = []
-    for case in matrix:
-        artifact_dir = root / case["platform"]
-        execution = _run_pipeline_case(case, artifact_dir, pipeline_factory=pipeline_factory, store_factory=store_factory)
-        probe = probe_artifacts(case, artifact_dir)
-        policy_passed = probe["probes"].get("delivery_policy", {}).get("passed", False)
-        pipeline_evidence = execution.get("pipeline_evidence") or {}
-        pipeline_passed = execution.get("passed") is True and pipeline_evidence.get("create_called") is True and pipeline_evidence.get("run_called") is True
-        failures = list(probe.get("failures") or [])
-        if not pipeline_passed:
-            failures.append("pipeline_execution_failed")
-        case_result = {
-            **case,
-            "command": {"entrypoint": "content_platform.pipeline.Pipeline.create+run", "mode": "serial"},
-            "git_commit": _git_commit(repo),
-            "pipeline_evidence": pipeline_evidence,
-            "job_evidence": {"job_id": pipeline_evidence.get("job_id", ""), "state": (execution.get("job") or {}).get("state", "")},
-            "input_hashes": {"case": _json_hash(case), "brief": _json_hash(_canary_brief(case)), "artifact_manifest": probe.get("manifest_sha256", "")},
-            "output_hashes": probe["input_output_hashes"],
-            "capability_evidence": probe["probes"].get("capabilities", {}),
-            "probes": probe["probes"],
-            "delivery_policy": probe["probes"].get("delivery_policy", {}),
-            "hotspot_evidence": probe["probes"].get("hotspot", {}),
-            "failure_reason": ";".join(sorted(set(failures + ([execution.get("error")] if execution.get("error") else [])))),
-            "evidence_level": "artifact_verified" if not failures else "declared",
-            "pending_reason": ";".join(value for value in failures if "missing" in value or "probe" in value or "pending" in value),
-            "artifact_policy_passed": bool(pipeline_passed and probe["passed"] and policy_passed),
-        }
-        cases.append(case_result)
-    gate_hash = _json_hash(DETERMINISTIC_GATE_NAMES)
-    model_reports: list[dict[str, Any]] = []
+    model_results: dict[str, dict[str, Any]] = {}
     if callable(model_runner):
         for role in ("active", "weak"):
-            model_result = model_runner(role, matrix[0], root)
-            runtime[role] = dict(model_result or {"status": "pending", "reason": "model_runner_returned_no_result"})
+            model_result = model_runner(role, matrix, root)
+            model_results[role] = dict(model_result or {})
     else:
-        active = runtime.get("active") or {}
-        runtime["active"] = {**active, "gate_passed": bool(active.get("status") == "verified" and all(item["artifact_policy_passed"] for item in cases)), "gate_contract_hash": gate_hash, "executed_cases": len(cases), "gate_reason": "pipeline_cases_failed" if not all(item["artifact_policy_passed"] for item in cases) else ""}
-        weak = runtime.get("weak") or {}
-        if weak.get("status") == "available":
-            runtime["weak"] = _run_model_matrix("weak", weak, matrix, root, pipeline_factory=pipeline_factory, store_factory=store_factory)
-        else:
-            runtime["weak"] = {**weak, "status": "dual_model_pending", "gate_passed": False, "gate_contract_hash": gate_hash}
+        for role in ("active", "weak"):
+            model_results[role] = _run_model_matrix(role, runtime.get(role) or {}, matrix, root, pipeline_factory=pipeline_factory, store_factory=store_factory)
+    for role, result in model_results.items():
+        runtime[role] = {**(runtime.get(role) or {}), **result}
+    active_cases = (model_results.get("active") or {}).get("case_results") or _blocked_model_matrix(matrix, "active_model_matrix_not_executed")
+    cases = []
+    for case, model_case in zip(matrix, active_cases):
+        failures = [value for value in str(model_case.get("failure_reason") or "").split(";") if value]
+        pipeline_evidence = model_case.get("pipeline_evidence") if isinstance(model_case.get("pipeline_evidence"), dict) else {}
+        probes = model_case.get("probes") if isinstance(model_case.get("probes"), dict) else {}
+        cases.append({
+            **case,
+            "command": {"entrypoint": "content_platform.pipeline.Pipeline.create+run", "mode": "serial", "model_role": "active"},
+            "git_commit": _git_commit(repo),
+            "pipeline_evidence": pipeline_evidence,
+            "job_evidence": {"job_id": model_case.get("job_id", ""), "state": model_case.get("state", "")},
+            "input_hashes": {"case": _json_hash(case), "brief": _json_hash(_canary_brief(case))},
+            "output_hashes": model_case.get("output_hashes", {}),
+            "capability_evidence": probes.get("capabilities", {}),
+            "probes": probes,
+            "delivery_policy": probes.get("delivery_policy", {}),
+            "hotspot_evidence": probes.get("hotspot", {}),
+            "generation_evidence": model_case.get("generation_evidence", {}),
+            "failure_reason": ";".join(sorted(set(failures))),
+            "evidence_level": "artifact_verified" if model_case.get("artifact_policy_passed") is True else "declared",
+            "pending_reason": ";".join(value for value in failures if "missing" in value or "probe" in value or "pending" in value or "unavailable" in value),
+            "artifact_policy_passed": model_case.get("artifact_policy_passed") is True,
+        })
+    gate_hash = _json_hash(DETERMINISTIC_GATE_NAMES)
+    model_reports: list[dict[str, Any]] = []
+    for role in ("active", "weak"):
+        identity = runtime.get(role) if isinstance(runtime.get(role), dict) else {}
+        identity["gate_contract_hash"] = gate_hash
+        if role == "active" and identity.get("status") in {"available", "verified"} and not identity.get("gate_passed"):
+            identity["gate_reason"] = identity.get("reason") or "active_model_matrix_failed"
+        runtime[role] = identity
     report = {
         "schema": "task9_canary_report_v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -750,7 +893,7 @@ def run_canaries(
         "deterministic_gate_contract": {"names": list(DETERMINISTIC_GATE_NAMES), "sha256": gate_hash},
         "cases": cases,
         "delivery_scenarios": run_delivery_scenarios(root / "task9_delivery.db"),
-        "passed": len(cases) == 12 and [case["platform"] for case in cases] == list(EXPECTED_CANARY_PLATFORMS) and all(case["artifact_policy_passed"] for case in cases),
+        "passed": len(cases) == 12 and [case["platform"] for case in cases] == list(EXPECTED_CANARY_PLATFORMS) and all(case["artifact_policy_passed"] for case in cases) and runtime.get("active", {}).get("gate_passed") is True and runtime.get("weak", {}).get("gate_passed") is True,
     }
     if output_path:
         destination = Path(output_path)
