@@ -136,6 +136,9 @@ def validate_run_contract(contract: dict[str, Any] | None, *, rulebook_path: str
 
 _GENERATION_OPTIONAL_FIELDS = (
     "compiled_skill_rules",
+    "content_profile",
+    "capability_plan",
+    "tool_selection",
     "tool_selection_plan",
     "content_quality_reference_pack",
     "runtime_capabilities",
