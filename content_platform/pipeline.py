@@ -1462,7 +1462,7 @@ class Pipeline:
             meta["render_manifest"] = manifest
             nested_manifest = manifest.get("tool_invocation_manifest")
             if isinstance(nested_manifest, dict) and nested_manifest:
-                meta["tool_invocation_manifest"] = nested_manifest
+                meta["renderer_tool_invocation_manifest"] = nested_manifest
         renderer_packet = artifact.get("render_packet")
         if isinstance(renderer_packet, dict):
             for key in ("audio_probe", "subtitle", "burned_captions", "background_assets", "bgm", "bgm_source"):
@@ -1470,7 +1470,7 @@ class Pipeline:
                     meta[key] = renderer_packet[key]
             manifest = renderer_packet.get("tool_invocation_manifest")
             if isinstance(manifest, dict) and manifest:
-                meta["tool_invocation_manifest"] = manifest
+                meta["renderer_tool_invocation_manifest"] = manifest
         for key in ("degraded", "fallback_used", "fallback_reason", "quality_gate", "scene_manifest", "observed_scene_evidence", "tts_fingerprint"):
             if key in artifact:
                 meta[key] = artifact[key]

@@ -6,6 +6,9 @@ Provides stdio and SSE transports. Requires `mcp` package (pip install mcp).
 import json
 import os
 import sys
+import asyncio
+import inspect
+import uuid
 from pathlib import Path
 
 try:
@@ -41,7 +44,12 @@ def _pipeline():
 
 
 def _tools():
-    pipeline, store = _pipeline()
+    runtime = {}
+
+    def pipeline_and_store():
+        if "pair" not in runtime:
+            runtime["pair"] = _pipeline()
+        return runtime["pair"]
 
     async def mcp_seo_geo_check(text: str = "") -> dict:
         from content_platform.seo import geo_check
@@ -55,19 +63,23 @@ def _tools():
         return {"count": len(ranked), "trends": ranked}
 
     async def mcp_create_job(topic: str, platforms: str = "wechat", brief: str = "{}") -> dict:
+        pipeline, _store = pipeline_and_store()
         plats = [p.strip() for p in platforms.split(",") if p.strip()]
         job = pipeline.create(topic, plats, json.loads(brief))
         return {"job_id": job["id"], "state": job["state"], "topic": topic}
 
     async def mcp_run_job(job_id: str) -> dict:
+        pipeline, _store = pipeline_and_store()
         job = pipeline.run(job_id)
         return {"job_id": job_id, "state": job.get("state", "unknown")}
 
     async def mcp_approve_job(job_id: str, actor: str = "mcp-agent") -> dict:
+        pipeline, _store = pipeline_and_store()
         job = pipeline.approve(job_id, actor)
         return {"job_id": job_id, "state": job.get("state", "unknown")}
 
     async def mcp_publish_job(job_id: str) -> dict:
+        pipeline, _store = pipeline_and_store()
         job = pipeline.publish(job_id)
         return {"job_id": job_id, "state": job.get("state", "unknown"), "deliveries": job.get("deliveries", [])}
 
@@ -90,6 +102,7 @@ def _tools():
         readiness = inspect_delivery_readiness(config)
         trend_cfg = config.get("trends", {}).get("reddit", {})
         publisher_cfg = config.get("publishers", {}).get("platforms", {}).get("reddit", {})
+        _pipeline_instance, store = pipeline_and_store()
         pending = [
             job
             for job in store.list_jobs(limit=50, state="review_required")
@@ -199,6 +212,15 @@ def _tools():
             )
         return result
 
+    async def mcp_content_search(query: str = "", documents: str = "[]") -> dict:
+        from content_platform.adapters.search import execute
+        rows = json.loads(documents or "[]")
+        return execute({"query": query, "documents": rows if isinstance(rows, list) else []})
+
+    async def mcp_memory_context(context: str = "{}") -> dict:
+        payload = json.loads(context or "{}")
+        return {"version": "memory_context_v1", "context": payload if isinstance(payload, dict) else {}}
+
     async def mcp_validate_content_package(packet: str = "{}", platform: str = "") -> dict:
         from content_platform.media_quality import (
             validate_article_packet,
@@ -303,8 +325,28 @@ def _tools():
         (mcp_capability_status, "capability_status", "Report available tools, skills bridge, and video effect registry", {}),
         (mcp_build_tool_selection_plan, "build_tool_selection_plan", "Build tool capability analysis and selected tool stack evidence for a packet", {"packet": str, "platform": str}),
         (mcp_build_content_recipe, "build_content_recipe", "Build article and knowledge-card recipe evidence for a packet", {"packet": str, "platform": str}),
+        (mcp_content_search, "content_search", "Search bounded content-production context", {"query": str, "documents": str}),
+        (mcp_memory_context, "memory_context", "Retrieve bounded workflow memory context", {"context": str}),
         (mcp_validate_content_package, "validate_content_package", "Validate article, video, Xiaohongshu, or platform article package gates", {"packet": str, "platform": str}),
     ]
+
+
+def invoke_registered_tool(tool_name: str, payload: dict | None = None) -> dict:
+    """Invoke the exact handler registered by the checked-in MCP server."""
+    handlers = {name: handler for handler, name, _description, _params in _tools()}
+    if tool_name not in handlers:
+        raise KeyError(f"MCP tool is not registered: {tool_name}")
+    handler = handlers[tool_name]
+    signature = inspect.signature(handler)
+    values = dict(payload or {})
+    kwargs = {name: values[name] for name in signature.parameters if name in values}
+    result = asyncio.run(handler(**kwargs))
+    return {
+        "_mcp_transport": "in_process_registered_mcp",
+        "_mcp_session_id": uuid.uuid4().hex,
+        "_mcp_server": "content-platform",
+        "result": result,
+    }
 
 
 def serve_stdio():

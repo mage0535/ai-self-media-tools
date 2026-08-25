@@ -91,7 +91,7 @@ def _can_bind(signature: inspect.Signature, *args: Any) -> bool:
     return True
 
 
-def _evidence(namespace: str, tool: str, input_hash: str, status: str, affected: str, started: float, *, output_hash: str = "", reason: str = "", fallback_used: bool = False) -> dict[str, Any]:
+def _evidence(namespace: str, tool: str, input_hash: str, status: str, affected: str, started: float, *, output_hash: str = "", reason: str = "", fallback_used: bool = False, transport: str = "", session_id: str = "") -> dict[str, Any]:
     result = {
         "version": "mcp_evidence_v1",
         "server_name": namespace,
@@ -103,6 +103,8 @@ def _evidence(namespace: str, tool: str, input_hash: str, status: str, affected:
         "affected_output": affected,
         "affected_outputs": [affected],
         "fallback_used": fallback_used,
+        "transport": transport,
+        "session_id": session_id,
     }
     if reason:
         result["reason"] = reason
@@ -132,7 +134,11 @@ def execute(inputs: dict[str, Any]) -> dict[str, Any]:
     try:
         future = executor.submit(_invoke, call, namespace, tool, payload, _runtime(inputs))
         raw_output = future.result(timeout=timeout)
-        return _evidence(namespace, tool, input_hash, "executed", affected, started, output_hash=_hash(raw_output))
+        transport = str(raw_output.get("_mcp_transport") or "") if isinstance(raw_output, dict) else ""
+        session_id = str(raw_output.get("_mcp_session_id") or "") if isinstance(raw_output, dict) else ""
+        if not transport or not session_id:
+            return _evidence(namespace, tool, input_hash, "failed", affected, started, reason="mcp_transport_evidence_missing")
+        return _evidence(namespace, tool, input_hash, "executed", affected, started, output_hash=_hash(raw_output), transport=transport, session_id=session_id)
     except FutureTimeout:
         reason = "mcp_timeout"
     except Exception as exc:
