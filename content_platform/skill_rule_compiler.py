@@ -9,20 +9,51 @@ from pathlib import Path
 from typing import Any
 
 
+_BLOCKED_SKILL_TOKENS = frozenset({
+    ".archive", "_archive", "archive", "duplicate", "duplicates", "finance", "financial",
+    "trading", "trade", "stock", "stocks", "forex", "crypto", "investment", "investing",
+})
+_PLATFORMS = frozenset({"douyin", "xiaohongshu", "zhihu", "juejin", "wechat", "kuaishou", "tiktok", "youtube"})
+
+
+def _blocked_skill(relative: str) -> bool:
+    lowered = relative.casefold().replace("\\", "/")
+    parts = set(lowered.split("/"))
+    return any(part in _BLOCKED_SKILL_TOKENS or any(token in part for token in _BLOCKED_SKILL_TOKENS if token not in {".archive", "_archive"}) for part in parts)
+
+
+def _source_platforms(source: str) -> set[str]:
+    tokens = set(re.findall(r"[a-z0-9]+", source.casefold()))
+    return tokens.intersection(_PLATFORMS)
+
+
 def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[dict[str, Any]]:
-    """Keep shared rules and rules named for the active platform only."""
+    """Keep shared content rules and rules named for the active platform only."""
     active = str(platform or "").casefold()
-    active_names = {active}
+    active_names = {active.removesuffix("_ai").removesuffix("_pet")}
     if active in {"douyin_ai", "douyin_pet"}:
         active_names.add("douyin")
-    platforms = {"douyin", "xiaohongshu", "zhihu", "juejin", "wechat", "kuaishou", "tiktok", "youtube"}
     selected = []
-    seen_text_hashes = set()
-    for rule in rules:
+    seen_text_hashes: set[str] = set()
+    candidates = sorted(
+        (item for item in rules if isinstance(item, dict)),
+        key=lambda item: (
+            0 if _source_platforms(str(item.get("source") or item.get("id") or "").casefold()).intersection(active_names) else
+            1 if "project" in str(item.get("source") or "").casefold() else 2,
+            str(item.get("source") or ""),
+            str(item.get("id") or ""),
+        ),
+    )
+    for rule in candidates:
         source = str(rule.get("source") or rule.get("id") or "").casefold()
-        if any(name in source and name not in active_names for name in platforms):
+        if _blocked_skill(source):
+            continue
+        named_platforms = _source_platforms(source)
+        if named_platforms and not named_platforms.intersection(active_names):
             continue
         normalized_text = " ".join(str(rule.get("text") or "").split()).casefold()
+        if not normalized_text:
+            continue
         text_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
         if text_hash in seen_text_hashes:
             continue
@@ -49,17 +80,20 @@ def _hermes_root(fallback_root: Path | None = None) -> Path:
     return (fallback_root or Path.cwd()) / ".hermes"
 
 
-def compile_skill_rules(paths: list[str | Path], *, root: str | Path) -> dict[str, Any]:
+def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: str = "") -> dict[str, Any]:
     root = Path(root).resolve()
     sources = []
     rules = []
+    records = []
     for raw_path in paths:
         path = Path(raw_path)
         relative = _relative(path, root)
-        if any(part.casefold() in {".archive", "_archive", "archive"} for part in relative.split("/")):
+        if _blocked_skill(relative) or "skills/content/" not in relative.casefold():
             continue
         if not path.is_file():
             continue
+        records.append((relative, path))
+    for relative, path in sorted(records, key=lambda item: item[0].casefold()):
         text = path.read_text(encoding="utf-8", errors="replace")
         rule_path = relative.removeprefix("skills/").removesuffix("/SKILL.md")
         source_id = f"skill:{rule_path}"
@@ -82,13 +116,29 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path) -> dict[st
                 "section": section,
                 "text": match.group(1)[:500],
             })
-    return {
+    result = {
         "version": "compiled_skill_rules_v1",
         "passed": True,
         "sources": sources,
-        "rules": rules[:120],
+        "rules": sorted(rules[:120], key=lambda item: str(item.get("id") or "")),
         "rule_count": min(len(rules), 120),
     }
+    if platform:
+        from .adapter_executor import execute_capability
+        from .capability_catalog import load_capability_registry
+
+        capability = next(
+            item for item in load_capability_registry()["capabilities"] if item["id"] == "skill_reference_compiler"
+        )
+        result["consultation"] = execute_capability(
+            capability,
+            {
+                "platform": platform,
+                "compiled_skill_rules": result,
+                "affected_outputs": ["generation_context", "provider_brief"],
+            },
+        )
+    return result
 
 
 def default_skill_paths(platform: str, *, root: str | Path) -> list[Path]:

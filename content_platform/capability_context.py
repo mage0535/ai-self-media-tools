@@ -20,7 +20,7 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
     )
     full_plan = build_capability_plan(profile)
     project_root = Path(__file__).resolve().parents[1]
-    compiled_skill_rules = compile_skill_rules(default_skill_paths(platform, root=project_root), root=project_root)
+    compiled_skill_rules = compile_skill_rules(default_skill_paths(platform, root=project_root), root=project_root, platform=platform)
     # Keep full provenance local while fitting bounded provider input.
     compiled_skill_rules["sources"] = [
         {"id": source["id"], "sha256": source["sha256"]}
@@ -35,12 +35,23 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
     compiled_skill_rules["content_assets"] = {
         "selected": selected_assets,
     }
+    consulted = list(full_plan.get("consulted", []))
+    consultation = compiled_skill_rules.get("consultation") or {}
+    for item in consulted:
+        if item.get("capability_id") == "skill_reference_compiler":
+            item.update({
+                "rules_applied": (consultation.get("output") or {}).get("rules_applied", []),
+                "source_hashes": (consultation.get("output") or {}).get("source_hashes", {}),
+                "affected_outputs": (consultation.get("output") or {}).get("affected_outputs", []),
+                "consultation_status": consultation.get("status", "consulted"),
+                "output_hash": consultation.get("output_hash", ""),
+            })
     plan = {
         "version": full_plan["version"],
         "profile": full_plan["profile"],
         "tool_group_count": len(full_plan.get("tool_groups", {})),
         "tool_group_names": sorted(full_plan.get("tool_groups", {})),
-        "consulted": full_plan.get("consulted", []),
+        "consulted": consulted,
         "candidates": full_plan.get("candidates", []),
         "executed": full_plan.get("executed", []),
         "skipped": full_plan.get("skipped", []),
