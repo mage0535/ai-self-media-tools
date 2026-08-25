@@ -39,3 +39,4 @@ cookies/
 *.bak
 *.bak.*
 *.egg-info/
+generation_checkpoint.json
