@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +117,8 @@ def _work(platform: str, source: str, query: str, title: str, **kwargs: Any) -> 
         "query": query,
         "title": strip_markup(title),
         "evidence_strength": kwargs.pop("evidence_strength"),
+        "captured_at": kwargs.pop("captured_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
+        "collector": kwargs.pop("collector", source),
     }
     item.update({key: value for key, value in kwargs.items() if value not in (None, "")})
     item["analysis"] = analyze_work(item["title"], str(item.get("excerpt") or ""))
@@ -141,7 +143,7 @@ def parse_sogou_wechat_html(raw_html: str, *, query: str, limit: int = 10) -> li
                 "sogou_weixin",
                 query,
                 title,
-                url=html.unescape(href_match.group(1)) if href_match else "",
+                url=urllib.parse.urljoin("https://weixin.sogou.com", html.unescape(href_match.group(1))) if href_match else "",
                 author=strip_markup(account_match.group(0)) if account_match else "",
                 excerpt=strip_markup(desc_match.group(0)) if desc_match else "",
                 evidence_strength="strong_public_wechat_search",
@@ -152,7 +154,17 @@ def parse_sogou_wechat_html(raw_html: str, *, query: str, limit: int = 10) -> li
     return rows
 
 
-def parse_xiaohongshu_search_text(text: str, *, query: str, limit: int = 12) -> list[dict[str, Any]]:
+def _matching_anchor(title: str, anchors: list[dict[str, str]] | None) -> str:
+    wanted = strip_markup(title).casefold()
+    for anchor in anchors or []:
+        label = strip_markup(str(anchor.get("text") or "")).casefold()
+        href = str(anchor.get("href") or "").strip()
+        if label and href.startswith(("http://", "https://")) and (wanted in label or label in wanted):
+            return href
+    return ""
+
+
+def parse_xiaohongshu_search_text(text: str, *, query: str, limit: int = 12, anchors: list[dict[str, str]] | None = None) -> list[dict[str, Any]]:
     lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
     skip = {"首页", "点点", "ai", "RED", "直播", "发布", "通知", "消息", "我", "全部", "图文", "视频", "用户", "筛选", "综合", "大家都在搜", "活动"}
     rows: list[dict[str, Any]] = []
@@ -175,6 +187,7 @@ def parse_xiaohongshu_search_text(text: str, *, query: str, limit: int = 12) -> 
                     author=author,
                     date=date,
                     engagement=metric,
+                    url=_matching_anchor(title, anchors),
                     evidence_strength="strong_logged_search_result",
                 )
             )
@@ -244,13 +257,72 @@ def _looks_like_content_line(line: str, query: str) -> bool:
     return any(token in lowered for token in query_tokens) or any(token in lowered for token in lane_tokens)
 
 
-def parse_logged_short_video_search_text(text: str, *, platform: str, query: str, limit: int = 12) -> list[dict[str, Any]]:
+def _nearby_metric(lines: list[str], title: str) -> str:
+    try:
+        index = lines.index(title)
+    except ValueError:
+        return ""
+    for line in lines[index + 1:index + 7]:
+        match = re.search(r"(?:赞同|点赞|播放|观看|喜欢|收藏|评论)?\s*(\d+(?:\.\d+)?(?:K|M|万)?)", line, re.I)
+        if match and _metric_number(match.group(1)) > 0:
+            return match.group(1)
+    return ""
+
+
+def parse_platform_search_evidence(
+    text: str,
+    *,
+    anchors: list[dict[str, str]],
+    platform: str,
+    query: str,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Build strong rows only from real content links with visible metrics."""
+    lowered = str(text or "").casefold()
+    if any(token in lowered for token in ("服务器出现问题", "服务器出错", "请求过于频繁", "captcha", "验证码")):
+        return []
+    lines = [strip_markup(line) for line in str(text or "").splitlines() if strip_markup(line)]
+    blocked_titles = {"ai works", "首页", "综合", "视频", "用户", "热榜", "创作中心", "内容发现"}
+    allowed_hosts = {
+        "bilibili": ("bilibili.com",),
+        "douyin": ("douyin.com",), "douyin_ai": ("douyin.com",), "douyin_pet": ("douyin.com",),
+        "juejin": ("juejin.cn",), "kuaishou": ("kuaishou.com",),
+        "tiktok": ("tiktok.com",), "twitter": ("x.com", "twitter.com"),
+        "xiaohongshu": ("xiaohongshu.com",), "youtube": ("youtube.com", "youtu.be"),
+        "zhihu": ("zhihu.com",),
+    }
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for anchor in anchors:
+        title = strip_markup(str(anchor.get("text") or ""))
+        href = str(anchor.get("href") or "").strip()
+        key = title.casefold()
+        if key in seen or key in blocked_titles or not href.startswith(("http://", "https://")):
+            continue
+        host = (urllib.parse.urlparse(href).hostname or "").casefold()
+        if not any(host == suffix or host.endswith("." + suffix) for suffix in allowed_hosts.get(platform, ())):
+            continue
+        if not _looks_like_content_line(title, query):
+            continue
+        metric = _nearby_metric(lines, title)
+        if _metric_number(metric) <= 0:
+            continue
+        seen.add(key)
+        rows.append(_work(platform, f"{platform}_logged_search", query, title, url=href, engagement=metric, evidence_strength="strong_logged_search_result"))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def parse_logged_short_video_search_text(text: str, *, platform: str, query: str, limit: int = 12, anchors: list[dict[str, str]] | None = None) -> list[dict[str, Any]]:
     """Extract usable hot-work rows from logged Douyin/Kuaishou search text.
 
     Their web DOM changes often, so this parser is deliberately conservative:
     it only emits rows whose visible text contains lane/query terms and never
     treats login/error pages as successful samples.
     """
+    if anchors:
+        return parse_platform_search_evidence(text, anchors=anchors, platform=platform, query=query, limit=limit)
     rows: list[dict[str, Any]] = []
     seen = set()
     for raw in str(text or "").splitlines():
@@ -277,7 +349,7 @@ def collect_logged_short_video_search(
     platform: str,
     query: str,
     *,
-    state_file: str | Path,
+    state_file: str | Path | None,
     output_dir: str | Path,
     limit: int = 12,
     timeout_ms: int = 30000,
@@ -324,7 +396,10 @@ def collect_logged_short_video_search(
         if executable_path:
             launch_options["executable_path"] = executable_path
         browser = pw.chromium.launch(**launch_options)
-        context = browser.new_context(storage_state=str(state_file), viewport={"width": 1365, "height": 900}, locale="zh-CN")
+        context_options: dict[str, Any] = {"viewport": {"width": 1365, "height": 900}, "locale": "zh-CN"}
+        if state_file and Path(state_file).is_file():
+            context_options["storage_state"] = str(state_file)
+        context = browser.new_context(**context_options)
         page = context.new_page()
         page.goto(urls[platform], wait_until="domcontentloaded", timeout=timeout_ms)
         try:
@@ -333,6 +408,9 @@ def collect_logged_short_video_search(
             pass
         page.wait_for_timeout(2500)
         text = page.locator("body").inner_text(timeout=8000)
+        anchors = page.locator("a").evaluate_all(
+            "els => els.map(a => ({text: (a.innerText || a.getAttribute('aria-label') || a.title || '').trim(), href: a.href || ''}))"
+        )
         text_path.write_text(text, encoding="utf-8")
         try:
             page.screenshot(path=str(screenshot_path), full_page=True)
@@ -340,7 +418,10 @@ def collect_logged_short_video_search(
             pass
         context.close()
         browser.close()
-    rows = parse_logged_short_video_search_text(text, platform=platform, query=query, limit=limit)
+    if platform == "xiaohongshu":
+        rows = parse_xiaohongshu_search_text(text, query=query, limit=limit, anchors=anchors)
+    else:
+        rows = parse_logged_short_video_search_text(text, platform=platform, query=query, limit=limit, anchors=anchors)
     lowered = text.casefold()
     if rows:
         status.update({"status": "ok", "count": len(rows)})
@@ -440,8 +521,19 @@ def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: l
     selected_platforms = platforms or sorted(set(grouped).union(default_platforms))
     output: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "platforms": {}}
     for platform in selected_platforms:
-        rows = sorted(grouped.get(platform, []), key=_metric_number, reverse=True)
-        strong = [row for row in rows if row.get("evidence_strength") in STRONG_EVIDENCE]
+        rows = sorted(
+            grouped.get(platform, []),
+            key=lambda row: _metric_number(row.get("views") or row.get("likes") or row.get("favorites") or row.get("engagement")),
+            reverse=True,
+        )
+        strong = [
+            row for row in rows
+            if row.get("evidence_strength") in STRONG_EVIDENCE
+            and str(row.get("url") or "").startswith(("http://", "https://"))
+            and bool(row.get("captured_at"))
+            and bool(row.get("collector"))
+            and _metric_number(row.get("views") or row.get("likes") or row.get("favorites") or row.get("engagement")) > 0
+        ]
         patterns = Counter()
         for row in strong:
             for key in ("hook_types", "structure_types", "copy_style", "display_style"):

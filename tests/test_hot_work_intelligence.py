@@ -5,6 +5,7 @@ from content_platform.hot_work_intelligence import (
     normalize_browser_cookies,
     parse_douyin_shipin_html,
     parse_logged_short_video_search_text,
+    parse_platform_search_evidence,
     parse_sogou_wechat_html,
     parse_tiktok_search_text,
     parse_xiaohongshu_search_text,
@@ -63,10 +64,20 @@ Claude Code vs Codex，用了3个月说真话
 08-14
 56
 """
-    rows = parse_xiaohongshu_search_text(text, query="AI工具")
+    rows = parse_xiaohongshu_search_text(
+        text,
+        query="AI工具",
+        anchors=[
+            {"text": "让Codex起飞的10个技巧，我用的很爽！", "href": "https://www.xiaohongshu.com/explore/a1"},
+            {"text": "Claude Code vs Codex，用了3个月说真话", "href": "https://www.xiaohongshu.com/explore/a2"},
+        ],
+    )
     assert len(rows) == 2
     assert rows[0]["engagement"] == "1459"
     assert rows[0]["evidence_strength"] == "strong_logged_search_result"
+    assert rows[0]["url"] == "https://www.xiaohongshu.com/explore/a1"
+    assert rows[0]["captured_at"]
+    assert rows[0]["collector"] == "xiaohongshu_logged_search"
 
 
 def test_parse_tiktok_search_text_extracts_video_cards():
@@ -98,13 +109,45 @@ def test_parse_douyin_shipin_html_extracts_related_recommendations_and_transcrip
 
 def test_build_hot_work_parameter_pack_requires_strong_platform_samples():
     samples = [
-        {"platform": "xiaohongshu", "title": "让Codex起飞的10个技巧", "author": "A", "engagement": "1459", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("让Codex起飞的10个技巧")},
-        {"platform": "xiaohongshu", "title": "AI工作流一图看懂", "author": "B", "engagement": "707", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI工作流一图看懂")},
-        {"platform": "xiaohongshu", "title": "Claude Code vs Codex", "author": "C", "engagement": "56", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("Claude Code vs Codex")},
+        {"platform": "xiaohongshu", "title": "让Codex起飞的10个技巧", "author": "A", "engagement": "1459", "url": "https://www.xiaohongshu.com/explore/a", "captured_at": "2026-08-26T00:00:00+00:00", "collector": "xiaohongshu_logged_search", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("让Codex起飞的10个技巧")},
+        {"platform": "xiaohongshu", "title": "AI工作流一图看懂", "author": "B", "engagement": "707", "url": "https://www.xiaohongshu.com/explore/b", "captured_at": "2026-08-26T00:00:00+00:00", "collector": "xiaohongshu_logged_search", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI工作流一图看懂")},
+        {"platform": "xiaohongshu", "title": "Claude Code vs Codex", "author": "C", "engagement": "56", "url": "https://www.xiaohongshu.com/explore/c", "captured_at": "2026-08-26T00:00:00+00:00", "collector": "xiaohongshu_logged_search", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("Claude Code vs Codex")},
     ]
     pack = build_hot_work_parameter_pack(samples, platforms=["xiaohongshu"])
     assert pack["platforms"]["xiaohongshu"]["ready"] is True
     assert pack["platforms"]["xiaohongshu"]["recommended_patterns"]
+
+
+def test_parameter_pack_does_not_mark_incomplete_labeled_rows_ready():
+    samples = [
+        {"platform": "zhihu", "title": f"AI 工作流 {index}", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI 工作流")}
+        for index in range(3)
+    ]
+    pack = build_hot_work_parameter_pack(samples, platforms=["zhihu"])
+    assert pack["platforms"]["zhihu"]["ready"] is False
+    assert pack["platforms"]["zhihu"]["strong_sample_count"] == 0
+
+
+def test_platform_anchor_parser_rejects_navigation_and_requires_real_url_and_metric():
+    anchors = [
+        {"text": "AI Works", "href": "https://www.zhihu.com/ai"},
+        {"text": "狂烧 40 亿 tokens，公开我的 7 套 AI 工作流！", "href": "https://www.zhihu.com/question/1/answer/2"},
+    ]
+    text = "AI Works\n狂烧 40 亿 tokens，公开我的 7 套 AI 工作流！\n赞同 49\n3 条评论"
+    rows = parse_platform_search_evidence(text, anchors=anchors, platform="zhihu", query="AI 工作流")
+    assert [row["title"] for row in rows] == ["狂烧 40 亿 tokens，公开我的 7 套 AI 工作流！"]
+    assert rows[0]["url"].endswith("/answer/2")
+    assert rows[0]["engagement"] == "49"
+
+
+def test_platform_anchor_parser_rejects_server_error_page():
+    rows = parse_platform_search_evidence(
+        "出错了\n抱歉，服务器出现问题，请重试。",
+        anchors=[{"text": "AI workflow", "href": "https://www.tiktok.com/tag/ai"}],
+        platform="tiktok",
+        query="AI workflow",
+    )
+    assert rows == []
 
 
 def test_load_samples_accepts_platform_grouped_logged_exports(tmp_path):

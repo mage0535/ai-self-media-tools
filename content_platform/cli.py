@@ -708,7 +708,8 @@ def execute(args):
                 "tiktok", "youtube", "bilibili", "zhihu", "juejin", "twitter",
             })):
                 state_file = state_files.get(platform) or state_files.get("douyin" if platform.startswith("douyin") else platform)
-                if not state_file:
+                public_without_state = {"bilibili", "juejin", "youtube"}
+                if not state_file and platform not in public_without_state:
                     continue
                 queries = query_map.get(platform) or query_map.get("douyin" if platform.startswith("douyin") else platform) or query_map.get("all")
                 if not queries:
