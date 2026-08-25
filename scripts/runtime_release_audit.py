@@ -19,10 +19,20 @@ def _resolve(path: Path | str) -> Path:
     return Path(path).expanduser().resolve()
 
 
-def _reject_symlink_root(path: Path | str, label: str) -> None:
+def _validate_raw_path(path: Path | str, label: str) -> None:
     original = Path(path).expanduser()
-    if original.is_symlink():
-        raise ReleaseAuditError(f"{label} must not be a symlink")
+    if ".." in original.parts:
+        raise ReleaseAuditError(f"{label} contains forbidden .. path component")
+    current = Path(original.anchor) if original.is_absolute() else Path.cwd()
+    parts = original.parts[1:] if original.anchor else original.parts
+    if current.is_symlink():
+        raise ReleaseAuditError(f"{label} path boundary is a symlink: {current}")
+    for part in parts:
+        if part in {"", "."}:
+            continue
+        current /= part
+        if current.is_symlink():
+            raise ReleaseAuditError(f"{label} path boundary is a symlink: {current}")
 
 
 def _git(source_root: Path, *args: str) -> str:
@@ -141,8 +151,12 @@ def audit_release(
 ) -> dict:
     if config_path is None or test_report_path is None or rollback_target is None:
         raise ReleaseAuditError("config_path, test_report_path, and rollback_target are required evidence")
-    _reject_symlink_root(source_root, "source_root")
-    _reject_symlink_root(release_root, "release_root")
+    _validate_raw_path(source_root, "source_root")
+    _validate_raw_path(release_root, "release_root")
+    _validate_raw_path(configured_script_root, "configured_script_root")
+    _validate_raw_path(config_path, "config_path")
+    _validate_raw_path(test_report_path, "test_report_path")
+    _validate_raw_path(rollback_target, "rollback_target")
     source = _resolve(source_root)
     release = _resolve(release_root)
     script_root = _resolve(configured_script_root)
@@ -185,6 +199,7 @@ def audit_release(
 
 
 def write_metadata(metadata: dict, path: Path | str) -> Path:
+    _validate_raw_path(path, "metadata_path")
     destination = _resolve(path)
     release = _resolve(metadata.get("release_root", ""))
     try:
