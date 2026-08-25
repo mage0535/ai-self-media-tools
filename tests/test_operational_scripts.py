@@ -323,6 +323,15 @@ shared_trend_only: false
         self.assertIn("batch_failed_before_result", text)
         self.assertIn("overnight-sync-state", text)
 
+    def test_overnight_script_verifies_release_metadata_before_any_task(self):
+        text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
+
+        verify = text.index("--verify-metadata")
+        mkdir = text.index("mkdir -p")
+        self.assertLess(verify, mkdir)
+        self.assertIn("runtime_release_audit.py", text)
+        self.assertIn("CONTENT_PLATFORM_CODE_ROOT", text)
+
     def test_background_systemd_services_use_notification_wrappers(self):
         growth = Path("systemd/hermes-content-platform-growth-cycle.service").read_text(encoding="utf-8")
         wechat = Path("systemd/ai-self-media-wechat-metrics.service").read_text(encoding="utf-8")
