@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .preflight_manifest import REQUIRED_SKILLS_BY_CHANNEL, required_workflow_skills
+
 
 _BLOCKED_SKILL_TOKENS = frozenset({
     ".archive", "_archive", "archive", "duplicate", "duplicates", "finance", "financial",
@@ -33,6 +35,7 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
     active_names = {active.removesuffix("_ai").removesuffix("_pet")}
     if active in {"douyin_ai", "douyin_pet"}:
         active_names.add("douyin")
+    allowed_sources = {f"skill:{name}" for name in required_workflow_skills(active)}
     selected = []
     seen_text_hashes: set[str] = set()
     candidates = sorted(
@@ -49,7 +52,7 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
         if _blocked_skill(source):
             continue
         named_platforms = _source_platforms(source)
-        if named_platforms and not named_platforms.intersection(active_names):
+        if named_platforms and source not in allowed_sources and not named_platforms.intersection(active_names):
             continue
         normalized_text = " ".join(str(rule.get("text") or "").split()).casefold()
         if not normalized_text:
@@ -88,7 +91,12 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
     for raw_path in paths:
         path = Path(raw_path)
         relative = _relative(path, root)
-        if _blocked_skill(relative) or "skills/content/" not in relative.casefold():
+        declared_sources = {f"skills/{name}/skill.md" for channel in REQUIRED_SKILLS_BY_CHANNEL for name in required_workflow_skills(channel)}
+        normalized_relative = relative.casefold().removeprefix("hermes/")
+        if _blocked_skill(relative) or (
+            "skills/content/" not in normalized_relative
+            and normalized_relative not in declared_sources
+        ):
             continue
         if not path.is_file():
             continue
@@ -101,21 +109,48 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
         sources.append({"id": source_id, "path": relative, "sha256": source_hash})
         section = "root"
         index = 0
-        for line in text.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                section = stripped.lstrip("#").strip()[:100] or "root"
-                continue
-            match = re.match(r"^(?:[-*]|\d+[.)])\s+(.+)$", stripped)
-            if not match or len(match.group(1)) < 8:
-                continue
+        paragraph: list[str] = []
+        in_frontmatter = False
+
+        def add_rule(rule_text: str) -> None:
+            nonlocal index
+            normalized = " ".join(rule_text.split())
+            if len(normalized) < 8:
+                return
             index += 1
             rules.append({
                 "id": f"{source_id}:{index}",
                 "source": source_id,
                 "section": section,
-                "text": match.group(1)[:500],
+                "text": normalized[:500],
             })
+
+        def flush_paragraph() -> None:
+            if paragraph:
+                add_rule(" ".join(paragraph))
+                paragraph.clear()
+
+        for line_number, line in enumerate(text.splitlines()):
+            stripped = line.strip()
+            if stripped == "---" and (line_number == 0 or in_frontmatter):
+                in_frontmatter = not in_frontmatter
+                continue
+            if in_frontmatter:
+                continue
+            if stripped.startswith("#"):
+                flush_paragraph()
+                section = stripped.lstrip("#").strip()[:100] or "root"
+                continue
+            match = re.match(r"^(?:[-*]|\d+[.)])\s+(.+)$", stripped)
+            if match:
+                flush_paragraph()
+                add_rule(match.group(1))
+                continue
+            if stripped:
+                paragraph.append(stripped)
+            else:
+                flush_paragraph()
+        flush_paragraph()
     result = {
         "version": "compiled_skill_rules_v1",
         "passed": True,
@@ -143,21 +178,13 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
 
 def default_skill_paths(platform: str, *, root: str | Path) -> list[Path]:
     root = Path(root)
-    names = ["channel-operations-workflow", "visual-quality-standards"]
-    platform_name = {
-        "wechat": "wechat-full-workflow",
-        "douyin_ai": "douyin-daily-analysis-workflow",
-        "douyin_pet": "douyin-repost-workflow",
-        "xiaohongshu": "xiaohongshu-content-enhancer",
-        "zhihu": "zhihu-publishing-workflow",
-        "juejin": "juejin-publishing-workflow",
-        "kuaishou": "kuaishou-publishing-workflow",
-        "tiktok": "intl-short-video-pipeline",
-        "youtube": "intl-short-video-pipeline",
-    }.get(str(platform).casefold())
-    if platform_name:
-        names.append(platform_name)
-    paths = [root / "skills" / "content" / name / "SKILL.md" for name in names]
+    names = required_workflow_skills(platform)
+    paths = [root / "skills" / name / "SKILL.md" for name in names]
     hermes_root = _hermes_root(root)
-    paths.extend(hermes_root / "skills" / "content" / name / "SKILL.md" for name in names)
+    paths.extend(hermes_root / "skills" / name / "SKILL.md" for name in names)
+    paths.extend(
+        hermes_root / "skills" / name.removeprefix("content/") / "SKILL.md"
+        for name in names
+        if name.startswith("content/")
+    )
     return list(dict.fromkeys(path for path in paths if path.is_file()))
