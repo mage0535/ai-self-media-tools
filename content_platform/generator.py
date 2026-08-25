@@ -959,15 +959,23 @@ class DraftGenerator:
             elapsed = clock() - started
             if elapsed >= hard:
                 finished = clock()
-                self._write_generation_checkpoint(self._checkpoint_payload(
-                    attempt=2 if retry else 1, status="hard_timeout", error_class="hard_timeout",
+                attempt = 2 if retry else 1
+                try:
+                    self._terminate_generation_process(proc)
+                except Exception as exc:
+                    payload = self._checkpoint_payload(
+                        attempt=attempt, status="process_termination_failed", error_class="process_termination_failed",
+                        prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
+                    )
+                    self._write_generation_checkpoint(payload)
+                    self._record_generation_attempt(payload)
+                    raise RuntimeError("Hermes process termination failed") from exc
+                payload = self._checkpoint_payload(
+                    attempt=attempt, status="hard_timeout", error_class="hard_timeout",
                     prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
-                ))
-                proc.terminate()
-                self._record_generation_attempt(self._checkpoint_payload(
-                    attempt=2 if retry else 1, status="hard_timeout", error_class="hard_timeout",
-                    prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=finished,
-                ))
+                )
+                self._write_generation_checkpoint(payload)
+                self._record_generation_attempt(payload)
                 raise GenerationTimeoutError("Hermes hard deadline exceeded")
             if elapsed >= next_heartbeat_at:
                 heartbeat_at = clock()
@@ -1026,6 +1034,15 @@ class DraftGenerator:
         self._write_generation_checkpoint(payload)
         self._record_generation_attempt(payload)
         return self._normalize(draft, context, "hermes-cli", topic, brief)
+
+    def _terminate_generation_process(self, proc):
+        grace = float(self.config.get("termination_grace", self.config.get("process_termination_grace", 5)))
+        proc.terminate()
+        try:
+            proc.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=grace)
 
     @staticmethod
     def _transient_error_class(content):
