@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -44,6 +45,29 @@ def _assert_clean(source_root: Path) -> None:
         raise ReleaseAuditError("source root is dirty or has uncommitted changes")
 
 
+def _assert_release_matches(source_root: Path, release_root: Path, source_hashes: dict[str, str]) -> None:
+    for relative, expected in source_hashes.items():
+        candidate = release_root / relative
+        if not candidate.is_file():
+            raise ReleaseAuditError(f"release file missing: {relative}")
+        actual = _sha256(candidate)
+        if actual != expected:
+            raise ReleaseAuditError(f"release content hash mismatch: {relative}")
+
+
+def _require_file(path: Path, label: str) -> None:
+    if not path.is_file():
+        raise ReleaseAuditError(f"required evidence {label} does not exist: {path}")
+
+
+def _validate_rollback_target(release_root: Path, rollback_target: Path) -> None:
+    if not rollback_target.is_dir() or rollback_target == release_root:
+        raise ReleaseAuditError("rollback target must be an existing directory different from current release")
+    scripts = rollback_target / "scripts"
+    if not scripts.is_dir() or not any(path.is_file() for path in scripts.rglob("*")):
+        raise ReleaseAuditError("rollback target must contain runnable scripts")
+
+
 def audit_release(
     *,
     source_root: Path | str,
@@ -53,16 +77,28 @@ def audit_release(
     test_report_path: Path | str | None = None,
     rollback_target: str | None = None,
 ) -> dict:
+    if config_path is None or test_report_path is None or rollback_target is None:
+        raise ReleaseAuditError("config_path, test_report_path, and rollback_target are required evidence")
     source = _resolve(source_root)
     release = _resolve(release_root)
     script_root = _resolve(configured_script_root)
+    config = _resolve(config_path)
+    test_report = _resolve(test_report_path)
+    rollback = _resolve(rollback_target)
     expected_script_root = (release / "scripts").resolve()
     if not source.is_dir() or not release.is_dir() or script_root != expected_script_root:
         raise ReleaseAuditError("source, release, and configured script roots do not match")
+    environment_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip()
+    if environment_root and _resolve(environment_root) != release:
+        raise ReleaseAuditError("CONTENT_PLATFORM_CODE_ROOT does not match release code root")
 
     _assert_clean(source)
+    _require_file(config, "config_path")
+    _require_file(test_report, "test_report_path")
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
+    _assert_release_matches(source, release, source_hashes)
+    _validate_rollback_target(release, rollback)
     metadata = {
         "commit": commit,
         "source_root": str(source),
@@ -72,16 +108,21 @@ def audit_release(
         "source_hash": hashlib.sha256(
             "\n".join(f"{name}:{digest}" for name, digest in sorted(source_hashes.items())).encode()
         ).hexdigest(),
-        "config_hash": _sha256(_resolve(config_path)) if config_path else None,
-        "test_report": str(_resolve(test_report_path)) if test_report_path else None,
-        "test_report_hash": _sha256(_resolve(test_report_path)) if test_report_path else None,
-        "rollback_target": rollback_target,
+        "config_hash": _sha256(config),
+        "test_report": str(test_report),
+        "test_report_hash": _sha256(test_report),
+        "rollback_target": str(rollback),
     }
     return metadata
 
 
 def write_metadata(metadata: dict, path: Path | str) -> Path:
     destination = _resolve(path)
+    release = _resolve(metadata.get("release_root", ""))
+    try:
+        destination.relative_to(release)
+    except ValueError as exc:
+        raise ReleaseAuditError("metadata path must be inside release") from exc
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
         with destination.open("x", encoding="utf-8", newline="\n") as handle:
@@ -97,9 +138,9 @@ def main() -> int:
     parser.add_argument("--source-root", required=True)
     parser.add_argument("--release-root", required=True)
     parser.add_argument("--configured-script-root", required=True)
-    parser.add_argument("--config-path")
-    parser.add_argument("--test-report-path")
-    parser.add_argument("--rollback-target")
+    parser.add_argument("--config-path", required=True)
+    parser.add_argument("--test-report-path", required=True)
+    parser.add_argument("--rollback-target", required=True)
     parser.add_argument("--metadata-path", required=True)
     args = parser.parse_args()
     metadata = audit_release(
