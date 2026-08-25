@@ -181,7 +181,10 @@ def test_hotspot_persistence_contains_identity_evidence_validity_lane_mode_and_p
 
 
 def test_due_task_runtime_reserves_topic_and_persists_hotspot(tmp_path):
-    candidate = _candidate("zhihu", "native", "A verified Zhihu workflow topic", native_verified=True)
+    candidate = _candidate(
+        "zhihu", "native", "A verified Zhihu workflow topic",
+        native_verified=True, expires_at="2099-08-25T14:00:00+00:00",
+    )
     reservation_path = tmp_path / "topic-reservations.json"
     result = build_due_tasks(
         [{"platform": "zhihu", "job_id": "job-runtime"}],

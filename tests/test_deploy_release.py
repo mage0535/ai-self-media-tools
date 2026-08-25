@@ -645,6 +645,30 @@ def test_rollback_verifies_target_and_atomically_switches_current(tmp_path: Path
     assert current.resolve() == Path(deployed["release_root"]).resolve()
 
 
+def test_static_systemd_service_is_not_restored_with_enable():
+    from scripts.deploy_release import query_systemd_unit_states, _restore_systemd_states
+
+    calls = []
+    class Result:
+        def __init__(self, returncode=0, stdout=""):
+            self.returncode, self.stdout, self.stderr = returncode, stdout, ""
+
+    def inspect(argv, **_kwargs):
+        if "is-enabled" in argv:
+            return Result(0, "static\n")
+        if "is-active" in argv:
+            return Result(0, "active\n")
+        calls.append(argv)
+        return Result()
+
+    states = query_systemd_unit_states(["worker.service"], runner=inspect)
+    assert states["worker.service"]["enabled"] is False
+    assert states["worker.service"]["active"] is True
+    _restore_systemd_states(states, runner=inspect)
+    assert not any(call[-2:] == ["enable", "worker.service"] for call in calls)
+    assert any(call[-2:] == ["start", "worker.service"] for call in calls)
+
+
 def test_rollback_rejects_target_without_audited_metadata(tmp_path: Path):
     target = tmp_path / "unaudited"
     target.mkdir()
