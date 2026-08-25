@@ -17,10 +17,16 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
         active_names.add("douyin")
     platforms = {"douyin", "xiaohongshu", "zhihu", "juejin", "wechat", "kuaishou", "tiktok", "youtube"}
     selected = []
+    seen_text_hashes = set()
     for rule in rules:
         source = str(rule.get("source") or rule.get("id") or "").casefold()
         if any(name in source and name not in active_names for name in platforms):
             continue
+        normalized_text = " ".join(str(rule.get("text") or "").split()).casefold()
+        text_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+        if text_hash in seen_text_hashes:
+            continue
+        seen_text_hashes.add(text_hash)
         selected.append(rule)
     return selected
 

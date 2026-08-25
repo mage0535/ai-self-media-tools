@@ -45,3 +45,24 @@ def test_retry_context_uses_reduced_budget_and_no_full_inventory():
     assert result["char_count"] <= 8000
     assert len(result["text"]) == result["char_count"]
 
+
+def test_selected_rules_deduplicate_normalized_text_and_keep_first_provenance():
+    result = compile_generation_context(
+        platform="wechat",
+        content_format="article",
+        stage="generate",
+        brief={
+            "compiled_skill_rules": {
+                "rules": [
+                    {"id": "project:1", "source": "skill:project", "text": "Keep  a stable rule."},
+                    {"id": "hermes:9", "source": "skill:hermes", "text": " keep a stable rule. "},
+                    {"id": "project:2", "source": "skill:project", "text": "Use the selected platform format."},
+                ]
+            }
+        },
+    )
+
+    rules = json.loads(result["text"])["selected_rule_ids"]
+    assert [rule["id"] for rule in rules] == ["project:1", "project:2"]
+    assert rules[0]["source"] == "skill:project"
+    assert rules[0]["rule_id"] == "project:1"
