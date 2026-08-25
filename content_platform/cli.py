@@ -724,6 +724,15 @@ def execute(args):
                     except Exception as exc:
                         statuses.append({"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
 
+            observed_platforms = {str(row.get("source") or "").partition(":")[0] for row in statuses if isinstance(row, dict)}
+            for platform in sorted(live_platforms - observed_platforms):
+                statuses.append({
+                    "source": f"{platform}:hot_work_collector",
+                    "status": "collector_unavailable",
+                    "count": 0,
+                    "error": "no verified platform hot-work collector is configured",
+                })
+
         paths = save_collection(items, statuses, output_dir)
         result = {"ok": True, "items": len(items), "collection_status": statuses, "paths": paths}
         store.save_tool_inventory("hot_work_parameter_pack:latest", result)

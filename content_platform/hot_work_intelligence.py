@@ -541,7 +541,10 @@ def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: l
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sample in samples:
         grouped[str(sample.get("platform") or "unknown")].append(sample)
-    default_platforms = ["wechat", "kuaishou", "bilibili", "zhihu", "juejin", "douyin_ai", "douyin_pet", "xiaohongshu", "tiktok", "youtube"]
+    default_platforms = [
+        "wechat", "xiaohongshu", "douyin_ai", "douyin_pet", "kuaishou", "bilibili",
+        "shipinhao", "zhihu", "juejin", "youtube", "tiktok", "twitter",
+    ]
     selected_platforms = platforms or sorted(set(grouped).union(default_platforms))
     output: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "platforms": {}}
     for platform in selected_platforms:

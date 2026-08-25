@@ -114,6 +114,7 @@ hot_work_args=(
   --platform douyin_ai
   --platform douyin_pet
   --platform bilibili
+  --platform shipinhao
   --platform zhihu
   --platform juejin
   --platform xiaohongshu
@@ -127,6 +128,7 @@ hot_work_args=(
   --query "douyin_ai=AI工具"
   --query "douyin_pet=猫咪治愈"
   --query "bilibili=AI工具 工作流 效率"
+  --query "shipinhao=AI工具 工作流 效率"
   --query "zhihu=AI工具 工作流 效率"
   --query "juejin=AI工程 工作流 实践"
   --query "xiaohongshu=AI工具 效率 工作流"

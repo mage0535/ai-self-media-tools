@@ -16,6 +16,7 @@ from .risk import redact_secrets
 from .trends import normalize_topic
 from .trend_candidate import build_trend_candidate, validate_trend_candidate
 from .workflow_runtime import WORKFLOW_STAGES, WorkflowStateMachine
+from .hot_work_intelligence import STRONG_EVIDENCE, _metric_number
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,17 +114,12 @@ def build_same_lane_selection_items(
         captured_at = str(sample.get("captured_at") or "").strip()
         collector = str(sample.get("collector") or "").strip()
         strength = str(sample.get("evidence_strength") or "").casefold()
-        metric = max(
-            float(sample.get("views") or 0),
-            float(sample.get("likes") or 0),
-            float(sample.get("engagement") or 0),
-            float(sample.get("metric") or 0) if str(sample.get("metric") or "").replace(".", "", 1).isdigit() else 0,
-        )
+        metric = max(_metric_number(sample.get(key)) for key in ("views", "likes", "engagement", "metric"))
         matched = [word for word in words if word in title.casefold()]
         if (
             not title or not url.startswith(("https://", "http://"))
             or not captured_at or not collector or metric <= 0
-            or strength not in {"strong", "verified", "high"}
+            or strength not in ({"strong", "verified", "high"} | STRONG_EVIDENCE)
             or (words and not matched)
         ):
             continue

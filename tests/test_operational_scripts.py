@@ -11,7 +11,7 @@ class OperationalScriptTests(unittest.TestCase):
         script = (Path(__file__).parents[1] / "scripts" / "run_overnight_batch.sh").read_text(encoding="utf-8")
         for platform in (
             "wechat", "kuaishou", "douyin_ai", "douyin_pet", "bilibili", "zhihu",
-            "juejin", "xiaohongshu", "youtube", "tiktok", "twitter",
+            "juejin", "xiaohongshu", "youtube", "tiktok", "twitter", "shipinhao",
         ):
             self.assertIn(f"--platform {platform}", script)
         self.assertIn("platform-browser-states.json", script)
