@@ -287,7 +287,11 @@ def _nearby_metric(lines: list[str], title: str) -> str:
         normalized = line.strip().lstrip("·• ")
         if re.fullmatch(r"20\d{2}(?:[-/.]\d{1,2})?(?:[-/.]\d{1,2})?", normalized):
             continue
-        match = re.search(r"(?:赞同|点赞|播放|观看|喜欢|收藏|评论)?\s*(\d+(?:\.\d+)?(?:K|M|万)?)", line, re.I)
+        match = re.fullmatch(
+            r"(?:赞同|点赞|赞|播放|观看|喜欢|收藏|评论|获赞)?\s*(\d+(?:\.\d+)?(?:K|M|万)?)\s*(?:赞同|点赞|赞|播放|观看|喜欢|收藏|评论|次)?",
+            normalized,
+            re.I,
+        )
         if match and _metric_number(match.group(1)) > 0:
             return match.group(1)
     return ""
