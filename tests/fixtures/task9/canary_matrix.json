@@ -1,0 +1,15 @@
+{
+  "schema": "task9_canary_matrix_v1",
+  "source": "scripts/task9_canary.py",
+  "execution": "serial",
+  "platforms": [
+    "douyin", "kuaishou", "shipinhao", "wechat", "xiaohongshu", "juejin",
+    "zhihu", "bilibili", "tiktok", "youtube", "twitter", "devto"
+  ],
+  "required_evidence": [
+    "command", "git_commit", "active_model_provider", "input_hashes", "output_hashes",
+    "capability_evidence", "asr", "subtitle", "scene", "frame", "audio", "tts", "bgm",
+    "cover_safe_zone", "delivery_policy", "hotspot", "failure_reason", "evidence_level"
+  ],
+  "evidence_levels": ["declared", "contract_verified", "artifact_verified", "external_verified"]
+}
