@@ -76,6 +76,13 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
     if len(set(referenced_ids)) != 47:
         failures.append(f"candidate_unique_count:{len(set(referenced_ids))}")
 
+    from .mcp_server import mcp_tool_inventory
+
+    mcp_inventory = {item["name"]: item["registry_scope"] for item in mcp_tool_inventory()}
+    expected_mcp_tools = {
+        name for name, scope in mcp_inventory.items() if scope == "content_production"
+    }
+    registry_mcp_tools: set[str] = set()
     capability_ids: set[str] = set()
     for capability in capabilities:
         if not isinstance(capability, dict):
@@ -97,6 +104,27 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
             failures.append(f"{capability_id}.required_inputs_invalid")
         if not isinstance(capability.get("fallback_chain"), list):
             failures.append(f"{capability_id}.fallback_chain_invalid")
+        if capability.get("kind") == "mcp_tool":
+            mcp_tool = str(capability.get("mcp_tool") or "").strip()
+            if capability.get("lifecycle") != "executable":
+                failures.append(f"{capability_id}.mcp_inventory_only")
+            if capability.get("mcp_namespace") != "content-platform":
+                failures.append(f"{capability_id}.mcp_namespace_invalid")
+            if capability.get("mcp_scope") != "content_production":
+                failures.append(f"{capability_id}.mcp_scope_invalid")
+            if not mcp_tool:
+                failures.append(f"{capability_id}.mcp_tool_missing")
+            elif mcp_tool in registry_mcp_tools:
+                failures.append(f"mcp_tool_duplicate:{mcp_tool}")
+            else:
+                registry_mcp_tools.add(mcp_tool)
+            if mcp_tool and mcp_tool not in mcp_inventory:
+                failures.append(f"{capability_id}.mcp_tool_not_registered:{mcp_tool}")
+            elif mcp_tool and mcp_inventory[mcp_tool] != "content_production":
+                failures.append(f"{capability_id}.mcp_not_content_production:{mcp_tool}")
+            for field in ("availability_probe", "adapter", "output_contract", "quality_gate"):
+                if not str(capability.get(field) or "").strip():
+                    failures.append(f"{capability_id}.{field}_missing")
         if capability.get("lifecycle") == "executable":
             adapter = str(capability.get("adapter") or "")
             if not adapter:
@@ -119,6 +147,10 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
 
     for capability_id in sorted(set(referenced_ids) - capability_ids):
         failures.append(f"group_orphan_reference:{capability_id}")
+    if registry_mcp_tools != expected_mcp_tools:
+        missing = ",".join(sorted(expected_mcp_tools - registry_mcp_tools))
+        extra = ",".join(sorted(registry_mcp_tools - expected_mcp_tools))
+        failures.append(f"mcp_registry_mismatch:missing={missing}:extra={extra}")
     return {"passed": not failures, "failures": failures}
 
 

@@ -72,6 +72,59 @@ def test_catalog_rejects_missing_group_reference_and_incomplete_executable():
     assert any("broken_executable.adapter_not_supported" in item for item in result["failures"])
 
 
+def test_registry_mcp_capabilities_exactly_match_content_production_mcp_inventory():
+    from content_platform.mcp_server import mcp_tool_inventory
+
+    registry = load_capability_registry(REGISTRY_PATH)
+    records = [item for item in registry["capabilities"] if item.get("kind") == "mcp_tool"]
+    expected = {
+        item["name"]
+        for item in mcp_tool_inventory()
+        if item["registry_scope"] == "content_production"
+    }
+
+    assert {item["mcp_tool"] for item in records} == expected
+    assert all(item["mcp_namespace"] == "content-platform" for item in records)
+    assert all(item["mcp_scope"] == "content_production" for item in records)
+    assert all(item["lifecycle"] == "executable" for item in records)
+    assert all(item["availability_probe"] for item in records)
+    assert all(item["adapter"] for item in records)
+    assert all(item["output_contract"] for item in records)
+    assert all(item["quality_gate"] for item in records)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "failure"),
+    [
+        ({"lifecycle": "inventory_only"}, "mcp_content_search.mcp_inventory_only"),
+        ({"mcp_tool": "missing_tool"}, "mcp_content_search.mcp_tool_not_registered:missing_tool"),
+        ({"mcp_tool": "publish_job"}, "mcp_content_search.mcp_not_content_production:publish_job"),
+    ],
+)
+def test_registry_rejects_untruthful_mcp_capabilities(mutation, failure):
+    registry = load_capability_registry(REGISTRY_PATH)
+    broken = copy.deepcopy(registry)
+    record = next(item for item in broken["capabilities"] if item["id"] == "mcp_content_search")
+    record.update(mutation)
+
+    result = validate_capability_registry(broken)
+
+    assert result["passed"] is False
+    assert failure in result["failures"]
+
+
+def test_registry_rejects_duplicate_mcp_tool_mapping():
+    registry = load_capability_registry(REGISTRY_PATH)
+    broken = copy.deepcopy(registry)
+    record = next(item for item in broken["capabilities"] if item["id"] == "mcp_memory_context")
+    record["mcp_tool"] = "content_search"
+
+    result = validate_capability_registry(broken)
+
+    assert result["passed"] is False
+    assert "mcp_tool_duplicate:content_search" in result["failures"]
+
+
 def test_tool_selection_is_registry_derived_and_fails_required_groups_closed():
     analysis = build_tools_capability_analysis(platform="douyin", content_type="video")
     source = inspect.getsource(__import__("content_platform.tool_selection", fromlist=["x"]))
