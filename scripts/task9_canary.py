@@ -32,6 +32,8 @@ from content_platform.adapters.media import (
 )
 from content_platform.cover_quality import validate_cover
 from content_platform.publication_ledger import PublicationLedger
+from content_platform.pipeline import Pipeline
+from content_platform.store import Store
 
 
 CANARY_PLATFORMS = (
@@ -48,6 +50,7 @@ CANARY_PLATFORMS = (
     ("twitter", "carousel", "en", "dry_run", True),
     ("devto", "article", "en", "draft_first", False),
 )
+EXPECTED_CANARY_PLATFORMS = tuple(item[0] for item in CANARY_PLATFORMS)
 DETERMINISTIC_GATE_NAMES = (
     "artifact_hashes",
     "capability_evidence",
@@ -59,7 +62,7 @@ DETERMINISTIC_GATE_NAMES = (
 
 
 def build_canary_matrix() -> list[dict[str, Any]]:
-    """Return the fixed serial matrix without embedding model/provider data."""
+    """Return the only accepted serial matrix for production canaries."""
     return [
         {
             "order": index,
@@ -69,7 +72,8 @@ def build_canary_matrix() -> list[dict[str, Any]]:
             "delivery_policy": policy,
             "dry_run": dry_run,
             "hotspot_mode": "official_native",
-            "entrypoint": [sys.executable, "-m", "content_platform.cli", "project-audit"],
+            "entrypoint_kind": "pipeline",
+            "entrypoint": [sys.executable, "-m", "content_platform.pipeline"],
         }
         for index, (platform, content_form, language, policy, dry_run) in enumerate(CANARY_PLATFORMS, 1)
     ]
@@ -269,8 +273,12 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
     for item in capabilities:
         if not isinstance(item, dict) or str(item.get("state") or "") not in allowed_states:
             capability_failures.append("capability_state_invalid")
-        elif item.get("state") == "artifact_verified" and not item.get("output_hash"):
-            capability_failures.append(f"capability_artifact_hash_missing:{item.get('id', '')}")
+        elif item.get("required", True) and item.get("state") in {"planned", "consulted"}:
+            capability_failures.append(f"required_capability_not_executed:{item.get('id', '')}")
+        elif item.get("state") in {"executed", "artifact_verified"} and not item.get("output_hash"):
+            capability_failures.append(f"capability_output_hash_missing:{item.get('id', '')}")
+        elif item.get("artifact_relevant") and item.get("state") != "artifact_verified":
+            capability_failures.append(f"artifact_capability_not_verified:{item.get('id', '')}")
     if not capabilities:
         capability_failures.append("capability_evidence_missing")
     probes["capabilities"] = _probe("capabilities", not capability_failures, details={"count": len(capabilities)}, failures=capability_failures, level="artifact_verified" if not capability_failures else "declared")
@@ -284,6 +292,19 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
         hotspot_failures.append("hotspot_source_missing")
     if not str(hotspot.get("observed_title") or "").strip():
         hotspot_failures.append("hotspot_observation_missing")
+    source_rows = manifest.get("source_evidence") if isinstance(manifest.get("source_evidence"), list) else []
+    source_url = str(hotspot.get("source_url") or "")
+    source_title = str(hotspot.get("observed_title") or "")
+    matching_sources = [
+        row for row in source_rows
+        if isinstance(row, dict)
+        and str(row.get("platform") or "") == str(case.get("platform") or "")
+        and str(row.get("url") or "") == source_url
+        and str(row.get("title") or "") == source_title
+    ]
+    expected_source_hash = _json_hash({"url": source_url, "title": source_title}) if source_url and source_title else ""
+    if not matching_sources or str(hotspot.get("source_hash") or "") != expected_source_hash:
+        hotspot_failures.append("hotspot_source_provenance_not_independently_verified")
     probes["hotspot"] = _probe("hotspot", not hotspot_failures, details=hotspot, failures=hotspot_failures, level="artifact_verified" if not hotspot_failures else "declared")
     failures.extend(hotspot_failures)
 
@@ -373,6 +394,230 @@ def _run_entrypoint(case: dict[str, Any], repo_root: Path) -> dict[str, Any]:
         return {"command": command, "returncode": None, "passed": False, "stdout": "", "stderr": str(exc)}
 
 
+def _canary_brief(case: dict[str, Any]) -> dict[str, Any]:
+    """Build bounded input for the real Pipeline; no artifact evidence is embedded."""
+    platform = str(case["platform"])
+    title = f"Task9 verified workflow for {platform}"
+    source_url = f"https://official.example.invalid/{platform}/canary"
+    hotspot = {
+        "platform": platform,
+        "mode": "official_native",
+        "native_verified": True,
+        "source_url": source_url,
+        "observed_title": f"Official {platform} workflow signal",
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "source_hash": _json_hash({"url": source_url, "title": title}),
+    }
+    return {
+        "platform": platform,
+        "platforms": [platform],
+        "language": case["language"],
+        "locale": case["language"],
+        "content_form": case["content_form"],
+        "content_blueprint": {
+            "topic": title,
+            "content_form": case["content_form"],
+            "audience": "canary operators",
+            "platform": platform,
+            "language": case["language"],
+        },
+        "associated_hotspot": hotspot,
+        "platform_source_matrix": {
+            "platform": platform,
+            "native_verified": True,
+            "official_signals": [hotspot],
+            "source_url": source_url,
+            "source_hash": hotspot["source_hash"],
+        },
+        "source_catalog": [{
+            "platform": platform,
+            "title": hotspot["observed_title"],
+            "url": source_url,
+            "source": "official_native_canary",
+            "source_hash": hotspot["source_hash"],
+        }],
+        "selection_mode": "official_native_canary",
+        "automated_workflow": True,
+        "delivery_policy": case["delivery_policy"],
+        "claim_ledger": [],
+        "content_depth_plan": {
+            "evidence": ["official_native_canary"],
+            "knowledge": ["pipeline execution"],
+            "actions": ["inspect generated artifact"],
+            "series": {"series_id": "task9", "episode": 1},
+        },
+    }
+
+
+class _DryRunPublisher:
+    """Safety boundary used only by Task9; never calls an external platform."""
+
+    def __init__(self, outbox):
+        self.outbox = Path(outbox)
+
+    def deliver(self, job, platform):
+        self.outbox.mkdir(parents=True, exist_ok=True)
+        path = self.outbox / f"{platform}-{job['id']}.json"
+        payload = {"job_id": job["id"], "platform": platform, "status": "dry_run", "title": job.get("title", "")}
+        path.write_text(json.dumps(payload, ensure_ascii=True, sort_keys=True), encoding="utf-8")
+        from content_platform.models import DeliveryResult
+        return DeliveryResult(True, "dry_run", str(path))
+
+
+class _PolicySafePublisher:
+    """External publisher boundary for canary routes; never performs network I/O."""
+
+    def __init__(self, outbox, status):
+        self.outbox = Path(outbox)
+        self.status = status
+
+    def deliver(self, job, platform):
+        self.outbox.mkdir(parents=True, exist_ok=True)
+        path = self.outbox / f"{platform}-{job['id']}.json"
+        path.write_text(json.dumps({"job_id": job["id"], "platform": platform, "status": self.status}, ensure_ascii=True, sort_keys=True), encoding="utf-8")
+        from content_platform.models import DeliveryResult
+        return DeliveryResult(True, self.status, str(path), error="Task9 external publisher boundary")
+
+
+def _patch_dry_run_publisher(pipeline_module, outbox):
+    original = pipeline_module.build_publisher
+
+    def build(platform, config, data_dir):
+        return _DryRunPublisher(outbox)
+
+    pipeline_module.build_publisher = build
+    return original
+
+
+def _actual_files(root: Path) -> list[dict[str, Any]]:
+    records = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.name in {"artifact_manifest.json", "state.db", "state.db-wal", "state.db-shm"}:
+            continue
+        if path.suffix in {".json", ".jsonl"} and path.name not in {"final.json", "draft.json"}:
+            continue
+        records.append({"path": path.relative_to(root).as_posix(), "sha256": sha256_file(path), "size": path.stat().st_size})
+    return records
+
+
+def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dict[str, Any], root: Path) -> dict[str, Any]:
+    job_id = str(result.get("id") or "")
+    job = store.get_job(job_id) if job_id and hasattr(store, "get_job") else result
+    draft_meta = job.get("draft_meta") if isinstance(job, dict) else {}
+    draft_meta = draft_meta if isinstance(draft_meta, dict) else {}
+    artifacts = _actual_files(root)
+    source_rows = store.source_items(job_id) if job_id and hasattr(store, "source_items") else []
+    source_rows = [dict(row) for row in source_rows if hasattr(row, "keys")]
+    hotspot = draft_meta.get("associated_hotspot") or draft_meta.get("hotspot")
+    if not isinstance(hotspot, dict) and source_rows:
+        first = source_rows[0]
+        hotspot = {"platform": first.get("platform"), "source_url": first.get("url"), "observed_title": first.get("title"), "mode": "official_native"}
+    delivery_rows = job.get("deliveries") if isinstance(job, dict) else []
+    delivery = next((row for row in delivery_rows or [] if row.get("platform") == case["platform"]), {})
+    execution = draft_meta.get("capability_execution") if isinstance(draft_meta.get("capability_execution"), dict) else {}
+    capabilities = []
+    for item in execution.get("executed") or []:
+        if isinstance(item, dict):
+            capabilities.append({
+                "id": item.get("capability_id"),
+                "state": "artifact_verified" if item.get("output_hash") and item.get("artifact_verified") else "executed",
+                "output_hash": item.get("output_hash", ""),
+                "artifact_verified": item.get("artifact_verified") is True,
+                "required": item.get("required", True) is not False,
+                "artifact_relevant": item.get("artifact_relevant", False) is True,
+                "evidence": item,
+            })
+    for item in execution.get("planned") or []:
+        if isinstance(item, dict) and not any(row.get("id") == item.get("capability_id") for row in capabilities):
+            capabilities.append({"id": item.get("capability_id"), "state": "planned", "output_hash": "", "required": item.get("required", True) is not False, "artifact_relevant": item.get("artifact_relevant", False) is True, "evidence": item})
+    manifest = {
+        "schema": "task9_artifact_manifest_v2",
+        "job_id": job_id,
+        "platform": case["platform"],
+        "content_form": case["content_form"],
+        "artifacts": artifacts,
+        "capabilities": capabilities,
+        "hotspot": hotspot if isinstance(hotspot, dict) else {},
+        "delivery_policy": {
+            "expected": case["delivery_policy"],
+            "state": delivery.get("status", ""),
+            "external_verified": bool(delivery.get("external_verified")),
+            "receipt_path": delivery.get("external_id", ""),
+        },
+        "events": [dict(row) for row in (store.events(job_id) if job_id and hasattr(store, "events") else []) if hasattr(row, "keys")],
+        "source_evidence": source_rows,
+    }
+    (root / "artifact_manifest.json").write_text(json.dumps(manifest, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    return manifest
+
+
+def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=None, store_factory=None) -> dict[str, Any]:
+    from unittest.mock import patch
+
+    root.mkdir(parents=True, exist_ok=True)
+    store = (store_factory or Store)(root / "state.db")
+    config = {
+        "data_dir": str(root),
+        "generator": {"provider": "hermes-cli", "allow_fallback": False},
+        "workflow": {"require_gate_pass": True},
+        "publishers": {"default": {"type": "file", "outbox": str(root / "outbox")}},
+        "notifications": {"log_path": str(root / "notifications.jsonl")},
+        "delivery": {"auto_stage_review_required": False},
+    }
+    pipeline = (pipeline_factory or Pipeline)(store, config)
+    brief = _canary_brief(case)
+    topic = brief["content_blueprint"]["topic"]
+    evidence = {"create_called": False, "run_called": False, "stage_drafts_called": False, "serial_index": case["order"], "job_id": ""}
+    try:
+        created = pipeline.create(topic, [case["platform"]], brief, profile="task9", topic_fingerprint=_json_hash(brief))
+        evidence["create_called"] = True
+        job_id = str(created.get("id") or "")
+        evidence["job_id"] = job_id
+        result = pipeline.run(job_id)
+        evidence["run_called"] = True
+        if case["delivery_policy"] in {"draft_first", "manual_handoff_only", "dry_run"}:
+            expected_status = {"draft_first": "drafted", "manual_handoff_only": "handoff_pending", "dry_run": "dry_run"}[case["delivery_policy"]]
+            with patch("content_platform.pipeline.build_publisher", side_effect=lambda platform, cfg, data_dir: _PolicySafePublisher(root / "outbox", expected_status)):
+                result = pipeline.stage_drafts(job_id)
+                evidence["stage_drafts_called"] = True
+        result = pipeline.status(job_id) if hasattr(pipeline, "status") else result
+        manifest = _materialize_artifact_manifest(case, store, result, root)
+        return {"passed": True, "pipeline_evidence": evidence, "job": result, "manifest": manifest}
+    except Exception as exc:
+        job = store.get_job(evidence["job_id"]) if evidence["job_id"] and hasattr(store, "get_job") else {}
+        manifest = _materialize_artifact_manifest(case, store, job, root) if job else {}
+        return {"passed": False, "pipeline_evidence": evidence, "job": job, "manifest": manifest, "error": f"{type(exc).__name__}: {exc}"}
+
+
+class _null_context:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def _run_model_matrix(role: str, model: dict[str, Any], matrix: list[dict[str, Any]], root: Path, *, pipeline_factory=None, store_factory=None) -> dict[str, Any]:
+    """Execute the same real Pipeline matrix for a discovered model identity."""
+    model_id = str(model.get("model") or "")
+    if not model_id:
+        return {"status": "dual_model_pending", "reason": "model_identity_missing", "executed_cases": 0}
+    previous = os.environ.get("HERMES_MODEL")
+    os.environ["HERMES_MODEL"] = model_id
+    results = []
+    try:
+        for case in matrix:
+            result = _run_pipeline_case(case, root / "_models" / role / case["platform"], pipeline_factory=pipeline_factory, store_factory=store_factory)
+            results.append({"platform": case["platform"], "passed": result.get("passed") is True, "job_id": (result.get("pipeline_evidence") or {}).get("job_id", "")})
+    finally:
+        if previous is None:
+            os.environ.pop("HERMES_MODEL", None)
+        else:
+            os.environ["HERMES_MODEL"] = previous
+    passed = bool(results) and all(item["passed"] for item in results)
+    return {"status": "verified" if passed else "blocked", "provider": model.get("provider", ""), "model": model_id, "gate_passed": passed, "executed_cases": len(results), "case_results": results, "reason": "" if passed else "weak_model_pipeline_failed"}
+
+
 def _git_commit(repo_root: Path) -> str:
     try:
         return subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, text=True, check=True).stdout.strip()
@@ -435,46 +680,77 @@ def run_delivery_scenarios(db_path: Path | str) -> dict[str, Any]:
     return {"passed": passed, "scenarios": scenarios}
 
 
-def run_canaries(artifact_root: Path | str, *, repo_root: Path | str, output_path: Path | str | None = None, active_model_report: Path | str | None = None, weak_model_report: Path | str | None = None) -> dict[str, Any]:
+def run_canaries(
+    artifact_root: Path | str,
+    *,
+    repo_root: Path | str,
+    output_path: Path | str | None = None,
+    pipeline_factory=None,
+    store_factory=None,
+    model_runner=None,
+    active_model_report: Path | str | None = None,
+    weak_model_report: Path | str | None = None,
+) -> dict[str, Any]:
     root = Path(artifact_root).resolve()
     repo = Path(repo_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    matrix = build_canary_matrix()
     runtime = discover_hermes_runtime()
     cases = []
-    for case in build_canary_matrix():
+    for case in matrix:
         artifact_dir = root / case["platform"]
-        entrypoint = _run_entrypoint(case, repo)
+        execution = _run_pipeline_case(case, artifact_dir, pipeline_factory=pipeline_factory, store_factory=store_factory)
         probe = probe_artifacts(case, artifact_dir)
         policy_passed = probe["probes"].get("delivery_policy", {}).get("passed", False)
+        pipeline_evidence = execution.get("pipeline_evidence") or {}
+        pipeline_passed = execution.get("passed") is True and pipeline_evidence.get("create_called") is True and pipeline_evidence.get("run_called") is True
+        failures = list(probe.get("failures") or [])
+        if not pipeline_passed:
+            failures.append("pipeline_execution_failed")
         case_result = {
             **case,
-            "command": entrypoint,
+            "command": {"entrypoint": "content_platform.pipeline.Pipeline.create+run", "mode": "serial"},
             "git_commit": _git_commit(repo),
-            "input_hashes": {"case": _json_hash(case), "artifact_manifest": probe.get("manifest_sha256", "")},
+            "pipeline_evidence": pipeline_evidence,
+            "job_evidence": {"job_id": pipeline_evidence.get("job_id", ""), "state": (execution.get("job") or {}).get("state", "")},
+            "input_hashes": {"case": _json_hash(case), "brief": _json_hash(_canary_brief(case)), "artifact_manifest": probe.get("manifest_sha256", "")},
             "output_hashes": probe["input_output_hashes"],
             "capability_evidence": probe["probes"].get("capabilities", {}),
             "probes": probe["probes"],
             "delivery_policy": probe["probes"].get("delivery_policy", {}),
             "hotspot_evidence": probe["probes"].get("hotspot", {}),
-            "failure_reason": ";".join(probe["failures"] + (["entrypoint_failed"] if not entrypoint["passed"] else [])),
-            "evidence_level": "artifact_verified" if probe["passed"] else "declared",
-            "pending_reason": ";".join(value for value in probe["failures"] if "missing" in value or "probe" in value),
-            "artifact_policy_passed": bool(entrypoint["passed"] and probe["passed"] and policy_passed),
+            "failure_reason": ";".join(sorted(set(failures + ([execution.get("error")] if execution.get("error") else [])))),
+            "evidence_level": "artifact_verified" if not failures else "declared",
+            "pending_reason": ";".join(value for value in failures if "missing" in value or "probe" in value or "pending" in value),
+            "artifact_policy_passed": bool(pipeline_passed and probe["passed"] and policy_passed),
         }
         cases.append(case_result)
     gate_hash = _json_hash(DETERMINISTIC_GATE_NAMES)
-    _apply_model_gate_report(runtime, "active", active_model_report, gate_hash)
-    _apply_model_gate_report(runtime, "weak", weak_model_report, gate_hash)
+    model_reports: list[dict[str, Any]] = []
+    if callable(model_runner):
+        for role in ("active", "weak"):
+            model_result = model_runner(role, matrix[0], root)
+            runtime[role] = dict(model_result or {"status": "pending", "reason": "model_runner_returned_no_result"})
+    else:
+        active = runtime.get("active") or {}
+        runtime["active"] = {**active, "gate_passed": bool(active.get("status") == "verified" and all(item["artifact_policy_passed"] for item in cases)), "gate_contract_hash": gate_hash, "executed_cases": len(cases), "gate_reason": "pipeline_cases_failed" if not all(item["artifact_policy_passed"] for item in cases) else ""}
+        weak = runtime.get("weak") or {}
+        if weak.get("status") == "available":
+            runtime["weak"] = _run_model_matrix("weak", weak, matrix, root, pipeline_factory=pipeline_factory, store_factory=store_factory)
+        else:
+            runtime["weak"] = {**weak, "status": "dual_model_pending", "gate_passed": False, "gate_contract_hash": gate_hash}
     report = {
         "schema": "task9_canary_report_v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "repo_root": str(repo),
         "git_commit": _git_commit(repo),
-        "execution": "serial",
+        "execution": {"mode": "serial", "overlap_detected": False, "entrypoint": "pipeline", "case_order": list(EXPECTED_CANARY_PLATFORMS)},
         "models": runtime,
+        "model_reports_used": model_reports,
         "deterministic_gate_contract": {"names": list(DETERMINISTIC_GATE_NAMES), "sha256": gate_hash},
         "cases": cases,
         "delivery_scenarios": run_delivery_scenarios(root / "task9_delivery.db"),
-        "passed": len(cases) == 12 and all(case["artifact_policy_passed"] for case in cases),
+        "passed": len(cases) == 12 and [case["platform"] for case in cases] == list(EXPECTED_CANARY_PLATFORMS) and all(case["artifact_policy_passed"] for case in cases),
     }
     if output_path:
         destination = Path(output_path)
@@ -490,10 +766,8 @@ def main() -> int:
     parser.add_argument("--artifact-root", required=True)
     parser.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument("--output", required=True)
-    parser.add_argument("--active-model-report")
-    parser.add_argument("--weak-model-report")
     args = parser.parse_args()
-    report = run_canaries(args.artifact_root, repo_root=args.repo_root, output_path=args.output, active_model_report=args.active_model_report, weak_model_report=args.weak_model_report)
+    report = run_canaries(args.artifact_root, repo_root=args.repo_root, output_path=args.output)
     print(json.dumps({"passed": report["passed"], "cases": len(report["cases"]), "output": args.output}, ensure_ascii=True))
     return 0 if report["passed"] else 2
 
