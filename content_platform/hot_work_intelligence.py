@@ -154,12 +154,33 @@ def parse_sogou_wechat_html(raw_html: str, *, query: str, limit: int = 10) -> li
     return rows
 
 
-def _matching_anchor(title: str, anchors: list[dict[str, str]] | None) -> str:
+def _is_content_url(platform: str, href: str) -> bool:
+    parsed = urllib.parse.urlparse(str(href or ""))
+    host = (parsed.hostname or "").casefold()
+    path = parsed.path or "/"
+    contracts = {
+        "bilibili": (("bilibili.com",), ("/video/", "/opus/", "/read/cv")),
+        "douyin": (("douyin.com",), ("/video/",)),
+        "douyin_ai": (("douyin.com",), ("/video/",)),
+        "douyin_pet": (("douyin.com",), ("/video/",)),
+        "juejin": (("juejin.cn",), ("/post/",)),
+        "kuaishou": (("kuaishou.com",), ("/short-video/",)),
+        "tiktok": (("tiktok.com",), ("/video/",)),
+        "twitter": (("x.com", "twitter.com"), ("/status/",)),
+        "xiaohongshu": (("xiaohongshu.com",), ("/explore/", "/discovery/item/", "/search_result/")),
+        "youtube": (("youtube.com", "youtu.be"), ("/watch", "/shorts/")),
+        "zhihu": (("zhihu.com",), ("/question/", "/p/")),
+    }
+    hosts, paths = contracts.get(platform, ((), ()))
+    return bool(hosts and any(host == suffix or host.endswith("." + suffix) for suffix in hosts) and any(token in path for token in paths))
+
+
+def _matching_anchor(title: str, anchors: list[dict[str, str]] | None, *, platform: str) -> str:
     wanted = strip_markup(title).casefold()
     for anchor in anchors or []:
         label = strip_markup(str(anchor.get("text") or "")).casefold()
         href = str(anchor.get("href") or "").strip()
-        if label and href.startswith(("http://", "https://")) and (wanted in label or label in wanted):
+        if label and _is_content_url(platform, href) and (wanted in label or label in wanted):
             return href
     return ""
 
@@ -187,7 +208,7 @@ def parse_xiaohongshu_search_text(text: str, *, query: str, limit: int = 12, anc
                     author=author,
                     date=date,
                     engagement=metric,
-                    url=_matching_anchor(title, anchors),
+                    url=_matching_anchor(title, anchors, platform="xiaohongshu"),
                     evidence_strength="strong_logged_search_result",
                 )
             )
@@ -263,6 +284,8 @@ def _nearby_metric(lines: list[str], title: str) -> str:
     except ValueError:
         return ""
     for line in lines[index + 1:index + 7]:
+        if re.fullmatch(r"20\d{2}(?:[-/.]\d{1,2})?(?:[-/.]\d{1,2})?", line.strip()):
+            continue
         match = re.search(r"(?:赞同|点赞|播放|观看|喜欢|收藏|评论)?\s*(\d+(?:\.\d+)?(?:K|M|万)?)", line, re.I)
         if match and _metric_number(match.group(1)) > 0:
             return match.group(1)
@@ -283,14 +306,6 @@ def parse_platform_search_evidence(
         return []
     lines = [strip_markup(line) for line in str(text or "").splitlines() if strip_markup(line)]
     blocked_titles = {"ai works", "首页", "综合", "视频", "用户", "热榜", "创作中心", "内容发现"}
-    allowed_hosts = {
-        "bilibili": ("bilibili.com",),
-        "douyin": ("douyin.com",), "douyin_ai": ("douyin.com",), "douyin_pet": ("douyin.com",),
-        "juejin": ("juejin.cn",), "kuaishou": ("kuaishou.com",),
-        "tiktok": ("tiktok.com",), "twitter": ("x.com", "twitter.com"),
-        "xiaohongshu": ("xiaohongshu.com",), "youtube": ("youtube.com", "youtu.be"),
-        "zhihu": ("zhihu.com",),
-    }
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for anchor in anchors:
@@ -299,8 +314,7 @@ def parse_platform_search_evidence(
         key = title.casefold()
         if key in seen or key in blocked_titles or not href.startswith(("http://", "https://")):
             continue
-        host = (urllib.parse.urlparse(href).hostname or "").casefold()
-        if not any(host == suffix or host.endswith("." + suffix) for suffix in allowed_hosts.get(platform, ())):
+        if not _is_content_url(platform, href):
             continue
         if not _looks_like_content_line(title, query):
             continue
@@ -543,7 +557,7 @@ def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: l
             "ready": len(strong) >= min_strong_samples,
             "strong_sample_count": len(strong),
             "sample_count": len(rows),
-            "top_samples": rows[:10],
+            "top_samples": strong[:10],
             "recommended_patterns": [name for name, _count in patterns.most_common(10)],
             "generation_requirements": _generation_requirements(platform, patterns),
         }
