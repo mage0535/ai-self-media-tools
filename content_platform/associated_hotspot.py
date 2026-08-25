@@ -89,7 +89,8 @@ def load_hotspot_support_matrix(path: str | Path | None = None) -> dict[str, Any
 def hotspot_mode_for_platform(platform: str, matrix: dict[str, Any] | None = None) -> str:
     matrix = matrix or load_hotspot_support_matrix()
     record = (matrix.get("platforms") or {}).get(str(platform).casefold(), {})
-    return str(record.get("association_mode") or matrix.get("default_mode") or "unsupported_or_unverified")
+    modes = record.get("allowed_association_modes") if isinstance(record.get("allowed_association_modes"), list) else []
+    return str(record.get("association_mode") or (modes[0] if modes else "") or matrix.get("default_mode") or "unsupported_or_unverified")
 
 
 def build_associated_hotspot(candidate: dict[str, Any], *, platform: str, association_mode: str, now: datetime | None = None, validity_hours: float = 6, postcheck_state: str = "pending") -> dict[str, Any]:

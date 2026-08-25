@@ -45,6 +45,12 @@ def evaluate_acceptance(report: dict[str, Any], *, repo_root: Path | str | None 
         hotspot = probes.get("hotspot") if isinstance(probes.get("hotspot"), dict) else {}
         if hotspot.get("passed") is not True or hotspot.get("evidence_level") != "artifact_verified":
             failures.append(f"hotspot_independent_evidence_missing:{expected_case['platform']}")
+        details = hotspot.get("details") if isinstance(hotspot.get("details"), dict) else {}
+        contract = expected_case.get("hotspot_contract") if isinstance(expected_case.get("hotspot_contract"), dict) else {}
+        if details.get("evidence_type") not in set(contract.get("allowed_evidence_types") or []):
+            failures.append(f"hotspot_evidence_type_mismatch:{expected_case['platform']}")
+        if details.get("association_mode") not in set(contract.get("allowed_association_modes") or []):
+            failures.append(f"hotspot_association_mode_mismatch:{expected_case['platform']}")
     audits = report.get("audits") if isinstance(report.get("audits"), dict) else {}
     for name in REQUIRED_AUDITS:
         item = audits.get(name) if isinstance(audits.get(name), dict) else {}
