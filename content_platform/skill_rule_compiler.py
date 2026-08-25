@@ -155,8 +155,12 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
         "version": "compiled_skill_rules_v1",
         "passed": True,
         "sources": sources,
-        "rules": sorted(rules[:120], key=lambda item: str(item.get("id") or "")),
-        "rule_count": min(len(rules), 120),
+        # Do not truncate before platform selection. A large shared skill can
+        # otherwise consume the whole budget and silently erase the active
+        # platform's rules. generation_context_compiler applies the bounded
+        # per-request limit after select_platform_rules().
+        "rules": sorted(rules, key=lambda item: str(item.get("id") or "")),
+        "rule_count": len(rules),
     }
     if platform:
         from .adapter_executor import execute_capability
