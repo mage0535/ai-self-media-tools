@@ -81,6 +81,46 @@ def test_hermes_command_uses_active_model_and_retries_hard_timeout_once(monkeypa
     assert all("prompt" not in row for row in attempts)
 
 
+def test_canary_command_uses_verified_dynamic_selectors_and_records_identity(monkeypatch, tmp_path):
+    process = FakeProcess([(0, '{"title":"T","body":"body " * 80}')])
+    commands = []
+
+    monkeypatch.setenv("HERMES_CANARY_SESSION", "task9-active-session")
+    monkeypatch.setenv("HERMES_PROVIDER", "active-provider")
+    monkeypatch.setenv("HERMES_MODEL", "active-model")
+    monkeypatch.setenv("HERMES_CANARY_SELECTOR_CAPABILITY", "verified")
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda command, **kwargs: (commands.append(command) or process))
+    attempts_path = tmp_path / "generation_attempts.json"
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(attempts_path), "clock": lambda: 0, "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    result = generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+
+    assert result["title"] == "T"
+    assert commands[0][-4:] == ["--provider", "active-provider", "--model", "active-model"]
+    attempts = json.loads(attempts_path.read_text(encoding="utf-8"))
+    assert attempts[-1]["provider"] == "active-provider"
+    assert attempts[-1]["model"] == "active-model"
+    assert attempts[-1]["session_id"] == "task9-active-session"
+
+
+def test_canary_without_verified_selectors_fails_before_launch(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setenv("HERMES_CANARY_SESSION", "task9-missing-selector-proof")
+    monkeypatch.delenv("HERMES_PROVIDER", raising=False)
+    monkeypatch.delenv("HERMES_MODEL", raising=False)
+    monkeypatch.delenv("HERMES_CANARY_SELECTOR_CAPABILITY", raising=False)
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *args, **kwargs: calls.append(1))
+    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path)})
+
+    with pytest.raises(RuntimeError, match="selectors are not verified"):
+        generator._hermes("topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""})
+    assert calls == []
+
+
 def test_non_transient_error_is_not_retried(monkeypatch, tmp_path):
     calls = []
 
