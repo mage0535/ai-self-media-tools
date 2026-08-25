@@ -9,6 +9,8 @@ WorkingDirectory=%h/.ai-self-media-tools-current
 Environment=HOME=%h
 Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
 Environment=PYTHONPATH=%h/.ai-self-media-tools-current
+Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
+Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
 ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run_wechat_metrics_refresh.sh
 Nice=10

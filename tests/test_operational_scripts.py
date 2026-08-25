@@ -246,6 +246,23 @@ shared_trend_only: false
         for platform in DEFAULT_GROWTH_PLATFORMS:
             self.assertIn(f"--platform {platform}", text)
 
+    def test_growth_and_wechat_entrypoints_require_explicit_mutable_roots(self):
+        for name in ("scripts/run_growth_cycle.sh", "scripts/run_wechat_metrics_refresh.sh"):
+            text = Path(name).read_text(encoding="utf-8")
+            self.assertIn('CONTENT_PLATFORM_DATA_DIR:?CONTENT_PLATFORM_DATA_DIR is required', text)
+            self.assertIn('CONTENT_PLATFORM_SECRETS_DIR:?CONTENT_PLATFORM_SECRETS_DIR is required', text)
+            self.assertNotIn('$root/data', text)
+            self.assertNotIn('$root/secrets', text)
+
+    def test_cli_systemd_units_use_current_release_and_explicit_runtime_roots(self):
+        for path in sorted(Path("systemd").glob("*.service")):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current", text, path)
+            self.assertIn("Environment=PYTHONPATH=%h/.ai-self-media-tools-current", text, path)
+            self.assertIn("Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data", text, path)
+            self.assertIn("Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets", text, path)
+            self.assertNotIn("%h/.local/bin/content-platform", text, path)
+
     def test_overnight_script_refreshes_growth_strategy_before_prepare(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
 

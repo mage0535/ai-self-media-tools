@@ -3,15 +3,17 @@
 set -euo pipefail
 
 root="${CONTENT_PLATFORM_HOME:?CONTENT_PLATFORM_HOME is required}"
-report="$root/data/performance/wechat_mp_daily_report.json"
+data_root="${CONTENT_PLATFORM_DATA_DIR:?CONTENT_PLATFORM_DATA_DIR is required}"
+secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:?CONTENT_PLATFORM_SECRETS_DIR is required}"
+report="$data_root/performance/wechat_mp_daily_report.json"
 notify() { "$root/scripts/notify_hermes_progress.sh" "wechat-metrics" "$1" "${2:-}" || true; }
 
 notify "started" "metrics_refresh_started"
 set +e
-python3 "$root/scripts/wechat_mp_daily_metrics.py" \
-  --db "$root/data/state.db" \
-  --state-file "$root/secrets/wechat_mp_uploaded_state.json" \
-  --metrics-file "$root/data/performance/wechat_mp_metrics.json" \
+PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" python3 "$root/scripts/wechat_mp_daily_metrics.py" \
+  --db "$data_root/state.db" \
+  --state-file "$secrets_root/wechat_mp_uploaded_state.json" \
+  --metrics-file "$data_root/performance/wechat_mp_metrics.json" \
   --report "$report"
 status=$?
 set -e

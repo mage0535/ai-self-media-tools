@@ -6,6 +6,9 @@ After=network.target local-fs.target
 Type=simple
 Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
 Environment=PYTHONPATH=%h/.ai-self-media-tools-current
+Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
+Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
+Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json
 ExecStart=/usr/bin/python3 -m content_platform.metrics_server --db %h/.ai-self-media-tools/data/state.db --host 127.0.0.1 --port 9108
 WorkingDirectory=%h/.ai-self-media-tools-current
 Restart=on-failure

@@ -34,6 +34,8 @@ from content_platform.cli import load_config
 CURRENT_LINK_NAME = ".ai-self-media-tools-current"
 SYSTEMD_CURRENT_ROOT = "%h/.ai-self-media-tools-current"
 SYSTEMD_MUTABLE_ROOT = "%h/.ai-self-media-tools"
+SYSTEMD_DATA_ROOT = "%h/.ai-self-media-tools/data"
+SYSTEMD_SECRETS_ROOT = "%h/.ai-self-media-tools/secrets"
 SYSTEMD_UNIT_PREFIXES = ("ai-self-media", "hermes-content-platform")
 
 
@@ -146,6 +148,9 @@ def _validate_systemd_unit(path: Path, text: str) -> None:
     required = (
         f"WorkingDirectory={SYSTEMD_CURRENT_ROOT}",
         f"Environment=CONTENT_PLATFORM_HOME={SYSTEMD_CURRENT_ROOT}",
+        f"Environment=PYTHONPATH={SYSTEMD_CURRENT_ROOT}",
+        f"Environment=CONTENT_PLATFORM_DATA_DIR={SYSTEMD_DATA_ROOT}",
+        f"Environment=CONTENT_PLATFORM_SECRETS_DIR={SYSTEMD_SECRETS_ROOT}",
     )
     missing = [value for value in required if value not in text]
     if missing:
@@ -169,11 +174,17 @@ def _validate_systemd_unit(path: Path, text: str) -> None:
 def _install_systemd_units(release_root: Path, unit_dir: Path, runner=None) -> tuple[list[str], list[str]]:
     services, timers = _systemd_unit_paths(release_root)
     unit_dir.mkdir(parents=True, exist_ok=True)
+    release_names = {path.name for path in [*services, *timers]}
+    for installed in _installed_related_unit_paths(unit_dir):
+        if installed.name not in release_names:
+            _remove_path(installed)
     for path in [*services, *timers]:
         text = path.read_text(encoding="utf-8")
         if path.suffix == ".service":
             _validate_systemd_unit(path, text)
         destination = unit_dir / path.name
+        if destination.exists() or destination.is_symlink():
+            _remove_path(destination)
         shutil.copy2(path, destination)
         destination.chmod(0o644)
     _systemd_run(["daemon-reload"], runner)
@@ -187,14 +198,64 @@ def _timer_enabled(timer: str, runner=None) -> bool:
     return result.returncode == 0
 
 
-def query_systemd_timer_states(timer_names: list[str], runner=None) -> dict[str, dict[str, object]]:
+def _installed_related_unit_paths(unit_dir: Path) -> list[Path]:
+    if not unit_dir.is_dir():
+        return []
+    return sorted(
+        path
+        for path in unit_dir.iterdir()
+        if (path.is_file() or path.is_symlink())
+        and path.suffix in {".service", ".timer"}
+        and path.stem.startswith(SYSTEMD_UNIT_PREFIXES)
+    )
+
+
+def _remove_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def _snapshot_unit_file(path: Path) -> dict[str, object]:
+    if path.is_symlink():
+        return {"kind": "symlink", "target": os.readlink(path)}
+    if path.is_file():
+        return {"kind": "file", "bytes": path.read_bytes(), "mode": path.stat().st_mode & 0o777}
+    if path.exists():
+        raise ReleaseAuditError(f"related systemd unit is not a file or symlink: {path}")
+    return {"kind": "missing"}
+
+
+def _snapshot_current_link(current: Path | None) -> dict[str, object]:
+    if current is None:
+        return {"kind": "missing"}
+    if current.is_symlink():
+        return {"kind": "symlink", "target": os.readlink(current)}
+    if current.exists():
+        raise ReleaseAuditError(f"current_link is not a symlink: {current}")
+    return {"kind": "missing"}
+
+
+def _snapshot_systemd_transaction(unit_dir: Path, unit_names: list[str], current: Path | None, runner=None) -> dict:
+    unit_dir_exists = unit_dir.is_dir()
+    paths = {name: _snapshot_unit_file(unit_dir / name) for name in unit_names}
+    return {
+        "unit_dir_exists": unit_dir_exists,
+        "files": paths,
+        "states": query_systemd_unit_states(unit_names, runner=runner),
+        "current_link": _snapshot_current_link(current),
+    }
+
+
+def query_systemd_unit_states(unit_names: list[str], runner=None) -> dict[str, dict[str, object]]:
     states = {}
-    for timer in timer_names:
-        enabled_result = _systemd_run(["is-enabled", timer], runner, allow_failure=True)
-        active_result = _systemd_run(["is-active", timer], runner, allow_failure=True)
-        if enabled_result.returncode not in (0, 1, 3) or active_result.returncode not in (0, 1, 3):
-            raise ReleaseAuditError(f"could not inspect systemd timer state: {timer}")
-        states[timer] = {
+    for unit in unit_names:
+        enabled_result = _systemd_run(["is-enabled", unit], runner, allow_failure=True)
+        active_result = _systemd_run(["is-active", unit], runner, allow_failure=True)
+        if enabled_result.returncode not in (0, 1, 3, 5) or active_result.returncode not in (0, 1, 3, 5):
+            raise ReleaseAuditError(f"could not inspect systemd unit state: {unit}")
+        states[unit] = {
             "enabled": enabled_result.returncode == 0,
             "active": active_result.returncode == 0,
             "enabled_state": (getattr(enabled_result, "stdout", "") or "").strip() or "unknown",
@@ -203,15 +264,80 @@ def query_systemd_timer_states(timer_names: list[str], runner=None) -> dict[str,
     return states
 
 
+def query_systemd_timer_states(timer_names: list[str], runner=None) -> dict[str, dict[str, object]]:
+    return query_systemd_unit_states(timer_names, runner=runner)
+
+
 def _disable_systemd_timers(timer_names: list[str], runner=None) -> None:
     if timer_names:
         _systemd_run(["disable", "--now", *timer_names], runner)
 
 
 def _restore_systemd_timers(timer_states: dict[str, dict[str, object]], runner=None) -> None:
-    for timer, state in timer_states.items():
-        if state["enabled"]:
-            _systemd_run(["enable", "--now", timer], runner)
+    _restore_systemd_states(timer_states, runner=runner)
+
+
+def _stop_systemd_units(unit_names: list[str], runner=None) -> None:
+    for unit in unit_names:
+        _systemd_run(["stop", unit], runner, allow_failure=True)
+
+
+def _run_state_command(argv: list[str], runner=None, *, allow_missing: bool = False) -> None:
+    result = _systemd_run(argv, runner, allow_failure=True)
+    if result.returncode == 0:
+        return
+    if allow_missing and result.returncode in (1, 3, 5):
+        return
+    detail = (getattr(result, "stderr", "") or getattr(result, "stdout", "")).strip()
+    raise ReleaseAuditError(f"systemd state restore failed ({' '.join(argv)}): {detail}")
+
+
+def _restore_systemd_states(states: dict[str, dict[str, object]], runner=None) -> None:
+    for unit in states:
+        _run_state_command(["stop", unit], runner, allow_missing=True)
+    for unit, state in states.items():
+        enabled = bool(state["enabled"])
+        active = bool(state["active"])
+        if enabled and active:
+            _run_state_command(["enable", "--now", unit], runner)
+        elif enabled:
+            _run_state_command(["enable", unit], runner)
+        elif active:
+            _run_state_command(["disable", unit], runner, allow_missing=True)
+            _run_state_command(["start", unit], runner)
+        else:
+            _run_state_command(["disable", unit], runner, allow_missing=True)
+
+
+def _restore_unit_files(unit_dir: Path, snapshot: dict[str, object]) -> None:
+    files = snapshot["files"]
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    for name, record in files.items():
+        destination = unit_dir / name
+        if destination.exists() or destination.is_symlink():
+            _remove_path(destination)
+        kind = record["kind"]
+        if kind == "file":
+            temporary = unit_dir / f".{name}.{uuid.uuid4().hex}.restore"
+            temporary.write_bytes(record["bytes"])
+            temporary.chmod(record["mode"])
+            os.replace(temporary, destination)
+        elif kind == "symlink":
+            temporary = unit_dir / f".{name}.{uuid.uuid4().hex}.restore"
+            os.symlink(record["target"], temporary)
+            os.replace(temporary, destination)
+
+
+def _restore_current_link(current: Path | None, snapshot: dict[str, object]) -> None:
+    if current is None:
+        return
+    if current.exists() or current.is_symlink():
+        _remove_path(current)
+    if snapshot["kind"] == "symlink":
+        current.parent.mkdir(parents=True, exist_ok=True)
+        temporary = current.parent / f".{current.name}.{uuid.uuid4().hex}.restore"
+        os.symlink(snapshot["target"], temporary, target_is_directory=True)
+        os.replace(temporary, current)
 
 
 def _verify_effective_systemd_units(
@@ -280,17 +406,52 @@ def _systemd_switch(
             activate(current, release_root)
         return {"verified": False, "skipped": True}
     unit_path = Path(unit_dir).expanduser().resolve()
-    services, timers, timer_states = _prepare_systemd_switch(release_root, unit_path, runner)
-    switched = False
+    services, timers = _systemd_unit_paths(release_root)
+    release_names = [path.name for path in [*services, *timers]]
+    installed_names = [path.name for path in _installed_related_unit_paths(unit_path)]
+    related_names = sorted(set(installed_names) | set(release_names))
+    snapshot = _snapshot_systemd_transaction(unit_path, related_names, current, runner)
+    timer_states = {name: snapshot["states"][name] for name in related_names if name.endswith(".timer")}
+    mutated = False
     try:
+        mutated = True
+        existing_timers = [
+            name for name in installed_names
+            if name.endswith(".timer") and snapshot["files"][name]["kind"] != "missing"
+        ]
+        existing_timers.extend(
+            name for name in release_names
+            if name.endswith(".timer") and snapshot["states"].get(name, {}).get("enabled")
+            and name not in existing_timers
+        )
+        _disable_systemd_timers(existing_timers, runner)
+        _install_systemd_units(release_root, unit_path, runner)
+        _disable_systemd_timers(timers, runner)
         if activate is not None:
             activate(current, release_root)
-            switched = True
-        _finish_systemd_switch(release_root, unit_path, services, timer_states, runner)
-    except Exception:
-        if switched and activate is not None and previous_release is not None:
-            activate(current, previous_release)
-        _restore_systemd_timers(timer_states, runner)
+        _verify_effective_systemd_units(release_root, unit_path, [path.name for path in services], runner)
+        _restore_systemd_states(
+            {name: snapshot["states"][name] for name in release_names},
+            runner=runner,
+        )
+    except Exception as exc:
+        rollback_errors = []
+        try:
+            _stop_systemd_units(related_names, runner)
+        except Exception as rollback_error:
+            rollback_errors.append(rollback_error)
+        try:
+            _restore_unit_files(unit_path, snapshot)
+            _systemd_run(["daemon-reload"], runner)
+            _restore_current_link(current, snapshot["current_link"])
+            _restore_systemd_states(snapshot["states"], runner=runner)
+        except Exception as rollback_error:
+            rollback_errors.append(rollback_error)
+        if rollback_errors:
+            raise ReleaseAuditError(
+                "systemd transaction failed and rollback failed: "
+                + "; ".join(str(error) for error in rollback_errors)
+            ) from exc
         raise
     return {"verified": True, "services": services, "timers": timers, "timer_states": timer_states}
 
@@ -685,6 +846,12 @@ def deploy_release(
             }
         except Exception:
             if release.exists() and not release.is_symlink():
+                for path in sorted(release.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+                    if path.is_file():
+                        path.chmod(0o644)
+                    elif path.is_dir() and not path.is_symlink():
+                        path.chmod(0o755)
+                release.chmod(0o755)
                 shutil.rmtree(release)
             raise
         finally:

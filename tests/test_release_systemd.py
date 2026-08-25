@@ -21,12 +21,13 @@ class FakeSystemd:
         self.systemd_dir = systemd_dir
         self.commands = []
         self.enabled = {}
+        self.active = {}
 
     def __call__(self, argv):
         self.commands.append(list(argv))
         operation = argv[2]
         if operation == "is-active":
-            return _systemd_result(3, "inactive\n")
+            return _systemd_result(0 if self.active.get(argv[3], False) else 3, "active\n" if self.active.get(argv[3], False) else "inactive\n")
         if operation == "is-enabled":
             return _systemd_result(0 if self.enabled.get(argv[3], False) else 1, "enabled\n" if self.enabled.get(argv[3], False) else "disabled\n")
         if operation == "show":
@@ -95,10 +96,10 @@ def test_deploy_installs_units_disables_timers_before_switch_and_verifies_effect
     assert disabled
     assert events
     assert max(disabled) < switch
-    assert daemon_reload < min(disabled)
+    assert min(disabled) < daemon_reload
     assert (systemd_dir / "hermes-content-platform.service").is_file()
     assert result["systemd"]["verified"] is True
-    assert any(command[2:4] == ["enable", "--now"] for command in fake.commands)
+    assert any(len(command) > 2 and command[2] == "enable" for command in fake.commands)
 
 
 def test_rollback_reverses_current_and_reverifies_units_without_touching_mutable_data(tmp_path):
@@ -165,3 +166,61 @@ def test_acceptance_queries_real_timer_state(monkeypatch):
 
     assert states["hermes-content-platform.timer"]["enabled"] is True
     assert states["hermes-content-platform-maintenance.timer"]["enabled"] is False
+
+
+def test_deploy_restores_unit_files_symlink_states_and_data_after_fault(tmp_path):
+    from tests.test_deploy_release import _case, _fixture_evidence_runner
+
+    source, config, report, rollback = _case(tmp_path)
+    systemd_dir = tmp_path / "systemd-user"
+    systemd_dir.mkdir()
+    old_service = b"[Service]\nExecStart=/old/service\n"
+    old_timer = b"[Timer]\nOnCalendar=*-*-* 01:00:00\n"
+    old_timer_target = tmp_path / "old-timer.target"
+    old_timer_target.write_bytes(old_timer)
+    (systemd_dir / "hermes-content-platform.service").write_bytes(old_service)
+    (systemd_dir / "hermes-content-platform.timer").symlink_to(old_timer_target)
+    old_release = tmp_path / "old-release"
+    old_release.mkdir()
+    current = tmp_path / ".ai-self-media-tools-current"
+    current.symlink_to(old_release, target_is_directory=True)
+    data = tmp_path / "data"
+    protected = data / "state.db"
+    protected.parent.mkdir(exist_ok=True)
+    protected.write_bytes(b"mutable-state")
+
+    fake = FakeSystemd(systemd_dir)
+    fake.enabled["hermes-content-platform.service"] = True
+    fake.enabled["hermes-content-platform.timer"] = True
+    fake.active["hermes-content-platform.service"] = True
+
+    def fail_on_effective_unit(argv):
+        result = fake(argv)
+        if argv[2] == "show":
+            raise RuntimeError("injected effective-unit failure")
+        return result
+
+    with pytest.raises(RuntimeError, match="injected effective-unit failure"):
+        deploy_release(
+            source_root=source,
+            releases_root=tmp_path / "releases",
+            current_link=current,
+            config_path=config,
+            test_report_path=report,
+            rollback_target=rollback,
+            data_root=data,
+            release_name="fault-injected",
+            secrets_root=tmp_path / "secrets",
+            evidence_runner=_fixture_evidence_runner,
+            systemd_unit_dir=systemd_dir,
+            systemd_runner=fail_on_effective_unit,
+        )
+
+    assert (systemd_dir / "hermes-content-platform.service").read_bytes() == old_service
+    assert (systemd_dir / "hermes-content-platform.timer").is_symlink()
+    assert (systemd_dir / "hermes-content-platform.timer").resolve() == old_timer_target.resolve()
+    assert old_timer_target.read_bytes() == old_timer
+    assert current.resolve() == old_release
+    assert protected.read_bytes() == b"mutable-state"
+    assert any(command[2] == "daemon-reload" for command in fake.commands)
+    assert any(command[2:4] == ["enable", "--now"] for command in fake.commands)
