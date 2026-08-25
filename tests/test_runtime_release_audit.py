@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from scripts.runtime_release_audit import ReleaseAuditError, audit_release, write_metadata
+from scripts.runtime_release_audit import ReleaseAuditError, audit_release, verify_metadata, write_metadata
 
 
 def _git_repo(root: Path) -> None:
@@ -487,3 +487,189 @@ def test_accepts_consistent_release_and_all_evidence(tmp_path: Path, monkeypatch
     saved = json.loads(destination.read_text(encoding="utf-8"))
     assert saved["release_root"] == str(release_root.resolve())
     assert saved["rollback_target"] == str(rollback_target.resolve())
+
+
+@pytest.mark.parametrize("link_part", ["parent", "leaf"])
+def test_rejects_code_root_environment_symlink_components(tmp_path: Path, monkeypatch, link_part: str):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    outside = tmp_path / "real-code-root"
+    shutil.copytree(release_root, outside)
+    if link_part == "parent":
+        parent = tmp_path / "linked-parent"
+        try:
+            parent.symlink_to(tmp_path, target_is_directory=True)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"symlink creation unavailable: {exc}")
+        code_root = parent / release_root.name
+    else:
+        code_root = tmp_path / "linked-code-root"
+        try:
+            code_root.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"symlink creation unavailable: {exc}")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(code_root))
+
+    with pytest.raises(ReleaseAuditError, match="CONTENT_PLATFORM_CODE_ROOT|symlink|path boundary"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+@pytest.mark.parametrize("kind", ["root", "scripts", "entry"])
+def test_rejects_symlinked_rollback_components(tmp_path: Path, monkeypatch, kind: str):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    outside = tmp_path / "outside-rollback"
+    (outside / "scripts").mkdir(parents=True)
+    (outside / "scripts" / "run.py").write_text("print('outside')\n", encoding="utf-8")
+    if kind == "root":
+        real = rollback_target
+        rollback_target = tmp_path / "linked-rollback"
+        try:
+            rollback_target.symlink_to(real, target_is_directory=True)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"symlink creation unavailable: {exc}")
+    elif kind == "scripts":
+        scripts = rollback_target / "scripts"
+        scripts.rename(rollback_target / "real-scripts")
+        try:
+            scripts.symlink_to(rollback_target / "real-scripts", target_is_directory=True)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"symlink creation unavailable: {exc}")
+    else:
+        entry = rollback_target / "scripts" / "run.py"
+        entry.unlink()
+        try:
+            entry.symlink_to(outside / "scripts" / "run.py")
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"symlink creation unavailable: {exc}")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="rollback|symlink|outside|contain"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_verify_metadata_rejects_missing_metadata_and_tampered_evidence(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+
+    assert verify_metadata(destination)["release_root"] == str(release_root.resolve())
+    destination.write_text(destination.read_text(encoding="utf-8").replace(metadata["config_hash"], "0" * 64), encoding="utf-8")
+    with pytest.raises(ReleaseAuditError, match="metadata|hash|config"):
+        verify_metadata(destination)
+
+    destination.unlink()
+    with pytest.raises(ReleaseAuditError, match="metadata|exist"):
+        verify_metadata(destination)
+
+
+def test_verify_metadata_rejects_release_or_config_drift(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+
+    (release_root / "README.md").write_text("drift\n", encoding="utf-8")
+    with pytest.raises(ReleaseAuditError, match="hash|release"):
+        verify_metadata(destination)
+
+
+@pytest.mark.parametrize("evidence", ["config", "report"])
+def test_verify_metadata_rejects_current_config_or_junit_drift(tmp_path: Path, monkeypatch, evidence: str):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+    path = config_path if evidence == "config" else report_path
+    path.write_text(path.read_text(encoding="utf-8") + " drift", encoding="utf-8")
+
+    with pytest.raises(ReleaseAuditError, match="hash|config|JUnit"):
+        verify_metadata(destination)
+
+
+def test_verify_metadata_successfully_checks_current_release_and_rollback(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+
+    verified = verify_metadata(destination, current_release_root=release_root)
+    assert verified["rollback_target"] == str(rollback_target.resolve())
+
+
+def test_verify_metadata_cli_mode_returns_success(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+    destination = release_root / "release-metadata.json"
+    write_metadata(metadata, destination)
+
+    result = subprocess.run(
+        [
+            os.environ.get("PYTHON", "python"),
+            "scripts/runtime_release_audit.py",
+            "verify_metadata",
+            "--metadata-path",
+            str(destination),
+            "--release-root",
+            str(release_root),
+        ],
+        cwd=Path(__file__).parents[1],
+        env={**os.environ, "CONTENT_PLATFORM_CODE_ROOT": str(release_root)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["release_root"] == str(release_root.resolve())
