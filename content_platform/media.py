@@ -211,7 +211,7 @@ class MediaBridge:
         video_platforms = platforms.intersection(
             {"kuaishou", "douyin", "douyin_ai", "tiktok", "shipinhao", "youtube", "youtube_shorts", "bilibili"}
         )
-        if (not video_platforms and not job.get("_video_asset_generation")
+        if ("juejin" not in platforms and not video_platforms and not job.get("_video_asset_generation")
                 and vr.get("auto") and vr.get("route_order")
                 and vr["route_order"][0] == "content-driven-cards"):
             try:
@@ -280,6 +280,10 @@ class MediaBridge:
             def generate_article_asset(item, target):
                 prompt = next(row["prompt"] for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
                 provider.run(prompt, target, extra_args)
+                if item["role"] == "cover":
+                    cover_gate = normalize_cover_resolution(target)
+                    if not cover_gate.get("passed"):
+                        raise RuntimeError("adaptive cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
                 return {
                     "source_url": f"{staging_url.rstrip('/')}/{job['id']}/{target.name}",
                     "license": "generated_for_project",
@@ -292,6 +296,8 @@ class MediaBridge:
                 output_dir,
                 generate_article_asset,
                 public_staging_base_url=staging_url,
+                public_staging_verifier=cfg.get("public_staging_verifier"),
+                staging_timeout_seconds=float(cfg.get("staging_timeout_seconds", 5)),
                 max_concurrency=int(cfg.get("max_concurrency", 3)),
                 max_attempts=int(cfg.get("max_attempts", 3)),
             )
@@ -570,6 +576,19 @@ class MediaBridge:
         )
         # ── visual-router 自动适配：结构化/知识内容 → 电影级视频管线 ──
         vr = job.get("visual_route") or {}
+        video_cfg = self.config.get("video", {}) if isinstance(self.config.get("video", {}), dict) else {}
+        meta = job.get("draft_meta") or {}
+        requested_cinematic = bool(
+            (vr.get("route_order") or [""])[0] == "cinema-video"
+            or str(meta.get("quality_profile") or video_cfg.get("quality_profile") or os.environ.get("FILM_QUALITY_PROFILE", "")).casefold() == "high"
+            or str(meta.get("motion_mode") or video_cfg.get("motion_mode") or os.environ.get("FILM_MOTION_MODE", "")).casefold() == "cinematic"
+        )
+        explicit_safe_mode = (
+            str(meta.get("quality_profile") or video_cfg.get("quality_profile") or os.environ.get("FILM_QUALITY_PROFILE", "")).casefold() == "degraded"
+            and str(meta.get("motion_mode") or video_cfg.get("motion_mode") or os.environ.get("FILM_MOTION_MODE", "")).casefold() == "safe"
+            and (meta.get("allow_degraded") is True or video_cfg.get("allow_degraded") is True or os.environ.get("FILM_ALLOW_DEGRADED") == "1")
+        )
+        cinematic_fallback = ""
         if vr.get("auto") and vr.get("route_order") and vr["route_order"][0] == "cinema-video":
             try:
                 import subprocess as _sp
@@ -600,9 +619,11 @@ class MediaBridge:
                         "render_manifest": manifest,
                         "render_packet": packet,
                     }
+                cinematic_fallback = "cinematic renderer did not emit verified manifest and packet"
             except Exception as e:
-                # 电影级管线失败 → 静默降级到原 video_toolchain 管线
-                pass
+                cinematic_fallback = f"cinematic renderer failed: {type(e).__name__}: {e}"
+            if requested_cinematic and not explicit_safe_mode:
+                raise RuntimeError("cinematic fallback forbidden: " + cinematic_fallback)
         plan = dict(job.get("draft_meta", {}).get("video_toolchain_plan") or {})
         run_contract = (job.get("brief") or {}).get("run_contract") or (job.get("draft_meta") or {}).get("run_contract")
         if run_contract:
@@ -662,6 +683,13 @@ class MediaBridge:
             "render_manifest": manifest,
             "render_packet": self._renderer_packet(output_dir),
         }
+        if cinematic_fallback:
+            artifact.update({
+                "degraded": True,
+                "fallback_used": True,
+                "fallback_reason": cinematic_fallback,
+                "quality_gate": {"passed": False, "failures": ["cinematic_fallback_used"]},
+            })
         if self._visual_route:
             artifact["visual_route"] = self._visual_route
         if plan:

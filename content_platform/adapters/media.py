@@ -12,6 +12,8 @@ import json
 import os
 import subprocess
 import threading
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable
@@ -30,6 +32,49 @@ def _write_json_atomic(path: Path, payload: Any) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _probe_public_url(url: str, timeout: float) -> dict[str, Any]:
+    """Probe one staged asset without downloading more than one byte."""
+    last_error = ""
+    for method in ("HEAD", "GET"):
+        request = urllib.request.Request(url, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                status = int(response.getcode() or 0)
+                if method == "GET":
+                    response.read(1)
+                if 200 <= status < 400:
+                    return {"passed": True, "method": method, "status": status, "url": url}
+                last_error = f"http_status:{status}"
+        except urllib.error.HTTPError as exc:
+            last_error = f"http_status:{exc.code}"
+            if method == "GET" or exc.code not in {405, 501}:
+                break
+        except (OSError, urllib.error.URLError) as exc:
+            last_error = f"{type(exc).__name__}:{exc}"
+            break
+    return {"passed": False, "method": method, "status": 0, "url": url, "error": last_error or "probe_failed"}
+
+
+def verify_public_staging(
+    urls: list[str],
+    *,
+    verifier: Callable[[str], Any] | None = None,
+    timeout_seconds: float = 5.0,
+) -> dict[str, Any]:
+    """Verify every public asset URL with bounded HTTP or an injected probe."""
+    results = []
+    for url in urls:
+        try:
+            raw = verifier(url) if callable(verifier) else _probe_public_url(url, timeout_seconds)
+            result = dict(raw) if isinstance(raw, dict) else {"passed": raw is True}
+        except Exception as exc:
+            result = {"passed": False, "error": f"{type(exc).__name__}:{exc}"}
+        result.setdefault("url", url)
+        result["passed"] = result.get("passed") is True
+        results.append(result)
+    return {"passed": bool(urls) and all(item["passed"] for item in results), "urls": results}
 
 
 def _article_assets(job: dict[str, Any]) -> list[dict[str, str]]:
@@ -53,6 +98,8 @@ def execute_article_media(
     generator: Callable[[dict[str, str], Path], dict[str, Any]],
     *,
     public_staging_base_url: str,
+    public_staging_verifier: Callable[[str], Any] | None = None,
+    staging_timeout_seconds: float = 5.0,
     max_concurrency: int = 3,
     max_attempts: int = 3,
 ) -> dict[str, Any]:
@@ -139,6 +186,11 @@ def execute_article_media(
         raise RuntimeError("article media contains duplicate asset checksums")
     if len(set(sources)) != len(sources):
         raise RuntimeError("article media contains duplicate source URLs")
+    public_staging_evidence = verify_public_staging(
+        [row["public_url"] for row in records],
+        verifier=public_staging_verifier,
+        timeout_seconds=staging_timeout_seconds,
+    )
     mapping = [
         {
             "asset_id": row["asset_id"],
@@ -147,7 +199,6 @@ def execute_article_media(
             "public_url": row["public_url"],
             "purpose": row["match_reason"],
             "adjacent_to_text": True,
-            "editor_visible": True,
             "target_renderer": "juejin_markdown_editor",
         }
         for row in records
@@ -161,6 +212,7 @@ def execute_article_media(
         ).hexdigest(),
         "artifacts": records,
         "source_license_evidence": [{"source_url": row["source_url"], "license": row["license"]} for row in records],
+        "public_staging_evidence": public_staging_evidence,
         "target_renderer_evidence": {"renderer": "juejin_markdown_editor", "mapping_count": len(mapping), "verified": False},
     }
     cover_design = (job.get("draft_meta") or {}).get("cover_design") if isinstance(job.get("draft_meta"), dict) else {}
@@ -179,13 +231,20 @@ def execute_article_media(
         "editor_visible_mapping": mapping,
         "cover_quality_evidence": cover_quality_evidence,
         "handoff_contract": handoff,
+        "public_staging_evidence": public_staging_evidence,
     }
     _write_json_atomic(output / "article_media_contract.json", result)
     _write_json_atomic(output / "section_image_map.json", mapping)
+    if not public_staging_evidence["passed"]:
+        raise RuntimeError("public_staging_verification_failed: " + json.dumps(public_staging_evidence, ensure_ascii=False))
     return result
 
 
-def validate_handoff_contract(contract: dict[str, Any] | None) -> dict[str, Any]:
+def validate_handoff_contract(
+    contract: dict[str, Any] | None,
+    *,
+    require_target_renderer: bool = True,
+) -> dict[str, Any]:
     """Validate evidence required before a package can become handoff_ready."""
     contract = contract if isinstance(contract, dict) else {}
     failures: list[str] = []
@@ -196,6 +255,10 @@ def validate_handoff_contract(contract: dict[str, Any] | None) -> dict[str, Any]
     artifacts = contract.get("artifacts") if isinstance(contract.get("artifacts"), list) else []
     if not artifacts:
         failures.append("media_artifacts_missing")
+    covers = [item for item in artifacts if isinstance(item, dict) and item.get("role") == "cover"]
+    sections = [item for item in artifacts if isinstance(item, dict) and item.get("role") == "section"]
+    if len(artifacts) != 4 or len(covers) != 1 or len(sections) != 3:
+        failures.append("article_media_requires_cover_plus_three_sections")
     for index, artifact in enumerate(artifacts, 1):
         path = Path(str(artifact.get("path") or "")) if isinstance(artifact, dict) else Path("")
         if not path.is_file() or path.stat().st_size <= 0:
@@ -210,9 +273,12 @@ def validate_handoff_contract(contract: dict[str, Any] | None) -> dict[str, Any]
         if not str(artifact.get("license") or "").strip():
             failures.append(f"artifact_{index}_license_missing")
     target = contract.get("target_renderer_evidence") if isinstance(contract.get("target_renderer_evidence"), dict) else {}
-    if target.get("verified") is not True:
+    staging = contract.get("public_staging_evidence") if isinstance(contract.get("public_staging_evidence"), dict) else {}
+    if staging.get("passed") is not True:
+        failures.append("public_staging_evidence_missing")
+    if require_target_renderer and target.get("verified") is not True:
         failures.append("target_renderer_evidence_missing")
-    return {"passed": not failures, "failures": failures, "state": contract.get("state", "")}
+    return {"passed": not failures, "failures": failures, "state": contract.get("state", ""), "public_staging": staging, "target_renderer": target}
 
 
 def validate_scene_manifest_contract(
