@@ -57,6 +57,18 @@ def _assert_release_matches(source_root: Path, release_root: Path, source_hashes
             raise ReleaseAuditError(f"release content hash mismatch: {relative}")
 
 
+def _assert_release_has_no_untracked_files(release_root: Path, source_hashes: dict[str, str]) -> None:
+    tracked = set(source_hashes)
+    for path in release_root.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(release_root)
+        if path.name == "release-metadata.json" or "__pycache__" in relative.parts or path.suffix.lower() == ".pyc":
+            continue
+        if relative.as_posix() not in tracked:
+            raise ReleaseAuditError(f"release file is not tracked by source: {relative.as_posix()}")
+
+
 def _require_file(path: Path, label: str) -> None:
     if not path.is_file():
         raise ReleaseAuditError(f"required evidence {label} does not exist: {path}")
@@ -122,6 +134,7 @@ def audit_release(
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
     _assert_release_matches(source, release, source_hashes)
+    _assert_release_has_no_untracked_files(release, source_hashes)
     _validate_rollback_target(release, rollback)
     metadata = {
         "commit": commit,

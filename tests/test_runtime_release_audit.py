@@ -157,6 +157,44 @@ def test_rejects_release_missing_a_tracked_file(tmp_path: Path, monkeypatch):
         )
 
 
+def test_rejects_release_file_not_in_source_tracked_files(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    injected = release_root / "content_platform" / "injected.py"
+    injected.parent.mkdir(parents=True)
+    injected.write_text("injected = True\n", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    with pytest.raises(ReleaseAuditError, match="not tracked|unexpected|release file"):
+        audit_release(
+            source_root=source_root,
+            release_root=release_root,
+            configured_script_root=release_root / "scripts",
+            config_path=config_path,
+            test_report_path=report_path,
+            rollback_target=rollback_target,
+        )
+
+
+def test_allows_release_metadata_and_python_cache_files(tmp_path: Path, monkeypatch):
+    source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
+    (release_root / "release-metadata.json").write_text("{}\n", encoding="utf-8")
+    cache = release_root / "scripts" / "__pycache__"
+    cache.mkdir()
+    (cache / "run.cpython-314.pyc").write_bytes(b"cache")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_root))
+
+    metadata = audit_release(
+        source_root=source_root,
+        release_root=release_root,
+        configured_script_root=release_root / "scripts",
+        config_path=config_path,
+        test_report_path=report_path,
+        rollback_target=rollback_target,
+    )
+
+    assert metadata["release_root"] == str(release_root.resolve())
+
+
 def test_rejects_environment_code_root_that_differs_from_release(tmp_path: Path, monkeypatch):
     source_root, release_root, config_path, report_path, rollback_target = _valid_case(tmp_path)
     monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(tmp_path / "another-release"))
