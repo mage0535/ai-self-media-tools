@@ -815,6 +815,32 @@ def execute(args):
             store,
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],
         )
+        from .trend_intelligence import rank_platform_candidates
+
+        def bind_collected_candidate(platform, candidate, keywords):
+            row = dict(candidate or {})
+            target = str(platform or "").casefold()
+            explicit = str(row.get("platform") or "").casefold()
+            source_prefix = str(row.get("source") or "").casefold().partition(":")[0]
+            aliases = {target}
+            if target.startswith("douyin_"):
+                aliases.add("douyin")
+            if target in {"x", "twitter"}:
+                aliases.update({"x", "twitter"})
+            if explicit and explicit != target:
+                return None
+            if not explicit and source_prefix not in aliases:
+                return None
+            row["platform"] = target
+            row.setdefault("captured_at", collected_at)
+            row.setdefault("evidence_type", "official_keyword" if row.get("official_reference_only") else "native")
+            matched = candidate_matches_topic_keywords(row, keywords)
+            row.setdefault("lane_fit_score", 0.85 if matched else 0.0)
+            row.setdefault("semantic_fit_score", 0.8 if matched else 0.0)
+            row.setdefault("content_value_score", 0.7)
+            row.setdefault("actionability_score", 0.7)
+            row.setdefault("saturation_score", 0.2)
+            return row
 
         def official_candidate_matches(platform, candidate):
             hotspot = candidate.get("associated_hotspot") if isinstance(candidate.get("associated_hotspot"), dict) else {}
@@ -832,14 +858,14 @@ def execute(args):
             # Filter after ranking against the full bounded collection.  A
             # small pre-filter pool can be filled by irrelevant high-score
             # headlines and hide valid lane-specific candidates.
-            ranked = rank_trends(items, lane_profile, store.used_topics(lookback_days=7), 200, store.learned_ranking_context(args.profile))
-            candidates = [
-                candidate
-                for candidate in ranked
-                if (official_candidate_matches(platform, candidate) or candidate_matches_topic_keywords(candidate, keywords))
-                and candidate_matches_platform_language(platform, candidate)
-            ]
-            return prefer_platform_source_candidates(platform, candidates, report.get("sources", []))
+            preliminary = rank_trends(items, lane_profile, store.used_topics(lookback_days=7), 200, store.learned_ranking_context(args.profile))
+            bound = [bind_collected_candidate(platform, candidate, keywords) for candidate in preliminary]
+            bound = [candidate for candidate in bound if candidate and candidate_matches_platform_language(platform, candidate)]
+            ranked = rank_platform_candidates(
+                bound, platform, lane_keywords=keywords,
+                used_topics=store.used_topics(lookback_days=7), limit=200,
+            )
+            return prefer_platform_source_candidates(platform, ranked, report.get("sources", []))
 
         def candidate_filter(platform, candidate, slot):
             keywords = topic_keywords_for_slot(platform, slot, profile)
@@ -872,7 +898,8 @@ def execute(args):
                 "collected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000),
             })
-            return rows
+            bound = [bind_collected_candidate(platform, row, keywords) for row in rows]
+            return [row for row in bound if row is not None]
 
         prepared = build_due_tasks(
             slots,
@@ -891,6 +918,8 @@ def execute(args):
             trend_evidence_mode=(args.trend_evidence_mode or str(config.get("feature_flags", {}).get("real_platform_trend_evidence_mode", "shadow"))).casefold(),
             report_path=str(snapshot_path),
             reserved_topic_fingerprints=store.used_topics(lookback_days=7),
+            topic_reservation_path=data_dir / "topic-reservations.json",
+            reservation_owner="overnight-prepare",
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)

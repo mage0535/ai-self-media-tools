@@ -328,14 +328,29 @@ def _rank_score(value: Any) -> float:
 
 
 def _semantic_duplicate(left: str, right: str) -> bool:
-    left_tokens = {_semantic_token(token) for token in left.split()}
-    right_tokens = {_semantic_token(token) for token in str(right).split()}
-    return bool(left_tokens and right_tokens and len(left_tokens & right_tokens) / max(1, len(left_tokens | right_tokens)) >= 0.8)
+    left_tokens = _semantic_features(left)
+    right_tokens = _semantic_features(right)
+    if not left_tokens or not right_tokens:
+        return False
+    similarity = len(left_tokens & right_tokens) / max(1, len(left_tokens | right_tokens))
+    containment = len(left_tokens & right_tokens) / max(1, min(len(left_tokens), len(right_tokens)))
+    return similarity >= 0.72 or containment >= 0.86
 
 
 def _semantic_token(token: str) -> str:
     token = str(token).strip()
     return token[:-1] if len(token) > 4 and token.endswith("s") else token
+
+
+def _semantic_features(value: str) -> set[str]:
+    import re
+    text = normalize_topic(value)
+    features = {_semantic_token(token) for token in re.findall(r"[a-z0-9]+", text) if token}
+    for run in re.findall(r"[\u4e00-\u9fff]+", text):
+        features.update(run[index:index + 2] for index in range(max(0, len(run) - 1)))
+        if len(run) <= 4:
+            features.add(run)
+    return {feature for feature in features if feature}
 
 
 def build_platform_matrix(
