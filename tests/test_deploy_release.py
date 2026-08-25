@@ -39,6 +39,18 @@ def _git_source(root: Path) -> None:
     run = root / "scripts" / "run.py"
     run.write_text("print('release')\n", encoding="utf-8")
     run.chmod(0o755)
+    (root / "systemd").mkdir()
+    (root / "systemd" / "hermes-content-platform.service").write_text(
+        "[Service]\n"
+        "Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current\n"
+        "WorkingDirectory=%h/.ai-self-media-tools-current\n"
+        "ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run.py\n",
+        encoding="utf-8",
+    )
+    (root / "systemd" / "hermes-content-platform.timer").write_text(
+        "[Timer]\nOnCalendar=*-*-* 00:00:00\n",
+        encoding="utf-8",
+    )
     (root / "README.md").write_text("release\n", encoding="utf-8")
     subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
     subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
@@ -66,6 +78,7 @@ def _case(tmp_path: Path):
     (rollback / "scripts").mkdir(parents=True)
     (rollback / "README.md").write_text("release\n", encoding="utf-8")
     (rollback / "scripts" / "run.py").write_text("print('release')\n", encoding="utf-8")
+    shutil.copytree(source / "systemd", rollback / "systemd")
     validation = tmp_path / "rollback-validation"
     (validation / "scripts").mkdir(parents=True)
     (validation / "scripts" / "run.py").write_text("print('validation')\n", encoding="utf-8")
@@ -102,6 +115,7 @@ def _existing_release_case(tmp_path: Path):
         destination = release / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source / relative, destination)
+    shutil.copytree(source / "systemd", release / "systemd")
     current = tmp_path / ".ai-self-media-tools-current"
     current.symlink_to(release, target_is_directory=True)
     return source, config, report, rollback, releases, release, current
@@ -655,6 +669,25 @@ def test_rollback_cli_verifies_and_switches_audited_target(tmp_path: Path, monke
         data_root=data,
         release_name="cli-good",
     )
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    fake_systemctl = tmp_path / "fake-systemctl.py"
+    fake_systemctl.write_text(
+        "import sys\n"
+        "op = sys.argv[2]\n"
+        "if op == 'is-enabled': sys.exit(1)\n"
+        "if op == 'is-active': sys.exit(3)\n"
+        "if op == 'show':\n"
+        " print('ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run.py')\n"
+        " print('WorkingDirectory=%h/.ai-self-media-tools-current')\n"
+        " print('Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current')\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "systemctl.cmd").write_text(
+        f'@"{sys.executable}" "{fake_systemctl}" %*\n',
+        encoding="utf-8",
+    )
 
     result = subprocess.run(
         [
@@ -669,9 +702,11 @@ def test_rollback_cli_verifies_and_switches_audited_target(tmp_path: Path, monke
             str(data),
             "--secrets-root",
             str(tmp_path / "secrets"),
+            "--systemd-unit-dir",
+            "",
         ],
         cwd=Path(__file__).parents[1],
-        env={**os.environ, "CONTENT_PLATFORM_CODE_ROOT": str(source)},
+        env={**os.environ, "CONTENT_PLATFORM_CODE_ROOT": str(source), "PATH": str(fake_bin) + os.pathsep + os.environ["PATH"]},
         capture_output=True,
         text=True,
     )

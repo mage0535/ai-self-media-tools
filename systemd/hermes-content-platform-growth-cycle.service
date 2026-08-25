@@ -6,12 +6,12 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=HOME=%h
-Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools
+Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
 Environment=CONTENT_PLATFORM_BIN=%h/.local/bin/content-platform
 Environment=HERMES_PLATFORM_SCRAPER=%h/.hermes/scripts/platform_scraper.py
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/proxy.env
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
-ExecStart=/bin/bash %h/.ai-self-media-tools/scripts/run_growth_cycle.sh
-WorkingDirectory=%h/.ai-self-media-tools
+ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run_growth_cycle.sh
+WorkingDirectory=%h/.ai-self-media-tools-current
 MemoryMax=384M
 TimeoutStartSec=900
