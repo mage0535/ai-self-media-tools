@@ -35,22 +35,35 @@ def test_canary_matrix_is_serial_and_covers_required_platform_forms_and_language
     assert all(case["entrypoint_kind"] == "pipeline" for case in matrix)
 
 
-def test_hotspot_provenance_uses_one_canonical_record_and_rejects_tampering():
+def test_hotspot_provenance_uses_external_snapshot_and_rejects_tampering(tmp_path: Path):
     from scripts.task9_canary import (
-        _canary_brief,
+        _hotspot_source_hash,
+        _load_verified_hotspot,
         _validate_hotspot_provenance,
     )
 
     case = {"platform": "kuaishou", "delivery_policy": "dry_run"}
-    brief = _canary_brief({**case, "language": "zh", "content_form": "article"})
-    hotspot = dict(brief["associated_hotspot"])
+    snapshot = _write(tmp_path / "_inputs" / "hotspots" / "kuaishou.txt", "DeepSeek 官方创作灵感热点快照")
+    snapshot_rel = "hotspots/kuaishou.txt"
+    snapshot_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    provenance_hash = _hotspot_source_hash(
+        "kuaishou", "https://www.kuaishou.com/hot", "DeepSeek",
+        fetched_at="2026-08-25T00:00:00Z", status=200,
+        snapshot_path=snapshot_rel, snapshot_sha256=snapshot_hash,
+    )
+    _write(tmp_path / "_inputs" / "hotspots" / "kuaishou.json", json.dumps({
+        "platform": "kuaishou", "native_source_url": "https://www.kuaishou.com/hot",
+        "observed_title": "DeepSeek", "fetched_at": "2026-08-25T00:00:00Z", "status": 200,
+        "snapshot_path": snapshot_rel, "snapshot_sha256": snapshot_hash, "provenance_hash": provenance_hash,
+    }))
+    hotspot = _load_verified_hotspot(tmp_path, case)
     manifest = {
         "hotspot": hotspot,
         "source_evidence": [{
             "platform": "kuaishou",
             "url": hotspot["source_url"],
             "title": hotspot["observed_title"],
-            "source_hash": hotspot["source_hash"],
+            "provenance_hash": hotspot["provenance_hash"],
         }],
     }
 
@@ -61,6 +74,27 @@ def test_hotspot_provenance_uses_one_canonical_record_and_rejects_tampering():
     result = _validate_hotspot_provenance(case, tampered)
     assert result["passed"] is False
     assert "hotspot_source_provenance_not_independently_verified" in result["failures"]
+
+
+def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Path):
+    from scripts.task9_canary import _run_pipeline_case
+
+    calls = []
+
+    class PipelineBoundary:
+        def __init__(self, store, config):
+            pass
+
+        def create(self, *args, **kwargs):
+            calls.append("create")
+            raise AssertionError("pipeline create must not run")
+
+    case = {"platform": "kuaishou", "content_form": "article", "language": "zh", "delivery_policy": "dry_run", "order": 1}
+    result = _run_pipeline_case(case, tmp_path, pipeline_factory=PipelineBoundary)
+
+    assert result["passed"] is False
+    assert calls == []
+    assert "hotspot" in result["error"]
 
 
 def test_runtime_identity_requires_successful_cli_output_not_environment_fallback(monkeypatch):

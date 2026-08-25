@@ -92,17 +92,88 @@ def _json_hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, ensure_ascii=True, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _canonical_hotspot_provenance(platform: Any, source_url: Any, observed_title: Any) -> dict[str, str]:
-    """Return the one stable record used for hotspot hash and source matching."""
+def _canonical_hotspot_provenance(platform: Any, source_url: Any, observed_title: Any, *, fetched_at: Any = "", status: Any = "", snapshot_path: Any = "", snapshot_sha256: Any = "") -> dict[str, str]:
+    """Return the stable provenance record supplied by the external collector."""
     return {
         "platform": str(platform or "").strip(),
         "source_url": str(source_url or "").strip(),
         "observed_title": str(observed_title or "").strip(),
+        "fetched_at": str(fetched_at or "").strip(),
+        "status": str(status or "").strip(),
+        "snapshot_path": str(snapshot_path or "").strip(),
+        "snapshot_sha256": str(snapshot_sha256 or "").strip().lower(),
     }
 
 
-def _hotspot_source_hash(platform: Any, source_url: Any, observed_title: Any) -> str:
-    return _json_hash(_canonical_hotspot_provenance(platform, source_url, observed_title))
+def _hotspot_source_hash(platform: Any, source_url: Any, observed_title: Any, **kwargs: Any) -> str:
+    return _json_hash(_canonical_hotspot_provenance(platform, source_url, observed_title, **kwargs))
+
+
+def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
+    """Load collector output; never manufacture platform-native evidence."""
+    inputs_root = (root / "_inputs").resolve()
+    evidence_path = (inputs_root / "hotspots" / f"{case['platform']}.json").resolve()
+    try:
+        evidence_path.relative_to(inputs_root)
+    except ValueError as exc:
+        raise ValueError("hotspot evidence path escapes _inputs") from exc
+    record = _load_json(evidence_path)
+    platform = str(record.get("platform") or "").strip()
+    source_url = str(record.get("native_source_url") or record.get("source_url") or "").strip()
+    observed_title = str(record.get("observed_title") or "").strip()
+    fetched_at = str(record.get("fetched_at") or "").strip()
+    status = record.get("status", record.get("status_code"))
+    status_text = str(status or "").strip()
+    snapshot_rel = str(record.get("snapshot_path") or "").strip().replace("\\", "/")
+    snapshot = (inputs_root / snapshot_rel).resolve()
+    failures = []
+    if platform != str(case["platform"]):
+        failures.append("hotspot_platform_mismatch")
+    if not source_url.startswith(("https://", "http://")):
+        failures.append("hotspot_native_source_url_missing")
+    if not observed_title or not fetched_at:
+        failures.append("hotspot_observation_incomplete")
+    try:
+        status_ok = 200 <= int(status) < 300
+    except (TypeError, ValueError):
+        status_ok = False
+    if not status_ok:
+        failures.append("hotspot_fetch_status_not_2xx")
+    try:
+        snapshot.relative_to(inputs_root)
+    except ValueError:
+        failures.append("hotspot_snapshot_outside_inputs")
+    if not snapshot.is_file():
+        failures.append("hotspot_snapshot_missing")
+    actual_snapshot_hash = sha256_file(snapshot) if snapshot.is_file() else ""
+    declared_snapshot_hash = str(record.get("snapshot_sha256") or "").strip().lower()
+    if not declared_snapshot_hash or actual_snapshot_hash != declared_snapshot_hash:
+        failures.append("hotspot_snapshot_hash_mismatch")
+    snapshot_text = snapshot.read_text(encoding="utf-8", errors="replace") if snapshot.is_file() else ""
+    if observed_title and observed_title not in snapshot_text:
+        failures.append("hotspot_observed_title_missing_from_snapshot")
+    expected_provenance = _hotspot_source_hash(
+        platform, source_url, observed_title, fetched_at=fetched_at, status=status_text,
+        snapshot_path=snapshot_rel, snapshot_sha256=declared_snapshot_hash,
+    )
+    if str(record.get("provenance_hash") or "").strip().lower() != expected_provenance:
+        failures.append("hotspot_provenance_hash_mismatch")
+    if failures:
+        raise ValueError(";".join(sorted(set(failures))))
+    return {
+        "platform": platform,
+        "mode": "official_native",
+        "native_verified": True,
+        "source_url": source_url,
+        "observed_title": observed_title,
+        "fetched_at": fetched_at,
+        "status": int(status),
+        "snapshot_path": snapshot_rel,
+        "snapshot_sha256": declared_snapshot_hash,
+        "provenance_hash": expected_provenance,
+        "source_hash": expected_provenance,
+        "evidence_verified": True,
+    }
 
 
 def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
@@ -110,7 +181,11 @@ def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any])
     platform = str(case.get("platform") or "")
     source_url = str(hotspot.get("source_url") or "")
     observed_title = str(hotspot.get("observed_title") or "")
-    expected = _hotspot_source_hash(platform, source_url, observed_title) if source_url and observed_title else ""
+    expected = _hotspot_source_hash(
+        platform, source_url, observed_title,
+        fetched_at=hotspot.get("fetched_at"), status=hotspot.get("status"),
+        snapshot_path=hotspot.get("snapshot_path"), snapshot_sha256=hotspot.get("snapshot_sha256"),
+    ) if source_url and observed_title else ""
     failures: list[str] = []
     if hotspot.get("mode") != "official_native" or hotspot.get("platform") != platform:
         failures.append("hotspot_not_platform_native")
@@ -118,8 +193,12 @@ def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any])
         failures.append("hotspot_source_missing")
     if not observed_title.strip():
         failures.append("hotspot_observation_missing")
-    if str(hotspot.get("source_hash") or "") != expected:
+    if hotspot.get("evidence_verified") is not True:
+        failures.append("hotspot_external_evidence_not_verified")
+    if str(hotspot.get("provenance_hash") or hotspot.get("source_hash") or "") != expected:
         failures.append("hotspot_source_provenance_not_independently_verified")
+    if not hotspot.get("snapshot_path") or not hotspot.get("snapshot_sha256") or not hotspot.get("fetched_at"):
+        failures.append("hotspot_snapshot_evidence_missing")
     source_rows = manifest.get("source_evidence") if isinstance(manifest.get("source_evidence"), list) else []
     matching = [
         row for row in source_rows
@@ -127,14 +206,18 @@ def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any])
         and str(row.get("platform") or "") == platform
         and str(row.get("url") or "") == source_url
         and str(row.get("title") or "") == observed_title
-        and str(row.get("source_hash") or "") == expected
+        and str(row.get("provenance_hash") or row.get("source_hash") or "") == expected
     ]
     if not matching:
         failures.append("hotspot_source_provenance_not_independently_verified")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),
-        "canonical_record": _canonical_hotspot_provenance(platform, source_url, observed_title),
+        "canonical_record": _canonical_hotspot_provenance(
+            platform, source_url, observed_title,
+            fetched_at=hotspot.get("fetched_at"), status=hotspot.get("status"),
+            snapshot_path=hotspot.get("snapshot_path"), snapshot_sha256=hotspot.get("snapshot_sha256"),
+        ),
         "source_hash": expected,
         "matching_sources": len(matching),
     }
@@ -463,22 +546,10 @@ def _run_entrypoint(case: dict[str, Any], repo_root: Path) -> dict[str, Any]:
         return {"command": command, "returncode": None, "passed": False, "stdout": "", "stderr": str(exc)}
 
 
-def _canary_brief(case: dict[str, Any]) -> dict[str, Any]:
-    """Build bounded input for the real Pipeline; no artifact evidence is embedded."""
+def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, Any]:
+    """Build bounded input from externally verified evidence."""
     platform = str(case["platform"])
-    title = f"Task9 verified workflow for {platform}"
-    source_url = f"https://official.example.invalid/{platform}/canary"
-    observed_title = f"Official {platform} workflow signal"
-    provenance = _canonical_hotspot_provenance(platform, source_url, observed_title)
-    hotspot = {
-        "platform": platform,
-        "mode": "official_native",
-        "native_verified": True,
-        "source_url": source_url,
-        "observed_title": observed_title,
-        "observed_at": datetime.now(timezone.utc).isoformat(),
-        "source_hash": _json_hash(provenance),
-    }
+    title = str(hotspot["observed_title"])
     return {
         "platform": platform,
         "platforms": [platform],
@@ -497,15 +568,15 @@ def _canary_brief(case: dict[str, Any]) -> dict[str, Any]:
             "platform": platform,
             "native_verified": True,
             "official_signals": [hotspot],
-            "source_url": source_url,
-            "source_hash": hotspot["source_hash"],
+            "source_url": hotspot["source_url"],
+            "source_hash": hotspot["provenance_hash"],
         },
         "source_catalog": [{
             "platform": platform,
             "title": hotspot["observed_title"],
-            "url": source_url,
+            "url": hotspot["source_url"],
             "source": "official_native_canary",
-            "source_hash": hotspot["source_hash"],
+            "source_hash": hotspot["provenance_hash"],
         }],
         "selection_mode": "official_native_canary",
         "automated_workflow": True,
@@ -571,7 +642,7 @@ def _actual_files(root: Path) -> list[dict[str, Any]]:
     return records
 
 
-def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dict[str, Any], root: Path) -> dict[str, Any]:
+def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dict[str, Any], root: Path, verified_hotspot: dict[str, Any] | None = None) -> dict[str, Any]:
     job_id = str(result.get("id") or "")
     job = store.get_job(job_id) if job_id and hasattr(store, "get_job") else result
     draft_meta = job.get("draft_meta") if isinstance(job, dict) else {}
@@ -579,7 +650,7 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
     artifacts = _actual_files(root)
     source_rows = store.source_items(job_id) if job_id and hasattr(store, "source_items") else []
     source_rows = [dict(row) for row in source_rows if hasattr(row, "keys")]
-    hotspot = draft_meta.get("associated_hotspot") or draft_meta.get("hotspot")
+    hotspot = verified_hotspot or draft_meta.get("associated_hotspot") or draft_meta.get("hotspot")
     if not isinstance(hotspot, dict) and source_rows:
         first = source_rows[0]
         hotspot = {"platform": first.get("platform"), "source_url": first.get("url"), "observed_title": first.get("title"), "mode": "official_native"}
@@ -609,6 +680,7 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
         "artifacts": artifacts,
         "capabilities": capabilities,
         "hotspot": hotspot if isinstance(hotspot, dict) else {},
+        "hotspot_evidence": verified_hotspot if isinstance(verified_hotspot, dict) else {},
         "delivery_policy": {
             "expected": case["delivery_policy"],
             "state": delivery.get("status", ""),
@@ -622,10 +694,15 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
     return manifest
 
 
-def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=None, store_factory=None) -> dict[str, Any]:
+def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=None, store_factory=None, hotspot_root: Path | None = None) -> dict[str, Any]:
     from unittest.mock import patch
 
     root.mkdir(parents=True, exist_ok=True)
+    try:
+        verified_hotspot = _load_verified_hotspot(hotspot_root or root, case)
+    except ValueError as exc:
+        (root / "hotspot_preflight.json").write_text(json.dumps({"passed": False, "error": str(exc)}, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        return {"passed": False, "pipeline_evidence": {"create_called": False, "run_called": False, "serial_index": case["order"], "job_id": ""}, "job": {}, "manifest": {}, "error": str(exc)}
     store = (store_factory or Store)(root / "state.db")
     config = {
         "data_dir": str(root),
@@ -636,7 +713,7 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
         "delivery": {"auto_stage_review_required": False},
     }
     pipeline = (pipeline_factory or Pipeline)(store, config)
-    brief = _canary_brief(case)
+    brief = _canary_brief(case, verified_hotspot)
     topic = brief["content_blueprint"]["topic"]
     evidence = {"create_called": False, "run_called": False, "stage_drafts_called": False, "serial_index": case["order"], "job_id": ""}
     try:
@@ -652,11 +729,11 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
                 result = pipeline.stage_drafts(job_id)
                 evidence["stage_drafts_called"] = True
         result = pipeline.status(job_id) if hasattr(pipeline, "status") else result
-        manifest = _materialize_artifact_manifest(case, store, result, root)
+        manifest = _materialize_artifact_manifest(case, store, result, root, verified_hotspot)
         return {"passed": True, "pipeline_evidence": evidence, "job": result, "manifest": manifest}
     except Exception as exc:
         job = store.get_job(evidence["job_id"]) if evidence["job_id"] and hasattr(store, "get_job") else {}
-        manifest = _materialize_artifact_manifest(case, store, job, root) if job else {}
+        manifest = _materialize_artifact_manifest(case, store, job, root, verified_hotspot) if job else {}
         return {"passed": False, "pipeline_evidence": evidence, "job": job, "manifest": manifest, "error": f"{type(exc).__name__}: {exc}"}
 
 
@@ -724,16 +801,17 @@ def _run_model_matrix(role: str, model: dict[str, Any], matrix: list[dict[str, A
     if selection.get("available") is not True:
         reason = str(selection.get("reason") or "model_selection_unavailable")
         return {"status": "dual_model_pending" if role == "weak" else "blocked", "provider": provider, "model": model_id, "gate_passed": False, "executed_cases": 0, "case_results": _blocked_model_matrix(matrix, reason), "reason": reason}
-    previous = {key: os.environ.get(key) for key in ("HERMES_PROVIDER", "HERMES_MODEL", "HERMES_CANARY_SESSION")}
+    previous = {key: os.environ.get(key) for key in ("HERMES_PROVIDER", "HERMES_MODEL", "HERMES_CANARY_SESSION", "HERMES_CANARY_SELECTOR_CAPABILITY")}
     os.environ["HERMES_PROVIDER"] = provider
     os.environ["HERMES_MODEL"] = model_id
+    os.environ["HERMES_CANARY_SELECTOR_CAPABILITY"] = "verified"
     canary_session = f"task9-{role}-{uuid.uuid4().hex}"
     os.environ["HERMES_CANARY_SESSION"] = canary_session
     results = []
     try:
         for case in matrix:
             artifact_dir = root / "_models" / role / case["platform"]
-            result = _run_pipeline_case(case, artifact_dir, pipeline_factory=pipeline_factory, store_factory=store_factory)
+            result = _run_pipeline_case(case, artifact_dir, pipeline_factory=pipeline_factory, store_factory=store_factory, hotspot_root=root)
             probe = probe_artifacts(case, artifact_dir)
             pipeline_evidence = result.get("pipeline_evidence") or {}
             generation_evidence = _generation_attempt_evidence(artifact_dir, model)
@@ -856,13 +934,18 @@ def run_canaries(
         failures = [value for value in str(model_case.get("failure_reason") or "").split(";") if value]
         pipeline_evidence = model_case.get("pipeline_evidence") if isinstance(model_case.get("pipeline_evidence"), dict) else {}
         probes = model_case.get("probes") if isinstance(model_case.get("probes"), dict) else {}
+        try:
+            input_hotspot = _load_verified_hotspot(root, case)
+            brief_hash = _json_hash(_canary_brief(case, input_hotspot))
+        except ValueError:
+            brief_hash = ""
         cases.append({
             **case,
             "command": {"entrypoint": "content_platform.pipeline.Pipeline.create+run", "mode": "serial", "model_role": "active"},
             "git_commit": _git_commit(repo),
             "pipeline_evidence": pipeline_evidence,
             "job_evidence": {"job_id": model_case.get("job_id", ""), "state": model_case.get("state", "")},
-            "input_hashes": {"case": _json_hash(case), "brief": _json_hash(_canary_brief(case))},
+            "input_hashes": {"case": _json_hash(case), "brief": brief_hash},
             "output_hashes": model_case.get("output_hashes", {}),
             "capability_evidence": probes.get("capabilities", {}),
             "probes": probes,

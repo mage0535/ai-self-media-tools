@@ -955,6 +955,14 @@ class DraftGenerator:
             raise ValueError("Hermes prompt exceeds the generate-stage UTF-8 byte budget")
         command = [self.config.get("hermes_command", "hermes")]
         command.extend(["-z", prompt, "--cli"])
+        canary_session = os.environ.get("HERMES_CANARY_SESSION", "").strip()
+        if canary_session:
+            provider = os.environ.get("HERMES_PROVIDER", "").strip()
+            model = os.environ.get("HERMES_MODEL", "").strip()
+            selector_capability = os.environ.get("HERMES_CANARY_SELECTOR_CAPABILITY", "").strip()
+            if not provider or not model or selector_capability != "verified":
+                raise RuntimeError("Hermes canary model selectors are not verified")
+            command.extend(["--provider", provider, "--model", model])
         clock = self.config.get("clock", time.time)
         started = clock()
         stdout_file = tempfile.TemporaryFile(mode="w+b")
@@ -1237,10 +1245,28 @@ class DraftGenerator:
                 rows = json.loads(target.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 rows = []
-        rows.append({key: value for key, value in payload.items() if key != "prompt"})
+        identity = self._generation_identity()
+        row = {key: value for key, value in payload.items() if key != "prompt"}
+        row.update(identity)
+        rows.append(row)
         temp = target.with_suffix(target.suffix + ".tmp")
         temp.write_text(json.dumps(rows, ensure_ascii=False, sort_keys=True), encoding="utf-8")
         os.replace(temp, target)
+
+    def _generation_identity(self):
+        """Record observed canary identity without changing normal model routing."""
+        canary_session = os.environ.get("HERMES_CANARY_SESSION", "").strip()
+        if canary_session:
+            return {
+                "provider": os.environ.get("HERMES_PROVIDER", "").strip(),
+                "model": os.environ.get("HERMES_MODEL", "").strip(),
+                "session_id": canary_session,
+            }
+        return {
+            "provider": str(self.config.get("provider") or ""),
+            "model": str(self.config.get("model") or os.environ.get("CONTENT_PLATFORM_MODEL", "") or ""),
+            "session_id": str(self.config.get("session_id") or ""),
+        }
 
     def _fallback(self, topic, brief, context):
         audience = brief.get("audience", "builders")
