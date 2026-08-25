@@ -6,8 +6,23 @@ from pathlib import Path
 
 import pytest
 
-from scripts.deploy_release import _tracked_modes, deploy_release, init_signing_key, rollback_release
+from scripts.deploy_release import _tracked_modes, deploy_release, deploy_release as _deploy_release, init_signing_key, rollback_release
 from scripts.runtime_release_audit import ReleaseAuditError, audit_release, verify_metadata, write_metadata
+
+
+def _fixture_evidence_runner(argv, cwd, stdout_path):
+    if argv[2] == "pytest":
+        junit = Path(next(item.split("=", 1)[1] for item in argv if item.startswith("--junitxml=")))
+        junit.parent.mkdir(parents=True, exist_ok=True)
+        junit.write_text("<testsuite tests='900' failures='0' errors='0'/>", encoding="utf-8")
+    else:
+        stdout_path.write_text(json.dumps({"ok": True, "issues": []}), encoding="utf-8")
+    return type("Result", (), {"returncode": 0, "stdout": ""})()
+
+
+def deploy_release(**kwargs):
+    kwargs.setdefault("evidence_runner", _fixture_evidence_runner)
+    return _deploy_release(**kwargs)
 
 
 def _git_source(root: Path) -> None:
@@ -113,6 +128,43 @@ def test_deploy_builds_attested_readonly_release_and_switches_current(tmp_path: 
     if os.name != "nt":
         assert (release / "scripts" / "run.py").stat().st_mode & 0o777 == 0o555
     assert (release / "README.md").stat().st_mode & 0o777 == 0o444
+
+
+def test_deploy_runs_source_evidence_commands_and_binds_manifest(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    calls = []
+
+    def runner(argv, cwd, stdout_path):
+        calls.append((list(argv), Path(cwd), Path(stdout_path)))
+        if argv[2] == "pytest":
+            junit = Path(next(item.split("=", 1)[1] for item in argv if item.startswith("--junitxml=")))
+            junit.parent.mkdir(parents=True, exist_ok=True)
+            junit.write_text("<testsuite tests='900' failures='0' errors='0'/>", encoding="utf-8")
+        else:
+            stdout_path.write_text(json.dumps({"ok": True, "issues": []}), encoding="utf-8")
+        return type("Result", (), {"returncode": 0, "stdout": ""})()
+
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    result = _deploy_release(
+        source_root=source,
+        releases_root=tmp_path / "releases",
+        current_link=tmp_path / ".ai-self-media-tools-current",
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=tmp_path / "data",
+        secrets_root=tmp_path / "secrets",
+        evidence_runner=runner,
+        release_name="evidence",
+    )
+
+    assert [call[0][1:3] for call in calls] == [["-m", "pytest"], ["-m", "content_platform"]]
+    manifest = tmp_path / "data" / "release-evidence" / "evidence" / "evidence_manifest.json"
+    saved = json.loads(manifest.read_text(encoding="utf-8"))
+    assert saved["commit"]
+    assert all(item["returncode"] == 0 and item["sha256"] for item in saved["evidence"])
+    metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
+    assert metadata["evidence_manifest_hash"]
 
 
 def test_deploy_requires_successful_junit(tmp_path: Path, monkeypatch):
@@ -477,7 +529,7 @@ def test_rollback_a_survives_source_b_and_rejects_all_a_tampering(tmp_path: Path
     release_a.chmod(0o755)
     (release_a / "README.md").chmod(0o644)
     (release_a / "README.md").write_text("release A tampered\n", encoding="utf-8")
-    with pytest.raises(ReleaseAuditError, match="attestation|hash|release"):
+    with pytest.raises(ReleaseAuditError, match="attestation|hash|release|evidence"):
         verify_metadata(metadata_a, current_release_root=release_a)
     (release_a / "README.md").write_bytes(original_readme)
 
@@ -485,7 +537,7 @@ def test_rollback_a_survives_source_b_and_rejects_all_a_tampering(tmp_path: Path
     tampered_metadata["commit"] = "0" * 40
     metadata_a.chmod(0o644)
     metadata_a.write_text(json.dumps(tampered_metadata), encoding="utf-8")
-    with pytest.raises(ReleaseAuditError, match="attestation|hash|release"):
+    with pytest.raises(ReleaseAuditError, match="attestation|hash|release|evidence"):
         verify_metadata(metadata_a, current_release_root=release_a)
     metadata_a.write_bytes(original_metadata)
 

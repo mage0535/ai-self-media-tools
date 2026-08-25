@@ -14,7 +14,7 @@ if ! [[ -n "$release_root" && -d "$release_root" ]]; then
   exit 1
 fi
 data_root="${CONTENT_PLATFORM_DATA_DIR:-$(dirname -- "$release_root")/data}"
-secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$release_root/secrets}"
+secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$(dirname -- "$release_root")/secrets}"
 config_path="${CONTENT_PLATFORM_CONFIG:-$release_root/config.json}"
 metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$release_root/release-metadata.json}"
 attestation_path="${CONTENT_PLATFORM_RELEASE_ATTESTATION:-$data_root/release-attestations/$(basename -- "$release_root").sha256}"

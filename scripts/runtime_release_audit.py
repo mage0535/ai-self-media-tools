@@ -8,6 +8,7 @@ import os
 import py_compile
 import re
 import secrets
+import sys
 import shutil
 import subprocess
 import tempfile
@@ -134,6 +135,28 @@ def _assert_project_audit(path: Path) -> None:
         raise ReleaseAuditError("project audit report must have ok=true and issues=[]")
 
 
+def _assert_evidence_manifest(path: Path, source: Path, commit: str, junit: Path, project: Path) -> None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        records = {item["kind"]: item for item in payload["evidence"]}
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ReleaseAuditError("evidence manifest is invalid") from exc
+    if payload.get("commit") != commit or set(records) != {"junit", "project_audit"}:
+        raise ReleaseAuditError("evidence manifest commit or kinds mismatch")
+    expected = {
+        "junit": ([sys.executable, "-m", "pytest", "-q", f"--junitxml={junit}"], junit),
+        "project_audit": ([sys.executable, "-m", "content_platform", "project-audit"], project),
+    }
+    for kind, (argv, output) in expected.items():
+        record = records[kind]
+        if record.get("argv") != argv or record.get("cwd") != str(source) or record.get("returncode") != 0:
+            raise ReleaseAuditError(f"evidence manifest {kind} command mismatch")
+        if record.get("path") != str(output) or not output.is_file() or record.get("sha256") != _sha256(output):
+            raise ReleaseAuditError(f"evidence manifest {kind} hash mismatch")
+        if not record.get("started_at") or not record.get("finished_at"):
+            raise ReleaseAuditError(f"evidence manifest {kind} timestamps missing")
+
+
 def _tracked_hashes(source_root: Path) -> dict[str, str]:
     output = _git(source_root, "ls-files", "-z")
     paths = [Path(item) for item in output.split("\0") if item]
@@ -248,6 +271,7 @@ def audit_release(
     signing_key_path: Path | str | None = None,
     trusted_secrets_root: Path | str | None = None,
     project_audit_report_path: Path | str | None = None,
+    evidence_manifest_path: Path | str | None = None,
     min_tests: int = 900,
 ) -> dict:
     if config_path is None or test_report_path is None or rollback_target is None:
@@ -266,6 +290,8 @@ def audit_release(
         _validate_raw_path(trusted_secrets_root, "trusted_secrets_root")
     if project_audit_report_path is not None:
         _validate_raw_path(project_audit_report_path, "project_audit_report_path")
+    if evidence_manifest_path is not None:
+        _validate_raw_path(evidence_manifest_path, "evidence_manifest_path")
     source = _resolve(source_root)
     release = _resolve(release_root)
     script_root = _resolve(configured_script_root)
@@ -276,6 +302,7 @@ def audit_release(
     signing_key = _resolve(signing_key_path) if signing_key_path is not None else _default_signing_key_path(release)
     trusted_secrets = _resolve(trusted_secrets_root) if trusted_secrets_root is not None else signing_key.parent
     project_audit_report = _resolve(project_audit_report_path) if project_audit_report_path is not None else None
+    evidence_manifest = _resolve(evidence_manifest_path) if evidence_manifest_path is not None else None
     expected_script_root = (release / "scripts").resolve()
     if not source.is_dir() or not release.is_dir() or script_root != expected_script_root:
         raise ReleaseAuditError("source, release, and configured script roots do not match")
@@ -311,6 +338,9 @@ def audit_release(
         raise ReleaseAuditError("signing key must equal trusted_secrets_root/release-signing.key")
     _prepare_signing_key(signing_key)
     commit = _git(source, "rev-parse", "HEAD").strip()
+    if evidence_manifest is not None:
+        _require_file(evidence_manifest, "evidence_manifest_path")
+        _assert_evidence_manifest(evidence_manifest, source, commit, test_report, project_audit_report)
     source_hashes = _tracked_hashes(source)
     _assert_release_has_no_symlinks(release)
     _assert_release_matches(release, source_hashes)
@@ -338,6 +368,9 @@ def audit_release(
     if project_audit_report is not None:
         metadata["project_audit_report"] = str(project_audit_report)
         metadata["project_audit_report_hash"] = _sha256(project_audit_report)
+    if evidence_manifest is not None:
+        metadata["evidence_manifest"] = str(evidence_manifest)
+        metadata["evidence_manifest_hash"] = _sha256(evidence_manifest)
     return metadata
 
 
@@ -512,6 +545,13 @@ def verify_metadata(
         _assert_project_audit(project_path)
         if _sha256(project_path) != metadata.get("project_audit_report_hash"):
             raise ReleaseAuditError("project audit report hash mismatch")
+    evidence_manifest = metadata.get("evidence_manifest")
+    if evidence_manifest:
+        manifest_path = _resolve(evidence_manifest)
+        _require_file(manifest_path, "evidence manifest")
+        _assert_evidence_manifest(manifest_path, Path(metadata.get("source_root", "")), metadata["commit"], test_report, project_path)
+        if _sha256(manifest_path) != metadata.get("evidence_manifest_hash"):
+            raise ReleaseAuditError("evidence manifest hash mismatch")
     _validate_rollback_target(release, rollback)
     _require_file(attestation, "release attestation")
     _require_file(signing_key, "release signing key")
