@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from scripts.deploy_release import _tracked_modes, deploy_release, rollback_release
+from scripts.runtime_release_audit import ReleaseAuditError, verify_metadata
 
 
 def _git_source(root: Path) -> None:
@@ -165,3 +166,69 @@ def test_rollback_cli_verifies_and_switches_audited_target(tmp_path: Path, monke
 
     assert result.returncode == 0, result.stderr
     assert current.resolve() == Path(deployed["release_root"]).resolve()
+
+
+def test_rollback_a_survives_source_b_and_rejects_all_a_tampering(tmp_path: Path, monkeypatch):
+    source, config, report, rollback = _case(tmp_path)
+    releases = tmp_path / "releases"
+    data = tmp_path / "data"
+    current = tmp_path / ".ai-self-media-tools-current"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    deployed_a = deploy_release(
+        source_root=source,
+        releases_root=releases,
+        current_link=current,
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=data,
+        release_name="release-a",
+    )
+    release_a = Path(deployed_a["release_root"])
+    metadata_a = release_a / "release-metadata.json"
+    attestation_a = data / "release-attestations" / "release-a.sha256"
+    original_metadata = metadata_a.read_bytes()
+    original_readme = (release_a / "README.md").read_bytes()
+
+    (source / "README.md").write_text("release B\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=source, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "release-b"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+    deploy_release(
+        source_root=source,
+        releases_root=releases,
+        current_link=current,
+        config_path=config,
+        test_report_path=report,
+        rollback_target=rollback,
+        data_root=data,
+        release_name="release-b",
+    )
+
+    source.rename(tmp_path / "source-no-longer-available")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(release_a))
+    assert verify_metadata(metadata_a, current_release_root=release_a)["commit"]
+    assert rollback_release(target_release=release_a, current_link=current, data_root=data)["ok"] is True
+
+    release_a.chmod(0o755)
+    (release_a / "README.md").chmod(0o644)
+    (release_a / "README.md").write_text("release A tampered\n", encoding="utf-8")
+    with pytest.raises(ReleaseAuditError, match="attestation|hash|release"):
+        verify_metadata(metadata_a, current_release_root=release_a)
+    (release_a / "README.md").write_bytes(original_readme)
+
+    tampered_metadata = json.loads(original_metadata.decode("utf-8"))
+    tampered_metadata["commit"] = "0" * 40
+    metadata_a.chmod(0o644)
+    metadata_a.write_text(json.dumps(tampered_metadata), encoding="utf-8")
+    with pytest.raises(ReleaseAuditError, match="attestation|hash|release"):
+        verify_metadata(metadata_a, current_release_root=release_a)
+    metadata_a.write_bytes(original_metadata)
+
+    attestation_a.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(ReleaseAuditError, match="attestation|hash|mismatch"):
+        verify_metadata(metadata_a, current_release_root=release_a)

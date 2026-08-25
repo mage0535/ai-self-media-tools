@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import py_compile
+import re
 import shutil
 import subprocess
 import tempfile
@@ -98,7 +99,7 @@ def _assert_clean(source_root: Path) -> None:
         raise ReleaseAuditError("source root is dirty or has uncommitted changes")
 
 
-def _assert_release_matches(source_root: Path, release_root: Path, source_hashes: dict[str, str]) -> None:
+def _assert_release_matches(release_root: Path, source_hashes: dict[str, str]) -> None:
     for relative, expected in source_hashes.items():
         candidate = release_root / relative
         try:
@@ -239,7 +240,7 @@ def audit_release(
     commit = _git(source, "rev-parse", "HEAD").strip()
     source_hashes = _tracked_hashes(source)
     _assert_release_has_no_symlinks(release)
-    _assert_release_matches(source, release, source_hashes)
+    _assert_release_matches(release, source_hashes)
     _assert_release_has_no_untracked_files(release, source_hashes)
     _validate_rollback_target(release, rollback)
     metadata = {
@@ -312,7 +313,6 @@ def verify_metadata(
     try:
         raw_paths = {
             "release": metadata["release_root"],
-            "source": metadata["source_root"],
             "script_root": metadata["configured_script_root"],
             "config": metadata["config_path"],
             "test_report": metadata["test_report"],
@@ -332,7 +332,6 @@ def verify_metadata(
             raise ReleaseAuditError(f"metadata {name} path is invalid")
         _validate_raw_path(raw_path, f"metadata {name}")
     release = _resolve(raw_paths["release"])
-    source = _resolve(raw_paths["source"])
     script_root = _resolve(raw_paths["script_root"])
     config = _resolve(raw_paths["config"])
     test_report = _resolve(raw_paths["test_report"])
@@ -359,22 +358,20 @@ def verify_metadata(
         if _resolve(current_release_root) != release:
             raise ReleaseAuditError("current release root does not match metadata")
 
-    if not isinstance(source_hashes, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in source_hashes.items()):
+    if not isinstance(source_hashes, dict) or not all(
+        isinstance(key, str) and isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+        for key, value in source_hashes.items()
+    ):
         raise ReleaseAuditError("release metadata source hashes are invalid")
-    if not isinstance(expected_commit, str) or not expected_commit:
+    if not isinstance(expected_commit, str) or not expected_commit.strip() or re.search(r"\s", expected_commit):
         raise ReleaseAuditError("release metadata commit is invalid")
-    _assert_clean(source)
-    current_commit = _git(source, "rev-parse", "HEAD").strip()
-    if current_commit != expected_commit:
-        raise ReleaseAuditError("metadata commit does not match source HEAD")
-    current_source_hashes = _tracked_hashes(source)
-    current_source_hash = hashlib.sha256(
-        "\n".join(f"{name}:{digest}" for name, digest in sorted(current_source_hashes.items())).encode()
+    source_hash = hashlib.sha256(
+        "\n".join(f"{name}:{digest}" for name, digest in sorted(source_hashes.items())).encode()
     ).hexdigest()
-    if current_source_hash != expected_source_hash or current_source_hashes != source_hashes:
-        raise ReleaseAuditError("source hash mismatch")
+    if source_hash != expected_source_hash:
+        raise ReleaseAuditError("metadata source hash mismatch")
     _assert_release_has_no_symlinks(release)
-    _assert_release_matches(source, release, source_hashes)
+    _assert_release_matches(release, source_hashes)
     _assert_release_has_no_untracked_files(release, source_hashes)
     if not config.is_file() or _sha256(config) != expected_config_hash:
         raise ReleaseAuditError("config hash mismatch")

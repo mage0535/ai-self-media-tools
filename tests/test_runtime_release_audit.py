@@ -606,7 +606,7 @@ def test_verify_metadata_rejects_tampered_commit(tmp_path: Path, monkeypatch):
     tampered["commit"] = "0" * 40
     destination.write_text(json.dumps(tampered), encoding="utf-8")
 
-    with pytest.raises(ReleaseAuditError, match="commit|HEAD|source"):
+    with pytest.raises(ReleaseAuditError, match="commit|HEAD|source|attestation|hash"):
         verify_metadata(destination)
 
 
