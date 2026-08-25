@@ -206,7 +206,7 @@ def _run_real_evidence(argv, cwd: Path, stdout_path: Path):
     return result
 
 
-def _generate_evidence(source: Path, data: Path, name: str, runner=None) -> dict:
+def _generate_evidence(source: Path, data: Path, name: str, commit: str, runner=None) -> dict:
     evidence_root = data / "release-evidence" / name
     if evidence_root.exists():
         raise ReleaseAuditError(f"release evidence already exists: {evidence_root}")
@@ -232,7 +232,9 @@ def _generate_evidence(source: Path, data: Path, name: str, runner=None) -> dict
             "path": str(output_path),
             "sha256": _sha256(output_path) if output_path.is_file() else "",
         })
-    manifest = {"commit": _git(source, "rev-parse", "HEAD").strip(), "evidence": records}
+        if _git(source, "status", "--porcelain").strip():
+            raise ReleaseAuditError("staging worktree is dirty or has uncommitted changes")
+    manifest = {"commit": commit, "evidence": records}
     manifest_path = evidence_root / "evidence_manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     if any(record["returncode"] != 0 or not record["sha256"] for record in records):
@@ -283,10 +285,6 @@ def deploy_release(
         commit = _git(source, "rev-parse", "HEAD").strip()
         rollback_rehearsal = _signed_rollback_dry_run(rollback, signing_key_path, secrets)
         name = release_name or commit[:12]
-        evidence = _generate_evidence(source, data, name, runner=evidence_runner)
-        report = evidence["junit"]
-        project_audit_report_path = evidence["project_audit"]
-        evidence_manifest_path = evidence["manifest"]
         if not name or name in {".", ".."} or Path(name).name != name:
             raise ReleaseAuditError("release_name must be a single non-empty path component")
         release = releases / name
@@ -294,10 +292,18 @@ def deploy_release(
             raise ReleaseAuditError(f"release already exists: {release}")
         releases.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=str(releases)))
+        staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
         try:
-            tracked_modes = _tracked_modes(source)
-            for relative in _tracked_paths(source):
-                source_path = source / relative
+            temporary.rmdir()
+            _git(source, "worktree", "add", "--detach", str(staging), commit)
+            evidence = _generate_evidence(staging, data, name, commit, runner=evidence_runner)
+            report = evidence["junit"]
+            project_audit_report_path = evidence["project_audit"]
+            evidence_manifest_path = evidence["manifest"]
+            tracked_paths = _tracked_paths(staging)
+            tracked_modes = _tracked_modes(staging)
+            for relative in tracked_paths:
+                source_path = staging / relative
                 if source_path.is_symlink() or not source_path.is_file():
                     raise ReleaseAuditError(f"tracked source file is not a regular file: {relative}")
                 destination = temporary / relative
@@ -316,7 +322,7 @@ def deploy_release(
             try:
                 _validate_runtime_config(config, release, data, secrets)
                 metadata = audit_release(
-                    source_root=source,
+                    source_root=staging,
                     release_root=release,
                     configured_script_root=release / "scripts",
                     config_path=config,
@@ -327,6 +333,7 @@ def deploy_release(
                     trusted_secrets_root=secrets,
                     project_audit_report_path=project_audit_report_path,
                     evidence_manifest_path=evidence_manifest_path,
+                    expected_commit=commit,
                     min_tests=min_tests,
                 )
                 metadata["rollback_rehearsal"] = rollback_rehearsal
@@ -361,6 +368,9 @@ def deploy_release(
         finally:
             if temporary is not None and temporary.exists():
                 shutil.rmtree(temporary)
+            if staging.exists() or staging.is_symlink():
+                _git(source, "worktree", "remove", "--force", str(staging))
+            _git(source, "worktree", "prune")
 
 
 def rollback_release(

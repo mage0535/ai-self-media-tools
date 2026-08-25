@@ -272,6 +272,7 @@ def audit_release(
     trusted_secrets_root: Path | str | None = None,
     project_audit_report_path: Path | str | None = None,
     evidence_manifest_path: Path | str | None = None,
+    expected_commit: str | None = None,
     min_tests: int = 900,
 ) -> dict:
     if config_path is None or test_report_path is None or rollback_target is None:
@@ -337,7 +338,7 @@ def audit_release(
     if signing_key.parent != trusted_secrets or signing_key.name != "release-signing.key":
         raise ReleaseAuditError("signing key must equal trusted_secrets_root/release-signing.key")
     _prepare_signing_key(signing_key)
-    commit = _git(source, "rev-parse", "HEAD").strip()
+    commit = expected_commit if expected_commit is not None else _git(source, "rev-parse", "HEAD").strip()
     if evidence_manifest is not None:
         _require_file(evidence_manifest, "evidence_manifest_path")
         _assert_evidence_manifest(evidence_manifest, source, commit, test_report, project_audit_report)
