@@ -215,7 +215,7 @@ def _read_setting(name, env_file, default=""):
 class JuejinPublisher:
     """掘金文章发布器 — 基于 API，支持 Markdown + 封面."""
     def __init__(self, account="main", cookie_dir=str(Path.home() / "social-auto-upload" / "cookies"),
-                 proxy="socks5://127.0.0.1:1080", save_as_draft=True):
+                 proxy="", save_as_draft=True):
         self.account = account
         self.cookie_dir = cookie_dir
         self.proxy = proxy
@@ -268,6 +268,10 @@ class JuejinPublisher:
             return sources
         _, _, storage = self._cookie_and_csrf()
         if not storage:
+            self._last_upload_error = "juejin login state missing"
+            return []
+        if not self.proxy:
+            self._last_upload_error = "CN proxy missing for Juejin upload"
             return []
         try:
             from playwright.sync_api import sync_playwright
@@ -290,7 +294,8 @@ class JuejinPublisher:
                   self._last_upload_error = "juejin editor login expired"
                   return []
               editor = page.locator(".CodeMirror")
-              upload = page.locator('.bytemd-toolbar-icon[bytemd-tippy-path="5"]').first
+              candidates = page.locator('.bytemd-toolbar-icon[bytemd-tippy-path="5"]')
+              upload = candidates.first if candidates.count() else page.locator(".bytemd-toolbar-icon").nth(5)
               for source in sources:
                 if _juejin_cdn_url(source):
                     urls.append(source)

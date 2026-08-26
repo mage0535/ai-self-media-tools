@@ -1533,14 +1533,14 @@ def build_publisher(platform, config, data_dir):
         return JuejinPublisher(
             account=cfg.get("account", "main"),
             cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
-            proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
+            proxy=cfg.get("proxy") or os.environ.get("CN_PROXY", ""),
             save_as_draft=cfg.get("save_as_draft", True),
         )
     if kind == "zhihu-playwright":
         return ZhihuPublisher(
             account=cfg.get("account", "main"),
             cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
-            proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
+            proxy=cfg.get("proxy") or os.environ.get("CN_PROXY", ""),
             headless=cfg.get("headless", True),
             save_as_draft=cfg.get("save_as_draft", True),
         )
