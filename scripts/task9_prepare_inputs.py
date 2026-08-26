@@ -29,7 +29,7 @@ def _lane_words(platform: str) -> tuple[str, ...]:
 def _fit(title: str, platform: str) -> float:
     text = str(title or "").casefold()
     hits = sum(1 for word in _lane_words(platform) if word in text)
-    return min(1.0, hits / 2) if hits else 0.0
+    return min(1.0, 0.55 + (hits - 1) * 0.2) if hits else 0.0
 
 
 def _latest_matrix(root: Path) -> Path | None:
@@ -75,7 +75,12 @@ def prepare_inputs(data_root: Path, artifact_root: Path) -> dict[str, Any]:
             if row.get("status") in VERIFIED_OFFICIAL_STATUSES:
                 for signal in row.get("signals") or []:
                     score = _fit(str(signal), platform)
-                    evidence_type = "native" if row.get("native_verified") is True else "official_activity"
+                    signal_type = str(row.get("signal_type") or "").casefold()
+                    evidence_type = (
+                        "native" if row.get("native_verified") is True
+                        else "official_keyword" if any(word in signal_type for word in ("keyword", "query", "search"))
+                        else "official_activity"
+                    )
                     mode = "auto_browser" if "auto_browser" in support.get("allowed_association_modes", []) else "manual_handoff"
                     if score >= 0.55 and evidence_type in support.get("allowed_evidence_types", []):
                         selected = {
