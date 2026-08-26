@@ -9,6 +9,13 @@ from typing import Any
 CONTINUATION = re.compile(r"(?:next (?:episode|part|post)|to be continued|下一[期集篇]|后续.*(?:讲|看|分享))", re.I)
 
 
+def remove_unplanned_continuation(body: str) -> str:
+    """Remove unsupported future-content promises while preserving this work."""
+    parts = re.split(r"(?<=[。！？.!?])|\n+", str(body or ""))
+    kept = [part.strip() for part in parts if part.strip() and not CONTINUATION.search(part)]
+    return "\n".join(kept).strip()
+
+
 def build_content_depth_plan(
     title: str,
     body: str,
