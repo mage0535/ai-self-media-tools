@@ -70,6 +70,7 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
             "target_audience": current_brief.get("target_audience") or "general",
             "platform": current_brief.get("platform") or profile.get("platform") or "",
             "compiled_strategy": current_brief.get("compiled_strategy")
+            or (current_brief.get("strategy") if isinstance(current_brief.get("strategy"), dict) and current_brief.get("strategy", {}).get("version") == "compiled_strategy_v1" else {})
             or ((current_brief.get("platform_strategy") or {}).get("compiled") if isinstance(current_brief.get("platform_strategy"), dict) else {})
             or ((current_brief.get("strategy") or {}).get("compiled") if isinstance(current_brief.get("strategy"), dict) else {}),
             "growth_strategy_evidence": current_brief.get("growth_strategy_evidence") or {},
