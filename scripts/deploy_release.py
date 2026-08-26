@@ -30,6 +30,7 @@ from scripts.runtime_release_audit import (
     write_metadata,
 )
 from content_platform.cli import load_config
+from content_platform.content_policy import validate_delivery_policy_config
 
 CURRENT_LINK_NAME = ".ai-self-media-tools-current"
 SYSTEMD_CURRENT_ROOT = "%h/.ai-self-media-tools-current"
@@ -465,6 +466,16 @@ def _validate_runtime_config(config_path: Path, release_root: Path, data_root: P
     loaded = load_config(str(config_path), str(data_root / "state.db"))
     if Path(loaded.get("data_dir", "")).expanduser().resolve() != data_root.resolve():
         raise ReleaseAuditError("runtime config data_dir is not the stable data root")
+    try:
+        raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ReleaseAuditError("runtime config is not valid JSON") from exc
+    # Legacy bootstrap fixtures may contain no publisher section. Whenever a
+    # mutable publisher policy is present, it must match the immutable matrix.
+    if isinstance(raw_config.get("publishers"), dict):
+        delivery_policy = validate_delivery_policy_config(loaded)
+        if not delivery_policy["passed"]:
+            raise ReleaseAuditError("runtime delivery policy mismatch: " + ";".join(delivery_policy["failures"]))
 
     def visit(value, key: str = ""):
         if isinstance(value, dict):
