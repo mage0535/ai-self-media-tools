@@ -50,10 +50,10 @@ def _env_present(name: str, env_file: str = "") -> bool:
 
 def _proxy_state(platform: str) -> tuple[bool, str]:
     region = platform_region(platform)
-    if region == "domestic" and not os.environ.get("CN_PROXY"):
-        return False, "missing CN_PROXY"
-    if region == "international" and not os.environ.get("US_PROXY"):
-        return False, "missing US_PROXY"
+    if region == "domestic":
+        return True, "direct-first; CN_PROXY optional fallback"
+    if region == "international":
+        return True, "direct-first; US_PROXY optional fallback"
     return True, ""
 
 
@@ -93,8 +93,6 @@ def _wechat_check(cfg: dict[str, Any]) -> tuple[bool, str]:
         return False, "WeChat adapter command missing"
     if not _env_present("WECHAT_APP_ID", env_file) or not _env_present("WECHAT_APP_SECRET", env_file):
         return False, "WeChat credentials missing"
-    if cfg.get("require_cn_proxy", True) and not os.environ.get("CN_PROXY"):
-        return False, "missing CN_PROXY"
     return True, "WeChat adapter and credentials present"
 
 

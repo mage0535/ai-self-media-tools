@@ -120,7 +120,7 @@ def _renderer_visibility_evidence(response, expected_urls, *, expected_cover="",
     }
 
 
-def _record_renderer_evidence(job, evidence, uploaded_urls=None):
+def _record_renderer_evidence(job, evidence, uploaded_urls=None, route_evidence=None):
     metadata = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
     contract = metadata.get("article_media_contract")
     contract_path = None
@@ -143,6 +143,7 @@ def _record_renderer_evidence(job, evidence, uploaded_urls=None):
         cdn_passed = len(uploaded_urls) == 4 and len(set(uploaded_urls)) == 4 and all(_juejin_cdn_url(url) for url in uploaded_urls)
         handoff["platform_upload_required"] = True
         handoff["platform_cdn_evidence"] = {"passed": cdn_passed, "urls": list(uploaded_urls), "platform": "juejin", "count": len(uploaded_urls)}
+        handoff["upload_route_evidence"] = dict(route_evidence or {})
     handoff["target_renderer_evidence"] = evidence
     handoff["state"] = "handoff_ready" if evidence.get("verified") is True else "handoff_blocked"
     if contract_path is None and metadata.get("article_media_contract_path"):
@@ -263,15 +264,30 @@ class JuejinPublisher:
 
     def _upload_images(self, sources):
         self._last_upload_error = ""
+        self._last_upload_route = ""
+        self._proxy_fallback_reason = ""
         sources = [str(source or "") for source in sources]
         if all(_juejin_cdn_url(source) for source in sources):
+            self._last_upload_route = "existing_platform_cdn"
             return sources
+        direct = self._upload_images_via_route(sources, "")
+        if len(direct) == len(sources) and all(_juejin_cdn_url(url) for url in direct):
+            self._last_upload_route = "direct"
+            return direct
+        direct_error = self._last_upload_error or "direct route failed"
+        if self.proxy:
+            fallback = self._upload_images_via_route(sources, self.proxy)
+            if len(fallback) == len(sources) and all(_juejin_cdn_url(url) for url in fallback):
+                self._last_upload_route = "cn_proxy_fallback"
+                self._proxy_fallback_reason = direct_error
+                return fallback
+        self._last_upload_error = f"direct={direct_error}; cn_proxy={self._last_upload_error or 'not configured'}"
+        return direct
+
+    def _upload_images_via_route(self, sources, route_proxy):
         _, _, storage = self._cookie_and_csrf()
         if not storage:
             self._last_upload_error = "juejin login state missing"
-            return []
-        if not self.proxy:
-            self._last_upload_error = "CN proxy missing for Juejin upload"
             return []
         try:
             from playwright.sync_api import sync_playwright
@@ -285,8 +301,8 @@ class JuejinPublisher:
             try:
               browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
               context_options = {"storage_state": storage if isinstance(storage, dict) else {"cookies": storage}, "locale": "zh-CN", "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-              if self.proxy:
-                  context_options["proxy"] = {"server": self.proxy}
+              if route_proxy:
+                  context_options["proxy"] = {"server": route_proxy}
               context = browser.new_context(**context_options)
               page = context.new_page()
               page.goto("https://juejin.cn/editor/drafts/new?v=2", wait_until="networkidle", timeout=60000)
@@ -413,7 +429,10 @@ class JuejinPublisher:
         if detail.get("err_no") != 0:
             return DeliveryResult(False, "blocked", f"juejin:{draft_id}", error="juejin editor postcheck failed")
         renderer_evidence = _renderer_visibility_evidence(detail, mapped_urls, expected_cover=cover, expected_markdown=md_body)
-        _record_renderer_evidence(job, renderer_evidence, [cover, *mapped_urls])
+        _record_renderer_evidence(job, renderer_evidence, [cover, *mapped_urls], {
+            "route": getattr(self, "_last_upload_route", ""),
+            "fallback_reason": getattr(self, "_proxy_fallback_reason", ""),
+        })
         if not renderer_evidence["verified"]:
             return DeliveryResult(False, "blocked", f"juejin:{result.get('data', {}).get('id', '')}", error="juejin editor visibility response missing or incomplete")
         if self.save_as_draft:

@@ -159,7 +159,7 @@ def main() -> None:
 
     hard_gates = rulebook.get("global_hard_gates") or {}
     require(hard_gates.get("metrics_review_required") is True, "metrics review must be required")
-    require(hard_gates.get("proxy_required_for_hermes_channel_access") is True, "Hermes channel access must require an explicit proxy")
+    require(hard_gates.get("proxy_required_for_hermes_channel_access") is False, "domestic channel access must be direct-first")
     require(hard_gates.get("anti_platform_spam_similarity") is True, "anti platform spam similarity gate must be required")
     anti_spam = rulebook.get("anti_spam_similarity_policy") or {}
     require(anti_spam.get("policy_id") == "anti_spam_similarity_v1", "anti spam similarity policy id mismatch")
@@ -185,6 +185,8 @@ def main() -> None:
         require(field in proxy_policy, f"missing proxy_policy field: {field}")
     require(proxy_policy["domestic_proxy_env"] == "CN_PROXY", "domestic channels must use CN_PROXY")
     require(proxy_policy["international_proxy_env"] == "US_PROXY", "international channels must use US_PROXY")
+    require(proxy_policy.get("domestic_route_order") == ["direct", "CN_PROXY"], "domestic route order must be direct then CN_PROXY")
+    require(proxy_policy.get("international_route_order") == ["direct", "US_PROXY"], "international route order must be direct then US_PROXY")
 
     domestic = set(proxy_policy.get("domestic_channels") or [])
     international = set(proxy_policy.get("international_channels") or [])

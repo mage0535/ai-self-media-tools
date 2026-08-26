@@ -54,8 +54,8 @@ foreach ($channel in $channels) {
 if (-not $rulebook.global_hard_gates.metrics_review_required) {
   throw "metrics review must be required"
 }
-if (-not $rulebook.global_hard_gates.proxy_required_for_hermes_channel_access) {
-  throw "Hermes channel access must require an explicit proxy"
+if ($rulebook.global_hard_gates.proxy_required_for_hermes_channel_access) {
+  throw "domestic channel access must be direct-first"
 }
 if (-not $rulebook.proxy_policy) {
   throw "proxy_policy is required"
@@ -70,6 +70,12 @@ if ($rulebook.proxy_policy.domestic_proxy_env -ne "CN_PROXY") {
 }
 if ($rulebook.proxy_policy.international_proxy_env -ne "US_PROXY") {
   throw "international channels must use US_PROXY"
+}
+if (($rulebook.proxy_policy.domestic_route_order -join ",") -ne "direct,CN_PROXY") {
+  throw "domestic route order must be direct then CN_PROXY"
+}
+if (($rulebook.proxy_policy.international_route_order -join ",") -ne "direct,US_PROXY") {
+  throw "international route order must be direct then US_PROXY"
 }
 $proxyCovered = @($rulebook.proxy_policy.domestic_channels) + @($rulebook.proxy_policy.international_channels)
 foreach ($channel in $channels) {

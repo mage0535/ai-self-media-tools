@@ -16,7 +16,7 @@ class HealthRefreshTests(unittest.TestCase):
         self.assertEqual(entry["state"], "manual_handoff_only")
         self.assertFalse(entry["can_publish_now"])
 
-    def test_domestic_route_requires_cn_proxy_before_probe(self):
+    def test_domestic_route_checks_platform_without_requiring_cn_proxy(self):
         with patch.dict(os.environ, {}, clear=True):
             entry = classify_platform_health(
                 "kuaishou",
@@ -29,7 +29,7 @@ class HealthRefreshTests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(entry["state"], "proxy_unavailable")
+        self.assertEqual(entry["state"], "auth_required")
 
     def test_xiaohongshu_policy_overrides_valid_route(self):
         with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
