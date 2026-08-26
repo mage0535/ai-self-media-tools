@@ -961,7 +961,7 @@ class Pipeline:
                     "juejin renderer visibility gate failed: " + json.dumps(post_delivery, ensure_ascii=False),
                 )
                 metadata["postcheck"] = post_delivery
-        if not result.ok and result.status not in {"blocked", "drafted", "handoff_pending", "review_required", "scheduled"}:
+        if not result.ok and result.status not in {"blocked", "drafted", "handoff_pending", "review_required", "unknown_requires_review", "scheduled"}:
             status = self._unknown_status(RuntimeError(result.error or result.status))
             result = DeliveryResult(False, status, result.external_id, result.error)
         verified_identity = None

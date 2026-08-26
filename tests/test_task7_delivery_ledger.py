@@ -219,6 +219,24 @@ def test_pipeline_converts_failed_external_auth_to_review_without_retry(tmp_path
         assert conn.execute("SELECT status FROM delivery_intents").fetchone()[0] == "unknown_requires_review"
 
 
+def test_pipeline_preserves_publisher_unknown_requires_review_without_retry(tmp_path, monkeypatch):
+    store = Store(tmp_path / "state.db")
+    pipeline = Pipeline(store, {"data_dir": str(tmp_path), "delivery_health": {"allow_unknown_health": True}, "publishers": {"default": {"type": "file"}}})
+
+    class Publisher:
+        def deliver(self, job, platform):
+            return DeliveryResult(False, "unknown_requires_review", "submitted-1", "immutable post identity missing")
+
+    monkeypatch.setattr("content_platform.pipeline.build_publisher", lambda *args, **kwargs: Publisher())
+    result = pipeline._deliver("twitter", {"id": "job-review", "title": "Title", "body": "Body", "platform_payload": {"title": "Title", "text": "Body"}, "artifacts": []})
+
+    assert result.status == "unknown_requires_review"
+    assert result.external_id == "submitted-1"
+    with store.connect() as conn:
+        assert conn.execute("SELECT status FROM delivery_intents").fetchone()[0] == "unknown_requires_review"
+        assert conn.execute("SELECT retry_allowed FROM delivery_intents").fetchone()[0] == 0
+
+
 def test_delivery_callback_can_prove_real_publication_identity(tmp_path, monkeypatch):
     store = Store(tmp_path / "state.db")
     pipeline = Pipeline(store, {"data_dir": str(tmp_path), "delivery_health": {"allow_unknown_health": True}, "publishers": {"default": {"type": "file"}}})
