@@ -22,6 +22,26 @@ def _tree_hash(root: Path) -> dict[str, str]:
     return result
 
 
+def _protected_snapshot(root: Path) -> dict[str, dict[str, int]]:
+    """Snapshot protected state without hashing a potentially huge media tree."""
+    if not root.exists():
+        return {}
+    paths = [root, *sorted(root.iterdir())]
+    # Databases are the mutable source of truth. Record their metadata even
+    # when nested one level below the supplied boundary.
+    for pattern in ("*.db", "*.sqlite", "*.sqlite3"):
+        paths.extend(path for path in root.rglob(pattern) if path not in paths)
+    snapshot = {}
+    for path in paths:
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        key = "." if path == root else path.relative_to(root).as_posix()
+        snapshot[key] = {"size": int(stat.st_size), "mtime_ns": int(stat.st_mtime_ns), "is_dir": int(path.is_dir())}
+    return snapshot
+
+
 def _activate(link: Path, target: Path) -> None:
     temporary = link.parent / f".{link.name}.{uuid.uuid4().hex}.tmp"
     try:
@@ -48,7 +68,7 @@ def rehearse_rollback(
     health_check=None,
 ) -> dict[str, Any]:
     protected = Path(protected_root).resolve() if protected_root else Path(current_root).resolve()
-    before = _tree_hash(protected)
+    before = _protected_snapshot(protected)
     # A rehearsal inspects the code target only. It never copies or removes
     # protected runtime state, including databases, cookies, or media.
     target_hash = _tree_hash(Path(rollback_root).resolve())
@@ -78,7 +98,7 @@ def rehearse_rollback(
                     forward_health = bool(health_check(forward) if callable(health_check) else True)
                 except Exception as exc:
                     error = (error + ";" if error else "") + f"forward_recovery_failed:{type(exc).__name__}:{exc}"
-    after = _tree_hash(protected)
+    after = _protected_snapshot(protected)
     health_checks_passed = rollback_health and forward_health
     return {
         "passed": before == after and (dry_run or (bool(target_hash) and mutation_performed and health_checks_passed and forward_recovered and not error)),
