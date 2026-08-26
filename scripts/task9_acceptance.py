@@ -3,14 +3,54 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
+import xml.etree.ElementTree as ET
 
 from scripts.task9_canary import build_canary_matrix, EXPECTED_CANARY_PLATFORMS
 
 
 REQUIRED_AUDITS = ("full_pytest", "privacy_audit", "license_audit")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_audit(name: str, item: dict[str, Any], expected_commit: str) -> list[str]:
+    failures: list[str] = []
+    path = Path(str(item.get("path") or ""))
+    if item.get("passed") is not True or not path.is_file():
+        return [f"audit_evidence_missing:{name}"]
+    if str(item.get("commit") or "") != expected_commit:
+        failures.append(f"audit_commit_mismatch:{name}")
+    expected_hash = str(item.get("sha256") or "").removeprefix("sha256:")
+    if not expected_hash or expected_hash != _sha256(path):
+        failures.append(f"audit_hash_mismatch:{name}")
+    try:
+        if name == "full_pytest":
+            root = ET.parse(path).getroot()
+            suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+            tests = sum(int(suite.attrib.get("tests", 0)) for suite in suites)
+            errors = sum(int(suite.attrib.get("errors", 0)) for suite in suites)
+            failed = sum(int(suite.attrib.get("failures", 0)) for suite in suites)
+            if tests <= 0 or errors or failed:
+                failures.append("audit_payload_invalid:full_pytest")
+        else:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            passed = payload.get("ok") is True or payload.get("passed") is True
+            issues = payload.get("issues", [])
+            if not passed or (isinstance(issues, list) and issues):
+                failures.append(f"audit_payload_invalid:{name}")
+    except (OSError, ValueError, ET.ParseError, json.JSONDecodeError):
+        failures.append(f"audit_payload_unreadable:{name}")
+    return failures
 
 
 def evaluate_acceptance(report: dict[str, Any], *, repo_root: Path | str | None = None) -> dict[str, Any]:
@@ -51,18 +91,22 @@ def evaluate_acceptance(report: dict[str, Any], *, repo_root: Path | str | None 
             failures.append(f"hotspot_evidence_type_mismatch:{expected_case['platform']}")
         if details.get("association_mode") not in set(contract.get("allowed_association_modes") or []):
             failures.append(f"hotspot_association_mode_mismatch:{expected_case['platform']}")
-    audits = report.get("audits") if isinstance(report.get("audits"), dict) else {}
-    for name in REQUIRED_AUDITS:
-        item = audits.get(name) if isinstance(audits.get(name), dict) else {}
-        path = Path(str(item.get("path") or ""))
-        if item.get("passed") is not True or not path.is_file():
-            failures.append(f"audit_evidence_missing:{name}")
     parity = report.get("commit_parity") if isinstance(report.get("commit_parity"), dict) else {}
     endpoints = [str(parity.get(key) or "") for key in ("source", "release", "hermes")]
     if not all(endpoints) or len(set(endpoints)) != 1:
         failures.append("three_end_commit_parity_missing")
+    expected_commit = endpoints[0] if endpoints and len(set(endpoints)) == 1 else ""
+    audits = report.get("audits") if isinstance(report.get("audits"), dict) else {}
+    for name in REQUIRED_AUDITS:
+        item = audits.get(name) if isinstance(audits.get(name), dict) else {}
+        failures.extend(_validate_audit(name, item, expected_commit))
     rehearsal = report.get("rollback_rehearsal") if isinstance(report.get("rollback_rehearsal"), dict) else {}
-    if rehearsal.get("passed") is not True:
+    if (
+        rehearsal.get("passed") is not True
+        or rehearsal.get("mutation_performed") is not True
+        or rehearsal.get("health_checks_passed") is not True
+        or rehearsal.get("forward_recovered") is not True
+    ):
         failures.append("rollback_rehearsal_missing")
     shadows = report.get("shadow_batches") if isinstance(report.get("shadow_batches"), list) else []
     if len(shadows) < 2 or any(item.get("passed") is not True or item.get("code_edits", 1) != 0 or item.get("manual_recovery", True) for item in shadows[:2] if isinstance(item, dict)):
