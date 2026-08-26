@@ -70,7 +70,24 @@ def test_juejin_accepts_complete_public_image_package_to_draft(tmp_path):
 
     assert result.ok is True
     assert result.status == "drafted"
-    assert api.call_count == 2
+
+
+def test_juejin_uploads_local_assets_to_platform_before_draft(tmp_path):
+    publisher = JuejinPublisher()
+    job = _article_job(tmp_path, public_images=False)
+    uploaded = ["https://p3-juejin.byteimg.com/cover.jpg", *[f"https://p3-juejin.byteimg.com/inline-{i}.jpg" for i in range(3)]]
+    with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
+        publisher, "_upload_image", side_effect=uploaded
+    ) as upload, patch.object(
+        publisher, "_api", side_effect=[
+            {"err_no": 0, "data": {"id": "draft-local"}},
+            {"err_no": 0, "data": {"mark_content": "\n".join(uploaded[1:]), "cover_image": uploaded[0]}},
+        ]
+    ):
+        result = publisher.deliver(job, "juejin")
+    assert result.ok is True
+    assert result.status == "drafted"
+    assert upload.call_count == 4
 
 
 def test_zhihu_blocks_incomplete_article_before_cookie_lookup():

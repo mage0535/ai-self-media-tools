@@ -83,6 +83,32 @@ def test_juejin_article_media_executes_four_real_assets_with_checkpointed_resume
     assert resumed["handoff_contract"]["version"]
 
 
+def test_juejin_article_media_can_prepare_local_assets_for_platform_upload(tmp_path):
+    from content_platform.adapters.media import execute_article_media, validate_handoff_contract
+
+    def generate(item, output):
+        checksum = _write_image(output, (20 + sum(map(ord, item["asset_id"])) % 180, 40, 80))
+        return {
+            "origin_type": "generated",
+            "generation_evidence": {"provider": "test", "model": "image-v1", "prompt_hash": hashlib.sha256(item["asset_id"].encode()).hexdigest()},
+            "license": "generated_for_project",
+            "semantic_match_score": 0.9,
+            "checksum": checksum,
+        }
+
+    result = execute_article_media(
+        {"id": "local-j1", "title": "Article", "sections": ["one", "two", "three"]},
+        tmp_path,
+        generate,
+        public_staging_base_url="",
+    )
+
+    assert result["handoff_contract"]["state"] == "local_assets_ready"
+    assert result["handoff_contract"]["platform_upload_required"] is True
+    assert all(not asset.get("public_url") for asset in result["assets"])
+    assert validate_handoff_contract(result["handoff_contract"], require_target_renderer=False)["passed"] is True
+
+
 def test_juejin_content_route_cannot_bypass_production_four_asset_path(tmp_path, monkeypatch):
     from content_platform.media import MediaBridge
 

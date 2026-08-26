@@ -274,8 +274,6 @@ class MediaBridge:
             extra_args.extend(["--input-image", str(input_image)])
         if "juejin" in platforms:
             staging_url = str(cfg.get("public_staging_base_url") or self.config.get("public_staging_base_url") or "").strip()
-            if not staging_url:
-                raise RuntimeError("juejin media requires public_staging_base_url")
 
             def generate_article_asset(item, target):
                 prompt = next(row["prompt"] for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
@@ -285,7 +283,12 @@ class MediaBridge:
                     if not cover_gate.get("passed"):
                         raise RuntimeError("adaptive cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
                 return {
-                    "source_url": f"{staging_url.rstrip('/')}/{job['id']}/{target.name}",
+                    "origin_type": "generated",
+                    "generation_evidence": {
+                        "provider": type(provider).__name__,
+                        "model": str(cfg.get("model") or cfg.get("provider") or "auto"),
+                        "prompt_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                    },
                     "license": "generated_for_project",
                     "semantic_match_score": 0.82,
                     "match_reason": item["section"],
