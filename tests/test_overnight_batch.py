@@ -668,6 +668,7 @@ def test_execute_batch_runs_each_platform_independently_and_persists_resume_stat
 
     assert summary["status"] == "completed"
     assert [item[1] for item in pipeline.created] == [["wechat"], ["youtube"]]
+    assert all(item[2]["automated_workflow"] is True for item in pipeline.created)
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert state["tasks"][0]["state"] == "staged"
     assert state["tasks"][1]["state"] == "handoff_ready"

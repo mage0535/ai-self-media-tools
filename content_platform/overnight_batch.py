@@ -1106,10 +1106,12 @@ def _execute_batch_locked(
                 }, persist=persist_state)
                 if not task.get("job_id"):
                     _workflow_for_task(task, platform)
+                    task_brief = dict(task.get("brief") or {})
+                    task_brief["automated_workflow"] = True
                     job = pipeline.create(
                         str(task.get("topic") or ""),
                         [platform],
-                        dict(task.get("brief") or {}),
+                        task_brief,
                         str(task.get("profile") or "default"),
                     )
                     task["job_id"] = str(job["id"])
