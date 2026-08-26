@@ -194,6 +194,8 @@ def test_juejin_publisher_requires_renderer_visibility_response(tmp_path):
     }
     publisher = JuejinPublisher()
     with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
+        publisher, "_upload_images", return_value=["https://p3-juejin.byteimg.com/cover.jpg", *[f"https://p3-juejin.byteimg.com/inline-{i}.jpg" for i in range(3)]]
+    ), patch.object(
         publisher, "_api", return_value={"err_no": 0, "data": {"id": "draft-3"}}
     ) as api:
         result = publisher.deliver(job, "juejin")
@@ -202,8 +204,8 @@ def test_juejin_publisher_requires_renderer_visibility_response(tmp_path):
     assert result.status == "blocked"
     assert "editor visibility" in result.error
     payload = api.call_args_list[0].args[1]
-    assert payload["cover_image"] == "https://cdn.example/cover.jpg"
-    assert all(url in payload["mark_content"] for url in [f"https://cdn.example/inline-{i}.jpg" for i in range(3)])
+    assert payload["cover_image"] == "https://p3-juejin.byteimg.com/cover.jpg"
+    assert all(url in payload["mark_content"] for url in [f"https://p3-juejin.byteimg.com/inline-{i}.jpg" for i in range(3)])
 
 
 def test_pipeline_final_gate_calls_task6_media_validators_fail_closed(tmp_path):

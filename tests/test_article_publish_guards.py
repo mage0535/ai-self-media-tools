@@ -9,8 +9,8 @@ from content_platform.zhihu_publisher import ZhihuPublisher
 def _article_job(tmp_path: Path, *, public_images: bool = True):
     artifacts = []
     if public_images:
-        artifacts.append({"kind": "cover", "url": "https://cdn.example/cover.jpg"})
-        artifacts.extend({"kind": "image", "url": f"https://cdn.example/inline-{i}.jpg"} for i in range(3))
+        artifacts.append({"kind": "cover", "url": "https://p3-juejin.byteimg.com/cover.jpg"})
+        artifacts.extend({"kind": "image", "url": f"https://p3-juejin.byteimg.com/inline-{i}.jpg"} for i in range(3))
     else:
         cover = tmp_path / "cover.jpg"
         cover.write_bytes(b"\xff\xd8" + b"x" * 2048)
@@ -53,18 +53,14 @@ def test_juejin_blocks_incomplete_article_before_api_call():
 
 def test_juejin_accepts_complete_public_image_package_to_draft(tmp_path):
     publisher = JuejinPublisher()
-    create = {"err_no": 0, "data": {"id": "draft-1"}}
-    detail = {
-            "err_no": 0,
-            "data": {
-                "id": "draft-1",
-                "editor_visible": True,
-                "inline_image_urls": [f"https://cdn.example/inline-{i}.jpg" for i in range(3)],
-                "mapping_count": 3,
-            },
-        }
+    created = {}
+    def api(endpoint, payload):
+        if endpoint.endswith("/create"):
+            created.update(payload)
+            return {"err_no": 0, "data": {"id": "draft-1"}}
+        return {"err_no": 0, "data": {"id": "draft-1", "mark_content": created["mark_content"], "cover_image": created["cover_image"]}}
     with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
-        publisher, "_api", side_effect=[create, detail]
+        publisher, "_api", side_effect=api
     ) as api:
         result = publisher.deliver(_article_job(tmp_path, public_images=True), "juejin")
 
@@ -76,13 +72,16 @@ def test_juejin_uploads_local_assets_to_platform_before_draft(tmp_path):
     publisher = JuejinPublisher()
     job = _article_job(tmp_path, public_images=False)
     uploaded = ["https://p3-juejin.byteimg.com/cover.jpg", *[f"https://p3-juejin.byteimg.com/inline-{i}.jpg" for i in range(3)]]
+    created = {}
+    def api(endpoint, payload):
+        if endpoint.endswith("/create"):
+            created.update(payload)
+            return {"err_no": 0, "data": {"id": "draft-local"}}
+        return {"err_no": 0, "data": {"id": "draft-local", "mark_content": created["mark_content"], "cover_image": created["cover_image"]}}
     with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
         publisher, "_upload_images", return_value=uploaded
     ) as upload, patch.object(
-        publisher, "_api", side_effect=[
-            {"err_no": 0, "data": {"id": "draft-local"}},
-            {"err_no": 0, "data": {"mark_content": "\n".join(uploaded[1:]), "cover_image": uploaded[0]}},
-        ]
+        publisher, "_api", side_effect=api
     ):
         result = publisher.deliver(job, "juejin")
     assert result.ok is True
@@ -105,7 +104,7 @@ def test_juejin_blocks_partial_platform_image_upload_before_draft(tmp_path):
 def test_juejin_rejects_duplicate_local_media_before_upload(tmp_path):
     publisher = JuejinPublisher()
     job = _article_job(tmp_path, public_images=False)
-    job["artifacts"][-1]["path"] = job["artifacts"][-2]["path"]
+    job["draft_meta"]["section_image_map"][-1]["image"] = "inline-1.jpg"
     with patch.object(publisher, "_upload_images") as upload:
         result = publisher.deliver(job, "juejin")
     assert result.ok is False
@@ -119,13 +118,16 @@ def test_juejin_writes_platform_cdn_and_renderer_evidence_to_contract(tmp_path):
     contract = tmp_path / "article_media_contract.json"
     contract.write_text(json.dumps({"handoff_contract": {"artifacts": [{"role": "cover"}, *[{"role": "section"} for _ in range(3)]]}}), encoding="utf-8")
     job["artifacts"].append({"kind": "article_media_contract", "path": str(contract)})
-    uploaded = ["https://cdn.example/cover.jpg", *[f"https://cdn.example/inline-{i}.jpg" for i in range(3)]]
+    uploaded = ["https://p3-juejin.byteimg.com/cover.jpg", *[f"https://p3-juejin.byteimg.com/inline-{i}.jpg" for i in range(3)]]
+    created = {}
+    def api(endpoint, payload):
+        if endpoint.endswith("/create"):
+            created.update(payload)
+            return {"err_no": 0, "data": {"id": "draft-evidence"}}
+        return {"err_no": 0, "data": {"id": "draft-evidence", "mark_content": created["mark_content"], "cover_image": created["cover_image"]}}
     with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
         publisher, "_upload_images", return_value=uploaded
-    ), patch.object(publisher, "_api", side_effect=[
-        {"err_no": 0, "data": {"id": "draft-evidence"}},
-        {"err_no": 0, "data": {"mark_content": "\n".join(uploaded[1:]), "cover_image": uploaded[0]}},
-    ]):
+    ), patch.object(publisher, "_api", side_effect=api):
         result = publisher.deliver(job, "juejin")
     saved = json.loads(contract.read_text(encoding="utf-8"))["handoff_contract"]
     assert result.ok is True
