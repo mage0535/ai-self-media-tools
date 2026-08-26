@@ -329,3 +329,73 @@ def test_execution_dag_records_transitions_and_keeps_optional_failure_nonblockin
     assert [item["capability_id"] for item in result["artifact_verified"]] == ["required_ok"]
     assert [item["capability_id"] for item in result["optional_failures"]] == ["optional_bad"]
     assert result["passed"] is True
+
+
+def test_execution_dag_preserves_full_plan_and_defers_future_stages():
+    plan = {
+        "candidates": [
+            {"capability_id": "content_search_adapter", "stage": "collection", "required_or_optional": "required"},
+            {"capability_id": "copywriting_structure_matcher", "stage": "generation", "required_or_optional": "required"},
+            {"capability_id": "voice_engine", "stage": "assets", "required_or_optional": "required"},
+            {"capability_id": "video_toolchain_runner", "stage": "render", "required_or_optional": "required"},
+        ]
+    }
+
+    result = execute_capability_dag(
+        plan,
+        {},
+        {},
+        executor=lambda item, _draft, _brief: {
+            "status": "executed",
+            "contract_valid": True,
+            "output_hash": f"sha256:{item['capability_id']}",
+        },
+        stages={"collection", "generation"},
+    )
+
+    assert [item["capability_id"] for item in result["selected"]] == [
+        "content_search_adapter",
+        "copywriting_structure_matcher",
+        "voice_engine",
+        "video_toolchain_runner",
+    ]
+    assert [item["capability_id"] for item in result["executed"]] == [
+        "content_search_adapter",
+        "copywriting_structure_matcher",
+    ]
+    assert [item["capability_id"] for item in result["pending"]] == [
+        "voice_engine",
+        "video_toolchain_runner",
+    ]
+    assert all(item["status"] == "pending" for item in result["pending"])
+    assert result["passed"] is True
+
+
+def test_plan_only_runtime_adapter_never_claims_media_execution():
+    registry = load_capability_registry(REGISTRY_PATH)
+    capability = next(item for item in registry["capabilities"] if item["id"] == "video_toolchain_runner")
+
+    result = execute_capability(
+        capability,
+        {
+            "content_profile": {"content_format": "short_video", "platform": "douyin"},
+            "content_blueprint": {
+                "video_toolchain_plan": {
+                    "required": True,
+                    "selected_pipeline": "knowledge_card_video",
+                    "template_family": "evidence_cards",
+                    "required_tools": ["renderer"],
+                }
+            },
+            "video_toolchain_plan": {
+                "required": True,
+                "selected_pipeline": "knowledge_card_video",
+                "template_family": "evidence_cards",
+                "required_tools": ["renderer"],
+            },
+        },
+    )
+
+    assert result["status"] == "planned"
+    assert result["contract_valid"] is True
+    assert result["status"] != "executed"

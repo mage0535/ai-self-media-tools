@@ -13,12 +13,14 @@ def validate_generation_execution(result: dict, *, required: bool = True) -> dic
     result = dict(result or {})
     executed = [item for item in result.get("executed", []) if isinstance(item, dict) and item.get("output_hash")]
     executed_ids = {str(item.get("capability_id") or "") for item in executed}
+    completed_stages = set(result.get("completed_stages") or [])
     selected_required = [
         str(item.get("capability_id") or "")
         for item in result.get("selected", [])
         if isinstance(item, dict)
         and str(item.get("required_or_optional") or "required") != "optional"
         and item.get("capability_id")
+        and (not completed_stages or str(item.get("stage") or "generation") in completed_stages)
     ]
     missing_required = [capability_id for capability_id in selected_required if capability_id not in executed_ids]
     if required and not executed:
@@ -44,18 +46,6 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
     runtime_context = _build_runtime_context(brief)
     registry = load_registry()
     matched = match_capabilities(profile, registry, runtime_context=runtime_context)
-    # Do not execute render/assets/gate capabilities before their real stage.
-    generation_stages = {"blueprint", "generation"}
-    deferred = []
-    candidates = []
-    for item in matched.get("candidates", []):
-        stage = str(item.get("stage") or "generation")
-        if stage in generation_stages:
-            candidates.append(item)
-        else:
-            deferred.append({**item, "status": "deferred", "reason": f"stage:{stage}"})
-    matched["candidates"] = candidates
-    matched["deferred"] = deferred
     def executor(item, current_draft, current_brief):
         capability = next(c for c in registry["capabilities"] if c["id"] == item["capability_id"])
         text = " ".join(
@@ -87,12 +77,18 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
             )
         return execute_capability(capability, inputs)
 
-    result = execute_capability_dag(matched, draft, brief, executor=executor)
+    result = execute_capability_dag(
+        matched,
+        draft,
+        brief,
+        executor=executor,
+        stages={"blueprint", "generation"},
+    )
     result = validate_generation_execution(result, required=bool(brief.get("automated_workflow")))
     result["profile"] = profile
     result["skipped"] = matched.get("skipped", [])
     result["inventory"] = matched.get("inventory", [])
-    result["deferred"] = matched.get("deferred", [])
+    result["deferred"] = list(result.get("pending") or [])
     return result
 
 
