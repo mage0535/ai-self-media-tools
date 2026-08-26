@@ -107,7 +107,7 @@ def execute_article_media(
     output_dir: str | Path,
     generator: Callable[[dict[str, str], Path], dict[str, Any]],
     *,
-    public_staging_base_url: str,
+    public_staging_base_url: str = "",
     public_staging_uploader: Callable[[Path, str], Any] | None = None,
     public_staging_verifier: Callable[..., Any] | None = None,
     staging_timeout_seconds: float = 5.0,
@@ -116,7 +116,7 @@ def execute_article_media(
 ) -> dict[str, Any]:
     """Generate a Juejin article package with bounded, resumable asset work."""
     base_url = str(public_staging_base_url or "").rstrip("/")
-    if not base_url.startswith(("https://", "http://")):
+    if base_url and not base_url.startswith(("https://", "http://")):
         raise ValueError("public_staging_base_url must be an HTTP(S) URL")
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -132,14 +132,14 @@ def execute_article_media(
     def run_one(item: dict[str, str]) -> dict[str, Any]:
         asset_id = item["asset_id"]
         path = output / ("cover.png" if asset_id == "cover" else f"{asset_id}.png")
-        public_url = f"{base_url}/{quote(str(job.get('id') or output.name))}/{quote(path.name)}"
+        public_url = f"{base_url}/{quote(str(job.get('id') or output.name))}/{quote(path.name)}" if base_url else ""
         previous = checkpoints.get(asset_id) if isinstance(checkpoints.get(asset_id), dict) else {}
         if (
             previous.get("status") == "complete"
             and Path(str(previous.get("path") or path)).is_file()
             and previous.get("checksum") == _sha256(Path(str(previous.get("path") or path)))
-            and previous.get("public_url") == public_url
-            and previous.get("source_url")
+            and previous.get("public_url", "") == public_url
+            and (previous.get("source_url") or previous.get("origin_type") == "generated")
             and previous.get("license")
         ):
             return dict(previous)
@@ -154,8 +154,11 @@ def execute_article_media(
                     raise RuntimeError("asset generator produced no readable file")
                 checksum = _sha256(path)
                 source_url = str(evidence.get("source_url") or "").strip()
+                origin_type = str(evidence.get("origin_type") or ("external" if source_url else "")).strip()
+                generation_evidence = evidence.get("generation_evidence") if isinstance(evidence.get("generation_evidence"), dict) else {}
                 license_name = str(evidence.get("license") or "").strip()
-                if not source_url.startswith(("https://", "http://")):
+                generated_valid = origin_type == "generated" and all(str(generation_evidence.get(key) or "").strip() for key in ("provider", "model", "prompt_hash"))
+                if not source_url.startswith(("https://", "http://")) and not generated_valid:
                     raise RuntimeError("asset source_url is missing or not public")
                 if not license_name:
                     raise RuntimeError("asset license evidence is missing")
@@ -167,6 +170,8 @@ def execute_article_media(
                     "checksum": checksum,
                     "source_url": source_url,
                     "public_url": public_url,
+                    "origin_type": origin_type,
+                    "generation_evidence": generation_evidence,
                     "license": license_name,
                     "semantic_match_score": float(evidence.get("semantic_match_score") or 0),
                     "match_reason": str(evidence.get("match_reason") or item["section"]),
@@ -192,23 +197,21 @@ def execute_article_media(
             records.append(future.result())
     records.sort(key=lambda row: (0 if row["role"] == "cover" else 1, row["asset_id"]))
     checksums = [row["checksum"] for row in records]
-    sources = [row["source_url"] for row in records]
+    sources = [row["source_url"] or f"generated:{row['generation_evidence'].get('prompt_hash')}" for row in records]
     if len(set(checksums)) != len(checksums):
         raise RuntimeError("article media contains duplicate asset checksums")
     if len(set(sources)) != len(sources):
         raise RuntimeError("article media contains duplicate source URLs")
-    staging_uploads = [
-        _stage_public_asset(Path(row["path"]), row["public_url"], public_staging_uploader, staging_timeout_seconds)
-        for row in records
-    ]
-    if not all(row.get("passed") is True for row in staging_uploads):
-        raise RuntimeError("public staging upload failed: " + json.dumps(staging_uploads, ensure_ascii=False))
-    public_staging_evidence = verify_public_staging(
-        [row["public_url"] for row in records],
-        expected_checksums={row["public_url"]: row["checksum"] for row in records},
-        verifier=public_staging_verifier,
-        timeout_seconds=staging_timeout_seconds,
-    )
+    staging_uploads = []
+    public_staging_evidence = {"passed": None, "skipped": True, "reason": "platform_upload_required"}
+    if base_url:
+        staging_uploads = [_stage_public_asset(Path(row["path"]), row["public_url"], public_staging_uploader, staging_timeout_seconds) for row in records]
+        if not all(row.get("passed") is True for row in staging_uploads):
+            raise RuntimeError("public staging upload failed: " + json.dumps(staging_uploads, ensure_ascii=False))
+        public_staging_evidence = verify_public_staging(
+            [row["public_url"] for row in records], expected_checksums={row["public_url"]: row["checksum"] for row in records},
+            verifier=public_staging_verifier, timeout_seconds=staging_timeout_seconds,
+        )
     mapping = [
         {
             "asset_id": row["asset_id"],
@@ -224,7 +227,8 @@ def execute_article_media(
     ]
     handoff = {
         "version": "handoff_contract_v1",
-        "state": "handoff_pending",
+        "state": "handoff_pending" if base_url else "local_assets_ready",
+        "platform_upload_required": not bool(base_url),
         "copy_media_version": hashlib.sha256(
             json.dumps({"title": job.get("title"), "sections": [row["section"] for row in mapping], "assets": checksums}, sort_keys=True).encode()
         ).hexdigest(),
@@ -254,7 +258,7 @@ def execute_article_media(
     }
     _write_json_atomic(output / "article_media_contract.json", result)
     _write_json_atomic(output / "section_image_map.json", mapping)
-    if not public_staging_evidence["passed"]:
+    if base_url and not public_staging_evidence["passed"]:
         raise RuntimeError("public_staging_verification_failed: " + json.dumps(public_staging_evidence, ensure_ascii=False))
     return result
 
@@ -285,15 +289,17 @@ def validate_handoff_contract(
             continue
         if str(artifact.get("checksum") or "") != _sha256(path):
             failures.append(f"artifact_{index}_checksum_mismatch")
-        if not str(artifact.get("source_url") or "").startswith(("https://", "http://")):
+        generation = artifact.get("generation_evidence") if isinstance(artifact.get("generation_evidence"), dict) else {}
+        generated_valid = artifact.get("origin_type") == "generated" and all(str(generation.get(key) or "").strip() for key in ("provider", "model", "prompt_hash"))
+        if not str(artifact.get("source_url") or "").startswith(("https://", "http://")) and not generated_valid:
             failures.append(f"artifact_{index}_source_missing")
-        if not str(artifact.get("public_url") or "").startswith(("https://", "http://")):
+        if require_target_renderer and not str(artifact.get("public_url") or "").startswith(("https://", "http://")):
             failures.append(f"artifact_{index}_public_url_missing")
         if not str(artifact.get("license") or "").strip():
             failures.append(f"artifact_{index}_license_missing")
     target = contract.get("target_renderer_evidence") if isinstance(contract.get("target_renderer_evidence"), dict) else {}
     staging = contract.get("public_staging_evidence") if isinstance(contract.get("public_staging_evidence"), dict) else {}
-    if staging.get("passed") is not True:
+    if require_target_renderer and staging.get("passed") is not True and contract.get("platform_upload_required") is not True:
         failures.append("public_staging_evidence_missing")
     if require_target_renderer and target.get("verified") is not True:
         failures.append("target_renderer_evidence_missing")

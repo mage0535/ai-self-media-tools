@@ -1,5 +1,7 @@
 """Juejin article publisher — API-based, supports markdown + cover."""
 import json
+import mimetypes
+import uuid
 import urllib.request
 from pathlib import Path
 
@@ -15,6 +17,14 @@ def _text_length(value):
 def _public_url(item):
     url = item.get("url") or item.get("public_url") or item.get("path") or ""
     return url if isinstance(url, str) and url.startswith("http") else ""
+
+
+def _artifact_source(item):
+    url = _public_url(item)
+    if url:
+        return url
+    path = Path(str(item.get("path") or ""))
+    return str(path) if path.is_file() else ""
 
 
 def _section_map_valid(section_map):
@@ -57,6 +67,18 @@ def _mapped_public_urls(section_map, artifacts):
     return urls
 
 
+def _mapped_sources(section_map, artifacts):
+    lookup = {}
+    for item in artifacts:
+        source = _artifact_source(item)
+        if not source:
+            continue
+        for key in {str(item.get("url") or ""), str(item.get("public_url") or ""), str(item.get("path") or ""), Path(source).name}:
+            if key:
+                lookup[key] = source
+    return [lookup.get(str(row.get("image") or "")) or lookup.get(Path(str(row.get("image") or "")).name) for row in section_map]
+
+
 def _renderer_visibility_evidence(response, expected_urls):
     response = response if isinstance(response, dict) else {}
     data = response.get("data") if isinstance(response.get("data"), dict) else {}
@@ -71,7 +93,13 @@ def _renderer_visibility_evidence(response, expected_urls):
         or data.get("rendered_image_urls")
         or []
     )
+    mark_content = str(data.get("mark_content") or data.get("markdown") or response.get("mark_content") or "")
+    cover_image = str(data.get("cover_image") or response.get("cover_image") or "")
+    if not observed_urls:
+        observed_urls = [url for url in expected_urls if url and url in mark_content]
     visible = evidence.get("verified") is True or data.get("editor_visible") is True
+    if expected_urls and set(expected_urls).issubset(set(observed_urls)):
+        visible = True
     mapping_count = int(evidence.get("mapping_count") or data.get("mapping_count") or len(observed_urls))
     passed = visible and mapping_count >= 3 and set(expected_urls).issubset(set(str(url) for url in observed_urls))
     return {
@@ -84,7 +112,7 @@ def _renderer_visibility_evidence(response, expected_urls):
     }
 
 
-def _record_renderer_evidence(job, evidence):
+def _record_renderer_evidence(job, evidence, uploaded_urls=None):
     metadata = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
     contract = metadata.get("article_media_contract")
     contract_path = None
@@ -97,6 +125,12 @@ def _record_renderer_evidence(job, evidence):
     if not isinstance(contract, dict):
         return
     handoff = contract.get("handoff_contract") if isinstance(contract.get("handoff_contract"), dict) else contract
+    if uploaded_urls:
+        for artifact, url in zip(handoff.get("artifacts") or [], uploaded_urls):
+            if isinstance(artifact, dict):
+                artifact["public_url"] = url
+        handoff["platform_upload_required"] = True
+        handoff["platform_cdn_evidence"] = {"passed": True, "urls": list(uploaded_urls), "platform": "juejin"}
     handoff["target_renderer_evidence"] = evidence
     handoff["state"] = "handoff_ready" if evidence.get("verified") is True else "handoff_blocked"
     if contract_path is None and metadata.get("article_media_contract_path"):
@@ -120,21 +154,21 @@ def _article_guard(job, title, body_text, platform_payload):
         or job.get("visual_template_selection")
         or {}
     )
-    covers = [item for item in artifacts if item.get("kind") == "cover" and _public_url(item)]
-    images = [item for item in artifacts if item.get("kind") == "image" and _public_url(item)]
+    covers = [item for item in artifacts if item.get("kind") == "cover" and _artifact_source(item)]
+    images = [item for item in artifacts if item.get("kind") == "image" and _artifact_source(item)]
     missing = []
     if _text_length(title) < 8:
         missing.append("title")
     if _text_length(body_text) < 1200:
         missing.append("body_1200_chars")
     if not covers:
-        missing.append("public_cover_image")
+        missing.append("cover_image")
     if len(images) < 3:
-        missing.append("public_inline_images_3")
+        missing.append("inline_images_3")
     if not _section_map_valid(section_map):
         missing.append("valid_section_image_map_3")
-    elif len(_mapped_public_urls(section_map, artifacts)) < 3:
-        missing.append("mapped_public_inline_images_3")
+    elif not all(_mapped_sources(section_map, artifacts)):
+        missing.append("mapped_inline_images_3")
     if not isinstance(template, dict) or not template.get("selected"):
         missing.append("visual_template_selection")
     return missing
@@ -194,6 +228,35 @@ class JuejinPublisher:
         except Exception as e:
             return {"err_no": -1, "err_msg": str(e)}
 
+    def _upload_image(self, source):
+        if str(source).startswith(("http://", "https://")):
+            return str(source)
+        path = Path(str(source))
+        if not path.is_file() or path.stat().st_size <= 0:
+            return ""
+        cookie_str, csrf, _ = self._cookie_and_csrf()
+        if not cookie_str:
+            return ""
+        boundary = "----ai-self-media-" + uuid.uuid4().hex
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        body = (
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{path.name}\"\r\n"
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode() + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+        headers = {
+            "Cookie": cookie_str, "x-csrf-token": csrf,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Origin": "https://juejin.cn", "Referer": "https://juejin.cn/editor/drafts/new?v=2",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        }
+        request = urllib.request.Request("https://api.juejin.cn/image_api/v1/image/upload", data=body, headers=headers, method="POST")
+        try:
+            payload = json.loads(urllib.request.urlopen(request, timeout=30).read())
+        except Exception:
+            return ""
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        return str(data.get("main_url") or data.get("url") or payload.get("url") or "")
+
     def deliver(self, job, platform):
         formatted = job.get("platform_payload") or format_for_platform(job, platform)
         title = formatted.get("title", job.get("title", ""))[:100]
@@ -212,7 +275,13 @@ class JuejinPublisher:
             or job.get("section_image_map")
             or []
         )
-        mapped_urls = _mapped_public_urls(section_map, job.get("artifacts", []))
+        artifacts = job.get("artifacts", [])
+        cover_source = next((_artifact_source(item) for item in artifacts if item.get("kind") == "cover"), "")
+        image_sources = _mapped_sources(section_map, artifacts)
+        uploaded = [self._upload_image(source) for source in [cover_source, *image_sources]]
+        if len(uploaded) != len(section_map) + 1 or any(not url.startswith("http") for url in uploaded):
+            return DeliveryResult(False, "blocked", error=f"juejin platform image upload incomplete: {len([url for url in uploaded if url])}/{len(section_map)+1}")
+        cover, mapped_urls = uploaded[0], uploaded[1:]
         md_body = body_text
         import re as _re
 
@@ -229,9 +298,6 @@ class JuejinPublisher:
             return DeliveryResult(False, "blocked", error="juejin article image markers do not match section_image_map")
 
         # The production contract supplies the adaptive public cover directly.
-        cover = str(formatted.get("cover_image") or "")
-        if not cover:
-            cover = next((_public_url(item) for item in job.get("artifacts", []) if item.get("kind") == "cover"), "")
         inline_urls = list(formatted.get("public_inline_image_urls") or formatted.get("inline_image_urls") or mapped_urls)
 
         # 1) Create draft
@@ -254,7 +320,7 @@ class JuejinPublisher:
         if detail.get("err_no") != 0:
             return DeliveryResult(False, "blocked", f"juejin:{draft_id}", error="juejin editor postcheck failed")
         renderer_evidence = _renderer_visibility_evidence(detail, mapped_urls)
-        _record_renderer_evidence(job, renderer_evidence)
+        _record_renderer_evidence(job, renderer_evidence, [cover, *mapped_urls])
         if not renderer_evidence["verified"]:
             return DeliveryResult(False, "blocked", f"juejin:{result.get('data', {}).get('id', '')}", error="juejin editor visibility response missing or incomplete")
         if self.save_as_draft:
