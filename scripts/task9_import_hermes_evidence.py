@@ -55,7 +55,10 @@ def import_evidence(report_path: Path, artifact_root: Path) -> dict:
         if platform == "douyin_ai" and int(metrics.get("ai_related") or 0) <= 0:
             failures.append("no_ai_candidate_observed")
         snapshot_value = str(row.get("snapshot_path") or "")
-        source_snapshot = source_root / snapshot_value.replace("hermes-recapture/", "") if snapshot_value else source_root / platform / "evidence_raw.json"
+        raw_snapshot = source_root / platform / "evidence_raw.json"
+        source_snapshot = raw_snapshot if raw_snapshot.is_file() else (
+            source_root / snapshot_value.replace("hermes-recapture/", "") if snapshot_value else raw_snapshot
+        )
         if not source_snapshot.is_file() or source_snapshot.stat().st_size <= 0:
             failures.append("raw_snapshot_missing")
         if failures:

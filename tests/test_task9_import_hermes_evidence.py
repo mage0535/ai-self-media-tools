@@ -29,3 +29,4 @@ def test_import_accepts_native_x_and_rejects_indirect_wechat(tmp_path: Path):
     assert result["rejected"] == [{"platform": "wechat", "failures": ["native_verification_missing", "platform_domain_mismatch"]}]
     saved = json.loads((tmp_path / "canary" / "_inputs" / "hotspots" / "twitter.json").read_text(encoding="utf-8"))
     assert saved["native_verified"] is True
+    assert saved["snapshot_path"].endswith(".json")
