@@ -1,6 +1,14 @@
 """Cross-platform publish-boundary and growth-policy regression tests."""
 
-from content_platform.content_policy import is_douyin_platform, is_manual_handoff_platform, is_short_video_platform, platform_region
+from content_platform.content_policy import (
+    AUTO_PUBLISH_PLATFORMS,
+    delivery_mode,
+    is_auto_publish_platform,
+    is_douyin_platform,
+    is_manual_handoff_platform,
+    is_short_video_platform,
+    platform_region,
+)
 from content_platform.growth_policy import build_growth_strategy, validate_growth_strategy
 
 
@@ -15,6 +23,26 @@ def test_douyin_account_variants_normalize_to_douyin_boundaries():
         assert is_short_video_platform(platform)
         assert is_douyin_platform(platform)
         assert is_manual_handoff_platform(platform)
+
+
+def test_only_configured_five_channel_family_can_auto_publish():
+    for platform in ["kuaishou", "zhihu", "juejin", "wechat", "twitter", "x"]:
+        assert is_auto_publish_platform(platform), platform
+        assert delivery_mode(platform) == "auto_publish"
+    assert AUTO_PUBLISH_PLATFORMS == {
+        "kuaishou", "zhihu", "juejin", "wechat", "wechat_official", "weixin", "twitter", "x"
+    }
+
+
+def test_all_ai_restricted_channels_are_manual_handoff_only():
+    for platform in ["bilibili", "douyin", "douyin_ai", "douyin_pet", "shipinhao", "xiaohongshu", "youtube", "tiktok"]:
+        assert delivery_mode(platform) == "manual_handoff", platform
+        assert not is_auto_publish_platform(platform)
+
+
+def test_unknown_channel_is_not_implicitly_publishable():
+    assert delivery_mode("new_platform") == "unsupported"
+    assert not is_auto_publish_platform("new_platform")
 
 
 def test_international_video_growth_rules_are_platform_specific():
