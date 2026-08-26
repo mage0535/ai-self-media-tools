@@ -51,6 +51,13 @@ class CookieRegistryTests(unittest.TestCase):
         self.assertEqual(type(build_publisher("juejin", config, "/tmp")).__name__, "JuejinPublisher")
         self.assertEqual(type(build_publisher("zhihu", config, "/tmp")).__name__, "ZhihuPublisher")
 
+    def test_domestic_article_publishers_follow_cn_proxy(self):
+        from content_platform.publishers import build_publisher
+        config = {"publishers": {"platforms": {"juejin": {"type": "juejin-api"}, "zhihu": {"type": "zhihu-playwright"}}}}
+        with patch.dict("os.environ", {"CN_PROXY": "socks5://127.0.0.1:2080"}, clear=False):
+            assert build_publisher("juejin", config, "/tmp").proxy.endswith(":2080")
+            assert build_publisher("zhihu", config, "/tmp").proxy.endswith(":2080")
+
 
 if __name__ == "__main__":
     unittest.main()

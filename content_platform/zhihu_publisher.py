@@ -128,7 +128,7 @@ def _article_guard(job, title, body_text, platform_payload):
 
 class ZhihuPublisher:
     def __init__(self, account="main", cookie_dir=str(Path.home() / "social-auto-upload" / "cookies"),
-                 proxy="socks5://127.0.0.1:1080", headless=True, save_as_draft=True):
+                 proxy="", headless=True, save_as_draft=True):
         self.account = account
         self.cookie_dir = cookie_dir
         self.proxy = proxy
