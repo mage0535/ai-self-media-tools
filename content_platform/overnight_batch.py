@@ -17,19 +17,9 @@ from .trends import normalize_topic
 from .trend_candidate import build_trend_candidate, validate_trend_candidate
 from .workflow_runtime import WORKFLOW_STAGES, WorkflowStateMachine
 from .hot_work_intelligence import STRONG_EVIDENCE, _metric_number
+from .content_policy import MANUAL_HANDOFF_PLATFORMS
 
 ROOT = Path(__file__).resolve().parents[1]
-
-MANUAL_HANDOFF_PLATFORMS = {
-    "bilibili",
-    "douyin",
-    "douyin_ai",
-    "douyin_pet",
-    "shipinhao",
-    "xiaohongshu",
-    "youtube",
-    "tiktok",
-}
 
 # Publishing keeps the historical ``twitter`` identifier, while analytics and
 # strategy snapshots use the canonical X key.  Keep the two concerns aligned

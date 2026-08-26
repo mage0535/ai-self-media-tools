@@ -40,12 +40,35 @@ INTERNATIONAL_PLATFORMS = {
 DOUYIN_ACCOUNT_VARIANTS = {"douyin_pet", "douyin_ai"}
 SHORT_VIDEO_PLATFORMS = {"bilibili", "douyin", "kuaishou", "shipinhao", "tiktok", "youtube", *DOUYIN_ACCOUNT_VARIANTS}
 XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
+# Only these channels may use an automatic delivery publisher.  This is a
+# fail-closed allowlist: adding a platform elsewhere must not silently enable
+# upload or scheduling for it.
+AUTO_PUBLISH_PLATFORMS = frozenset({
+    "kuaishou",
+    "zhihu",
+    "juejin",
+    "wechat",
+    "wechat_official",
+    "weixin",
+    "twitter",
+    "x",
+})
 # This is intentionally separate from the broader manual-handoff set.  The
 # account recovery policy makes Xiaohongshu a permanent fail-closed boundary:
 # config, routing defaults, and health data must never re-enable an uploader.
 STRICT_MANUAL_HANDOFF_PLATFORMS = frozenset(XIAOHONGSHU_PLATFORMS)
 DOUYIN_PLATFORMS = {"douyin", *DOUYIN_ACCOUNT_VARIANTS}
-MANUAL_HANDOFF_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu", "rednote", *DOUYIN_ACCOUNT_VARIANTS}
+MANUAL_HANDOFF_PLATFORMS = frozenset({
+    "bilibili",
+    "douyin",
+    "douyin_ai",
+    "douyin_pet",
+    "shipinhao",
+    "tiktok",
+    "youtube",
+    "xiaohongshu",
+    "rednote",
+})
 
 
 def normalize_platform(platform):
@@ -83,6 +106,21 @@ def is_douyin_platform(platform):
 
 def is_manual_handoff_platform(platform):
     return normalize_platform(platform) in MANUAL_HANDOFF_PLATFORMS
+
+
+def is_auto_publish_platform(platform):
+    """Return whether the platform is explicitly allowed to auto-deliver."""
+    return normalize_platform(platform) in AUTO_PUBLISH_PLATFORMS
+
+
+def delivery_mode(platform):
+    """Return the immutable delivery boundary used by production workflows."""
+    normalized = normalize_platform(platform)
+    if normalized in AUTO_PUBLISH_PLATFORMS:
+        return "auto_publish"
+    if normalized in MANUAL_HANDOFF_PLATFORMS:
+        return "manual_handoff"
+    return "unsupported"
 
 
 def generated_media_kinds_for_job(job, config):
