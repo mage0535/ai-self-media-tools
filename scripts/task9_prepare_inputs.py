@@ -66,7 +66,7 @@ def prepare_inputs(data_root: Path, artifact_root: Path) -> dict[str, Any]:
                 }
                 break
         if not selected:
-            row = official.get(platform) or (official.get("douyin_ai") if platform == "douyin_pet" else {})
+            row = official.get(platform) or (official.get("douyin_ai") if platform == "douyin_pet" else {}) or {}
             if row.get("status") in VERIFIED_OFFICIAL_STATUSES:
                 for signal in row.get("signals") or []:
                     score = _fit(str(signal), platform)
