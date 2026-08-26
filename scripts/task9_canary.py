@@ -820,8 +820,12 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
         evidence["job_id"] = job_id
         result = pipeline.run(job_id)
         evidence["run_called"] = True
-        if case["delivery_policy"] in {"draft_first", "manual_handoff_only", "dry_run"}:
-            expected_status = {"draft_first": "drafted", "manual_handoff_only": "handoff_pending", "dry_run": "dry_run"}[case["delivery_policy"]]
+        if case.get("dry_run") or case["delivery_policy"] in {"draft_first", "manual_handoff_only", "dry_run"}:
+            expected_status = (
+                "dry_run"
+                if case.get("dry_run") or case["delivery_policy"] == "dry_run"
+                else {"draft_first": "drafted", "manual_handoff_only": "handoff_pending"}[case["delivery_policy"]]
+            )
             with patch("content_platform.pipeline.build_publisher", side_effect=lambda platform, cfg, data_dir: _PolicySafePublisher(root / "outbox", expected_status)):
                 result = pipeline.stage_drafts(job_id)
                 evidence["stage_drafts_called"] = True
