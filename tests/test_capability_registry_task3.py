@@ -455,3 +455,14 @@ def test_delivery_router_selects_exactly_one_policy_compatible_capability():
     assert "pipeline_publisher" not in {item["capability_id"] for item in manual["candidates"]}
     assert "pipeline_publisher" in {item["capability_id"] for item in automatic["candidates"]}
     assert "handoff_package_builder" not in {item["capability_id"] for item in automatic["candidates"]}
+
+
+def test_video_layout_formats_route_to_video_capabilities():
+    from content_platform.capability_router import match_capabilities
+
+    vertical = match_capabilities({"platform": "kuaishou", "content_format": "vertical_video"})
+    horizontal = match_capabilities({"platform": "youtube", "content_format": "horizontal_video"})
+
+    for result in (vertical, horizontal):
+        selected = {item["capability_id"] for item in result["candidates"]}
+        assert {"content_platform.video_recipe", "video_toolchain_runner", "shotcraft_moves", "voice_engine", "lower_third_subtitle_renderer", "mix_bgm_with_gate", "media_quality"} <= selected
