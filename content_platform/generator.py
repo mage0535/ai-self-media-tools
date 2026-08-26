@@ -432,12 +432,22 @@ class DraftGenerator:
                 planned_manifest=draft_meta["tool_invocation_manifest"],
             ))
         platform = str(platforms[0] if platforms else brief.get("platform") or "")
+        series_plan = draft.get("series_plan") if isinstance(draft.get("series_plan"), dict) else {}
+        if not series_plan:
+            from .content_depth import remove_unplanned_continuation
+            cleaned_body = remove_unplanned_continuation(body)
+            if cleaned_body != body:
+                body = cleaned_body
+                draft_meta["continuation_sanitization"] = {
+                    "passed": True,
+                    "reason": "unplanned continuation promise removed",
+                }
         draft_meta["content_depth_plan"] = build_content_depth_plan(
             str(draft.get("title") or topic),
             body,
             evidence=self._depth_evidence(brief, draft_meta),
             actions=draft_meta.get("actionable_checklist") or [],
-            series_plan=draft.get("series_plan") if isinstance(draft.get("series_plan"), dict) else {},
+            series_plan=series_plan,
             platform=platform,
         )
         return {
