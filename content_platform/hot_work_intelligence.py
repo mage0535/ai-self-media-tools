@@ -377,6 +377,8 @@ def collect_logged_short_video_search(
     output_dir: str | Path,
     limit: int = 12,
     timeout_ms: int = 30000,
+    proxy_url: str = "",
+    route_name: str = "direct",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Collect a logged short-video search page with Playwright.
 
@@ -404,7 +406,7 @@ def collect_logged_short_video_search(
         raise ValueError(f"unsupported logged short-video platform: {platform}")
     base = Path(output_dir)
     base.mkdir(parents=True, exist_ok=True)
-    status: dict[str, Any] = {"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0}
+    status: dict[str, Any] = {"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0, "route": route_name}
     text_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.txt"
     screenshot_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.png"
     with sync_playwright() as pw:
@@ -417,6 +419,9 @@ def collect_logged_short_video_search(
             or shutil.which("google-chrome-stable")
         )
         launch_options: dict[str, Any] = {"headless": True}
+        if proxy_url:
+            normalized_proxy = "socks5://" + proxy_url[len("socks5h://"):] if proxy_url.startswith("socks5h://") else proxy_url
+            launch_options["proxy"] = {"server": normalized_proxy}
         if executable_path:
             launch_options["executable_path"] = executable_path
         browser = pw.chromium.launch(**launch_options)
@@ -451,12 +456,16 @@ def collect_logged_short_video_search(
         status.update({"status": "ok", "count": len(rows)})
     elif any(token in lowered for token in ("登录", "验证码", "login", "captcha")):
         status.update({"status": "login_required_or_captcha", "count": 0})
-    elif any(token in text for token in ("服务器出错", "刷新重试", "请求过于频繁")):
+    elif any(token in text for token in ("服务器出错", "刷新重试", "请求过于频繁", "访问验证", "安全验证", "challenge")):
         status.update({"status": "platform_error_or_rate_limited", "count": 0})
     else:
         status.update({"status": "layout_changed_or_no_lane_results", "count": 0})
     status.update({"text_path": str(text_path), "screenshot_path": str(screenshot_path)})
     return rows, status
+
+
+def should_use_regional_proxy(status: dict[str, Any]) -> bool:
+    return str(status.get("status") or "") == "platform_error_or_rate_limited"
 
 
 def _decode_js_string(value: str) -> str:
