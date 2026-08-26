@@ -410,3 +410,22 @@ def test_router_inherits_requiredness_from_applicable_tool_groups():
     assert by_id["duplication_policy"]["required_or_optional"] == "required"
     assert by_id["content_platform.content_recipe"]["required_or_optional"] == "required"
     assert by_id["performance_cycle"]["required_or_optional"] == "optional"
+
+
+def test_render_adapter_only_executes_after_real_renderer_output(tmp_path):
+    registry = load_capability_registry(REGISTRY_PATH)
+    capability = next(item for item in registry["capabilities"] if item["id"] == "video_toolchain_runner")
+    output = tmp_path / "final.mp4"
+    output.write_bytes(b"video")
+
+    result = execute_capability(
+        capability,
+        {
+            "content_profile": {"content_format": "short_video"},
+            "content_blueprint": {"topic": "AI workflow"},
+            "render_manifest": {"ok": True, "status": "rendered", "output": str(output)},
+        },
+    )
+
+    assert result["status"] == "executed"
+    assert result["contract_valid"] is True

@@ -98,6 +98,65 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
     return result
 
 
+def execute_post_generation_capabilities(
+    prior: dict,
+    draft: dict,
+    brief: dict,
+    *,
+    artifacts: list[dict],
+    render_manifest: dict,
+    quality_gate: dict,
+) -> dict:
+    """Resume selected asset/render/gate nodes using real produced evidence."""
+    registry = load_registry()
+    by_id = {item["id"]: item for item in registry["capabilities"]}
+    plan = {
+        "candidates": [dict(item) for item in prior.get("selected") or prior.get("planned") or []],
+        "consulted": list(prior.get("consulted") or []),
+        "selection_failures": list(prior.get("selection_failures") or []),
+    }
+    meta = draft.get("draft_meta") if isinstance(draft.get("draft_meta"), dict) else {}
+
+    def executor(item, _draft, _brief):
+        capability = by_id[item["capability_id"]]
+        subtitle = render_manifest.get("subtitle") if isinstance(render_manifest.get("subtitle"), dict) else {}
+        bgm = meta.get("bgm_source") or meta.get("bgm") or render_manifest.get("bgm") or {}
+        inputs = {
+            "content_profile": prior.get("profile") or brief.get("content_profile") or {},
+            "content_blueprint": brief.get("content_blueprint") or {},
+            "artifacts": artifacts,
+            "render_manifest": render_manifest,
+            "video_toolchain_plan": meta.get("video_toolchain_plan") or {},
+            "shotcraft_plan": render_manifest.get("shotcraft_motion_plan") or {},
+            "tts_fingerprint": meta.get("tts_fingerprint") or {},
+            "subtitle_evidence": subtitle,
+            "audio_mix_evidence": bgm,
+            "media_quality_evidence": quality_gate,
+            "preflight_manifest": meta.get("preflight_manifest") or brief.get("preflight_manifest") or {},
+            "platform": brief.get("platform") or (brief.get("platforms") or [""])[0],
+        }
+        return execute_capability(capability, inputs)
+
+    late = execute_capability_dag(plan, draft, brief, executor=executor, stages={"assets", "render", "gate"})
+    merged = dict(prior)
+    for key in ("executed", "artifact_verified", "skipped", "optional_failures"):
+        values = [*(prior.get(key) or []), *(late.get(key) or [])]
+        deduped = {}
+        for value in values:
+            if isinstance(value, dict) and value.get("capability_id"):
+                deduped[str(value["capability_id"])] = value
+        merged[key] = list(deduped.values())
+    merged["failures"] = [*(prior.get("failures") or []), *(late.get("failures") or [])]
+    merged["completed_stages"] = sorted(set(prior.get("completed_stages") or []) | set(late.get("completed_stages") or []))
+    merged["pending"] = [
+        item for item in late.get("pending") or []
+        if str(item.get("stage") or "") not in set(merged["completed_stages"])
+    ]
+    merged = validate_generation_execution(merged, required=bool(brief.get("automated_workflow")))
+    merged["profile"] = prior.get("profile") or brief.get("content_profile") or {}
+    return merged
+
+
 def _dedup_evidence(hygiene: dict) -> dict:
     if not isinstance(hygiene, dict) or not hygiene:
         return {}
