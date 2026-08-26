@@ -116,6 +116,9 @@ def _record_renderer_evidence(job, evidence, uploaded_urls=None):
     metadata = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
     contract = metadata.get("article_media_contract")
     contract_path = None
+    if not contract:
+        contract_path = next((Path(str(item.get("path") or "")) for item in job.get("artifacts") or [] if item.get("kind") == "article_media_contract"), None)
+        contract = str(contract_path) if contract_path else None
     if isinstance(contract, str):
         contract_path = Path(contract)
         try:
@@ -139,6 +142,19 @@ def _record_renderer_evidence(job, evidence, uploaded_urls=None):
         contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _article_contract(job):
+    metadata = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
+    contract = metadata.get("article_media_contract")
+    if not contract:
+        contract = next((item.get("path") for item in job.get("artifacts") or [] if item.get("kind") == "article_media_contract"), None)
+    if isinstance(contract, str) and Path(contract).is_file():
+        try:
+            contract = json.loads(Path(contract).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+    return contract if isinstance(contract, dict) else {}
+
+
 def _article_guard(job, title, body_text, platform_payload):
     artifacts = job.get("artifacts") or []
     draft_meta = job.get("draft_meta") or {}
@@ -146,6 +162,7 @@ def _article_guard(job, title, body_text, platform_payload):
         platform_payload.get("section_image_map")
         or draft_meta.get("section_image_map")
         or job.get("section_image_map")
+        or _article_contract(job).get("section_image_map")
         or []
     )
     template = (
@@ -273,6 +290,7 @@ class JuejinPublisher:
             formatted.get("section_image_map")
             or (job.get("draft_meta") or {}).get("section_image_map")
             or job.get("section_image_map")
+            or _article_contract(job).get("section_image_map")
             or []
         )
         artifacts = job.get("artifacts", [])

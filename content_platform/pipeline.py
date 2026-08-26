@@ -1105,6 +1105,9 @@ class Pipeline:
             mapping_path = Path(artifact["path"]).parent / "section_image_map.json"
             if mapping_path.is_file():
                 self.store.add_artifact(job_id, "section_image_map", mapping_path, "")
+            contract_path = Path(str(artifact.get("article_media_contract") or ""))
+            if contract_path.is_file():
+                self.store.add_artifact(job_id, "article_media_contract", contract_path, "")
             return artifact
         self.store.add_artifact(job_id, artifact["kind"], artifact["path"], artifact.get("checksum", ""))
         return artifact
