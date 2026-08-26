@@ -718,6 +718,17 @@ def execute(args):
                     started = datetime.now()
                     try:
                         rows, status = collect_logged_short_video_search(platform, query, state_file=state_file, output_dir=output_dir / "logged_search")
+                        from .hot_work_intelligence import should_use_regional_proxy
+                        proxy_env = "US_PROXY" if platform in {"tiktok", "youtube", "twitter"} else "CN_PROXY"
+                        proxy_url = os.environ.get(proxy_env, "")
+                        if not rows and proxy_url and should_use_regional_proxy(status):
+                            direct_status = dict(status)
+                            rows, status = collect_logged_short_video_search(
+                                platform, query, state_file=state_file, output_dir=output_dir / "logged_search",
+                                proxy_url=proxy_url, route_name=proxy_env,
+                            )
+                            status["route_attempts"] = [direct_status, dict(status)]
+                            status["fallback_reason"] = direct_status.get("status")
                         items.extend(rows)
                         status.setdefault("elapsed_ms", int((datetime.now() - started).total_seconds() * 1000))
                         statuses.append(status)

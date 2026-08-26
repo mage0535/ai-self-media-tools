@@ -9,6 +9,7 @@ from content_platform.hot_work_intelligence import (
     parse_sogou_wechat_html,
     parse_tiktok_search_text,
     parse_xiaohongshu_search_text,
+    should_use_regional_proxy,
 )
 
 
@@ -148,6 +149,12 @@ def test_platform_anchor_parser_rejects_server_error_page():
         query="AI workflow",
     )
     assert rows == []
+
+
+def test_hot_work_proxy_fallback_only_for_classified_platform_or_network_failure():
+    assert should_use_regional_proxy({"status": "platform_error_or_rate_limited"}) is True
+    assert should_use_regional_proxy({"status": "login_required_or_captcha"}) is False
+    assert should_use_regional_proxy({"status": "layout_changed_or_no_lane_results"}) is False
 
 
 def test_platform_anchor_parser_rejects_ads_profiles_and_year_as_metric():

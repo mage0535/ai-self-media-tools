@@ -377,7 +377,7 @@ class PerformanceCollectorTests(unittest.TestCase):
 
             def fake_probe(pw, state_file, target, config, route_name, proxy_url, diagnostic_only):
                 calls.append((route_name, proxy_url, diagnostic_only))
-                if route_name == "direct_diagnostic":
+                if route_name == "CN_PROXY":
                     return {"status": "backend_signal", "account_metrics": {"views": 1}, "reason": "ok"}
                 return {"status": "browser_probe_failed", "reason": "ERR_NO_SUPPORTED_PROXIES"}
 
@@ -397,11 +397,33 @@ class PerformanceCollectorTests(unittest.TestCase):
             ), patch.dict("os.environ", {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=False), patch(
                 "content_platform.performance_collectors._probe_browser_backend_route", side_effect=fake_probe
             ):
-                result = _browser_backend_signal("douyin", {"state_file": str(state), "diagnose_direct_without_proxy": True})
+                result = _browser_backend_signal("douyin", {"state_file": str(state)})
 
         self.assertEqual(result["status"], "backend_signal")
-        self.assertEqual([item[0] for item in calls], ["CN_PROXY", "direct_diagnostic"])
-        self.assertTrue(calls[1][2])
+        self.assertEqual([item[0] for item in calls], ["direct", "CN_PROXY"])
+        self.assertFalse(calls[0][2])
+        self.assertIn("fallback_reason", result)
+
+    def test_backend_browser_direct_success_does_not_use_regional_proxy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / "state.json"
+            state.write_text('{"cookies": [], "origins": []}', encoding="utf-8")
+            calls = []
+            def fake_probe(_pw, _state, _target, _config, route_name, proxy_url, diagnostic_only):
+                calls.append((route_name, proxy_url, diagnostic_only))
+                return {"status": "backend_signal", "account_metrics": {"views": 1}, "reason": "ok"}
+            class FakeSync:
+                def __enter__(self): return object()
+                def __exit__(self, *_args): return False
+            fake_playwright = types.ModuleType("playwright")
+            fake_sync_api = types.ModuleType("playwright.sync_api")
+            fake_sync_api.sync_playwright = lambda: FakeSync()
+            with patch.dict(sys.modules, {"playwright": fake_playwright, "playwright.sync_api": fake_sync_api}), patch.dict(
+                "os.environ", {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=False
+            ), patch("content_platform.performance_collectors._probe_browser_backend_route", side_effect=fake_probe):
+                result = _browser_backend_signal("douyin", {"state_file": str(state)})
+        self.assertEqual(result["status"], "backend_signal")
+        self.assertEqual([item[0] for item in calls], ["direct"])
 
     def test_backend_browser_route_normalizes_socks5h_for_playwright(self):
         launched = {}

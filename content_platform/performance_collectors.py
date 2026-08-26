@@ -209,28 +209,34 @@ def _browser_backend_signal(platform: str, config: dict[str, Any]) -> dict[str, 
     except Exception as exc:
         return {"status": "browser_unavailable", "reason": f"{type(exc).__name__}: {str(exc)[:160]}"}
     with sync_playwright() as pw:
-        routes: list[tuple[str, str, bool]] = []
+        routes: list[tuple[str, str, bool]] = [("direct", "", False)]
         if proxy_url:
-            routes.append((proxy_env or "proxy", proxy_url, False))
-        else:
-            routes.append(("direct", "", False))
-        diagnose_direct = bool(config.get("diagnose_direct_without_proxy")) or os.environ.get("CONTENT_PLATFORM_DIAGNOSE_DIRECT_BACKEND") == "1"
-        if proxy_url and diagnose_direct:
-            routes.append(("direct_diagnostic", "", True))
+            routes.append((proxy_env or "regional_proxy", proxy_url, False))
         route_errors: list[str] = []
         login_required = False
         for route_name, route_proxy, diagnostic_only in routes:
             result = _probe_browser_backend_route(pw, state_file, target, config, route_name, route_proxy, diagnostic_only)
             if result.get("status") == "backend_signal":
                 if route_errors:
-                    result["proxy_probe_errors"] = route_errors[-3:]
+                    result["route_attempts"] = route_errors + [f"{route_name}: success"]
+                    result["fallback_reason"] = route_errors[0]
                 return result
             if result.get("status") == "login_required_or_verification":
                 login_required = True
+                break
             route_errors.append(f"{route_name}: {result.get('reason') or result.get('status')}")
+            if route_name == "direct" and not _network_route_failure(result):
+                break
     if login_required:
         return {"status": "login_required_or_verification", "reason": "creator backend requires login or verification"}
     return {"status": "backend_signal_unavailable", "reason": "; ".join(route_errors)[:300] or "backend metrics not visible"}
+
+
+def _network_route_failure(result: dict[str, Any]) -> bool:
+    if result.get("status") == "browser_probe_failed":
+        return True
+    reason = str(result.get("reason") or "").casefold()
+    return any(marker in reason for marker in ("timeout", "timed out", "connection", "net::err", "proxy", "rate limit", "waf", "region"))
 
 
 def _probe_browser_backend_route(
