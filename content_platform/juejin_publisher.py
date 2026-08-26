@@ -1,7 +1,5 @@
 """Juejin article publisher — API-based, supports markdown + cover."""
 import json
-import mimetypes
-import uuid
 import urllib.request
 from pathlib import Path
 
@@ -246,33 +244,57 @@ class JuejinPublisher:
             return {"err_no": -1, "err_msg": str(e)}
 
     def _upload_image(self, source):
-        if str(source).startswith(("http://", "https://")):
-            return str(source)
-        path = Path(str(source))
-        if not path.is_file() or path.stat().st_size <= 0:
-            return ""
-        cookie_str, csrf, _ = self._cookie_and_csrf()
-        if not cookie_str:
-            return ""
-        boundary = "----ai-self-media-" + uuid.uuid4().hex
-        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        body = (
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{path.name}\"\r\n"
-            f"Content-Type: {content_type}\r\n\r\n"
-        ).encode() + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
-        headers = {
-            "Cookie": cookie_str, "x-csrf-token": csrf,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Origin": "https://juejin.cn", "Referer": "https://juejin.cn/editor/drafts/new?v=2",
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-        }
-        request = urllib.request.Request("https://api.juejin.cn/image_api/v1/image/upload", data=body, headers=headers, method="POST")
+        urls = self._upload_images([source])
+        return urls[0] if urls else ""
+
+    def _upload_images(self, sources):
+        sources = [str(source or "") for source in sources]
+        if all(source.startswith(("http://", "https://")) for source in sources):
+            return sources
+        _, _, storage = self._cookie_and_csrf()
+        if not storage:
+            return []
         try:
-            payload = json.loads(urllib.request.urlopen(request, timeout=30).read())
-        except Exception:
-            return ""
-        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-        return str(data.get("main_url") or data.get("url") or payload.get("url") or "")
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            return []
+        urls = []
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
+            context = browser.new_context(
+                storage_state=storage if isinstance(storage, dict) else {"cookies": storage},
+                locale="zh-CN",
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            )
+            page = context.new_page()
+            page.goto("https://juejin.cn/editor/drafts/new?v=2", wait_until="networkidle", timeout=60000)
+            editor = page.locator(".CodeMirror")
+            upload = page.locator('.bytemd-toolbar-icon[bytemd-tippy-path="5"]').first
+            for source in sources:
+                if source.startswith(("http://", "https://")):
+                    urls.append(source)
+                    continue
+                path = Path(source)
+                if not path.is_file() or path.stat().st_size <= 0 or upload.count() != 1:
+                    urls.append("")
+                    continue
+                before = editor.evaluate("e => e.CodeMirror && e.CodeMirror.getValue()") or ""
+                try:
+                    with page.expect_file_chooser(timeout=5000) as chooser:
+                        upload.click()
+                    chooser.value.set_files(str(path))
+                    value = before
+                    for _ in range(30):
+                        page.wait_for_timeout(1000)
+                        value = editor.evaluate("e => e.CodeMirror && e.CodeMirror.getValue()") or ""
+                        if value != before and "http" in value:
+                            break
+                    matches = __import__("re").findall(r"!\[[^\]]*\]\((https?://[^)]+)\)", value)
+                    urls.append(matches[-1] if matches else "")
+                except Exception:
+                    urls.append("")
+            browser.close()
+        return urls
 
     def deliver(self, job, platform):
         formatted = job.get("platform_payload") or format_for_platform(job, platform)
@@ -296,7 +318,7 @@ class JuejinPublisher:
         artifacts = job.get("artifacts", [])
         cover_source = next((_artifact_source(item) for item in artifacts if item.get("kind") == "cover"), "")
         image_sources = _mapped_sources(section_map, artifacts)
-        uploaded = [self._upload_image(source) for source in [cover_source, *image_sources]]
+        uploaded = self._upload_images([cover_source, *image_sources])
         if len(uploaded) != len(section_map) + 1 or any(not url.startswith("http") for url in uploaded):
             return DeliveryResult(False, "blocked", error=f"juejin platform image upload incomplete: {len([url for url in uploaded if url])}/{len(section_map)+1}")
         cover, mapped_urls = uploaded[0], uploaded[1:]

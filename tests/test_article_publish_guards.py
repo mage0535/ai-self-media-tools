@@ -77,7 +77,7 @@ def test_juejin_uploads_local_assets_to_platform_before_draft(tmp_path):
     job = _article_job(tmp_path, public_images=False)
     uploaded = ["https://p3-juejin.byteimg.com/cover.jpg", *[f"https://p3-juejin.byteimg.com/inline-{i}.jpg" for i in range(3)]]
     with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(
-        publisher, "_upload_image", side_effect=uploaded
+        publisher, "_upload_images", return_value=uploaded
     ) as upload, patch.object(
         publisher, "_api", side_effect=[
             {"err_no": 0, "data": {"id": "draft-local"}},
@@ -87,7 +87,7 @@ def test_juejin_uploads_local_assets_to_platform_before_draft(tmp_path):
         result = publisher.deliver(job, "juejin")
     assert result.ok is True
     assert result.status == "drafted"
-    assert upload.call_count == 4
+    assert upload.call_count == 1
 
 
 def test_zhihu_blocks_incomplete_article_before_cookie_lookup():
