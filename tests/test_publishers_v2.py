@@ -18,6 +18,7 @@ from content_platform.publishers import (
     RedditDraftPublisher,
     SocialAutoUploadPublisher,
     HermesWechatAdapter,
+    ManualHandoffPublisher,
     WechatDraftPublisher,
     build_publisher,
 )
@@ -38,6 +39,97 @@ class FakeResponse:
 
 
 class PublisherV2Tests(unittest.TestCase):
+    def test_build_publisher_forces_article_routes_to_draft_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = {
+                "publishers": {
+                    "platforms": {
+                        "zhihu": {"type": "zhihu-playwright", "save_as_draft": False},
+                        "juejin": {"type": "juejin-api", "save_as_draft": False},
+                    }
+                }
+            }
+
+            self.assertIs(build_publisher("zhihu", config, tmp).save_as_draft, True)
+            self.assertIs(build_publisher("juejin", config, tmp).save_as_draft, True)
+
+    def test_manual_handoff_blocks_missing_or_unreadable_three_piece_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "video.mp4"
+            video.write_bytes(b"video")
+            publisher = ManualHandoffPublisher(root / "outbox")
+            base = {
+                "id": "job-incomplete",
+                "title": "Ready title",
+                "body": "Ready caption",
+                "platform_payload": {"kind": "video", "title": "Ready title", "caption": "Ready caption"},
+            }
+            cases = [
+                [],
+                None,
+                [{"kind": "video", "path": str(video)}, {"kind": "cover", "path": str(root / "missing.png")}],
+                [{"kind": "video", "path": str(video)}, {"kind": "cover", "path": str(video)}],
+            ]
+            for artifacts in cases:
+                with self.subTest(artifacts=artifacts):
+                    result = publisher.deliver({**base, "artifacts": artifacts}, "tiktok")
+                    self.assertFalse(result.ok)
+                    self.assertEqual(result.status, "blocked")
+
+    def test_manual_handoff_accepts_complete_three_piece_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "video.mp4"
+            cover = root / "cover.png"
+            video.write_bytes(b"video")
+            cover.write_bytes(b"cover")
+            publisher = ManualHandoffPublisher(root / "outbox")
+
+            result = publisher.deliver(
+                {
+                    "id": "job-complete",
+                    "title": "Ready title",
+                    "body": "Ready caption",
+                    "platform_payload": {"kind": "video", "title": "Ready title", "caption": "Ready caption", "hashtags": ["#AI"]},
+                    "artifacts": [
+                        {"kind": "video", "path": str(video)},
+                        {"kind": "cover", "path": str(cover)},
+                    ],
+                },
+                "tiktok",
+            )
+
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "handoff_pending")
+
+    def test_manual_handoff_blocks_package_without_direct_publish_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "video.mp4"
+            cover = root / "cover.png"
+            video.write_bytes(b"video")
+            cover.write_bytes(b"cover")
+            publisher = ManualHandoffPublisher(root / "outbox")
+
+            result = publisher.deliver(
+                {
+                    "id": "job-no-text",
+                    "title": "Ready title",
+                    "body": "",
+                    "platform_payload": {"kind": "video", "title": "Ready title", "caption": ""},
+                    "artifacts": [
+                        {"kind": "video", "path": str(video)},
+                        {"kind": "cover", "path": str(cover)},
+                    ],
+                },
+                "tiktok",
+            )
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.status, "blocked")
+            self.assertIn("publish_text_missing", result.error)
+
     def test_devto_always_creates_private_draft(self):
         with patch("content_platform.publishers.urllib.request.urlopen", return_value=FakeResponse({"id": 12})) as call:
             result = DevtoDraftPublisher(api_key="key").deliver({"title": "T", "body": "B"}, "devto")
@@ -393,7 +485,7 @@ class PublisherV2Tests(unittest.TestCase):
 
             result = publisher.deliver({"id": "job7", "title": "T", "body": "B"}, "tiktok")
 
-        self.assertEqual(result.status, "handoff_pending")
+        self.assertEqual(result.status, "blocked")
         self.assertIn("manual", result.error)
 
     def test_manual_only_platforms_override_any_auto_publisher_config(self):
@@ -422,7 +514,7 @@ class PublisherV2Tests(unittest.TestCase):
                     self.assertIn("handoff gate", result.error)
                 else:
                     self.assertEqual(publisher.__class__.__name__, "ManualHandoffPublisher")
-                    self.assertEqual(result.status, "handoff_pending")
+                    self.assertEqual(result.status, "blocked")
                     self.assertIn("manual-only", result.error)
 
     def test_aitoearn_disabled_platforms_override_draft_and_flow_configs(self):
@@ -448,7 +540,7 @@ class PublisherV2Tests(unittest.TestCase):
                         result = publisher.deliver({"id": "job7", "title": "T", "body": "B"}, platform)
 
                         self.assertEqual(publisher.__class__.__name__, "ManualHandoffPublisher")
-                        self.assertEqual(result.status, "handoff_pending")
+                        self.assertEqual(result.status, "blocked")
                         self.assertTrue("AiToEarn is disabled" in result.error or "manual-only" in result.error)
 
     def test_aitoearn_flow_publisher_returns_handoff_pending(self):

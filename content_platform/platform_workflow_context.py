@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .content_policy import delivery_mode
 from .strategy_compiler import compile_strategy, validate_compiled_strategy
 from .content_quality_reference import load_content_quality_reference_pack, validate_content_quality_reference_pack
 from .runtime_capabilities import build_runtime_capability_snapshot
@@ -31,18 +32,6 @@ PLATFORM_SKILLS = {
     name: [skill for skill in required_workflow_skills(name) if skill not in GENERIC_SKILLS]
     for name in REQUIRED_SKILLS_BY_CHANNEL
 }
-PUBLISH_MODES = {
-    "kuaishou": "automatic_scheduled",
-    "x": "automatic",
-    "twitter": "automatic",
-    "wechat": "draft",
-    "zhihu": "draft",
-    "juejin": "draft",
-}
-for _platform in {"tiktok", "youtube", "bilibili", "shipinhao", "douyin", "douyin_ai", "douyin_pet", "xiaohongshu"}:
-    PUBLISH_MODES.setdefault(_platform, "manual_handoff")
-
-
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -211,7 +200,7 @@ def load_platform_workflow_context(platform: str, *, plan: dict[str, Any] | None
         "content_quality_reference_gate": quality_reference_gate,
         "runtime_capabilities": runtime_capabilities,
         "hot_work_parameter_pack": load_hot_work_parameter_pack_compact(platform),
-        "publish_mode": PUBLISH_MODES.get(platform, "manual_handoff"),
+        "publish_mode": delivery_mode(platform),
         "selected_tools": list(dict.fromkeys(map(str, selected_tools))),
         "plan": {"template_family": plan.get("template_family", ""), "selected_pipeline": plan.get("selected_pipeline", "")},
         "loaded": True,

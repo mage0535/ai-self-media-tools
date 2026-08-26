@@ -40,23 +40,6 @@ INTERNATIONAL_PLATFORMS = {
 DOUYIN_ACCOUNT_VARIANTS = {"douyin_pet", "douyin_ai"}
 SHORT_VIDEO_PLATFORMS = {"bilibili", "douyin", "kuaishou", "shipinhao", "tiktok", "youtube", *DOUYIN_ACCOUNT_VARIANTS}
 XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
-# Only these channels may use an automatic delivery publisher.  This is a
-# fail-closed allowlist: adding a platform elsewhere must not silently enable
-# upload or scheduling for it.
-AUTOMATED_DELIVERY_PLATFORMS = frozenset({
-    "kuaishou",
-    "zhihu",
-    "juejin",
-    "wechat",
-    "wechat_official",
-    "weixin",
-    "twitter",
-    "x",
-})
-# Preserve the old name for callers that only need to ask whether an
-# automated route is permitted.  The detailed mode below distinguishes draft,
-# scheduled, and direct publication.
-AUTO_PUBLISH_PLATFORMS = AUTOMATED_DELIVERY_PLATFORMS
 DELIVERY_MODES = {
     "kuaishou": "automatic_scheduled",
     "zhihu": "draft_box",
@@ -66,23 +49,30 @@ DELIVERY_MODES = {
     "weixin": "draft_box",
     "twitter": "direct_publish",
     "x": "direct_publish",
+    "bilibili": "manual_handoff",
+    "douyin": "manual_handoff",
+    "douyin_ai": "manual_handoff",
+    "douyin_pet": "manual_handoff",
+    "shipinhao": "manual_handoff",
+    "tiktok": "manual_handoff",
+    "youtube": "manual_handoff",
+    "xiaohongshu": "manual_handoff",
+    "rednote": "manual_handoff",
 }
+# These sets are derived compatibility views. DELIVERY_MODES is the canonical
+# source and unknown platforms remain unsupported.
+AUTOMATED_DELIVERY_PLATFORMS = frozenset(
+    platform for platform, mode in DELIVERY_MODES.items() if mode != "manual_handoff"
+)
+AUTO_PUBLISH_PLATFORMS = AUTOMATED_DELIVERY_PLATFORMS
 # This is intentionally separate from the broader manual-handoff set.  The
 # account recovery policy makes Xiaohongshu a permanent fail-closed boundary:
 # config, routing defaults, and health data must never re-enable an uploader.
 STRICT_MANUAL_HANDOFF_PLATFORMS = frozenset(XIAOHONGSHU_PLATFORMS)
 DOUYIN_PLATFORMS = {"douyin", *DOUYIN_ACCOUNT_VARIANTS}
-MANUAL_HANDOFF_PLATFORMS = frozenset({
-    "bilibili",
-    "douyin",
-    "douyin_ai",
-    "douyin_pet",
-    "shipinhao",
-    "tiktok",
-    "youtube",
-    "xiaohongshu",
-    "rednote",
-})
+MANUAL_HANDOFF_PLATFORMS = frozenset(
+    platform for platform, mode in DELIVERY_MODES.items() if mode == "manual_handoff"
+)
 
 
 def normalize_platform(platform):
@@ -129,12 +119,7 @@ def is_auto_publish_platform(platform):
 
 def delivery_mode(platform):
     """Return the immutable delivery boundary used by production workflows."""
-    normalized = normalize_platform(platform)
-    if normalized in DELIVERY_MODES:
-        return DELIVERY_MODES[normalized]
-    if normalized in MANUAL_HANDOFF_PLATFORMS:
-        return "manual_handoff"
-    return "unsupported"
+    return DELIVERY_MODES.get(normalize_platform(platform), "unsupported")
 
 
 def generated_media_kinds_for_job(job, config):
@@ -175,21 +160,28 @@ def recommended_media_kinds(platforms):
 def default_publisher_config(platform, routing_defaults):
     if not routing_defaults.get("enabled", False):
         return None
+    normalized = normalize_platform(platform)
+    mode = delivery_mode(normalized)
     region = platform_region(platform)
-    if region == "domestic":
-        domestic = routing_defaults.get("domestic", {})
-        return {
-            "type": "social-auto-upload",
-            "platform_name": domestic.get("platform_name", platform),
-            "account_name": domestic.get("account_name", "default"),
-            **{k: v for k, v in domestic.items() if k != "platform_name"},
-        }
-    if region == "international":
-        international = routing_defaults.get("international", {})
-        return {
-            "type": international.get("type", "manual-handoff"),
-            "platform_name": international.get("platform_name", platform),
-            "account_name": international.get("account_name", "default"),
-            **{k: v for k, v in international.items() if k != "platform_name"},
-        }
-    return None
+    defaults = routing_defaults.get(region, {}) if region in {"domestic", "international"} else {}
+    shared = {k: v for k, v in defaults.items() if k not in {"type", "platform_name"}}
+    route_types = {
+        "kuaishou": "social-auto-upload",
+        "wechat": "wechat-draft",
+        "weixin": "wechat-draft",
+        "wechat_official": "wechat-draft",
+        "zhihu": "zhihu-playwright",
+        "juejin": "juejin-api",
+        "twitter": "x-playwright",
+        "x": "x-playwright",
+    }
+    if mode == "manual_handoff":
+        return {"type": "manual-handoff", "reason": defaults.get("reason", "manual publish required by delivery policy")}
+    if normalized not in route_types:
+        return None
+    return {
+        **shared,
+        "type": route_types[normalized],
+        "platform_name": defaults.get("platform_name", normalized),
+        "account_name": defaults.get("account_name", "default"),
+    }
