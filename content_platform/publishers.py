@@ -12,6 +12,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .aitoearn import AitoEarnClient
@@ -676,6 +677,36 @@ class XPlaywrightPublisher:
         self.headless = bool(headless)
         self.timeout = int(timeout or 900)
         self.live = bool(live)
+        self.delivery_callback = None
+
+    def set_delivery_callback(self, callback):
+        self.delivery_callback = callback
+
+    def _emit_delivery(self, event):
+        if callable(self.delivery_callback):
+            return self.delivery_callback(dict(event))
+        return None
+
+    @staticmethod
+    def _tweet_identity(payload):
+        """Extract the immutable post identity from X's CreateTweet response."""
+        identities = []
+
+        def walk(value):
+            if isinstance(value, dict):
+                rest_id = str(value.get("rest_id") or "").strip()
+                legacy = value.get("legacy") if isinstance(value.get("legacy"), dict) else {}
+                text = str(legacy.get("full_text") or legacy.get("text") or "").strip()
+                if rest_id and text:
+                    identities.append({"content_id": rest_id, "text": text})
+                for child in value.values():
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+
+        walk(payload)
+        return identities[0] if identities else {}
 
     def _compose_text(self, job, platform):
         formatted = job.get("platform_payload") or format_for_platform(job, platform)
@@ -716,6 +747,19 @@ class XPlaywrightPublisher:
                     context_kwargs["proxy"] = {"server": self.proxy}
                 context = browser.new_context(**context_kwargs)
                 page = context.new_page()
+                published = {}
+
+                def capture_response(response):
+                    if "CreateTweet" not in str(getattr(response, "url", "")):
+                        return
+                    try:
+                        identity = self._tweet_identity(response.json())
+                    except Exception:
+                        identity = {}
+                    if identity:
+                        published.update(identity)
+
+                page.on("response", capture_response)
                 page.goto("https://x.com/compose/post", timeout=self.timeout * 1000, wait_until="domcontentloaded")
                 box = page.locator('[data-testid="tweetTextarea_0"]').first
                 box.wait_for(timeout=30000)
@@ -724,7 +768,19 @@ class XPlaywrightPublisher:
                 button.click(timeout=30000)
                 page.wait_for_timeout(5000)
                 browser.close()
-            return DeliveryResult(True, "published", f"x:{job.get('id', '')}", error="X/Twitter post submitted via cookie browser session")
+            content_id = str(published.get("content_id") or "")
+            if not content_id or str(published.get("text") or "").strip() != text:
+                return DeliveryResult(False, "unknown_requires_review", error="X/Twitter post submitted but immutable CreateTweet identity was not captured")
+            url = f"https://x.com/i/web/status/{content_id}"
+            verification = {
+                "account_alias": self.account,
+                "content_id": content_id,
+                "url": url,
+                "published_at": datetime.now(timezone.utc).isoformat(),
+                "source": "x_create_tweet_response",
+            }
+            self._emit_delivery({"status": "published", "external_id": url, "verification": verification})
+            return DeliveryResult(True, "published", url, error="X/Twitter post verified from CreateTweet response")
         except Exception as exc:
             return DeliveryResult(False, "failed", error=f"X/Twitter browser publish failed: {str(exc)[:300]}")
 
