@@ -59,6 +59,23 @@ DELIVERY_MODES = {
     "xiaohongshu": "manual_handoff",
     "rednote": "manual_handoff",
 }
+DELIVERY_PUBLISHER_TYPES = {
+    "kuaishou": "social-auto-upload",
+    "zhihu": "zhihu-playwright",
+    "juejin": "juejin-api",
+    "wechat": "wechat-draft",
+    "wechat_official": "wechat-draft",
+    "weixin": "wechat-draft",
+    "twitter": "x-playwright",
+    "x": "x-playwright",
+    **{
+        platform: "manual-handoff"
+        for platform in (
+            "bilibili", "douyin", "douyin_ai", "douyin_pet", "shipinhao",
+            "tiktok", "youtube", "xiaohongshu", "rednote",
+        )
+    },
+}
 # These sets are derived compatibility views. DELIVERY_MODES is the canonical
 # source and unknown platforms remain unsupported.
 AUTOMATED_DELIVERY_PLATFORMS = frozenset(
@@ -120,6 +137,31 @@ def is_auto_publish_platform(platform):
 def delivery_mode(platform):
     """Return the immutable delivery boundary used by production workflows."""
     return DELIVERY_MODES.get(normalize_platform(platform), "unsupported")
+
+
+def validate_delivery_policy_config(config):
+    """Validate mutable publisher configuration against the immutable matrix."""
+    publishers = (config or {}).get("publishers")
+    if not isinstance(publishers, dict):
+        return {"passed": False, "failures": ["publishers_config_missing"]}
+    failures = []
+    defaults = publishers.get("routing_defaults") if isinstance(publishers.get("routing_defaults"), dict) else {}
+    for region in ("domestic", "international"):
+        route = defaults.get(region) if isinstance(defaults.get(region), dict) else {}
+        if route and str(route.get("type") or "manual-handoff") != "manual-handoff":
+            failures.append(f"routing_default_must_fail_closed:{region}")
+    platforms = publishers.get("platforms") if isinstance(publishers.get("platforms"), dict) else {}
+    for platform, expected_type in DELIVERY_PUBLISHER_TYPES.items():
+        entry = platforms.get(platform)
+        if not isinstance(entry, dict):
+            failures.append(f"publisher_route_missing:{platform}")
+            continue
+        actual = str(entry.get("type") or "")
+        if actual != expected_type:
+            failures.append(f"publisher_route_mismatch:{platform}:{actual or 'missing'}:{expected_type}")
+        if platform in {"zhihu", "juejin"} and entry.get("save_as_draft") is False:
+            failures.append(f"draft_route_cannot_publish:{platform}")
+    return {"passed": not failures, "failures": failures}
 
 
 def generated_media_kinds_for_job(job, config):

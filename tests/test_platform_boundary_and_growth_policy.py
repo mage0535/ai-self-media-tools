@@ -8,6 +8,7 @@ from content_platform.content_policy import (
     is_manual_handoff_platform,
     is_short_video_platform,
     platform_region,
+    validate_delivery_policy_config,
 )
 from content_platform.growth_policy import build_growth_strategy, validate_growth_strategy
 
@@ -53,6 +54,22 @@ def test_all_ai_restricted_channels_are_manual_handoff_only():
 def test_unknown_channel_is_not_implicitly_publishable():
     assert delivery_mode("new_platform") == "unsupported"
     assert not is_auto_publish_platform("new_platform")
+
+
+def test_effective_publisher_config_rejects_policy_overrides():
+    import json
+    from pathlib import Path
+
+    config = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+    assert validate_delivery_policy_config(config)["passed"] is True
+
+    config["publishers"]["platforms"]["youtube"] = {"type": "youtube"}
+    config["publishers"]["platforms"]["juejin"]["save_as_draft"] = False
+    result = validate_delivery_policy_config(config)
+
+    assert result["passed"] is False
+    assert "publisher_route_mismatch:youtube:youtube:manual-handoff" in result["failures"]
+    assert "draft_route_cannot_publish:juejin" in result["failures"]
 
 
 def test_international_video_growth_rules_are_platform_specific():
