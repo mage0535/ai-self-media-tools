@@ -3,7 +3,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.task9_prepare_inputs import prepare_inputs
+from scripts.task9_prepare_inputs import _fit, prepare_inputs
+
+
+def test_one_explicit_lane_keyword_meets_minimum_fit_without_inflation():
+    assert _fit("AI tools worth using", "xiaohongshu") == 0.55
+    assert _fit("unrelated entertainment", "xiaohongshu") == 0.0
 
 
 def test_prepare_inputs_uses_real_same_lane_evidence_and_reports_missing(tmp_path: Path):
