@@ -43,6 +43,17 @@ def match_capabilities(
     candidates: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     inventory: list[dict[str, Any]] = []
+    content_format = str(profile.get("content_format") or "")
+    applicable_groups = [
+        group for group in registry.get("groups", [])
+        if content_format in set(group.get("applies_to") or [])
+    ]
+    required_ids = {
+        capability_id
+        for group in applicable_groups
+        if group.get("required_policy") == "required"
+        for capability_id in group.get("candidate_ids") or []
+    }
     for capability in registry.get("capabilities", []):
         if not _matches(capability, profile):
             continue
@@ -52,7 +63,7 @@ def match_capabilities(
             "adapter": capability.get("adapter"),
             "output_contract": capability.get("output_contract"),
             "quality_gate": capability.get("quality_gate"),
-            "required_or_optional": capability.get("required_or_optional", "required"),
+            "required_or_optional": "required" if capability["id"] in required_ids else "optional",
         }
         if capability.get("kind") == "methodology":
             consulted.append({**item, "status": "consulted", "rules_applied": []})
