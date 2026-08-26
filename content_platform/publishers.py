@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .aitoearn import AitoEarnClient
 from .auth_registry import resolve_cookie_file
-from .content_policy import default_publisher_config, is_manual_handoff_platform, is_xiaohongshu_platform, platform_region
+from .content_policy import default_publisher_config, is_manual_handoff_platform, is_short_video_platform, is_xiaohongshu_platform, platform_region
 from .formatters import format_for_platform
 from .juejin_publisher import JuejinPublisher
 from .media_quality import validate_article_packet
@@ -74,22 +74,69 @@ class ManualHandoffPublisher:
         self.outbox = Path(outbox)
         self.reason = reason
 
+    @staticmethod
+    def _readable_artifacts(job, kind):
+        readable = []
+        for artifact in job.get("artifacts") or []:
+            if not isinstance(artifact, dict) or artifact.get("kind") != kind:
+                continue
+            path = Path(str(artifact.get("path") or "")).expanduser()
+            try:
+                if path.is_file() and path.stat().st_size > 0:
+                    with path.open("rb") as handle:
+                        handle.read(1)
+                    readable.append(str(path.resolve()))
+            except OSError:
+                continue
+        return readable
+
+    def _validate(self, job, platform, formatted):
+        failures = []
+        media_kind = "video" if is_short_video_platform(platform) or formatted.get("kind") == "video" else "image"
+        media = self._readable_artifacts(job, media_kind)
+        covers = self._readable_artifacts(job, "cover")
+        if not media:
+            failures.append(f"readable_{media_kind}_missing")
+        if not covers:
+            failures.append("readable_cover_missing")
+        if set(media) & set(covers):
+            failures.append("cover_must_be_distinct_from_content_media")
+        title = str(formatted.get("title") or job.get("title") or "").strip()
+        text = str(
+            formatted.get("caption")
+            or formatted.get("text")
+            or formatted.get("markdown")
+            or formatted.get("description")
+            or job.get("body")
+            or ""
+        ).strip()
+        if not title:
+            failures.append("publish_title_missing")
+        if not text:
+            failures.append("publish_text_missing")
+        return failures
+
     def deliver(self, job, platform):
         directory = self.outbox / platform
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{job['id']}.json"
+        formatted = job.get("platform_payload") or format_for_platform(job, platform)
+        failures = self._validate(job, platform, formatted)
         payload = {
             "job_id": job["id"],
             "platform": platform,
-            "status": "handoff_pending",
+            "status": "blocked" if failures else "handoff_pending",
             "live_publish": False,
             "reason": self.reason,
             "title": job["title"],
             "body": job["body"],
             "artifacts": job.get("artifacts", []),
-            "platform_payload": job.get("platform_payload") or format_for_platform(job, platform),
+            "platform_payload": formatted,
+            "validation_failures": failures,
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if failures:
+            return DeliveryResult(False, "blocked", str(path), error=f"{self.reason}; manual handoff package incomplete: " + ",".join(failures))
         return DeliveryResult(True, "handoff_pending", str(path), error=self.reason)
 
 
@@ -1534,7 +1581,7 @@ def build_publisher(platform, config, data_dir):
             account=cfg.get("account", "main"),
             cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
             proxy=cfg.get("proxy") or os.environ.get("CN_PROXY", ""),
-            save_as_draft=cfg.get("save_as_draft", True),
+            save_as_draft=True,
         )
     if kind == "zhihu-playwright":
         return ZhihuPublisher(
@@ -1542,7 +1589,7 @@ def build_publisher(platform, config, data_dir):
             cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
             proxy=cfg.get("proxy") or os.environ.get("CN_PROXY", ""),
             headless=cfg.get("headless", True),
-            save_as_draft=cfg.get("save_as_draft", True),
+            save_as_draft=True,
         )
     if kind == "x-playwright":
         return XPlaywrightPublisher(

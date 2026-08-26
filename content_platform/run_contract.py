@@ -7,15 +7,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .content_policy import delivery_mode
 from .preflight_manifest import REQUIRED_SKILLS_BY_CHANNEL
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RULEBOOK = ROOT / "config" / "channel_content_rulebook.json"
-MANUAL_PLATFORMS = {
-    "bilibili", "douyin", "douyin_ai", "douyin_pet", "shipinhao",
-    "xiaohongshu", "youtube", "tiktok",
-}
 PLATFORM_ALIASES = {"douyin_ai": "douyin", "douyin_pet": "douyin", "twitter": "twitter"}
 PRECEDENCE = [
     "global_hard_gates",
@@ -45,6 +42,15 @@ BOUNDS = {
 
 class RunContractError(ValueError):
     pass
+
+
+def _publish_boundary(platform: str) -> str:
+    mode = delivery_mode(platform)
+    if mode == "manual_handoff":
+        return "manual_handoff_only"
+    if mode == "unsupported":
+        return "unsupported_pre_onboarding"
+    return "policy_controlled_publish"
 
 
 def _sha256(path: Path) -> str:
@@ -85,13 +91,8 @@ def build_run_contract(platform: str, *, rulebook_path: str | Path = DEFAULT_RUL
             "sha256": _sha256(path),
         },
         "precedence": list(PRECEDENCE),
-        "publish_boundary": (
-            "manual_handoff_only"
-            if normalized in MANUAL_PLATFORMS
-            else "unsupported_pre_onboarding"
-            if channel_rules.get("status") == "unsupported_pre_onboarding"
-            else "policy_controlled_publish"
-        ),
+        "delivery_mode": delivery_mode(normalized),
+        "publish_boundary": _publish_boundary(normalized),
         "mandatory_sequence": list(rulebook.get("mandatory_sequence") or []),
         "global_hard_gates": dict(rulebook.get("global_hard_gates") or {}),
         "channel_rules": channel_rules,
@@ -119,14 +120,10 @@ def validate_run_contract(contract: dict[str, Any] | None, *, rulebook_path: str
     if contract.get("precedence") != PRECEDENCE:
         failures.append("run_contract.precedence_mismatch")
     platform = str(contract.get("platform") or "").casefold()
-    channel_rules = contract.get("channel_rules") or {}
-    expected_boundary = (
-        "manual_handoff_only"
-        if platform in MANUAL_PLATFORMS
-        else "unsupported_pre_onboarding"
-        if channel_rules.get("status") == "unsupported_pre_onboarding"
-        else "policy_controlled_publish"
-    )
+    expected_mode = delivery_mode(platform)
+    if contract.get("delivery_mode") != expected_mode:
+        failures.append("run_contract.delivery_mode_mismatch")
+    expected_boundary = _publish_boundary(platform)
     if contract.get("publish_boundary") != expected_boundary:
         failures.append("run_contract.publish_boundary_mismatch")
     if not contract.get("required_skills") or not contract.get("stage_fields") or not contract.get("bounds"):

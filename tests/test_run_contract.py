@@ -40,8 +40,22 @@ def test_run_contract_records_rule_hash_precedence_and_manual_boundary(tmp_path:
     assert contract["rulebook"]["version"] == "test-v1"
     assert len(contract["rulebook"]["sha256"]) == 64
     assert contract["publish_boundary"] == "manual_handoff_only"
+    assert contract["delivery_mode"] == "manual_handoff"
     assert contract["precedence"][0] == "global_hard_gates"
     assert validate_run_contract(contract, rulebook_path=_rulebook(tmp_path))["passed"] is True
+
+
+def test_run_contract_fails_closed_for_unknown_platform_even_if_rulebook_lists_it(tmp_path: Path) -> None:
+    rulebook = _rulebook(tmp_path)
+    payload = json.loads(rulebook.read_text(encoding="utf-8"))
+    payload["channel_rules"]["future_channel"] = {"publish_policy": "automatic", "quality_gates": []}
+    rulebook.write_text(json.dumps(payload), encoding="utf-8")
+
+    contract = build_run_contract("future_channel", rulebook_path=rulebook)
+
+    assert contract["delivery_mode"] == "unsupported"
+    assert contract["publish_boundary"] == "unsupported_pre_onboarding"
+    assert validate_run_contract(contract, rulebook_path=rulebook)["passed"] is True
 
 
 def test_run_contract_detects_rulebook_drift(tmp_path: Path) -> None:

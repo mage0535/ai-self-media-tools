@@ -31,6 +31,8 @@ def test_only_configured_five_channel_family_can_auto_publish():
         "zhihu": "draft_box",
         "juejin": "draft_box",
         "wechat": "draft_box",
+        "weixin": "draft_box",
+        "wechat_official": "draft_box",
         "twitter": "direct_publish",
         "x": "direct_publish",
     }
@@ -43,7 +45,7 @@ def test_only_configured_five_channel_family_can_auto_publish():
 
 
 def test_all_ai_restricted_channels_are_manual_handoff_only():
-    for platform in ["bilibili", "douyin", "douyin_ai", "douyin_pet", "shipinhao", "xiaohongshu", "youtube", "tiktok"]:
+    for platform in ["bilibili", "douyin", "douyin_ai", "douyin_pet", "shipinhao", "xiaohongshu", "rednote", "youtube", "tiktok"]:
         assert delivery_mode(platform) == "manual_handoff", platform
         assert not is_auto_publish_platform(platform)
 

@@ -21,7 +21,7 @@ def test_install_check_mode_does_not_write_runtime_config(tmp_path):
     assert not (tmp_path / "runtime" / "config.json").exists()
 
 
-def test_install_config_only_writes_runtime_report_and_international_publishers(tmp_path):
+def test_install_config_only_writes_runtime_report_and_policy_bounded_publishers(tmp_path):
     home = tmp_path / "runtime"
     env = os.environ.copy()
     env["CONTENT_PLATFORM_HOME"] = str(home)
@@ -46,7 +46,41 @@ def test_install_config_only_writes_runtime_report_and_international_publishers(
     platforms = config["publishers"]["platforms"]
     for platform in ["youtube", "tiktok", "reddit", "devto", "mastodon", "bluesky", "nostr"]:
         assert platform in platforms
-
+    expected_routes = {
+        "kuaishou": "social-auto-upload",
+        "wechat": "wechat-draft",
+        "weixin": "wechat-draft",
+        "wechat_official": "wechat-draft",
+        "zhihu": "zhihu-playwright",
+        "juejin": "juejin-api",
+        "twitter": "x-playwright",
+        "x": "x-playwright",
+        "bilibili": "manual-handoff",
+        "douyin": "manual-handoff",
+        "douyin_ai": "manual-handoff",
+        "douyin_pet": "manual-handoff",
+        "shipinhao": "manual-handoff",
+        "xiaohongshu": "manual-handoff",
+        "rednote": "manual-handoff",
+        "youtube": "manual-handoff",
+        "tiktok": "manual-handoff",
+    }
+    assert {name: platforms[name]["type"] for name in expected_routes} == expected_routes
+    assert config["publishers"]["routing_defaults"]["domestic"]["type"] == "manual-handoff"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["mode"] == "config-only"
     assert Path(report["install_root"]) == home
+
+
+def test_example_config_explicitly_routes_every_production_delivery_mode():
+    config = json.loads(Path("config.example.json").read_text(encoding="utf-8"))
+    platforms = config["publishers"]["platforms"]
+
+    assert platforms["kuaishou"]["type"] == "social-auto-upload"
+    assert all(platforms[name]["type"] == "wechat-draft" for name in ["wechat", "weixin", "wechat_official"])
+    assert platforms["zhihu"]["type"] == "zhihu-playwright"
+    assert platforms["juejin"]["type"] == "juejin-api"
+    assert all(platforms[name]["type"] == "x-playwright" for name in ["twitter", "x"])
+    manual = ["bilibili", "douyin", "douyin_ai", "douyin_pet", "shipinhao", "xiaohongshu", "rednote", "youtube", "tiktok"]
+    assert all(platforms[name]["type"] == "manual-handoff" for name in manual)
+    assert config["publishers"]["routing_defaults"]["domestic"]["type"] == "manual-handoff"

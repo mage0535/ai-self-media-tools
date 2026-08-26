@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from content_platform.content_policy import delivery_mode
 from content_platform.platform_workflow_context import load_platform_workflow_context
 
 
@@ -20,3 +21,4 @@ def test_platform_workflow_context_loads_rules_strategy_skills_and_publish_mode(
         assert "tools" in context["runtime_capabilities"]
         assert "content_quality_reference_pack" in context["selected_tools"]
         assert context["selected_tools"]
+        assert context["publish_mode"] == delivery_mode(platform)

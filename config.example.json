@@ -146,8 +146,8 @@
     "routing_defaults": {
       "enabled": true,
       "domestic": {
-        "type": "social-auto-upload",
-        "account_name": "<account-alias>"
+        "type": "manual-handoff",
+        "reason": "domestic channels require an explicit policy-bounded platform route"
       },
       "international": {
         "type": "manual-handoff",
@@ -155,6 +155,26 @@
       }
     },
     "platforms": {
+      "kuaishou": {
+        "type": "social-auto-upload",
+        "account_name": "<account-alias>"
+      },
+      "wechat": {"type": "wechat-draft"},
+      "weixin": {"type": "wechat-draft"},
+      "wechat_official": {"type": "wechat-draft"},
+      "zhihu": {"type": "zhihu-playwright", "account": "main", "save_as_draft": true},
+      "juejin": {"type": "juejin-api", "account": "main", "save_as_draft": true},
+      "twitter": {"type": "x-playwright", "account": "main"},
+      "x": {"type": "x-playwright", "account": "main"},
+      "bilibili": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "douyin": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "douyin_ai": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "douyin_pet": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "shipinhao": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "xiaohongshu": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "rednote": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "youtube": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
+      "tiktok": {"type": "manual-handoff", "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox"},
       "reddit": {
         "type": "reddit-draft",
         "outbox": "{{CONTENT_PLATFORM_HOME}}/data/outbox",
