@@ -198,13 +198,24 @@ def test_canary_pipeline_config_registers_task9_profile(tmp_path: Path):
             return {"id": "job-profile"}
 
         def run(self, job_id):
-            raise RuntimeError("stop_after_profile_validation")
+            return {"id": job_id, "state": "review_required", "artifacts": [], "deliveries": [], "draft_meta": {}}
+
+        def stage_drafts(self, job_id):
+            return {"id": job_id, "state": "review_required", "artifacts": [], "deliveries": [], "draft_meta": {}}
+
+        def status(self, job_id):
+            return {"id": job_id, "state": "review_required", "artifacts": [], "deliveries": [], "draft_meta": {}}
+
+    class StoreBoundary:
+        def __init__(self, path):
+            self.path = Path(path)
 
     result = _run_pipeline_case(
         {"platform": "kuaishou", "content_form": "vertical_video", "language": "zh", "delivery_policy": "dry_run", "dry_run": True, "order": 1},
         tmp_path / "case",
         hotspot_root=tmp_path,
         pipeline_factory=ProfileCheckingPipeline,
+        store_factory=StoreBoundary,
     )
 
     assert result["pipeline_evidence"]["create_called"] is True
