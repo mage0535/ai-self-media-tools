@@ -30,3 +30,20 @@ def test_import_accepts_native_x_and_rejects_indirect_wechat(tmp_path: Path):
     saved = json.loads((tmp_path / "canary" / "_inputs" / "hotspots" / "twitter.json").read_text(encoding="utf-8"))
     assert saved["native_verified"] is True
     assert saved["snapshot_path"].endswith(".json")
+    assert saved["observed_title"] == "AI Agent workflow"
+
+
+def test_import_requires_all_expected_platforms_for_pass(tmp_path: Path):
+    root = tmp_path / "hermes-recapture"
+    (root / "twitter").mkdir(parents=True)
+    (root / "twitter" / "evidence_raw.json").write_text('{"tweets":[{"text":"AI Agent workflow"}]}', encoding="utf-8")
+    report = root / "report.json"
+    report.write_text(json.dumps({"platforms": {"twitter": {
+        "status": "success", "evidence_type": "native_search", "source_url": "https://x.com/search?q=AI",
+        "observed_title": "summary", "captured_at": "2026-08-26T00:00:00Z", "native_verified": True,
+    }}}), encoding="utf-8")
+
+    result = import_evidence(report, tmp_path / "canary", expected_platforms={"twitter", "bilibili"})
+
+    assert result["passed"] is False
+    assert result["expected_platforms"] == ["bilibili", "twitter"]

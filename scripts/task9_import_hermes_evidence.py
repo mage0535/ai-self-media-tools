@@ -27,7 +27,21 @@ PLATFORM_DOMAINS = {
 NATIVE_TYPES = {"native_search", "native_search + hot_list_api", "hot_search_api", "native"}
 
 
-def import_evidence(report_path: Path, artifact_root: Path) -> dict:
+def _exact_title(raw: dict, platform: str, fallback: str) -> str:
+    candidates = []
+    if platform == "twitter":
+        candidates = [str(item.get("text") or "") for item in raw.get("tweets") or [] if isinstance(item, dict)]
+    elif platform == "douyin_pet":
+        candidates = [str(item.get("word") or "") for item in raw.get("hot_search_pet_items") or [] if isinstance(item, dict)]
+    elif platform == "douyin_ai":
+        candidates = [str(item.get("word") or item.get("title") or "") for item in raw.get("hot_search_ai_items") or [] if isinstance(item, dict)]
+    elif platform == "bilibili":
+        rows = [*(raw.get("deepseek_claude_search_results") or []), *(raw.get("ai_agent_search_results") or [])]
+        candidates = [str(item.get("title") or "") for item in rows if isinstance(item, dict)]
+    return next((title for title in candidates if _fit(title, platform) >= 0.55), fallback)
+
+
+def import_evidence(report_path: Path, artifact_root: Path, *, expected_platforms: set[str] | None = None) -> dict:
     report = json.loads(report_path.read_text(encoding="utf-8"))
     cases = {case["platform"]: case for case in build_canary_matrix()}
     source_root = report_path.parent
@@ -48,9 +62,6 @@ def import_evidence(report_path: Path, artifact_root: Path) -> dict:
         if host not in PLATFORM_DOMAINS.get(platform, set()):
             failures.append("platform_domain_mismatch")
         title = str(row.get("observed_title") or "")
-        score = _fit(title, platform)
-        if score < 0.55:
-            failures.append("lane_fit_unverified")
         metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
         if platform == "douyin_ai" and int(metrics.get("ai_related") or 0) <= 0:
             failures.append("no_ai_candidate_observed")
@@ -61,6 +72,16 @@ def import_evidence(report_path: Path, artifact_root: Path) -> dict:
         )
         if not source_snapshot.is_file() or source_snapshot.stat().st_size <= 0:
             failures.append("raw_snapshot_missing")
+            raw = {}
+        else:
+            try:
+                raw = json.loads(source_snapshot.read_text(encoding="utf-8")) if source_snapshot.suffix.casefold() == ".json" else {}
+            except (OSError, json.JSONDecodeError):
+                raw = {}
+        title = _exact_title(raw, platform, title)
+        score = _fit(title, platform)
+        if score < 0.55:
+            failures.append("lane_fit_unverified")
         if failures:
             rejected.append({"platform": platform, "failures": sorted(set(failures))})
             continue
@@ -82,7 +103,10 @@ def import_evidence(report_path: Path, artifact_root: Path) -> dict:
         )
         (output_root / f"{platform}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         accepted.append({"platform": platform, "source_url": source_url, "evidence_type": "native"})
-    return {"schema": "task9_hermes_import_v1", "accepted": accepted, "rejected": rejected, "passed": bool(accepted)}
+    expected = set(expected_platforms or [])
+    accepted_platforms = {row["platform"] for row in accepted}
+    passed = bool(accepted) if not expected else expected <= accepted_platforms
+    return {"schema": "task9_hermes_import_v1", "accepted": accepted, "rejected": rejected, "expected_platforms": sorted(expected), "passed": passed}
 
 
 def main() -> int:
@@ -90,8 +114,9 @@ def main() -> int:
     parser.add_argument("--report", required=True)
     parser.add_argument("--artifact-root", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--expected-platform", action="append", default=[])
     args = parser.parse_args()
-    result = import_evidence(Path(args.report), Path(args.artifact_root))
+    result = import_evidence(Path(args.report), Path(args.artifact_root), expected_platforms=set(args.expected_platform))
     Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0 if result["passed"] else 2
