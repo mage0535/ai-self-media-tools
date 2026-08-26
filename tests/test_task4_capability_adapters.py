@@ -274,7 +274,8 @@ def test_capability_runtime_injects_mcp_caller_and_runtime_context():
 
     evidence = [item for item in result["executed"] if item["capability_id"] == "mcp_ai_self_media_content"]
     assert len(evidence) == 1
-    assert calls == [("content-platform", "build_content_recipe", {"query": "AI workflow"}, runtime)]
+    assert {call[1] for call in calls} == {"content_search", "memory_context", "build_content_recipe"}
+    assert all(call[0] == "content-platform" and call[2] == {"query": "AI workflow"} and call[3] == runtime for call in calls)
 
 
 def test_capability_runtime_uses_the_checked_in_registered_mcp_by_default():

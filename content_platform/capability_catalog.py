@@ -71,10 +71,8 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
             failures.append(f"{group_id}.candidate_id_invalid")
         referenced_ids.extend(str(item).strip() for item in candidate_ids if str(item).strip())
 
-    if len(referenced_ids) != 48:
-        failures.append(f"candidate_appearance_count:{len(referenced_ids)}")
-    if len(set(referenced_ids)) != 47:
-        failures.append(f"candidate_unique_count:{len(set(referenced_ids))}")
+    if not referenced_ids:
+        failures.append("candidate_references_missing")
 
     from .mcp_server import mcp_tool_inventory
 

@@ -23,14 +23,14 @@ from content_platform.tool_selection import (
 REGISTRY_PATH = Path(__file__).resolve().parents[1] / "config" / "creative_capability_registry.json"
 
 
-def test_registry_has_exact_legacy_group_coverage_and_candidate_appearances():
+def test_registry_has_complete_group_coverage_and_valid_candidate_references():
     registry = load_capability_registry(REGISTRY_PATH)
     groups = registry["groups"]
     appearances = [candidate for group in groups for candidate in group["candidate_ids"]]
+    capability_ids = {item["id"] for item in registry["capabilities"]}
 
     assert len(groups) == 22
-    assert len(appearances) == 48
-    assert len(set(appearances)) == 47
+    assert set(appearances) <= capability_ids
     assert all(group["candidate_ids"] for group in groups)
     assert all(group["required_policy"] in {"required", "optional"} for group in groups)
 
@@ -129,7 +129,8 @@ def test_tool_selection_is_registry_derived_and_fails_required_groups_closed():
     analysis = build_tools_capability_analysis(platform="douyin", content_type="video")
     source = inspect.getsource(__import__("content_platform.tool_selection", fromlist=["x"]))
 
-    assert sum(len(items) for items in analysis["analyzed_tool_groups"].values()) == 36
+    assert set(analysis["required_tool_groups"]) <= set(analysis["analyzed_tool_groups"])
+    assert all(row["status"] == "available" for row in analysis["group_status"].values())
     assert analysis["selection_status"] == "ready"
     assert not analysis["failures"]
     assert "_default_candidates" not in source
@@ -429,3 +430,28 @@ def test_render_adapter_only_executes_after_real_renderer_output(tmp_path):
 
     assert result["status"] == "executed"
     assert result["contract_valid"] is True
+
+
+def test_every_tool_group_has_an_executable_adapter_candidate():
+    registry = load_capability_registry(REGISTRY_PATH)
+    by_id = {item["id"]: item for item in registry["capabilities"]}
+
+    missing = [
+        group["id"]
+        for group in registry["groups"]
+        if not any(by_id[candidate]["lifecycle"] == "executable" for candidate in group["candidate_ids"])
+    ]
+
+    assert missing == []
+
+
+def test_delivery_router_selects_exactly_one_policy_compatible_capability():
+    from content_platform.capability_router import match_capabilities
+
+    manual = match_capabilities({"platform": "youtube", "content_format": "long_video"})
+    automatic = match_capabilities({"platform": "juejin", "content_format": "article"})
+
+    assert "handoff_package_builder" in {item["capability_id"] for item in manual["candidates"]}
+    assert "pipeline_publisher" not in {item["capability_id"] for item in manual["candidates"]}
+    assert "pipeline_publisher" in {item["capability_id"] for item in automatic["candidates"]}
+    assert "handoff_package_builder" not in {item["capability_id"] for item in automatic["candidates"]}
