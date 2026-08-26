@@ -22,3 +22,13 @@ def test_platform_workflow_context_loads_rules_strategy_skills_and_publish_mode(
         assert "content_quality_reference_pack" in context["selected_tools"]
         assert context["selected_tools"]
         assert context["publish_mode"] == delivery_mode(platform)
+
+
+def test_existing_content_skills_are_routed_by_format_instead_of_orphaned():
+    from content_platform.preflight_manifest import required_workflow_skills
+
+    article = set(required_workflow_skills("juejin"))
+    video = set(required_workflow_skills("douyin_ai"))
+
+    assert {"content/content-copywriting-style", "content/content-seo-toolset", "content/content-open-notebook", "content/content-github-star-explorer"} <= article
+    assert {"content/content-copywriting-style", "content/content-voice-engine", "content/content-ai-autoclip", "content/content-github-star-explorer"} <= video

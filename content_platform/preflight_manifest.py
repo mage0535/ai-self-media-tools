@@ -29,8 +29,15 @@ COMMON_REQUIRED_KEYS = [
 ]
 
 _PREFLIGHT_BASE_SKILLS = {"meta/content-preflight", "content/content-strategy-workflow"}
-_WORKFLOW_BASE_SKILLS = {"content/channel-operations-workflow", "content/visual-quality-standards"}
+_WORKFLOW_BASE_SKILLS = {
+    "content/channel-operations-workflow",
+    "content/visual-quality-standards",
+    "content/content-copywriting-style",
+}
 _KNOWLEDGE_CARD_SKILL = {"content/knowledge-card-designer"}
+_ARTICLE_SKILLS = {"content/content-seo-toolset", "content/content-open-notebook"}
+_VIDEO_SKILLS = {"content/content-voice-engine", "content/content-ai-autoclip"}
+_AI_RESEARCH_SKILLS = {"content/content-github-star-explorer"}
 _PREFLIGHT_ONLY_SKILLS = _PREFLIGHT_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {
     "content/wechat-operational-strategy",
     "content/wechat-full-workflow",
@@ -41,21 +48,21 @@ _PREFLIGHT_ONLY_SKILLS = _PREFLIGHT_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {
 # This is the only hand-maintained channel-to-skill mapping. Runtime consumers
 # derive their file-backed subset through required_workflow_skills().
 REQUIRED_SKILLS_BY_CHANNEL = {
-    "wechat": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
-    "weixin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
-    "wechat_official": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
-    "kuaishou": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/kuaishou-content-publishing", "content/kuaishou-publishing-workflow"},
-    "douyin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"douyin-repost-workflow"},
-    "douyin_ai": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"douyin-daily-analysis-workflow"},
-    "douyin_pet": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"douyin-repost-workflow"},
-    "shipinhao": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/kuaishou-content-publishing"},
-    "bilibili": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL,
+    "wechat": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _ARTICLE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
+    "weixin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _ARTICLE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
+    "wechat_official": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _ARTICLE_SKILLS | {"content/wechat-operational-strategy", "content/wechat-full-workflow", "wechat-pipeline-v2", "wewrite", "no-ai-slop"},
+    "kuaishou": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | {"content/kuaishou-content-publishing", "content/kuaishou-publishing-workflow"},
+    "douyin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | {"douyin-repost-workflow"},
+    "douyin_ai": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | _AI_RESEARCH_SKILLS | {"douyin-daily-analysis-workflow"},
+    "douyin_pet": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | {"douyin-repost-workflow"},
+    "shipinhao": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | {"content/kuaishou-content-publishing"},
+    "bilibili": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS,
     "xiaohongshu": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/xiaohongshu-content-enhancer"},
     "rednote": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/xiaohongshu-content-enhancer"},
-    "juejin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/juejin-publishing-workflow"},
-    "zhihu": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/zhihu-publishing-workflow"},
-    "tiktok": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/intl-short-video-pipeline"},
-    "youtube": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"content/intl-short-video-pipeline"},
+    "juejin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _ARTICLE_SKILLS | _AI_RESEARCH_SKILLS | {"content/juejin-publishing-workflow"},
+    "zhihu": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _ARTICLE_SKILLS | {"content/zhihu-publishing-workflow"},
+    "tiktok": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _VIDEO_SKILLS | {"content/intl-short-video-pipeline"},
+    "youtube": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _VIDEO_SKILLS | {"content/intl-short-video-pipeline"},
     "x": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"social-media/x-twitter-autopublish"},
     "twitter": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | {"social-media/x-twitter-autopublish"},
 }
