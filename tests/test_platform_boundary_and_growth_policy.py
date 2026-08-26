@@ -26,9 +26,17 @@ def test_douyin_account_variants_normalize_to_douyin_boundaries():
 
 
 def test_only_configured_five_channel_family_can_auto_publish():
-    for platform in ["kuaishou", "zhihu", "juejin", "wechat", "twitter", "x"]:
+    expected = {
+        "kuaishou": "automatic_scheduled",
+        "zhihu": "draft_box",
+        "juejin": "draft_box",
+        "wechat": "draft_box",
+        "twitter": "direct_publish",
+        "x": "direct_publish",
+    }
+    for platform, mode in expected.items():
         assert is_auto_publish_platform(platform), platform
-        assert delivery_mode(platform) == "auto_publish"
+        assert delivery_mode(platform) == mode
     assert AUTO_PUBLISH_PLATFORMS == {
         "kuaishou", "zhihu", "juejin", "wechat", "wechat_official", "weixin", "twitter", "x"
     }

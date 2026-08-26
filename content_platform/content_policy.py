@@ -43,7 +43,7 @@ XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
 # Only these channels may use an automatic delivery publisher.  This is a
 # fail-closed allowlist: adding a platform elsewhere must not silently enable
 # upload or scheduling for it.
-AUTO_PUBLISH_PLATFORMS = frozenset({
+AUTOMATED_DELIVERY_PLATFORMS = frozenset({
     "kuaishou",
     "zhihu",
     "juejin",
@@ -53,6 +53,20 @@ AUTO_PUBLISH_PLATFORMS = frozenset({
     "twitter",
     "x",
 })
+# Preserve the old name for callers that only need to ask whether an
+# automated route is permitted.  The detailed mode below distinguishes draft,
+# scheduled, and direct publication.
+AUTO_PUBLISH_PLATFORMS = AUTOMATED_DELIVERY_PLATFORMS
+DELIVERY_MODES = {
+    "kuaishou": "automatic_scheduled",
+    "zhihu": "draft_box",
+    "juejin": "draft_box",
+    "wechat": "draft_box",
+    "wechat_official": "draft_box",
+    "weixin": "draft_box",
+    "twitter": "direct_publish",
+    "x": "direct_publish",
+}
 # This is intentionally separate from the broader manual-handoff set.  The
 # account recovery policy makes Xiaohongshu a permanent fail-closed boundary:
 # config, routing defaults, and health data must never re-enable an uploader.
@@ -116,8 +130,8 @@ def is_auto_publish_platform(platform):
 def delivery_mode(platform):
     """Return the immutable delivery boundary used by production workflows."""
     normalized = normalize_platform(platform)
-    if normalized in AUTO_PUBLISH_PLATFORMS:
-        return "auto_publish"
+    if normalized in DELIVERY_MODES:
+        return DELIVERY_MODES[normalized]
     if normalized in MANUAL_HANDOFF_PLATFORMS:
         return "manual_handoff"
     return "unsupported"
