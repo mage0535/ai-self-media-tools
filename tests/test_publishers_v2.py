@@ -39,6 +39,25 @@ class FakeResponse:
 
 
 class PublisherV2Tests(unittest.TestCase):
+    def test_x_identity_parser_requires_a_real_tweet_text_and_id(self):
+        from content_platform.publishers import XPlaywrightPublisher
+
+        payload = {
+            "data": {
+                "create_tweet": {
+                    "tweet_results": {
+                        "result": {"rest_id": "123456", "legacy": {"full_text": "Useful AI workflow"}}
+                    }
+                }
+            }
+        }
+
+        assert XPlaywrightPublisher._tweet_identity(payload) == {
+            "content_id": "123456",
+            "text": "Useful AI workflow",
+        }
+        assert XPlaywrightPublisher._tweet_identity({"rest_id": "local-job"}) == {}
+
     def test_build_publisher_forces_article_routes_to_draft_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = {
