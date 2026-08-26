@@ -3,6 +3,8 @@
   "default_mode": "unsupported_or_unverified",
   "platforms": {
     "douyin": {"allowed_evidence_types": ["native", "official_activity", "official_keyword", "same_lane_hot_work"], "allowed_association_modes": ["auto_browser", "manual_handoff"]},
+    "douyin_ai": {"allowed_evidence_types": ["native", "official_activity", "official_keyword", "same_lane_hot_work"], "allowed_association_modes": ["auto_browser", "manual_handoff"]},
+    "douyin_pet": {"allowed_evidence_types": ["native", "official_activity", "official_keyword", "same_lane_hot_work"], "allowed_association_modes": ["auto_browser", "manual_handoff"]},
     "kuaishou": {"allowed_evidence_types": ["native", "official_activity", "official_keyword", "same_lane_hot_work"], "allowed_association_modes": ["auto_browser", "manual_handoff"]},
     "shipinhao": {"allowed_evidence_types": ["official_activity", "official_keyword", "same_lane_hot_work"], "allowed_association_modes": ["auto_browser", "manual_handoff"]},
     "wechat": {"allowed_evidence_types": ["official_activity", "official_keyword", "same_lane_hot_work"], "allowed_association_modes": ["manual_handoff"]},
