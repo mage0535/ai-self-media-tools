@@ -89,6 +89,26 @@ def test_juejin_uploads_local_assets_to_platform_before_draft(tmp_path):
     assert upload.call_count == 1
 
 
+def test_juejin_upload_route_is_direct_first_then_cn_fallback():
+    publisher = JuejinPublisher(proxy="socks5://127.0.0.1:1080")
+    cdn = ["https://p3-juejin.byteimg.com/cover.jpg"]
+    with patch.object(publisher, "_upload_images_via_route", side_effect=[[], cdn]) as route:
+        result = publisher._upload_images(["cover.jpg"])
+    assert result == cdn
+    assert [call.args[1] for call in route.call_args_list] == ["", "socks5://127.0.0.1:1080"]
+    assert publisher._last_upload_route == "cn_proxy_fallback"
+    assert publisher._proxy_fallback_reason
+
+
+def test_juejin_upload_does_not_call_cn_proxy_when_direct_succeeds():
+    publisher = JuejinPublisher(proxy="socks5://127.0.0.1:1080")
+    cdn = ["https://p3-juejin.byteimg.com/cover.jpg"]
+    with patch.object(publisher, "_upload_images_via_route", return_value=cdn) as route:
+        assert publisher._upload_images(["cover.jpg"]) == cdn
+    route.assert_called_once_with(["cover.jpg"], "")
+    assert publisher._last_upload_route == "direct"
+
+
 def test_juejin_blocks_partial_platform_image_upload_before_draft(tmp_path):
     publisher = JuejinPublisher()
     with patch.object(publisher, "_cookie_and_csrf", return_value=("sessionid=x", "csrf", [])), patch.object(

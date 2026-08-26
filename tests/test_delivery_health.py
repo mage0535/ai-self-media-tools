@@ -196,7 +196,7 @@ class DeliveryHealthTests(unittest.TestCase):
         self.assertTrue(decision.ok)
         self.assertTrue(decision.require_postcheck)
 
-    def test_proxy_required_blocks_domestic_before_uploader(self):
+    def test_domestic_delivery_is_direct_first_without_cn_proxy(self):
         with patch.dict(os.environ, {}, clear=True):
             decision = delivery_health_decision(
                 "kuaishou",
@@ -215,10 +215,9 @@ class DeliveryHealthTests(unittest.TestCase):
                 },
             )
 
-        self.assertFalse(decision.ok)
-        self.assertEqual(decision.state, "proxy_unavailable")
+        self.assertTrue(decision.ok)
 
-    def test_proxy_required_allows_domestic_when_cn_proxy_exists(self):
+    def test_optional_cn_proxy_does_not_block_domestic_delivery(self):
         with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
             decision = delivery_health_decision(
                 "kuaishou",

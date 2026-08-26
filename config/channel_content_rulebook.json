@@ -24,9 +24,9 @@
   "no_secret_output": true,
   "no_model_provider_change": true,
   "zero_paid_priority": true,
-  "domestic_hermes_proxy": "socks5h://127.0.0.1:1080",
+  "domestic_hermes_proxy": "CN_PROXY_fallback_only",
   "international_hermes_proxy": "US_PROXY",
-  "proxy_required_for_hermes_channel_access": true,
+  "proxy_required_for_hermes_channel_access": false,
   "paused_cron_remains_paused_without_explicit_user_approval": true,
   "strategy_or_outbox_is_not_publish_success": true,
   "public_publish_requires_explicit_current_approval": true,
@@ -117,6 +117,8 @@
  },
  "proxy_policy": {
   "scope": "all_hermes_browser_or_http_channel_access",
+  "domestic_route_order": ["direct", "CN_PROXY"],
+  "international_route_order": ["direct", "US_PROXY"],
   "domestic_proxy_env": "CN_PROXY",
   "domestic_proxy_default": "socks5://127.0.0.1:1080",
   "international_proxy_env": "US_PROXY",
@@ -144,11 +146,11 @@
    "buttondown"
   ],
   "rules": [
-   "Hermes access to domestic channels must use CN_PROXY and must not fall back to the Hermes server public IP.",
-   "Hermes access to international channels must use US_PROXY and must not reuse CN_PROXY unless a current ops report explicitly approves a route exception.",
+   "Hermes access to domestic channels must try direct first and use CN_PROXY only after a classified direct-route failure.",
+   "Hermes access to international channels must try direct first and use US_PROXY only after a classified direct-route failure.",
    "Login, cookie refresh, upload, draft, schedule, postcheck, analytics, trend scraping, and crawler probes are all channel access and must follow this proxy policy.",
-   "If the required proxy is missing, unreachable, or the observed egress region does not match the channel class, the channel must be blocked before login or upload.",
-   "Cookie files created under the wrong egress class are suspect and must be revalidated through the correct proxy before use."
+   "Every regional proxy fallback must record the direct-route failure reason, selected route, and final result.",
+   "If direct and the matching regional proxy both fail, the channel must be blocked before upload or publication."
   ]
  },
  "feedback_schema": {
