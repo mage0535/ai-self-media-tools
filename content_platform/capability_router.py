@@ -31,7 +31,17 @@ def load_registry(platform: str = "") -> dict[str, Any]:
 
 def _matches(capability: dict[str, Any], profile: dict[str, Any]) -> bool:
     applies = set(capability.get("applies_to") or [])
-    return str(profile.get("content_format") or "") in applies
+    raw_format = str(profile.get("content_format") or "").casefold()
+    aliases = {
+        "vertical_video": "short_video",
+        "short": "short_video",
+        "reel": "short_video",
+        "horizontal_video": "long_video",
+        "video": "long_video",
+        "long_article": "article",
+        "image_text_note": "carousel",
+    }
+    return aliases.get(raw_format, raw_format) in applies
 
 
 def match_capabilities(
@@ -44,7 +54,12 @@ def match_capabilities(
     candidates: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     inventory: list[dict[str, Any]] = []
-    content_format = str(profile.get("content_format") or "")
+    raw_format = str(profile.get("content_format") or "").casefold()
+    content_format = {
+        "vertical_video": "short_video", "short": "short_video", "reel": "short_video",
+        "horizontal_video": "long_video", "video": "long_video",
+        "long_article": "article", "image_text_note": "carousel",
+    }.get(raw_format, raw_format)
     applicable_groups = [
         group for group in registry.get("groups", [])
         if content_format in set(group.get("applies_to") or [])
