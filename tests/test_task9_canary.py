@@ -170,6 +170,17 @@ def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Pat
     assert "hotspot" in result["error"]
 
 
+def test_scheduled_and_direct_publish_canaries_remain_non_publishing_dry_runs():
+    from scripts.task9_canary import build_canary_matrix
+
+    cases = {case["platform"]: case for case in build_canary_matrix()}
+
+    assert cases["kuaishou"]["delivery_policy"] == "scheduled"
+    assert cases["kuaishou"]["dry_run"] is True
+    assert cases["twitter"]["delivery_policy"] == "direct_publish"
+    assert cases["twitter"]["dry_run"] is True
+
+
 def test_runtime_identity_requires_successful_cli_output_not_environment_fallback(monkeypatch):
     from scripts import task9_canary
 
