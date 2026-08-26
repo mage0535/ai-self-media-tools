@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -39,12 +40,27 @@ def main() -> int:
     parser.add_argument("--current-root", required=True)
     parser.add_argument("--rollback-root", required=True)
     parser.add_argument("--protected-root", required=True)
+    parser.add_argument("--current-link")
     parser.add_argument("--output", required=True)
-    parser.add_argument("--execute", action="store_true", help="Still records only a non-mutating rehearsal")
+    parser.add_argument("--execute", action="store_true", help="Perform rollback, health checks, and forward recovery")
+    parser.add_argument("--health-command", nargs=argparse.REMAINDER, default=[])
     args = parser.parse_args()
     report = json.loads(Path(args.report).read_text(encoding="utf-8"))
     acceptance = evaluate_acceptance(report, repo_root=Path(__file__).resolve().parents[1])
-    rollback = rehearse_rollback(args.current_root, args.rollback_root, dry_run=not args.execute, protected_root=args.protected_root)
+    def health_check(root):
+        if not args.health_command:
+            return True
+        process = subprocess.run(args.health_command, cwd=root, capture_output=True, text=True, timeout=300, check=False)
+        return process.returncode == 0
+
+    rollback = rehearse_rollback(
+        args.current_root,
+        args.rollback_root,
+        dry_run=not args.execute,
+        protected_root=args.protected_root,
+        current_link=args.current_link,
+        health_check=health_check,
+    )
     try:
         timer_states = query_timer_states()
         timers_enabled = bool(timer_states) and all(state["enabled"] for state in timer_states.values())

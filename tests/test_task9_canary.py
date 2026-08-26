@@ -371,6 +371,19 @@ def test_deployment_acceptance_rejects_enabled_or_active_timer(monkeypatch, tmp_
     assert result["production_ready"] is False
 
 
+def test_deployment_acceptance_cli_exposes_real_rollback_arguments():
+    result = subprocess.run(
+        [sys.executable, "scripts/task9_deployment_acceptance.py", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "--current-link" in result.stdout
+    assert "--health-command" in result.stdout
+
+
 def test_runner_calls_real_pipeline_methods_serially_and_does_not_accept_user_model_reports(tmp_path: Path):
     from scripts.task9_canary import build_canary_matrix, run_canaries
 
