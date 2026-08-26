@@ -276,6 +276,36 @@ def test_acceptance_requires_all_evidence_before_production_ready(tmp_path: Path
     assert result["failures"] == []
 
 
+def test_acceptance_rejects_unbound_passed_json_as_audit_evidence(tmp_path: Path):
+    from scripts.task9_acceptance import evaluate_acceptance
+
+    report = _valid_acceptance_report(tmp_path)
+    fake = _write(tmp_path / "fake.json", json.dumps({"passed": True}))
+    report["audits"]["full_pytest"] = {
+        "passed": True,
+        "path": str(fake),
+        "sha256": __import__("hashlib").sha256(fake.read_bytes()).hexdigest(),
+        "commit": "abc",
+    }
+
+    result = evaluate_acceptance(report, repo_root=ROOT)
+
+    assert result["production_ready"] is False
+    assert "audit_payload_unreadable:full_pytest" in result["failures"]
+
+
+def test_acceptance_rejects_non_mutating_rollback_claim(tmp_path: Path):
+    from scripts.task9_acceptance import evaluate_acceptance
+
+    report = _valid_acceptance_report(tmp_path)
+    report["rollback_rehearsal"] = {"passed": True, "mutation_performed": False}
+
+    result = evaluate_acceptance(report, repo_root=ROOT)
+
+    assert result["production_ready"] is False
+    assert "rollback_rehearsal_missing" in result["failures"]
+
+
 def test_acceptance_rejects_fake_platform_set_and_requires_pipeline_evidence(tmp_path: Path):
     from scripts.task9_acceptance import evaluate_acceptance
 
@@ -391,9 +421,15 @@ def _valid_acceptance_report(tmp_path: Path) -> dict:
 
     gate_hash = __import__("hashlib").sha256(json.dumps(DETERMINISTIC_GATE_NAMES, ensure_ascii=True, sort_keys=True).encode("utf-8")).hexdigest()
     evidence = {}
-    for name in ("full_pytest", "privacy_audit", "license_audit"):
-        path = _write(tmp_path / f"{name}.json", json.dumps({"passed": True}))
-        evidence[name] = {"passed": True, "path": str(path)}
+    junit = _write(tmp_path / "full_pytest.xml", '<testsuite tests="1" failures="0" errors="0"><testcase name="ok"/></testsuite>')
+    audit_paths = {
+        "full_pytest": junit,
+        "privacy_audit": _write(tmp_path / "privacy_audit.json", json.dumps({"ok": True, "issues": []})),
+        "license_audit": _write(tmp_path / "license_audit.json", json.dumps({"passed": True, "issues": []})),
+    }
+    for name, path in audit_paths.items():
+        digest = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+        evidence[name] = {"passed": True, "path": str(path), "sha256": digest, "commit": "abc"}
     from scripts.task9_canary import build_canary_matrix, EXPECTED_CANARY_PLATFORMS
     matrix = build_canary_matrix()
     cases = [
@@ -425,7 +461,7 @@ def _valid_acceptance_report(tmp_path: Path) -> dict:
         "cases": cases,
         "audits": evidence,
         "commit_parity": {"source": "abc", "release": "abc", "hermes": "abc"},
-        "rollback_rehearsal": {"passed": True},
+        "rollback_rehearsal": {"passed": True, "mutation_performed": True, "health_checks_passed": True, "forward_recovered": True},
         "shadow_batches": [
             {"passed": True, "code_edits": 0, "manual_recovery": False},
             {"passed": True, "code_edits": 0, "manual_recovery": False},
