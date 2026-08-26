@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from scripts.task9_prepare_inputs import prepare_inputs
@@ -20,3 +22,15 @@ def test_prepare_inputs_uses_real_same_lane_evidence_and_reports_missing(tmp_pat
     saved = json.loads((tmp_path / "canary" / "_inputs" / "hotspots" / "juejin.json").read_text(encoding="utf-8"))
     assert saved["evidence_type"] == "same_lane_hot_work"
     assert saved["source_url"].startswith("https://juejin.cn/")
+
+
+def test_prepare_inputs_script_entrypoint_imports_from_repo_root():
+    result = subprocess.run(
+        [sys.executable, "scripts/task9_prepare_inputs.py", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "--artifact-root" in result.stdout
