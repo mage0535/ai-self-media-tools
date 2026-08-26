@@ -1,6 +1,8 @@
 """Juejin article publisher — API-based, supports markdown + cover."""
 import json
 import urllib.request
+import urllib.parse
+import tempfile
 from pathlib import Path
 
 from .auth_registry import resolve_cookie_file
@@ -18,11 +20,15 @@ def _public_url(item):
 
 
 def _artifact_source(item):
-    url = _public_url(item)
-    if url:
-        return url
     path = Path(str(item.get("path") or ""))
-    return str(path) if path.is_file() else ""
+    if path.is_file():
+        return str(path)
+    return _public_url(item)
+
+
+def _juejin_cdn_url(url):
+    host = (urllib.parse.urlparse(str(url or "")).hostname or "").casefold()
+    return bool(host and (host.endswith(".juejin.cn") or host.endswith(".byteimg.com")))
 
 
 def _section_map_valid(section_map):
@@ -77,7 +83,7 @@ def _mapped_sources(section_map, artifacts):
     return [lookup.get(str(row.get("image") or "")) or lookup.get(Path(str(row.get("image") or "")).name) for row in section_map]
 
 
-def _renderer_visibility_evidence(response, expected_urls):
+def _renderer_visibility_evidence(response, expected_urls, *, expected_cover="", expected_markdown=""):
     response = response if isinstance(response, dict) else {}
     data = response.get("data") if isinstance(response.get("data"), dict) else {}
     evidence = data.get("target_renderer_evidence") or response.get("target_renderer_evidence") or {}
@@ -95,9 +101,10 @@ def _renderer_visibility_evidence(response, expected_urls):
     cover_image = str(data.get("cover_image") or response.get("cover_image") or "")
     if not observed_urls:
         observed_urls = [url for url in expected_urls if url and url in mark_content]
-    visible = evidence.get("verified") is True or data.get("editor_visible") is True
-    if expected_urls and set(expected_urls).issubset(set(observed_urls)):
-        visible = True
+    draft_id = str(data.get("id") or data.get("draft_id") or "")
+    exact_markdown = bool(expected_markdown and mark_content and mark_content.strip() == expected_markdown.strip())
+    visible = bool(draft_id and exact_markdown and expected_cover and cover_image == expected_cover)
+    visible = visible or (evidence.get("verified") is True and data.get("editor_visible") is True)
     mapping_count = int(evidence.get("mapping_count") or data.get("mapping_count") or len(observed_urls))
     passed = visible and mapping_count >= 3 and set(expected_urls).issubset(set(str(url) for url in observed_urls))
     return {
@@ -106,6 +113,9 @@ def _renderer_visibility_evidence(response, expected_urls):
         "mapping_count": mapping_count,
         "public_inline_image_urls": [str(url) for url in observed_urls],
         "response_evidence": evidence,
+        "draft_id": draft_id,
+        "cover_verified": bool(expected_cover and cover_image == expected_cover),
+        "markdown_verified": exact_markdown,
         "failure": "editor visibility response missing or incomplete" if not passed else "",
     }
 
@@ -130,8 +140,9 @@ def _record_renderer_evidence(job, evidence, uploaded_urls=None):
         for artifact, url in zip(handoff.get("artifacts") or [], uploaded_urls):
             if isinstance(artifact, dict):
                 artifact["public_url"] = url
+        cdn_passed = len(uploaded_urls) == 4 and len(set(uploaded_urls)) == 4 and all(_juejin_cdn_url(url) for url in uploaded_urls)
         handoff["platform_upload_required"] = True
-        handoff["platform_cdn_evidence"] = {"passed": True, "urls": list(uploaded_urls), "platform": "juejin"}
+        handoff["platform_cdn_evidence"] = {"passed": cdn_passed, "urls": list(uploaded_urls), "platform": "juejin", "count": len(uploaded_urls)}
     handoff["target_renderer_evidence"] = evidence
     handoff["state"] = "handoff_ready" if evidence.get("verified") is True else "handoff_blocked"
     if contract_path is None and metadata.get("article_media_contract_path"):
@@ -180,8 +191,8 @@ def _article_guard(job, title, body_text, platform_payload):
         missing.append("cover_image")
     if len(images) < 3:
         missing.append("inline_images_3")
-    local_sources = [_artifact_source(item) for item in [*covers, *images]]
-    if len(local_sources) != len(set(local_sources)):
+    mapped_images = [str(item.get("image") or "") for item in section_map if isinstance(item, dict)]
+    if mapped_images and len(mapped_images) != len(set(mapped_images)):
         missing.append("duplicate_media_assets")
     if not _section_map_valid(section_map):
         missing.append("valid_section_image_map_3")
@@ -251,8 +262,9 @@ class JuejinPublisher:
         return urls[0] if urls else ""
 
     def _upload_images(self, sources):
+        self._last_upload_error = ""
         sources = [str(source or "") for source in sources]
-        if all(source.startswith(("http://", "https://")) for source in sources):
+        if all(_juejin_cdn_url(source) for source in sources):
             return sources
         _, _, storage = self._cookie_and_csrf()
         if not storage:
@@ -261,24 +273,42 @@ class JuejinPublisher:
             from playwright.sync_api import sync_playwright
         except ImportError:
             return []
-        urls = []
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
-            context = browser.new_context(
-                storage_state=storage if isinstance(storage, dict) else {"cookies": storage},
-                locale="zh-CN",
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            )
-            page = context.new_page()
-            page.goto("https://juejin.cn/editor/drafts/new?v=2", wait_until="networkidle", timeout=60000)
-            editor = page.locator(".CodeMirror")
-            upload = page.locator('.bytemd-toolbar-icon[bytemd-tippy-path="5"]').first
-            for source in sources:
-                if source.startswith(("http://", "https://")):
+        urls, temporary_files = [], []
+        try:
+          with sync_playwright() as pw:
+            browser = None
+            context = None
+            try:
+              browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
+              context_options = {"storage_state": storage if isinstance(storage, dict) else {"cookies": storage}, "locale": "zh-CN", "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+              if self.proxy:
+                  context_options["proxy"] = {"server": self.proxy}
+              context = browser.new_context(**context_options)
+              page = context.new_page()
+              page.goto("https://juejin.cn/editor/drafts/new?v=2", wait_until="networkidle", timeout=60000)
+              if "/editor/" not in page.url:
+                  self._last_upload_error = "juejin editor login expired"
+                  return []
+              editor = page.locator(".CodeMirror")
+              upload = page.locator('.bytemd-toolbar-icon[bytemd-tippy-path="5"]').first
+              for source in sources:
+                if _juejin_cdn_url(source):
                     urls.append(source)
                     continue
+                if source.startswith(("http://", "https://")):
+                    suffix = Path(urllib.parse.urlparse(source).path).suffix or ".jpg"
+                    target = Path(tempfile.gettempdir()) / f"juejin-source-{len(temporary_files)}{suffix}"
+                    try:
+                        urllib.request.urlretrieve(source, target)
+                        temporary_files.append(target)
+                        source = str(target)
+                    except Exception as exc:
+                        self._last_upload_error = f"source download failed: {type(exc).__name__}"
+                        urls.append("")
+                        continue
                 path = Path(source)
                 if not path.is_file() or path.stat().st_size <= 0 or upload.count() != 1:
+                    self._last_upload_error = "juejin image upload control missing or source unreadable"
                     urls.append("")
                     continue
                 before = editor.evaluate("e => e.CodeMirror && e.CodeMirror.getValue()") or ""
@@ -293,10 +323,21 @@ class JuejinPublisher:
                         if value != before and "http" in value:
                             break
                     matches = __import__("re").findall(r"!\[[^\]]*\]\((https?://[^)]+)\)", value)
-                    urls.append(matches[-1] if matches else "")
-                except Exception:
+                    url = matches[-1] if matches and _juejin_cdn_url(matches[-1]) else ""
+                    if not url:
+                        self._last_upload_error = "juejin ImageX returned no verified CDN URL"
+                    urls.append(url)
+                except Exception as exc:
+                    self._last_upload_error = f"juejin ImageX upload failed: {type(exc).__name__}"
                     urls.append("")
-            browser.close()
+            finally:
+              if context is not None:
+                  context.close()
+              if browser is not None:
+                  browser.close()
+        finally:
+            for path in temporary_files:
+                path.unlink(missing_ok=True)
         return urls
 
     def deliver(self, job, platform):
@@ -321,9 +362,13 @@ class JuejinPublisher:
         artifacts = job.get("artifacts", [])
         cover_source = next((_artifact_source(item) for item in artifacts if item.get("kind") == "cover"), "")
         image_sources = _mapped_sources(section_map, artifacts)
-        uploaded = self._upload_images([cover_source, *image_sources])
+        selected_sources = [cover_source, *image_sources]
+        if not cover_source or not all(image_sources) or len(selected_sources) != len(set(selected_sources)):
+            return DeliveryResult(False, "blocked", error="juejin selected media contains missing or duplicate assets")
+        uploaded = self._upload_images(selected_sources)
         if len(uploaded) != len(section_map) + 1 or any(not url.startswith("http") for url in uploaded):
-            return DeliveryResult(False, "blocked", error=f"juejin platform image upload incomplete: {len([url for url in uploaded if url])}/{len(section_map)+1}")
+            detail = getattr(self, "_last_upload_error", "")
+            return DeliveryResult(False, "blocked", error=f"juejin platform image upload incomplete: {len([url for url in uploaded if url])}/{len(section_map)+1}; {detail}".rstrip("; "))
         cover, mapped_urls = uploaded[0], uploaded[1:]
         md_body = body_text
         import re as _re
@@ -362,7 +407,7 @@ class JuejinPublisher:
         detail = self._api("/content_api/v1/article_draft/detail", {"draft_id": draft_id})
         if detail.get("err_no") != 0:
             return DeliveryResult(False, "blocked", f"juejin:{draft_id}", error="juejin editor postcheck failed")
-        renderer_evidence = _renderer_visibility_evidence(detail, mapped_urls)
+        renderer_evidence = _renderer_visibility_evidence(detail, mapped_urls, expected_cover=cover, expected_markdown=md_body)
         _record_renderer_evidence(job, renderer_evidence, [cover, *mapped_urls])
         if not renderer_evidence["verified"]:
             return DeliveryResult(False, "blocked", f"juejin:{result.get('data', {}).get('id', '')}", error="juejin editor visibility response missing or incomplete")

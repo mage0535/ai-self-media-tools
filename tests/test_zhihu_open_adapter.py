@@ -113,3 +113,11 @@ def test_zhihu_markdown_replaces_all_empty_image_markers():
 
     assert markdown.count("https://cdn.example/") == 3
     assert "![]()" not in markdown
+
+
+def test_zhihu_editor_dom_requires_all_platform_cdn_images():
+    from content_platform.zhihu_publisher import validate_editor_dom
+    html = "<p>problem</p>" + "".join(f'<img src="https://pic{i}.zhimg.com/v2-{i}.jpg">' for i in range(4))
+    assert validate_editor_dom(html, expected_images=4)["passed"] is True
+    assert validate_editor_dom(html.replace("pic3.zhimg.com", "cdn.example.com"), expected_images=4)["passed"] is False
+    assert validate_editor_dom(html.rsplit("<img", 1)[0], expected_images=4)["passed"] is False

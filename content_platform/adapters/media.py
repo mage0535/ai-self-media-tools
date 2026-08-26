@@ -299,8 +299,11 @@ def validate_handoff_contract(
             failures.append(f"artifact_{index}_license_missing")
     target = contract.get("target_renderer_evidence") if isinstance(contract.get("target_renderer_evidence"), dict) else {}
     staging = contract.get("public_staging_evidence") if isinstance(contract.get("public_staging_evidence"), dict) else {}
+    platform_cdn = contract.get("platform_cdn_evidence") if isinstance(contract.get("platform_cdn_evidence"), dict) else {}
     if require_target_renderer and staging.get("passed") is not True and contract.get("platform_upload_required") is not True:
         failures.append("public_staging_evidence_missing")
+    if require_target_renderer and contract.get("platform_upload_required") is True and platform_cdn.get("passed") is not True:
+        failures.append("platform_cdn_evidence_missing")
     if require_target_renderer and target.get("verified") is not True:
         failures.append("target_renderer_evidence_missing")
     return {"passed": not failures, "failures": failures, "state": contract.get("state", ""), "public_staging": staging, "target_renderer": target}

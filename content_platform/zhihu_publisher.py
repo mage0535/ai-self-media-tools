@@ -1,5 +1,6 @@
 """Zhihu article publisher — MD import for formatting + pre-uploaded CDN images."""
 import json, re
+import urllib.parse
 from pathlib import Path
 
 from .auth_registry import resolve_cookie_file
@@ -81,6 +82,13 @@ def build_markdown_with_cdn(body_text, section_map, cdn_urls):
     if re.search(r"!\[[^\]]*\]\(\s*\)", markdown):
         raise ValueError("zhihu article contains unresolved image markers")
     return markdown
+
+
+def validate_editor_dom(html, *, expected_images):
+    urls = re.findall(r'<img[^>]+src=["\'](https?://[^"\']+)', str(html or ""), re.I)
+    hosts = [(urllib.parse.urlparse(url).hostname or "").casefold() for url in urls]
+    passed = len(urls) >= int(expected_images) and all(host == "zhimg.com" or host.endswith(".zhimg.com") for host in hosts)
+    return {"passed": passed, "image_count": len(urls), "expected_images": int(expected_images), "hosts": hosts}
 
 
 def _article_guard(job, title, body_text, platform_payload):
@@ -282,6 +290,11 @@ class ZhihuPublisher:
 
             if self.save_as_draft:
                 page.wait_for_timeout(3000)
+                html = page.evaluate("() => document.querySelector('[contenteditable=true]')?.innerHTML || ''")
+                postcheck = validate_editor_dom(html, expected_images=len(cdn_urls))
+                if not postcheck["passed"]:
+                    browser.close()
+                    return DeliveryResult(False, "blocked", f"zhihu:{self.account}", error="zhihu editor postcheck failed: CDN images missing")
                 browser.close()
                 return DeliveryResult(True, "drafted", f"zhihu:{self.account}",
                                      error="zhihu draft with CDN images via MD import")
