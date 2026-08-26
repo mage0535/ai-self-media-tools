@@ -159,6 +159,10 @@ def _visual_recipe(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]
 
 
 def _video_template_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
+    rendered = _dict_value(inputs, "render_manifest")
+    output = Path(str(rendered.get("output") or ""))
+    if rendered.get("status") == "rendered" and rendered.get("ok") is True and output.is_file():
+        return _executed(capability_id, "video_template_plan_v1", rendered)
     from ..video_toolchain import build_video_toolchain_plan
 
     plan = _dict_value(inputs, "video_toolchain_plan", "video_template_plan")
@@ -174,6 +178,11 @@ def _video_template_plan(inputs: dict[str, Any], capability_id: str) -> dict[str
 
 
 def _shotcraft_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
+    rendered = _dict_value(inputs, "render_manifest")
+    observed = rendered.get("segment_motion_evidence") if isinstance(rendered.get("segment_motion_evidence"), dict) else {}
+    motion = rendered.get("shotcraft_motion_plan") if isinstance(rendered.get("shotcraft_motion_plan"), dict) else {}
+    if rendered.get("status") == "rendered" and motion.get("available") and len(observed.get("segments") or []) >= 3:
+        return _executed(capability_id, "shotcraft_plan_v1", {"shots": observed["segments"], "motion_plan": motion})
     evidence = _dict_value(inputs, "shotcraft_plan", "shotcraft_motion_plan")
     if not evidence:
         return _failure(capability_id, "shotcraft_plan_v1", "missing_evidence:shotcraft_plan")
@@ -187,6 +196,9 @@ def _tts_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
     evidence = _dict_value(inputs, "tts_plan", "voice_plan", "tts_fingerprint")
     if not evidence:
         return _failure(capability_id, "tts_plan_v1", "missing_evidence:tts_plan")
+    audio_paths = [Path(str(item.get("path") or "")) for item in inputs.get("artifacts") or [] if isinstance(item, dict) and item.get("kind") == "audio"]
+    if evidence.get("sha256") and any(path.is_file() for path in audio_paths):
+        return _executed(capability_id, "tts_plan_v1", evidence)
     return _planned(capability_id, "tts_plan_v1", evidence)
 
 
@@ -194,6 +206,9 @@ def _subtitle_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]
     evidence = _dict_value(inputs, "subtitle_plan", "subtitle_evidence")
     if not evidence:
         return _failure(capability_id, "subtitle_plan_v1", "missing_evidence:subtitle_plan")
+    subtitle_path = Path(str(evidence.get("path") or evidence.get("subtitle") or ""))
+    if subtitle_path.is_file() and subtitle_path.stat().st_size > 0:
+        return _executed(capability_id, "subtitle_plan_v1", evidence)
     return _planned(capability_id, "subtitle_plan_v1", evidence)
 
 
@@ -201,6 +216,9 @@ def _audio_mix_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any
     evidence = _dict_value(inputs, "audio_mix_plan", "audio_mix_evidence", "bgm_plan")
     if not evidence:
         return _failure(capability_id, "audio_mix_plan_v1", "missing_evidence:audio_mix_plan")
+    output = Path(str(evidence.get("output") or evidence.get("path") or ""))
+    if output.is_file() and evidence.get("source_url") and evidence.get("license"):
+        return _executed(capability_id, "audio_mix_plan_v1", evidence)
     return _planned(capability_id, "audio_mix_plan_v1", evidence)
 
 
@@ -263,6 +281,12 @@ def _verified(capability_id: str, version: str, evidence: dict[str, Any]) -> dic
 def _planned(capability_id: str, version: str, evidence: dict[str, Any]) -> dict[str, Any]:
     result = _verified(capability_id, version, evidence)
     result["status"] = "planned"
+    return result
+
+
+def _executed(capability_id: str, version: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    result = _verified(capability_id, version, evidence)
+    result["status"] = "executed"
     return result
 
 

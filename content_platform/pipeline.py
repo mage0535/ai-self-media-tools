@@ -12,7 +12,7 @@ from .claim_ledger import sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
-from .capability_runtime import execute_generation_capabilities
+from .capability_runtime import execute_generation_capabilities, execute_post_generation_capabilities
 from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
@@ -489,6 +489,15 @@ class Pipeline:
                 artifacts = self.store.artifacts(job_id)
                 image_required = self._media_required("image", self.config.get("media", {}).get("image", {}), current_job)
                 video_required = self._media_required("video", self.config.get("media", {}).get("video", {}), current_job)
+                capability_execution = execute_post_generation_capabilities(
+                    capability_execution,
+                    draft,
+                    brief,
+                    artifacts=artifacts,
+                    render_manifest=(draft.get("draft_meta") or {}).get("render_manifest") or {},
+                    quality_gate=final_gate,
+                )
+                draft["draft_meta"]["capability_execution"] = capability_execution
                 draft["draft_meta"]["execution_trace"] = build_pre_delivery_trace(
                     capability_execution=capability_execution,
                     artifacts=artifacts,
@@ -497,6 +506,14 @@ class Pipeline:
                     render_required=bool(video_required),
                     quality_gate=final_gate,
                 )
+                if brief.get("automated_workflow") and draft["draft_meta"]["execution_trace"].get("passed") is False:
+                    runner.block(
+                        "run_final_platform_quality_gate",
+                        "canonical_execution_trace_failed",
+                        "selected required capabilities lack real execution or artifact evidence",
+                        draft["draft_meta"]["execution_trace"],
+                        depends_on=["validate_image_requirements"],
+                    )
                 self.store.save_draft(
                     job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
                 )
