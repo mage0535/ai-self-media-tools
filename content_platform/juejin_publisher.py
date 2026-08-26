@@ -180,6 +180,9 @@ def _article_guard(job, title, body_text, platform_payload):
         missing.append("cover_image")
     if len(images) < 3:
         missing.append("inline_images_3")
+    local_sources = [_artifact_source(item) for item in [*covers, *images]]
+    if len(local_sources) != len(set(local_sources)):
+        missing.append("duplicate_media_assets")
     if not _section_map_valid(section_map):
         missing.append("valid_section_image_map_3")
     elif not all(_mapped_sources(section_map, artifacts)):
