@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +29,11 @@ def _lane_words(platform: str) -> tuple[str, ...]:
 
 def _fit(title: str, platform: str) -> float:
     text = str(title or "").casefold()
-    hits = sum(1 for word in _lane_words(platform) if word in text)
+    hits = sum(
+        1
+        for word in _lane_words(platform)
+        if (re.search(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", text) if word.isascii() else word in text)
+    )
     return min(1.0, 0.55 + (hits - 1) * 0.2) if hits else 0.0
 
 
