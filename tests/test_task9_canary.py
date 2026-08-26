@@ -30,6 +30,10 @@ def test_canary_matrix_is_serial_and_covers_required_platform_forms_and_language
     assert {case["platform"] for case in matrix} == set(EXPECTED_CANARY_PLATFORMS)
     assert {case["content_form"] for case in matrix} >= {"article", "carousel", "vertical_video", "horizontal_video"}
     assert {case["language"] for case in matrix} >= {"zh", "en"}
+    assert {case["platform"] for case in matrix} == {
+        "wechat", "kuaishou", "juejin", "twitter", "douyin_ai", "douyin_pet",
+        "shipinhao", "xiaohongshu", "bilibili", "zhihu", "youtube", "tiktok",
+    }
     assert any(case["delivery_policy"] == "manual_handoff_only" for case in matrix)
     assert any(case["dry_run"] for case in matrix)
     support_matrix = load_hotspot_support_matrix()

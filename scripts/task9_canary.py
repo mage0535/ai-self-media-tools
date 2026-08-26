@@ -40,18 +40,18 @@ from content_platform.associated_hotspot import load_hotspot_support_matrix
 
 
 CANARY_PLATFORMS = (
-    ("douyin", "vertical_video", "zh", "manual_handoff_only", False),
-    ("kuaishou", "vertical_video", "zh", "dry_run", True),
-    ("shipinhao", "vertical_video", "zh", "manual_handoff_only", False),
     ("wechat", "article", "zh", "draft_first", False),
-    ("xiaohongshu", "carousel", "zh", "manual_handoff_only", False),
+    ("kuaishou", "vertical_video", "zh", "scheduled", True),
     ("juejin", "article", "zh", "draft_first", False),
-    ("zhihu", "article", "zh", "draft_first", True),
+    ("twitter", "short_post", "en", "direct_publish", True),
+    ("douyin_ai", "vertical_video", "zh", "manual_handoff_only", False),
+    ("douyin_pet", "vertical_video", "zh", "manual_handoff_only", False),
+    ("shipinhao", "vertical_video", "zh", "manual_handoff_only", False),
+    ("xiaohongshu", "carousel", "zh", "manual_handoff_only", False),
     ("bilibili", "horizontal_video", "zh", "manual_handoff_only", False),
-    ("tiktok", "vertical_video", "en", "manual_handoff_only", False),
+    ("zhihu", "article", "zh", "draft_first", True),
     ("youtube", "horizontal_video", "en", "manual_handoff_only", False),
-    ("twitter", "carousel", "en", "dry_run", True),
-    ("devto", "article", "en", "draft_first", False),
+    ("tiktok", "vertical_video", "en", "manual_handoff_only", False),
 )
 EXPECTED_CANARY_PLATFORMS = tuple(item[0] for item in CANARY_PLATFORMS)
 DETERMINISTIC_GATE_NAMES = (
