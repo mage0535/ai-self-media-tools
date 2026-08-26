@@ -7,7 +7,7 @@ from content_platform.capability_runtime import (
 from content_platform.execution_trace import build_pre_delivery_trace, complete_delivery_trace
 
 
-STAGES = ("generation", "assets", "render", "gate", "delivery")
+STAGES = ("collection", "selection", "blueprint", "generation", "assets", "render", "gate", "delivery")
 
 
 def _hash(index: int) -> str:
@@ -42,7 +42,7 @@ def test_merger_builds_canonical_five_stage_trace_with_manifest_references():
     assert trace["version"] == "execution_trace_v1"
     assert [record["stage"] for record in trace["stages"]] == list(STAGES)
     assert [record["manifest_ref"]["hash"] for record in trace["stages"]] == [
-        f"sha256:{_hash(index)}" for index in range(1, 6)
+        f"sha256:{_hash(index)}" for index in range(1, len(STAGES) + 1)
     ]
     assert trace["passed"] is True
     assert trace["failures"] == []
@@ -67,7 +67,7 @@ def test_recorder_keeps_evidence_states_explicit_and_separate():
 
 def test_selected_required_node_without_execution_fails_closed():
     records = [_complete_stage(stage, index) for index, stage in enumerate(STAGES, 1)]
-    records[2] = record_execution_stage(
+    records[5] = record_execution_stage(
         "render",
         manifest_hash=_hash(3),
         planned=[{"node_id": "renderer", "selected": True, "required": True}],
@@ -83,7 +83,7 @@ def test_selected_required_node_without_execution_fails_closed():
 
 def test_required_artifact_verification_is_not_inferred_from_execution():
     records = [_complete_stage(stage, index) for index, stage in enumerate(STAGES, 1)]
-    records[4] = record_execution_stage(
+    records[7] = record_execution_stage(
         "delivery",
         manifest_hash=_hash(5),
         planned=[
@@ -106,7 +106,7 @@ def test_required_artifact_verification_is_not_inferred_from_execution():
 
 def test_optional_or_unselected_nodes_do_not_block_execution_trace():
     records = [_complete_stage(stage, index) for index, stage in enumerate(STAGES, 1)]
-    records[1] = record_execution_stage(
+    records[4] = record_execution_stage(
         "assets",
         manifest_hash=_hash(2),
         planned=[
@@ -144,11 +144,11 @@ def test_recorder_rejects_invalid_manifest_hashes(manifest_hash):
 def test_pre_delivery_trace_is_pending_not_failed_when_real_prior_stages_pass():
     trace = build_pre_delivery_trace(
         capability_execution={
-            "selected": [{"capability_id": "writer", "required_or_optional": "required"}],
+            "selected": [{"capability_id": "copywriting_structure_matcher", "stage": "generation", "required_or_optional": "required"}],
             "consulted": [{"capability_id": "guide"}],
-            "executed": [{"capability_id": "writer", "output_hash": "sha256:x"}],
+            "executed": [{"capability_id": "copywriting_structure_matcher", "stage": "generation", "output_hash": "sha256:x"}],
         },
-        artifacts=[{"kind": "image", "path": "image.png", "checksum": "abc"}],
+        artifacts=[{"kind": "image", "path": "image.png", "checksum": "abc", "capability_id": "voice_engine"}],
         assets_required=True,
         render_manifest={},
         render_required=False,
@@ -156,14 +156,14 @@ def test_pre_delivery_trace_is_pending_not_failed_when_real_prior_stages_pass():
     )
     assert trace["passed"] is None
     assert trace["status"] == "pending_delivery"
-    assert [row["stage"] for row in trace["stages"]] == ["generation", "assets", "render", "gate"]
+    assert [row["stage"] for row in trace["stages"]] == list(STAGES[:-1])
 
 
 def test_delivery_completion_makes_canonical_trace_pass():
     pending = build_pre_delivery_trace(
         capability_execution={
-            "selected": [{"capability_id": "writer", "required_or_optional": "required"}],
-            "executed": [{"capability_id": "writer", "output_hash": "sha256:x"}],
+            "selected": [{"capability_id": "copywriting_structure_matcher", "stage": "generation", "required_or_optional": "required"}],
+            "executed": [{"capability_id": "copywriting_structure_matcher", "stage": "generation", "output_hash": "sha256:x"}],
         },
         artifacts=[],
         assets_required=False,
@@ -189,4 +189,89 @@ def test_multiple_platform_deliveries_share_one_delivery_stage():
     second = complete_delivery_trace(first, platform="zhihu", result={"ok": True, "status": "drafted", "external_id": "draft-2"})
     assert [row["stage"] for row in second["stages"]].count("delivery") == 1
     delivery = next(row for row in second["stages"] if row["stage"] == "delivery")
-    assert {row["node_id"] for row in delivery["executed"]} == {"delivery:wechat", "delivery:zhihu"}
+    assert {row["node_id"] for row in delivery["executed"]} == {"pipeline_publisher"}
+
+
+def test_full_selected_plan_maps_to_registry_ids_and_terminal_evidence():
+    selected = [
+        {"capability_id": "platform_source_matrix", "stage": "collection", "required_or_optional": "required"},
+        {"capability_id": "duplication_policy", "stage": "selection", "required_or_optional": "required"},
+        {"capability_id": "growth_strategy_latest", "stage": "blueprint", "required_or_optional": "required"},
+        {"capability_id": "copywriting_structure_matcher", "stage": "generation", "required_or_optional": "required"},
+        {"capability_id": "voice_engine", "stage": "assets", "required_or_optional": "required", "artifact_required": True},
+        {"capability_id": "video_toolchain_runner", "stage": "render", "required_or_optional": "required", "artifact_required": True},
+        {"capability_id": "media_quality", "stage": "gate", "required_or_optional": "required", "artifact_required": True},
+    ]
+    early = selected[:4]
+    pending = [{**item, "status": "pending"} for item in selected[4:]]
+    trace = build_pre_delivery_trace(
+        capability_execution={"selected": selected, "executed": early, "pending": pending},
+        artifacts=[{"capability_id": "voice_engine", "path": "voice.wav", "checksum": "abc"}],
+        assets_required=True,
+        render_manifest={
+            "ok": True,
+            "status": "rendered",
+            "capability_evidence": [
+                {"capability_id": "video_toolchain_runner", "status": "executed", "artifact_verified": True}
+            ],
+        },
+        render_required=True,
+        quality_gate={
+            "passed": True,
+            "capability_evidence": [
+                {"capability_id": "media_quality", "status": "executed", "artifact_verified": True}
+            ],
+        },
+    )
+    trace = complete_delivery_trace(
+        trace,
+        platform="douyin",
+        result={"ok": True, "status": "published", "external_id": "post-1"},
+    )
+
+    assert trace["passed"] is True
+    planned_ids = {
+        item["node_id"]
+        for stage in trace["stages"]
+        for item in stage["planned"]
+    }
+    assert set(item["capability_id"] for item in selected) <= planned_ids
+    assert "pipeline_publisher" in planned_ids
+    assert not planned_ids.intersection({"media_assets", "media_render", "final_quality_gate"})
+
+
+def test_deferred_required_capability_cannot_escape_terminal_validation():
+    trace = build_pre_delivery_trace(
+        capability_execution={
+            "selected": [
+                {"capability_id": "video_toolchain_runner", "stage": "render", "required_or_optional": "required", "artifact_required": True}
+            ],
+            "pending": [
+                {"capability_id": "video_toolchain_runner", "stage": "render", "required_or_optional": "required", "status": "pending"}
+            ],
+        },
+        artifacts=[],
+        assets_required=False,
+        render_manifest={"ok": True, "status": "rendered"},
+        render_required=True,
+        quality_gate={"passed": True},
+    )
+
+    assert trace["passed"] is False
+    assert "required_node_not_executed:render:video_toolchain_runner" in trace["failures"]
+    assert "required_artifact_not_verified:render:video_toolchain_runner" in trace["failures"]
+
+
+def test_generic_placeholder_only_trace_fails_validation():
+    records = [_complete_stage(stage, index) for index, stage in enumerate(STAGES, 1)]
+    records[4] = record_execution_stage(
+        "assets",
+        manifest_hash=_hash(5),
+        planned=[{"node_id": "media_assets", "selected": True, "required": True}],
+        executed=[{"node_id": "media_assets"}],
+    )
+
+    trace = merge_execution_manifests(records)
+
+    assert trace["passed"] is False
+    assert "generic_placeholder_node_forbidden:assets:media_assets" in trace["failures"]

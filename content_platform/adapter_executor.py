@@ -95,7 +95,12 @@ def execute_capability(capability: dict[str, Any], inputs: dict[str, Any]) -> di
     serialized = json.dumps(_stable_hash_value(output), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     adapter_status = str(output.get("status") or "")
     non_success = {"skipped", "failed", "fallback", "degraded"}
-    status = adapter_status if adapter_status in non_success else "consulted" if capability.get("kind") == "methodology" else "executed"
+    evidence_states = {"planned", "consulted", "executed"}
+    status = (
+        adapter_status
+        if adapter_status in non_success | evidence_states
+        else "consulted" if capability.get("kind") == "methodology" else "executed"
+    )
     result = {
         "status": status,
         "output": output,
@@ -165,7 +170,7 @@ def _validate_contract(output: dict[str, Any], contract: str) -> bool:
             and isinstance(output.get("runtime_evidence"), dict)
         ) or (
             output.get("version") == contract
-            and output.get("status") == "verified"
+            and output.get("status") in {"verified", "planned", "consulted", "executed"}
             and isinstance(output.get("runtime_evidence"), dict)
             and isinstance(output.get("evidence"), dict)
         )

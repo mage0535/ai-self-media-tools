@@ -7,8 +7,9 @@ import re
 from typing import Any, Callable
 
 
-_EXECUTION_STAGES = ("generation", "assets", "render", "gate", "delivery")
+_EXECUTION_STAGES = ("collection", "selection", "blueprint", "generation", "assets", "render", "gate", "delivery")
 _MANIFEST_HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+_GENERIC_PLACEHOLDERS = frozenset({"media_assets", "media_render", "final_quality_gate", "delivery_receipt"})
 
 
 def validate_execution_trace(records: list[dict[str, Any]]) -> list[str]:
@@ -41,6 +42,11 @@ def validate_execution_trace(records: list[dict[str, Any]]) -> list[str]:
 
         executed_ids = _evidence_ids(record.get("executed"))
         verified_ids = _evidence_ids(record.get("artifact_verified"))
+        skipped = {
+            _node_id(item): item
+            for item in record.get("skipped") or []
+            if isinstance(item, dict) and _node_id(item)
+        }
         for planned in record.get("planned") or []:
             if not isinstance(planned, dict) or not _node_id(planned):
                 failures.append(f"planned_node_invalid:{stage}")
@@ -48,10 +54,15 @@ def validate_execution_trace(records: list[dict[str, Any]]) -> list[str]:
             if not _is_selected_required(planned):
                 continue
             node_id = _node_id(planned)
+            if node_id in _GENERIC_PLACEHOLDERS:
+                failures.append(f"generic_placeholder_node_forbidden:{stage}:{node_id}")
             if node_id not in executed_ids:
                 failures.append(f"required_node_not_executed:{stage}:{node_id}")
             if _artifact_required(planned) and node_id not in verified_ids:
                 failures.append(f"required_artifact_not_verified:{stage}:{node_id}")
+        for node_id, item in skipped.items():
+            if not str(item.get("reason") or "").strip():
+                failures.append(f"skipped_reason_missing:{stage}:{node_id}")
     return list(dict.fromkeys(failures))
 
 
@@ -83,8 +94,23 @@ def execute_capability_dag(
     brief: dict[str, Any],
     *,
     executor: Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], dict[str, Any]],
+    stages: set[str] | None = None,
 ) -> dict[str, Any]:
-    selected = [dict(item, status="planned") for item in (plan.get("candidates") or [])]
+    active_stages = set(stages or _EXECUTION_STAGES)
+    unknown_stages = active_stages.difference(_EXECUTION_STAGES)
+    if unknown_stages:
+        raise ValueError(f"unsupported execution stages: {sorted(unknown_stages)}")
+    selected = []
+    pending: list[dict[str, Any]] = []
+    for raw in plan.get("candidates") or []:
+        item = dict(raw)
+        stage = str(item.get("stage") or "generation")
+        if stage in active_stages:
+            item["status"] = "planned"
+        else:
+            item.update(status="pending", reason=f"stage_pending:{stage}")
+            pending.append(item)
+        selected.append(item)
     consulted = [dict(item, status="consulted") for item in (plan.get("consulted") or [])]
     planned = list(selected)
     executed: list[dict[str, Any]] = []
@@ -93,6 +119,8 @@ def execute_capability_dag(
     failures: list[dict[str, Any] | str] = list(plan.get("selection_failures") or plan.get("failures") or [])
     optional_failures: list[dict[str, Any]] = []
     for item in selected:
+        if item.get("status") == "pending":
+            continue
         required = str(item.get("required_or_optional") or "required") != "optional"
         started = time.monotonic()
         try:
@@ -134,6 +162,8 @@ def execute_capability_dag(
         "executed": executed,
         "artifact_verified": artifact_verified,
         "skipped": skipped,
+        "pending": pending,
+        "completed_stages": [stage for stage in _EXECUTION_STAGES if stage in active_stages],
         "failures": failures,
         "optional_failures": optional_failures,
         "passed": not failures,

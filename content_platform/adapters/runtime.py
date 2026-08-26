@@ -170,7 +170,7 @@ def _video_template_plan(inputs: dict[str, Any], capability_id: str) -> dict[str
         plan = build_video_toolchain_plan(strategy, brief)
     if not plan.get("required") or not plan.get("selected_pipeline") or not plan.get("template_family") or not plan.get("required_tools"):
         return _failure(capability_id, "video_template_plan_v1", "invalid_evidence:video_plan")
-    return _verified(capability_id, "video_template_plan_v1", plan)
+    return _planned(capability_id, "video_template_plan_v1", plan)
 
 
 def _shotcraft_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
@@ -180,28 +180,28 @@ def _shotcraft_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any
     shots = evidence.get("shots") or evidence.get("moves") or evidence.get("segments")
     if not isinstance(shots, list) or len(shots) < 3:
         return _failure(capability_id, "shotcraft_plan_v1", "invalid_evidence:shotcraft_plan")
-    return _verified(capability_id, "shotcraft_plan_v1", evidence)
+    return _planned(capability_id, "shotcraft_plan_v1", evidence)
 
 
 def _tts_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
     evidence = _dict_value(inputs, "tts_plan", "voice_plan", "tts_fingerprint")
     if not evidence:
         return _failure(capability_id, "tts_plan_v1", "missing_evidence:tts_plan")
-    return _verified(capability_id, "tts_plan_v1", evidence)
+    return _planned(capability_id, "tts_plan_v1", evidence)
 
 
 def _subtitle_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
     evidence = _dict_value(inputs, "subtitle_plan", "subtitle_evidence")
     if not evidence:
         return _failure(capability_id, "subtitle_plan_v1", "missing_evidence:subtitle_plan")
-    return _verified(capability_id, "subtitle_plan_v1", evidence)
+    return _planned(capability_id, "subtitle_plan_v1", evidence)
 
 
 def _audio_mix_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
     evidence = _dict_value(inputs, "audio_mix_plan", "audio_mix_evidence", "bgm_plan")
     if not evidence:
         return _failure(capability_id, "audio_mix_plan_v1", "missing_evidence:audio_mix_plan")
-    return _verified(capability_id, "audio_mix_plan_v1", evidence)
+    return _planned(capability_id, "audio_mix_plan_v1", evidence)
 
 
 def _media_quality(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
@@ -257,6 +257,12 @@ def _verified(capability_id: str, version: str, evidence: dict[str, Any]) -> dic
         "evidence": evidence,
     }
     result.update({key: value for key, value in evidence.items() if key not in result})
+    return result
+
+
+def _planned(capability_id: str, version: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    result = _verified(capability_id, version, evidence)
+    result["status"] = "planned"
     return result
 
 
