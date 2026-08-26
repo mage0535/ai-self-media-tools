@@ -39,7 +39,7 @@ def test_generation_runtime_receives_compiled_growth_strategy():
     }
     result = execute_generation_capabilities(
         {"title": "AI workflow", "body": "problem method proof with enough content"},
-        {"platform": "juejin", "content_form": "article", "compiled_strategy": strategy},
+        {"platform": "juejin", "content_form": "article", "strategy": strategy},
     )
     growth = next(row for row in result["executed"] if row["capability_id"] == "growth_strategy_latest")
     assert growth["status"] == "executed"
