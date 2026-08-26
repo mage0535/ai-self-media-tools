@@ -170,6 +170,34 @@ def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Pat
     assert "hotspot" in result["error"]
 
 
+def test_canary_pipeline_config_registers_task9_profile(tmp_path: Path):
+    from scripts.task9_canary import _hotspot_source_hash, _run_pipeline_case
+
+    snapshot = _write(tmp_path / "_inputs" / "hotspots" / "kuaishou.txt", "AI workflow")
+    snapshot_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    provenance = _hotspot_source_hash(
+        "kuaishou", "https://www.kuaishou.com/hot", "AI workflow",
+        fetched_at="2026-08-26T00:00:00Z", status=200,
+        snapshot_path="hotspots/kuaishou.txt", snapshot_sha256=snapshot_hash,
+    )
+    _write(tmp_path / "_inputs" / "hotspots" / "kuaishou.json", json.dumps({
+        "platform": "kuaishou", "source_url": "https://www.kuaishou.com/hot",
+        "observed_title": "AI workflow", "fetched_at": "2026-08-26T00:00:00Z", "status": 200,
+        "snapshot_path": "hotspots/kuaishou.txt", "snapshot_sha256": snapshot_hash,
+        "provenance_hash": provenance, "evidence_type": "native", "native_verified": True,
+        "association_mode": "auto_browser", "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
+    }))
+
+    result = _run_pipeline_case(
+        {"platform": "kuaishou", "content_form": "vertical_video", "language": "zh", "delivery_policy": "dry_run", "dry_run": True, "order": 1},
+        tmp_path / "case",
+        hotspot_root=tmp_path,
+    )
+
+    assert result["pipeline_evidence"]["create_called"] is True
+    assert "unknown profile: task9" not in str(result.get("error") or "")
+
+
 def test_scheduled_and_direct_publish_canaries_remain_non_publishing_dry_runs():
     from scripts.task9_canary import build_canary_matrix
 
