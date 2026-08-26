@@ -803,6 +803,7 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
     store = (store_factory or Store)(root / "state.db")
     config = {
         "data_dir": str(root),
+        "profiles": {"task9": {}},
         "generator": {"provider": "hermes-cli", "allow_fallback": False},
         "workflow": {"require_gate_pass": True},
         "publishers": {"default": {"type": "file", "outbox": str(root / "outbox")}},
@@ -920,12 +921,15 @@ def _run_model_matrix(role: str, model: dict[str, Any], matrix: list[dict[str, A
             failures = list(probe.get("failures") or []) + list(generation_evidence.get("failures") or [])
             if not result.get("passed"):
                 failures.append("pipeline_execution_failed")
+            if result.get("error"):
+                failures.append("pipeline_error:" + str(result["error"])[:500])
             results.append({
                 **case,
                 "passed": passed,
                 "artifact_policy_passed": passed,
                 "job_id": pipeline_evidence.get("job_id", ""),
                 "pipeline_evidence": pipeline_evidence,
+                "pipeline_error": str(result.get("error") or ""),
                 "generation_evidence": generation_evidence,
                 "probes": probe.get("probes", {}),
                 "failure_reason": ";".join(sorted(set(failures))),
