@@ -399,3 +399,14 @@ def test_plan_only_runtime_adapter_never_claims_media_execution():
     assert result["status"] == "planned"
     assert result["contract_valid"] is True
     assert result["status"] != "executed"
+
+
+def test_router_inherits_requiredness_from_applicable_tool_groups():
+    from content_platform.capability_router import match_capabilities
+
+    result = match_capabilities({"platform": "juejin", "content_format": "article"})
+    by_id = {item["capability_id"]: item for item in result["candidates"]}
+
+    assert by_id["duplication_policy"]["required_or_optional"] == "required"
+    assert by_id["content_platform.content_recipe"]["required_or_optional"] == "required"
+    assert by_id["performance_cycle"]["required_or_optional"] == "optional"

@@ -64,6 +64,12 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
             or ((current_brief.get("platform_strategy") or {}).get("compiled") if isinstance(current_brief.get("platform_strategy"), dict) else {})
             or ((current_brief.get("strategy") or {}).get("compiled") if isinstance(current_brief.get("strategy"), dict) else {}),
             "growth_strategy_evidence": current_brief.get("growth_strategy_evidence") or {},
+            "platform_source_matrix": current_brief.get("platform_source_matrix") or {},
+            "performance_evidence": current_brief.get("historical_feedback") or {},
+            "topic_dedup_evidence": _dedup_evidence(current_brief.get("content_hygiene") or {}),
+            "preflight_manifest": current_brief.get("preflight_manifest") or {},
+            "query": text,
+            "documents": current_brief.get("search_documents") or [],
         }
         if capability.get("kind") == "mcp_tool":
             inputs.update(
@@ -82,7 +88,7 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
         draft,
         brief,
         executor=executor,
-        stages={"blueprint", "generation"},
+        stages={"collection", "selection", "blueprint", "generation"},
     )
     result = validate_generation_execution(result, required=bool(brief.get("automated_workflow")))
     result["profile"] = profile
@@ -90,6 +96,18 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
     result["inventory"] = matched.get("inventory", [])
     result["deferred"] = list(result.get("pending") or [])
     return result
+
+
+def _dedup_evidence(hygiene: dict) -> dict:
+    if not isinstance(hygiene, dict) or not hygiene:
+        return {}
+    return {
+        "lookback_days": 7,
+        "passed": hygiene.get("status") not in {"blocked"},
+        "duplicate_found": hygiene.get("status") == "blocked",
+        "matches": list(hygiene.get("matches") or []),
+        "topic_dedup_report": dict(hygiene),
+    }
 
 
 def _build_runtime_context(brief: dict) -> dict:
