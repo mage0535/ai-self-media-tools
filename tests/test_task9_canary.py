@@ -416,6 +416,36 @@ def test_rollback_dry_run_preserves_db_cookies_and_media(tmp_path: Path):
     assert {name: path.read_bytes() for name, path in protected.items()} == before
 
 
+def test_rollback_execute_switches_health_checks_and_forward_recovers(tmp_path: Path):
+    from scripts.task9_rollback import rehearse_rollback
+
+    current = tmp_path / "release-current"
+    rollback = tmp_path / "release-previous"
+    current.mkdir()
+    rollback.mkdir()
+    (current / "version.txt").write_text("current", encoding="utf-8")
+    (rollback / "version.txt").write_text("previous", encoding="utf-8")
+    link = tmp_path / ".ai-self-media-tools-current"
+    link.symlink_to(current, target_is_directory=True)
+    seen = []
+
+    result = rehearse_rollback(
+        current,
+        rollback,
+        dry_run=False,
+        protected_root=tmp_path / "protected",
+        current_link=link,
+        health_check=lambda root: seen.append(Path(root).name) is None or True,
+    )
+
+    assert result["passed"] is True
+    assert result["mutation_performed"] is True
+    assert result["health_checks_passed"] is True
+    assert result["forward_recovered"] is True
+    assert link.resolve() == current.resolve()
+    assert seen == ["release-previous", "release-current"]
+
+
 def _valid_acceptance_report(tmp_path: Path) -> dict:
     from scripts.task9_canary import DETERMINISTIC_GATE_NAMES
 
