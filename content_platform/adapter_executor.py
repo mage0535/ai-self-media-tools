@@ -162,6 +162,8 @@ def _validate_contract(output: dict[str, Any], contract: str) -> bool:
         "audio_mix_plan_v1",
         "media_quality_v1",
         "preflight_manifest_v1",
+        "media_asset_evidence_v1",
+        "delivery_receipt_v1",
     }
     if contract in runtime_contracts:
         return (

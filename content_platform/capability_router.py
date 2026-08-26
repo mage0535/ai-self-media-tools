@@ -6,6 +6,7 @@ from typing import Any
 
 from .adapter_executor import capability_available
 from .capability_catalog import build_capability_catalog, load_capability_registry
+from .content_policy import delivery_mode
 
 
 def _is_video(content_type: str) -> bool:
@@ -56,6 +57,13 @@ def match_capabilities(
     }
     for capability in registry.get("capabilities", []):
         if not _matches(capability, profile):
+            continue
+        mode = delivery_mode(str(profile.get("platform") or ""))
+        if capability.get("id") == "pipeline_publisher" and mode == "manual_handoff":
+            skipped.append({"capability_id": capability["id"], "reason": "delivery_policy_selects_manual_handoff"})
+            continue
+        if capability.get("id") == "handoff_package_builder" and mode != "manual_handoff":
+            skipped.append({"capability_id": capability["id"], "reason": f"delivery_policy_selects_{mode}"})
             continue
         item = {
             "capability_id": capability["id"],

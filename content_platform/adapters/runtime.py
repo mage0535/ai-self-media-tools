@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,9 @@ def execute(inputs: dict[str, Any]) -> dict[str, Any]:
         "mix_bgm_with_gate": _audio_mix_plan,
         "media_quality": _media_quality,
         "preflight_manifest": _preflight,
+        "media_asset_pipeline": _media_assets,
+        "pipeline_publisher": _delivery_receipt,
+        "handoff_package_builder": _delivery_receipt,
     }
     handler = handlers.get(capability_id)
     if handler is None:
@@ -252,6 +256,30 @@ def _preflight(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
     if evidence.get("passed") is not True:
         return _failure(capability_id, "preflight_manifest_v1", "invalid_evidence:preflight_manifest", evidence.get("failures") or [])
     return _verified(capability_id, "preflight_manifest_v1", evidence)
+
+
+def _media_assets(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
+    verified = []
+    for item in inputs.get("artifacts") or []:
+        if not isinstance(item, dict):
+            continue
+        path = Path(str(item.get("path") or ""))
+        checksum = str(item.get("checksum") or "")
+        if not path.is_file() or path.stat().st_size <= 0 or not checksum:
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest == checksum:
+            verified.append({"kind": item.get("kind"), "path": str(path), "sha256": digest})
+    if not verified:
+        return _failure(capability_id, "media_asset_evidence_v1", "missing_evidence:verified_media_assets")
+    return _executed(capability_id, "media_asset_evidence_v1", {"artifacts": verified})
+
+
+def _delivery_receipt(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
+    receipt = _dict_value(inputs, "delivery_result")
+    if receipt.get("ok") is not True or receipt.get("status") not in {"published", "drafted", "scheduled", "handoff_pending"} or not receipt.get("external_id"):
+        return _failure(capability_id, "delivery_receipt_v1", "missing_evidence:delivery_receipt")
+    return _executed(capability_id, "delivery_receipt_v1", receipt)
 
 
 def _dict_value(inputs: dict[str, Any], *keys: str) -> dict[str, Any]:
