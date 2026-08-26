@@ -172,6 +172,7 @@ def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Pat
 
 def test_canary_pipeline_config_registers_task9_profile(tmp_path: Path):
     from scripts.task9_canary import _hotspot_source_hash, _run_pipeline_case
+    from content_platform.profiles import resolve_profile
 
     snapshot = _write(tmp_path / "_inputs" / "hotspots" / "kuaishou.txt", "AI workflow")
     snapshot_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
@@ -188,10 +189,22 @@ def test_canary_pipeline_config_registers_task9_profile(tmp_path: Path):
         "association_mode": "auto_browser", "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
     }))
 
+    class ProfileCheckingPipeline:
+        def __init__(self, store, config):
+            self.config = config
+
+        def create(self, topic, platforms, brief, profile="default", topic_fingerprint=""):
+            resolve_profile(self.config.get("profiles"), profile, brief)
+            return {"id": "job-profile"}
+
+        def run(self, job_id):
+            raise RuntimeError("stop_after_profile_validation")
+
     result = _run_pipeline_case(
         {"platform": "kuaishou", "content_form": "vertical_video", "language": "zh", "delivery_policy": "dry_run", "dry_run": True, "order": 1},
         tmp_path / "case",
         hotspot_root=tmp_path,
+        pipeline_factory=ProfileCheckingPipeline,
     )
 
     assert result["pipeline_evidence"]["create_called"] is True
