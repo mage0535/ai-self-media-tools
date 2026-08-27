@@ -286,6 +286,8 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertTrue(manifest["recipe_reuse_gate"]["passed"])
             self.assertTrue(manifest["recipe_collision_recovery"]["recovered"])
             self.assertEqual(manifest["recipe_collision_recovery"]["attempts"][0]["duplicate_count"], 1)
+            fingerprints = {row["core_fingerprint"] for row in manifest["recipe_collision_recovery"]["attempts"]}
+            self.assertGreater(len(fingerprints), 1)
 
     def test_runner_rejects_cross_platform_same_core_visual_recipe(self):
         root = Path(__file__).resolve().parents[1]
@@ -364,6 +366,41 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertTrue(manifest["recipe_reuse_gate"]["passed"])
             self.assertTrue(manifest["recipe_collision_recovery"]["recovered"])
             self.assertEqual(manifest["recipe_collision_recovery"]["attempts"][0]["duplicates"][0]["duplicate_scope"], "cross_platform")
+
+    def test_runner_reselects_when_explicit_visual_recipe_collides(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            registry = Path(tmp) / "registry.json"
+            explicit = {
+                "template_family": "chaptered_explainer",
+                "modules": ["template_theme", "cinema_color_css", "cinema_composition_layout"],
+                "style_variants": {"color_mood": "fresh_green", "motion_density": "fast_cut", "text_layout": "large_number_story", "scene_change_interval_sec": 6},
+                "asset_strategy": {"primary": "generated", "fallback": "cards", "forbidden": []},
+                "selection_reason": "test",
+                "differentiation_reason": "test",
+                "scene_asset_match": [{"scene": i, "script_beat": f"b{i}", "visual_source": f"v{i}", "match_reason": "test"} for i in range(1, 4)],
+                "avoid": ["same_recipe_fingerprint", "same_bgm_fingerprint"],
+            }
+            from content_platform.video_recipe import build_visual_recipe
+            built = build_visual_recipe({"selected_pipeline": "article_explainer_video", "visual_recipe": explicit}, script_body="One.\nTwo.\nThree.", title="Title")
+            registry.write_text(json.dumps({"recipes": [{
+                "used_at": "2099-01-01T00:00:00+00:00", "core_fingerprint": built["core_fingerprint"],
+                "fingerprint": built["fingerprint"], "template_family": built["template_family"],
+                "modules": built["modules"], "style_variants": built["style_variants"], "platforms": ["kuaishou"],
+            }]}), encoding="utf-8")
+            plan = {"selected_pipeline": "article_explainer_video", "content_form": "vertical_video", "template_family": "chaptered_explainer", "platforms": ["kuaishou"], "visual_recipe": explicit}
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            env = {**os.environ, "VIDEO_OUTPUT_DIR": str(out), "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path), "VIDEO_TOOLCHAIN_DRY_RUN": "1", "VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(registry)}
+
+            proc = subprocess.run([sys.executable, str(script), "One scene.\nTwo scene.\nThree scene.", "Title"], capture_output=True, text=True, env=env, timeout=30, check=False)
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest["recipe_collision_recovery"]["recovered"])
+            self.assertNotEqual(manifest["visual_recipe"]["core_fingerprint"], built["core_fingerprint"])
 
     def test_localized_repost_refuses_original_card_fallback_without_source(self):
         root = Path(__file__).resolve().parents[1]

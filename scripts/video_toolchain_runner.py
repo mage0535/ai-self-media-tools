@@ -199,11 +199,26 @@ def main(argv: list[str] | None = None) -> int:
     recipe_collision_recovery = {"recovered": False, "attempts": []}
     if recipe_gate.get("passed") and not recipe_reuse_gate.get("passed"):
         recipe_collision_recovery["attempts"].append({"attempt": 0, **recipe_reuse_gate})
+        retry_styles = [
+            ("clean_blueprint", "medium_high", "split_screen_steps", 3),
+            ("warm_editorial", "medium", "timeline_cards", 5),
+            ("high_contrast_note", "fast_cut", "diagonal_hook_cards", 3),
+            ("content_matched", "calm", "headline_plus_lower_third", 6),
+        ]
         for attempt in range(1, 5):
             retry_plan = dict(plan)
             retry_plan["recipe_retry_variant"] = attempt
-            for key in ("color_mood", "motion_density", "text_layout", "scene_change_interval_sec"):
-                retry_plan.pop(key, None)
+            # An explicit visual_recipe otherwise ignores retry fields and
+            # repeats the same core fingerprint forever. Rebuild the recipe
+            # with a genuinely different visual combination.
+            retry_plan.pop("visual_recipe", None)
+            color, density, layout, interval = retry_styles[attempt - 1]
+            retry_plan.update({
+                "color_mood": color,
+                "motion_density": density,
+                "text_layout": layout,
+                "scene_change_interval_sec": interval,
+            })
             candidate = build_visual_recipe(
                 retry_plan,
                 script_body=script_body,
