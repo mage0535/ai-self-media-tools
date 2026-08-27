@@ -389,7 +389,11 @@ class PipelineTests(unittest.TestCase):
         with patch.object(self.pipeline.generator, "generate", return_value={
             "title": "Workflow tutorial",
             "body": "为什么这个流程容易失败？\n先核对来源。\n再检查配置。\n然后运行工具。\n查看证据。\n修复错误。\n重新验证。\n最后记录结果。",
-            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+            "draft_meta": {
+                "claim_ledger": [],
+                "quality_gate": {"passed": True},
+                "content_depth_plan": {"version": "content_depth_plan_v1", "title": "Workflow tutorial"},
+            },
         }), patch.object(self.pipeline.media, "generate", return_value=None):
             self.pipeline.run(job["id"])
 
