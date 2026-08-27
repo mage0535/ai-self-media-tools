@@ -40,7 +40,7 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bridge.generate("podcast", {"id": "j1", "topic": "Topic", "body": "Body"})
 
-    def test_cinema_route_refuses_legacy_fallback_without_explicit_safe_policy(self):
+    def test_cinema_route_uses_unified_video_provider_instead_of_missing_legacy_adapter(self):
         cinema_script = self.root / "agent-scripts" / "cinema_video_pipeline.py"
         cinema_script.parent.mkdir(parents=True)
         cinema_script.write_text("# fixture", encoding="utf-8")
@@ -74,10 +74,11 @@ class AdapterTests(unittest.TestCase):
         with patch.dict("os.environ", {"CONTENT_PLATFORM_AGENT_SCRIPTS_DIR": str(cinema_script.parent)}), \
              patch.object(MediaBridge, "_video_duration", return_value=42.0), \
              patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
-            with self.assertRaisesRegex(RuntimeError, "cinematic fallback forbidden"):
-                bridge._generate_video(job, self.root / "artifacts" / job["id"])
+            artifact = bridge._generate_video(job, self.root / "artifacts" / job["id"])
 
         self.assertEqual(run.call_count, 1)
+        self.assertTrue(Path(artifact["path"]).is_file())
+        self.assertFalse(artifact.get("fallback_used", False))
 
     def test_media_bridge_can_run_ocr_transcription_and_analysis_providers(self):
         script = self.root / "tool.py"

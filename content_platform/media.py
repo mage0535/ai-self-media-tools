@@ -592,43 +592,11 @@ class MediaBridge:
             and str(meta.get("motion_mode") or video_cfg.get("motion_mode") or os.environ.get("FILM_MOTION_MODE", "")).casefold() == "safe"
             and (meta.get("allow_degraded") is True or video_cfg.get("allow_degraded") is True or os.environ.get("FILM_ALLOW_DEGRADED") == "1")
         )
-        cinematic_fallback = ""
-        if requested_cinematic:
-            try:
-                import subprocess as _sp
-                cinema_dir = output_dir / "cinema"
-                cinema_dir.mkdir(parents=True, exist_ok=True)
-                title = job.get("title") or job.get("topic") or "AI"
-                cinema_script = agent_scripts_dir() / "cinema_video_pipeline.py"
-                if not cinema_script.is_file():
-                    raise FileNotFoundError("cinema video adapter is not configured")
-                r = _sp.run([sys.executable, str(cinema_script),
-                             "--title", str(title)[:60], "--body", script_body,
-                             "--out-dir", str(cinema_dir)],
-                            capture_output=True, text=True, timeout=1800)
-                final = cinema_dir / "cinema_final.mp4"
-                manifest = self._video_toolchain_manifest(cinema_dir)
-                packet = self._renderer_packet(cinema_dir)
-                # A legacy cinematic renderer may produce a playable file but
-                # still omit the evidence required by the publish gate. Treat
-                # that output as an unverified preview and use the checked
-                # toolchain instead of letting it reach delivery.
-                if final.exists() and manifest and packet:
-                    return {
-                        "kind": "video",
-                        "path": str(final),
-                        "checksum": hashlib.sha256(final.read_bytes()).hexdigest(),
-                        "auto_route": "cinema-video",
-                        "duration": self._video_duration(final),
-                        "render_manifest": manifest,
-                        "render_packet": packet,
-                    }
-                cinematic_fallback = "cinematic renderer did not emit verified manifest and packet"
-            except Exception as e:
-                cinematic_fallback = f"cinematic renderer failed: {type(e).__name__}: {e}"
-            if requested_cinematic and not explicit_safe_mode:
-                raise RuntimeError("cinematic fallback forbidden: " + cinematic_fallback)
         plan = dict(job.get("draft_meta", {}).get("video_toolchain_plan") or {})
+        if requested_cinematic:
+            plan.update({"quality_profile": "high", "motion_mode": "cinematic", "allow_degraded": False})
+        elif explicit_safe_mode:
+            plan.update({"quality_profile": "degraded", "motion_mode": "safe", "allow_degraded": True})
         run_contract = (job.get("brief") or {}).get("run_contract") or (job.get("draft_meta") or {}).get("run_contract")
         if run_contract:
             plan["run_contract"] = run_contract
@@ -640,6 +608,9 @@ class MediaBridge:
         # article stays long-form; a renderer must never infer narration from
         # the full body again.
         env = os.environ.copy()
+        env["FILM_QUALITY_PROFILE"] = str(plan.get("quality_profile") or "high")
+        env["FILM_MOTION_MODE"] = str(plan.get("motion_mode") or "cinematic")
+        env["FILM_ALLOW_DEGRADED"] = "1" if plan.get("allow_degraded") is True else "0"
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
         # Make the licensed local BGM fallback explicit for nested renderers;
         # do not rely on an inherited shell environment across adapters.
@@ -687,13 +658,6 @@ class MediaBridge:
             "render_manifest": manifest,
             "render_packet": self._renderer_packet(output_dir),
         }
-        if cinematic_fallback:
-            artifact.update({
-                "degraded": True,
-                "fallback_used": True,
-                "fallback_reason": cinematic_fallback,
-                "quality_gate": {"passed": False, "failures": ["cinematic_fallback_used"]},
-            })
         if self._visual_route:
             artifact["visual_route"] = self._visual_route
         if plan:
