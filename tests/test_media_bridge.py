@@ -3,6 +3,20 @@ from pathlib import Path
 from content_platform.media import MediaBridge
 
 
+def test_cover_generation_reuses_existing_verified_cover(tmp_path):
+    output = tmp_path / "artifacts" / "job-1"
+    output.mkdir(parents=True)
+    cover = output / "cover.png"
+    cover.write_bytes(b"verified-cover")
+    bridge = MediaBridge({"cover": {"enabled": True}}, tmp_path)
+
+    artifact = bridge.generate("cover", {"id": "job-1", "platforms": ["kuaishou"]})
+
+    assert artifact["kind"] == "cover"
+    assert artifact["path"] == str(cover)
+    assert artifact["source"] == "existing_verified_image_artifact"
+
+
 def test_video_visual_assets_never_cycle_missing_images(tmp_path):
     first = tmp_path / "first.png"
     second = tmp_path / "second.png"
