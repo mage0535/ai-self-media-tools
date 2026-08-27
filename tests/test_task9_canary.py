@@ -222,6 +222,26 @@ def test_canary_pipeline_config_registers_task9_profile(tmp_path: Path):
     assert "unknown profile: task9" not in str(result.get("error") or "")
 
 
+def test_canary_config_preserves_real_media_toolchain_but_isolates_delivery(tmp_path: Path):
+    from scripts.task9_canary import _canary_config
+
+    config_path = _write(tmp_path / "config.json", json.dumps({
+        "data_dir": str(tmp_path / "production"),
+        "media": {"video": {"enabled": True, "quality_profile": "high"}, "cover": {"enabled": True}},
+        "generator": {"timeout": 600},
+        "delivery": {"auto_stage_review_required": True},
+    }))
+
+    config = _canary_config(tmp_path / "case", config_path)
+
+    assert config["media"]["video"]["enabled"] is True
+    assert config["media"]["video"]["quality_profile"] == "high"
+    assert config["media"]["cover"]["enabled"] is True
+    assert config["generator"]["timeout"] == 600
+    assert config["delivery"]["auto_stage_review_required"] is False
+    assert config["data_dir"] == str(tmp_path / "case")
+
+
 def test_scheduled_and_direct_publish_canaries_remain_non_publishing_dry_runs():
     from scripts.task9_canary import build_canary_matrix
 

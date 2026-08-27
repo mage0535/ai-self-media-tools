@@ -466,3 +466,11 @@ def test_video_layout_formats_route_to_video_capabilities():
     for result in (vertical, horizontal):
         selected = {item["capability_id"] for item in result["candidates"]}
         assert {"content_platform.video_recipe", "video_toolchain_runner", "shotcraft_moves", "voice_engine", "lower_third_subtitle_renderer", "mix_bgm_with_gate", "media_quality"} <= selected
+
+
+def test_short_post_uses_article_capabilities_without_empty_selection():
+    from content_platform.capability_router import match_capabilities
+
+    result = match_capabilities({"platform": "twitter", "content_format": "short_post"})
+
+    assert {"content_platform.content_recipe", "seo_geo_check", "media_quality"} <= {item["capability_id"] for item in result["candidates"]}
