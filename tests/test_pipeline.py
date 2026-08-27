@@ -547,7 +547,8 @@ class PipelineTests(unittest.TestCase):
 
         self.assertEqual(result["state"], "review_required")
         artifacts = self.store.artifacts(job["id"])
-        self.assertEqual(len([item for item in artifacts if item["kind"] == "image"]), 2)
+        self.assertEqual(len([item for item in artifacts if item["kind"] == "image"]), 1)
+        self.assertEqual(len([item for item in artifacts if item["kind"] == "cover"]), 1)
         self.assertEqual(len([item for item in artifacts if item["kind"] == "section_image_map"]), 1)
 
     def test_delivery_worker_processes_one_item_by_default(self):
