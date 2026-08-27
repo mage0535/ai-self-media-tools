@@ -935,6 +935,10 @@ class DraftGenerator:
             return self._hermes_attempt(topic, brief, context, retry=False, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
         except GenerationTimeoutError:
             return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+        except ValueError as exc:
+            if str(exc) not in {"provider returned non-JSON content", "Hermes returned an incomplete draft"}:
+                raise
+            return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
         except RuntimeError as exc:
             if str(exc) != "transient provider error":
                 raise
