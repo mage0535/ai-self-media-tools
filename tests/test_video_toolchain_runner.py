@@ -917,6 +917,16 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertEqual([row["asset_id"] for row in rows], ["long"])
         self.assertEqual(rows[0]["duration"], 78)
 
+    def test_bgm_queries_prioritize_requested_instrument(self):
+        from scripts.kuaishou_render import _bgm_queries
+
+        piano = _bgm_queries("upright piano and brushed drums")
+        guitar = _bgm_queries("warm acoustic guitar")
+
+        self.assertIn("piano", piano[0])
+        self.assertNotIn("guitar", piano[0])
+        self.assertIn("guitar", guitar[0])
+
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm
 
