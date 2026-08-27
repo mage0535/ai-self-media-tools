@@ -31,4 +31,5 @@ def test_existing_content_skills_are_routed_by_format_instead_of_orphaned():
     video = set(required_workflow_skills("douyin_ai"))
 
     assert {"content/content-copywriting-style", "content/content-seo-toolset", "content/content-open-notebook", "content/content-github-star-explorer"} <= article
-    assert {"content/content-copywriting-style", "content/content-voice-engine", "content/content-ai-autoclip", "content/content-github-star-explorer"} <= video
+    assert {"content/content-copywriting-style", "content/content-voice-engine", "content/content-github-star-explorer"} <= video
+    assert "content/content-ai-autoclip" not in video

@@ -58,3 +58,23 @@ def test_shared_skill_rules_do_not_leak_other_platform_instructions():
     selected = select_platform_rules(rules, "kuaishou")
 
     assert {row["id"] for row in selected} == {"shared:2", "shared:3"}
+
+
+def test_video_skill_discovery_excludes_retired_and_format_conflicting_skills(tmp_path: Path):
+    valid = _skill(tmp_path, "cinema-motion", "cinematic shots motion transitions and BGM")
+    retired = _skill(tmp_path, "content-ai-autoclip", "Downloads and recompiles source videos")
+    superseded = _skill(tmp_path, "kuaishou-video-publishing", "This skill is superseded by kuaishou-content-publishing")
+    longform = _skill(tmp_path, "chinese-longform-content-standards", "Chinese longform article writing standards")
+
+    selected, report = discover_relevant_skill_paths(
+        "kuaishou",
+        {"content_format": "vertical_video", "content_domain": "tech", "visual_treatment": "cinematic"},
+        root=tmp_path,
+        hermes_root=tmp_path / "missing-hermes",
+    )
+
+    assert valid.resolve() in selected
+    assert retired.resolve() not in selected
+    assert superseded.resolve() not in selected
+    assert longform.resolve() not in selected
+    assert report["retired_or_incompatible_count"] == 3

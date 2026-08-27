@@ -222,6 +222,7 @@ def _recipe_variant(plan: dict[str, Any], title: str) -> str:
         "content_form": plan.get("content_form") or "",
         "template_family": plan.get("template_family") or "",
         "title": title or plan.get("topic") or plan.get("title") or "",
+        "recipe_retry_variant": int(plan.get("recipe_retry_variant") or 0),
     }
     blob = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()[:12]

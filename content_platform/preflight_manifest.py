@@ -36,7 +36,7 @@ _WORKFLOW_BASE_SKILLS = {
 }
 _KNOWLEDGE_CARD_SKILL = {"content/knowledge-card-designer"}
 _ARTICLE_SKILLS = {"content/content-seo-toolset", "content/content-open-notebook"}
-_VIDEO_SKILLS = {"content/content-voice-engine", "content/content-ai-autoclip"}
+_VIDEO_SKILLS = {"content/content-voice-engine"}
 _AI_RESEARCH_SKILLS = {"content/content-github-star-explorer"}
 _PREFLIGHT_ONLY_SKILLS = _PREFLIGHT_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {
     "content/wechat-operational-strategy",

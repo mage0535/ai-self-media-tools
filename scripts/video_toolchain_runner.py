@@ -196,6 +196,33 @@ def main(argv: list[str] | None = None) -> int:
     )
     recipe_gate = validate_visual_recipe(visual_recipe, registry)
     recipe_reuse_gate = _recipe_reuse_gate(visual_recipe, plan)
+    recipe_collision_recovery = {"recovered": False, "attempts": []}
+    if recipe_gate.get("passed") and not recipe_reuse_gate.get("passed"):
+        recipe_collision_recovery["attempts"].append({"attempt": 0, **recipe_reuse_gate})
+        for attempt in range(1, 5):
+            retry_plan = dict(plan)
+            retry_plan["recipe_retry_variant"] = attempt
+            for key in ("color_mood", "motion_density", "text_layout", "scene_change_interval_sec"):
+                retry_plan.pop(key, None)
+            candidate = build_visual_recipe(
+                retry_plan,
+                script_body=script_body,
+                title=title,
+                cinema_scenes=cinema_scenes,
+                shotcraft_plan=shotcraft_plan,
+                visual_assets=visual_assets,
+                registry=registry,
+            )
+            candidate_gate = validate_visual_recipe(candidate, registry)
+            candidate_reuse_gate = _recipe_reuse_gate(candidate, retry_plan)
+            recipe_collision_recovery["attempts"].append({"attempt": attempt, **candidate_reuse_gate})
+            if candidate_gate.get("passed") and candidate_reuse_gate.get("passed"):
+                visual_recipe = candidate
+                recipe_gate = candidate_gate
+                recipe_reuse_gate = candidate_reuse_gate
+                plan = retry_plan
+                recipe_collision_recovery.update({"recovered": True, "selected_attempt": attempt})
+                break
     recipe_path = output_dir / "visual_recipe.json"
     recipe_path.write_text(json.dumps(visual_recipe, ensure_ascii=False, indent=2), encoding="utf-8")
     scene_manifest_path = output_dir / "scene_manifest.json"
@@ -210,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
             "visual_recipe_path": str(recipe_path),
             "visual_recipe_gate": recipe_gate,
             "recipe_reuse_gate": recipe_reuse_gate,
+            "recipe_collision_recovery": recipe_collision_recovery,
             "tool_invocation_manifest": tool_manifest,
             **tool_selection_evidence,
             "status": "visual_recipe_failed" if not recipe_gate.get("passed") else "visual_recipe_reuse_failed",
@@ -327,6 +355,7 @@ def main(argv: list[str] | None = None) -> int:
         "visual_recipe_path": str(recipe_path),
         "visual_recipe_gate": recipe_gate,
         "recipe_reuse_gate": recipe_reuse_gate,
+        "recipe_collision_recovery": recipe_collision_recovery,
         "scene_manifest": scene_manifest,
         "scene_manifest_path": str(scene_manifest_path),
         "scene_manifest_gate": scene_manifest_gate,
@@ -989,11 +1018,12 @@ def _recipe_reuse_gate(recipe: dict, plan: dict) -> dict:
             recipe_family
             and item_family == recipe_family
             and item_platforms
-            and (
-                not item_modules
-                or not recipe_modules
-                or (item_modules == recipe_modules and item_style == recipe_style)
-            )
+            and item_modules
+            and recipe_modules
+            and item_style
+            and recipe_style
+            and item_modules == recipe_modules
+            and item_style == recipe_style
         )
         if not (same_core or same_visual_family):
             continue
