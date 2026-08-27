@@ -160,6 +160,28 @@ def main(argv: list[str] | None = None) -> int:
             pass
     # diagram-design 补图通道：结构化主题且背景不足时，自动生成杂志级 diagram 背景
     materialized_backgrounds = _diagram_background_fill(output_dir, script_body or title, materialized_backgrounds)
+    if plan.get("run_contract"):
+        ledger = AssetLedger(os.environ.get("ASSET_LEDGER_PATH") or ROOT / "data" / "asset_ledger.db")
+        previous_hashes = {str(row.get("sha256") or "") for row in ledger.uses() if str(row.get("sha256") or "")}
+        current_hashes = {
+            hashlib.sha256(Path(str(item.get("path") or "")).read_bytes()).hexdigest()
+            for item in materialized_backgrounds
+            if Path(str(item.get("path") or "")).is_file()
+        }
+        if previous_hashes.intersection(current_hashes):
+            try:
+                from pexels_auto_bg import auto_fetch_backgrounds
+                replacements = auto_fetch_backgrounds(
+                    script_body or title,
+                    title or "",
+                    output_dir,
+                    _primary_platform(plan),
+                    force=True,
+                    excluded_hashes=previous_hashes,
+                )
+                materialized_backgrounds = _merge_materialized_backgrounds([], replacements)
+            except Exception as exc:
+                print(f"[asset-reselection] failed: {exc}", file=sys.stderr)
     asset_records = _asset_provenance_records(materialized_backgrounds)
     asset_provenance_path = output_dir / "asset_provenance.json"
     asset_provenance_path.write_text(json.dumps({"version": "asset_provenance_v1", "assets": asset_records}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -169,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
             asset_records,
             _primary_platform(plan),
             str(plan.get("work_id") or output_dir.name),
-            AssetLedger(os.environ.get("ASSET_LEDGER_PATH") or ROOT / "data" / "asset_ledger.db"),
+            ledger,
         )
         (output_dir / "asset_quality_gate.json").write_text(json.dumps(asset_gate, ensure_ascii=False, indent=2), encoding="utf-8")
         if not asset_gate.get("passed"):
