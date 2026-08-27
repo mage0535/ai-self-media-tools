@@ -64,3 +64,7 @@ def test_compiler_prefers_full_domain_rule_and_does_not_replace_ai_inside_words(
 
     assert result.tts_text == "打开 快手人工智能开放平台官网 使用 人工智能"
     assert result.unhandled_latin_tokens == []
+
+    spaced = compiler.compile("打开 ai. kuaishou. com", context="tech", platform="kuaishou")
+    assert spaced.display_text == "打开 ai.kuaishou.com"
+    assert spaced.tts_text == "打开 快手人工智能开放平台官网"
