@@ -15,6 +15,22 @@ _BLOCKED_SKILL_TOKENS = frozenset({
     ".archive", "_archive", "archive", "duplicate", "duplicates", "finance", "financial",
     "trading", "trade", "stock", "stocks", "forex", "crypto", "investment", "investing",
 })
+
+_PLATFORM_TEXT_MARKERS = {
+    "kuaishou": ("kuaishou", "快手"),
+    "douyin": ("douyin", "抖音"),
+    "douyin_ai": ("douyin_ai", "抖音ai", "抖音 ai"),
+    "douyin_pet": ("douyin_pet", "抖音宠物"),
+    "shipinhao": ("shipinhao", "视频号"),
+    "wechat": ("wechat", "weixin", "公众号", "微信"),
+    "xiaohongshu": ("xiaohongshu", "rednote", "小红书"),
+    "bilibili": ("bilibili", "b站", "哔哩哔哩"),
+    "zhihu": ("zhihu", "知乎"),
+    "juejin": ("juejin", "掘金"),
+    "youtube": ("youtube",),
+    "tiktok": ("tiktok",),
+    "twitter": ("twitter", "x.com"),
+}
 _PLATFORMS = frozenset({
     "douyin", "xiaohongshu", "rednote", "zhihu", "juejin", "wechat", "kuaishou",
     "tiktok", "youtube", "bilibili", "shipinhao", "x", "twitter",
@@ -59,6 +75,19 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
             continue
         normalized_text = " ".join(str(rule.get("text") or "").split()).casefold()
         if not normalized_text:
+            continue
+        text_platforms = {
+            name for name, markers in _PLATFORM_TEXT_MARKERS.items()
+            if any(marker in normalized_text for marker in markers)
+        }
+        compatible = set(active_names)
+        if active in {"douyin_ai", "douyin_pet"}:
+            compatible.update({active, "douyin"})
+        if active in {"x", "twitter"}:
+            compatible.update({"x", "twitter"})
+        if active in {"wechat", "weixin", "wechat_official"}:
+            compatible.add("wechat")
+        if text_platforms and not text_platforms.intersection(compatible):
             continue
         text_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
         if text_hash in seen_text_hashes:
