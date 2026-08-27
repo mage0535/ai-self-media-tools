@@ -268,12 +268,23 @@ def discover_relevant_skill_paths(
             continue
         discovered.extend(path for path in skill_root.rglob("SKILL.md") if path.is_file())
     discovered = list(dict.fromkeys(path.resolve() for path in discovered))
-    candidates = [
-        path for path in discovered
-        if not _blocked_skill(path.as_posix()) and not any(part.casefold() in {".git", "cache"} for part in path.parts)
-    ]
+    retired_names = {"content-ai-autoclip", "kuaishou-video-publishing"}
     raw_format = str(profile.get("content_format") or "").casefold()
     video = "video" in raw_format or raw_format in {"short", "reel"}
+
+    def incompatible(path: Path) -> bool:
+        name = path.parent.name.casefold()
+        if name in retired_names:
+            return True
+        return video and "longform" in name
+
+    candidates = [
+        path for path in discovered
+        if not _blocked_skill(path.as_posix())
+        and not incompatible(path)
+        and not any(part.casefold() in {".git", "cache"} for part in path.parts)
+    ]
+    required = [path for path in required if not incompatible(path)]
     article = raw_format in {"article", "long_article", "carousel", "image_text_note", "short_post"}
     keywords = {
         str(platform).casefold(), str(profile.get("content_domain") or "").casefold(),
@@ -306,6 +317,7 @@ def discover_relevant_skill_paths(
         "version": "skill_discovery_v1",
         "discovered_count": len(discovered),
         "blocked_count": len(discovered) - len(candidates),
+        "retired_or_incompatible_count": len([path for path in discovered if incompatible(path)]),
         "considered_count": len(candidates),
         "selected_count": len(selected),
         "selected": [path.parent.name for path in selected],

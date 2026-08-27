@@ -332,6 +332,24 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(claim_step["status"], "BLOCKED")
         media.assert_not_called()
 
+    def test_automated_workflow_blocks_unsourced_numeric_claim_without_run_contract(self):
+        job = self.pipeline.create(
+            "Automated video",
+            ["kuaishou"],
+            {"automated_workflow": True, "selection_mode": "official_native_canary"},
+        )
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Automated video",
+            "body": "三分钟通过审核，一个月省下两万元。" * 12,
+            "draft_meta": {"claim_ledger": []},
+        }), patch.object(self.pipeline.media, "generate") as media:
+            result = self.pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        claim_step = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "validate_factual_claims"][-1]
+        self.assertEqual(claim_step["status"], "BLOCKED")
+        media.assert_not_called()
+
     def test_scheduled_contract_requires_content_depth_before_media(self):
         from content_platform.run_contract import build_run_contract
 

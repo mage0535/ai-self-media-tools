@@ -211,7 +211,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(manifest["status"], "visual_recipe_failed")
             self.assertFalse(manifest["visual_recipe_gate"]["passed"])
 
-    def test_runner_rejects_recent_duplicate_visual_recipe_core(self):
+    def test_runner_reselects_after_recent_duplicate_visual_recipe_core(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"
         with tempfile.TemporaryDirectory() as tmp:
@@ -280,11 +280,12 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 check=False,
             )
 
-            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
             manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["status"], "visual_recipe_reuse_failed")
-            self.assertFalse(manifest["recipe_reuse_gate"]["passed"])
-            self.assertEqual(manifest["recipe_reuse_gate"]["duplicate_count"], 1)
+            self.assertEqual(manifest["status"], "dry_run")
+            self.assertTrue(manifest["recipe_reuse_gate"]["passed"])
+            self.assertTrue(manifest["recipe_collision_recovery"]["recovered"])
+            self.assertEqual(manifest["recipe_collision_recovery"]["attempts"][0]["duplicate_count"], 1)
 
     def test_runner_rejects_cross_platform_same_core_visual_recipe(self):
         root = Path(__file__).resolve().parents[1]
@@ -297,6 +298,10 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 "selected_pipeline": "knowledge_card_video",
                 "content_form": "knowledge_card_video",
                 "template_family": "knowledge_card_motion_case",
+                "color_mood": "clean_blueprint",
+                "motion_density": "medium_high",
+                "text_layout": "split_screen_steps",
+                "scene_change_interval_sec": 4,
             }
             first_plan_path = Path(tmp) / "first_plan.json"
             first_plan_path.write_text(json.dumps({**base_plan, "platforms": ["douyin"]}), encoding="utf-8")
@@ -326,6 +331,8 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                                 "core_fingerprint": duplicate["core_fingerprint"],
                                 "fingerprint": duplicate["fingerprint"],
                                 "template_family": duplicate["template_family"],
+                                "modules": duplicate["modules"],
+                                "style_variants": duplicate["style_variants"],
                                 "platforms": ["douyin"],
                             }
                         ]
@@ -351,11 +358,12 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 check=False,
             )
 
-            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
             manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["status"], "visual_recipe_reuse_failed")
-            self.assertFalse(manifest["recipe_reuse_gate"]["passed"])
-            self.assertEqual(manifest["recipe_reuse_gate"]["duplicates"][0]["duplicate_scope"], "cross_platform")
+            self.assertEqual(manifest["status"], "dry_run")
+            self.assertTrue(manifest["recipe_reuse_gate"]["passed"])
+            self.assertTrue(manifest["recipe_collision_recovery"]["recovered"])
+            self.assertEqual(manifest["recipe_collision_recovery"]["attempts"][0]["duplicates"][0]["duplicate_scope"], "cross_platform")
 
     def test_localized_repost_refuses_original_card_fallback_without_source(self):
         root = Path(__file__).resolve().parents[1]

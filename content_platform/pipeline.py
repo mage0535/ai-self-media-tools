@@ -361,7 +361,11 @@ class Pipeline:
                 claim_ledger = (draft.get("draft_meta") or {}).get("claim_ledger") or brief.get("claim_ledger") or []
                 claim_gate = validate_claims(text, claim_ledger)
                 draft.setdefault("draft_meta", {})["claim_gate"] = claim_gate
-                strict_claims = bool((job.get("brief") or {}).get("run_contract")) or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
+                strict_claims = (
+                    bool((job.get("brief") or {}).get("run_contract"))
+                    or (job.get("brief") or {}).get("automated_workflow") is True
+                    or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
+                )
                 if not claim_gate.get("passed") and strict_claims:
                     cleaned_title = sanitize_unsupported_claims(draft["title"], claim_gate.get("findings")) or str(job.get("topic") or "Verified workflow")
                     cleaned_body = sanitize_unsupported_claims(draft["body"], claim_gate.get("findings"))
@@ -411,7 +415,11 @@ class Pipeline:
                     for item in compliance.get("findings", [])
                     if isinstance(item, dict)
                 }
-                strict_compliance = bool((job.get("brief") or {}).get("run_contract")) or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
+                strict_compliance = (
+                    bool((job.get("brief") or {}).get("run_contract"))
+                    or (job.get("brief") or {}).get("automated_workflow") is True
+                    or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
+                )
                 if strict_compliance and blocking_claim_codes & {"numeric_claim_without_source", "attribution_without_source"}:
                     runner.block(
                         "run_safety_gate",
