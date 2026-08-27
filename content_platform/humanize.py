@@ -53,6 +53,12 @@ def _strip_web_residue(text: str) -> str:
     # Collapse the doubled separators that residue removal often leaves behind.
     updated = re.sub(r"\n{3,}", "\n\n", updated)
     updated = re.sub(r"[ \t]{2,}", " ", updated)
+    updated = re.sub(
+        r"\b([a-z0-9-]+)\s*\.\s*([a-z0-9-]+)\s*\.\s*(com|cn|org|net|io|ai|dev)\b",
+        r"\1.\2.\3",
+        updated,
+        flags=re.I,
+    )
     return updated.strip()
 
 QUALITY_TARGETS = {
@@ -251,7 +257,8 @@ def naturalize_copy(body, context):
             updated = updated.replace("\n\n", "\n").strip()
             notes.append("tightened spacing for feed-native rhythm")
         cta = context.get("style", {}).get("cta", "")
-        if cta and cta not in updated:
+        cta_language_matches = _contains_chinese(cta) == _contains_chinese(updated)
+        if cta and cta_language_matches and cta not in updated:
             updated = f"{updated}\n\n{cta}".strip()
             notes.append("restored call to action")
         scores = _score(updated, context)

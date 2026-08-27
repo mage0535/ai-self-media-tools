@@ -56,7 +56,10 @@ class TTSTextCompiler:
             international_english = {"tiktok", "youtube", "youtube_shorts", "shorts"}
             if platform.casefold() in international_english and re.search(r"[\u3400-\u9fff]", alias):
                 continue
-            pattern = re.compile(re.escape(source), re.IGNORECASE if source.isascii() else 0)
+            expression = re.escape(source)
+            if source.isascii() and source.replace("-", "").isalnum():
+                expression = rf"(?<![A-Za-z0-9]){expression}(?![A-Za-z0-9])"
+            pattern = re.compile(expression, re.IGNORECASE if source.isascii() else 0)
             for match in list(pattern.finditer(result)):
                 span = match.span()
                 if any(span[0] < end and start < span[1] for start, end in occupied):

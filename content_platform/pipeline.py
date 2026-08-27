@@ -1366,7 +1366,10 @@ class Pipeline:
             checks["bgm"] = validate_bgm_contract(bgm, recent_fingerprints=meta.get("recent_bgm_fingerprints") or [])
             checks["tts"] = validate_tts_fingerprint(meta.get("tts_fingerprint") or meta.get("tts_config"))
             video_path = str(video_artifact.get("path") or manifest.get("output") or "")
-            checks["ffprobe"] = probe_final_video(video_path)
+            checks["ffprobe"] = probe_final_video(
+                video_path,
+                burned_subtitles=meta.get("subtitle_evidence") or meta.get("burned_captions"),
+            )
 
         if not checks:
             return None
@@ -1580,6 +1583,43 @@ class Pipeline:
             "checksum": artifact.get("checksum", ""),
             "selected_pipeline": artifact.get("selected_pipeline", ""),
         }
+        output = Path(str(artifact.get("path") or ""))
+        artifact_dir = output.parent if output.is_file() else None
+        if artifact_dir:
+            sidecars = {
+                "scene_manifest": "scene_manifest.json",
+                "bgm_source": "bgm_source.json",
+                "tts_fingerprint": "tts_fingerprint.json",
+                "subtitle_evidence": "subtitle_burn_evidence.json",
+                "audio_probe": "audio_quality_evidence.json",
+            }
+            for key, filename in sidecars.items():
+                path = artifact_dir / filename
+                if not path.is_file():
+                    continue
+                try:
+                    value = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if isinstance(value, dict):
+                    meta[key] = value
+            execution_path = artifact_dir / "scene_execution_evidence.json"
+            if execution_path.is_file():
+                try:
+                    execution = json.loads(execution_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    execution = {}
+                rows = execution.get("scenes") if isinstance(execution, dict) else []
+                if isinstance(rows, list):
+                    meta["observed_scene_evidence"] = {
+                        str(row.get("scene_id") or ""): {
+                            "frame_difference": float(row.get("frame_difference") or 0),
+                            "static_ratio": float(row.get("static_ratio") if row.get("static_ratio") is not None else 1),
+                            "renderer_modes": list(row.get("renderer_modes") or []),
+                            "fallback": bool(row.get("fallback")),
+                        }
+                        for row in rows if isinstance(row, dict) and row.get("scene_id")
+                    }
 
     @staticmethod
     def _generation_platform_packet(job_id, draft, platforms, platform):

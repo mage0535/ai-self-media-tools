@@ -101,7 +101,7 @@ class PreRenderGateTests(unittest.TestCase):
             root = Path(tmp)
             cards = [{"layout": "cover", "t": "AI workflow"}, {"t": "evidence"}, {"t": "result"}]
             manifest = {
-                "version": "scene_manifest_v1",
+                "version": "scene_manifest_v2",
                 "mascot_roles": {"cat": {"narrative_function": "introduce the problem", "decorative_only": False}},
                 "scenes": [],
             }
@@ -116,7 +116,7 @@ class PreRenderGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             cards = [{"layout": "cover", "t": "AI workflow"}, {"t": "evidence"}, {"t": "result"}]
-            (root / "scene_manifest.json").write_text(json.dumps({"version": "scene_manifest_v1", "scenes": []}), encoding="utf-8")
+            (root / "scene_manifest.json").write_text(json.dumps({"version": "scene_manifest_v2", "scenes": [], "timeline": []}), encoding="utf-8")
             result = validate_render_inputs(root, cards, require_backgrounds=False, require_scene_manifest=True, require_functional_mascots=True)
             self.assertIn("functional_mascot_role_missing", result["failures"])
 

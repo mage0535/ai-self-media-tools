@@ -91,7 +91,7 @@ def test_video_runner_writes_a_valid_scene_manifest_in_dry_run():
         assert proc.returncode == 0, proc.stderr
         scene_manifest = json.loads((output_dir / "scene_manifest.json").read_text(encoding="utf-8"))
         runner_manifest = json.loads((output_dir / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
-        assert scene_manifest["version"] == "scene_manifest_v1"
+        assert scene_manifest["version"] == "scene_manifest_v2"
         assert runner_manifest["scene_manifest_gate"]["passed"] is True
 
 

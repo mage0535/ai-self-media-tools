@@ -344,7 +344,9 @@ def validate_scene_manifest_contract(
             failures.append(f"scene_asset_missing:{scene_id}")
         elif str(asset.get("sha256") or "") != _sha256(path):
             failures.append(f"scene_asset_checksum_mismatch:{scene_id}")
-        if not str(asset.get("source_url") or "").startswith(("https://", "http://")):
+        source_url = str(asset.get("source_url") or "")
+        generated = source_url.startswith("generated:") and isinstance(asset.get("generation_evidence"), dict) and bool(asset.get("generation_evidence"))
+        if not (source_url.startswith(("https://", "http://")) or generated):
             failures.append(f"scene_asset_source_missing:{scene_id}")
         if not str(asset.get("license") or "").strip():
             failures.append(f"scene_asset_license_missing:{scene_id}")
@@ -416,7 +418,7 @@ def validate_tts_fingerprint(fingerprint: dict[str, Any] | None) -> dict[str, An
     return {"passed": not failures, "failures": failures}
 
 
-def probe_final_video(path: str | Path) -> dict[str, Any]:
+def probe_final_video(path: str | Path, *, burned_subtitles: dict[str, Any] | None = None) -> dict[str, Any]:
     """Probe encoded streams and sampled frames; never trust render metadata."""
     video = Path(path)
     failures: list[str] = []
@@ -436,7 +438,9 @@ def probe_final_video(path: str | Path) -> dict[str, Any]:
     subtitle_streams = sum(1 for row in streams if row.get("codec_type") == "subtitle")
     if audio["sample_rate"] != 44100 or audio["channels"] != 2:
         failures.append("audio_must_be_stereo_44100")
-    if subtitle_streams < 1:
+    burned_subtitles = burned_subtitles if isinstance(burned_subtitles, dict) else {}
+    burned_verified = burned_subtitles.get("passed") is True and int(burned_subtitles.get("sample_count") or len(burned_subtitles.get("samples") or [])) >= 6
+    if subtitle_streams < 1 and not burned_verified:
         failures.append("subtitle_stream_missing")
     motion = {"mean_frame_difference": 0.0, "static_ratio": 1.0}
     try:
@@ -454,4 +458,4 @@ def probe_final_video(path: str | Path) -> dict[str, Any]:
         failures.append("motion_probe_failed")
     if motion["mean_frame_difference"] <= 0 or motion["static_ratio"] >= 1:
         failures.append("frame_motion_missing")
-    return {"passed": not failures, "failures": failures, "audio": audio, "subtitle_streams": subtitle_streams, "motion": motion, "av_alignment_ms": 0}
+    return {"passed": not failures, "failures": failures, "audio": audio, "subtitle_streams": subtitle_streams, "burned_subtitles_verified": burned_verified, "motion": motion, "av_alignment_ms": 0}

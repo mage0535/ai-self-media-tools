@@ -1,6 +1,7 @@
 {
   "version": 1,
   "rules": [
+    {"source": "ai.kuaishou.com", "alias": "快手人工智能开放平台官网", "priority": 50, "contexts": ["tech"]},
     {"source": "API", "alias": "A P I", "priority": 30, "contexts": ["tech"]},
     {"source": "TTS", "alias": "语音合成", "priority": 30, "contexts": ["tech"]},
     {"source": "AI", "alias": "人工智能", "priority": 20, "contexts": ["tech"]},

@@ -42,6 +42,27 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(draft["draft_meta"]["renderer_tool_invocation_manifest"], manifest)
         self.assertNotIn("tool_invocation_manifest", draft["draft_meta"])
 
+    def test_renderer_sidecars_are_promoted_to_final_media_contract(self):
+        artifact_dir = self.pipeline.data_dir / "artifacts" / "sidecars"
+        artifact_dir.mkdir(parents=True)
+        final = artifact_dir / "final.mp4"
+        final.write_bytes(b"video")
+        (artifact_dir / "scene_manifest.json").write_text(json.dumps({"version": "scene_manifest_v2"}), encoding="utf-8")
+        (artifact_dir / "bgm_source.json").write_text(json.dumps({"source_url": "https://example.test/bgm", "sha256": "abc"}), encoding="utf-8")
+        (artifact_dir / "tts_fingerprint.json").write_text(json.dumps({"provider": "edge-tts", "sha256": "voice"}), encoding="utf-8")
+        (artifact_dir / "subtitle_burn_evidence.json").write_text(json.dumps({"passed": True, "sample_count": 8}), encoding="utf-8")
+        (artifact_dir / "scene_execution_evidence.json").write_text(json.dumps({"scenes": [{"scene_id": "s01", "frame_difference": 0.02, "static_ratio": 0.2, "renderer_modes": ["playwright-video"], "fallback": False}]}), encoding="utf-8")
+        draft = {"draft_meta": {}}
+
+        Pipeline._attach_video_render_evidence(draft, {"path": str(final), "checksum": "hash", "render_manifest": {"status": "rendered"}})
+
+        meta = draft["draft_meta"]
+        self.assertEqual(meta["scene_manifest"]["version"], "scene_manifest_v2")
+        self.assertEqual(meta["bgm_source"]["sha256"], "abc")
+        self.assertEqual(meta["tts_fingerprint"]["provider"], "edge-tts")
+        self.assertTrue(meta["subtitle_evidence"]["passed"])
+        self.assertEqual(meta["observed_scene_evidence"]["s01"]["frame_difference"], 0.02)
+
     def test_each_job_overwrites_generator_checkpoint_dir(self):
         first = self.pipeline.create("First topic", ["wechat"], {"audience": "operators"})
         second = self.pipeline.create("Second topic", ["wechat"], {"audience": "operators"})
