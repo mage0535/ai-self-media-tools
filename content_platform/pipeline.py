@@ -17,7 +17,7 @@ from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
 from .generator import DraftGenerator
-from .humanize import naturalize_copy
+from .humanize import naturalize_copy, repair_weak_hook
 from .intelligence import GLOBAL_EN_PLATFORMS, build_generation_context
 from .media import MediaBridge
 from .adapters.media import (
@@ -424,6 +424,18 @@ class Pipeline:
                     risk["level"] = "review"
                 if risk["level"] == "block":
                     runner.block("run_safety_gate", "safety_gate_blocked", "content safety gate blocked this job", risk)
+                current_quality = (draft.get("draft_meta") or {}).get("quality_gate") or {}
+                if "hook_strength" in set(current_quality.get("failed_dimensions") or []):
+                    repaired = repair_weak_hook(draft.get("title"), draft.get("body"), draft.get("draft_meta") or {})
+                    if repaired.get("changed"):
+                        draft["body"] = repaired["body"]
+                        draft["draft_meta"]["quality_scores"] = repaired["quality_scores"]
+                        draft["draft_meta"]["quality_gate"] = repaired["quality_gate"]
+                        draft["draft_meta"]["hook_repair"] = {
+                            "version": "deterministic_hook_repair_v1",
+                            "hook": repaired["hook"],
+                            "passed": repaired["quality_gate"].get("passed") is True,
+                        }
                 gate = self._quality_gate(job_id, draft, risk, geo, phase="generation", platforms=job.get("platforms"))
                 draft["draft_meta"]["geo_score"] = geo["score"]
                 draft["draft_meta"]["geo_details"] = geo

@@ -2,6 +2,7 @@ import unittest
 
 from content_platform.humanize import (
     naturalize_copy,
+    repair_weak_hook,
     _burstiness_score,
     _score,
     quality_gate,
@@ -212,6 +213,15 @@ class QualityGateG3IntegrationTests(unittest.TestCase):
             "burstiness", g3_failures,
             f"burstiness={scores['burstiness']} should pass G3"
         )
+
+    def test_repair_weak_hook_uses_title_without_new_factual_claims(self):
+        context = {"style": {}, "strategy": {"content_form": "short_video"}}
+        result = repair_weak_hook("快手 AI 开放平台", "这个平台整合了多种能力。\n按步骤配置即可。", context)
+
+        self.assertTrue(result["changed"])
+        self.assertTrue(result["body"].startswith("为什么快手 AI 开放平台？"))
+        self.assertGreaterEqual(result["quality_scores"]["hook_strength"], 0.60)
+        self.assertNotIn("数据", result["hook"])
 
 
 if __name__ == "__main__":

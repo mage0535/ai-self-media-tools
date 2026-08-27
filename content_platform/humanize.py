@@ -262,3 +262,24 @@ def naturalize_copy(body, context):
         "quality_gate": gate,
         "rewrite_notes": notes or ["kept original structure"],
     }
+
+
+def repair_weak_hook(title, body, context):
+    """Repair only the opening hook without introducing factual claims."""
+    original = str(body or "").strip()
+    scores = _score(original, context or {})
+    if scores.get("hook_strength", 0) >= QUALITY_TARGETS["hook_strength"]:
+        return {"changed": False, "body": original, "quality_scores": scores, "quality_gate": quality_gate(scores)}
+    subject = re.sub(r"[？?！!。.:：]+$", "", str(title or "").strip())[:56]
+    if not subject:
+        return {"changed": False, "body": original, "quality_scores": scores, "quality_gate": quality_gate(scores)}
+    hook = f"为什么{subject}？" if _contains_chinese(subject + original[:80]) else f"Why does {subject} matter?"
+    updated = hook + "\n" + original
+    repaired_scores = _score(updated, context or {})
+    return {
+        "changed": True,
+        "hook": hook,
+        "body": updated,
+        "quality_scores": repaired_scores,
+        "quality_gate": quality_gate(repaired_scores),
+    }
