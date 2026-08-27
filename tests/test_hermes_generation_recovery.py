@@ -129,6 +129,19 @@ def test_automated_workflow_prompt_forbids_unsupported_claim_patterns(monkeypatc
     assert "exact claim appears in claim_ledger" in prompt
 
 
+def test_factual_repair_prompt_requires_complete_evidence_safe_rewrite(monkeypatch, tmp_path):
+    process = FakeProcess([(0, '{"title":"T","body":"Use neutral verified steps only. "}')])
+    commands = []
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda command, **kwargs: (commands.append(command) or process))
+    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path), "clock": lambda: 0, "sleep": lambda _: None})
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    generator._hermes("topic", {"platform": "kuaishou", "automated_workflow": True, "factual_repair": {"failures": ["unsourced_numeric_claim"]}}, {"language": "zh", "platform_rules": ""})
+
+    assert "single factual-repair attempt" in commands[0][2]
+    assert "Rewrite the complete draft from scratch" in commands[0][2]
+
+
 def test_canary_without_verified_selectors_fails_before_launch(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setenv("HERMES_CANARY_SESSION", "task9-missing-selector-proof")

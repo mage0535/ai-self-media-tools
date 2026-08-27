@@ -7,7 +7,7 @@ from typing import Any
 
 
 NUMERIC_CLAIM = re.compile(
-    r"(?:(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿几半]+)\s*(?:%|个|家|种|款|次|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?))",
+    r"(?:(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿几半]+)\s*(?:%|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?)|(?:\d+(?:\.\d+)?|[二两三四五六七八九十百千万亿几]+)\s*(?:个|家|种|款|次))",
     re.I,
 )
 FIRST_PERSON_OPERATION = re.compile(

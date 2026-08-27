@@ -925,6 +925,12 @@ class DraftGenerator:
             "Write recommendations and clearly labelled hypothetical steps only; do not imply they happened. "
             if editorial_facts_only else ""
         )
+        if isinstance(brief.get("factual_repair"), dict):
+            factual_boundary += (
+                "This is the single factual-repair attempt after a failed evidence gate. Rewrite the complete draft from scratch. "
+                "Keep the selected topic and eight-part structure, but replace every unsupported number, duration, money claim, personal/friend anecdote, "
+                "free/no-code/all-in-one promise, and guaranteed result with neutral evidence-safe instructions. Do not mention the repair or omitted claims. "
+            )
         try:
             return self._hermes_attempt(topic, brief, context, retry=False, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
         except GenerationTimeoutError:
