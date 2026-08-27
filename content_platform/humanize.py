@@ -205,6 +205,14 @@ def _sentence_break(text):
     return re.sub(r"([。！？!?]|\.(?=\s|$))\s*", r"\1\n", str(text))
 
 
+def normalize_feed_paragraphs(text: str) -> str:
+    """Make every feed paragraph short without dropping content or domains."""
+    normalized = _strip_web_residue(text)
+    normalized = _sentence_break(normalized)
+    lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+    return "\n\n".join(lines)
+
+
 def naturalize_copy(body, context):
     updated = str(body or "")
     notes = []

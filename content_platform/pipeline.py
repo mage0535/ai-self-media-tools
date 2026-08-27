@@ -17,7 +17,7 @@ from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
 from .generator import DraftGenerator
-from .humanize import naturalize_copy, repair_weak_hook
+from .humanize import naturalize_copy, normalize_feed_paragraphs, repair_weak_hook
 from .intelligence import GLOBAL_EN_PLATFORMS, build_generation_context
 from .media import MediaBridge
 from .adapters.media import (
@@ -396,6 +396,8 @@ class Pipeline:
                         self._validate_draft_structure(repaired)
                         repaired_title = str(repaired.get("title") or "").strip()
                         repaired_body = str(repaired.get("body") or "").strip()
+                        if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
+                            repaired_body = normalize_feed_paragraphs(repaired_body)
                         repaired_gate = validate_claims(repaired_title + "\n" + repaired_body, claim_ledger)
                         if len(repaired_body) >= 80 and repaired_gate.get("passed"):
                             draft["title"] = repaired_title
