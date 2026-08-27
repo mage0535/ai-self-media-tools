@@ -66,28 +66,33 @@ def _semantic_queries(text: str, count: int = 8) -> list[str]:
     return base_queries[:count]
 
 
-def _download_pexels(query: str, key: str, orientation: str = "portrait") -> dict | None:
+def _download_pexels(query: str, key: str, orientation: str = "portrait", exclude_ids: set[str] | None = None) -> dict | None:
     """Download one Pexels photo with source and license evidence."""
     qq = query.replace(" ", "+")
-    url = f"https://api.pexels.com/v1/search?query={qq}&per_page=1&orientation={orientation}"
+    url = f"https://api.pexels.com/v1/search?query={qq}&per_page=10&orientation={orientation}"
     req = urllib.request.Request(url, headers={"Authorization": key, "User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode())
         if not data.get("photos"):
             return None
-        photo = data["photos"][0]
-        img_url = photo["src"]["large2x"]
-        ireq = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(ireq, timeout=20) as ir:
-            content = ir.read()
-        return {
-            "content": content,
-            "source_url": str(photo.get("url") or ""),
-            "artist": str(photo.get("photographer") or ""),
-            "artist_url": str(photo.get("photographer_url") or ""),
-            "asset_id": str(photo.get("id") or ""),
-        }
+        excluded = set(exclude_ids or set())
+        for photo in data["photos"]:
+            asset_id = str(photo.get("id") or "")
+            if not asset_id or asset_id in excluded:
+                continue
+            img_url = photo["src"]["large2x"]
+            ireq = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(ireq, timeout=20) as ir:
+                content = ir.read()
+            return {
+                "content": content,
+                "source_url": str(photo.get("url") or ""),
+                "artist": str(photo.get("photographer") or ""),
+                "artist_url": str(photo.get("photographer_url") or ""),
+                "asset_id": asset_id,
+            }
+        return None
     except Exception:
         return None
 
@@ -107,24 +112,29 @@ def auto_fetch_backgrounds(script_body: str, title: str, output_dir: Path, platf
     key = _pexels_key()
     queries = _semantic_queries(f"{script_body} {title}", 8)
     assignments = []
-    start = len(existing) + 1
+    needed = max(0, 8 - len(existing))
 
     # 优先 Pexels 实景（带 md5 去重，防同图重复）
-    seen_hashes = set()
+    seen_hashes = {hashlib.sha256(path.read_bytes()).hexdigest() for path in existing if path.is_file()}
+    seen_ids: set[str] = set()
     if key:
-        for i, q in enumerate(queries, start):
-            photo = _download_pexels(q, key)
+        for q in queries:
+            if len(assignments) >= needed:
+                break
+            photo = _download_pexels(q, key, exclude_ids=seen_ids)
             if not photo:
                 time.sleep(1)
                 continue
             content = bytes(photo["content"])
             # md5 去重：已下载过的图跳过
-            import hashlib
-            h = hashlib.md5(bytes(content)).hexdigest()
+            h = hashlib.sha256(bytes(content)).hexdigest()
             if h in seen_hashes:
+                seen_ids.add(photo["asset_id"])
                 time.sleep(0.5)
                 continue
             seen_hashes.add(h)
+            seen_ids.add(photo["asset_id"])
+            i = len(existing) + len(assignments) + 1
             fp = bg_dir / f"bg_{i:02d}.jpg"
             fp.write_bytes(bytes(content))
             assignments.append({
@@ -138,28 +148,36 @@ def auto_fetch_backgrounds(script_body: str, title: str, output_dir: Path, platf
             time.sleep(1.0)
 
     # Pexels 不足 8 张 → AI 生图兜底（Pollinations FLUX 免费）
-    if len(assignments) < 8:
-        need = 8 - len(assignments)
+    if len(assignments) < needed:
         try:
             sys.path.insert(0, str(ROOT / "scripts"))
             from content_platform.image_provider import generate_image
-            for i in range(len(assignments) + 1, 9):
-                prompt = _ai_prompt(queries[i - 1], platform)
+            attempts = 0
+            while len(assignments) < needed and attempts < max(3, needed * 3):
+                attempts += 1
+                i = len(existing) + len(assignments) + 1
+                query = queries[(i - 1) % len(queries)]
+                prompt = _ai_prompt(query, platform)
                 fp = bg_dir / f"bg_{i:02d}.jpg"
                 try:
                     generate_image(prompt, fp, provider="pollinations", size="1080x1920")
                     if fp.is_file() and fp.stat().st_size > 5000:
+                        image_hash = hashlib.sha256(fp.read_bytes()).hexdigest()
+                        if image_hash in seen_hashes:
+                            fp.unlink(missing_ok=True)
+                            continue
+                        seen_hashes.add(image_hash)
                         assignments.append({
                             "background_image": str(fp), "rights_cleared": True, "real_scene": False,
-                            "source_query": queries[i - 1], "ai_generated": True,
+                            "source_query": query, "ai_generated": True,
                             "source_url": "generated:pollinations", "license": "generated_for_project",
                             "semantic_match_score": 0.8,
-                            "match_reason": f"generated image matched: {queries[i - 1]}",
-                            "semantic_tags": [queries[i - 1], "generated", "vertical"],
+                            "match_reason": f"generated image matched: {query}",
+                            "semantic_tags": [query, "generated", "vertical"],
                             "generation_evidence": {"provider": "pollinations", "prompt": prompt},
                         })
                 except Exception:
-                    continue
+                    break
                 time.sleep(0.5)
         except Exception:
             pass
