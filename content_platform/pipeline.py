@@ -391,7 +391,12 @@ class Pipeline:
                         )
                 runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"], message="legacy review-only claim findings" if not claim_gate.get("passed") else "")
                 if (job.get("brief") or {}).get("run_contract"):
-                    depth_gate = validate_content_depth_plan((draft.get("draft_meta") or {}).get("content_depth_plan"))
+                    depth_plan = (
+                        (draft.get("draft_meta") or {}).get("content_depth_plan")
+                        or brief.get("content_depth_plan")
+                    )
+                    draft.setdefault("draft_meta", {})["content_depth_plan"] = depth_plan
+                    depth_gate = validate_content_depth_plan(depth_plan)
                     draft["draft_meta"]["content_depth_gate"] = depth_gate
                     if not depth_gate.get("passed"):
                         runner.block(
