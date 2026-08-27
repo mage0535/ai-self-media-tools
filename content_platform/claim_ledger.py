@@ -14,6 +14,10 @@ FIRST_PERSON_OPERATION = re.compile(
     r"(?:我(?:实测|测试|运行|用了|使用|部署|发布|修复|运营)|\bI\s+(?:tested|ran|used|deployed|published|fixed|operated)\b)",
     re.I,
 )
+UNSUPPORTED_PROMOTIONAL_CLAIM = re.compile(
+    r"(?:零成本|完全免费|免费(?:使用|试用|开放)|no[- ]cost|completely free|free to use)",
+    re.I,
+)
 
 
 def _sentences(text: str) -> list[str]:
@@ -56,6 +60,11 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
             findings.append({"type": "first_person_operation", "text": sentence, "covered": covered})
             if not covered:
                 failures.append("unsourced_first_person_operation")
+        if UNSUPPORTED_PROMOTIONAL_CLAIM.search(sentence):
+            covered = _covered(sentence, ledger, first_person=False)
+            findings.append({"type": "promotional", "text": sentence, "covered": covered})
+            if not covered:
+                failures.append("unsourced_promotional_claim")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),

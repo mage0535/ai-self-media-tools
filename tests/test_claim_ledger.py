@@ -30,6 +30,13 @@ def test_claim_gate_allows_unsourced_advice_without_factual_claims() -> None:
     assert result["passed"] is True
 
 
+def test_claim_gate_rejects_unsourced_chinese_numbers_and_free_claims() -> None:
+    result = validate_claims("三分钟通过审核。沙箱可以零成本试错。一个月省下两万元。", [])
+    assert result["passed"] is False
+    assert "unsourced_numeric_claim" in result["failures"]
+    assert "unsourced_promotional_claim" in result["failures"]
+
+
 def test_claim_sanitizer_removes_only_unsupported_sentences() -> None:
     text = "This checklist is practical. Success rose 99% in 8 months. Verify the owner before acting."
     gate = validate_claims(text, [])
