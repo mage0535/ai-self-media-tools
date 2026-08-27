@@ -353,8 +353,10 @@ def validate_scene_manifest_contract(
         evidence = observed.get(scene_id)
         if not isinstance(evidence, dict):
             failures.append(f"scene_observation_missing:{scene_id}")
-        elif float(evidence.get("frame_difference") or 0) <= 0 or float(evidence.get("static_ratio") or 1) >= 1:
-            failures.append(f"scene_observation_insufficient:{scene_id}")
+        else:
+            static_ratio = evidence.get("static_ratio")
+            if float(evidence.get("frame_difference") or 0) <= 0 or static_ratio is None or float(static_ratio) >= 1:
+                failures.append(f"scene_observation_insufficient:{scene_id}")
     return {"passed": not failures, "failures": failures, "scene_count": len(scenes)}
 
 
