@@ -859,17 +859,6 @@ def download_bgm(video_dir, style="acoustic guitar"):
     errors = []
     timed_out = False
     try:
-        for candidate in _local_bgm_candidates(style):
-            if not _bgm_candidate_allowed(candidate):
-                continue
-            try:
-                _download_candidate_bgm(candidate, bgm)
-                if bgm.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
-                    _write_bgm_source(video_dir, candidate, style)
-                    return str(bgm)
-            except Exception as exc:  # noqa: BLE001 - continue to the next licensed track.
-                errors.append(f"local_library:{str(exc)[:120]}")
-                bgm.unlink(missing_ok=True)
         for candidate in _online_bgm_candidates(style):
             if _bgm_deadline_reached():
                 timed_out = True
@@ -895,14 +884,6 @@ def download_bgm(video_dir, style="acoustic guitar"):
         _ACTIVE_BGM_DEADLINE = previous_deadline
         _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_candidate_deadline
     if timed_out:
-        # 2026-08-16 修复：在线 provider 预算耗尽时，自动兜底 archive.org 本地纯钢琴库
-        # （解决定时任务渲染必卡「online real-instrument BGM resolution budget exhausted」）
-        try:
-            fallback = _fetch_archive_bgm(video_dir)
-            if fallback:
-                return str(fallback)
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"archive_fallback:{str(exc)[:120]}")
         raise RuntimeError("online real-instrument BGM resolution budget exhausted")
     raise RuntimeError(
         "online real-instrument BGM unavailable; checked network music providers; "
@@ -1206,6 +1187,8 @@ def _openverse_candidates(query):
         duration = row.get("duration") or 0
         if isinstance(duration, (int, float)) and duration > 1000:
             duration = round(duration / 1000)
+        if not isinstance(duration, (int, float)) or float(duration) < 60:
+            continue
         candidates.append(
             {
                 "provider": "openverse_audio",
@@ -1471,7 +1454,7 @@ def _download_candidate_bgm(candidate, bgm):
                 handle.write(chunk)
     except Exception:
         tmp.unlink(missing_ok=True)
-        raise
+        _download_bgm_with_proxy_fallback(url, tmp)
     if tmp.stat().st_size <= REAL_BGM_MIN_BYTES:
         tmp.unlink(missing_ok=True)
         raise RuntimeError("downloaded BGM too small")
@@ -1488,6 +1471,34 @@ def _download_candidate_bgm(candidate, bgm):
     tmp.unlink(missing_ok=True)
     if result.returncode != 0:
         raise RuntimeError("BGM conversion failed: " + (result.stderr or result.stdout)[-300:])
+
+
+def _download_bgm_with_proxy_fallback(url, output):
+    """Use configured backup tunnels only after the direct request failed."""
+    errors = []
+    proxies = [
+        value.strip()
+        for value in (
+            os.environ.get("BGM_US_PROXY", "socks5h://127.0.0.1:2080"),
+            os.environ.get("BGM_CN_PROXY", "socks5h://127.0.0.1:1080"),
+        )
+        if value.strip()
+    ]
+    for proxy in proxies:
+        output.unlink(missing_ok=True)
+        timeout = max(1, int(_bgm_request_timeout(ONLINE_BGM_TIMEOUT)))
+        proc = subprocess.run(
+            ["curl", "--fail", "--location", "--silent", "--show-error", "--proxy", proxy, "--max-time", str(timeout), "--output", str(output), url],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+            check=False,
+        )
+        if proc.returncode == 0 and output.is_file() and output.stat().st_size > 0:
+            return
+        errors.append(f"{proxy}:{(proc.stderr or proc.stdout or proc.returncode)[-100:]}")
+    output.unlink(missing_ok=True)
+    raise RuntimeError("BGM direct download failed and proxy fallbacks failed: " + "; ".join(errors))
 
 
 def _media_duration(path, default=60.0):

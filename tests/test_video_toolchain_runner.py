@@ -853,7 +853,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "online real-instrument BGM unavailable"):
                     download_bgm(root, "lo-fi")
 
-    def test_bgm_download_uses_operator_licensed_local_library_before_network(self):
+    def test_bgm_download_does_not_use_operator_local_library(self):
         from scripts.kuaishou_render import REAL_BGM_MIN_BYTES, download_bgm
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -878,12 +878,10 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 "BGM_FINGERPRINT_REGISTRY": str(registry),
             }, clear=False):
                 with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[]):
-                    result = download_bgm(root, "piano instrumental")
+                    with self.assertRaisesRegex(RuntimeError, "online real-instrument BGM unavailable"):
+                        download_bgm(root, "piano instrumental")
 
-            self.assertEqual(result, str(root / "bgm.mp3"))
-            source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
-            self.assertEqual(source["license"], "CC BY")
-            self.assertEqual(source["source"], "local_test_library")
+            self.assertFalse((root / "bgm_source.json").exists())
 
     def test_bgm_download_stops_when_the_global_resolution_budget_is_exhausted(self):
         from scripts.kuaishou_render import download_bgm
@@ -901,10 +899,23 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             with patch.dict(os.environ, {"BGM_RESOLUTION_MAX_SECONDS": "1"}, clear=False):
                 with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
                     with patch("scripts.kuaishou_render.time.monotonic", side_effect=[0.0, 2.0]):
-                        # 2026-08-16：在线预算耗尽会自动兜底 archive（改进）；测试 patch 掉兜底验证原预算逻辑
-                        with patch("scripts.kuaishou_render._fetch_archive_bgm", return_value=None):
-                            with self.assertRaisesRegex(RuntimeError, "resolution budget exhausted"):
-                                download_bgm(root, "acoustic guitar")
+                        with self.assertRaisesRegex(RuntimeError, "resolution budget exhausted"):
+                            download_bgm(root, "acoustic guitar")
+
+    def test_openverse_candidates_skip_short_sound_effects(self):
+        from scripts.kuaishou_render import _openverse_candidates
+
+        payload = {
+            "results": [
+                {"id": "short", "title": "Piano tap", "url": "https://cdn.test/short.mp3", "foreign_landing_url": "https://source.test/short", "license": "cc0", "license_url": "https://creativecommons.org/publicdomain/zero/1.0/", "duration": 4000, "tags": [{"name": "piano"}]},
+                {"id": "long", "title": "Piano performance", "url": "https://cdn.test/long.mp3", "foreign_landing_url": "https://source.test/long", "license": "cc0", "license_url": "https://creativecommons.org/publicdomain/zero/1.0/", "duration": 78000, "tags": [{"name": "piano"}]},
+            ]
+        }
+        with patch("scripts.kuaishou_render._request_json", return_value=payload):
+            rows = _openverse_candidates("piano music instrumental")
+
+        self.assertEqual([row["asset_id"] for row in rows], ["long"])
+        self.assertEqual(rows[0]["duration"], 78)
 
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm
