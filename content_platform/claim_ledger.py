@@ -11,11 +11,11 @@ NUMERIC_CLAIM = re.compile(
     re.I,
 )
 FIRST_PERSON_OPERATION = re.compile(
-    r"(?:我(?:实测|测试|运行|用了|使用|部署|发布|修复|运营)|\bI\s+(?:tested|ran|used|deployed|published|fixed|operated)\b)",
+    r"(?:我[^。！？.!?\n]{0,8}(?:实测|测试|运行|用了|使用|部署|发布|修复|运营|订阅|付费|花了|省了|砍掉|切换)|\bI\s+(?:tested|ran|used|deployed|published|fixed|operated|subscribed|paid|saved|switched)\b)",
     re.I,
 )
 UNSUPPORTED_PROMOTIONAL_CLAIM = re.compile(
-    r"(?:零成本|完全免费|免费(?:使用|试用|开放)|no[- ]cost|completely free|free to use)",
+    r"(?:零成本|完全免费|免费(?:使用|试用|开放)|不用写代码|无需写代码|零代码|全都有|一个平台全搞定|费用(?:砍掉|降低).{0,8}(?:一大半|一半|大半)|no[- ]cost|completely free|free to use|no code required)",
     re.I,
 )
 

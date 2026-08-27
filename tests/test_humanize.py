@@ -31,6 +31,14 @@ class HumanizeTests(unittest.TestCase):
         self.assertIn("ai.kuaishou.com", result["body"])
         self.assertNotIn("ai.\nkuaishou", result["body"])
 
+    def test_naturalize_copy_repairs_spaced_domain_and_skips_foreign_cta(self):
+        result = naturalize_copy(
+            "打开 ai. kuaishou. com 注册账号。然后验证接口。最后保存配置。",
+            {"style": {"cta": "Save this"}, "strategy": {"content_form": "short_video"}},
+        )
+        self.assertIn("ai.kuaishou.com", result["body"])
+        self.assertNotIn("Save this", result["body"])
+
 
 class BurstinessChineseTests(unittest.TestCase):
     """Chinese text burstiness: should not be depressed by lack of spaces."""

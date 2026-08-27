@@ -51,3 +51,16 @@ def test_compiler_uses_priority_and_reports_unhandled_latin_tokens(tmp_path: Pat
     assert result.tts_text == "A I 与 GPU"
     assert result.applied_rules[0]["alias"] == "A I"
     assert result.unhandled_latin_tokens == ["GPU"]
+
+
+def test_compiler_prefers_full_domain_rule_and_does_not_replace_ai_inside_words():
+    from content_platform.tts_text_compiler import TTSTextCompiler
+
+    compiler = TTSTextCompiler([
+        {"source": "ai.kuaishou.com", "alias": "快手人工智能开放平台官网", "priority": 50, "contexts": ["tech"]},
+        {"source": "AI", "alias": "人工智能", "priority": 20, "contexts": ["tech"]},
+    ])
+    result = compiler.compile("打开 ai.kuaishou.com 使用 AI", context="tech", platform="kuaishou")
+
+    assert result.tts_text == "打开 快手人工智能开放平台官网 使用 人工智能"
+    assert result.unhandled_latin_tokens == []

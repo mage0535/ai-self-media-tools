@@ -32,6 +32,12 @@ def test_default_policy_requires_cinematic_motion(monkeypatch):
     assert policy == {"quality_profile": "high", "motion_mode": "cinematic", "allow_degraded": False}
 
 
+def test_renderer_rejects_empty_platform_gate_bypass():
+    with pytest.raises(ValueError, match="non-empty video platform"):
+        film_renderer.validate_platform_argument("")
+    assert film_renderer.validate_platform_argument("youtube-shorts") == "youtube_shorts"
+
+
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
     assert film_renderer.RENDERER_VERSION == "cinematic-v10"

@@ -7,6 +7,8 @@ will be shown.
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any
 
 
@@ -30,32 +32,60 @@ def build_scene_manifest(
         shotcraft = card.get("shotcraft") if isinstance(card.get("shotcraft"), dict) else {}
         narration = str(card.get("tts") or card.get("txt") or "").strip()
         claim = str(card.get("txt") or narration).strip()
-        source = str(card.get("visual_asset") or match.get("visual_source") or "").strip()
+        visual = card.get("visual_asset") if isinstance(card.get("visual_asset"), dict) else {}
+        raw_source = visual or match.get("visual_source") or card.get("visual_asset") or ""
+        source = str(
+            visual.get("materialized_background")
+            or visual.get("background_image")
+            or visual.get("source_image")
+            or visual.get("path")
+            or raw_source
+        ).strip()
         reason = str(match.get("match_reason") or "").strip()
+        asset_path = Path(source)
+        asset_sha = hashlib.sha256(asset_path.read_bytes()).hexdigest() if asset_path.is_file() else ""
+        subject_motion = str(shotcraft.get("name") or "card_module_stagger")
+        transition = "cut" if index == 1 else "content_matched_crossfade"
         scenes.append(
             {
                 "scene_id": f"s{index:02d}",
+                "purpose": str(visual.get("purpose") or ("hook" if index == 1 else "explain")),
+                "shot_language": subject_motion,
+                "subject_motion": subject_motion,
+                "text_motion": "lower_third_subtitles",
+                "transition": transition,
+                "interaction_cue": "continue" if index < len(cards) else "cta",
+                "rhythm": {"duration_seconds": 1.0, "phase": "planned_before_measured_tts"},
                 "narration": narration,
                 "subtitle": narration,
                 "visual_claim": claim,
-                "asset": {"source": source, "kind": "resolved_or_planned_visual_asset"},
+                "asset": {
+                    "source": source,
+                    "path": source,
+                    "sha256": asset_sha,
+                    "source_url": str(visual.get("source_url") or ""),
+                    "license": str(visual.get("license") or ""),
+                    "generation_evidence": dict(visual.get("generation_evidence") or {}),
+                    "kind": "resolved_or_planned_visual_asset",
+                },
                 "evidence": [{"source": source, "match_reason": reason}] if source and reason else [],
                 "motion": {
                     "background": "content_matched_background_motion",
-                    "subject": str(shotcraft.get("name") or "card_module_stagger"),
+                    "subject": subject_motion,
                     "text": "lower_third_subtitles",
-                    "transition": "cut" if index == 1 else "content_matched_crossfade",
+                    "transition": transition,
                 },
             }
         )
     max_seconds = SHORT_DURATION_LIMITS.get(platform)
     result = {
-        "version": "scene_manifest_v1",
+        "version": "scene_manifest_v2",
         "title": str(title or "").strip(),
         "platform": platform,
         "duration_policy": {"max_seconds": max_seconds, "enforced": max_seconds is not None},
         "visual_recipe_fingerprint": str(visual_recipe.get("fingerprint") or ""),
         "scenes": scenes,
+        "timeline": [scene["scene_id"] for scene in scenes],
     }
     roles = plan.get("mascot_roles") or plan.get("content_blueprint", {}).get("mascot_roles")
     if isinstance(roles, dict) and roles:
@@ -68,7 +98,7 @@ def validate_scene_manifest(manifest: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(manifest, dict):
         return _result(["scene_manifest missing"])
     failures: list[str] = []
-    if manifest.get("version") != "scene_manifest_v1":
+    if manifest.get("version") != "scene_manifest_v2":
         failures.append("scene_manifest version missing or unsupported")
     scenes = manifest.get("scenes") if isinstance(manifest.get("scenes"), list) else []
     if len(scenes) < 3:

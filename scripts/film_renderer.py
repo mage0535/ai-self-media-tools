@@ -1083,6 +1083,17 @@ def _wrap(text: str, max_chars: int = 20):
     return text[:cut], text[cut:max_chars + cut]
 
 
+def validate_platform_argument(platform: str) -> str:
+    normalized = str(platform or "").strip().casefold().replace("-", "_")
+    allowed = {
+        "kuaishou", "douyin", "douyin_ai", "douyin_pet", "shipinhao",
+        "tiktok", "youtube", "youtube_shorts", "shorts", "bilibili",
+    }
+    if normalized not in allowed:
+        raise ValueError("a supported non-empty video platform is required")
+    return normalized
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="融合渲染器：电影级多镜头")
     ap.add_argument("--video-dir", required=True)
@@ -1096,6 +1107,11 @@ def main() -> int:
     ap.add_argument("--height", type=int, default=H)
     ap.add_argument("--script", default="", help="完整 8 段脚本文件（空行分隔），避免 runner 按句切分截断 TTS")
     args = ap.parse_args()
+    try:
+        args.platform = validate_platform_argument(args.platform)
+    except ValueError as exc:
+        print(f"平台参数无效: {exc}", file=sys.stderr)
+        return 2
     try:
         render_policy = resolve_render_policy()
     except ValueError as exc:
@@ -1712,6 +1728,21 @@ def main() -> int:
     if not ok:
         print("字幕烧录验证失败", file=sys.stderr)
         return 4
+    subtitle_evidence = {
+        "version": "burned_subtitle_evidence_v1",
+        "passed": ok and len(samples) >= 6,
+        "burned_in": True,
+        "sample_count": len(samples),
+        "samples": samples,
+        "position": "lower_third",
+        "font_size": subtitle_font_size,
+        "max_chars_per_line": subtitle_wrap_chars,
+        "max_lines": 2,
+        "margin_v": 290,
+    }
+    (out / "subtitle_burn_evidence.json").write_text(
+        json.dumps(subtitle_evidence, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     audio_evidence = validate_audio_spec(probe_audio_spec(final))
     (out / "audio_quality_evidence.json").write_text(
@@ -1720,6 +1751,21 @@ def main() -> int:
     if not audio_evidence["passed"]:
         print(f"音频规格验证失败: {audio_evidence}", file=sys.stderr)
         return 4
+    tts_fingerprint = {
+        "display_text": "\n".join(str(row.get("display_text") or "") for row in tts_records),
+        "tts_text": "\n".join(str(row.get("tts_text") or "") for row in tts_records),
+        "provider": str(tts_records[0].get("provider") or "") if tts_records else "",
+        "voice": str(tts_records[0].get("voice") or "") if tts_records else "",
+        "rate": str(tts_records[0].get("rate") or "") if tts_records else "",
+        "sample_rate": int(audio_evidence.get("sample_rate") or 0),
+        "channels": int(audio_evidence.get("channels") or 0),
+        "duration_seconds": round(sum(float(row.get("duration_seconds") or 0) for row in tts_records), 6),
+        "sha256": _sha256_file(voice_path) if Path(voice_path).is_file() else "",
+        "unhandled_latin_tokens": sorted({token for row in tts_records for token in (row.get("unhandled_latin_tokens") or [])}),
+    }
+    (out / "tts_fingerprint.json").write_text(
+        json.dumps(tts_fingerprint, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     try:
         measured_motion = measure_motion_evidence(final)
@@ -1771,12 +1817,22 @@ def main() -> int:
     execution_scenes = []
     for index, context in enumerate(scene_execution_context):
         records = [record_by_name.get(name, {}) for name in context["shot_names"]]
+        scene_motion = {"mean_delta": 0.0, "static_ratio": 1.0, "passed": False}
+        scene_video = out / "shots" / f"shot_{index + 1:02d}B.mp4"
+        if scene_video.is_file():
+            try:
+                scene_motion = measure_motion_evidence(scene_video)
+            except Exception as exc:
+                scene_motion = {"mean_delta": 0.0, "static_ratio": 1.0, "passed": False, "error": str(exc)[:120]}
         execution_scenes.append({
             **context,
             "actual_transition_after": applied_transitions.get(index, "end_hold"),
             "renderer_modes": [row.get("renderer") for row in records],
             "fallback": any(bool(row.get("fallback")) for row in records),
             "reused": any(bool(row.get("reused")) for row in records),
+            "frame_difference": float(scene_motion.get("mean_delta") or 0),
+            "static_ratio": float(scene_motion.get("static_ratio") if scene_motion.get("static_ratio") is not None else 1),
+            "motion_probe": scene_motion,
         })
     execution_failures = [
         row["scene_id"] for row in execution_scenes
