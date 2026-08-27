@@ -927,6 +927,35 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertNotIn("guitar", piano[0])
         self.assertIn("guitar", guitar[0])
 
+    def test_fallback_backgrounds_merge_without_dropping_existing_provenance(self):
+        from scripts.video_toolchain_runner import _asset_provenance_records, _merge_materialized_backgrounds
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = root / "first.png"
+            second = root / "second.jpg"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+            existing = [{
+                "scene": 1, "path": str(first), "source_url": "generated:image-provider",
+                "license": "generated_for_project", "semantic_match_score": 0.82,
+                "match_reason": "cover match", "semantic_tags": ["cover"],
+                "generation_evidence": {"provider": "image-provider"},
+            }]
+            additions = [{
+                "background_image": str(second), "source_url": "https://www.pexels.com/photo/1/",
+                "license": "Pexels Content License", "semantic_match_score": 0.8,
+                "source_query": "technology office", "semantic_tags": ["technology"],
+            }]
+
+            merged = _merge_materialized_backgrounds(existing, additions)
+            records = _asset_provenance_records(merged)
+
+            self.assertEqual(len(records), 2)
+            self.assertEqual(records[0]["source_url"], "generated:image-provider")
+            self.assertEqual(records[1]["source_url"], "https://www.pexels.com/photo/1/")
+            self.assertEqual(records[1]["license"], "Pexels Content License")
+
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm
 
