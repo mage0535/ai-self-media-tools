@@ -97,7 +97,15 @@ def _download_pexels(query: str, key: str, orientation: str = "portrait", exclud
         return None
 
 
-def auto_fetch_backgrounds(script_body: str, title: str, output_dir: Path, platform: str = "") -> list[dict]:
+def auto_fetch_backgrounds(
+    script_body: str,
+    title: str,
+    output_dir: Path,
+    platform: str = "",
+    *,
+    force: bool = False,
+    excluded_hashes: set[str] | None = None,
+) -> list[dict]:
     """自动下载 8 张背景图（Pexels 实景优先，AI 生图兜底），返回 visual_assets assignments"""
     output_dir = Path(output_dir)
     bg_dir = output_dir / "backgrounds"
@@ -105,17 +113,19 @@ def auto_fetch_backgrounds(script_body: str, title: str, output_dir: Path, platf
 
     # 检查是否已有足够背景
     existing = sorted(bg_dir.glob("bg_*.*"))
-    if len(existing) >= 8:
+    if len(existing) >= 8 and not force:
         # 已有 8 张，返回现有
         return [{"background_image": str(p), "rights_cleared": True, "real_scene": True} for p in existing[:8]]
 
     key = _pexels_key()
     queries = _semantic_queries(f"{script_body} {title}", 8)
     assignments = []
-    needed = max(0, 8 - len(existing))
+    base_existing = [] if force else existing
+    needed = max(0, 8 - len(base_existing))
 
     # 优先 Pexels 实景（带 md5 去重，防同图重复）
-    seen_hashes = {hashlib.sha256(path.read_bytes()).hexdigest() for path in existing if path.is_file()}
+    seen_hashes = set(excluded_hashes or set())
+    seen_hashes.update(hashlib.sha256(path.read_bytes()).hexdigest() for path in base_existing if path.is_file())
     seen_ids: set[str] = set()
     if key:
         for q in queries:
@@ -134,7 +144,7 @@ def auto_fetch_backgrounds(script_body: str, title: str, output_dir: Path, platf
                 continue
             seen_hashes.add(h)
             seen_ids.add(photo["asset_id"])
-            i = len(existing) + len(assignments) + 1
+            i = len(base_existing) + len(assignments) + 1
             fp = bg_dir / f"bg_{i:02d}.jpg"
             fp.write_bytes(bytes(content))
             assignments.append({
@@ -155,7 +165,7 @@ def auto_fetch_backgrounds(script_body: str, title: str, output_dir: Path, platf
             attempts = 0
             while len(assignments) < needed and attempts < max(3, needed * 3):
                 attempts += 1
-                i = len(existing) + len(assignments) + 1
+                i = len(base_existing) + len(assignments) + 1
                 query = queries[(i - 1) % len(queries)]
                 prompt = _ai_prompt(query, platform)
                 fp = bg_dir / f"bg_{i:02d}.jpg"

@@ -43,3 +43,23 @@ def test_auto_fetch_counts_existing_files_and_adds_only_missing_unique_assets(tm
     assert {row["asset_id"] for row in result} == {"a", "b"}
     assert (backgrounds / "bg_07.jpg").is_file()
     assert (backgrounds / "bg_08.jpg").is_file()
+
+
+def test_force_fetch_excludes_historical_hashes(tmp_path: Path):
+    from scripts.pexels_auto_bg import auto_fetch_backgrounds
+    import hashlib
+
+    old = b"historical"
+    fresh = [f"fresh-{index}".encode() for index in range(8)]
+    payloads = iter([
+        {"content": old, "source_url": "https://pexels.test/old", "artist": "Old", "artist_url": "", "asset_id": "old"},
+        *[
+            {"content": content, "source_url": f"https://pexels.test/{index}", "artist": "A", "artist_url": "", "asset_id": str(index)}
+            for index, content in enumerate(fresh)
+        ],
+    ])
+    with patch("scripts.pexels_auto_bg._pexels_key", return_value="key"), patch("scripts.pexels_auto_bg._semantic_queries", return_value=[f"q{i}" for i in range(9)]), patch("scripts.pexels_auto_bg._download_pexels", side_effect=lambda *args, **kwargs: next(payloads)):
+        rows = auto_fetch_backgrounds("AI", "Title", tmp_path, "kuaishou", force=True, excluded_hashes={hashlib.sha256(old).hexdigest()})
+
+    assert len(rows) == 8
+    assert all(hashlib.sha256(Path(row["background_image"]).read_bytes()).hexdigest() != hashlib.sha256(old).hexdigest() for row in rows)
