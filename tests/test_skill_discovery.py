@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from content_platform.skill_rule_compiler import discover_relevant_skill_paths
+from content_platform.skill_rule_compiler import select_platform_rules
 
 
 def _skill(root: Path, name: str, description: str) -> Path:
@@ -45,3 +46,15 @@ def test_article_skill_discovery_selects_layout_image_and_seo(tmp_path: Path):
 
     assert article.resolve() in selected
     assert video.resolve() not in selected
+
+
+def test_shared_skill_rules_do_not_leak_other_platform_instructions():
+    rules = [
+        {"id": "shared:1", "source": "skill:content/channel-operations-workflow", "text": "douyin_pet 只允许猫狗治愈内容"},
+        {"id": "shared:2", "source": "skill:content/channel-operations-workflow", "text": "快手发布后检查管理页定时时间"},
+        {"id": "shared:3", "source": "skill:content/channel-operations-workflow", "text": "所有短视频必须有字幕"},
+    ]
+
+    selected = select_platform_rules(rules, "kuaishou")
+
+    assert {row["id"] for row in selected} == {"shared:2", "shared:3"}
