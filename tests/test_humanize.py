@@ -23,6 +23,14 @@ class HumanizeTests(unittest.TestCase):
         self.assertGreater(result["quality_scores"]["clarity"], 0)
         self.assertIn("passed", result["quality_gate"])
 
+    def test_naturalize_copy_preserves_bare_domain(self):
+        result = naturalize_copy(
+            "打开 ai.kuaishou.com 注册账号。然后验证接口。最后保存配置。",
+            {"style": {}, "strategy": {"content_form": "short_video"}},
+        )
+        self.assertIn("ai.kuaishou.com", result["body"])
+        self.assertNotIn("ai.\nkuaishou", result["body"])
+
 
 class BurstinessChineseTests(unittest.TestCase):
     """Chinese text burstiness: should not be depressed by lack of spaces."""

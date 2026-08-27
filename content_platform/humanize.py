@@ -194,7 +194,9 @@ def quality_gate(scores):
 
 
 def _sentence_break(text):
-    return re.sub(r"([。！？.!?])\s*", r"\1\n", str(text))
+    # A full stop is a sentence boundary only before whitespace/end. This
+    # preserves bare domains such as ai.kuaishou.com in scripts and subtitles.
+    return re.sub(r"([。！？!?]|\.(?=\s|$))\s*", r"\1\n", str(text))
 
 
 def naturalize_copy(body, context):
