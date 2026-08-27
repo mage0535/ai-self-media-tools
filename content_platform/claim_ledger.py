@@ -82,6 +82,41 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
     }
 
 
+def compile_verified_claim_ledger(brief: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Merge explicit claims with independently verified source text."""
+    brief = brief if isinstance(brief, dict) else {}
+    rows = [dict(row) for row in (brief.get("claim_ledger") or []) if isinstance(row, dict)]
+    hotspot = brief.get("associated_hotspot") if isinstance(brief.get("associated_hotspot"), dict) else {}
+    source_url = str(hotspot.get("source_url") or "").strip()
+    claim = str(hotspot.get("observed_title") or "").strip()
+    evidence_path = str(hotspot.get("snapshot_path") or "").strip()
+    provenance = str(hotspot.get("provenance_hash") or hotspot.get("source_hash") or "").strip()
+    if (
+        hotspot.get("evidence_verified") is True
+        and source_url.startswith(("https://", "http://"))
+        and claim
+        and evidence_path
+        and len(provenance) >= 32
+    ):
+        rows.append({
+            "claim": claim,
+            "source_url": source_url,
+            "evidence_path": evidence_path,
+            "verified": True,
+            "provenance_hash": provenance,
+            "source_type": str(hotspot.get("evidence_type") or "verified_platform_evidence"),
+        })
+    unique = []
+    seen = set()
+    for row in rows:
+        key = (str(row.get("claim") or ""), str(row.get("source_url") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique
+
+
 def sanitize_unsupported_claims(text: str, findings: list[dict[str, Any]] | None) -> str:
     cleaned = str(text or "")
     unsupported = [str(row.get("text") or "") for row in (findings or []) if isinstance(row, dict) and not row.get("covered")]
