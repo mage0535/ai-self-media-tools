@@ -356,6 +356,8 @@ class Pipeline:
                 self._validate_draft_structure(draft)
                 platform_alignment = self._enforce_target_platform_strategy(draft, job)
                 draft.setdefault("draft_meta", {})["platform_alignment"] = platform_alignment
+                if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
+                    draft["body"] = normalize_feed_paragraphs(draft.get("body") or "")
                 runner.succeeded("validate_content_structure", {"title_present": bool(draft.get("title")), "body_chars": len(str(draft.get("body", ""))), "platform_alignment": platform_alignment}, depends_on=["generate_content"])
                 self._persist_intelligence(job_id, draft.get("draft_meta", {}))
                 text = draft["title"] + "\n" + draft["body"]

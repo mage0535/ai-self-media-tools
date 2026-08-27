@@ -636,6 +636,9 @@ class MediaBridge:
         # article stays long-form; a renderer must never infer narration from
         # the full body again.
         env = os.environ.copy()
+        runtime_root = str(Path(__file__).resolve().parents[1])
+        env["CONTENT_PLATFORM_HOME"] = runtime_root
+        env["PYTHONPATH"] = runtime_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
         env["FILM_QUALITY_PROFILE"] = str(plan.get("quality_profile") or "high")
         env["FILM_MOTION_MODE"] = str(plan.get("motion_mode") or "cinematic")
         env["FILM_ALLOW_DEGRADED"] = "1" if plan.get("allow_degraded") is True else "0"

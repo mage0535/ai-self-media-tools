@@ -438,6 +438,19 @@ class PipelineTests(unittest.TestCase):
         claim_step = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "validate_factual_claims"][-1]
         self.assertEqual(claim_step["status"], "SUCCEEDED")
 
+    def test_short_video_normalizes_spaced_domain_before_factual_and_media_steps(self):
+        job = self.pipeline.create("Domain workflow", ["kuaishou"], {"automated_workflow": True})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Domain workflow",
+            "body": "打开 ai. kuaishou. com。检查来源。确认配置。执行流程。核对结果。保存证据。复查输出。完成记录。",
+            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        self.assertIn("ai.kuaishou.com", current["body"])
+        self.assertNotIn("ai.\nkuaishou", current["body"])
+
     def test_scheduled_contract_requires_content_depth_before_media(self):
         from content_platform.run_contract import build_run_contract
 
