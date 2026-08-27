@@ -39,6 +39,7 @@ def _matches(capability: dict[str, Any], profile: dict[str, Any]) -> bool:
         "horizontal_video": "long_video",
         "video": "long_video",
         "long_article": "article",
+        "short_post": "article",
         "image_text_note": "carousel",
     }
     return aliases.get(raw_format, raw_format) in applies
@@ -59,6 +60,7 @@ def match_capabilities(
         "vertical_video": "short_video", "short": "short_video", "reel": "short_video",
         "horizontal_video": "long_video", "video": "long_video",
         "long_article": "article", "image_text_note": "carousel",
+        "short_post": "article",
     }.get(raw_format, raw_format)
     applicable_groups = [
         group for group in registry.get("groups", [])

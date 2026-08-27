@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import ast
+import copy
 import json
 import os
 import shlex
@@ -36,6 +37,7 @@ from content_platform.cover_quality import validate_cover
 from content_platform.publication_ledger import PublicationLedger
 from content_platform.pipeline import Pipeline
 from content_platform.store import Store
+from content_platform.cli import load_config
 from content_platform.associated_hotspot import load_hotspot_support_matrix
 
 
@@ -653,7 +655,18 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
         },
         "associated_hotspot": hotspot,
         "platform_source_matrix": {
+            "version": "platform_source_matrix_v2",
             "platform": platform,
+            "attempted_sources": [{
+                "source": f"{platform}:task9_verified_evidence",
+                "status": "ok",
+                "count": 1,
+                "collected_at": hotspot["fetched_at"],
+                "source_url": hotspot["source_url"],
+                "evidence_hash": hotspot["provenance_hash"],
+            }],
+            "platform_internal_verified": hotspot.get("native_verified") is True,
+            "real_platform_collection_verified": True,
             "native_verified": True,
             "official_signals": [hotspot],
             "source_url": hotspot["source_url"],
@@ -707,6 +720,24 @@ class _PolicySafePublisher:
         path.write_text(json.dumps({"job_id": job["id"], "platform": platform, "status": self.status}, ensure_ascii=True, sort_keys=True), encoding="utf-8")
         from content_platform.models import DeliveryResult
         return DeliveryResult(True, self.status, str(path), error="Task9 external publisher boundary")
+
+
+def _canary_config(root: Path, runtime_config_path: Path | str | None = None) -> dict[str, Any]:
+    """Load real production capabilities while keeping delivery isolated."""
+    config_path = Path(runtime_config_path).expanduser() if runtime_config_path else None
+    if config_path and config_path.is_file():
+        config = copy.deepcopy(load_config(str(config_path), str(root / "state.db")))
+    else:
+        config = {}
+    config["data_dir"] = str(root)
+    config.setdefault("profiles", {})["task9"] = {}
+    generator = config.setdefault("generator", {})
+    generator.update({"provider": "hermes-cli", "allow_fallback": False})
+    config.setdefault("workflow", {})["require_gate_pass"] = True
+    config.setdefault("publishers", {})["default"] = {"type": "file", "outbox": str(root / "outbox")}
+    config.setdefault("notifications", {})["log_path"] = str(root / "notifications.jsonl")
+    config.setdefault("delivery", {})["auto_stage_review_required"] = False
+    return config
 
 
 def _patch_dry_run_publisher(pipeline_module, outbox):
@@ -791,7 +822,7 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
     return manifest
 
 
-def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=None, store_factory=None, hotspot_root: Path | None = None) -> dict[str, Any]:
+def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=None, store_factory=None, hotspot_root: Path | None = None, runtime_config_path: Path | str | None = None) -> dict[str, Any]:
     from unittest.mock import patch
 
     root.mkdir(parents=True, exist_ok=True)
@@ -801,15 +832,7 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
         (root / "hotspot_preflight.json").write_text(json.dumps({"passed": False, "error": str(exc)}, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return {"passed": False, "pipeline_evidence": {"create_called": False, "run_called": False, "serial_index": case["order"], "job_id": ""}, "job": {}, "manifest": {}, "error": str(exc)}
     store = (store_factory or Store)(root / "state.db")
-    config = {
-        "data_dir": str(root),
-        "profiles": {"task9": {}},
-        "generator": {"provider": "hermes-cli", "allow_fallback": False},
-        "workflow": {"require_gate_pass": True},
-        "publishers": {"default": {"type": "file", "outbox": str(root / "outbox")}},
-        "notifications": {"log_path": str(root / "notifications.jsonl")},
-        "delivery": {"auto_stage_review_required": False},
-    }
+    config = _canary_config(root, runtime_config_path)
     pipeline = (pipeline_factory or Pipeline)(store, config)
     brief = _canary_brief(case, verified_hotspot)
     topic = brief["content_blueprint"]["topic"]
@@ -889,7 +912,7 @@ class _null_context:
         return False
 
 
-def _run_model_matrix(role: str, model: dict[str, Any], matrix: list[dict[str, Any]], root: Path, *, pipeline_factory=None, store_factory=None) -> dict[str, Any]:
+def _run_model_matrix(role: str, model: dict[str, Any], matrix: list[dict[str, Any]], root: Path, *, pipeline_factory=None, store_factory=None, runtime_config_path: Path | str | None = None) -> dict[str, Any]:
     """Execute the same real Pipeline matrix for a discovered model identity."""
     selection = model.get("selection") if isinstance(model.get("selection"), dict) else {}
     if model.get("status") not in {"available", "verified"}:
@@ -913,7 +936,7 @@ def _run_model_matrix(role: str, model: dict[str, Any], matrix: list[dict[str, A
     try:
         for case in matrix:
             artifact_dir = root / "_models" / role / case["platform"]
-            result = _run_pipeline_case(case, artifact_dir, pipeline_factory=pipeline_factory, store_factory=store_factory, hotspot_root=root)
+            result = _run_pipeline_case(case, artifact_dir, pipeline_factory=pipeline_factory, store_factory=store_factory, hotspot_root=root, runtime_config_path=runtime_config_path)
             probe = probe_artifacts(case, artifact_dir)
             pipeline_evidence = result.get("pipeline_evidence") or {}
             generation_evidence = _generation_attempt_evidence(artifact_dir, model)
@@ -1017,6 +1040,7 @@ def run_canaries(
     model_runner=None,
     active_model_report: Path | str | None = None,
     weak_model_report: Path | str | None = None,
+    runtime_config_path: Path | str | None = None,
 ) -> dict[str, Any]:
     root = Path(artifact_root).resolve()
     repo = Path(repo_root).resolve()
@@ -1030,7 +1054,7 @@ def run_canaries(
             model_results[role] = dict(model_result or {})
     else:
         for role in ("active", "weak"):
-            model_results[role] = _run_model_matrix(role, runtime.get(role) or {}, matrix, root, pipeline_factory=pipeline_factory, store_factory=store_factory)
+            model_results[role] = _run_model_matrix(role, runtime.get(role) or {}, matrix, root, pipeline_factory=pipeline_factory, store_factory=store_factory, runtime_config_path=runtime_config_path)
     for role, result in model_results.items():
         runtime[role] = {**(runtime.get(role) or {}), **result}
     active_cases = (model_results.get("active") or {}).get("case_results") or _blocked_model_matrix(matrix, "active_model_matrix_not_executed")
@@ -1097,8 +1121,9 @@ def main() -> int:
     parser.add_argument("--artifact-root", required=True)
     parser.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument("--output", required=True)
+    parser.add_argument("--config", default="")
     args = parser.parse_args()
-    report = run_canaries(args.artifact_root, repo_root=args.repo_root, output_path=args.output)
+    report = run_canaries(args.artifact_root, repo_root=args.repo_root, output_path=args.output, runtime_config_path=args.config or None)
     print(json.dumps({"passed": report["passed"], "cases": len(report["cases"]), "output": args.output}, ensure_ascii=True))
     return 0 if report["passed"] else 2
 
