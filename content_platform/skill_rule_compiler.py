@@ -206,14 +206,14 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
     return result
 
 
-def default_skill_paths(platform: str, *, root: str | Path) -> list[Path]:
+def default_skill_paths(platform: str, *, root: str | Path, hermes_skills_root: str | Path | None = None) -> list[Path]:
     root = Path(root)
     names = required_workflow_skills(platform)
     paths = [root / "skills" / name / "SKILL.md" for name in names]
-    hermes_root = _hermes_root(root)
-    paths.extend(hermes_root / "skills" / name / "SKILL.md" for name in names)
+    runtime_skills = Path(hermes_skills_root) if hermes_skills_root else _hermes_root(root) / "skills"
+    paths.extend(runtime_skills / name / "SKILL.md" for name in names)
     paths.extend(
-        hermes_root / "skills" / name.removeprefix("content/") / "SKILL.md"
+        runtime_skills / name.removeprefix("content/") / "SKILL.md"
         for name in names
         if name.startswith("content/")
     )
@@ -230,8 +230,9 @@ def discover_relevant_skill_paths(
 ) -> tuple[list[Path], dict]:
     """Discover every installed skill, then select the content-relevant subset."""
     root = Path(root)
-    required = default_skill_paths(platform, root=root)
-    roots = [root / "skills", Path(hermes_root) if hermes_root else _hermes_root(root) / "skills"]
+    runtime_skills = Path(hermes_root) if hermes_root else _hermes_root(root) / "skills"
+    required = default_skill_paths(platform, root=root, hermes_skills_root=runtime_skills)
+    roots = [root / "skills", runtime_skills]
     discovered = []
     for skill_root in roots:
         if not skill_root.is_dir():
