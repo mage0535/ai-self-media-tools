@@ -291,6 +291,24 @@ def test_scene_manifest_requires_real_assets_and_observed_per_scene_evidence(tmp
     assert "scene_observation_missing:s02" in result["failures"]
 
 
+def test_scene_manifest_accepts_zero_static_ratio_as_strong_motion(tmp_path):
+    from content_platform.adapters.media import validate_scene_manifest_contract
+
+    asset = tmp_path / "scene.png"
+    checksum = _write_image(asset, (10, 20, 30))
+    scene = {
+        "scene_id": "s01", "purpose": "show proof", "shot_language": "push_in",
+        "subject_motion": "activate", "text_motion": "stagger", "transition": "cut",
+        "rhythm": {"duration_seconds": 2}, "interaction_cue": "continue",
+        "asset": {"path": str(asset), "sha256": checksum, "source_url": "https://source.test/1", "license": "CC BY"},
+    }
+    manifest = {"version": "scene_manifest_v2", "timeline": ["s01"], "scenes": [scene]}
+
+    result = validate_scene_manifest_contract(manifest, observed={"s01": {"frame_difference": 0.03, "static_ratio": 0.0}})
+
+    assert result["passed"] is True
+
+
 def test_bgm_contract_is_online_real_instrument_and_7_day_unique():
     from content_platform.adapters.media import validate_bgm_contract
 
