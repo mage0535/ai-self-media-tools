@@ -39,6 +39,7 @@ from content_platform.pipeline import Pipeline
 from content_platform.store import Store
 from content_platform.cli import load_config
 from content_platform.associated_hotspot import load_hotspot_support_matrix
+from content_platform.run_contract import build_run_contract
 
 
 CANARY_PLATFORMS = (
@@ -681,6 +682,7 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
         }],
         "selection_mode": "official_native_canary",
         "automated_workflow": True,
+        "run_contract": build_run_contract(platform),
         "delivery_policy": case["delivery_policy"],
         "claim_ledger": [],
         "content_depth_plan": {

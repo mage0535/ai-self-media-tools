@@ -170,6 +170,24 @@ def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Pat
     assert "hotspot" in result["error"]
 
 
+def test_canary_brief_uses_the_same_strict_run_contract_as_production():
+    from scripts.task9_canary import _canary_brief, build_canary_matrix
+
+    case = next(row for row in build_canary_matrix() if row["platform"] == "kuaishou")
+    hotspot = {
+        "observed_title": "Verified Kuaishou topic",
+        "fetched_at": "2026-08-27T00:00:00+00:00",
+        "source_url": "https://cp.kuaishou.com/profile",
+        "provenance_hash": "a" * 64,
+        "native_verified": True,
+    }
+    brief = _canary_brief(case, hotspot)
+
+    assert brief["automated_workflow"] is True
+    assert brief["run_contract"]["version"] == "run_contract_v1"
+    assert brief["run_contract"]["platform"] == "kuaishou"
+
+
 def test_canary_pipeline_config_registers_task9_profile(tmp_path: Path):
     from scripts.task9_canary import _hotspot_source_hash, _run_pipeline_case
     from content_platform.profiles import resolve_profile
