@@ -55,7 +55,7 @@ REQUIRED_SKILLS_BY_CHANNEL = {
     "douyin": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | {"douyin-repost-workflow"},
     "douyin_ai": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | _AI_RESEARCH_SKILLS | {"douyin-daily-analysis-workflow"},
     "douyin_pet": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | {"douyin-repost-workflow"},
-    "shipinhao": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS | {"content/kuaishou-content-publishing"},
+    "shipinhao": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS,
     "bilibili": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | _VIDEO_SKILLS,
     "xiaohongshu": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/xiaohongshu-content-enhancer"},
     "rednote": _PREFLIGHT_BASE_SKILLS | _WORKFLOW_BASE_SKILLS | _KNOWLEDGE_CARD_SKILL | {"content/xiaohongshu-content-enhancer"},

@@ -49,7 +49,7 @@ class MediaBridge:
         return provider.run(target)
 
     def generate(self, kind, job):
-        if kind not in {"image", "video", "audio", "illustration", "logo", "wechat_format", "magazine_format"}:
+        if kind not in {"image", "cover", "video", "audio", "illustration", "logo", "wechat_format", "magazine_format"}:
             raise ValueError(f"unsupported media kind: {kind}")
         if kind == "illustration":
             return self._generate_illustration(job)
@@ -94,11 +94,39 @@ class MediaBridge:
             self._visual_route = job["visual_route"]
         output_dir = self.data_dir / "artifacts" / job["id"]
         output_dir.mkdir(parents=True, exist_ok=True)
+        if kind == "cover":
+            return self._generate_cover(job, output_dir)
         if kind == "audio":
             return self._generate_audio(job, output_dir, cfg)
         if kind == "image":
             return self._generate_image(job, output_dir, cfg)
         return self._generate_video(job, output_dir)
+
+    def _generate_cover(self, job, output_dir):
+        for pattern in ("cover.png", "cover.jpg", "cover.jpeg", "cover.webp"):
+            candidate = output_dir / pattern
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return {
+                    "kind": "cover",
+                    "path": str(candidate),
+                    "checksum": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                    "source": "existing_verified_image_artifact",
+                }
+        image_cfg = dict(self.config.get("image", {}))
+        if not image_cfg.get("enabled", False):
+            raise FileNotFoundError("cover is missing and image generation is not configured")
+        image_cfg["min_count"] = 1
+        artifact = self._generate_image(job, output_dir, image_cfg)
+        rows = [item for item in artifact.get("images", []) if str(item.get("role") or "").casefold() == "cover"]
+        if not rows:
+            raise RuntimeError("image provider produced no cover artifact")
+        cover = rows[0]
+        return {
+            "kind": "cover",
+            "path": str(cover["path"]),
+            "checksum": str(cover.get("checksum") or hashlib.sha256(Path(cover["path"]).read_bytes()).hexdigest()),
+            "source": "adaptive_image_pipeline",
+        }
 
     def _generate_logo(self, job):
         """使用归藏 logo-generator 为品牌/产品生成 SVG Logo 变体。"""

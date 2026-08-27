@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
         ("tiktok", "skill:content/intl-short-video-pipeline"),
         ("youtube", "skill:content/intl-short-video-pipeline"),
         ("bilibili", "skill:content/channel-operations-workflow"),
-        ("shipinhao", "skill:content/kuaishou-content-publishing"),
+        ("shipinhao", "skill:content/content-voice-engine"),
         ("xiaohongshu", "skill:content/xiaohongshu-content-enhancer"),
         ("rednote", "skill:content/xiaohongshu-content-enhancer"),
         ("wechat", "skill:wechat-pipeline-v2"),

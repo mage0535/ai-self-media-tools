@@ -87,6 +87,8 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
             compatible.update({"x", "twitter"})
         if active in {"wechat", "weixin", "wechat_official"}:
             compatible.add("wechat")
+        if active in {"xiaohongshu", "rednote"}:
+            compatible.update({"xiaohongshu", "rednote"})
         if text_platforms and not text_platforms.intersection(compatible):
             continue
         text_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
