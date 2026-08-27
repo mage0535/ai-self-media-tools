@@ -59,9 +59,9 @@ SUBTITLE_MAX_CHARS_PER_LINE = 16
 SUBTITLE_MAX_LINES = 2
 REAL_BGM_MIN_BYTES = 500_000
 ONLINE_BGM_TIMEOUT = 20
-DEFAULT_BGM_RESOLUTION_MAX_SECONDS = 90
-DEFAULT_BGM_CANDIDATE_MAX_SECONDS = 18
-DEFAULT_BGM_PROVIDER_MAX_SECONDS = 8
+DEFAULT_BGM_RESOLUTION_MAX_SECONDS = 240
+DEFAULT_BGM_CANDIDATE_MAX_SECONDS = 45
+DEFAULT_BGM_PROVIDER_MAX_SECONDS = 12
 TTS_MAX_ATTEMPTS = 4
 _ACTIVE_BGM_DEADLINE = None
 _ACTIVE_BGM_CANDIDATE_DEADLINE = None
@@ -1032,9 +1032,18 @@ def _register_bgm_fingerprint(meta):
 
 def _bgm_queries(style):
     base = re.sub(r"\s+", " ", str(style or "acoustic guitar").strip())
-    # A proven broad real-instrument search prevents a narrow mood phrase from
-    # exhausting the resolver before any licensed track can be downloaded.
-    queries = ["acoustic guitar instrumental", "piano instrumental", base]
+    lowered = base.casefold()
+    # Search the requested instrument first. Broad fallbacks come later so a
+    # piano score does not waste the download budget on unrelated guitar rows.
+    queries = [base + " music instrumental"]
+    if "piano" in lowered or "keyboard" in lowered:
+        queries.extend(["piano music instrumental", "jazz piano music"])
+    elif "guitar" in lowered:
+        queries.extend(["acoustic guitar music instrumental", "folk guitar music"])
+    elif any(term in lowered for term in {"violin", "cello", "strings", "orchestral"}):
+        queries.extend(["orchestral strings music", "classical instrumental music"])
+    else:
+        queries.extend(["piano music instrumental", "acoustic guitar music instrumental"])
     if not any(term in base.casefold() for term in REAL_INSTRUMENT_TERMS):
         queries.append(base + " acoustic instrumental")
     queries.extend(["orchestral strings instrumental"])
