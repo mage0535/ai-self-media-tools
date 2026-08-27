@@ -483,6 +483,15 @@ class Pipeline:
                 generated_kinds = set(generated_media_kinds_for_job(self.store.get_job(job_id), self.config))
                 generated_kinds.discard("image")
                 for kind in generated_kinds:
+                    if kind == "cover" and any(item.get("kind") == "cover" for item in self.store.artifacts(job_id)):
+                        runner.skipped(
+                            "generate_cover",
+                            "cover_already_generated_by_image_pipeline",
+                            "adaptive cover was generated and verified with the image asset set",
+                            required=False,
+                            depends_on=["validate_image_requirements"],
+                        )
+                        continue
                     artifact = self._generate_optional_media(job_id, kind, runner, ["validate_image_requirements"])
                     if kind == "video" and artifact:
                         self._attach_video_render_evidence(draft, artifact)
@@ -1130,7 +1139,8 @@ class Pipeline:
             return artifact
         if kind == "image" and artifact.get("images"):
             for item in artifact.get("images", []):
-                self.store.add_artifact(job_id, item.get("kind") or "image", item.get("path", ""), item.get("checksum", ""))
+                artifact_kind = "cover" if str(item.get("role") or "").casefold() == "cover" else item.get("kind") or "image"
+                self.store.add_artifact(job_id, artifact_kind, item.get("path", ""), item.get("checksum", ""))
             mapping_path = Path(artifact["path"]).parent / "section_image_map.json"
             if mapping_path.is_file():
                 self.store.add_artifact(job_id, "section_image_map", mapping_path, "")
@@ -1159,7 +1169,8 @@ class Pipeline:
         image_cfg = self.config.get("media", {}).get("image", {})
         job = self.store.get_job(job_id)
         required = self._media_required("image", image_cfg, job)
-        artifacts = [item for item in self.store.artifacts(job_id) if item.get("kind") == "image"]
+        artifacts = [item for item in self.store.artifacts(job_id) if item.get("kind") in {"image", "cover"}]
+        cover_artifacts = [item for item in artifacts if item.get("kind") == "cover"]
         if not required and not image_cfg.get("enabled", False):
             runner.skipped("validate_image_requirements", "image_not_required", "current config does not require images", required=False, depends_on=["generate_or_collect_images"])
             return
@@ -1173,10 +1184,11 @@ class Pipeline:
             else:
                 failures.append(str(path))
         gate = {
-            "passed": len(verified) >= minimum and not failures,
+            "passed": len(verified) >= minimum and not failures and (not required or bool(cover_artifacts)),
             "checks": [
                 {"rule_id": "image.required_count", "required": required, "passed": len(verified) >= minimum, "actual": len(verified), "expected_min": minimum, "blocking": required},
                 {"rule_id": "image.file_readable", "required": required, "passed": not failures, "failed_paths": failures, "blocking": required},
+                {"rule_id": "image.cover_present", "required": required, "passed": bool(cover_artifacts), "actual": len(cover_artifacts), "blocking": required},
             ],
         }
         if required and not gate["passed"]:
