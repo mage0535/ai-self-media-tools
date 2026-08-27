@@ -7,7 +7,7 @@ from pathlib import Path
 from .capability_router import build_capability_plan
 from .content_profile import classify_content_profile
 from .tool_selection import build_tool_selection_evidence
-from .skill_rule_compiler import compile_skill_rules, default_skill_paths, select_platform_rules
+from .skill_rule_compiler import compile_skill_rules, discover_relevant_skill_paths, select_platform_rules
 from .content_assets import load_compiled_assets, select_content_asset_ids
 
 
@@ -20,7 +20,9 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
     )
     full_plan = build_capability_plan(profile)
     project_root = Path(__file__).resolve().parents[1]
-    compiled_skill_rules = compile_skill_rules(default_skill_paths(platform, root=project_root), root=project_root, platform=platform)
+    skill_paths, skill_discovery = discover_relevant_skill_paths(platform, profile, root=project_root)
+    compiled_skill_rules = compile_skill_rules(skill_paths, root=project_root, platform=platform)
+    compiled_skill_rules["skill_discovery"] = skill_discovery
     # Keep full provenance local while fitting bounded provider input.
     compiled_skill_rules["sources"] = [
         {"id": source["id"], "sha256": source["sha256"]}

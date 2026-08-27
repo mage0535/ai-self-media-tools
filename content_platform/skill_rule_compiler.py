@@ -218,3 +218,70 @@ def default_skill_paths(platform: str, *, root: str | Path) -> list[Path]:
         if name.startswith("content/")
     )
     return list(dict.fromkeys(path for path in paths if path.is_file()))
+
+
+def discover_relevant_skill_paths(
+    platform: str,
+    profile: dict,
+    *,
+    root: str | Path,
+    hermes_root: str | Path | None = None,
+    limit: int = 48,
+) -> tuple[list[Path], dict]:
+    """Discover every installed skill, then select the content-relevant subset."""
+    root = Path(root)
+    required = default_skill_paths(platform, root=root)
+    roots = [root / "skills", Path(hermes_root) if hermes_root else _hermes_root(root) / "skills"]
+    discovered = []
+    for skill_root in roots:
+        if not skill_root.is_dir():
+            continue
+        discovered.extend(path for path in skill_root.rglob("SKILL.md") if path.is_file())
+    discovered = list(dict.fromkeys(path.resolve() for path in discovered))
+    candidates = [
+        path for path in discovered
+        if not _blocked_skill(path.as_posix()) and not any(part.casefold() in {".git", "cache"} for part in path.parts)
+    ]
+    raw_format = str(profile.get("content_format") or "").casefold()
+    video = "video" in raw_format or raw_format in {"short", "reel"}
+    article = raw_format in {"article", "long_article", "carousel", "image_text_note", "short_post"}
+    keywords = {
+        str(platform).casefold(), str(profile.get("content_domain") or "").casefold(),
+        str(profile.get("visual_treatment") or "").casefold(),
+        "content", "strategy", "copywriting", "hook", "visual", "cover",
+    }
+    if video:
+        keywords.update({"video", "voice", "tts", "subtitle", "motion", "cinema", "shot", "bgm", "template", "theme"})
+    if article:
+        keywords.update({"article", "image", "card", "carousel", "layout", "seo", "notebook", "poster"})
+    required_set = {path.resolve() for path in required}
+    scored = []
+    for path in candidates:
+        try:
+            head = path.read_text(encoding="utf-8", errors="replace")[:4096].casefold()
+        except OSError:
+            continue
+        searchable = path.parent.name.casefold() + "\n" + head
+        matched = sorted(
+            word for word in keywords
+            if word and (re.search(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", searchable) if word.isascii() else word in searchable)
+        )
+        score = 100 if path in required_set else len(matched)
+        if score:
+            scored.append((score, path, matched))
+    scored.sort(key=lambda row: (-row[0], row[1].as_posix()))
+    selected = list(dict.fromkeys([*required, *(row[1] for row in scored)]))[: max(len(required), int(limit))]
+    selected_set = {path.resolve() for path in selected}
+    return selected, {
+        "version": "skill_discovery_v1",
+        "discovered_count": len(discovered),
+        "blocked_count": len(discovered) - len(candidates),
+        "considered_count": len(candidates),
+        "selected_count": len(selected),
+        "selected": [path.parent.name for path in selected],
+        "selection_reasons": {
+            path.parent.name: ("required_platform_skill" if path.resolve() in required_set else "matched:" + ",".join(matched[:8]))
+            for _score, path, matched in scored if path.resolve() in selected_set
+        },
+        "excluded_count": max(0, len(candidates) - len(selected_set)),
+    }
