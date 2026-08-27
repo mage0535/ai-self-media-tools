@@ -40,6 +40,7 @@ from content_platform.store import Store
 from content_platform.cli import load_config
 from content_platform.associated_hotspot import load_hotspot_support_matrix
 from content_platform.run_contract import build_run_contract
+from content_platform.content_depth import build_content_depth_plan
 
 
 CANARY_PLATFORMS = (
@@ -685,12 +686,13 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
         "run_contract": build_run_contract(platform),
         "delivery_policy": case["delivery_policy"],
         "claim_ledger": [],
-        "content_depth_plan": {
-            "evidence": ["official_native_canary"],
-            "knowledge": ["pipeline execution"],
-            "actions": ["inspect generated artifact"],
-            "series": {"series_id": "task9", "episode": 1},
-        },
+        "content_depth_plan": build_content_depth_plan(
+            title,
+            "Verify the platform source. Explain the workflow. Inspect the generated artifact.",
+            evidence=[hotspot["source_url"]],
+            actions=["verify the platform source", "explain the workflow", "inspect the generated artifact"],
+            platform=platform,
+        ),
     }
 
 
@@ -846,6 +848,16 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
         evidence["job_id"] = job_id
         result = pipeline.run(job_id)
         evidence["run_called"] = True
+        state = str((result or {}).get("state") or "")
+        if state in {"blocked", "failed", "rejected"}:
+            manifest = _materialize_artifact_manifest(case, store, result, root, verified_hotspot)
+            return {
+                "passed": False,
+                "pipeline_evidence": evidence,
+                "job": result,
+                "manifest": manifest,
+                "error": f"pipeline ended in terminal state: {state}",
+            }
         if case.get("dry_run") or case["delivery_policy"] in {"draft_first", "manual_handoff_only", "dry_run"}:
             expected_status = (
                 "dry_run"

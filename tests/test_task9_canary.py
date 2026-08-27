@@ -186,6 +186,48 @@ def test_canary_brief_uses_the_same_strict_run_contract_as_production():
     assert brief["automated_workflow"] is True
     assert brief["run_contract"]["version"] == "run_contract_v1"
     assert brief["run_contract"]["platform"] == "kuaishou"
+    assert brief["content_depth_plan"]["version"] == "content_depth_plan_v1"
+    assert len(brief["content_depth_plan"]["knowledge_points"]) >= 3
+
+
+def test_canary_does_not_stage_a_pipeline_blocked_job(tmp_path: Path):
+    from scripts.task9_canary import _hotspot_source_hash, _run_pipeline_case
+
+    snapshot = _write(tmp_path / "_inputs" / "hotspots" / "kuaishou.txt", "AI workflow")
+    snapshot_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    provenance = _hotspot_source_hash(
+        "kuaishou", "https://www.kuaishou.com/hot", "AI workflow",
+        fetched_at="2026-08-26T00:00:00Z", status=200,
+        snapshot_path="hotspots/kuaishou.txt", snapshot_sha256=snapshot_hash,
+    )
+    _write(tmp_path / "_inputs" / "hotspots" / "kuaishou.json", json.dumps({
+        "platform": "kuaishou", "source_url": "https://www.kuaishou.com/hot",
+        "observed_title": "AI workflow", "fetched_at": "2026-08-26T00:00:00Z", "status": 200,
+        "snapshot_path": "hotspots/kuaishou.txt", "snapshot_sha256": snapshot_hash,
+        "provenance_hash": provenance, "evidence_type": "native", "native_verified": True,
+        "association_mode": "auto_browser", "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
+    }))
+
+    class BlockedPipeline:
+        def __init__(self, store, config): self.store = store
+        def create(self, *args, **kwargs): return {"id": "blocked-job"}
+        def run(self, job_id): return {"id": job_id, "state": "blocked", "artifacts": [], "deliveries": [], "draft_meta": {}}
+        def stage_drafts(self, job_id): raise AssertionError("blocked job must not be staged")
+
+    class StoreBoundary:
+        def __init__(self, path): self.path = Path(path)
+        def artifacts(self, job_id): return []
+        def deliveries(self, job_id): return []
+        def events(self, job_id): return []
+
+    result = _run_pipeline_case(
+        {"platform": "kuaishou", "content_form": "vertical_video", "language": "zh", "delivery_policy": "dry_run", "dry_run": True, "order": 1},
+        tmp_path / "case", hotspot_root=tmp_path, pipeline_factory=BlockedPipeline, store_factory=StoreBoundary,
+    )
+
+    assert result["passed"] is False
+    assert result["pipeline_evidence"]["stage_drafts_called"] is False
+    assert result["error"] == "pipeline ended in terminal state: blocked"
 
 
 def test_canary_pipeline_config_registers_task9_profile(tmp_path: Path):
