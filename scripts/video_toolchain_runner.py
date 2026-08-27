@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             from pexels_auto_bg import auto_fetch_backgrounds, write_auto_assets
             auto_assets = auto_fetch_backgrounds(script_body or title, title or "", output_dir, _primary_platform(plan))
             if auto_assets:
-                materialized_backgrounds = auto_assets
+                materialized_backgrounds = _merge_materialized_backgrounds(materialized_backgrounds, auto_assets)
         except Exception:
             # 静默失败，不阻断渲染
             pass
@@ -821,6 +821,35 @@ def _asset_provenance_records(materialized: list[dict]) -> list[dict]:
         for index, item in enumerate(materialized, 1)
         if item.get("path")
     ]
+
+
+def _merge_materialized_backgrounds(existing: list[dict], additions: list[dict]) -> list[dict]:
+    """Preserve rich input provenance while normalizing fallback asset rows."""
+    merged = list(existing)
+    seen_paths = {str(Path(str(item.get("path") or "")).resolve()) for item in merged if item.get("path")}
+    for index, item in enumerate(additions, len(merged) + 1):
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or item.get("background_image") or "")
+        if not path or not Path(path).is_file():
+            continue
+        resolved = str(Path(path).resolve())
+        if resolved in seen_paths:
+            continue
+        seen_paths.add(resolved)
+        query = str(item.get("source_query") or "topic-matched background")
+        merged.append({
+            **item,
+            "scene": item.get("scene") or index,
+            "path": path,
+            "source_url": str(item.get("source_url") or ""),
+            "license": str(item.get("license") or ""),
+            "semantic_match_score": float(item.get("semantic_match_score") or 0),
+            "match_reason": str(item.get("match_reason") or f"visual search matched: {query}"),
+            "semantic_tags": list(item.get("semantic_tags") or [query]),
+            "generation_evidence": dict(item.get("generation_evidence") or {}),
+        })
+    return merged[:8]
 
 
 def _renderer_path(plan: dict) -> Path:
