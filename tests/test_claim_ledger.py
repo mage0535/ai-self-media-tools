@@ -51,6 +51,11 @@ def test_claim_gate_rejects_approximate_counts_half_hours_and_friend_anecdotes()
     assert "unsourced_promotional_claim" in result["failures"]
 
 
+def test_claim_gate_allows_non_quantitative_single_item_instructions() -> None:
+    result = validate_claims("注册一个账号。选择一个入口。逐个检查接口。", [])
+    assert result["passed"] is True
+
+
 def test_claim_sanitizer_removes_only_unsupported_sentences() -> None:
     text = "This checklist is practical. Success rose 99% in 8 months. Verify the owner before acting."
     gate = validate_claims(text, [])

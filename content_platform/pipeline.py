@@ -382,13 +382,40 @@ class Pipeline:
                         claim_gate = cleaned_gate
                         draft["draft_meta"]["claim_gate"] = claim_gate
                     else:
-                        runner.block(
-                            "validate_factual_claims",
-                            "factual_claim_evidence_missing",
-                            "numeric or first-person operational claims require verifiable evidence",
-                            claim_gate,
-                            depends_on=["validate_content_structure"],
-                        )
+                        repair_brief = json.loads(json.dumps(brief, ensure_ascii=False))
+                        repair_brief["factual_repair"] = {
+                            "failures": list(claim_gate.get("failures") or []),
+                            "unsupported_claims": [
+                                str(row.get("text") or "")
+                                for row in claim_gate.get("findings") or []
+                                if isinstance(row, dict) and not row.get("covered")
+                            ],
+                        }
+                        repaired = self.generator.generate(job.get("topic") or draft["title"], repair_brief)
+                        self._validate_draft_structure(repaired)
+                        repaired_title = str(repaired.get("title") or "").strip()
+                        repaired_body = str(repaired.get("body") or "").strip()
+                        repaired_gate = validate_claims(repaired_title + "\n" + repaired_body, claim_ledger)
+                        if len(repaired_body) >= 80 and repaired_gate.get("passed"):
+                            draft["title"] = repaired_title
+                            draft["body"] = repaired_body
+                            text = repaired_title + "\n" + repaired_body
+                            draft["draft_meta"]["factual_repair"] = {
+                                "version": "single_bounded_factual_repair_v1",
+                                "attempted": True,
+                                "passed": True,
+                                "original_gate": claim_gate,
+                            }
+                            claim_gate = repaired_gate
+                            draft["draft_meta"]["claim_gate"] = claim_gate
+                        else:
+                            runner.block(
+                                "validate_factual_claims",
+                                "factual_claim_evidence_missing",
+                                "numeric or first-person operational claims require verifiable evidence",
+                                {"initial": claim_gate, "repair": repaired_gate},
+                                depends_on=["validate_content_structure"],
+                            )
                 runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"], message="legacy review-only claim findings" if not claim_gate.get("passed") else "")
                 if (job.get("brief") or {}).get("run_contract"):
                     model_depth_plan = (draft.get("draft_meta") or {}).get("content_depth_plan")

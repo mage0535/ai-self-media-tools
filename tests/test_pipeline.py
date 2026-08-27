@@ -403,6 +403,41 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(claim_step["status"], "BLOCKED")
         media.assert_not_called()
 
+    def test_automated_workflow_repairs_unsupported_claims_once_before_media(self):
+        from content_platform.content_depth import build_content_depth_plan
+        from content_platform.run_contract import build_run_contract
+
+        safe_body = (
+            "为什么工具越多流程越乱？先把目标写清楚再选择能力。\n"
+            "先列出当前任务，并确认真正需要处理的输入。\n"
+            "再确认输入来源，避免把未经核对的信息带进流程。\n"
+            "选择对应能力，并明确每项工具应该产生什么结果。\n"
+            "核对输出，保留来源，检查结果，最后记录下一步。\n"
+            "如果任一环节缺少证据，就返回该环节修正后重新验证。"
+        )
+        brief = {
+            "automated_workflow": True,
+            "run_contract": build_run_contract("kuaishou"),
+            "content_depth_plan": build_content_depth_plan(
+                "工具流程", safe_body,
+                evidence=["https://example.test/source"],
+                actions=["列出任务", "确认输入", "核对输出"], platform="kuaishou",
+            ),
+        }
+        job = self.pipeline.create("工具流程", ["kuaishou"], brief)
+        drafts = [
+            {"title": "十分钟搞定", "body": "我实测十分钟省下一半成本。" * 12, "draft_meta": {"claim_ledger": []}},
+            {"title": "工具流程", "body": safe_body, "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}}},
+        ]
+        with patch.object(self.pipeline.generator, "generate", side_effect=drafts) as generate, patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        self.assertEqual(generate.call_count, 2)
+        repair_brief = generate.call_args_list[1].args[1]
+        self.assertIn("factual_repair", repair_brief)
+        claim_step = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "validate_factual_claims"][-1]
+        self.assertEqual(claim_step["status"], "SUCCEEDED")
+
     def test_scheduled_contract_requires_content_depth_before_media(self):
         from content_platform.run_contract import build_run_contract
 
