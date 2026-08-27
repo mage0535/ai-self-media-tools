@@ -914,10 +914,14 @@ class DraftGenerator:
             else "Write in Simplified Chinese for this Chinese-language channel."
         )
         body_requirement, style_limit = self._generation_requirements(context)
-        editorial_facts_only = str(brief.get("selection_mode") or "") == "editorial_calendar"
+        editorial_facts_only = (
+            str(brief.get("selection_mode") or "") == "editorial_calendar"
+            or brief.get("automated_workflow") is True
+        )
         factual_boundary = (
             "Do not write first-person operational history, named-team anecdotes, incident timelines, "
-            "percentages, durations, benchmark figures, provider performance claims, or invented examples. "
+            "friend/customer anecdotes, percentages, counts, money, durations, benchmark figures, provider performance claims, or invented examples "
+            "unless the exact claim appears in claim_ledger with verified evidence. Do not claim free, no-code, all-in-one, guaranteed savings, or instant approval. "
             "Write recommendations and clearly labelled hypothetical steps only; do not imply they happened. "
             if editorial_facts_only else ""
         )

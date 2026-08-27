@@ -107,6 +107,28 @@ def test_canary_command_uses_verified_dynamic_selectors_and_records_identity(mon
     assert attempts[-1]["session_id"] == "task9-active-session"
 
 
+def test_automated_workflow_prompt_forbids_unsupported_claim_patterns(monkeypatch, tmp_path):
+    process = FakeProcess([(0, '{"title":"T","body":"Use verified steps only. "}')])
+    commands = []
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda command, **kwargs: (commands.append(command) or process))
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "clock": lambda: 0, "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    generator._hermes(
+        "topic",
+        {"platform": "kuaishou", "automated_workflow": True, "claim_ledger": []},
+        {"language": "zh", "platform_rules": ""},
+    )
+
+    prompt = commands[0][2]
+    assert "friend/customer anecdotes" in prompt
+    assert "Do not claim free, no-code, all-in-one" in prompt
+    assert "exact claim appears in claim_ledger" in prompt
+
+
 def test_canary_without_verified_selectors_fails_before_launch(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setenv("HERMES_CANARY_SESSION", "task9-missing-selector-proof")
