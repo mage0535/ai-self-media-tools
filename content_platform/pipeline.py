@@ -1489,7 +1489,7 @@ class Pipeline:
         subtitle = meta.get("subtitle") or {}
         backgrounds = meta.get("background_assets") or []
         artifact_dir = output.parent if output.is_file() else None
-        if artifact_dir and not audio:
+        if artifact_dir and (not audio or int(audio.get("stream_count") or 0) < 1 or float(audio.get("duration") or 0) <= 0):
             try:
                 probe = subprocess.run(
                     ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-show_entries", "format=duration", "-of", "json", str(output)],
@@ -1517,7 +1517,11 @@ class Pipeline:
             except OSError:
                 pass
         if artifact_dir and not backgrounds:
-            backgrounds = [{"path": str(path)} for path in sorted((artifact_dir / "backgrounds").glob("bg_*.png"))]
+            backgrounds = [
+                {"path": str(path)}
+                for pattern in ("bg_*.png", "bg_*.jpg", "bg_*.jpeg", "bg_*.webp")
+                for path in sorted((artifact_dir / "backgrounds").glob(pattern))
+            ]
         required_tools = {
             "cinema_composition.storyboard",
             "shotcraft_moves.shot_plan_for_text",

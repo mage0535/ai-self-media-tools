@@ -7,7 +7,7 @@ from typing import Any
 
 
 NUMERIC_CLAIM = re.compile(
-    r"(?:(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿]+)\s*(?:%|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?))",
+    r"(?:(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿几半]+)\s*(?:%|个|家|种|款|次|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?))",
     re.I,
 )
 FIRST_PERSON_OPERATION = re.compile(
@@ -15,7 +15,11 @@ FIRST_PERSON_OPERATION = re.compile(
     re.I,
 )
 UNSUPPORTED_PROMOTIONAL_CLAIM = re.compile(
-    r"(?:零成本|完全免费|免费(?:使用|试用|开放)|不用写代码|无需写代码|零代码|全都有|一个平台全搞定|费用(?:砍掉|降低).{0,8}(?:一大半|一半|大半)|no[- ]cost|completely free|free to use|no code required)",
+    r"(?:零成本|完全免费|免费(?:的|使用|试用|开放)|不用写代码|无需写代码|零代码|全都有|一个平台全搞定|费用(?:砍掉|降低).{0,8}(?:一大半|一半|大半)|no[- ]cost|completely free|free to use|no code required)",
+    re.I,
+)
+UNSUPPORTED_ANECDOTE = re.compile(
+    r"(?:朋友|团队|客户|创作者|同行)[^。！？.!?\n]{0,36}(?:之前|曾经|每天|试了|用了|花了|省了|切换)",
     re.I,
 )
 
@@ -65,6 +69,11 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
             findings.append({"type": "promotional", "text": sentence, "covered": covered})
             if not covered:
                 failures.append("unsourced_promotional_claim")
+        if UNSUPPORTED_ANECDOTE.search(sentence):
+            covered = _covered(sentence, ledger, first_person=False)
+            findings.append({"type": "anecdote", "text": sentence, "covered": covered})
+            if not covered:
+                failures.append("unsourced_anecdote")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),

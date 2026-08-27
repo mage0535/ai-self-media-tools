@@ -44,6 +44,13 @@ def test_claim_gate_rejects_vague_personal_savings_and_no_code_claims() -> None:
     assert "unsourced_promotional_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_approximate_counts_half_hours_and_friend_anecdotes() -> None:
+    result = validate_claims("手机里装了十几个工具，每天浪费半小时。朋友之前试了四五个平台。这个功能是免费的。", [])
+    assert "unsourced_numeric_claim" in result["failures"]
+    assert "unsourced_anecdote" in result["failures"]
+    assert "unsourced_promotional_claim" in result["failures"]
+
+
 def test_claim_sanitizer_removes_only_unsupported_sentences() -> None:
     text = "This checklist is practical. Success rose 99% in 8 months. Verify the owner before acting."
     gate = validate_claims(text, [])

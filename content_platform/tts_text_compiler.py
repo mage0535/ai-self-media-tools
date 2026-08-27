@@ -38,7 +38,13 @@ class TTSTextCompiler:
         return cls([])
 
     def compile(self, display_text: str, *, context: str = "default", platform: str = "") -> CompiledTTS:
-        result = str(display_text or "")
+        display = re.sub(
+            r"\b([a-z0-9-]+)\s*\.\s*([a-z0-9-]+)\s*\.\s*(com|cn|org|net|io|ai|dev)\b",
+            r"\1.\2.\3",
+            str(display_text or ""),
+            flags=re.I,
+        )
+        result = display
         applied: list[dict[str, Any]] = []
         occupied: list[tuple[int, int]] = []
         rules = sorted(self.rules, key=lambda row: int(row.get("priority", 0)), reverse=True)
@@ -77,4 +83,4 @@ class TTSTextCompiler:
                 continue
             if token not in unhandled:
                 unhandled.append(token)
-        return CompiledTTS(str(display_text or ""), result, applied, unhandled)
+        return CompiledTTS(display, result, applied, unhandled)

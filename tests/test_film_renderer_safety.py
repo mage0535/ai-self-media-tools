@@ -38,6 +38,11 @@ def test_renderer_rejects_empty_platform_gate_bypass():
     assert film_renderer.validate_platform_argument("youtube-shorts") == "youtube_shorts"
 
 
+def test_scene_static_ratio_uses_sustained_motion_not_strong_activity():
+    motion = {"active_ratio": 0.0, "sustained_motion_ratio": 0.55}
+    assert film_renderer.scene_static_ratio(motion) == 0.45
+
+
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
     assert film_renderer.RENDERER_VERSION == "cinematic-v10"

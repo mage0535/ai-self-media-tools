@@ -1094,6 +1094,11 @@ def validate_platform_argument(platform: str) -> str:
     return normalized
 
 
+def scene_static_ratio(motion: dict) -> float:
+    """Use sustained low-level motion, not only strong-frame activity."""
+    return round(1.0 - float((motion or {}).get("sustained_motion_ratio") or 0), 6)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="融合渲染器：电影级多镜头")
     ap.add_argument("--video-dir", required=True)
@@ -1831,7 +1836,7 @@ def main() -> int:
             "fallback": any(bool(row.get("fallback")) for row in records),
             "reused": any(bool(row.get("reused")) for row in records),
             "frame_difference": float(scene_motion.get("mean_delta") or 0),
-            "static_ratio": float(scene_motion.get("static_ratio") if scene_motion.get("static_ratio") is not None else 1),
+            "static_ratio": scene_static_ratio(scene_motion),
             "motion_probe": scene_motion,
         })
     execution_failures = [
