@@ -885,7 +885,10 @@ def download_bgm(video_dir, style="acoustic guitar"):
                 if bgm.exists():
                     bgm.unlink()
             finally:
-                _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_candidate_deadline
+                # Do not restore the provider-query deadline captured while a
+                # generator is suspended at yield. It may already be expired
+                # and would prevent the generator from yielding its next row.
+                _ACTIVE_BGM_CANDIDATE_DEADLINE = None
     finally:
         _ACTIVE_BGM_DEADLINE = previous_deadline
         _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_candidate_deadline
