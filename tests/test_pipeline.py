@@ -169,6 +169,31 @@ class PipelineTests(unittest.TestCase):
         assert result["gates"]["audio_stream"]["passed"] is True
         assert result["gates"]["visual_backgrounds"]["passed"] is True
 
+    def test_rendered_gate_accepts_measured_burned_subtitle_evidence(self):
+        root = self.pipeline.data_dir / "artifacts" / "burned-subtitle"
+        (root / "backgrounds").mkdir(parents=True)
+        video = root / "final.mp4"
+        video.write_bytes(b"video")
+        for index in range(4):
+            (root / "backgrounds" / f"bg_{index}.jpg").write_bytes(b"image")
+        packet = {
+            "video_toolchain_plan": {"required": True, "platforms": ["kuaishou"]},
+            "video_artifact": {"path": str(video)},
+            "render_manifest": {
+                "ok": True, "status": "rendered", "output": str(video),
+                "toolchain_contract": {"planned_tools": ["cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text", "kuaishou_render.render_cards", "kuaishou_render.download_bgm", "kuaishou_render.gen_subtitles", "kuaishou_render.encode_final"]},
+                "motion_evidence": {"passed": True, "unique_frame_count": 4},
+                "segment_motion_evidence": {"segments": [{"move_id": "m", "profile": "p"}] * 3},
+            },
+            "subtitle_evidence": {"burned_in": True, "sample_count": 8, "position": "lower_third", "font_size": 46, "max_chars_per_line": 18, "max_lines": 2, "margin_v": 290},
+            "bgm_source": {"source": "openverse_audio", "source_url": "https://example.test/bgm", "license": "CC BY", "fit_reason": "matched"},
+        }
+        probe = type("Result", (), {"stdout": json.dumps({"streams": [{"codec_type": "audio"}], "format": {"duration": "45"}})})()
+        with patch("content_platform.pipeline.subprocess.run", return_value=probe):
+            result = Pipeline._rendered_video_platform_gate(packet, "kuaishou")
+
+        assert result["gates"]["subtitle_safety"]["passed"] is True
+
     def test_end_to_end_requires_approval_and_is_idempotent(self):
         job = self.pipeline.create("Practical automation", ["wechat", "xiaohongshu"], {"audience": "operators"})
         reviewed = self.pipeline.run(job["id"])

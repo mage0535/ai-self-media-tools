@@ -69,6 +69,10 @@ def test_compiler_prefers_full_domain_rule_and_does_not_replace_ai_inside_words(
     assert spaced.display_text == "打开 ai.kuaishou.com"
     assert spaced.tts_text == "打开 快手人工智能开放平台官网"
 
+    truncated = compiler.compile("打开 ai.kuaishou.", context="tech", platform="kuaishou")
+    assert truncated.display_text == "打开 ai.kuaishou.com"
+    assert truncated.tts_text == "打开 快手人工智能开放平台官网"
+
 
 def test_compiler_applies_the_same_pronunciation_rule_to_every_occurrence():
     from content_platform.tts_text_compiler import TTSTextCompiler

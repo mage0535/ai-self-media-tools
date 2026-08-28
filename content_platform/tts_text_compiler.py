@@ -44,6 +44,12 @@ class TTSTextCompiler:
             str(display_text or ""),
             flags=re.I,
         )
+        for rule in self.rules:
+            source = str(rule.get("source") or "")
+            if not re.fullmatch(r"(?:[a-z0-9-]+\.)+(?:com|cn|org|net|io|ai|dev)", source, re.I):
+                continue
+            prefix = source.rsplit(".", 1)[0] + "."
+            display = re.sub(re.escape(prefix) + r"(?![A-Za-z0-9-])", source, display, flags=re.I)
         result = display
         applied: list[dict[str, Any]] = []
         occupied: list[tuple[int, int]] = []
