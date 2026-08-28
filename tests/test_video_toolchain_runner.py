@@ -65,6 +65,8 @@ class VideoToolchainRunnerTests(unittest.TestCase):
 
         assert [card["presentation_mode"] for card in cards] == plan["video_route"]["scene_presentations"]
         assert len({card["layout"] for card in cards}) >= 5
+        assert all(card["txt"] != card["tts"] for card in cards)
+        assert all(card["tts"] not in " ".join(card.get("items") or []) for card in cards)
 
     def test_cinema_route_writes_scene_level_visual_treatment_for_renderer(self):
         from PIL import Image
@@ -129,6 +131,22 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             assert len(evidence["scenes"]) == 8
             assert all(row["frame_difference"] > 0 for row in evidence["scenes"])
             assert all(row["static_ratio"] < 1 for row in evidence["scenes"])
+
+    def test_background_queries_follow_each_script_beat_instead_of_generic_cycle(self):
+        from scripts.pexels_auto_bg import _semantic_queries
+
+        script = "\n\n".join([
+            "Switching between too many tools wastes attention.",
+            "A content creator edits text images and voice.",
+            "Open the API dashboard on a developer laptop.",
+            "Connect the interface to an automation workflow.",
+        ])
+        queries = _semantic_queries(script, 4)
+
+        assert len(queries) == 4
+        assert len(set(queries)) == 4
+        assert any("dashboard" in query or "developer" in query for query in queries)
+        assert any("content creator" in query for query in queries)
 
     def test_short_video_duration_is_normalized_before_artifact_gate(self):
         from scripts import video_toolchain_runner as runner

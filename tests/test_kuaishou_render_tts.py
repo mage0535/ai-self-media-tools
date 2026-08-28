@@ -3,6 +3,7 @@ import json
 import sys
 import time
 from types import SimpleNamespace
+from pathlib import Path
 
 from scripts import kuaishou_render
 
@@ -241,3 +242,9 @@ def test_bgm_queries_prioritize_requested_instruments_before_broad_fallbacks():
     assert queries[0] == "muted percussion and low strings music instrumental"
     assert "orchestral strings music" in queries
     assert "acoustic guitar music instrumental" not in queries[:2]
+
+
+def test_like_overlay_uses_font_safe_text_without_emoji():
+    source = Path(kuaishou_render.__file__).read_text(encoding="utf-8")
+    assert "觉得有用 · 点赞" in source
+    assert "❤️" not in source

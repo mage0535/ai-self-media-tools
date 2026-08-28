@@ -617,7 +617,7 @@ def build_cards(
         card = {
             "layout": layout,
             "t": title if index == 0 else _card_title(beat, index),
-            "txt": beat,
+            "txt": _visual_label(beat),
             "tts": beat,
             "f": str(plan.get("template_family") or "video_toolchain"),
             "label": str(plan.get("selected_pipeline") or "auto_video"),
@@ -635,13 +635,27 @@ def build_cards(
         if layout == "cover":
             card.update({"sub": _summary(script_body), "hook": title, "hook_prefix": "Auto selected video workflow"})
         if layout == "card_stack":
-            card["items"] = [beat, next_beat, title]
+            card["items"] = [_visual_label(beat), _visual_label(next_beat), _visual_label(title)]
         if layout == "big_number":
             card.update({"num": f"0{index + 1}", "ext": beat})
         if layout == "timeline":
-            card["items"] = [beat, next_beat, title]
+            card["items"] = [_visual_label(beat), _visual_label(next_beat), _visual_label(title)]
         cards.append(card)
     return cards
+
+
+def _visual_label(text: str) -> str:
+    clean = re.sub(r"\s+", " ", str(text or "")).strip(" ，。！？!?;；")
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9.+#-]{1,18}|[\u3400-\u9fff]{2,6}", clean)
+    stop = {"为什么", "这是", "一个", "第一步", "第二步", "第三步", "直接", "根据", "不要", "可以"}
+    selected = []
+    for token in tokens:
+        if token in stop or token in selected:
+            continue
+        selected.append(token)
+        if len(selected) >= 3:
+            break
+    return " · ".join(selected) if selected else clean[:18]
 
 
 def _shotcraft_motion_plan(text: str, num_shots: int = 8) -> dict:
