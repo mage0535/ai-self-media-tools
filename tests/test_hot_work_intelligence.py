@@ -239,3 +239,107 @@ Claude Code 自动化工作流，普通人也能照着做
         "Claude Code 自动化工作流，普通人也能照着做",
         "猫咪治愈短片：拆家前的三个信号",
     ]
+
+
+def test_shipinhao_parser_requires_official_content_url_and_visible_engagement():
+    from content_platform import hot_work_intelligence as hot_work
+
+    cards = [
+        {
+            "title": "3 个 AI 工作流让周报自动完成",
+            "href": "https://channels.weixin.qq.com/web/pages/feed?object_id=123&nonce_id=abc",
+            "visible_text": "3 个 AI 工作流让周报自动完成\n播放 12.8万\n点赞 3580\n评论 96",
+        },
+        {
+            "title": "视频号创作平台",
+            "href": "https://channels.weixin.qq.com/platform",
+            "visible_text": "视频号创作平台\n数据中心",
+        },
+        {
+            "title": "没有可见互动的 AI 教程",
+            "href": "https://channels.weixin.qq.com/post/456",
+            "visible_text": "没有可见互动的 AI 教程",
+        },
+    ]
+
+    rows = hot_work.parse_shipinhao_hot_work_cards(cards, query="AI 工作流")
+
+    assert len(rows) == 1
+    assert rows[0]["platform"] == "shipinhao"
+    assert rows[0]["url"].startswith("https://channels.weixin.qq.com/")
+    assert rows[0]["engagement"] == "12.8万"
+    assert rows[0]["visible_engagement"]["plays"] == "12.8万"
+    assert rows[0]["visible_engagement"]["likes"] == "3580"
+
+
+def test_shipinhao_evidence_is_fail_closed_for_login_only_page():
+    from content_platform import hot_work_intelligence as hot_work
+
+    rows, status = hot_work.finalize_shipinhao_hot_work_evidence(
+        "视频号助手\n已登录\n内容管理\n发表视频",
+        [],
+        query="AI 工作流",
+        page_url="https://channels.weixin.qq.com/platform",
+        dom_snapshot_path="/private/run/shipinhao_search.html",
+        screenshot_path="/private/run/shipinhao_search.png",
+        captured_at="2026-08-27T01:02:03+00:00",
+    )
+
+    assert rows == []
+    assert status["status"] == "layout_changed_or_no_real_hot_works"
+    assert status["count"] == 0
+
+
+def test_shipinhao_evidence_attaches_dom_screenshot_and_collection_time():
+    from content_platform import hot_work_intelligence as hot_work
+
+    rows, status = hot_work.finalize_shipinhao_hot_work_evidence(
+        "AI Agent 实战\n观看 8600\n点赞 321",
+        [{
+            "title": "AI Agent 实战",
+            "href": "https://channels.weixin.qq.com/post/789",
+            "visible_text": "AI Agent 实战\n观看 8600\n点赞 321",
+        }],
+        query="AI Agent",
+        page_url="https://channels.weixin.qq.com/platform/content/discovery",
+        dom_snapshot_path="/private/run/shipinhao_search.html",
+        screenshot_path="/private/run/shipinhao_search.png",
+        captured_at="2026-08-27T01:02:03+00:00",
+    )
+
+    assert status["status"] == "ok"
+    assert status["count"] == 1
+    assert rows[0]["dom_snapshot_path"] == status["dom_snapshot_path"]
+    assert rows[0]["screenshot_path"] == status["screenshot_path"]
+    assert rows[0]["captured_at"] == "2026-08-27T01:02:03+00:00"
+
+
+def test_shipinhao_collector_resolves_existing_private_storage_state(tmp_path, monkeypatch):
+    from scripts import shipinhao_hot_work_collector as collector
+
+    social_root = tmp_path / "social-auto-upload"
+    state = social_root / "cookies" / "tencent_uploader" / "main.json"
+    state.parent.mkdir(parents=True)
+    state.write_text('{"cookies": [], "origins": []}', encoding="utf-8")
+    monkeypatch.delenv("SHIPINHAO_STORAGE_STATE", raising=False)
+    monkeypatch.setenv("SOCIAL_AUTO_UPLOAD_DIR", str(social_root))
+
+    assert collector.resolve_state_file(None) == state
+
+
+def test_shipinhao_collector_script_is_directly_executable():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, str(repo_root / "scripts" / "shipinhao_hot_work_collector.py"), "--help"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--state-file" in result.stdout

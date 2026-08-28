@@ -408,6 +408,8 @@ class DirectTrendSource:
         return items
 
     def _wewrite_hotspots(self):
+        from scripts.wechat_official_signal_collector import build_wechat_official_contracts
+
         binary = os.path.expanduser(str(self.config.get("wewrite_bin") or shutil.which("wewrite") or "~/.local/bin/wewrite"))
         if not Path(binary).is_file():
             raise RuntimeError(f"wewrite CLI not found: {binary}")
@@ -422,23 +424,30 @@ class DirectTrendSource:
         )
         if proc.returncode != 0:
             raise RuntimeError((proc.stderr or proc.stdout or "wewrite hotspots failed")[:240])
+        raw_snapshot = (proc.stdout or "").encode("utf-8")
         payload = json.loads(proc.stdout or "[]")
-        rows = payload if isinstance(payload, list) else payload.get("items", payload.get("hotspots", []))
+        report = build_wechat_official_contracts(
+            payload,
+            raw_snapshot=raw_snapshot,
+            source_kind="wewrite_hotspots",
+        )
         items = []
-        for row in rows[: self.limit]:
-            if isinstance(row, str):
-                row = {"title": row}
-            title = str(row.get("title") or row.get("topic") or row.get("keyword") or "").strip()
-            if not title:
-                continue
-            upstream_source = str(row.get("source") or "").strip()
+        for contract in report["contracts"][: self.limit]:
+            title = contract["signals"][0]
+            upstream_source = str(contract.get("upstream_source") or "").strip()
             items.append({
-                **row,
                 "title": title,
                 "source": "wewrite_hotspots" if not upstream_source or upstream_source == "wewrite_hotspots" else f"wewrite_hotspots:{upstream_source}",
                 **({"upstream_source": upstream_source} if upstream_source else {}),
-                "url": row.get("url", ""),
-                "points": int(row.get("points") or row.get("score") or row.get("heat") or 0),
+                "platform": "wechat",
+                "url": contract["official_url"],
+                "points": contract["heat"],
+                "heat": contract["heat"],
+                "rank": contract["rank"],
+                "captured_at": contract["captured_at"],
+                "evidence_type": contract["evidence_type"],
+                "raw_snapshot_sha256": contract["raw_snapshot_sha256"],
+                "official_signal_contract": contract,
             })
         return items
 

@@ -338,6 +338,140 @@ def parse_platform_search_evidence(
     return rows
 
 
+def _is_shipinhao_content_url(href: str) -> bool:
+    parsed = urllib.parse.urlparse(str(href or "").strip())
+    host = (parsed.hostname or "").casefold()
+    if host != "channels.weixin.qq.com":
+        return False
+    path = parsed.path.casefold().rstrip("/")
+    query = {key.casefold(): value for key, value in urllib.parse.parse_qs(parsed.query).items()}
+    if path.startswith("/web/pages/feed") or path.startswith("/feed/"):
+        return True
+    if path.startswith("/post/") and not path.endswith(("/create", "/list")):
+        return True
+    content_id_keys = {"object_id", "objectid", "feed_id", "feedid"}
+    return "detail" in path and any(query.get(key) for key in content_id_keys)
+
+
+def _visible_shipinhao_engagement(text: str) -> dict[str, str]:
+    labels = {
+        "播放": "plays",
+        "观看": "plays",
+        "点赞": "likes",
+        "赞": "likes",
+        "评论": "comments",
+        "收藏": "favorites",
+        "转发": "shares",
+    }
+    metrics: dict[str, str] = {}
+    for label, key in labels.items():
+        match = re.search(rf"{label}\s*[:：]?\s*(\d+(?:\.\d+)?(?:K|M|万)?)", str(text or ""), re.I)
+        if match and _metric_number(match.group(1)) > 0:
+            metrics.setdefault(key, match.group(1))
+    return metrics
+
+
+def parse_shipinhao_hot_work_cards(
+    cards: list[dict[str, Any]],
+    *,
+    query: str,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Accept only official Video Channels works with visible engagement."""
+    rows: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for card in cards:
+        href = str(card.get("href") or "").strip()
+        if not _is_shipinhao_content_url(href):
+            continue
+        canonical_url = urllib.parse.urlunsplit((*urllib.parse.urlsplit(href)[:3], "", ""))
+        if canonical_url in seen_urls:
+            continue
+        title = strip_markup(str(card.get("title") or ""))
+        visible_text = str(card.get("visible_text") or "")
+        if not title:
+            title = next(
+                (
+                    strip_markup(line)
+                    for line in visible_text.splitlines()
+                    if strip_markup(line) and not _visible_shipinhao_engagement(line)
+                ),
+                "",
+            )
+        metrics = _visible_shipinhao_engagement(visible_text)
+        if not title or not metrics:
+            continue
+        engagement = next((metrics[key] for key in ("plays", "likes", "comments", "favorites", "shares") if key in metrics), "")
+        if _metric_number(engagement) <= 0:
+            continue
+        seen_urls.add(canonical_url)
+        rows.append(
+            _work(
+                "shipinhao",
+                "shipinhao_official_logged_discovery",
+                query,
+                title,
+                url=href,
+                engagement=engagement,
+                visible_engagement=metrics,
+                evidence_strength="strong_logged_search_result",
+            )
+        )
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def finalize_shipinhao_hot_work_evidence(
+    text: str,
+    cards: list[dict[str, Any]],
+    *,
+    query: str,
+    page_url: str,
+    dom_snapshot_path: str,
+    screenshot_path: str,
+    captured_at: str,
+    limit: int = 12,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    status: dict[str, Any] = {
+        "source": "shipinhao:official_logged_discovery",
+        "query": query,
+        "status": "failed",
+        "count": 0,
+        "page_url": page_url,
+        "dom_snapshot_path": dom_snapshot_path,
+        "screenshot_path": screenshot_path,
+        "captured_at": captured_at,
+    }
+    lowered = str(text or "").casefold()
+    login_markers = ("扫码登录", "微信登录", "登录后", "login", "二维码")
+    error_markers = ("服务器出错", "刷新重试", "请求过于频繁", "访问验证", "安全验证", "challenge", "captcha")
+    if any(token in lowered for token in login_markers):
+        status["status"] = "login_required_or_captcha"
+        return [], status
+    if any(token in lowered for token in error_markers):
+        status["status"] = "platform_error_or_rate_limited"
+        return [], status
+    rows = parse_shipinhao_hot_work_cards(cards, query=query, limit=limit)
+    if not dom_snapshot_path or not screenshot_path:
+        status["status"] = "evidence_capture_failed"
+        return [], status
+    if not rows:
+        status["status"] = "layout_changed_or_no_real_hot_works"
+        return [], status
+    for row in rows:
+        row.update(
+            {
+                "captured_at": captured_at,
+                "source_page_url": page_url,
+                "dom_snapshot_path": dom_snapshot_path,
+                "screenshot_path": screenshot_path,
+            }
+        )
+    status.update({"status": "ok", "count": len(rows)})
+    return rows, status
+
+
 def parse_logged_short_video_search_text(text: str, *, platform: str, query: str, limit: int = 12, anchors: list[dict[str, str]] | None = None) -> list[dict[str, Any]]:
     """Extract usable hot-work rows from logged Douyin/Kuaishou search text.
 
@@ -401,6 +535,7 @@ def collect_logged_short_video_search(
         "zhihu": f"https://www.zhihu.com/search?q={encoded}",
         "juejin": f"https://juejin.cn/search?query={encoded}",
         "twitter": f"https://x.com/search?q={encoded}&src=typed_query",
+        "shipinhao": "https://channels.weixin.qq.com/platform",
     }
     if platform not in urls:
         raise ValueError(f"unsupported logged short-video platform: {platform}")
@@ -409,6 +544,10 @@ def collect_logged_short_video_search(
     status: dict[str, Any] = {"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0, "route": route_name}
     text_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.txt"
     screenshot_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.png"
+    dom_snapshot_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.html"
+    for artifact in (screenshot_path, dom_snapshot_path):
+        artifact.unlink(missing_ok=True)
+    captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with sync_playwright() as pw:
         executable_path = (
             os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE")
@@ -436,17 +575,62 @@ def collect_logged_short_video_search(
         except Exception:
             pass
         page.wait_for_timeout(2500)
+        if platform == "shipinhao":
+            for label in ("内容发现", "创作灵感", "热门内容", "热点"):
+                candidate = page.get_by_text(label, exact=False).first
+                try:
+                    if candidate.is_visible(timeout=1000):
+                        candidate.click(timeout=5000)
+                        page.wait_for_timeout(1500)
+                        break
+                except Exception:
+                    continue
+            for placeholder in ("搜索作品", "搜索内容", "搜索视频", "搜索"):
+                search = page.get_by_placeholder(placeholder, exact=False).first
+                try:
+                    if search.is_visible(timeout=800):
+                        search.fill(str(query or ""), timeout=3000)
+                        search.press("Enter")
+                        page.wait_for_timeout(2500)
+                        break
+                except Exception:
+                    continue
         text = page.locator("body").inner_text(timeout=8000)
-        anchors = page.locator("a").evaluate_all(
-            "els => els.map(a => ({text: (a.innerText || a.getAttribute('aria-label') || a.title || '').trim(), href: a.href || ''}))"
+        anchors = page.locator("a[href], [data-url]").evaluate_all(
+            """els => els.map(a => {
+                const box = a.closest('article, li, [class*="card"], [class*="item"], [class*="video"], [class*="feed"]') || a;
+                const heading = box.querySelector('h1, h2, h3, h4, [class*="title"]');
+                return {
+                    text: ((heading && heading.innerText) || a.innerText || a.getAttribute('aria-label') || a.title || '').trim(),
+                    href: a.href || a.getAttribute('data-url') || '',
+                    context: (box.innerText || '').trim()
+                };
+            })"""
         )
+        final_url = page.url
         text_path.write_text(text, encoding="utf-8")
+        dom_snapshot_path.write_text(page.content(), encoding="utf-8")
         try:
             page.screenshot(path=str(screenshot_path), full_page=True)
         except Exception:
             pass
         context.close()
         browser.close()
+    if platform == "shipinhao":
+        cards = [
+            {"title": anchor.get("text", ""), "href": anchor.get("href", ""), "visible_text": anchor.get("context", anchor.get("text", ""))}
+            for anchor in anchors
+        ]
+        return finalize_shipinhao_hot_work_evidence(
+            text,
+            cards,
+            query=query,
+            page_url=final_url,
+            dom_snapshot_path=str(dom_snapshot_path) if dom_snapshot_path.is_file() else "",
+            screenshot_path=str(screenshot_path) if screenshot_path.is_file() else "",
+            captured_at=captured_at,
+            limit=limit,
+        )
     if platform == "xiaohongshu":
         rows = parse_xiaohongshu_search_text(text, query=query, limit=limit, anchors=anchors)
     else:

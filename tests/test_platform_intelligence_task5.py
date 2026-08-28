@@ -79,7 +79,7 @@ def test_official_reference_is_scoring_context_not_native_identity(tmp_path):
     path = tmp_path / "overnight" / "2026-08-25" / "official-platform-signal-matrix-v3.json"
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps(matrix), encoding="utf-8")
-    evidence, items = build_reference_items("wechat", data_dir=tmp_path)
+    evidence, items = build_reference_items("wechat", data_dir=tmp_path, now=NOW)
     assert evidence["evidence_type"] == "official_keyword"
     assert items[0]["platform"] == "wechat"
     assert items[0]["official_reference_only"] is True
@@ -104,7 +104,7 @@ def test_verified_official_activity_can_enter_selection_without_native_relabel(t
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps(matrix), encoding="utf-8")
 
-    evidence, items = build_selection_items("kuaishou", ["AI", "工作流"], data_dir=tmp_path)
+    evidence, items = build_selection_items("kuaishou", ["AI", "工作流"], data_dir=tmp_path, now=NOW)
 
     assert evidence["evidence_type"] == "official_activity"
     assert len(items) == 1
