@@ -1096,6 +1096,7 @@ def _bgm_queries(style):
 def _online_bgm_candidates(style):
     global _ACTIVE_BGM_CANDIDATE_DEADLINE
     providers = [
+        _wikimedia_commons_candidates,
         _openverse_candidates,
         _youtube_audio_library_candidates,
         _jamendo_candidates,
@@ -1202,6 +1203,54 @@ def _youtube_audio_library_candidates(query):
         )
         if len(candidates) >= 10:
             break
+    return candidates
+
+
+def _wikimedia_commons_candidates(query):
+    params = urllib.parse.urlencode({
+        "action": "query",
+        "generator": "search",
+        "gsrsearch": f"{query} filetype:audio",
+        "gsrnamespace": "6",
+        "gsrlimit": "20",
+        "prop": "imageinfo",
+        "iiprop": "url|extmetadata|mime",
+        "format": "json",
+        "origin": "*",
+    })
+    payload = _request_json(
+        "https://commons.wikimedia.org/w/api.php?" + params,
+        headers={"User-Agent": "ai-self-media-tools/1.0 online-bgm-resolver"},
+    )
+    pages = list(((payload.get("query") or {}).get("pages") or {}).values())
+    candidates = []
+    for row in pages:
+        info = (row.get("imageinfo") or [{}])[0]
+        mime = str(info.get("mime") or "").casefold()
+        metadata = info.get("extmetadata") or {}
+        license_name = re.sub(r"<[^>]+>", "", str((metadata.get("LicenseShortName") or {}).get("value") or "")).strip()
+        license_lower = license_name.casefold()
+        allowed = any(token in license_lower for token in ("cc by", "cc0", "public domain", "pdm"))
+        url = str(info.get("url") or "")
+        source_url = str(info.get("descriptionurl") or "")
+        if not mime.startswith("audio/") or not url or not source_url or not allowed:
+            continue
+        title = re.sub(r"^File:", "", str(row.get("title") or query), flags=re.I)
+        artist = re.sub(r"<[^>]+>", "", str((metadata.get("Artist") or {}).get("value") or "")).strip()
+        candidates.append({
+            "provider": "wikimedia_commons_audio",
+            "download_url": url,
+            "source_url": source_url,
+            "title": title,
+            "artist": artist,
+            "license": license_name,
+            "attribution_required": "cc by" in license_lower,
+            "duration": 0,
+            "asset_id": str(row.get("pageid") or title),
+            "tags": f"{query} {title} real instrument instrumental",
+            "fit_reason": f"Wikimedia Commons open-license audio search match: {query}",
+            "license_verified": True,
+        })
     return candidates
 
 
