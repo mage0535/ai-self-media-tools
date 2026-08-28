@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -68,6 +69,14 @@ def _segment_mean_volume(path: Path, start: float, duration: float = 5.0) -> flo
     return float(match.group(1)) if match else None
 
 
+def _bgm_gain_plan(source_volume: float | None, weight: float) -> tuple[float, float | None]:
+    if source_volume is None:
+        return 0.0, None
+    pre_gain = max(0.0, min(24.0, -22.0 - source_volume)) if source_volume < -25 else 0.0
+    effective = source_volume + pre_gain + 20.0 * math.log10(max(0.001, weight))
+    return pre_gain, effective
+
+
 def mix_bgm(
     video: Path,
     bgm: Path,
@@ -85,10 +94,7 @@ def mix_bgm(
     bgm_weight = max(0.3, min(float(bgm_weight), 1.0))
     voice_gain = max(1.0, min(float(voice_gain), 4.0))
     bgm_source_volume = _mean_volume(bgm)
-    bgm_pre_gain = 0.0
-    if bgm_source_volume is not None and bgm_source_volume < -25:
-        # Quiet source recordings can become inaudible after narration mixing.
-        bgm_pre_gain = min(12.0, -22.0 - bgm_source_volume)
+    bgm_pre_gain, bgm_effective_volume = _bgm_gain_plan(bgm_source_volume, bgm_weight)
     bgm_filter = f"volume={bgm_weight}"
     if bgm_pre_gain:
         bgm_filter += f",volume={bgm_pre_gain:.2f}dB"
@@ -138,8 +144,8 @@ def mix_bgm(
         channels >= 2
         and mean_volume is not None
         and -24 <= mean_volume <= -6
-        and bgm_volume is not None
-        and bgm_volume > -35
+        and bgm_effective_volume is not None
+        and bgm_effective_volume > -35
         and (tail_gap is None or tail_gap <= 10)
         and output.stat().st_size > 100_000
     )
@@ -153,6 +159,7 @@ def mix_bgm(
         "tail_mean_volume_db": tail_volume,
         "head_tail_gap_db": tail_gap,
         "bgm_mean_volume_db": bgm_volume,
+        "bgm_effective_volume_db": None if bgm_effective_volume is None else round(bgm_effective_volume, 2),
         "bgm_weight": bgm_weight,
         "bgm_pre_gain_db": round(bgm_pre_gain, 2),
         "voice_gain": voice_gain,
