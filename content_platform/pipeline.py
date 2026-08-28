@@ -5,6 +5,7 @@ import re
 import subprocess
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .compliance import ComplianceChecker
@@ -356,6 +357,39 @@ class Pipeline:
                 self._validate_draft_structure(draft)
                 platform_alignment = self._enforce_target_platform_strategy(draft, job)
                 draft.setdefault("draft_meta", {})["platform_alignment"] = platform_alignment
+                from .cover_director import build_cover_direction
+                target_platform = str((job.get("platforms") or [""])[0])
+                draft["draft_meta"]["cover_design"] = build_cover_direction(
+                    platform=target_platform,
+                    topic=str(job.get("topic") or ""),
+                    title=str(draft.get("title") or job.get("topic") or ""),
+                    body=str(draft.get("body") or ""),
+                    recent_direction_ids=list(brief.get("recent_cover_direction_ids") or []),
+                    existing=draft["draft_meta"].get("cover_design") if isinstance(draft["draft_meta"].get("cover_design"), dict) else None,
+                )
+                if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
+                    from .video_director import build_video_route
+                    plan = dict(draft["draft_meta"].get("video_toolchain_plan") or {})
+                    route = build_video_route(
+                        platform=target_platform,
+                        title=str(draft.get("title") or job.get("topic") or ""),
+                        body=str(draft.get("body") or ""),
+                        content_form=str(draft["draft_meta"].get("content_form") or plan.get("content_form") or "short_video"),
+                        available_assets=dict(brief.get("available_video_assets") or {}),
+                        recent_style_ids=list(brief.get("recent_video_style_ids") or []),
+                    )
+                    plan.update({
+                        "video_route": route,
+                        "effect_stack": list(route["modules"]),
+                        "color_mood": route["palette_id"],
+                        "text_layout": route["presentation_mode"],
+                        "scene_presentations": list(route["scene_presentations"]),
+                        "style_id": route["style_id"],
+                        "recent_cover_direction_ids": list(brief.get("recent_cover_direction_ids") or []),
+                    })
+                    plan.pop("visual_recipe", None)
+                    draft["draft_meta"]["video_toolchain_plan"] = plan
+                    draft["draft_meta"]["video_route"] = route
                 # Recompile at the point of use so provider-side normalization
                 # cannot erase evidence required for deterministic repair.
                 claim_ledger = compile_verified_claim_ledger(brief)
@@ -890,6 +924,38 @@ class Pipeline:
         brief.setdefault("platform_historical_feedback", platform_history)
         brief.setdefault("topic_historical_feedback", topic_history)
         brief.setdefault("cluster_memory", topic_history.get("clusters", []) or platform_history.get("clusters", []))
+        recent_cover_ids = []
+        recent_video_ids = []
+        target_platforms = {str(item).casefold() for item in platforms}
+        style_cutoff = datetime.now(timezone.utc) - timedelta(days=3)
+        for candidate in self.store.content_candidates(limit=80, exclude_job_id=job.get("id", "")):
+            if target_platforms.isdisjoint({str(item).casefold() for item in candidate.get("platforms") or []}):
+                continue
+            try:
+                updated_at = datetime.fromisoformat(str(candidate.get("updated_at") or "").replace("Z", "+00:00"))
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+                if updated_at < style_cutoff:
+                    continue
+            except ValueError:
+                continue
+            meta = candidate.get("draft_meta") if isinstance(candidate.get("draft_meta"), dict) else {}
+            cover = meta.get("cover_design") if isinstance(meta.get("cover_design"), dict) else {}
+            direction_id = str(cover.get("direction_id") or "")
+            if direction_id and direction_id not in recent_cover_ids:
+                recent_cover_ids.append(direction_id)
+            recipe = meta.get("visual_recipe") if isinstance(meta.get("visual_recipe"), dict) else {}
+            render_manifest = meta.get("render_manifest") if isinstance(meta.get("render_manifest"), dict) else {}
+            video_route = meta.get("video_route") if isinstance(meta.get("video_route"), dict) else {}
+            if not recipe:
+                recipe = render_manifest.get("visual_recipe") if isinstance(render_manifest.get("visual_recipe"), dict) else {}
+            if not video_route:
+                video_route = render_manifest.get("video_route") if isinstance(render_manifest.get("video_route"), dict) else {}
+            style_id = str(video_route.get("style_id") or recipe.get("style_id") or recipe.get("core_fingerprint") or "")
+            if style_id and style_id not in recent_video_ids:
+                recent_video_ids.append(style_id)
+        brief.setdefault("recent_cover_direction_ids", recent_cover_ids[:12])
+        brief.setdefault("recent_video_style_ids", recent_video_ids[:12])
         if hygiene:
             brief["content_hygiene"] = hygiene
         return brief
@@ -1568,14 +1634,16 @@ class Pipeline:
                 for pattern in ("bg_*.png", "bg_*.jpg", "bg_*.jpeg", "bg_*.webp")
                 for path in sorted((artifact_dir / "backgrounds").glob(pattern))
             ]
-        required_tools = {
-            "cinema_composition.storyboard",
-            "shotcraft_moves.shot_plan_for_text",
-            "kuaishou_render.render_cards",
-            "kuaishou_render.download_bgm",
-            "kuaishou_render.gen_subtitles",
-            "kuaishou_render.encode_final",
+        renderer_id = str(((manifest.get("video_route") or {}).get("renderer_id") if isinstance(manifest.get("video_route"), dict) else "") or "")
+        route_tools = {
+            "landscape_explainer_renderer": {"render_landscape_video.slides", "render_landscape_video.playwright", "render_landscape_video.tts", "render_landscape_video.segments", "render_landscape_video.concat", "kuaishou_render.download_bgm", "mix_bgm_with_gate.mix_bgm", "render_landscape_video.subtitles", "render_landscape_video.encode_final", "visual_gate.py --cinema"},
+            "real_footage_renderer": {"cinematic_v11.source_asset_gate", "cinematic_v11.tts", "kuaishou_render.download_bgm", "cinematic_v11.scene_compositor", "cinematic_v11.semantic_transitions", "cinematic_v11.subtitle_overlay", "cinematic_v11.audio_mix", "cinematic_v11.encode_final", "visual_gate.py --cinema"},
         }
+        required_tools = route_tools.get(renderer_id, {"cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text", "kuaishou_render.render_cards", "kuaishou_render.download_bgm", "kuaishou_render.gen_subtitles", "kuaishou_render.encode_final"})
+        horizontal = str(platform).casefold() in {"bilibili", "youtube"}
+        minimum_font = 28 if horizontal else 44
+        maximum_chars = 30 if horizontal else 18
+        minimum_margin = 50 if horizontal else 180
         forbidden_bgm = {"synthetic", "procedural", "generated_tone", "midi", "generated_synthetic_bgm"}
         gates = {
             "rendered_output": {"passed": output.is_file() and output.stat().st_size > 0 and str(manifest.get("output") or "") == str(output)},
@@ -1591,9 +1659,9 @@ class Pipeline:
             },
             "subtitle_safety": {
                 "passed": int(subtitle.get("cue_count") or 0) >= 8 and captions.get("position") == "lower_third"
-                and captions.get("burned_in") is True and int(captions.get("font_size") or 0) >= 44
-                and int(captions.get("max_chars_per_line") or 99) <= 18 and int(captions.get("max_lines") or 99) <= 2
-                and int(captions.get("margin_v") or 0) >= 180,
+                and captions.get("burned_in") is True and int(captions.get("font_size") or 0) >= minimum_font
+                and int(captions.get("max_chars_per_line") or 99) <= maximum_chars and int(captions.get("max_lines") or 99) <= 2
+                and int(captions.get("margin_v") or 0) >= minimum_margin,
             },
             "visual_backgrounds": {"passed": isinstance(backgrounds, list) and len(backgrounds) >= 4},
             "platform_binding": {"passed": str(platform).casefold() in {str(item).casefold() for item in plan.get("platforms") or []}},
@@ -1609,6 +1677,10 @@ class Pipeline:
         manifest = artifact.get("render_manifest")
         if isinstance(manifest, dict):
             meta["render_manifest"] = manifest
+            if isinstance(manifest.get("visual_recipe"), dict):
+                meta["visual_recipe"] = manifest["visual_recipe"]
+            if isinstance(manifest.get("video_route"), dict):
+                meta["video_route"] = manifest["video_route"]
             nested_manifest = manifest.get("tool_invocation_manifest")
             if isinstance(nested_manifest, dict) and nested_manifest:
                 meta["renderer_tool_invocation_manifest"] = nested_manifest

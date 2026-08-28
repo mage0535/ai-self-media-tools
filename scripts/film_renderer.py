@@ -255,6 +255,34 @@ def subtitle_layout(platform: str) -> dict[str, int]:
     return {"max_chars": 36, "wrap_chars": 18, "font_size": 46, "max_lines": 2}
 
 
+def compile_shotcraft_css(card: dict[str, object]) -> str:
+    shotcraft = card.get("shotcraft") if isinstance(card.get("shotcraft"), dict) else {}
+    rules = []
+    for selector, declarations in (shotcraft.get("css") or {}).items():
+        if not isinstance(declarations, dict):
+            continue
+        body = " ".join(f"{key}: {value};" for key, value in declarations.items())
+        rules.append(f"{selector} {{ {body} }}")
+    for name, frames in (shotcraft.get("keyframe_definitions") or {}).items():
+        if not isinstance(frames, list):
+            continue
+        rows = [f"@keyframes {name} {{"]
+        for frame in frames:
+            if not isinstance(frame, dict):
+                continue
+            offset = float(frame.get("offset") or 0) * 100
+            body = " ".join(f"{key}: {value};" for key, value in frame.items() if key != "offset")
+            rows.append(f"{offset:.0f}% {{ {body} }}")
+        rows.append("}")
+        rules.append(" ".join(rows))
+    return "\n".join(rules)
+
+
+def inject_shotcraft_css(html: str, card: dict[str, object]) -> str:
+    css = compile_shotcraft_css(card)
+    return str(html).replace("</style>", css + "\n</style>", 1) if css else str(html)
+
+
 def probe_audio_spec(path: Path) -> dict[str, object]:
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,sample_rate,channels", "-of", "json", str(path)],
@@ -1457,6 +1485,8 @@ def main() -> int:
                 i, title, modules, bg, screenshot_path=shot_path, screenshot_caption=caption,
                 camera_index=int(treatment["camera_index"]), text_motion_index=int(treatment["text_motion_index"]), platform=args.platform,
             )
+        html_a = inject_shotcraft_css(html_a, card)
+        html_b = inject_shotcraft_css(html_b, card)
         (out / "html" / f"shot_{i:02d}A.html").write_text(html_a, encoding="utf-8")
         (out / "html" / f"shot_{i:02d}B.html").write_text(html_b, encoding="utf-8")
         d = durs[i - 1]
@@ -1470,6 +1500,8 @@ def main() -> int:
             "background_path": bg,
             "background_sha256": _sha256_file(Path(bg)),
             "subject_asset_used": bool(shot_path),
+            "shotcraft_move_id": str((card.get("shotcraft") or {}).get("name") or ""),
+            "shotcraft_css_injected": bool(compile_shotcraft_css(card)),
             "shot_names": [f"shot_{i:02d}A", f"shot_{i:02d}B"],
         })
 

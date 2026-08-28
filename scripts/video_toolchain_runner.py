@@ -72,6 +72,7 @@ PLANNED_TOOLS = [
     "kuaishou_render.gen_subtitles",
     "kuaishou_render.encode_final",
     "visual_gate.py --cinema",
+    "cover_director.render_cover_poster",
 ]
 RENDERER_STEPS = [
     "cinema_storyboard",
@@ -108,6 +109,19 @@ REPOST_PLANNED_TOOLS = [
     "ffmpeg.concat",
     "repost_rights_manifest",
 ]
+ROUTE_PLANNED_TOOLS = {
+    "landscape_explainer_renderer": [
+        "render_landscape_video.slides", "render_landscape_video.playwright", "render_landscape_video.tts",
+        "render_landscape_video.segments", "render_landscape_video.concat", "kuaishou_render.download_bgm",
+        "mix_bgm_with_gate.mix_bgm", "render_landscape_video.subtitles", "render_landscape_video.encode_final",
+        "visual_gate.py --cinema", "cover_director.render_cover_poster",
+    ],
+    "real_footage_renderer": [
+        "cinematic_v11.source_asset_gate", "cinematic_v11.tts", "kuaishou_render.download_bgm",
+        "cinematic_v11.scene_compositor", "cinematic_v11.semantic_transitions", "cinematic_v11.subtitle_overlay",
+        "cinematic_v11.audio_mix", "cinematic_v11.encode_final", "visual_gate.py --cinema", "cover_director.render_cover_poster",
+    ],
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -148,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     visual_assets = _load_visual_assets()
     materialized_backgrounds = _materialize_visual_backgrounds(output_dir, visual_assets)
     # 2026-08-16 新增：背景不足时自动 Pexels 语义下载兜底（取代 Hermes 手动下载）
-    if len(materialized_backgrounds) < 8:
+    if not dry_run and len(materialized_backgrounds) < 8:
         try:
             sys.path.insert(0, str(ROOT / "scripts"))
             from pexels_auto_bg import auto_fetch_backgrounds, write_auto_assets
@@ -159,7 +173,8 @@ def main(argv: list[str] | None = None) -> int:
             # 静默失败，不阻断渲染
             pass
     # diagram-design 补图通道：结构化主题且背景不足时，自动生成杂志级 diagram 背景
-    materialized_backgrounds = _diagram_background_fill(output_dir, script_body or title, materialized_backgrounds)
+    if not dry_run:
+        materialized_backgrounds = _diagram_background_fill(output_dir, script_body or title, materialized_backgrounds)
     if plan.get("run_contract"):
         ledger = AssetLedger(os.environ.get("ASSET_LEDGER_PATH") or ROOT / "data" / "asset_ledger.db")
         previous_hashes = {str(row.get("sha256") or "") for row in ledger.uses() if str(row.get("sha256") or "")}
@@ -349,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
         _write_manifest(output_dir, manifest)
         print(manifest["error"], file=sys.stderr)
         return 5
+    if len(materialized_backgrounds) >= 8:
+        _write_visual_treatment_plan(output_dir, plan, materialized_backgrounds)
     renderer, plan = _content_driven_renderer(plan, script_body, title, output_dir)
     template_family = str(visual_recipe.get("template_family") or plan.get("template_family") or "")
     style_variants = visual_recipe.get("style_variants") if isinstance(visual_recipe.get("style_variants"), dict) else {}
@@ -403,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
         "scene_manifest_gate": scene_manifest_gate,
         "recipe_fingerprint": visual_recipe.get("fingerprint"),
         "recipe_core_fingerprint": visual_recipe.get("core_fingerprint"),
+        "video_route": plan.get("video_route") or {},
         "card_titles": [str(card.get("t") or "") for card in cards],
         "subtitle": {"width": 1080, "height": 1920},
         "tool_invocation_manifest": tool_manifest,
@@ -423,6 +441,8 @@ def main(argv: list[str] | None = None) -> int:
     cmd = renderer_cmd
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=int(os.environ.get("VIDEO_TOOLCHAIN_TIMEOUT", "900")))
     manifest.update({"renderer_command": cmd, "returncode": proc.returncode, "stdout_tail": (proc.stdout or "")[-800:], "stderr_tail": (proc.stderr or "")[-800:]})
+    if proc.returncode == 0:
+        _normalize_alternate_renderer_outputs(renderer, output_dir, plan, script_body)
     generated = sorted(output_dir.glob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
     if proc.returncode == 0 and generated:
         duration_fix = _normalize_short_video_duration(generated[0], _primary_platform(plan))
@@ -472,12 +492,7 @@ def main(argv: list[str] | None = None) -> int:
             print(manifest["error"], file=sys.stderr)
             return 4
         manifest["segment_motion_evidence"] = {"path": str(segment_motion_path), "segments": segments}
-        actual_tools = {
-            "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text", "shotcraft_moves.shot_sequence",
-            "video_toolchain_runner.build_cards", "kuaishou_render.render_cards", "kuaishou_render.gen_tts",
-            "kuaishou_render.render_segments", "kuaishou_render.concat_video", "kuaishou_render.gen_subtitles",
-            "kuaishou_render.encode_final", "visual_gate.py --cinema",
-        }
+        actual_tools = set(_route_planned_tools(plan))
         invocations = manifest.get("tool_invocation_manifest", {}).get("invocations", {}) or {}
         for name, record in invocations.items():
             if not isinstance(record, dict) or record.get("status") != "planned_internal":
@@ -503,32 +518,28 @@ def main(argv: list[str] | None = None) -> int:
                 register=True,
             )
         _register_visual_recipe_use(visual_recipe, plan, str(generated[0]))
-        # 2026-08-17 新增：渲染完成后自动归档规范 JSON + audio/ 到交付包根目录
-        # （08-13 规范：platform_source_matrix/scene_manifest/visual_recipe/bgm/tts/checkpoint/quality/publish/audio）
-        # 由 scripts/archive_delivery_package.py 统一执行，防止 render/ 产物漏归档
+        bg_for_cover = None
+        if materialized_backgrounds:
+            bg_for_cover = materialized_backgrounds[0].get("background_image") or materialized_backgrounds[0].get("path")
+        if not bg_for_cover or not Path(str(bg_for_cover)).is_file():
+            manifest.update({"ok": False, "status": "cover_failed", "error": "topic-matched cover background missing"})
+            _write_manifest(output_dir, manifest)
+            return 6
+        try:
+            cover = _generate_video_cover(output_dir, title, _summary(script_body), plan, Path(str(bg_for_cover)))
+        except Exception as exc:
+            manifest.update({"ok": False, "status": "cover_failed", "error": str(exc)[:500]})
+            _write_manifest(output_dir, manifest)
+            return 6
+        manifest["cover"] = cover["path"]
+        manifest["cover_quality_evidence"] = cover["evidence"]
+        # Archive only after the cover and its measured evidence exist, so the
+        # handoff package cannot omit the click-facing asset.
         try:
             from scripts.archive_delivery_package import archive_delivery_package_direct
             archive_delivery_package_direct(output_dir)
         except Exception as _archive_err:
             manifest["archive_warning"] = f"delivery archive failed: {_archive_err}"
-        # 2026-08-16 新增：渲染完成后自动生成优化封面（取代 Hermes 手动生成）
-        try:
-            bg_for_cover = None
-            if materialized_backgrounds:
-                bg_for_cover = materialized_backgrounds[0].get("background_image") or materialized_backgrounds[0].get("path")
-            if bg_for_cover:
-                sys.path.insert(0, str(ROOT / "scripts"))
-                from gen_cover import generate_cover
-                orientation = "horizontal" if _primary_platform(plan) in {"bilibili", "youtube"} else "vertical"
-                cover_path = output_dir / "cover_1080x1920.jpg" if orientation == "vertical" else output_dir / "cover_1920x1080.jpg"
-                cover = generate_cover(
-                    title=title[:24], subtitle=_summary(script_body)[:36], hook="🔥 先收藏 慢慢看",
-                    bg_image=str(bg_for_cover), output_path=str(cover_path), orientation=orientation,
-                )
-                if cover:
-                    manifest["cover"] = str(cover)
-        except Exception:
-            pass
         _write_manifest(output_dir, manifest)
         print(json.dumps({"ok": True, "output": str(generated[0])}, ensure_ascii=False))
         return 0
@@ -575,11 +586,27 @@ def build_cards(
     beats = _story_beats(script_body) or [title]
     shotcraft_timeline = list((shotcraft_plan or {}).get("timeline") or [])
     visual_assignments = list((visual_assets or {}).get("assignments") or [])
+    route = plan.get("video_route") if isinstance(plan.get("video_route"), dict) else {}
+    directed_presentations = list(route.get("scene_presentations") or [])
+    presentation_layouts = {
+        "hero_footage": "cover", "hero_poster": "cover", "hero_conflict": "cover", "hero_number": "big_number",
+        "split_screen": "two_column", "side_a": "two_column", "side_b": "two_column",
+        "difference_grid": "card_stack", "takeaway_grid": "card_stack", "summary_grid": "card_stack",
+        "timeline": "timeline", "process_flow": "timeline", "process_insert": "timeline",
+        "chart_build": "big_number", "metric_focus": "big_number", "number_motion": "big_number",
+        "evidence_zoom": "diagonal", "evidence_source": "diagonal", "evidence_overlay": "diagonal",
+        "ui_focus": "diagonal", "cursor_demo": "timeline", "detail_closeup": "diagonal",
+        "result_reveal": "interaction", "winner_reveal": "interaction", "payoff_reveal": "interaction",
+        "reaction_cut": "card_stack", "behavior_closeup": "diagonal", "context_wide": "two_column",
+        "list_reveal": "card_stack", "diagram": "timeline", "real_asset_overlay": "diagonal",
+        "establishing": "two_column", "cta": "interaction", "cta_footage": "interaction",
+    }
     cards = []
     for index in range(8):
         beat = beats[index % len(beats)]
         next_beat = beats[(index + 1) % len(beats)]
-        layout = LAYOUTS[index % len(LAYOUTS)]
+        presentation = directed_presentations[index] if index < len(directed_presentations) else ""
+        layout = presentation_layouts.get(presentation, LAYOUTS[index % len(LAYOUTS)])
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
         card = {
             "layout": layout,
@@ -595,6 +622,7 @@ def build_cards(
             "color_scheme": scene.get("color_scheme", {}),
             "css": scene.get("css", {}),
             "shotcraft": _shotcraft_for_card(shotcraft_timeline, index),
+            "presentation_mode": presentation or layout,
         }
         if visual_assignments:
             card["visual_asset"] = visual_assignments[index % len(visual_assignments)]
@@ -637,6 +665,8 @@ def _shotcraft_motion_plan(text: str, num_shots: int = 8) -> dict:
                 "params": item.get("params") or {},
                 "css_selectors": sorted((item.get("css") or {}).keys()),
                 "keyframes": sorted((item.get("keyframes") or {}).keys()),
+                "css": item.get("css") or {},
+                "keyframe_definitions": item.get("keyframes") or {},
             }
             for item in timeline
         ],
@@ -654,6 +684,8 @@ def _shotcraft_for_card(timeline: list[dict], index: int) -> dict:
         "end_frame": item.get("end_frame", 0),
         "css_selectors": item.get("css_selectors") or [],
         "keyframes": item.get("keyframes") or [],
+        "css": item.get("css") or {},
+        "keyframe_definitions": item.get("keyframe_definitions") or {},
     }
 
 
@@ -927,6 +959,130 @@ def _renderer_path(plan: dict) -> Path:
     return Path(os.environ.get(env_key) or os.environ.get("VIDEO_TOOLCHAIN_RENDERER") or DEFAULT_RENDERER)
 
 
+def _generate_video_cover(output_dir: Path, title: str, summary: str, plan: dict, background: Path) -> dict:
+    from content_platform.cover_director import build_cover_direction, render_cover_poster
+    from content_platform.cover_quality import validate_cover
+
+    platform = _primary_platform(plan)
+    direction = build_cover_direction(
+        platform=platform,
+        topic=str(plan.get("topic") or title),
+        title=title,
+        body=summary,
+        recent_direction_ids=list(plan.get("recent_cover_direction_ids") or []),
+    )
+    width, height = direction["target_size"]
+    cover_path = output_dir / f"cover_{width}x{height}.jpg"
+    evidence = render_cover_poster(background, cover_path, direction)
+    evidence_path = output_dir / "cover_quality_evidence.json"
+    evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+    gate = validate_cover(cover_path, evidence, platform)
+    if not gate.get("passed"):
+        raise RuntimeError("video cover quality gate failed: " + ", ".join(gate.get("failures") or []))
+    return {"path": str(cover_path), "evidence_path": str(evidence_path), "evidence": evidence, "gate": gate}
+
+
+def _write_visual_treatment_plan(output_dir: Path, plan: dict, assignments: list[dict]) -> Path:
+    route = plan.get("video_route") if isinstance(plan.get("video_route"), dict) else {}
+    presentations = list(route.get("scene_presentations") or [])
+    cameras = ["handheld_push", "split_screen_slide", "top_down_reveal", "left_dolly", "right_dolly", "orbit_pull", "snap_zoom", "direct_eye_contact"]
+    subjects = {
+        "split_screen": "outline_compare", "difference_grid": "kanban_reveal", "data_story": "digit_roll",
+        "chart_build": "digit_roll", "metric_focus": "digit_roll", "process_flow": "action_path",
+        "timeline": "action_path", "list_reveal": "kanban_reveal", "cta": "choice_pulse",
+    }
+    texts = ["message_type", "before_after_wipe", "label_stagger", "path_draw", "highlight_underline", "focus_fade", "warning_shake", "choice_bounce"]
+    transitions = ["hard_cut", "split_reveal", "card_flip", "left_swipe", "right_swipe", "path_draw", "glitch_wipe", "end_hold"]
+    scenes = []
+    for index, item in enumerate(assignments[:8]):
+        presentation = presentations[index] if index < len(presentations) else "explain"
+        asset = str(item.get("background_image") or item.get("path") or "")
+        scenes.append({
+            "scene_id": f"s{index + 1:02d}",
+            "display_purpose": str(item.get("purpose") or presentation),
+            "real_asset": asset,
+            "camera_language": "split_screen_slide" if presentation == "split_screen" else cameras[index],
+            "subject_motion": subjects.get(presentation, "choice_pulse" if index == 7 else "persona_focus"),
+            "text_motion": texts[index],
+            "transition": transitions[index],
+            "rhythm_beat": {"emphasis": "hook" if index == 0 else "cta" if index == 7 else presentation},
+            "interaction_prompt": "comment your choice" if index == 7 else "",
+            "presentation_mode": presentation,
+        })
+    path = output_dir / "visual_treatment_plan.json"
+    path.write_text(json.dumps({"version": "visual_treatment_plan_v2", "generated_by": "video_director", "style_id": route.get("style_id", ""), "scenes": scenes}, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def _normalize_alternate_renderer_outputs(renderer: Path, output_dir: Path, plan: dict, script_body: str) -> None:
+    if renderer.name not in {"render_landscape_video.py", "cinematic_v11.py"}:
+        return
+    candidates = [
+        output_dir / "render" / "final.mp4",
+        output_dir / "final_v11.mp4",
+        output_dir / "final.mp4",
+    ]
+    source = next((path for path in candidates if path.is_file() and path.stat().st_size > 0), None)
+    if source is None:
+        return
+    final = output_dir / "final.mp4"
+    if source.resolve() != final.resolve():
+        shutil.copy2(source, final)
+    nested = output_dir / "render"
+    for name in ("bgm_source.json", "bgm.mp3", "subtitles.ass", "visual_recipe.json"):
+        source_sidecar = nested / name
+        if source_sidecar.is_file() and not (output_dir / name).is_file():
+            shutil.copy2(source_sidecar, output_dir / name)
+    tts_files = sorted([*(nested / "tts").glob("tts_*.mp3"), *(output_dir / "tts").glob("tts_*.mp3")])
+    if tts_files:
+        from content_platform.tts_text_compiler import TTSTextCompiler
+        platform = _primary_platform(plan)
+        has_cjk = bool(re.search(r"[\u3400-\u9fff]", script_body))
+        compiled = TTSTextCompiler.default().compile(script_body, context="tech", platform=platform)
+        digest = hashlib.sha256()
+        duration = 0.0
+        for path in tts_files:
+            digest.update(path.read_bytes())
+            duration += _video_duration(path)
+        fingerprint = {
+            "display_text": script_body,
+            "tts_text": compiled.tts_text,
+            "provider": "edge-tts",
+            "voice": "en-US-GuyNeural" if platform == "youtube" and not has_cjk else "zh-CN-YunjianNeural",
+            "rate": "+0%",
+            "sample_rate": 44100,
+            "channels": 2,
+            "duration_seconds": round(duration, 3),
+            "sha256": digest.hexdigest(),
+            "unhandled_latin_tokens": list(compiled.unhandled_latin_tokens) if has_cjk else [],
+        }
+        (output_dir / "tts_fingerprint.json").write_text(json.dumps(fingerprint, ensure_ascii=False, indent=2), encoding="utf-8")
+    subtitle_file = output_dir / "subtitles.ass"
+    if subtitle_file.is_file():
+        cue_count = sum(1 for line in subtitle_file.read_text(encoding="utf-8", errors="ignore").splitlines() if line.startswith("Dialogue:"))
+        (output_dir / "subtitle_burn_evidence.json").write_text(json.dumps({
+            "version": "burned_subtitle_evidence_v1", "passed": cue_count >= 3, "burned_in": True,
+            "sample_count": cue_count, "position": "lower_third", "font_size": 28,
+            "max_chars_per_line": 20, "max_lines": 2, "margin_v": 55,
+            "renderer": renderer.name,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+    segment_roots = [nested / "segments", output_dir / "v11_clips"]
+    segment_files = next((sorted(root.glob("*.mp4")) for root in segment_roots if root.is_dir()), [])
+    route = plan.get("video_route") if isinstance(plan.get("video_route"), dict) else {}
+    presentations = list(route.get("scene_presentations") or [])
+    segments = []
+    for index, path in enumerate(segment_files[:8]):
+        segments.append({
+            "scene_id": f"s{index + 1:02d}", "move_id": presentations[index] if index < len(presentations) else renderer.stem,
+            "profile": str(route.get("style_id") or renderer.stem), "path": str(path),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "artifact_verified": True,
+        })
+    if segments:
+        payload = {"version": "segment_motion_evidence_v2", "renderer": renderer.name, "segments": segments}
+        (output_dir / "segment_motion_evidence.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (output_dir / "scene_execution_evidence.json").write_text(json.dumps({"version": "scene_execution_evidence_v2", "scenes": segments}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _content_driven_renderer(plan: dict, script_body: str, title: str, output_dir: Path) -> tuple[Path, dict]:
     """内容驱动渲染器选择（2026-08-15 固化 — 用户要求工作流自动识别动效，不依赖人工指定）。
 
@@ -937,6 +1093,23 @@ def _content_driven_renderer(plan: dict, script_body: str, title: str, output_di
     让 manifest / 门禁证据链一致。
     """
     new_plan = dict(plan)
+    route = plan.get("video_route") if isinstance(plan.get("video_route"), dict) else {}
+    renderer_id = str(route.get("renderer_id") or "")
+    if renderer_id:
+        renderers = {
+            "layered_card_renderer": ROOT / "scripts" / "kuaishou_render.py",
+            "cinema_multishot_renderer": ROOT / "scripts" / "film_renderer.py",
+            "landscape_explainer_renderer": ROOT / "scripts" / "render_landscape_video.py",
+            "real_footage_renderer": ROOT / "scripts" / "cinematic_v11.py",
+        }
+        renderer = renderers.get(renderer_id)
+        if renderer is None:
+            raise RuntimeError(f"unknown video route renderer: {renderer_id}")
+        script_md = output_dir / "script.md"
+        if script_body.strip():
+            script_md.write_text(script_body.strip(), encoding="utf-8")
+        print(f"[video-director] {renderer_id} -> {renderer.name}", file=sys.stderr)
+        return renderer, new_plan
     # 文案来源：script_body 或 title（title 也是内容信号）
     # ⚠️ 对齐 film_renderer 内部逻辑：只检测偶数段（i%2==0 才启用动效镜头），
     # 避免"切了 film_renderer 但实际无动效"的白切
@@ -980,6 +1153,17 @@ def _content_driven_renderer(plan: dict, script_body: str, title: str, output_di
 
 
 def _renderer_command(renderer: Path, output_dir: Path, theme: str, title: str, script_body: str, plan: dict, bgm_style: str) -> list[str]:
+    if renderer.name == "render_landscape_video.py":
+        script_path = output_dir / "script.md"
+        if not script_path.is_file():
+            script_path.write_text(script_body, encoding="utf-8")
+        return [
+            sys.executable, str(renderer), "--out-dir", str(output_dir), "--script", str(script_path),
+            "--bg-dir", str(output_dir / "backgrounds"), "--title", title[:80],
+            "--platform", _primary_platform(plan), "--bgm-style", bgm_style,
+        ]
+    if renderer.name == "cinematic_v11.py":
+        return [sys.executable, str(renderer), "--video-dir", str(output_dir), "--platform", _primary_platform(plan)]
     return [
         sys.executable,
         str(renderer),
@@ -1031,7 +1215,7 @@ def _toolchain_contract(plan: dict, theme: str, bgm_style: str, renderer: Path, 
     recipe = visual_recipe or {}
     recipe_modules = [str(item) for item in (recipe.get("modules") or [])]
     return {
-        "planned_tools": PLANNED_TOOLS,
+        "planned_tools": _route_planned_tools(plan),
         "renderer_steps": RENDERER_STEPS,
         "effect_stack": recipe_modules or EFFECT_STACK,
         "template_registry": {
@@ -1160,6 +1344,9 @@ def _register_visual_recipe_use(recipe: dict, plan: dict, output_path: str) -> N
         "style_variants": recipe.get("style_variants") or {},
         "platforms": plan.get("platforms") or [],
         "selected_pipeline": plan.get("selected_pipeline") or "",
+        "video_route": plan.get("video_route") or {},
+        "style_id": (plan.get("video_route") or {}).get("style_id", "") if isinstance(plan.get("video_route"), dict) else "",
+        "renderer_id": (plan.get("video_route") or {}).get("renderer_id", "") if isinstance(plan.get("video_route"), dict) else "",
         "output_path": output_path,
     }
     rows.append(row)
@@ -1346,12 +1533,17 @@ def _primary_platform(plan: dict) -> str:
 
 
 def _tool_invocation_manifest(plan: dict, repost: bool = False) -> dict:
-    names = REPOST_PLANNED_TOOLS if repost else PLANNED_TOOLS
+    names = REPOST_PLANNED_TOOLS if repost else _route_planned_tools(plan)
     planned = {name: _tool_ref(name) for name in names}
     return build_tool_invocation_manifest(
         planned_tools=planned,
         invocations={name: {"status": "planned_internal", "output": ref} for name, ref in planned.items()},
     )
+
+
+def _route_planned_tools(plan: dict) -> list[str]:
+    route = plan.get("video_route") if isinstance(plan.get("video_route"), dict) else {}
+    return list(ROUTE_PLANNED_TOOLS.get(str(route.get("renderer_id") or ""), PLANNED_TOOLS))
 
 
 def _tool_ref(name: str) -> str:

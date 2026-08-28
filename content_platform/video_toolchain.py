@@ -8,6 +8,7 @@ from .content_policy import SHORT_VIDEO_PLATFORMS
 from .content_recipe import build_tool_invocation_manifest
 from .tool_selection import build_tool_selection_evidence
 from .video_recipe import build_visual_recipe
+from .video_director import build_video_route
 
 
 VIDEO_FORMS = {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video", "article_explainer_video"}
@@ -36,8 +37,21 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
             "platforms": platforms,
         }
 
-    selected_pipeline = _select_pipeline(platforms, content_form, asset_plan, brief)
-    template_family = _select_template_family(platforms, content_form, brief)
+    legacy_pipeline = _select_pipeline(platforms, content_form, asset_plan, brief)
+    legacy_template_family = _select_template_family(platforms, content_form, brief)
+    available_assets = brief.get("available_video_assets") if isinstance(brief.get("available_video_assets"), dict) else {}
+    route = build_video_route(
+        platform=platforms[0] if platforms else "",
+        title=str(brief.get("topic") or brief.get("title") or ""),
+        body=str(brief.get("body") or brief.get("summary") or ""),
+        content_form=content_form,
+        available_assets=available_assets,
+        recent_style_ids=list(brief.get("recent_video_style_ids") or []),
+    )
+    # Preserve the public pipeline contract. The renderer is selected once in
+    # video_route and must not rewrite selected_pipeline downstream.
+    selected_pipeline = legacy_pipeline
+    template_family = legacy_template_family
     required_tools = _required_tools(selected_pipeline, content_form, asset_plan)
     plan = {
         "required": True,
@@ -45,6 +59,9 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
         "platforms": platforms,
         "selected_pipeline": selected_pipeline,
         "template_family": template_family,
+        "video_route": route,
+        "legacy_pipeline_hint": legacy_pipeline,
+        "recent_cover_direction_ids": list(brief.get("recent_cover_direction_ids") or []),
         "required_tools": required_tools,
         "tool_refs": {
             "source_video_discovery": "hermes_tool:same_lane_hot_video_analysis",
@@ -84,17 +101,7 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
             "generate_packet",
             "visual_gate_cinema",
         ],
-        "effect_stack": [
-            "template_theme",
-            "cinema_color_css",
-            "cinema_composition_layout",
-            "shotcraft_motion_css",
-            "motion_card_layouts",
-            "lower_third_subtitles",
-            "licensed_bgm_mix",
-            "audio_loudness_gate",
-            "post_render_anti_template_gate",
-        ],
+        "effect_stack": list(route["modules"]) + ["audio_loudness_gate", "post_render_anti_template_gate"],
         "render_requirements": {
             "duration_seconds": [40, 100],
             "min_distinct_scenes": 8,

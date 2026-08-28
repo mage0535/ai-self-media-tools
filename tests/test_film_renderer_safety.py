@@ -101,6 +101,21 @@ def test_chinese_short_video_subtitle_layout_matches_platform_gate():
     assert layout["max_lines"] <= 2
 
 
+def test_shotcraft_css_is_compiled_into_renderer_html():
+    card = {
+        "shotcraft": {
+            "name": "dolly-in",
+            "css": {".scene": {"animation": "dolly-in 2s ease-out forwards"}},
+            "keyframe_definitions": {"dolly-in": [{"offset": 0, "transform": "scale(1)"}, {"offset": 1, "transform": "scale(1.15)"}]},
+        }
+    }
+
+    css = film_renderer.compile_shotcraft_css(card)
+
+    assert ".scene { animation: dolly-in 2s ease-out forwards; }" in css
+    assert "@keyframes dolly-in" in css
+
+
 def test_timeline_uses_real_transition_boundaries():
     starts, total = film_renderer.calculate_timeline([2.0, 2.0, 2.0], [0.35, 0.0])
 

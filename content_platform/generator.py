@@ -479,26 +479,22 @@ class DraftGenerator:
 
     @staticmethod
     def _default_cover_design(topic, draft, brief, draft_meta):
-        topic_text = str(topic or draft.get("title") or "content topic")
-        layouts = ["hero_conflict", "diagonal_split", "evidence_interface", "checklist_poster", "magazine_story", "result_reveal"]
-        layout = layouts[int(hashlib.sha256(topic_text.encode("utf-8")).hexdigest()[:8], 16) % len(layouts)]
+        from .cover_director import build_cover_direction
+
+        platforms = list((draft_meta.get("strategy") or {}).get("primary_platforms") or brief.get("platforms") or [])
         blueprint = brief.get("content_blueprint") if isinstance(brief.get("content_blueprint"), dict) else {}
         roles = blueprint.get("mascot_roles") if isinstance(blueprint.get("mascot_roles"), dict) else {}
-        focal = list(roles) if roles else [topic_text, "problem evidence", "actionable result"]
-        return {
-            "visual_subject": f"{topic_text} narrative proof",
-            "topic_alignment": "matches the selected topic and content payoff",
-            "mobile_readable": True,
-            "visual_hierarchy": "hook, conflict, proof, payoff",
-            "template_family": str(draft_meta.get("content_form") or "content_specific"),
-            "layout_key": layout,
-            "hook": str(draft.get("hook") or draft.get("title") or topic_text),
-            "conflict_or_payoff": str(blueprint.get("user_pain") or "show the costly mistake and the verifiable corrective result"),
-            "focal_subjects": focal,
-            "content_match_reason": "the poster visualizes the current platform blueprint rather than reusing a fixed cover",
-            "safe_zone_verified": True,
-            "degraded": False,
-        }
+        existing = dict(draft_meta.get("cover_design") or {})
+        if roles:
+            existing["focal_subjects"] = list(roles)
+        return build_cover_direction(
+            platform=str(platforms[0] if platforms else brief.get("platform") or ""),
+            topic=str(topic or draft.get("title") or "content topic"),
+            title=str(draft.get("hook") or draft.get("title") or topic or ""),
+            body=str(draft.get("body") or ""),
+            recent_direction_ids=list(brief.get("recent_cover_direction_ids") or []),
+            existing=existing,
+        )
 
     @staticmethod
     def _attach_growth_recipe(brief, context, draft_meta):
