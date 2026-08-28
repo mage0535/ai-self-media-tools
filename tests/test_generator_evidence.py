@@ -1,6 +1,7 @@
 from content_platform.generator import DraftGenerator
 from content_platform.content_quality_reference import load_content_quality_reference_pack
 from content_platform.run_contract import build_run_contract
+from content_platform.preflight_manifest import validate_preflight_manifest
 import pytest
 
 
@@ -140,6 +141,30 @@ def test_video_draft_also_gets_an_adaptive_cover_contract():
     assert len(manifest["planned_tools"]) >= 6
     assert set(manifest["planned_tools"]) == set(manifest["invocations"])
     assert all(item["status"] == "planned" for item in manifest["invocations"].values())
+
+
+def test_video_draft_builds_preflight_before_capability_execution():
+    draft = DraftGenerator({"allow_fallback": True}).generate("AI meeting notes", {
+        "platform": "kuaishou",
+        "platforms": ["kuaishou"],
+        "content_form": "short_video",
+        "content_blueprint": {
+            "topic": "AI meeting notes",
+            "content_form": "short_video",
+            "audience": "content creators",
+        },
+        "selection_mode": "official_native",
+        "platform_source_matrix": {
+            "platform": "kuaishou",
+            "real_platform_collection_verified": True,
+            "attempted_sources": [{"source": "kuaishou_native", "status": "ok", "url": "https://example.test/hot"}],
+        },
+    })
+
+    manifest = draft["draft_meta"]["preflight_manifest"]
+    assert manifest["content_type"] == "short_video"
+    assert "content/visual-quality-standards" in manifest["skills_loaded"]
+    assert validate_preflight_manifest({"preflight_manifest": manifest}, "kuaishou")["passed"] is True
 
 
 def test_blueprint_content_form_controls_generation_context():
