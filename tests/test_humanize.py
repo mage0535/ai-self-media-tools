@@ -15,6 +15,8 @@ class HumanizeTests(unittest.TestCase):
     def test_feed_paragraph_normalization_preserves_domains_and_breaks_sentences(self):
         result = normalize_feed_paragraphs("打开 ai.kuaishou.com。检查来源。确认结果。")
         self.assertEqual(result, "打开 ai.kuaishou.com。\n\n检查来源。\n\n确认结果。")
+        joined = normalize_feed_paragraphs("第一步，打开ai.\n\nkuaishou.\n\ncom注册账号。")
+        self.assertIn("打开ai.kuaishou.com", joined)
 
     def test_naturalize_copy_returns_scores_and_rewrite_notes(self):
         result = naturalize_copy(

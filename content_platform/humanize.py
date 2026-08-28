@@ -54,7 +54,7 @@ def _strip_web_residue(text: str) -> str:
     updated = re.sub(r"\n{3,}", "\n\n", updated)
     updated = re.sub(r"[ \t]{2,}", " ", updated)
     updated = re.sub(
-        r"\b([a-z0-9-]+)\s*\.\s*([a-z0-9-]+)\s*\.\s*(com|cn|org|net|io|ai|dev)\b",
+        r"(?<![a-z0-9-])([a-z0-9-]+)\s*\.\s*([a-z0-9-]+)\s*\.\s*(com|cn|org|net|io|ai|dev)(?![a-z0-9-])",
         r"\1.\2.\3",
         updated,
         flags=re.I,

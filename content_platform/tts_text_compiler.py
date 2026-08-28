@@ -39,7 +39,7 @@ class TTSTextCompiler:
 
     def compile(self, display_text: str, *, context: str = "default", platform: str = "") -> CompiledTTS:
         display = re.sub(
-            r"\b([a-z0-9-]+)\s*\.\s*([a-z0-9-]+)\s*\.\s*(com|cn|org|net|io|ai|dev)\b",
+            r"(?<![a-z0-9-])([a-z0-9-]+)\s*\.\s*([a-z0-9-]+)\s*\.\s*(com|cn|org|net|io|ai|dev)(?![a-z0-9-])",
             r"\1.\2.\3",
             str(display_text or ""),
             flags=re.I,
