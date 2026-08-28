@@ -70,7 +70,7 @@ def validate_render_inputs(
         narration = re.sub(r"\s+", "", str(card.get("tts") or ""))
         displayed = "".join(
             re.sub(r"\s+", "", str(card.get(key) or ""))
-            for key in ("t", "txt", "sub")
+            for key in ("t", "txt", "sub", "ext")
         ) + "".join(re.sub(r"\s+", "", str(item)) for item in card.get("items") or [])
         if narration and displayed and (narration in displayed or SequenceMatcher(None, narration, displayed).ratio() >= 0.88):
             failures.append(f"card_{card_index}_narration_display_duplicate")
