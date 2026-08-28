@@ -45,3 +45,18 @@ def test_video_route_avoids_same_platform_style_used_within_three_days():
 
     assert second["style_id"] != first["style_id"]
     assert second["history_window_days"] == 3
+
+
+def test_screen_demo_requires_verified_ui_assets_and_falls_back_without_them():
+    without_ui = build_video_route(
+        platform="kuaishou", title="API 接入三步", body="第一步打开界面，第二步接入 API。",
+        content_form="knowledge_card_video", available_assets={},
+    )
+    with_ui = build_video_route(
+        platform="kuaishou", title="API 接入三步", body="第一步打开界面，第二步接入 API。",
+        content_form="knowledge_card_video", available_assets={"screenshot_count": 2},
+    )
+
+    assert without_ui["presentation_mode"] == "layered_checklist"
+    assert without_ui["renderer_id"] == "layered_card_renderer"
+    assert with_ui["presentation_mode"] == "screen_demo"

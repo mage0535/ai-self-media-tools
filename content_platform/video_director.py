@@ -36,7 +36,12 @@ def build_video_route(
     platform = str(platform or "").casefold()
     text = f"{title} {body}".casefold()
     assets = available_assets or {}
-    modality = _modality(text, int(assets.get("footage_count") or 0), content_form)
+    modality = _modality(
+        text,
+        int(assets.get("footage_count") or 0),
+        int(assets.get("screenshot_count") or assets.get("ui_asset_count") or 0),
+        content_form,
+    )
     renderer_id = _renderer(platform, modality)
     palettes = _palettes(platform, modality)
     typography = ["editorial_condensed", "bold_geometric", "documentary_sans"]
@@ -74,14 +79,14 @@ def build_video_route(
     return route
 
 
-def _modality(text: str, footage_count: int, content_form: str) -> str:
+def _modality(text: str, footage_count: int, screenshot_count: int, content_form: str) -> str:
     if footage_count >= 8:
         return "real_footage_story"
     if any(token in text for token in ("vs", "versus", "对比", "区别", "a平台", "b平台", "before", "after")):
         return "split_comparison"
     if any(token in text for token in ("数据", "指标", "%", "增长", "下降", "chart", "metric")):
         return "data_story"
-    if any(token in text for token in ("界面", "截图", "api", "操作", "演示", "demo", "screen")):
+    if screenshot_count > 0 and any(token in text for token in ("界面", "截图", "api", "操作", "演示", "demo", "screen")):
         return "screen_demo"
     if any(token in text for token in ("第一步", "第二步", "清单", "步骤", "避坑", "checklist")):
         return "layered_checklist"
