@@ -993,6 +993,20 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(records[1]["source_url"], "https://www.pexels.com/photo/1/")
             self.assertEqual(records[1]["license"], "Pexels Content License")
 
+    def test_materialized_assets_become_the_manifest_and_card_assignments(self):
+        from scripts.video_toolchain_runner import _visual_assets_from_materialized
+
+        materialized = [
+            {"scene": index, "path": f"/tmp/bg-{index}.jpg", "source_url": f"https://pexels.test/{index}", "license": "Pexels Content License", "semantic_match_score": 0.8, "match_reason": "matched", "semantic_tags": ["tech"]}
+            for index in range(1, 9)
+        ]
+        packet = _visual_assets_from_materialized(materialized)
+
+        self.assertEqual(packet["scene_count"], 8)
+        self.assertEqual(len(packet["assignments"]), 8)
+        self.assertEqual(packet["assignments"][0]["background_image"], "/tmp/bg-1.jpg")
+        self.assertEqual(packet["assignments"][0]["source_url"], "https://pexels.test/1")
+
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm
 

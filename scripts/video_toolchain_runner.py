@@ -182,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                 materialized_backgrounds = _merge_materialized_backgrounds([], replacements)
             except Exception as exc:
                 print(f"[asset-reselection] failed: {exc}", file=sys.stderr)
+    visual_assets = _visual_assets_from_materialized(materialized_backgrounds)
     asset_records = _asset_provenance_records(materialized_backgrounds)
     asset_provenance_path = output_dir / "asset_provenance.json"
     asset_provenance_path.write_text(json.dumps({"version": "asset_provenance_v1", "assets": asset_records}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -858,6 +859,34 @@ def _asset_provenance_records(materialized: list[dict]) -> list[dict]:
         for index, item in enumerate(materialized, 1)
         if item.get("path")
     ]
+
+
+def _visual_assets_from_materialized(materialized: list[dict]) -> dict:
+    assignments = []
+    for index, item in enumerate(materialized[:8], 1):
+        path = str(item.get("path") or item.get("background_image") or "")
+        if not path:
+            continue
+        assignments.append({
+            "scene": item.get("scene") or index,
+            "source_image": str(item.get("source") or path),
+            "background_image": path,
+            "materialized_background": path,
+            "reused": False,
+            "purpose": str(item.get("match_reason") or "scene background matched to narration"),
+            "source_url": str(item.get("source_url") or ""),
+            "license": str(item.get("license") or ""),
+            "semantic_match_score": float(item.get("semantic_match_score") or 0),
+            "match_reason": str(item.get("match_reason") or ""),
+            "semantic_tags": list(item.get("semantic_tags") or []),
+            "generation_evidence": dict(item.get("generation_evidence") or {}),
+        })
+    return {
+        "source": "materialized_asset_selection",
+        "image_count": len(assignments),
+        "scene_count": len(assignments),
+        "assignments": assignments,
+    }
 
 
 def _merge_materialized_backgrounds(existing: list[dict], additions: list[dict]) -> list[dict]:
