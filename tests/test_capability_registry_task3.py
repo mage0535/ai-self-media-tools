@@ -457,6 +457,22 @@ def test_delivery_router_selects_exactly_one_policy_compatible_capability():
     assert "handoff_package_builder" not in {item["capability_id"] for item in automatic["candidates"]}
 
 
+def test_delivery_router_does_not_claim_publisher_execution_in_dry_run():
+    from content_platform.capability_router import match_capabilities
+
+    result = match_capabilities(
+        {"platform": "kuaishou", "content_format": "vertical_video"},
+        runtime_context={"dry_run": True},
+    )
+
+    assert "pipeline_publisher" not in {item["capability_id"] for item in result["candidates"]}
+    assert any(
+        item.get("capability_id") == "pipeline_publisher"
+        and item.get("reason") == "dry_run_uses_verified_delivery_boundary"
+        for item in result["skipped"]
+    )
+
+
 def test_video_layout_formats_route_to_video_capabilities():
     from content_platform.capability_router import match_capabilities
 

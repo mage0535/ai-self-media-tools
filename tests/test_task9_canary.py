@@ -313,6 +313,19 @@ def test_scheduled_and_direct_publish_canaries_remain_non_publishing_dry_runs():
     assert cases["twitter"]["dry_run"] is True
 
 
+def test_canary_brief_propagates_dry_run_to_capability_routing():
+    from scripts.task9_canary import _canary_brief, build_canary_matrix
+
+    case = next(row for row in build_canary_matrix() if row["platform"] == "kuaishou")
+    hotspot = {
+        "platform": "kuaishou", "observed_title": "AI workflow", "source_url": "https://example.test/hot",
+        "fetched_at": "2026-08-28T00:00:00+00:00", "provenance_hash": "a" * 64,
+        "native_verified": True, "evidence_type": "native", "association_mode": "auto_browser",
+    }
+
+    assert _canary_brief(case, hotspot)["dry_run"] is True
+
+
 def test_runtime_identity_requires_successful_cli_output_not_environment_fallback(monkeypatch):
     from scripts import task9_canary
 
@@ -385,6 +398,38 @@ def test_canary_artifact_probe_uses_actual_file_hashes_and_contract_evidence(tmp
     assert "artifact_hash_mismatch:cover.jpg" in result["failures"]
     assert result["input_output_hashes"]["cover.jpg"]
     assert result["probes"]["cover"]["evidence_level"] == "declared"
+
+
+def test_canary_subtitle_probe_accepts_burned_ass_dialogue(tmp_path: Path):
+    from scripts.task9_canary import _read_subtitle
+
+    subtitle = _write(
+        tmp_path / "subtitles.ass",
+        "[Events]\nDialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,真实字幕\n",
+    )
+
+    result = _read_subtitle(subtitle)
+
+    assert result["passed"] is True
+    assert result["cue_count"] == 1
+
+
+def test_canary_artifact_manifest_points_probe_to_job_media_root(tmp_path: Path):
+    from scripts.task9_canary import probe_artifacts
+
+    media = tmp_path / "artifacts" / "job-1"
+    _write(media / "cover.png", b"cover-bytes")
+    _write(media / "cover_quality_evidence.json", json.dumps({"safe_zone_verified": True}))
+    _write(tmp_path / "artifact_manifest.json", json.dumps({
+        "artifact_root": "artifacts/job-1",
+        "artifacts": [{"path": "artifacts/job-1/cover.png", "sha256": hashlib.sha256(b"cover-bytes").hexdigest()}],
+        "capabilities": [{"id": "cover", "state": "executed", "output_hash": "sha256:x", "required": False}],
+        "delivery_policy": {"state": "dry_run"},
+    }))
+
+    result = probe_artifacts({"content_form": "article", "platform": "wechat", "dry_run": True, "delivery_policy": "dry_run"}, tmp_path)
+
+    assert "cover_missing" not in result["failures"]
 
 
 def test_delivery_scenarios_use_real_ledger_and_prove_unknown_boundaries(tmp_path: Path):
