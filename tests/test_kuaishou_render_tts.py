@@ -236,6 +236,20 @@ def test_bgm_download_skips_registered_sources_before_network_download(tmp_path,
     assert downloads == [fresh["source_url"]]
 
 
+def test_bgm_registry_enforces_only_the_seven_day_window(tmp_path, monkeypatch):
+    registry = tmp_path / "bgm_registry.json"
+    registry.write_text(json.dumps({"tracks": [
+        {"source_url": "https://source.test/old", "registered_at": "2026-08-01T00:00:00Z"},
+        {"source_url": "https://source.test/legacy"},
+    ]}), encoding="utf-8")
+    monkeypatch.setenv("BGM_FINGERPRINT_REGISTRY", str(registry))
+
+    keys = kuaishou_render._registered_bgm_candidate_keys()
+
+    assert "source:https://source.test/old" not in keys
+    assert "source:https://source.test/legacy" in keys
+
+
 def test_bgm_queries_prioritize_requested_instruments_before_broad_fallbacks():
     queries = kuaishou_render._bgm_queries("muted percussion and low strings")
 
