@@ -472,6 +472,23 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("ai.kuaishou.com", current["body"])
         self.assertTrue(current["draft_meta"]["claim_ledger"])
 
+    def test_short_video_rechecks_stale_hook_score_after_copy_transforms(self):
+        job = self.pipeline.create("AI workflow", ["kuaishou"], {})
+        draft = {
+            "title": "AI 工作流",
+            "body": "做内容还在来回切工具？\n\n先确认输入。\n\n再核对结果。",
+            "draft_meta": {
+                "quality_scores": {"clarity": 1, "authenticity": 1, "hook_strength": 0.45, "platform_fit": 0.75, "burstiness": 0.6},
+                "quality_gate": {"passed": False, "failed_dimensions": ["hook_strength"]},
+                "strategy": {"content_form": "vertical_video", "primary_platforms": ["kuaishou"]},
+            },
+        }
+        with patch.object(self.pipeline.generator, "generate", return_value=draft), patch.object(self.pipeline.media, "generate", return_value=None):
+            result = self.pipeline.run(job["id"])
+
+        assert result["state"] != "blocked"
+        assert result["draft_meta"]["quality_gate"]["gates"]["G3_anti_generic"]["passed"] is True
+
     def test_scheduled_contract_requires_content_depth_before_media(self):
         from content_platform.run_contract import build_run_contract
 
