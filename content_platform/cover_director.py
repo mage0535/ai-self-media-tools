@@ -114,14 +114,19 @@ def render_cover_poster(background: str | Path, output: str | Path, direction: d
     kicker_y = pill[1] + ((pill[3] - pill[1]) - (bbox[3] - bbox[1])) / 2 - bbox[1]
     draw.text((margin + 24, kicker_y), kicker_text, font=kicker_font, fill=(10, 14, 20, 255))
     y += 14
-    title_lines = _wrap(str(direction.get("title_text") or ""), 12 if width < height else 18, 3)
+    text_max_width = width - (margin * 2)
+    title_lines = _wrap_pixels(draw, str(direction.get("title_text") or ""), title_font, text_max_width, 3)
+    measured_title_widths = []
     for line in title_lines:
+        measured_title_widths.append(draw.textbbox((0, 0), line, font=title_font, stroke_width=2)[2])
         draw.text((margin, y), line, font=title_font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 190))
         y += round(title_size * 1.16)
     subtitle = str(direction.get("subtitle_text") or "").strip()
+    measured_subtitle_widths = []
     if subtitle:
         y += round(subtitle_size * 0.35)
-        for line in _wrap(subtitle, 20 if width < height else 32, 2):
+        for line in _wrap_pixels(draw, subtitle, subtitle_font, text_max_width, 2):
+            measured_subtitle_widths.append(draw.textbbox((0, 0), line, font=subtitle_font, stroke_width=1)[2])
             draw.text((margin, y), line, font=subtitle_font, fill=(235, 239, 244, 255), stroke_width=1, stroke_fill=(0, 0, 0, 170))
             y += round(subtitle_size * 1.35)
     draw.rectangle((margin, height - round(height * 0.065), width - margin, height - round(height * 0.061)), fill=(*accent, 230))
@@ -130,18 +135,24 @@ def render_cover_poster(background: str | Path, output: str | Path, direction: d
     composite.save(target, quality=94)
     luminance = composite.convert("L")
     contrast_stddev = float(ImageStat.Stat(luminance).stddev[0])
+    max_text_width = max([*measured_title_widths, *measured_subtitle_widths] or [0])
+    horizontal_safe = max_text_width <= text_max_width
+    vertical_safe = y < height - round(height * 0.10)
     evidence = {
         **direction,
         "version": "cover_quality_evidence_v2",
         "typography_overlay_verified": True,
-        "title_safe_zone_verified": y < height - round(height * 0.10),
-        "safe_zone_verified": y < height - round(height * 0.10),
+        "title_safe_zone_verified": vertical_safe and horizontal_safe,
+        "horizontal_safe_zone_verified": horizontal_safe,
+        "safe_zone_verified": vertical_safe and horizontal_safe,
         "background_sha256": _sha(source),
         "composite_sha256": _sha(target),
         "dimensions": [width, height],
         "measured_contrast_stddev": round(contrast_stddev, 3),
         "visual_variance_verified": contrast_stddev >= 18.0,
         "title_line_count": len(title_lines),
+        "max_text_line_width_px": max_text_width,
+        "text_safe_width_px": text_max_width,
     }
     return evidence
 
@@ -228,6 +239,32 @@ def _wrap(text: str, limit: int, max_lines: int) -> list[str]:
     else:
         lines = [clean[index:index + limit] for index in range(0, len(clean), limit)]
     return lines[:max_lines]
+
+
+def _wrap_pixels(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int, max_lines: int) -> list[str]:
+    clean = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not clean:
+        return []
+    tokens = clean.split() if " " in clean and not re.search(r"[\u3400-\u9fff]", clean) else list(clean)
+    separator = " " if tokens and tokens[0] != clean[:1] else ""
+    lines: list[str] = []
+    current = ""
+    for token in tokens:
+        candidate = f"{current}{separator if current else ''}{token}"
+        width = draw.textbbox((0, 0), candidate, font=font, stroke_width=2)[2]
+        if current and width > max_width:
+            lines.append(current)
+            current = token
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        while draw.textbbox((0, 0), lines[-1] + "…", font=font, stroke_width=2)[2] > max_width and lines[-1]:
+            lines[-1] = lines[-1][:-1]
+        lines[-1] = lines[-1].rstrip("，,；;：: ") + "…"
+    return lines
 
 
 def _rgb(value: str) -> tuple[int, int, int]:

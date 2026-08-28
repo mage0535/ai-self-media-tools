@@ -50,6 +50,25 @@ def test_rendered_cover_contains_typography_and_machine_evidence(tmp_path: Path)
     assert evidence["background_sha256"] != evidence["composite_sha256"]
     assert evidence["visual_variance_verified"] is True
     assert 1 <= evidence["title_line_count"] <= 3
+    assert evidence["horizontal_safe_zone_verified"] is True
+    assert evidence["max_text_line_width_px"] <= evidence["text_safe_width_px"]
+    assert validate_cover(output, evidence, "kuaishou")["passed"] is True
+
+
+def test_long_mixed_title_is_pixel_wrapped_inside_horizontal_safe_zone(tmp_path: Path):
+    background = tmp_path / "background.jpg"
+    Image.new("RGB", (1200, 2133), (24, 36, 48)).save(background)
+    output = tmp_path / "cover.png"
+    direction = build_cover_direction(
+        platform="kuaishou", topic="AI 工具工作流",
+        title="AI能力一次配齐，别再到处攒工具",
+        body="写文案开一个网页，生图切另一个，配音再换一个。",
+    )
+
+    evidence = render_cover_poster(background, output, direction)
+
+    assert evidence["horizontal_safe_zone_verified"] is True
+    assert evidence["max_text_line_width_px"] <= evidence["text_safe_width_px"]
     assert validate_cover(output, evidence, "kuaishou")["passed"] is True
 
 
