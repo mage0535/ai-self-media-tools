@@ -15,6 +15,7 @@ Usage:
 
 """
 import argparse, asyncio, base64, hashlib, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -1074,9 +1075,22 @@ def _registered_bgm_candidate_keys():
     tracks = data.get("tracks") if isinstance(data, dict) else []
     keys = set()
     for track in tracks if isinstance(tracks, list) else []:
-        if isinstance(track, dict):
+        if isinstance(track, dict) and _bgm_track_within_dedup_window(track):
             keys.update(_bgm_candidate_keys(track))
     return keys
+
+
+def _bgm_track_within_dedup_window(track, days=7):
+    registered = str((track or {}).get("registered_at") or "").strip()
+    if not registered:
+        return True  # Legacy records without time remain conservatively blocked.
+    try:
+        observed = datetime.fromisoformat(registered.replace("Z", "+00:00"))
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return True
+    return observed >= datetime.now(timezone.utc) - timedelta(days=max(1, int(days)))
 
 
 def _register_bgm_fingerprint(meta):
@@ -1097,7 +1111,8 @@ def _register_bgm_fingerprint(meta):
     if not isinstance(tracks, list):
         tracks = []
         data["tracks"] = tracks
-    if any(str(item.get("fingerprint") or item.get("sha256") or "").strip() == fingerprint for item in tracks if isinstance(item, dict)):
+    tracks[:] = [item for item in tracks if isinstance(item, dict) and _bgm_track_within_dedup_window(item)]
+    if any(str(item.get("fingerprint") or item.get("sha256") or "").strip() == fingerprint for item in tracks):
         raise RuntimeError("BGM fingerprint already used; choose a different licensed track")
     tracks.append(
         {
