@@ -110,6 +110,10 @@ def test_bgm_download_limits_each_candidate_without_consuming_global_budget(tmp_
     assert 0 < candidate_deadlines[0] - started <= 3.5
 
 
+def test_default_bgm_candidate_budget_is_short_enough_to_skip_dead_sources():
+    assert kuaishou_render.DEFAULT_BGM_CANDIDATE_MAX_SECONDS <= 15
+
+
 def test_bgm_download_skips_registered_sources_before_network_download(tmp_path, monkeypatch):
     used = {
         "provider": "openverse_audio",
