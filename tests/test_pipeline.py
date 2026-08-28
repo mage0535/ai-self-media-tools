@@ -518,6 +518,26 @@ class PipelineTests(unittest.TestCase):
         assert result["state"] == "review_required"
         assert result["title"] == "Verified workflow"
 
+    def test_long_unsafe_topic_does_not_become_a_multi_sentence_title_fallback(self):
+        from content_platform.run_contract import build_run_contract
+
+        long_topic = "九十九秒完成工作。朋友每天节省八小时。" * 8
+        job = self.pipeline.create(long_topic, ["twitter"], {"run_contract": build_run_contract("twitter")})
+        safe_body = "先核对来源。\n再确认负责人。\n记录下一步。" * 8
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "九十九秒完成工作",
+            "body": safe_body,
+            "draft_meta": {"claim_ledger": [], "content_depth_plan": {
+                "version": "content_depth_plan_v1", "title": "workflow", "knowledge_points": ["a", "b", "c"],
+                "case_or_demo": "source", "steps": ["a", "b"], "counterexample": "none", "takeaway": "verify",
+                "interaction_prompt": "which?", "continuation_claimed": False,
+            }},
+        }):
+            result = self.pipeline.run(job["id"])
+
+        self.assertLessEqual(len(result["title"]), 40)
+        self.assertNotEqual(result["title"], long_topic)
+
     def test_short_video_geo_gate_uses_short_form_contract(self):
         draft = {
             "draft_meta": {
