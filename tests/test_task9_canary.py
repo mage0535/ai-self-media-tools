@@ -432,6 +432,32 @@ def test_canary_artifact_manifest_points_probe_to_job_media_root(tmp_path: Path)
     assert "cover_missing" not in result["failures"]
 
 
+def test_canary_manifest_merges_verified_capabilities_and_store_deliveries(tmp_path: Path):
+    from scripts.task9_canary import _materialize_artifact_manifest
+
+    class Store:
+        def get_job(self, _job_id):
+            return {"id": "job-1", "draft_meta": {"capability_execution": {
+                "executed": [{"capability_id": "voice_engine", "output_hash": "sha256:voice", "required": False}],
+                "artifact_verified": [{"capability_id": "voice_engine", "output_hash": "sha256:voice"}],
+                "planned": [{"capability_id": "optional_search", "required_or_optional": "optional"}],
+            }}}
+        def deliveries(self, _job_id):
+            return [{"platform": "kuaishou", "status": "dry_run", "external_id": "outbox/receipt.json"}]
+        def source_items(self, _job_id): return []
+        def events(self, _job_id): return []
+
+    manifest = _materialize_artifact_manifest(
+        {"platform": "kuaishou", "content_form": "vertical_video", "delivery_policy": "scheduled"},
+        Store(), {"id": "job-1"}, tmp_path,
+    )
+
+    capabilities = {item["id"]: item for item in manifest["capabilities"]}
+    assert capabilities["voice_engine"]["state"] == "artifact_verified"
+    assert capabilities["optional_search"]["required"] is False
+    assert manifest["delivery_policy"]["state"] == "dry_run"
+
+
 def test_delivery_scenarios_use_real_ledger_and_prove_unknown_boundaries(tmp_path: Path):
     from scripts.task9_canary import run_delivery_scenarios
 
