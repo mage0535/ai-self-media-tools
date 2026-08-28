@@ -524,18 +524,19 @@ class Pipeline:
                     risk["level"] = "review"
                 if risk["level"] == "block":
                     runner.block("run_safety_gate", "safety_gate_blocked", "content safety gate blocked this job", risk)
-                current_quality = (draft.get("draft_meta") or {}).get("quality_gate") or {}
-                if "hook_strength" in set(current_quality.get("failed_dimensions") or []):
-                    repaired = repair_weak_hook(draft.get("title"), draft.get("body"), draft.get("draft_meta") or {})
-                    if repaired.get("changed"):
-                        draft["body"] = repaired["body"]
-                        draft["draft_meta"]["quality_scores"] = repaired["quality_scores"]
-                        draft["draft_meta"]["quality_gate"] = repaired["quality_gate"]
-                        draft["draft_meta"]["hook_repair"] = {
-                            "version": "deterministic_hook_repair_v1",
-                            "hook": repaired["hook"],
-                            "passed": repaired["quality_gate"].get("passed") is True,
-                        }
+                # Re-score the current copy after factual sanitization, domain
+                # repair and paragraph normalization. Generator-time scores are
+                # stale once any of those deterministic transforms have run.
+                repaired = repair_weak_hook(draft.get("title"), draft.get("body"), draft.get("draft_meta") or {})
+                draft["draft_meta"]["quality_scores"] = repaired["quality_scores"]
+                draft["draft_meta"]["quality_gate"] = repaired["quality_gate"]
+                if repaired.get("changed"):
+                    draft["body"] = repaired["body"]
+                    draft["draft_meta"]["hook_repair"] = {
+                        "version": "deterministic_hook_repair_v2",
+                        "hook": repaired["hook"],
+                        "passed": repaired["quality_gate"].get("passed") is True,
+                    }
                 gate = self._quality_gate(job_id, draft, risk, geo, phase="generation", platforms=job.get("platforms"))
                 draft["draft_meta"]["geo_score"] = geo["score"]
                 draft["draft_meta"]["geo_details"] = geo
