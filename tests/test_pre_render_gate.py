@@ -7,6 +7,18 @@ from unittest.mock import patch
 
 
 class PreRenderGateTests(unittest.TestCase):
+    def test_gate_blocks_full_narration_duplicated_in_card_text(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            narration = "完整讲解只应该出现在字幕，不应该在卡片正文重复。"
+            cards = [{"layout": "cover", "t": "核心结论", "txt": narration, "tts": narration, "items": []}]
+
+            result = validate_render_inputs(root, cards, require_backgrounds=False, require_cover_contract=True)
+
+            self.assertIn("card_1_narration_display_duplicate", result["failures"])
+
     def test_gate_blocks_placeholder_card_content_before_render(self):
         from scripts.pre_render_gate import validate_render_inputs
 

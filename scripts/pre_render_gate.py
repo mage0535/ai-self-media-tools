@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from difflib import SequenceMatcher
 import json
 import re
 import sys
@@ -66,6 +67,13 @@ def validate_render_inputs(
                 failures.append(f"card_{card_index}_{field}_placeholder")
             if _PATH_LIKE.search(value):
                 failures.append(f"card_{card_index}_{field}_path_like_value")
+        narration = re.sub(r"\s+", "", str(card.get("tts") or ""))
+        displayed = "".join(
+            re.sub(r"\s+", "", str(card.get(key) or ""))
+            for key in ("t", "txt", "sub")
+        ) + "".join(re.sub(r"\s+", "", str(item)) for item in card.get("items") or [])
+        if narration and displayed and (narration in displayed or SequenceMatcher(None, narration, displayed).ratio() >= 0.88):
+            failures.append(f"card_{card_index}_narration_display_duplicate")
 
     if require_cover_contract:
         first = cards[0] if cards else {}

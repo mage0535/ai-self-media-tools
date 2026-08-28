@@ -35,7 +35,15 @@ def _pexels_key() -> str:
 def _semantic_queries(text: str, count: int = 8) -> list[str]:
     """从脚本/标题提取语义关键词生成 Pexels 查询词"""
     lowered = str(text or "").casefold()
-    base_queries = []
+    beats = [part.strip().casefold() for part in __import__("re").split(r"\n\s*\n|(?<=[。！？!?])\s*", str(text or "")) if part.strip()]
+    beat_queries = []
+    for beat in beats:
+        query = _query_for_beat(beat)
+        if query and query not in beat_queries:
+            beat_queries.append(query)
+        if len(beat_queries) >= count:
+            return beat_queries[:count]
+    base_queries = list(beat_queries)
     # 平台/领域关键词映射
     domain_map = {
         "ai": ["artificial intelligence", "technology", "computer"],
@@ -61,9 +69,31 @@ def _semantic_queries(text: str, count: int = 8) -> list[str]:
         if q not in seen:
             seen.append(q)
     base_queries = seen
+    seeds = list(base_queries)
+    variants = ["portrait closeup", "workspace wide shot", "hands at work", "screen detail"]
     while len(base_queries) < count:
-        base_queries.append(base_queries[len(base_queries) % len(base_queries)])
+        seed = seeds[len(base_queries) % len(seeds)]
+        candidate = f"{seed} {variants[(len(base_queries) // len(seeds)) % len(variants)]}"
+        if candidate not in base_queries:
+            base_queries.append(candidate)
     return base_queries[:count]
+
+
+def _query_for_beat(beat: str) -> str:
+    rules = [
+        (("api", "接口", "控制台", "dashboard", "developer"), "software developer API dashboard laptop"),
+        (("文案", "文本", "图片", "图像", "语音", "content creator"), "content creator editing workstation"),
+        (("切换", "工具太多", "too many tools", "switching"), "overwhelmed creator multiple computer screens"),
+        (("工作流", "workflow", "automation", "自动化"), "digital workflow automation team"),
+        (("视频", "剪辑", "camera"), "video editor camera workstation"),
+        (("效率", "productivity", "省时间"), "focused productive creative workspace"),
+        (("团队", "协作", "team"), "creative team collaboration office"),
+        (("ai", "人工智能", "robot"), "artificial intelligence technology interface"),
+    ]
+    for tokens, query in rules:
+        if any(token in beat for token in tokens):
+            return query
+    return "modern digital workspace"
 
 
 def _download_pexels(

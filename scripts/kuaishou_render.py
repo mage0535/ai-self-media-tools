@@ -349,12 +349,12 @@ def build_card_html(card, idx, bg_b64, gh_b64, t, motion_plan=None):
 
     if l == "interaction":
         return f'''<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="width:720px;height:1280px;margin:0;background:{bg};background-size:cover;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:'Noto Sans CJK SC',sans-serif;color:#fff;text-align:center;padding:60px">
-<div style="font-size:60px;margin-bottom:24px">💬</div>
+<div style="font-size:42px;margin-bottom:24px;font-weight:800;letter-spacing:4px">互动</div>
 <h2 style="font-size:36px;font-weight:800;margin-bottom:20px;color:#fff;text-shadow:0 0 20px {t['accent']}60">{card.get('t','来聊聊')}</h2>
 <div style="font-size:22px;line-height:1.7;opacity:0.9;margin-bottom:32px;color:{t['text']};max-width:85%">{body or '你最常用的AI工具是什么？评论区告诉我'}</div>
 <div style="display:flex;gap:24px;justify-content:center;font-size:16px;color:{t['accent']};opacity:0.8">
-<span>❤️ 点赞支持</span>
-<span>💬 评论互动</span>
+<span>点赞支持</span>
+<span>评论互动</span>
 </div>
 <div style="font-size:13px;margin-top:24px;opacity:0.4;color:{t['text']}">转发给需要的朋友</div></body></html>'''
 
@@ -1722,7 +1722,7 @@ def encode_final(video_dir, add_like_overlay=True):
     # Like overlay: first 3 seconds (2026-07-26 视频号优化)
     if add_like_overlay:
         vf_parts.append(
-            "drawtext=text='❤️ 觉得有用点个赞'"
+            "drawtext=text='觉得有用 · 点赞'"
             ":fontfile=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
             ":fontsize=28:fontcolor=white@0.6:borderw=1:bordercolor=black@0.5"
             ":x=w-text_w-30:y=30"
