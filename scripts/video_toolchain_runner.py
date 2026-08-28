@@ -610,14 +610,14 @@ def build_cards(
     cards = []
     for index in range(8):
         beat = beats[index % len(beats)]
-        next_beat = beats[(index + 1) % len(beats)]
         presentation = directed_presentations[index] if index < len(directed_presentations) else ""
         layout = presentation_layouts.get(presentation, LAYOUTS[index % len(LAYOUTS)])
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
+        headline = title if index == 0 else _visual_headline(beat, presentation, index)
         card = {
             "layout": layout,
-            "t": title if index == 0 else _card_title(beat, index),
-            "txt": _visual_label(beat),
+            "t": headline,
+            "txt": _presentation_label(presentation, index),
             "tts": beat,
             "f": str(plan.get("template_family") or "video_toolchain"),
             "label": str(plan.get("selected_pipeline") or "auto_video"),
@@ -633,13 +633,13 @@ def build_cards(
         if visual_assignments:
             card["visual_asset"] = visual_assignments[index % len(visual_assignments)]
         if layout == "cover":
-            card.update({"sub": _summary(script_body), "hook": title, "hook_prefix": "Auto selected video workflow"})
+            card.update({"sub": "先看问题，再看统一路径", "hook": title, "hook_prefix": "内容工作流实测"})
         if layout == "card_stack":
-            card["items"] = [_visual_label(beat), _visual_label(next_beat), _visual_label(title)]
+            card["items"] = _supporting_labels(presentation, index)
         if layout == "big_number":
-            card.update({"num": f"0{index + 1}", "ext": beat})
+            card.update({"num": f"0{index + 1}", "ext": _presentation_label(presentation, index)})
         if layout == "timeline":
-            card["items"] = [_visual_label(beat), _visual_label(next_beat), _visual_label(title)]
+            card["items"] = _supporting_labels(presentation, index)
         cards.append(card)
     return cards
 
@@ -656,6 +656,46 @@ def _visual_label(text: str) -> str:
         if len(selected) >= 3:
             break
     return " · ".join(selected) if selected else clean[:18]
+
+
+def _visual_headline(text: str, presentation: str, index: int) -> str:
+    lowered = str(text or "").casefold()
+    rules = [
+        (("切换", "工具越多", "too many tools", "switching"), "工具切换黑洞"),
+        (("账号", "密码", "登录", "充值", "会员"), "隐藏的管理成本"),
+        (("文本", "图像", "图片", "语音", "视频"), "能力散落在各处"),
+        (("一个入口", "统一", "整合", "后台管理"), "统一入口管理"),
+        (("api", "接口", "接入"), "把能力接进流程"),
+        (("效率", "时间", "省下"), "把时间还给内容"),
+        (("第一步", "第二步", "第三步", "步骤"), "按顺序跑通"),
+    ]
+    for tokens, label in rules:
+        if any(token in lowered for token in tokens):
+            return label
+    return _presentation_label(presentation, index)
+
+
+def _presentation_label(presentation: str, index: int) -> str:
+    labels = {
+        "hero_poster": "核心问题", "hero_conflict": "先看冲突", "hero_number": "关键数字",
+        "establishing": "真实场景", "detail_closeup": "问题细节", "process_flow": "执行路径",
+        "split_screen": "两种做法", "evidence_zoom": "核对证据", "payoff_reveal": "可执行结果",
+        "list_reveal": "关键清单", "timeline": "步骤顺序", "diagram": "关系结构",
+        "real_asset_overlay": "真实素材", "card_stack": "重点归纳", "summary_grid": "一页总结",
+        "cta": "下一步行动", "cta_footage": "下一步行动", "interaction": "评论互动",
+    }
+    return labels.get(presentation, f"关键点 {index + 1}")
+
+
+def _supporting_labels(presentation: str, index: int) -> list[str]:
+    groups = {
+        "process_flow": ["统一入口", "按需调用", "集中留痕"],
+        "timeline": ["先定位", "再接入", "后验证"],
+        "list_reveal": ["减少切换", "统一管理", "保留证据"],
+        "summary_grid": ["问题", "路径", "结果"],
+        "card_stack": ["成本", "流程", "改进"],
+    }
+    return groups.get(presentation, [f"要点 {index + 1}", "对应场景", "可执行结果"])
 
 
 def _shotcraft_motion_plan(text: str, num_shots: int = 8) -> dict:

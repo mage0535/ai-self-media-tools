@@ -189,6 +189,31 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertNotIn("match visual to narration", serialized)
         self.assertNotIn("step 1", serialized)
 
+    def test_build_cards_separates_visual_copy_from_spoken_narration(self):
+        from scripts.pre_render_gate import validate_render_inputs
+        from scripts.video_toolchain_runner import build_cards
+
+        script = "\n".join([
+            "工具越多，创作者每天切换账号和会员的时间越长。",
+            "文本、图像、语音和视频能力散落在不同后台。",
+            "把这些能力通过 API 接入统一流程，才能减少重复操作。",
+            "第一步先确认工具接口和授权范围。",
+            "第二步把常用能力接进一个统一入口。",
+            "第三步保存每次调用结果和证据。",
+            "这样省下来的时间可以回到内容创作。",
+            "最后检查输出质量，再决定是否发布。",
+        ])
+        plan = {"template_family": "knowledge_card_motion_case", "video_route": {"scene_presentations": [
+            "hero_conflict", "detail_closeup", "process_flow", "timeline",
+            "list_reveal", "evidence_zoom", "payoff_reveal", "cta",
+        ]}}
+
+        cards = build_cards(script, "AI 工具越多，效率为什么反而更低？", plan)
+        result = validate_render_inputs(Path("."), cards, require_backgrounds=False)
+
+        self.assertTrue(result["passed"], result["failures"])
+        self.assertTrue(all(card["txt"] != card["tts"] for card in cards))
+
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"

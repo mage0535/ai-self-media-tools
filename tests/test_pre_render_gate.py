@@ -40,7 +40,7 @@ class PreRenderGateTests(unittest.TestCase):
             root = Path(tmp)
             (root / "backgrounds").mkdir()
             (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
-            cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
+            cards = [{"layout": "cover", "t": "Useful title", "txt": "Core problem", "tts": "A complete spoken explanation of the real script beat.", "items": ["Useful point"]}]
             bgm = root / "bgm.mp3"
             bgm.write_bytes(b"licensed music")
             (root / "bgm_source.json").write_text(
@@ -89,7 +89,7 @@ class PreRenderGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             cards = [
-                {"layout": "cover" if index == 0 else "card", "t": f"Title {index}", "txt": f"A real script beat {index}", "tts": f"A real script beat {index}"}
+                {"layout": "cover" if index == 0 else "card", "t": f"Title {index}", "txt": f"Key point {index}", "tts": f"A complete spoken explanation for scene number {index}."}
                 for index in range(6)
             ]
             recipe = {
@@ -150,7 +150,7 @@ class PreRenderGateTests(unittest.TestCase):
             root = Path(tmp)
             (root / "backgrounds").mkdir()
             (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
-            cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
+            cards = [{"layout": "cover", "t": "Useful title", "txt": "Core problem", "tts": "A complete spoken explanation of the real script beat.", "items": ["Useful point"]}]
 
             result = run_pre_render_gate(root, cards)
 
