@@ -147,6 +147,26 @@ def test_bgm_resolver_continues_after_first_candidate_timeout(tmp_path, monkeypa
     assert kuaishou_render._ACTIVE_BGM_CANDIDATE_DEADLINE is None
 
 
+def test_bgm_stage_retries_transient_provider_exhaustion(tmp_path, monkeypatch):
+    calls = []
+
+    def resolve(video_dir, _style):
+        calls.append(len(calls) + 1)
+        if len(calls) == 1:
+            raise RuntimeError("temporary provider timeout")
+        path = Path(video_dir) / "bgm.mp3"
+        path.write_bytes(b"audio" * 200_000)
+        return str(path)
+
+    monkeypatch.setattr(kuaishou_render, "download_bgm", resolve)
+    monkeypatch.setattr(kuaishou_render.time, "sleep", lambda _seconds: None)
+
+    result = kuaishou_render.download_bgm_with_retries(tmp_path, "piano", attempts=2)
+
+    assert calls == [1, 2]
+    assert Path(result).is_file()
+
+
 def test_wikimedia_candidates_require_open_license_and_real_audio(monkeypatch):
     monkeypatch.setattr(kuaishou_render, "_request_json", lambda *_args, **_kwargs: {
         "query": {"pages": {

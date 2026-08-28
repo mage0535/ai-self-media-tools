@@ -920,6 +920,21 @@ def download_bgm(video_dir, style="acoustic guitar"):
     )
 
 
+def download_bgm_with_retries(video_dir, style="acoustic guitar", attempts=2):
+    """Retry transient provider exhaustion without relaxing license or dedup gates."""
+    errors = []
+    for attempt in range(1, max(1, int(attempts)) + 1):
+        try:
+            return download_bgm(video_dir, style)
+        except Exception as exc:
+            errors.append(str(exc))
+            for stale in (Path(video_dir) / "bgm.mp3", Path(video_dir) / "bgm_source.json"):
+                stale.unlink(missing_ok=True)
+            if attempt < max(1, int(attempts)):
+                time.sleep(min(3, attempt))
+    raise RuntimeError(f"online BGM failed after {len(errors)} attempts: {errors[-1]}")
+
+
 def _local_bgm_candidates(style):
     """Read an operator-provided licensed library without treating raw audio as licensed."""
     root = os.environ.get("BGM_LIBRARY_DIR", "").strip()
@@ -1964,7 +1979,7 @@ async def main():
     if final_needs_render:
         print("\n=== Step 5: BGM + 混音 ===")
         started = time.perf_counter()
-        download_bgm(vd, args.bgm_style)
+        download_bgm_with_retries(vd, args.bgm_style)
         mix_audio(vd)
         _record_stage_timing(vd, "audio_mix", started)
 
