@@ -114,6 +114,33 @@ def test_default_bgm_candidate_budget_is_short_enough_to_skip_dead_sources():
     assert kuaishou_render.DEFAULT_BGM_CANDIDATE_MAX_SECONDS <= 15
 
 
+def test_bgm_resolver_continues_after_first_candidate_timeout(tmp_path, monkeypatch):
+    rows = [
+        {"provider": "openverse_audio", "download_url": "https://one.invalid/a.mp3", "source_url": "https://source.test/one", "title": "Piano one", "license": "CC BY", "tags": "piano instrumental", "license_verified": True, "asset_id": "one"},
+        {"provider": "openverse_audio", "download_url": "https://two.test/b.mp3", "source_url": "https://source.test/two", "title": "Piano two", "license": "CC BY", "tags": "piano instrumental", "license_verified": True, "asset_id": "two"},
+    ]
+    attempts = []
+
+    def candidates(_style):
+        for row in rows:
+            yield row
+
+    def download(row, output):
+        attempts.append(row["asset_id"])
+        if row["asset_id"] == "one":
+            raise TimeoutError("dead source")
+        output.write_bytes(b"audio" * 200_000)
+
+    monkeypatch.setenv("BGM_FINGERPRINT_REGISTRY", str(tmp_path / "registry.json"))
+    monkeypatch.setattr(kuaishou_render, "_online_bgm_candidates", candidates)
+    monkeypatch.setattr(kuaishou_render, "_download_candidate_bgm", download)
+
+    kuaishou_render.download_bgm(tmp_path, "piano")
+
+    assert attempts == ["one", "two"]
+    assert kuaishou_render._ACTIVE_BGM_CANDIDATE_DEADLINE is None
+
+
 def test_bgm_download_skips_registered_sources_before_network_download(tmp_path, monkeypatch):
     used = {
         "provider": "openverse_audio",
