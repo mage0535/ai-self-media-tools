@@ -159,6 +159,26 @@ def test_pre_delivery_trace_is_pending_not_failed_when_real_prior_stages_pass():
     assert [row["stage"] for row in trace["stages"]] == list(STAGES[:-1])
 
 
+def test_capability_dag_execution_records_retain_selected_stage():
+    from content_platform.execution_dag import execute_capability_dag
+
+    plan = {
+        "candidates": [
+            {"capability_id": "source", "stage": "collection", "required_or_optional": "required"},
+            {"capability_id": "dedup", "stage": "selection", "required_or_optional": "required"},
+        ]
+    }
+
+    result = execute_capability_dag(
+        plan, {}, {},
+        stages={"collection", "selection"},
+        executor=lambda item, draft, brief: {"status": "executed", "contract_valid": True, "output_hash": "sha256:" + "a" * 64},
+    )
+
+    assert {(row["capability_id"], row["stage"]) for row in result["executed"]} == {("source", "collection"), ("dedup", "selection")}
+    assert {(row["capability_id"], row["stage"]) for row in result["artifact_verified"]} == {("source", "collection"), ("dedup", "selection")}
+
+
 def test_delivery_completion_makes_canonical_trace_pass():
     pending = build_pre_delivery_trace(
         capability_execution={
