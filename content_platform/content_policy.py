@@ -182,7 +182,9 @@ def generated_media_kinds_for_job(job, config):
             if platform in SHORT_VIDEO_PLATFORMS:
                 kinds.add("video")
                 break
-    if allow_audio and media_cfg.get("audio", {}).get("enabled", False):
+    # The video renderer owns narration, subtitles, BGM, and the final audio
+    # stream. A second audio pass would overwrite its measured TTS sidecars.
+    if "video" not in kinds and allow_audio and media_cfg.get("audio", {}).get("enabled", False):
         kinds.add("audio")
     return tuple(sorted(kinds))
 
