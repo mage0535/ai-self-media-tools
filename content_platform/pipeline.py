@@ -356,7 +356,10 @@ class Pipeline:
                 self._validate_draft_structure(draft)
                 platform_alignment = self._enforce_target_platform_strategy(draft, job)
                 draft.setdefault("draft_meta", {})["platform_alignment"] = platform_alignment
-                claim_ledger = brief.get("claim_ledger") or (draft.get("draft_meta") or {}).get("claim_ledger") or []
+                # Recompile at the point of use so provider-side normalization
+                # cannot erase evidence required for deterministic repair.
+                claim_ledger = compile_verified_claim_ledger(brief)
+                draft.setdefault("draft_meta", {})["claim_ledger"] = claim_ledger
                 if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
                     draft["body"] = normalize_feed_paragraphs(draft.get("body") or "")
                     draft["body"] = restore_verified_domains(draft["body"], claim_ledger)

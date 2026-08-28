@@ -248,6 +248,13 @@ def validate_audio_spec(probe: dict[str, object]) -> dict[str, object]:
     return {"passed": not failures, "sample_rate": sample_rate, "channels": channels, "failures": failures}
 
 
+def subtitle_layout(platform: str) -> dict[str, int]:
+    international = str(platform or "").casefold() in {"tiktok", "youtube", "shorts"}
+    if international:
+        return {"max_chars": 100, "wrap_chars": 30, "font_size": 38, "max_lines": 3}
+    return {"max_chars": 36, "wrap_chars": 18, "font_size": 46, "max_lines": 2}
+
+
 def probe_audio_spec(path: Path) -> dict[str, object]:
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,sample_rate,channels", "-of", "json", str(path)],
@@ -1669,9 +1676,10 @@ def main() -> int:
 
     # 字幕按平台语言使用不同容量：国际英文平台允许 3 行完整字幕，中文平台保留移动端两行安全限制。
     international = args.platform in {"tiktok", "youtube", "shorts"}
-    subtitle_max_chars = 100 if international else 40
-    subtitle_wrap_chars = 30 if international else 20
-    subtitle_font_size = 38 if international else 42
+    subtitle_policy = subtitle_layout(args.platform)
+    subtitle_max_chars = subtitle_policy["max_chars"]
+    subtitle_wrap_chars = subtitle_policy["wrap_chars"]
+    subtitle_font_size = subtitle_policy["font_size"]
     script_texts = []
     for i in range(1, 9):
         seg = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
@@ -1742,7 +1750,7 @@ def main() -> int:
         "position": "lower_third",
         "font_size": subtitle_font_size,
         "max_chars_per_line": subtitle_wrap_chars,
-        "max_lines": 2,
+        "max_lines": subtitle_policy["max_lines"],
         "margin_v": 290,
     }
     (out / "subtitle_burn_evidence.json").write_text(

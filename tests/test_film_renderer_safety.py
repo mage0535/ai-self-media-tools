@@ -93,6 +93,14 @@ def test_audio_spec_requires_44100hz_stereo():
     assert film_renderer.validate_audio_spec({"sample_rate": 44100, "channels": 2})["passed"] is True
 
 
+def test_chinese_short_video_subtitle_layout_matches_platform_gate():
+    layout = film_renderer.subtitle_layout("kuaishou")
+
+    assert layout["font_size"] >= 44
+    assert layout["wrap_chars"] <= 18
+    assert layout["max_lines"] <= 2
+
+
 def test_timeline_uses_real_transition_boundaries():
     starts, total = film_renderer.calculate_timeline([2.0, 2.0, 2.0], [0.35, 0.0])
 

@@ -451,6 +451,27 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("ai.kuaishou.com", current["body"])
         self.assertNotIn("ai.\nkuaishou", current["body"])
 
+    def test_short_video_restores_verified_domain_suffix_before_media_steps(self):
+        hotspot = {
+            "observed_title": "打开 ai.kuaishou.com 注册开发者账号。",
+            "source_url": "https://cp.kuaishou.com/profile",
+            "snapshot_path": "hotspots/kuaishou.txt",
+            "provenance_hash": "a" * 64,
+            "evidence_type": "native",
+            "evidence_verified": True,
+        }
+        job = self.pipeline.create("Domain workflow", ["kuaishou"], {"associated_hotspot": hotspot})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Domain workflow",
+            "body": "第一步，打开 ai.kuaishou.\n\n第二步，检查来源。\n\n第三步，确认配置。",
+            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        self.assertIn("ai.kuaishou.com", current["body"])
+        self.assertTrue(current["draft_meta"]["claim_ledger"])
+
     def test_scheduled_contract_requires_content_depth_before_media(self):
         from content_platform.run_contract import build_run_contract
 

@@ -81,3 +81,11 @@ def test_compiler_applies_the_same_pronunciation_rule_to_every_occurrence():
 
     assert result.tts_text == "人工智能开放平台整合多个人工智能能力"
     assert result.unhandled_latin_tokens == []
+
+
+def test_compiler_allows_single_uppercase_labels_in_chinese_narration():
+    from content_platform.tts_text_compiler import TTSTextCompiler
+
+    result = TTSTextCompiler.default().compile("A平台、B平台和C平台", context="tech", platform="kuaishou")
+
+    assert result.unhandled_latin_tokens == []
