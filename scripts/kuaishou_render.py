@@ -709,7 +709,7 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
                     await asyncio.sleep(retry_delay * attempt)
             rendered += 1
             mark_complete(Path(video_dir), f"tts_{idx:02d}", checkpoint_inputs, [out])
-        dur = float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(out)],capture_output=True,text=True).stdout.strip() or 0)
+        dur = _media_duration(out, default=0)
         records.append({
             "index": idx,
             "provider": "edge-tts",
@@ -726,6 +726,24 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
         json.dumps({"version": "tts_config_v1", "provider": "edge-tts", "voice": edge_voice, "segments": records}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    digest = hashlib.sha256()
+    for record in records:
+        audio = tts_dir / f"tts_{int(record['index']):02d}.mp3"
+        if audio.is_file():
+            digest.update(audio.read_bytes())
+    fingerprint = {
+        "display_text": "\n".join(str(row.get("display_text") or "") for row in records),
+        "tts_text": "\n".join(str(row.get("tts_text") or "") for row in records),
+        "provider": "edge-tts",
+        "voice": edge_voice,
+        "rate": "+0%",
+        "sample_rate": 44100,
+        "channels": 2,
+        "duration_seconds": round(sum(float(row.get("duration_seconds") or 0) for row in records), 3),
+        "sha256": digest.hexdigest(),
+        "unhandled_latin_tokens": sorted({token for row in records for token in row.get("unhandled_latin_tokens") or []}),
+    }
+    (Path(video_dir) / "tts_fingerprint.json").write_text(json.dumps(fingerprint, ensure_ascii=False, indent=2), encoding="utf-8")
     (Path(video_dir) / "tts.done").write_text("ok")
     print(f"  ✅ TTS完成 ({len(cards)}段, voice={edge_voice})")
 
@@ -1705,7 +1723,43 @@ def encode_final(video_dir, add_like_overlay=True):
     r = subprocess.run(["ffmpeg","-i",str(final),"-af","volumedetect","-f","null","-"],capture_output=True,text=True,timeout=30)
     for l in r.stderr.split("\n"):
         if "mean_volume" in l: print(f"  音量: {l.strip()}")
+    _verify_burned_subtitles(Path(video_dir), final)
     (Path(video_dir) / "final.done").write_text("ok")
+
+
+def _verify_burned_subtitles(video_dir: Path, final: Path) -> dict:
+    from PIL import Image
+
+    ass = video_dir / "subtitles.ass"
+    cues = [line for line in ass.read_text(encoding="utf-8", errors="ignore").splitlines() if line.startswith("Dialogue:")]
+    duration = _media_duration(final, default=0)
+    samples = []
+    sample_dir = video_dir / "subtitle_samples"
+    sample_dir.mkdir(exist_ok=True)
+    for index in range(min(8, len(cues))):
+        offset = duration * (index + 0.5) / max(1, min(8, len(cues)))
+        frame = sample_dir / f"sample_{index + 1:02d}.png"
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-ss", f"{offset:.3f}", "-i", str(final), "-frames:v", "1", str(frame)],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        if result.returncode != 0 or not frame.is_file():
+            samples.append({"segment": index + 1, "time_s": round(offset, 3), "white_pixels": 0, "passed": False})
+            continue
+        image = Image.open(frame).convert("L")
+        crop = image.crop((0, int(image.height * 0.65), image.width, image.height))
+        white = sum(1 for value in crop.getdata() if value > 150)
+        samples.append({"segment": index + 1, "time_s": round(offset, 3), "white_pixels": white, "passed": white > 800})
+    evidence = {
+        "version": "burned_subtitle_evidence_v1", "passed": len(samples) >= 6 and all(row["passed"] for row in samples),
+        "burned_in": True, "sample_count": len(samples), "samples": samples, "position": "lower_third",
+        "font_size": 48, "max_chars_per_line": SUBTITLE_MAX_CHARS_PER_LINE, "max_lines": SUBTITLE_MAX_LINES,
+        "margin_v": SUBTITLE_MARGIN_V,
+    }
+    (video_dir / "subtitle_burn_evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not evidence["passed"]:
+        raise RuntimeError("burned subtitle pixel verification failed")
+    return evidence
 
 
 def generate_packet(video_dir, cards, args):
