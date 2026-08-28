@@ -211,7 +211,17 @@ def _style_variants(cinema_scenes: list[dict[str, Any]], plan: dict[str, Any], t
         "semantic_visual_pattern": _semantic_visual_pattern(script_body),
         "recipe_variant": variant,
         "variant_driven": not any(plan.get(key) for key in ["color_mood", "motion_density", "text_layout", "scene_change_interval_sec"]),
+        "theme": str(plan.get("theme") or _theme_for_palette(str(plan.get("color_mood") or ""))),
     }
+
+
+def _theme_for_palette(palette: str) -> str:
+    value = str(palette or "").casefold()
+    if any(token in value for token in ("warm", "amber", "playful", "fresh", "sunlit")):
+        return "mint-fresh"
+    if any(token in value for token in ("blue", "evidence", "studio", "tech", "contrast")):
+        return "blueprint"
+    return "cyber-neon"
 
 
 def _recipe_variant(plan: dict[str, Any], title: str) -> str:

@@ -10,6 +10,105 @@ from unittest.mock import patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
+    def test_video_cover_uses_shared_platform_director(self):
+        from PIL import Image
+        from scripts.video_toolchain_runner import _generate_video_cover
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            background = root / "background.jpg"
+            Image.new("RGB", (1400, 1800), (20, 30, 50)).save(background)
+            result = _generate_video_cover(
+                root,
+                "别再来回切 AI 工具",
+                "一个入口串起文案、图片和语音。",
+                {"platforms": ["kuaishou"], "recent_cover_direction_ids": []},
+                background,
+            )
+
+            self.assertTrue(Path(result["path"]).is_file())
+            self.assertEqual(result["evidence"]["platform_profile"], "fast_utility")
+            self.assertTrue(result["evidence"]["typography_overlay_verified"])
+
+    def test_renderer_selection_uses_precompiled_video_route_without_late_keyword_override(self):
+        from scripts.video_toolchain_runner import _content_driven_renderer
+
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = {
+                "selected_pipeline": "layered_knowledge_card_video",
+                "video_route": {"renderer_id": "layered_card_renderer"},
+            }
+            renderer, updated = _content_driven_renderer(
+                plan,
+                "First step. Second step. Compare the result.",
+                "A tutorial comparison",
+                Path(tmp),
+            )
+
+            self.assertEqual(renderer.name, "kuaishou_render.py")
+            self.assertEqual(updated["selected_pipeline"], "layered_knowledge_card_video")
+
+    def test_cards_follow_directed_scene_presentations_instead_of_fixed_sequence(self):
+        from scripts.video_toolchain_runner import build_cards
+
+        plan = {
+            "template_family": "split_comparison",
+            "selected_pipeline": "comparison_cinematic_video",
+            "video_route": {
+                "scene_presentations": [
+                    "hero_conflict", "split_screen", "side_a", "side_b",
+                    "difference_grid", "evidence_zoom", "winner_reveal", "cta",
+                ]
+            },
+        }
+        cards = build_cards("\n\n".join(f"Beat {index}" for index in range(8)), "A vs B", plan)
+
+        assert [card["presentation_mode"] for card in cards] == plan["video_route"]["scene_presentations"]
+        assert len({card["layout"] for card in cards}) >= 5
+
+    def test_cinema_route_writes_scene_level_visual_treatment_for_renderer(self):
+        from PIL import Image
+        from scripts.video_toolchain_runner import _write_visual_treatment_plan
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            assignments = []
+            for index in range(8):
+                path = root / f"bg_{index + 1}.jpg"
+                Image.new("RGB", (1080, 1920), (index * 20, 30, 50)).save(path)
+                assignments.append({"background_image": str(path), "purpose": f"beat {index + 1}"})
+            plan = {"video_route": {"presentation_mode": "split_comparison", "scene_presentations": ["split_screen"] * 8}}
+
+            path = _write_visual_treatment_plan(root, plan, assignments)
+            payload = json.loads(path.read_text(encoding="utf-8"))
+
+            assert len(payload["scenes"]) == 8
+            assert {scene["camera_language"] for scene in payload["scenes"]}
+            assert all(scene["real_asset"] for scene in payload["scenes"])
+
+    def test_landscape_renderer_outputs_are_normalized_to_shared_media_contract(self):
+        from scripts import video_toolchain_runner as runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            render = root / "render"
+            (render / "tts").mkdir(parents=True)
+            (render / "segments").mkdir()
+            (render / "final.mp4").write_bytes(b"video" * 1000)
+            (render / "bgm.mp3").write_bytes(b"music" * 1000)
+            (render / "bgm_source.json").write_text(json.dumps({"source_url": "https://example.test", "license": "CC BY"}), encoding="utf-8")
+            (render / "subtitles.ass").write_text("\n".join(["Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Text"] * 8), encoding="utf-8")
+            for index in range(8):
+                (render / "tts" / f"tts_{index + 1:02d}.mp3").write_bytes(b"voice" * 1000)
+                (render / "segments" / f"seg_{index + 1:02d}.mp4").write_bytes(b"segment" * 1000)
+            plan = {"platforms": ["bilibili"], "video_route": {"renderer_id": "landscape_explainer_renderer", "style_id": "style-1", "scene_presentations": ["timeline"] * 8}}
+            with patch.object(runner, "_video_duration", return_value=5.0):
+                runner._normalize_alternate_renderer_outputs(Path("render_landscape_video.py"), root, plan, "八段真实讲解")
+
+            assert (root / "final.mp4").is_file()
+            assert json.loads((root / "tts_fingerprint.json").read_text(encoding="utf-8"))["duration_seconds"] == 40.0
+            assert len(json.loads((root / "segment_motion_evidence.json").read_text(encoding="utf-8"))["segments"]) == 8
+
     def test_short_video_duration_is_normalized_before_artifact_gate(self):
         from scripts import video_toolchain_runner as runner
 

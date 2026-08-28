@@ -11,6 +11,7 @@ from .resource import ResourceGuard
 from .tool_adapters import ScriptVideoProvider
 from .tool_registry import ToolRegistry
 from .paths import agent_scripts_dir
+from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
 from .adapters.media import execute_article_media
 
@@ -307,6 +308,16 @@ class MediaBridge:
                 prompt = next(row["prompt"] for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
                 provider.run(prompt, target, extra_args)
                 if item["role"] == "cover":
+                    generated_target = target.with_name("cover-background" + target.suffix)
+                    target.replace(generated_target)
+                    evidence = render_cover_poster(
+                        generated_target,
+                        target,
+                        (job.get("draft_meta") or {}).get("cover_design") or {},
+                    )
+                    (output_dir / "cover_quality_evidence.json").write_text(
+                        json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
                     cover_gate = normalize_cover_resolution(target)
                     if not cover_gate.get("passed"):
                         raise RuntimeError("adaptive cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
@@ -354,6 +365,17 @@ class MediaBridge:
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
             provider.run(item["prompt"], output, extra_args)
+            if item["role"] == "cover" and output.is_file():
+                generated_output = output.with_name("cover-background.png")
+                output.replace(generated_output)
+                evidence = render_cover_poster(
+                    generated_output,
+                    output,
+                    (job.get("draft_meta") or {}).get("cover_design") or {},
+                )
+                (output_dir / "cover_quality_evidence.json").write_text(
+                    json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
             if not output.is_file():
                 raise RuntimeError("image provider produced no output file")
             if item["role"] == "cover":
@@ -423,7 +445,9 @@ class MediaBridge:
                 "safe_zone_verified": design.get("safe_zone_verified") is True,
                 "degraded": design.get("degraded") is True,
             }
-            (output_dir / "cover_quality_evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+            evidence_path = output_dir / "cover_quality_evidence.json"
+            if not evidence_path.is_file():
+                evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
 
     @staticmethod
     def _required_image_count(job, cfg):
@@ -499,14 +523,7 @@ class MediaBridge:
     def _cover_prompt(cls, job):
         meta = job.get("draft_meta") or {}
         design = meta.get("cover_design") if isinstance(meta.get("cover_design"), dict) else {}
-        base = cls._image_prompt(job)
-        return (
-            f"{base} Layout: {design.get('layout_key') or 'hero_conflict'}. "
-            f"Hook: {design.get('hook') or job.get('title') or job.get('topic') or ''}. "
-            f"Conflict or payoff: {design.get('conflict_or_payoff') or 'show problem and result'}. "
-            f"Focal subjects: {', '.join(str(item) for item in design.get('focal_subjects') or [])}. "
-            "Create a high-click narrative poster with strong focal hierarchy and mobile-safe text, not a screenshot plus caption."
-        )
+        return str(design.get("background_prompt") or cls._image_prompt(job))
 
     @staticmethod
     def _article_sections(job):
@@ -847,21 +864,27 @@ class MediaBridge:
             if not output.is_file() or output_dir not in output.parents:
                 raise RuntimeError("required video manifest output is missing or outside output_dir")
             return
-        required_tools = {
-            "cinema_composition.storyboard",
-            "shotcraft_moves.shot_plan_for_text",
-            "shotcraft_moves.shot_sequence",
-            "video_toolchain_runner.build_cards",
-            "kuaishou_render.render_cards",
-            "kuaishou_render.gen_tts",
-            "kuaishou_render.render_segments",
-            "kuaishou_render.concat_video",
-            "kuaishou_render.download_bgm",
-            "mix_bgm_with_gate.mix_bgm",
-            "kuaishou_render.gen_subtitles",
-            "kuaishou_render.encode_final",
-            "visual_gate.py --cinema",
+        renderer_id = str(((manifest.get("video_route") or {}).get("renderer_id") if isinstance(manifest.get("video_route"), dict) else "") or "")
+        route_tools = {
+            "landscape_explainer_renderer": {
+                "render_landscape_video.slides", "render_landscape_video.playwright", "render_landscape_video.tts",
+                "render_landscape_video.segments", "render_landscape_video.concat", "kuaishou_render.download_bgm",
+                "mix_bgm_with_gate.mix_bgm", "render_landscape_video.subtitles", "render_landscape_video.encode_final",
+                "visual_gate.py --cinema",
+            },
+            "real_footage_renderer": {
+                "cinematic_v11.source_asset_gate", "cinematic_v11.tts", "kuaishou_render.download_bgm",
+                "cinematic_v11.scene_compositor", "cinematic_v11.semantic_transitions", "cinematic_v11.subtitle_overlay",
+                "cinematic_v11.audio_mix", "cinematic_v11.encode_final", "visual_gate.py --cinema",
+            },
         }
+        required_tools = route_tools.get(renderer_id, {
+            "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text", "shotcraft_moves.shot_sequence",
+            "video_toolchain_runner.build_cards", "kuaishou_render.render_cards", "kuaishou_render.gen_tts",
+            "kuaishou_render.render_segments", "kuaishou_render.concat_video", "kuaishou_render.download_bgm",
+            "mix_bgm_with_gate.mix_bgm", "kuaishou_render.gen_subtitles", "kuaishou_render.encode_final",
+            "visual_gate.py --cinema",
+        })
         missing = sorted(required_tools - planned_tools)
         if missing:
             raise RuntimeError(f"required video toolchain_contract missing tools: {missing}")

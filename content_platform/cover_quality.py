@@ -12,8 +12,13 @@ from PIL import Image, UnidentifiedImageError
 ALLOWED_LAYOUTS = {
     "character_showdown", "evidence_interface", "hero_conflict", "diagonal_split",
     "before_after", "checklist_poster", "magazine_story", "result_reveal",
+    "hero_subject", "split_comparison",
 }
-VERTICAL = {"douyin", "douyin_ai", "douyin_pet", "tiktok", "kuaishou", "xiaohongshu", "shipinhao"}
+ASPECTS = {
+    "douyin": 9 / 16, "douyin_ai": 9 / 16, "douyin_pet": 9 / 16,
+    "tiktok": 9 / 16, "kuaishou": 9 / 16, "shipinhao": 9 / 16,
+    "xiaohongshu": 3 / 4, "bilibili": 16 / 9, "youtube": 16 / 9,
+}
 
 
 def validate_cover(cover: str | Path, evidence: dict[str, Any] | str | Path | None, platform: str = "") -> dict[str, Any]:
@@ -32,10 +37,11 @@ def validate_cover(cover: str | Path, evidence: dict[str, Any] | str | Path | No
     except (OSError, UnidentifiedImageError):
         return {"passed": False, "failures": ["cover_probe_failed"]}
     normalized = str(platform or evidence.get("platform") or "").casefold()
-    if min(width, height) < 1000:
+    if max(width, height) < 1200:
         failures.append("cover_resolution_too_low")
-    if normalized in VERTICAL and abs(width / height - 9 / 16) > 0.02:
-        failures.append("vertical_cover_aspect_invalid")
+    expected_aspect = ASPECTS.get(normalized)
+    if expected_aspect and abs(width / height - expected_aspect) > 0.03:
+        failures.append("platform_cover_aspect_invalid")
     if evidence.get("layout_key") not in ALLOWED_LAYOUTS:
         failures.append("viral_layout_missing")
     for field in ("hook", "conflict_or_payoff", "content_match_reason"):
@@ -47,6 +53,17 @@ def validate_cover(cover: str | Path, evidence: dict[str, Any] | str | Path | No
         failures.append("safe_zone_not_verified")
     if evidence.get("degraded") is True:
         failures.append("degraded_cover_forbidden")
+    if evidence.get("version") == "cover_quality_evidence_v2":
+        if evidence.get("typography_overlay_verified") is not True:
+            failures.append("cover_typography_overlay_missing")
+        if not str(evidence.get("platform_profile") or ""):
+            failures.append("platform_cover_profile_missing")
+        if not str(evidence.get("direction_id") or ""):
+            failures.append("cover_direction_id_missing")
+        if evidence.get("visual_variance_verified") is not True or float(evidence.get("measured_contrast_stddev") or 0) < 18:
+            failures.append("cover_visual_contrast_insufficient")
+        if not 1 <= int(evidence.get("title_line_count") or 0) <= 3:
+            failures.append("cover_title_layout_invalid")
     return {
         "passed": not failures,
         "cover": str(path),
