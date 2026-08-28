@@ -84,7 +84,7 @@ class TTSTextCompiler:
         allowed = {token for row in applied for token in re.findall(r"[A-Za-z][A-Za-z0-9+#.-]*", row["alias"])}
         unhandled = []
         for token in re.findall(r"[A-Za-z][A-Za-z0-9+#.-]*", result):
-            if token in allowed or (len(token) == 1 and token.upper() in {"A", "I"}):
+            if token in allowed or (len(token) == 1 and token.isascii() and token.isalpha() and token.isupper()):
                 continue
             if token not in unhandled:
                 unhandled.append(token)
