@@ -1598,8 +1598,10 @@ class Pipeline:
         segments = (manifest.get("segment_motion_evidence") or {}).get("segments") or []
         audio = meta.get("audio_probe") or {}
         bgm = meta.get("bgm_source") or meta.get("bgm") or {}
-        captions = meta.get("burned_captions") or {}
+        captions = meta.get("burned_captions") or meta.get("subtitle_evidence") or {}
         subtitle = meta.get("subtitle") or {}
+        if not subtitle and captions.get("burned_in") is True:
+            subtitle = {"cue_count": int(captions.get("sample_count") or 0)}
         backgrounds = meta.get("background_assets") or []
         artifact_dir = output.parent if output.is_file() else None
         if artifact_dir and (not audio or int(audio.get("stream_count") or 0) < 1 or float(audio.get("duration") or 0) <= 0):
