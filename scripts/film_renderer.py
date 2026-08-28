@@ -508,6 +508,23 @@ def _modules_from_card(card: dict) -> list[str]:
     return (parts + ["", "", ""])[:3]
 
 
+def _visual_title_for_scene(card: dict, script_segment: str, fallback: str) -> str:
+    """Keep full narration in audio/subtitles and concise card copy on screen."""
+    visual = _card_title(card, "").strip()
+    if visual:
+        return visual
+    first = re.split(r"[，。；！？、：.!?;]+", str(script_segment or ""))[0].strip()
+    return first[:24] or fallback
+
+
+def _visual_modules_for_scene(card: dict, script_segment: str) -> list[str]:
+    modules = [item for item in _modules_from_card(card) if item]
+    if modules:
+        return (modules + ["", "", ""])[:3]
+    first = re.split(r"[，。；！？、：.!?;]+", str(script_segment or ""))[0].strip()
+    return ([first[:18]] if first else []) + ["", ""]
+
+
 def build_shot_a(idx: int, title: str, stat: str, bg_path: str, kicker: str, stat_label: str = "关键数字",
                  camera_index: int | None = None, text_motion_index: int | None = None, platform: str = "") -> str:
     motion_index = idx % len(KB_A) if camera_index is None else camera_index
@@ -1414,20 +1431,12 @@ def main() -> int:
         return r"[，。；！？、：.!?;]+" if args.platform in {"tiktok", "youtube", "shorts"} else r"[，。；！？、：]+"
 
     def seg_title(i: int) -> str:
-        if i <= len(script_segments) and script_segments[i - 1]:
-            seg = script_segments[i - 1]
-            first = re.split(_segment_punctuation(), seg)[0].strip()
-            if args.platform in {"tiktok", "youtube", "shorts"}:
-                return first or seg.strip()
-            return (first or seg.strip())[:16]
-        return _card_title(cards[i - 1], f"第 {i} 段")
+        segment = script_segments[i - 1] if i <= len(script_segments) else ""
+        return _visual_title_for_scene(cards[i - 1], segment, f"第 {i} 段")
 
     def seg_modules(i: int) -> list[str]:
-        if i <= len(script_segments) and script_segments[i - 1]:
-            seg = script_segments[i - 1]
-            sentences = [s.strip() for s in re.split(_segment_punctuation(), seg) if s.strip()]
-            return (sentences[:3] if len(sentences) >= 3 else sentences + ["", "", ""])[:3]
-        return _modules_from_card(cards[i - 1])
+        segment = script_segments[i - 1] if i <= len(script_segments) else ""
+        return _visual_modules_for_scene(cards[i - 1], segment)
 
     # 截图素材检测（规则1：工具/项目介绍嵌入真实截图）——video_dir/screenshots/ 或上级目录
     screenshots_dir = None

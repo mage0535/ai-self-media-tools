@@ -160,7 +160,18 @@ def _cover_subtitle(body: str, topic: str, title: str, platform: str) -> str:
     rows = [part.strip() for part in re.split(r"[。！？!?\n]+", str(body or "")) if part.strip() and title not in part]
     value = rows[0] if rows else str(topic or "")
     limit = 52 if platform in {"youtube", "twitter", "x"} else 28
-    clipped = value[:limit].rstrip("，。！？!? ")
+    if re.search(r"[\u3400-\u9fff]", value) and len(value) > limit:
+        clauses = [part.strip() for part in re.split(r"[，,；;：:]", value) if part.strip()]
+        selected = ""
+        for clause in clauses:
+            candidate = f"{selected}，{clause}" if selected else clause
+            if len(candidate) > limit:
+                break
+            selected = candidate
+        clipped = selected or clauses[0][:limit]
+    else:
+        clipped = value[:limit]
+    clipped = clipped.rstrip("，。！？!? ")
     if not re.search(r"[\u3400-\u9fff]", value) and len(value) > limit and " " in clipped:
         clipped = clipped.rsplit(" ", 1)[0]
     return clipped
