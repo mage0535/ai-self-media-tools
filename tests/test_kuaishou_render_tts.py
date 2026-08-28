@@ -141,6 +141,28 @@ def test_bgm_resolver_continues_after_first_candidate_timeout(tmp_path, monkeypa
     assert kuaishou_render._ACTIVE_BGM_CANDIDATE_DEADLINE is None
 
 
+def test_wikimedia_candidates_require_open_license_and_real_audio(monkeypatch):
+    monkeypatch.setattr(kuaishou_render, "_request_json", lambda *_args, **_kwargs: {
+        "query": {"pages": {
+            "1": {"pageid": 1, "title": "File:Piano instrumental.ogg", "imageinfo": [{
+                "url": "https://upload.wikimedia.org/piano.ogg", "descriptionurl": "https://commons.wikimedia.org/wiki/File:Piano_instrumental.ogg", "mime": "audio/ogg",
+                "extmetadata": {"LicenseShortName": {"value": "CC BY 4.0"}, "Artist": {"value": "<b>Artist</b>"}},
+            }]},
+            "2": {"pageid": 2, "title": "File:Closed song.ogg", "imageinfo": [{
+                "url": "https://upload.wikimedia.org/closed.ogg", "descriptionurl": "https://commons.wikimedia.org/wiki/File:Closed_song.ogg", "mime": "audio/ogg",
+                "extmetadata": {"LicenseShortName": {"value": "All rights reserved"}},
+            }]},
+        }}
+    })
+
+    rows = kuaishou_render._wikimedia_commons_candidates("piano instrumental")
+
+    assert len(rows) == 1
+    assert rows[0]["provider"] == "wikimedia_commons_audio"
+    assert rows[0]["license"] == "CC BY 4.0"
+    assert rows[0]["artist"] == "Artist"
+
+
 def test_bgm_download_skips_registered_sources_before_network_download(tmp_path, monkeypatch):
     used = {
         "provider": "openverse_audio",
