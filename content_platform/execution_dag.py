@@ -129,6 +129,7 @@ def execute_capability_dag(
             result = {"status": "failed", "reason": f"executor_error:{type(exc).__name__}"}
         record: dict[str, Any] = {
             "capability_id": item.get("capability_id"),
+            "stage": str(item.get("stage") or "generation"),
             "required": required,
             **result,
             "duration_ms": round((time.monotonic() - started) * 1000),
