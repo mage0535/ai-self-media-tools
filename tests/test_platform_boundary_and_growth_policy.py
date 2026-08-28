@@ -3,6 +3,7 @@
 from content_platform.content_policy import (
     AUTO_PUBLISH_PLATFORMS,
     delivery_mode,
+    generated_media_kinds_for_job,
     is_auto_publish_platform,
     is_douyin_platform,
     is_manual_handoff_platform,
@@ -54,6 +55,20 @@ def test_all_ai_restricted_channels_are_manual_handoff_only():
 def test_unknown_channel_is_not_implicitly_publishable():
     assert delivery_mode("new_platform") == "unsupported"
     assert not is_auto_publish_platform("new_platform")
+
+
+def test_video_jobs_do_not_run_a_second_audio_generator_over_the_renderer_output():
+    config = {
+        "content_policy": {"allow_local_video_generation": True, "allow_local_audio_generation": True},
+        "media": {
+            "video": {"enabled": True},
+            "audio": {"enabled": True},
+            "image": {"enabled": False},
+            "cover": {"enabled": False},
+        },
+    }
+
+    assert generated_media_kinds_for_job({"platforms": ["kuaishou"]}, config) == ("video",)
 
 
 def test_effective_publisher_config_rejects_policy_overrides():

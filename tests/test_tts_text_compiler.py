@@ -68,3 +68,16 @@ def test_compiler_prefers_full_domain_rule_and_does_not_replace_ai_inside_words(
     spaced = compiler.compile("打开 ai. kuaishou. com", context="tech", platform="kuaishou")
     assert spaced.display_text == "打开 ai.kuaishou.com"
     assert spaced.tts_text == "打开 快手人工智能开放平台官网"
+
+
+def test_compiler_applies_the_same_pronunciation_rule_to_every_occurrence():
+    from content_platform.tts_text_compiler import TTSTextCompiler
+
+    compiler = TTSTextCompiler([
+        {"source": "AI", "alias": "人工智能", "priority": 20, "contexts": ["tech"]},
+    ])
+
+    result = compiler.compile("AI开放平台整合多个AI能力", context="tech", platform="kuaishou")
+
+    assert result.tts_text == "人工智能开放平台整合多个人工智能能力"
+    assert result.unhandled_latin_tokens == []

@@ -1,4 +1,9 @@
-from content_platform.claim_ledger import compile_verified_claim_ledger, sanitize_unsupported_claims, validate_claims
+from content_platform.claim_ledger import (
+    compile_verified_claim_ledger,
+    restore_verified_domains,
+    sanitize_unsupported_claims,
+    validate_claims,
+)
 
 
 def test_claim_gate_rejects_unsourced_numeric_and_first_person_operations() -> None:
@@ -76,3 +81,16 @@ def test_claim_sanitizer_removes_only_unsupported_sentences() -> None:
     cleaned = sanitize_unsupported_claims(text, gate["findings"])
     assert "99%" not in cleaned
     assert "Verify the owner" in cleaned
+
+
+def test_verified_domain_is_restored_when_model_drops_only_the_tld() -> None:
+    ledger = [{
+        "claim": "打开 ai.kuaishou.com 注册开发者账号。",
+        "source_url": "https://cp.kuaishou.com/profile",
+        "evidence_path": "hotspots/kuaishou.txt",
+        "verified": True,
+    }]
+
+    repaired = restore_verified_domains("第一步，打开 ai.kuaishou.\n\n第二步，检查接口。", ledger)
+
+    assert "ai.kuaishou.com" in repaired

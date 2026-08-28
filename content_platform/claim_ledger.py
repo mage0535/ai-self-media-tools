@@ -22,6 +22,10 @@ UNSUPPORTED_ANECDOTE = re.compile(
     r"(?:朋友|团队|客户|创作者|同行)[^。！？.!?\n]{0,36}(?:之前|曾经|每天|试了|用了|花了|省了|切换)",
     re.I,
 )
+VERIFIED_DOMAIN = re.compile(
+    r"(?<![a-z0-9-])(?:[a-z0-9-]+\.)+(?:com|cn|org|net|io|ai|dev)(?![a-z0-9-])",
+    re.I,
+)
 
 
 def _sentences(text: str) -> list[str]:
@@ -115,6 +119,22 @@ def compile_verified_claim_ledger(brief: dict[str, Any] | None) -> list[dict[str
         seen.add(key)
         unique.append(row)
     return unique
+
+
+def restore_verified_domains(text: str, ledger: list[dict[str, Any]] | None) -> str:
+    """Restore only domain suffixes proven by a verified claim source."""
+    domains = set()
+    for row in ledger or []:
+        if not isinstance(row, dict) or row.get("verified") is not True:
+            continue
+        if not str(row.get("source_url") or "").startswith(("https://", "http://")):
+            continue
+        domains.update(match.group(0).casefold() for match in VERIFIED_DOMAIN.finditer(str(row.get("claim") or "")))
+    repaired = str(text or "")
+    for domain in sorted(domains, key=len, reverse=True):
+        prefix = domain.rsplit(".", 1)[0] + "."
+        repaired = re.sub(re.escape(prefix) + r"(?![A-Za-z0-9-])", domain, repaired, flags=re.I)
+    return repaired
 
 
 def sanitize_unsupported_claims(text: str, findings: list[dict[str, Any]] | None) -> str:

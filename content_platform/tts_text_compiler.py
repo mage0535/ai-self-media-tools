@@ -66,16 +66,21 @@ class TTSTextCompiler:
             if source.isascii() and source.replace("-", "").isalnum():
                 expression = rf"(?<![A-Za-z0-9]){expression}(?![A-Za-z0-9])"
             pattern = re.compile(expression, re.IGNORECASE if source.isascii() else 0)
-            for match in list(pattern.finditer(result)):
+            cursor = 0
+            while True:
+                match = pattern.search(result, cursor)
+                if match is None:
+                    break
                 span = match.span()
                 if any(span[0] < end and start < span[1] for start, end in occupied):
+                    cursor = max(match.end(), cursor + 1)
                     continue
                 result = result[:span[0]] + alias + result[span[1]:]
                 delta = len(alias) - (span[1] - span[0])
                 occupied = [(start if start < span[0] else start + delta, end if end <= span[0] else end + delta) for start, end in occupied]
                 occupied.append((span[0], span[0] + len(alias)))
                 applied.append({"source": source, "alias": alias, "priority": int(rule.get("priority", 0)), "context": context})
-                break
+                cursor = span[0] + len(alias)
         allowed = {token for row in applied for token in re.findall(r"[A-Za-z][A-Za-z0-9+#.-]*", row["alias"])}
         unhandled = []
         for token in re.findall(r"[A-Za-z][A-Za-z0-9+#.-]*", result):

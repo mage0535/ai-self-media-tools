@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from .compliance import ComplianceChecker
-from .claim_ledger import compile_verified_claim_ledger, sanitize_unsupported_claims, validate_claims
+from .claim_ledger import compile_verified_claim_ledger, restore_verified_domains, sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
@@ -356,12 +356,13 @@ class Pipeline:
                 self._validate_draft_structure(draft)
                 platform_alignment = self._enforce_target_platform_strategy(draft, job)
                 draft.setdefault("draft_meta", {})["platform_alignment"] = platform_alignment
+                claim_ledger = brief.get("claim_ledger") or (draft.get("draft_meta") or {}).get("claim_ledger") or []
                 if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
                     draft["body"] = normalize_feed_paragraphs(draft.get("body") or "")
+                    draft["body"] = restore_verified_domains(draft["body"], claim_ledger)
                 runner.succeeded("validate_content_structure", {"title_present": bool(draft.get("title")), "body_chars": len(str(draft.get("body", ""))), "platform_alignment": platform_alignment}, depends_on=["generate_content"])
                 self._persist_intelligence(job_id, draft.get("draft_meta", {}))
                 text = draft["title"] + "\n" + draft["body"]
-                claim_ledger = brief.get("claim_ledger") or (draft.get("draft_meta") or {}).get("claim_ledger") or []
                 claim_gate = validate_claims(text, claim_ledger)
                 draft.setdefault("draft_meta", {})["claim_gate"] = claim_gate
                 strict_claims = (
@@ -409,6 +410,7 @@ class Pipeline:
                         repaired_body = str(repaired.get("body") or "").strip()
                         if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
                             repaired_body = normalize_feed_paragraphs(repaired_body)
+                            repaired_body = restore_verified_domains(repaired_body, claim_ledger)
                         repaired_gate = validate_claims(repaired_title + "\n" + repaired_body, claim_ledger)
                         if len(repaired_body) >= 80 and repaired_gate.get("passed"):
                             draft["title"] = repaired_title
