@@ -1699,8 +1699,8 @@ def main() -> int:
     bgm_path = out / "bgm.mp3"
     if not bgm_path.is_file():
         os.environ.setdefault("BGM_TARGET_PLATFORM", args.platform)
-        from scripts.kuaishou_render import download_bgm
-        bgm_path = Path(download_bgm(str(out), style=args.bgm_style))
+        from scripts.kuaishou_render import download_bgm_with_retries
+        bgm_path = Path(download_bgm_with_retries(str(out), style=args.bgm_style))
     r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(out / "visual_xfade.mp4"),
                         "-i", str(voice_path), "-stream_loop", "-1", "-i", str(bgm_path),
                         "-filter_complex",
