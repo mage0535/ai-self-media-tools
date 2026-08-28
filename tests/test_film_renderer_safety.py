@@ -129,6 +129,22 @@ def test_segment_shot_budget_covers_internal_crossfade_and_audio_margin():
     assert a_duration + b_duration - film_renderer.XFADE_DUR_LONG >= 9.53
 
 
+def test_cinematic_scene_uses_visual_copy_instead_of_full_narration():
+    card = {
+        "t": "工具切换黑洞",
+        "txt": "核心问题",
+        "tts": "市面上AI工具多到数不清，写文案用一个，生图用一个，语音合成又一个。",
+        "items": ["减少切换", "统一管理", "保留证据"],
+    }
+
+    title = film_renderer._visual_title_for_scene(card, card["tts"], "fallback")
+    modules = film_renderer._visual_modules_for_scene(card, card["tts"])
+
+    assert title == "工具切换黑洞"
+    assert modules == ["减少切换", "统一管理", "保留证据"]
+    assert card["tts"] not in title + "".join(modules)
+
+
 def test_cinematic_templates_use_continuous_high_frequency_background_motion():
     source = (ROOT / "scripts" / "film_renderer.py").read_text(encoding="utf-8")
 

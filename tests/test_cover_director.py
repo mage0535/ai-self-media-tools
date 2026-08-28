@@ -51,3 +51,15 @@ def test_rendered_cover_contains_typography_and_machine_evidence(tmp_path: Path)
     assert evidence["visual_variance_verified"] is True
     assert 1 <= evidence["title_line_count"] <= 3
     assert validate_cover(output, evidence, "kuaishou")["passed"] is True
+
+
+def test_chinese_cover_subtitle_stops_at_a_complete_clause():
+    direction = build_cover_direction(
+        platform="kuaishou",
+        topic="AI 工具工作流",
+        title="别再到处攒 AI 工具",
+        body="市面上AI工具多到数不清，写文案用一个，生图用一个，语音合成又一个。",
+    )
+
+    assert direction["subtitle_text"] == "市面上AI工具多到数不清，写文案用一个，生图用一个"
+    assert not direction["subtitle_text"].endswith("语音")
