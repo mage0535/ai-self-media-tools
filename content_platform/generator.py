@@ -406,6 +406,29 @@ class DraftGenerator:
             "cornerstone_mode": context.get("cornerstone_mode", False),
         }
         self._attach_article_packet_evidence(topic, brief, body, context, draft_meta)
+        if not draft_meta.get("preflight_manifest"):
+            platform = str((strategy.get("primary_platforms") or brief.get("platforms") or [brief.get("platform") or ""])[0]).casefold()
+            content_form = str(strategy.get("content_form") or brief.get("content_form") or "article")
+            asset_plan = [str(item) for item in strategy.get("asset_plan") or draft_meta.get("media_plan") or [] if str(item)]
+            if not asset_plan:
+                asset_plan = ["copy"]
+            extra_skills = []
+            if any(token in content_form.casefold() for token in ("video", "card", "carousel", "image")):
+                extra_skills.append("content/visual-quality-standards")
+            if any(token in content_form.casefold() for token in ("card", "carousel")):
+                extra_skills.append("content/knowledge-card-designer")
+            draft_meta["preflight_manifest"] = build_preflight_manifest(
+                channel=platform,
+                content_type=content_form,
+                strategy_source="content_platform.generator",
+                strategy_result_path="runtime:draft_meta.strategy",
+                strategy_summary="platform strategy and content blueprint compiled before capability execution",
+                selected_topic=str(topic or draft.get("title") or "content topic"),
+                selection_reason=str(brief.get("selection_mode") or "platform evidence and account-lane fit"),
+                content_angle=str(context.get("trend_angle") or "platform-adapted practical explanation"),
+                required_assets=asset_plan,
+                extra_skills=extra_skills,
+            )
         if not draft_meta.get("cover_design"):
             draft_meta["cover_design"] = self._default_cover_design(topic, draft, brief, draft_meta)
         self._attach_growth_recipe(brief, context, draft_meta)
