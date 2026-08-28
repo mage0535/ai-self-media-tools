@@ -168,6 +168,34 @@ def test_wikimedia_candidates_require_open_license_and_real_audio(monkeypatch):
     assert rows[0]["artist"] == "Artist"
 
 
+def test_bgm_source_records_measured_real_instrument_evidence(tmp_path, monkeypatch):
+    audio = tmp_path / "bgm.mp3"
+    audio.write_bytes(b"audio" * 200_000)
+    monkeypatch.setenv("BGM_FINGERPRINT_REGISTRY", str(tmp_path / "registry.json"))
+    monkeypatch.setattr(kuaishou_render, "_media_duration", lambda *_args, **_kwargs: 73.5)
+    candidate = {"provider": "wikimedia_commons_audio", "source_url": "https://commons.wikimedia.org/file", "license": "CC BY 4.0", "title": "Piano", "artist": "Artist", "asset_id": "1", "fit_reason": "piano match"}
+
+    kuaishou_render._write_bgm_source(tmp_path, candidate, "piano")
+
+    evidence = json.loads((tmp_path / "bgm_source.json").read_text(encoding="utf-8"))
+    assert evidence["real_instrument"] is True
+    assert evidence["duration"] == 73.5
+
+
+def test_existing_online_bgm_evidence_is_upgraded_before_reuse(tmp_path, monkeypatch):
+    (tmp_path / "bgm.mp3").write_bytes(b"audio" * 200_000)
+    (tmp_path / "bgm_source.json").write_text(json.dumps({
+        "source": "wikimedia_commons_audio", "source_url": "https://commons.wikimedia.org/file",
+        "license": "CC BY 4.0", "title": "Piano instrumental", "fit_reason": "real piano match",
+    }), encoding="utf-8")
+    monkeypatch.setattr(kuaishou_render, "_media_duration", lambda *_args, **_kwargs: 64.0)
+
+    assert kuaishou_render.download_bgm(tmp_path, "piano") == str(tmp_path / "bgm.mp3")
+    evidence = json.loads((tmp_path / "bgm_source.json").read_text(encoding="utf-8"))
+    assert evidence["real_instrument"] is True
+    assert evidence["duration"] == 64.0
+
+
 def test_bgm_download_skips_registered_sources_before_network_download(tmp_path, monkeypatch):
     used = {
         "provider": "openverse_audio",

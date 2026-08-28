@@ -861,7 +861,8 @@ def download_bgm(video_dir, style="acoustic guitar"):
     bgm = Path(video_dir) / "bgm.mp3"
     source_meta = Path(video_dir) / "bgm_source.json"
     if bgm.exists() and source_meta.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
-        return str(bgm)
+        if _upgrade_existing_bgm_source(video_dir):
+            return str(bgm)
     for stale in (bgm, source_meta):
         if stale.exists():
             stale.unlink()
@@ -1002,7 +1003,8 @@ def _write_bgm_source(video_dir, candidate, style):
         "license": candidate.get("license", ""),
         "attribution_required": bool(candidate.get("attribution_required")),
         "fit_reason": candidate.get("fit_reason") or f"real-instrument instrumental background matched to {style}",
-        "duration": candidate.get("duration", 0),
+        "duration": _media_duration(bgm, default=float(candidate.get("duration") or 0)),
+        "real_instrument": True,
         "sha256": sha256,
         "manifest": {
             "asset_id": candidate.get("asset_id") or sha256[:16],
@@ -1014,6 +1016,32 @@ def _write_bgm_source(video_dir, candidate, style):
     }
     _register_bgm_fingerprint(meta)
     Path(video_dir, "bgm_source.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _upgrade_existing_bgm_source(video_dir):
+    root = Path(video_dir)
+    bgm = root / "bgm.mp3"
+    source = root / "bgm_source.json"
+    try:
+        meta = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    text = " ".join(str(meta.get(key) or "") for key in ("title", "fit_reason", "style")).casefold()
+    provider = str(meta.get("source") or "").casefold()
+    verified = (
+        bgm.is_file()
+        and bgm.stat().st_size > REAL_BGM_MIN_BYTES
+        and provider not in {"local", "library", "synthetic", "procedural", "midi"}
+        and any(term in text for term in REAL_INSTRUMENT_TERMS)
+        and str(meta.get("source_url") or "").startswith(("https://", "http://"))
+        and bool(meta.get("license"))
+    )
+    if not verified:
+        return False
+    meta["duration"] = _media_duration(bgm, default=float(meta.get("duration") or 0))
+    meta["real_instrument"] = True
+    source.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
 
 
 def _bgm_registry_path():

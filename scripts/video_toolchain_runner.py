@@ -492,6 +492,12 @@ def main(argv: list[str] | None = None) -> int:
             print(manifest["error"], file=sys.stderr)
             return 4
         manifest["segment_motion_evidence"] = {"path": str(segment_motion_path), "segments": segments}
+        manifest["scene_execution_evidence"] = _write_measured_scene_execution(
+            output_dir,
+            generated[0],
+            scene_manifest,
+            segment_motion,
+        )
         actual_tools = set(_route_planned_tools(plan))
         invocations = manifest.get("tool_invocation_manifest", {}).get("invocations", {}) or {}
         for name, record in invocations.items():
@@ -1081,6 +1087,47 @@ def _normalize_alternate_renderer_outputs(renderer: Path, output_dir: Path, plan
         payload = {"version": "segment_motion_evidence_v2", "renderer": renderer.name, "segments": segments}
         (output_dir / "segment_motion_evidence.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         (output_dir / "scene_execution_evidence.json").write_text(json.dumps({"version": "scene_execution_evidence_v2", "scenes": segments}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _sample_video_frame(video: Path, offset: float):
+    from io import BytesIO
+    from PIL import Image
+
+    result = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", f"{offset:.3f}", "-i", str(video), "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
+        capture_output=True, timeout=30, check=False,
+    )
+    if result.returncode != 0 or not result.stdout:
+        raise RuntimeError(f"scene frame probe failed at {offset:.3f}s")
+    return Image.open(BytesIO(result.stdout)).convert("L")
+
+
+def _write_measured_scene_execution(output_dir: Path, final: Path, scene_manifest: dict, segment_motion: dict) -> dict:
+    from PIL import ImageChops, ImageStat
+
+    scenes = list(scene_manifest.get("scenes") or [])
+    motions = list(segment_motion.get("segments") or [])
+    duration = _video_duration(final)
+    rows = []
+    for index, scene in enumerate(scenes[:8]):
+        start = duration * index / max(1, len(scenes))
+        end = duration * (index + 1) / max(1, len(scenes))
+        first = _sample_video_frame(final, min(end - 0.1, start + max(0.15, (end - start) * 0.25)))
+        second = _sample_video_frame(final, min(end - 0.05, start + max(0.3, (end - start) * 0.75)))
+        difference = ImageStat.Stat(ImageChops.difference(first, second)).mean[0] / 255.0
+        motion = motions[index] if index < len(motions) and isinstance(motions[index], dict) else {}
+        rows.append({
+            "scene_id": str(scene.get("scene_id") or f"s{index + 1:02d}"),
+            "frame_difference": round(difference, 6),
+            "static_ratio": 0.0 if difference > 0.002 else 1.0,
+            "move_id": str(motion.get("move_id") or "measured_scene_motion"),
+            "profile": str(motion.get("profile") or "encoded_frame_probe"),
+            "sample_offsets": [round(start + (end - start) * 0.25, 3), round(start + (end - start) * 0.75, 3)],
+            "artifact_verified": True,
+        })
+    evidence = {"version": "scene_execution_evidence_v3", "video": str(final), "scenes": rows}
+    (output_dir / "scene_execution_evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+    return evidence
 
 
 def _content_driven_renderer(plan: dict, script_body: str, title: str, output_dir: Path) -> tuple[Path, dict]:

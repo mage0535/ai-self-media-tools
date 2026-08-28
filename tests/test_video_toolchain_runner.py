@@ -109,6 +109,27 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             assert json.loads((root / "tts_fingerprint.json").read_text(encoding="utf-8"))["duration_seconds"] == 40.0
             assert len(json.loads((root / "segment_motion_evidence.json").read_text(encoding="utf-8"))["segments"]) == 8
 
+    def test_scene_execution_evidence_uses_measured_encoded_frames(self):
+        from PIL import Image
+        from scripts import video_toolchain_runner as runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            final = root / "final.mp4"
+            final.write_bytes(b"video")
+            scene_manifest = {"scenes": [{"scene_id": f"s{index + 1:02d}"} for index in range(8)]}
+            segment_motion = {"segments": [{"move_id": f"move-{index}", "profile": "cinematic"} for index in range(8)]}
+            colors = [(20, 20, 20), (180, 180, 180)] * 8
+
+            with patch.object(runner, "_video_duration", return_value=48.0), patch.object(
+                runner, "_sample_video_frame", side_effect=[Image.new("RGB", (64, 64), color) for color in colors]
+            ):
+                evidence = runner._write_measured_scene_execution(root, final, scene_manifest, segment_motion)
+
+            assert len(evidence["scenes"]) == 8
+            assert all(row["frame_difference"] > 0 for row in evidence["scenes"])
+            assert all(row["static_ratio"] < 1 for row in evidence["scenes"])
+
     def test_short_video_duration_is_normalized_before_artifact_gate(self):
         from scripts import video_toolchain_runner as runner
 
@@ -970,10 +991,13 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             root = Path(tmp)
             (root / "bgm.mp3").write_bytes(b"x" * (REAL_BGM_MIN_BYTES + 1000))
             (root / "bgm_source.json").write_text(
-                json.dumps({"source": "openverse_audio", "license": "cc0", "title": "valid"}),
+                json.dumps({
+                    "source": "openverse_audio", "license": "cc0", "title": "acoustic guitar instrumental",
+                    "source_url": "https://openverse.org/audio/example", "fit_reason": "real acoustic guitar match",
+                }),
                 encoding="utf-8",
             )
-            with patch("scripts.kuaishou_render._online_bgm_candidates") as mock_online:
+            with patch("scripts.kuaishou_render._media_duration", return_value=61.0), patch("scripts.kuaishou_render._online_bgm_candidates") as mock_online:
                 result = download_bgm(root, "acoustic guitar")
             mock_online.assert_not_called()
             self.assertEqual(result, str(root / "bgm.mp3"))
