@@ -56,6 +56,10 @@ def validate_cover(cover: str | Path, evidence: dict[str, Any] | str | Path | No
     if evidence.get("version") == "cover_quality_evidence_v2":
         if evidence.get("typography_overlay_verified") is not True:
             failures.append("cover_typography_overlay_missing")
+        if evidence.get("horizontal_safe_zone_verified") is not True:
+            failures.append("cover_horizontal_safe_zone_failed")
+        if float(evidence.get("max_text_line_width_px") or 0) > float(evidence.get("text_safe_width_px") or 0):
+            failures.append("cover_text_overflow")
         if not str(evidence.get("platform_profile") or ""):
             failures.append("platform_cover_profile_missing")
         if not str(evidence.get("direction_id") or ""):
