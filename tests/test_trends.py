@@ -197,7 +197,10 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(report["summary"]["degraded_sources"], 5)
 
     def test_wewrite_hotspots_source_normalizes_cli_output(self):
-        payload = [{"title": "公众号热点选题", "heat": 42, "url": "https://example.com/w"}]
+        payload = [{
+            "title": "公众号热点选题", "heat": 42, "rank": 2,
+            "url": "https://mp.weixin.qq.com/s/w", "captured_at": "2026-08-27T01:30:00Z",
+        }]
         completed = type("Completed", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""})()
 
         with patch("content_platform.trends.Path.is_file", return_value=True):
@@ -209,7 +212,10 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(items[0]["title"], "公众号热点选题")
 
     def test_wewrite_hotspots_preserves_its_collection_transport(self):
-        payload = [{"title": "公众号热点选题", "source": "wechat"}]
+        payload = [{
+            "title": "公众号热点选题", "source": "wechat", "rank": 1,
+            "url": "https://mp.weixin.qq.com/s/w", "captured_at": "2026-08-27T01:30:00Z",
+        }]
         completed = type("Completed", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""})()
 
         with patch("content_platform.trends.Path.is_file", return_value=True):

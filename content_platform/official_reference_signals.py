@@ -16,6 +16,9 @@ from typing import Any
 READY_STATUSES = {"verified", "verified_via_shared_douyin_source", "backend_loaded"}
 OFFICIAL_EVIDENCE_TYPES = {"official_activity", "official_keyword", "official_reference"}
 SIGNAL_TYPE_TO_EVIDENCE = {
+    "official_activity": "official_activity",
+    "official_keyword": "official_keyword",
+    "official_reference": "official_reference",
     "official_feed_and_campaign": "official_activity",
     "official_creator_activity": "official_activity",
     "creator_backend_activity": "official_activity",
@@ -52,7 +55,9 @@ def _is_topic_text(value: str) -> bool:
 
 def _candidate_paths(data_dir: str | Path | None = None) -> list[Path]:
     explicit = str(os.environ.get("OFFICIAL_PLATFORM_SIGNAL_MATRIX") or "").strip()
-    paths = [Path(explicit)] if explicit else []
+    # An explicit run data directory is an isolation boundary. Environment
+    # overrides apply only when the caller did not supply that boundary.
+    paths = [Path(explicit)] if explicit and data_dir is None else []
     root = Path(data_dir or os.environ.get("AI_SELF_MEDIA_DATA_DIR") or Path.cwd())
     paths.extend([
         root / "overnight" / datetime.now(timezone.utc).date().isoformat() / "official-platform-signal-matrix-v3.json",
@@ -62,8 +67,9 @@ def _candidate_paths(data_dir: str | Path | None = None) -> list[Path]:
     return list(dict.fromkeys(paths))
 
 
-def load_official_reference_signals(platform: str, *, data_dir: str | Path | None = None) -> dict[str, Any]:
+def load_official_reference_signals(platform: str, *, data_dir: str | Path | None = None, now: datetime | None = None) -> dict[str, Any]:
     normalized = str(platform or "").casefold()
+    current = now or datetime.now(timezone.utc)
     for path in _candidate_paths(data_dir):
         if not path.is_file():
             continue
@@ -77,7 +83,7 @@ def load_official_reference_signals(platform: str, *, data_dir: str | Path | Non
             continue
         row = rows[0]
         status = str(row.get("status") or "").casefold()
-        if not _fresh_capture(row.get("captured_at"), datetime.now(timezone.utc), max_age_hours=48):
+        if not _fresh_capture(row.get("captured_at"), current, max_age_hours=48):
             continue
         raw_signal_type = str(row.get("signal_type") or "official_reference").casefold()
         evidence_type = str(row.get("evidence_type") or SIGNAL_TYPE_TO_EVIDENCE.get(raw_signal_type) or raw_signal_type).casefold()
@@ -100,7 +106,7 @@ def load_official_reference_signals(platform: str, *, data_dir: str | Path | Non
             "final_url": str(row.get("final_url") or row.get("official_url") or ""),
             "captured_at": str(row.get("captured_at") or ""),
             "native_verified": False,
-            "validity": _validity(row, datetime.now(timezone.utc)),
+            "validity": _validity(row, current),
             "expires_at": str(row.get("expires_at") or row.get("valid_until") or ""),
             "signals": [item for item in raw_signals if _is_topic_text(item)][:80],
             "evidence_sha256": str(row.get("evidence_sha256") or ""),
@@ -110,8 +116,8 @@ def load_official_reference_signals(platform: str, *, data_dir: str | Path | Non
     return {"status": "insufficient", "source_status": "missing", "signal_type": "official_reference", "evidence_type": "official_reference", "signals": [], "reason": "official platform signal matrix not found"}
 
 
-def build_reference_items(platform: str, *, data_dir: str | Path | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    evidence = load_official_reference_signals(platform, data_dir=data_dir)
+def build_reference_items(platform: str, *, data_dir: str | Path | None = None, now: datetime | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    evidence = load_official_reference_signals(platform, data_dir=data_dir, now=now)
     if evidence.get("status") != "ready":
         return evidence, []
     source = f"{str(platform).casefold()}:official_reference"
@@ -150,13 +156,14 @@ def build_selection_items(
     lane_keywords: list[str] | tuple[str, ...],
     *,
     data_dir: str | Path | None = None,
+    now: datetime | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Compile verified first-party activity/keyword rows into candidates.
 
     Reference-only rows remain separate. This adapter requires lane overlap and
     complete provenance before a signal may enter selection.
     """
-    evidence = load_official_reference_signals(platform, data_dir=data_dir)
+    evidence = load_official_reference_signals(platform, data_dir=data_dir, now=now)
     evidence_type = str(evidence.get("evidence_type") or "")
     if evidence.get("status") != "ready" or evidence_type not in {"official_activity", "official_keyword"}:
         return evidence, []
