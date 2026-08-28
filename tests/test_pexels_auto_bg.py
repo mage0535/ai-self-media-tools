@@ -25,6 +25,23 @@ def test_pexels_candidate_pool_skips_excluded_photo_id():
     assert result["content"] == b"photo-two"
 
 
+def test_pexels_candidate_pool_skips_historical_content_hash():
+    from scripts.pexels_auto_bg import _download_pexels
+    import hashlib
+
+    duplicate = b"duplicate"
+    fresh = b"fresh"
+    api = json.dumps({"photos": [
+        {"id": 1, "url": "https://pexels.test/1", "photographer": "A", "photographer_url": "", "src": {"large2x": "https://cdn.test/1.jpg"}},
+        {"id": 2, "url": "https://pexels.test/2", "photographer": "B", "photographer_url": "", "src": {"large2x": "https://cdn.test/2.jpg"}},
+    ]}).encode()
+    with patch("scripts.pexels_auto_bg.urllib.request.urlopen", side_effect=[_Response(api), _Response(duplicate), _Response(fresh)]):
+        result = _download_pexels("technology", "key", exclude_hashes={hashlib.sha256(duplicate).hexdigest()})
+
+    assert result["asset_id"] == "2"
+    assert result["content"] == fresh
+
+
 def test_auto_fetch_counts_existing_files_and_adds_only_missing_unique_assets(tmp_path: Path):
     from scripts.pexels_auto_bg import auto_fetch_backgrounds
 

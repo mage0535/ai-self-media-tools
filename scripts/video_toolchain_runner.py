@@ -179,7 +179,11 @@ def main(argv: list[str] | None = None) -> int:
                     force=True,
                     excluded_hashes=previous_hashes,
                 )
-                materialized_backgrounds = _merge_materialized_backgrounds([], replacements)
+                replacement_rows = _merge_materialized_backgrounds([], replacements)
+                if len(replacement_rows) >= 8:
+                    materialized_backgrounds = replacement_rows
+                else:
+                    print(f"[asset-reselection] insufficient unique replacements: {len(replacement_rows)}/8", file=sys.stderr)
             except Exception as exc:
                 print(f"[asset-reselection] failed: {exc}", file=sys.stderr)
     visual_assets = _visual_assets_from_materialized(materialized_backgrounds)

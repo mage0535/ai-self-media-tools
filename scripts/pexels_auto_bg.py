@@ -66,10 +66,16 @@ def _semantic_queries(text: str, count: int = 8) -> list[str]:
     return base_queries[:count]
 
 
-def _download_pexels(query: str, key: str, orientation: str = "portrait", exclude_ids: set[str] | None = None) -> dict | None:
+def _download_pexels(
+    query: str,
+    key: str,
+    orientation: str = "portrait",
+    exclude_ids: set[str] | None = None,
+    exclude_hashes: set[str] | None = None,
+) -> dict | None:
     """Download one Pexels photo with source and license evidence."""
     qq = query.replace(" ", "+")
-    url = f"https://api.pexels.com/v1/search?query={qq}&per_page=10&orientation={orientation}"
+    url = f"https://api.pexels.com/v1/search?query={qq}&per_page=80&orientation={orientation}"
     req = urllib.request.Request(url, headers={"Authorization": key, "User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
@@ -85,6 +91,9 @@ def _download_pexels(query: str, key: str, orientation: str = "portrait", exclud
             ireq = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(ireq, timeout=20) as ir:
                 content = ir.read()
+            if hashlib.sha256(content).hexdigest() in set(exclude_hashes or set()):
+                excluded.add(asset_id)
+                continue
             return {
                 "content": content,
                 "source_url": str(photo.get("url") or ""),
@@ -131,7 +140,7 @@ def auto_fetch_backgrounds(
         for q in queries:
             if len(assignments) >= needed:
                 break
-            photo = _download_pexels(q, key, exclude_ids=seen_ids)
+            photo = _download_pexels(q, key, exclude_ids=seen_ids, exclude_hashes=seen_hashes)
             if not photo:
                 time.sleep(1)
                 continue
@@ -167,7 +176,7 @@ def auto_fetch_backgrounds(
                 attempts += 1
                 i = len(base_existing) + len(assignments) + 1
                 query = queries[(i - 1) % len(queries)]
-                prompt = _ai_prompt(query, platform)
+                prompt = _ai_prompt(query, platform) + f", distinct scene {i}, composition variant {i}"
                 fp = bg_dir / f"bg_{i:02d}.jpg"
                 try:
                     generate_image(prompt, fp, provider="pollinations", size="1080x1920")
