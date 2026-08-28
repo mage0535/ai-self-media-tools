@@ -858,11 +858,17 @@ def download_bgm(video_dir, style="acoustic guitar"):
     _ACTIVE_BGM_DEADLINE = time.monotonic() + budget
     errors = []
     timed_out = False
+    registered_candidate_keys = _registered_bgm_candidate_keys()
+    attempted_candidate_keys = set()
     try:
         for candidate in _online_bgm_candidates(style):
             if _bgm_deadline_reached():
                 timed_out = True
                 break
+            candidate_keys = _bgm_candidate_keys(candidate)
+            if candidate_keys & (registered_candidate_keys | attempted_candidate_keys):
+                continue
+            attempted_candidate_keys.update(candidate_keys)
             if not _bgm_candidate_allowed(candidate):
                 continue
             _ACTIVE_BGM_CANDIDATE_DEADLINE = min(
@@ -996,6 +1002,34 @@ def _bgm_registry_path():
     return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "data" / "bgm_fingerprint.json"
 
 
+def _bgm_candidate_keys(candidate):
+    provider = str(candidate.get("provider") or "").strip()
+    asset_id = str(candidate.get("asset_id") or "").strip()
+    source_url = str(candidate.get("source_url") or "").strip()
+    keys = set()
+    if provider and asset_id:
+        keys.add(f"asset:{provider}:{asset_id}")
+    if source_url:
+        keys.add(f"source:{source_url}")
+    return keys
+
+
+def _registered_bgm_candidate_keys():
+    registry = _bgm_registry_path()
+    if not registry.is_file():
+        return set()
+    try:
+        data = json.loads(registry.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    tracks = data.get("tracks") if isinstance(data, dict) else []
+    keys = set()
+    for track in tracks if isinstance(tracks, list) else []:
+        if isinstance(track, dict):
+            keys.update(_bgm_candidate_keys(track))
+    return keys
+
+
 def _register_bgm_fingerprint(meta):
     fingerprint = str(meta.get("sha256") or (meta.get("manifest") or {}).get("fingerprint") or "").strip()
     if not fingerprint:
@@ -1019,6 +1053,8 @@ def _register_bgm_fingerprint(meta):
     tracks.append(
         {
             "fingerprint": fingerprint,
+            "provider": meta.get("source", ""),
+            "asset_id": (meta.get("manifest") or {}).get("asset_id", ""),
             "title": meta.get("title", ""),
             "artist": meta.get("artist", ""),
             "source": meta.get("source", ""),

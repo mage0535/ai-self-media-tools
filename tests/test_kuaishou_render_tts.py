@@ -110,8 +110,48 @@ def test_bgm_download_limits_each_candidate_without_consuming_global_budget(tmp_
     assert 0 < candidate_deadlines[0] - started <= 3.5
 
 
-def test_bgm_queries_try_verified_instrumental_baseline_before_narrow_style():
+def test_bgm_download_skips_registered_sources_before_network_download(tmp_path, monkeypatch):
+    used = {
+        "provider": "openverse_audio",
+        "download_url": "https://cdn.example/used.mp3",
+        "source_url": "https://freesound.org/sounds/used",
+        "title": "Used upright piano",
+        "artist": "artist",
+        "license": "https://creativecommons.org/licenses/by/4.0/",
+        "tags": "upright piano instrumental",
+        "license_verified": True,
+        "asset_id": "used",
+    }
+    fresh = {
+        **used,
+        "download_url": "https://cdn.example/fresh.mp3",
+        "source_url": "https://freesound.org/sounds/fresh",
+        "title": "Fresh upright piano",
+        "asset_id": "fresh",
+    }
+    registry = tmp_path / "bgm_registry.json"
+    registry.write_text(
+        json.dumps({"tracks": [{"fingerprint": "old", "source_url": used["source_url"]}]}),
+        encoding="utf-8",
+    )
+    downloads = []
+
+    def fake_download(candidate, output):
+        downloads.append(candidate["source_url"])
+        output.write_bytes(b"audio" * 200_000)
+
+    monkeypatch.setenv("BGM_FINGERPRINT_REGISTRY", str(registry))
+    monkeypatch.setattr(kuaishou_render, "_online_bgm_candidates", lambda _style: [used, used, fresh])
+    monkeypatch.setattr(kuaishou_render, "_download_candidate_bgm", fake_download)
+
+    kuaishou_render.download_bgm(tmp_path, "upright piano")
+
+    assert downloads == [fresh["source_url"]]
+
+
+def test_bgm_queries_prioritize_requested_instruments_before_broad_fallbacks():
     queries = kuaishou_render._bgm_queries("muted percussion and low strings")
 
-    assert queries[0] == "acoustic guitar instrumental"
-    assert "muted percussion and low strings" in queries
+    assert queries[0] == "muted percussion and low strings music instrumental"
+    assert "orchestral strings music" in queries
+    assert "acoustic guitar music instrumental" not in queries[:2]
