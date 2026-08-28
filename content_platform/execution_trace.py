@@ -140,8 +140,13 @@ def build_pre_delivery_trace(
 
 
 def complete_delivery_trace(trace: dict[str, Any], *, platform: str, result: dict[str, Any]) -> dict[str, Any]:
-    accepted = bool(result.get("ok")) and str(result.get("status") or "") in {"published", "drafted", "scheduled", "handoff_pending"}
-    node_id = "handoff_package_builder" if str(result.get("status") or "") == "handoff_pending" else "pipeline_publisher"
+    status = str(result.get("status") or "")
+    accepted = bool(result.get("ok")) and status in {"published", "drafted", "scheduled", "handoff_pending", "dry_run"}
+    node_id = (
+        "delivery_boundary_probe" if status == "dry_run"
+        else "handoff_package_builder" if status == "handoff_pending"
+        else "pipeline_publisher"
+    )
     delivery = record_execution_stage(
         "delivery", manifest_hash=manifest_hash(result), manifest_kind="delivery_receipt",
         planned=[{"node_id": node_id, "selected": True, "required": True, "artifact_required": True}],

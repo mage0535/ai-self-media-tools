@@ -10,8 +10,10 @@ from __future__ import annotations
 import hashlib
 import ast
 import copy
+from difflib import SequenceMatcher
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -324,7 +326,7 @@ def _read_subtitle(path: Path | None) -> dict[str, Any]:
     if path is None or not path.is_file():
         return {"passed": False, "cue_count": 0, "failures": ["subtitle_file_missing"]}
     text = path.read_text(encoding="utf-8", errors="replace")
-    cue_count = sum(1 for line in text.splitlines() if " --> " in line)
+    cue_count = sum(1 for line in text.splitlines() if " --> " in line or line.startswith("Dialogue:"))
     return {"passed": cue_count > 0, "cue_count": cue_count, "failures": [] if cue_count else ["subtitle_cues_missing"]}
 
 
@@ -389,11 +391,14 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
     failures = [] if manifest else ["artifact_manifest_missing"]
     output_hashes, hash_failures = _artifact_paths(root, manifest)
     failures.extend(hash_failures)
+    media_root = _relative_file(root, manifest.get("artifact_root")) or root
+    if not media_root.is_dir():
+        media_root = root
     form = str(case.get("content_form") or "")
     probes: dict[str, dict[str, Any]] = {}
 
-    cover_path = next((root / name for name in ("cover.jpg", "cover.jpeg", "cover.png") if (root / name).is_file()), None)
-    cover_evidence = manifest.get("probe_evidence", {}).get("cover", {}) if isinstance(manifest.get("probe_evidence"), dict) else {}
+    cover_path = next((media_root / name for name in ("cover.jpg", "cover.jpeg", "cover.png", "cover_1080x1920.jpg") if (media_root / name).is_file()), None)
+    cover_evidence = _load_json(media_root / "cover_quality_evidence.json")
     if cover_path:
         cover_result = validate_cover(cover_path, cover_evidence, str(case.get("platform") or ""))
         probes["cover"] = _probe("cover", cover_result["passed"], details=cover_result, failures=cover_result.get("failures", []), level="artifact_verified" if cover_result["passed"] else "declared")
@@ -415,45 +420,56 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
         if not carousel_passed:
             failures.append("carousel_images_not_unique_or_missing")
 
-    video_path = root / "final.mp4"
+    video_path = media_root / "final.mp4"
     video_result: dict[str, Any] | None = None
     if form in {"vertical_video", "horizontal_video"}:
-        video_result = probe_final_video(video_path)
+        video_result = probe_final_video(video_path, burned_subtitles=_load_json(media_root / "subtitle_burn_evidence.json"))
         video_passed = bool(video_result.get("passed"))
         level = "artifact_verified" if video_passed else "declared"
         probes["audio"] = _probe("audio", video_result.get("audio", {}).get("sample_rate") == 44100 and video_result.get("audio", {}).get("channels") == 2, details=video_result.get("audio", {}), failures=[value for value in video_result.get("failures", []) if "audio" in value], level=level)
-        probes["subtitle"] = _probe("subtitle", int(video_result.get("subtitle_streams") or 0) > 0, details={"subtitle_streams": video_result.get("subtitle_streams", 0)}, failures=[value for value in video_result.get("failures", []) if "subtitle" in value], level=level)
+        subtitle_verified = int(video_result.get("subtitle_streams") or 0) > 0 or video_result.get("burned_subtitles_verified") is True
+        probes["subtitle"] = _probe("subtitle", subtitle_verified, details={"subtitle_streams": video_result.get("subtitle_streams", 0), "burned_subtitles_verified": video_result.get("burned_subtitles_verified") is True}, failures=[value for value in video_result.get("failures", []) if "subtitle" in value], level=level)
         probes["frame"] = _probe("frame", float(video_result.get("motion", {}).get("mean_frame_difference") or 0) > 0, details=video_result.get("motion", {}), failures=[value for value in video_result.get("failures", []) if "frame" in value or "motion" in value], level=level)
         if not video_passed:
             failures.extend(f"video:{value}" for value in video_result.get("failures", []))
 
-        subtitle = _read_subtitle(next((root / name for name in ("subtitles.srt", "subtitle.srt") if (root / name).is_file()), None))
+        subtitle = _read_subtitle(next((media_root / name for name in ("subtitles.srt", "subtitle.srt", "subtitles.ass") if (media_root / name).is_file()), None))
         probes["subtitle_file"] = _probe("subtitle_file", subtitle["passed"], details=subtitle, failures=subtitle["failures"], level="artifact_verified" if subtitle["passed"] else "declared")
         if not subtitle["passed"]:
             failures.extend(f"subtitle_file:{value}" for value in subtitle["failures"])
 
-        tts = _load_json(root / "tts_fingerprint.json")
+        tts = _load_json(media_root / "tts_fingerprint.json")
         tts_result = validate_tts_fingerprint(tts)
         probes["tts"] = _probe("tts", tts_result["passed"], details=tts_result, failures=tts_result.get("failures", []), level="artifact_verified" if tts_result["passed"] else "declared")
         if not tts_result["passed"]:
             failures.extend(f"tts:{value}" for value in tts_result.get("failures", []))
 
-        bgm = _load_json(root / "bgm.json")
+        bgm = _load_json(media_root / "bgm_source.json") or _load_json(media_root / "bgm.json")
         bgm_result = validate_bgm_contract(bgm, recent_fingerprints=[])
         probes["bgm"] = _probe("bgm", bgm_result["passed"], details=bgm_result, failures=bgm_result.get("failures", []), level="artifact_verified" if bgm_result["passed"] else "declared")
         if not bgm_result["passed"]:
             failures.extend(f"bgm:{value}" for value in bgm_result.get("failures", []))
 
-        scene_manifest = _load_json(root / "scene_manifest.json")
-        observed = _load_json(root / "scene_observed.json")
+        scene_manifest = _load_json(media_root / "scene_manifest.json")
+        observed_payload = _load_json(media_root / "scene_execution_evidence.json") or _load_json(media_root / "scene_observed.json")
+        observed = {
+            str(row.get("scene_id") or ""): row
+            for row in observed_payload.get("scenes") or []
+            if isinstance(row, dict) and row.get("scene_id")
+        } if isinstance(observed_payload.get("scenes"), list) else observed_payload
         scene_result = validate_scene_manifest_contract(scene_manifest, observed=observed)
         probes["scene"] = _probe("scene", scene_result["passed"], details=scene_result, failures=scene_result.get("failures", []), level="artifact_verified" if scene_result["passed"] else "declared")
         if not scene_result["passed"]:
             failures.extend(f"scene:{value}" for value in scene_result.get("failures", []))
 
-        asr = _load_json(root / "asr.json")
-        asr_passed = bool(str(asr.get("transcript") or "").strip()) and bool(asr.get("segments"))
-        probes["asr"] = _probe("asr", asr_passed, details={"segment_count": len(asr.get("segments", [])) if isinstance(asr.get("segments"), list) else 0}, failures=[] if asr_passed else ["asr_transcript_or_segments_missing"], level="artifact_verified" if asr_passed else "declared")
+        asr = _load_json(media_root / "asr.json")
+        asr_text = str(asr.get("transcript") or "").strip()
+        expected_text = str(tts.get("tts_text") or "").strip()
+        normalize = lambda value: re.sub(r"[^0-9a-z\u3400-\u9fff]", "", value.casefold())
+        asr_similarity = SequenceMatcher(None, normalize(asr_text), normalize(expected_text)).ratio() if asr_text and expected_text else 0.0
+        asr_passed = bool(asr_text) and bool(asr.get("segments")) and asr_similarity >= 0.5
+        asr_failures = [] if asr_passed else (["asr_transcript_or_segments_missing"] if not asr_text or not asr.get("segments") else ["asr_transcript_mismatch"])
+        probes["asr"] = _probe("asr", asr_passed, details={"segment_count": len(asr.get("segments", [])) if isinstance(asr.get("segments"), list) else 0, "tts_similarity": round(asr_similarity, 4), "provider": asr.get("provider"), "model": asr.get("model")}, failures=asr_failures, level="artifact_verified" if asr_passed else "declared")
         if not asr_passed:
             failures.append("asr:asr_transcript_or_segments_missing")
 
@@ -463,9 +479,11 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
         probes["handoff"] = _probe("handoff", handoff_result["passed"], details=handoff_result, failures=handoff_result.get("failures", []), level="artifact_verified" if handoff_result["passed"] else "contract_verified")
         if not handoff_result["passed"]:
             failures.extend(f"handoff:{value}" for value in handoff_result.get("failures", []))
-    else:
+    elif str(case.get("delivery_policy") or "") == "manual_handoff_only":
         probes["handoff"] = _probe("handoff", False, failures=["handoff_contract_missing"])
         failures.append("handoff_contract_missing")
+    else:
+        probes["handoff"] = _probe("handoff", True, details={"applicable": False, "reason": "delivery_policy_does_not_require_handoff"}, level="contract_verified")
 
     capabilities = manifest.get("capabilities") if isinstance(manifest.get("capabilities"), list) else []
     capability_failures = []
@@ -683,6 +701,7 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
         }],
         "selection_mode": "official_native_canary",
         "automated_workflow": True,
+        "dry_run": case.get("dry_run") is True,
         "run_contract": build_run_contract(platform),
         "delivery_policy": case["delivery_policy"],
         "claim_ledger": [],
@@ -754,10 +773,48 @@ def _patch_dry_run_publisher(pipeline_module, outbox):
     return original
 
 
+def _materialize_asr_evidence(root: Path, job_id: str) -> dict[str, Any]:
+    """Transcribe the encoded audio; never reuse script text as ASR proof."""
+    media_root = root / "artifacts" / str(job_id)
+    video = media_root / "final.mp4"
+    output = media_root / "asr.json"
+    if not video.is_file() or video.stat().st_size <= 0:
+        return {"passed": False, "reason": "final_video_missing"}
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        return {"passed": False, "reason": "faster_whisper_unavailable"}
+    started = datetime.now(timezone.utc)
+    model_id = str(os.environ.get("TASK9_ASR_MODEL") or "base")
+    try:
+        model = WhisperModel(model_id, device="cpu", compute_type="int8")
+        segments, info = model.transcribe(str(video), language=None, vad_filter=True, beam_size=5)
+        rows = []
+        for segment in segments:
+            text = str(segment.text or "").strip()
+            if text:
+                rows.append({"start": round(float(segment.start), 3), "end": round(float(segment.end), 3), "text": text})
+        payload = {
+            "version": "asr_evidence_v1",
+            "provider": "faster-whisper",
+            "model": model_id,
+            "language": str(getattr(info, "language", "") or ""),
+            "language_probability": float(getattr(info, "language_probability", 0) or 0),
+            "transcript": " ".join(row["text"] for row in rows),
+            "segments": rows,
+            "source_video_sha256": sha256_file(video),
+            "duration_ms": round((datetime.now(timezone.utc) - started).total_seconds() * 1000),
+        }
+        output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"passed": bool(rows), "path": str(output), "segment_count": len(rows)}
+    except Exception as exc:
+        return {"passed": False, "reason": f"{type(exc).__name__}:{exc}"}
+
+
 def _actual_files(root: Path) -> list[dict[str, Any]]:
     records = []
     for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.name in {"artifact_manifest.json", "state.db", "state.db-wal", "state.db-shm"}:
+        if not path.is_file() or path.stat().st_size <= 0 or path.name in {"artifact_manifest.json", "state.db", "state.db-wal", "state.db-shm"}:
             continue
         if path.suffix in {".json", ".jsonl"} and path.name not in {"final.json", "draft.json"}:
             continue
@@ -809,6 +866,7 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
         "job_id": job_id,
         "platform": case["platform"],
         "content_form": case["content_form"],
+        "artifact_root": f"artifacts/{job_id}" if job_id else ".",
         "artifacts": artifacts,
         "capabilities": capabilities,
         "hotspot": hotspot if isinstance(hotspot, dict) else {},
@@ -867,6 +925,8 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
             with patch("content_platform.pipeline.build_publisher", side_effect=lambda platform, cfg, data_dir: _PolicySafePublisher(root / "outbox", expected_status)):
                 result = pipeline.stage_drafts(job_id)
                 evidence["stage_drafts_called"] = True
+        if case["content_form"] in {"vertical_video", "horizontal_video"}:
+            evidence["asr"] = _materialize_asr_evidence(root, job_id)
         result = pipeline.status(job_id) if hasattr(pipeline, "status") else result
         manifest = _materialize_artifact_manifest(case, store, result, root, verified_hotspot)
         return {"passed": True, "pipeline_evidence": evidence, "job": result, "manifest": manifest}

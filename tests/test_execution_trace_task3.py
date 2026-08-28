@@ -212,6 +212,25 @@ def test_multiple_platform_deliveries_share_one_delivery_stage():
     assert {row["node_id"] for row in delivery["executed"]} == {"pipeline_publisher"}
 
 
+def test_dry_run_delivery_uses_verified_boundary_without_claiming_publish():
+    pending = build_pre_delivery_trace(
+        capability_execution={"selected": [], "executed": []}, artifacts=[], assets_required=False,
+        render_manifest={}, render_required=False, quality_gate={"passed": True},
+    )
+
+    trace = complete_delivery_trace(
+        pending,
+        platform="kuaishou",
+        result={"ok": True, "status": "dry_run", "external_id": "outbox/kuaishou.json"},
+    )
+
+    delivery = next(row for row in trace["stages"] if row["stage"] == "delivery")
+    assert trace["passed"] is True
+    assert {row["node_id"] for row in delivery["executed"]} == {"delivery_boundary_probe"}
+    assert {row["node_id"] for row in delivery["artifact_verified"]} == {"delivery_boundary_probe"}
+    assert "pipeline_publisher" not in str(delivery)
+
+
 def test_full_selected_plan_maps_to_registry_ids_and_terminal_evidence():
     selected = [
         {"capability_id": "platform_source_matrix", "stage": "collection", "required_or_optional": "required"},

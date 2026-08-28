@@ -76,6 +76,9 @@ def match_capabilities(
         if not _matches(capability, profile):
             continue
         mode = delivery_mode(str(profile.get("platform") or ""))
+        if capability.get("id") == "pipeline_publisher" and (runtime_context or {}).get("dry_run") is True:
+            skipped.append({"capability_id": capability["id"], "reason": "dry_run_uses_verified_delivery_boundary"})
+            continue
         if capability.get("id") == "pipeline_publisher" and mode == "manual_handoff":
             skipped.append({"capability_id": capability["id"], "reason": "delivery_policy_selects_manual_handoff"})
             continue

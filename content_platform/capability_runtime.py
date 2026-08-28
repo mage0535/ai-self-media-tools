@@ -182,7 +182,11 @@ def _build_runtime_context(brief: dict) -> dict:
         caller = getattr(context, "mcp_caller", None)
     if caller is None:
         caller = _project_mcp_caller(brief)
-    return {"mcp_caller": caller, "mcp_runtime": context}
+    return {
+        "mcp_caller": caller,
+        "mcp_runtime": context,
+        "dry_run": brief.get("dry_run") is True,
+    }
 
 
 def _project_mcp_caller(brief: dict):
