@@ -398,6 +398,27 @@ class Pipeline:
                     draft["body"] = normalize_feed_paragraphs(draft.get("body") or "")
                     draft["body"] = restore_verified_domains(draft["body"], claim_ledger)
                 runner.succeeded("validate_content_structure", {"title_present": bool(draft.get("title")), "body_chars": len(str(draft.get("body", ""))), "platform_alignment": platform_alignment}, depends_on=["generate_content"])
+                script_budget = self._video_script_budget(draft, job)
+                if not script_budget["passed"]:
+                    repair_brief = json.loads(json.dumps(brief, ensure_ascii=False))
+                    blueprint = dict(repair_brief.get("content_blueprint") or {})
+                    blueprint["script_length_requirement"] = {
+                        "language": script_budget["language"],
+                        "min_words": script_budget["min_words"],
+                        "max_words": script_budget["max_words"],
+                        "paragraphs": 8,
+                        "rule": "expand with evidence-backed explanation, boundaries, steps, takeaway, and CTA; do not invent facts",
+                    }
+                    repair_brief["content_blueprint"] = blueprint
+                    if isinstance(repair_brief.get("bounded_model_input"), dict):
+                        repair_brief["bounded_model_input"]["content_blueprint"] = blueprint
+                    repaired = self.generator.generate(job.get("topic") or draft["title"], repair_brief)
+                    repaired_budget = self._video_script_budget(repaired, job)
+                    if not repaired_budget["passed"]:
+                        runner.block("validate_content_structure", "video_script_budget_failed", "video script remained below the platform narration budget after one bounded repair", repaired_budget, depends_on=["generate_content"])
+                    draft["title"] = repaired["title"]
+                    draft["body"] = repaired["body"]
+                    draft.setdefault("draft_meta", {})["script_budget_repair"] = {"attempted": True, "passed": True, "before": script_budget, "after": repaired_budget}
                 self._persist_intelligence(job_id, draft.get("draft_meta", {}))
                 text = draft["title"] + "\n" + draft["body"]
                 claim_gate = validate_claims(text, claim_ledger)
@@ -960,6 +981,17 @@ class Pipeline:
         if hygiene:
             brief["content_hygiene"] = hygiene
         return brief
+
+    @staticmethod
+    def _video_script_budget(draft, job):
+        platforms = {str(item).casefold() for item in job.get("platforms") or []}
+        body = str(draft.get("body") or "")
+        horizontal = bool(platforms.intersection({"youtube", "bilibili"}))
+        english = sum(ch.isascii() and ch.isalpha() for ch in body) > sum("\u4e00" <= ch <= "\u9fff" for ch in body) * 2
+        if not horizontal or not english:
+            return {"passed": True, "language": "zh", "word_count": len(body), "min_words": 0, "max_words": 0}
+        count = len(re.findall(r"\b[A-Za-z][A-Za-z0-9'-]*\b", body))
+        return {"passed": 90 <= count <= 160, "language": "en", "word_count": count, "min_words": 90, "max_words": 160}
 
     def _content_hygiene(self, job):
         if not self.content_hygiene_cfg.get("enabled", True):
