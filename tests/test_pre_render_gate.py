@@ -139,9 +139,20 @@ class PreRenderGateTests(unittest.TestCase):
         ass = build_ass([(0.0, 3.25, text)], platform="douyin")
 
         self.assertIn("PlayResX: 720", ass)
-        self.assertIn("Dialogue: 0,00:00:00.000,00:00:03.250", ass)
+        self.assertIn("Dialogue: 0,00:00:00.000", ass)
+        self.assertIn("00:00:03.250", ass)
         self.assertIn(r"\N", ass)
         self.assertIn("MarginV", ass)
+
+    def test_subtitle_builder_splits_long_narration_without_ellipsis(self):
+        from scripts.build_subtitles import build_ass
+
+        text = "第一段解释为什么工具切换会浪费时间，第二段说明如何把能力接入统一工作流，第三段给出验证结果和下一步行动。"
+        ass = build_ass([(0.0, 8.0, text)], platform="kuaishou")
+
+        self.assertGreaterEqual(ass.count("Dialogue:"), 2)
+        self.assertNotIn("...", ass)
+        self.assertIn("下一步行动", ass)
 
     def test_kuaishou_renderer_writes_pre_render_evidence_before_rendering(self):
         from scripts.kuaishou_render import run_pre_render_gate

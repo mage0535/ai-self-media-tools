@@ -207,6 +207,10 @@ def _poster_shade(draw: ImageDraw.ImageDraw, width: int, height: int, layout: st
         draw.polygon(((width * 0.48, 0), (width, 0), (width, height), (width * 0.62, height)), fill=(8, 15, 28, 75))
     elif layout == "evidence_interface":
         draw.rounded_rectangle((width * 0.54, height * 0.08, width * 0.94, height * 0.38), radius=28, outline=(255, 255, 255, 65), width=3)
+        for index, ratio in enumerate((0.15, 0.22, 0.29)):
+            cy = height * ratio
+            draw.ellipse((width * 0.58, cy - 9, width * 0.58 + 18, cy + 9), fill=(255, 209, 102, 170))
+            draw.rounded_rectangle((width * 0.62, cy - 7, width * (0.86 - index * 0.04), cy + 7), radius=7, fill=(255, 255, 255, 75))
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

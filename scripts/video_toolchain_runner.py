@@ -524,15 +524,16 @@ def main(argv: list[str] | None = None) -> int:
                 register=True,
             )
         _register_visual_recipe_use(visual_recipe, plan, str(generated[0]))
-        bg_for_cover = None
-        if materialized_backgrounds:
-            bg_for_cover = materialized_backgrounds[0].get("background_image") or materialized_backgrounds[0].get("path")
+        bg_for_cover, background_selection = _select_cover_background(materialized_backgrounds, _primary_platform(plan))
         if not bg_for_cover or not Path(str(bg_for_cover)).is_file():
             manifest.update({"ok": False, "status": "cover_failed", "error": "topic-matched cover background missing"})
             _write_manifest(output_dir, manifest)
             return 6
         try:
-            cover = _generate_video_cover(output_dir, title, _summary(script_body), plan, Path(str(bg_for_cover)))
+            cover = _generate_video_cover(
+                output_dir, title, _summary(script_body), plan, Path(str(bg_for_cover)),
+                background_selection=background_selection,
+            )
         except Exception as exc:
             manifest.update({"ok": False, "status": "cover_failed", "error": str(exc)[:500]})
             _write_manifest(output_dir, manifest)
@@ -613,7 +614,7 @@ def build_cards(
         presentation = directed_presentations[index] if index < len(directed_presentations) else ""
         layout = presentation_layouts.get(presentation, LAYOUTS[index % len(LAYOUTS)])
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
-        headline = title if index == 0 else _visual_headline(beat, presentation, index)
+        headline = _visual_headline(beat, presentation, index)
         card = {
             "layout": layout,
             "t": headline,
@@ -1019,7 +1020,7 @@ def _renderer_path(plan: dict) -> Path:
     return Path(os.environ.get(env_key) or os.environ.get("VIDEO_TOOLCHAIN_RENDERER") or DEFAULT_RENDERER)
 
 
-def _generate_video_cover(output_dir: Path, title: str, summary: str, plan: dict, background: Path) -> dict:
+def _generate_video_cover(output_dir: Path, title: str, summary: str, plan: dict, background: Path, *, background_selection: dict | None = None) -> dict:
     from content_platform.cover_director import build_cover_direction, render_cover_poster
     from content_platform.cover_quality import validate_cover
 
@@ -1034,12 +1035,48 @@ def _generate_video_cover(output_dir: Path, title: str, summary: str, plan: dict
     width, height = direction["target_size"]
     cover_path = output_dir / f"cover_{width}x{height}.jpg"
     evidence = render_cover_poster(background, cover_path, direction)
+    evidence["background_selection"] = dict(background_selection or {})
     evidence_path = output_dir / "cover_quality_evidence.json"
     evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
     gate = validate_cover(cover_path, evidence, platform)
     if not gate.get("passed"):
         raise RuntimeError("video cover quality gate failed: " + ", ".join(gate.get("failures") or []))
     return {"path": str(cover_path), "evidence_path": str(evidence_path), "evidence": evidence, "gate": gate}
+
+
+_FOREIGN_PLATFORM_MARKERS = {
+    "kuaishou": {"instagram", "tiktok", "youtube", "facebook"},
+    "douyin": {"instagram", "tiktok", "youtube", "facebook"},
+    "xiaohongshu": {"instagram", "tiktok", "youtube", "facebook"},
+}
+
+
+def _select_cover_background(assignments: list[dict], platform: str) -> tuple[str | None, dict]:
+    candidates = []
+    forbidden = _FOREIGN_PLATFORM_MARKERS.get(str(platform or "").casefold(), set())
+    for index, item in enumerate(assignments or []):
+        raw = item.get("background_image") or item.get("path")
+        path = Path(str(raw or ""))
+        if not path.is_file():
+            continue
+        ocr = ""
+        try:
+            proc = subprocess.run(
+                ["tesseract", str(path), "stdout", "-l", "eng"],
+                capture_output=True, text=True, timeout=8, check=False,
+            )
+            ocr = (proc.stdout or "").casefold()
+        except (OSError, subprocess.SubprocessError):
+            pass
+        conflicts = sorted(marker for marker in forbidden if marker in ocr)
+        purpose = str(item.get("purpose") or item.get("match_reason") or "").casefold()
+        score = sum(token in purpose for token in ("api", "workflow", "developer", "dashboard", "tool")) - 10 * len(conflicts)
+        candidates.append({"path": str(path), "score": score, "ocr_conflicts": conflicts, "assignment_index": index, "purpose": purpose})
+    usable = [row for row in candidates if not row["ocr_conflicts"]]
+    selected = max(usable or candidates, key=lambda row: (row["score"], -row["assignment_index"]), default=None)
+    if not selected:
+        return None, {"passed": False, "reason": "no_cover_background_candidates"}
+    return selected["path"], {"passed": not selected["ocr_conflicts"], **selected, "candidate_count": len(candidates)}
 
 
 def _write_visual_treatment_plan(output_dir: Path, plan: dict, assignments: list[dict]) -> Path:

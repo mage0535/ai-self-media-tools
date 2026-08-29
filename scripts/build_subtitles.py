@@ -64,7 +64,10 @@ def wrap_text(text: str, *, max_chars: int, max_lines: int) -> str:
 def build_ass(cues: list[tuple[float, float, str]], *, platform: str = "default") -> str:
     spec = subtitle_spec(platform)
     events = []
+    expanded = []
     for start, end, text in cues:
+        expanded.extend(split_timed_cue(start, end, text, max_chars=spec["max_chars"], max_lines=spec["max_lines"]))
+    for start, end, text in expanded:
         if float(end) <= float(start):
             continue
         wrapped = wrap_text(text, max_chars=spec["max_chars"], max_lines=spec["max_lines"])
@@ -80,6 +83,33 @@ Style: Default,Noto Sans CJK SC,{spec['font_size']},&H00FFFFFF,&H000000FF,&H0000
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 {chr(10).join(events)}"""
+
+
+def split_timed_cue(start: float, end: float, text: str, *, max_chars: int, max_lines: int) -> list[tuple[float, float, str]]:
+    clean = re.sub(r"\s+", " ", str(text or "")).strip()
+    capacity = max(8, int(max_chars) * int(max_lines))
+    if not clean:
+        return []
+    chunks = []
+    remaining = clean
+    while remaining:
+        if len(remaining) <= capacity:
+            chunks.append(remaining)
+            break
+        window = remaining[: capacity + 1]
+        boundary = max(window.rfind(mark) for mark in "，。！？；,.!?;")
+        cut = boundary + 1 if boundary >= max(6, capacity // 2) else capacity
+        chunks.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    total_weight = sum(max(1, len(chunk)) for chunk in chunks)
+    cursor = float(start)
+    duration = max(0.01, float(end) - float(start))
+    result = []
+    for index, chunk in enumerate(chunks):
+        next_cursor = float(end) if index == len(chunks) - 1 else cursor + duration * max(1, len(chunk)) / total_weight
+        result.append((cursor, next_cursor, chunk))
+        cursor = next_cursor
+    return result
 
 
 def _audio_duration(path: Path) -> float:
