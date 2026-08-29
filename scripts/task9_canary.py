@@ -745,9 +745,13 @@ class _PolicySafePublisher:
             artifacts = []
             backgrounds = []
             motion = {}
-            for item in job.get("artifacts") or []:
+            artifact_rows = list(job.get("artifacts") or [])
+            dimension_cover = "cover_1920x1080.jpg" if platform in {"youtube", "bilibili"} else "cover_1080x1920.jpg"
+            has_dimension_cover = any(Path(str(item.get("path") or "")).name == dimension_cover for item in artifact_rows)
+            for item in artifact_rows:
                 source = Path(str(item.get("path") or ""))
-                if source.is_file() and source.name in {"final.mp4", "cover.png", "cover.jpg", "cover_1920x1080.jpg", "cover_1080x1920.jpg"}:
+                allowed = {"final.mp4", dimension_cover} if has_dimension_cover else {"final.mp4", "cover.png", "cover.jpg"}
+                if source.is_file() and source.name in allowed:
                     artifacts.append({"path": str(source), "sha256": sha256_file(source), "kind": item.get("kind")})
                     root = source.parent
                     backgrounds.extend(sha256_file(bg) for bg in sorted((root / "backgrounds").glob("bg_*.*")) if bg.is_file())
