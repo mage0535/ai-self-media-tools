@@ -208,6 +208,8 @@ def test_canary_brief_compiles_independent_related_sources_into_matrix():
     assert len(matrix["attempted_sources"]) == 5
     assert matrix["successful_source_count"] == 5
     assert len(matrix["trend_evidence"]["samples"]) == 5
+    assert matrix["platform_internal_verified"] is True
+    assert matrix["native_verified"] is True
     assert brief["content_depth_plan"]["version"] == "content_depth_plan_v1"
     assert len(brief["content_depth_plan"]["knowledge_points"]) >= 3
 
