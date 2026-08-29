@@ -662,6 +662,21 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
     """Build bounded input from externally verified evidence."""
     platform = str(case["platform"])
     title = str(hotspot["observed_title"])
+    related = [row for row in hotspot.get("related_sources") or [] if isinstance(row, dict) and row.get("source_url") and row.get("provenance_hash")]
+    attempted = [{
+        "source": f"{platform}:task9_verified_evidence",
+        "status": "ok", "count": 1, "collected_at": hotspot["fetched_at"],
+        "source_url": hotspot["source_url"], "evidence_hash": hotspot["provenance_hash"],
+    }]
+    attempted.extend({
+        "source": str(row.get("source") or f"{platform}:related_evidence"),
+        "status": "ok", "count": 1,
+        "collected_at": str(row.get("fetched_at") or hotspot["fetched_at"]),
+        "source_url": str(row["source_url"]), "evidence_hash": str(row["provenance_hash"]),
+        "topic_signal": str(row.get("observed_title") or ""),
+    } for row in related)
+    trend_samples = [{"title": title, "url": hotspot["source_url"], "source_hash": hotspot["provenance_hash"]}]
+    trend_samples.extend({"title": str(row.get("observed_title") or ""), "url": str(row["source_url"]), "source_hash": str(row["provenance_hash"])} for row in related)
     return {
         "platform": platform,
         "platforms": [platform],
@@ -679,20 +694,18 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
         "platform_source_matrix": {
             "version": "platform_source_matrix_v2",
             "platform": platform,
-            "attempted_sources": [{
-                "source": f"{platform}:task9_verified_evidence",
-                "status": "ok",
-                "count": 1,
-                "collected_at": hotspot["fetched_at"],
-                "source_url": hotspot["source_url"],
-                "evidence_hash": hotspot["provenance_hash"],
-            }],
+            "attempted_sources": attempted,
+            "successful_source_count": len(attempted),
             "platform_internal_verified": hotspot.get("native_verified") is True,
             "real_platform_collection_verified": True,
+            "current_platform_specific_topic": True,
             "native_verified": True,
             "official_signals": [hotspot],
             "source_url": hotspot["source_url"],
             "source_hash": hotspot["provenance_hash"],
+            "report_path": f"hotspots/{platform}.json",
+            "shared_trend_only": False,
+            "trend_evidence": {"source": attempted[0]["source"], "collected_at": hotspot["fetched_at"], "samples": trend_samples},
         },
         "source_catalog": [{
             "platform": platform,

@@ -1652,7 +1652,7 @@ class Pipeline:
             elif phase == "rendered" and needs_rendered_video:
                 result = self._rendered_video_platform_gate(packet, normalized)
             else:
-                result = self._platform_quality_validator(normalized, packet)
+                result = self._platform_quality_validator(normalized, packet, phase=phase)
             if result:
                 results[normalized] = result
         if not results:
@@ -1856,7 +1856,7 @@ class Pipeline:
         return packet
 
     @staticmethod
-    def _platform_quality_validator(platform, packet):
+    def _platform_quality_validator(platform, packet, phase="rendered"):
         if platform in {"wechat", "weixin", "wechat_official"}:
             return validate_wechat_auto_packet(packet)
         if platform == "kuaishou":
@@ -1871,7 +1871,7 @@ class Pipeline:
                 return {"passed": not failures, "failed_dimensions": failures}
             return validate_douyin_auto_packet(packet)
         if platform in {"xiaohongshu", "rednote"}:
-            return validate_xiaohongshu_auto_packet(packet)
+            return validate_xiaohongshu_auto_packet(packet, phase=phase)
         if platform in {"juejin", "zhihu", "devto", "telegraph", "writeas", "buttondown"}:
             return validate_platform_article_packet(packet, platform)
         return None

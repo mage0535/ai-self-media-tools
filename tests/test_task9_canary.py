@@ -187,6 +187,27 @@ def test_canary_brief_uses_the_same_strict_run_contract_as_production():
     assert brief["automated_workflow"] is True
     assert brief["run_contract"]["version"] == "run_contract_v1"
     assert brief["run_contract"]["platform"] == "kuaishou"
+
+
+def test_canary_brief_compiles_independent_related_sources_into_matrix():
+    from scripts.task9_canary import _canary_brief
+
+    case = {"platform": "xiaohongshu", "language": "zh", "content_form": "carousel", "delivery_policy": "manual_handoff_only", "dry_run": False}
+    hotspot = {
+        "platform": "xiaohongshu", "observed_title": "AI工具", "source_url": "https://xiaohongshu.com/explore/primary",
+        "fetched_at": "2026-08-22T00:00:00Z", "provenance_hash": "a" * 64, "native_verified": True,
+        "related_sources": [
+            {"source": f"xiaohongshu:hot_work:{index}", "source_url": f"https://xiaohongshu.com/explore/{index}", "observed_title": f"hot {index}", "provenance_hash": str(index) * 64}
+            for index in range(1, 5)
+        ],
+    }
+
+    brief = _canary_brief(case, hotspot)
+    matrix = brief["platform_source_matrix"]
+
+    assert len(matrix["attempted_sources"]) == 5
+    assert matrix["successful_source_count"] == 5
+    assert len(matrix["trend_evidence"]["samples"]) == 5
     assert brief["content_depth_plan"]["version"] == "content_depth_plan_v1"
     assert len(brief["content_depth_plan"]["knowledge_points"]) >= 3
 
