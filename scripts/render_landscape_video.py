@@ -27,6 +27,10 @@ THEMES = {
     "bilibili": {"accent": "#00a1d6", "bg": "rgba(15,18,30,0.78)", "label": "B站知识视频"},
     "youtube": {"accent": "#ff0033", "bg": "rgba(20,16,16,0.80)", "label": "YouTube Explainer"},
 }
+LANDSCAPE_SCENE_ROLES = (
+    "The core question", "What breaks", "The definition", "How it works",
+    "Tools in action", "The boundary", "When to use it", "The takeaway",
+)
 
 
 def _run(command: list[str], timeout: int = 600) -> subprocess.CompletedProcess[str]:
@@ -69,7 +73,7 @@ def _write_slides(render_dir: Path, beats: list[str], bg_dir: Path, theme: dict)
         bg = next((candidate for candidate in [bg_dir / f"bg_{idx:02d}.jpg", bg_dir / f"bg_{idx}.jpg", bg_dir / f"bg_{idx:02d}.png"] if candidate.is_file()), None)
         if not bg:
             raise RuntimeError(f"missing landscape background for beat {idx}: {bg_dir}")
-        title = beat[:28]
+        title, visual_points = _landscape_visual_copy(beat, idx)
         bg_html = f"""<!doctype html><html><head><meta charset='utf-8'><style>
 body{{margin:0;width:1280px;height:720px;overflow:hidden;background:#000;}}
 .bg{{position:absolute;inset:0;background:url('{_image_b64(bg)}') center/cover no-repeat;transform:scale(1.08);}}
@@ -80,10 +84,25 @@ body{{margin:0;width:1280px;height:720px;overflow:hidden;background:transparent;
 .panel{{position:absolute;left:60px;top:185px;width:780px;padding:30px 36px;background:{theme['bg']};border-left:7px solid {theme['accent']};border-radius:16px;box-shadow:0 18px 45px rgba(0,0,0,.35);}}
 .tag{{display:inline-block;background:{theme['accent']};color:white;font-size:20px;font-weight:800;padding:7px 18px;border-radius:999px;margin-bottom:18px;}}
 h1{{margin:0 0 16px 0;color:white;font-size:46px;line-height:1.25;font-weight:900;}}
-p{{margin:0;color:#f3f4f6;font-size:27px;line-height:1.65;font-weight:520;}}
-</style></head><body><div class='panel'><div class='tag'>{theme['label']} · {idx:02d}</div><h1>{title}</h1><p>{beat}</p></div></body></html>"""
+p{{margin:0;color:#f3f4f6;font-size:27px;line-height:1.65;font-weight:650;letter-spacing:.02em;}}
+</style></head><body><div class='panel'><div class='tag'>{theme['label']} · {idx:02d}</div><h1>{title}</h1><p>{visual_points}</p></div></body></html>"""
         (slide_dir / f"slide_{idx:02d}_bg.html").write_text(bg_html, encoding="utf-8")
         (slide_dir / f"slide_{idx:02d}_text.html").write_text(text_html, encoding="utf-8")
+
+
+def _landscape_visual_copy(beat: str, index: int) -> tuple[str, str]:
+    role = LANDSCAPE_SCENE_ROLES[(index - 1) % len(LANDSCAPE_SCENE_ROLES)]
+    words = re.findall(r"[A-Za-z][A-Za-z0-9'-]*", str(beat or ""))
+    stop = {"this", "that", "with", "from", "your", "have", "what", "when", "they", "into", "about", "just", "then"}
+    keywords = []
+    for word in words:
+        clean = word.strip("'-")
+        if len(clean) < 4 or clean.casefold() in stop or clean.casefold() in {item.casefold() for item in keywords}:
+            continue
+        keywords.append(clean)
+        if len(keywords) == 3:
+            break
+    return role, "  ·  ".join(keywords) or "Evidence  ·  Action  ·  Result"
 
 
 async def _tts(render_dir: Path, beats: list[str], voice: str) -> None:
@@ -192,27 +211,16 @@ def _resolve_bgm(render_dir: Path, style: str, platform: str) -> Path:
 
 
 def _subtitles(render_dir: Path, beats: list[str]) -> Path:
-    lines = [
-        "[Script Info]",
-        "ScriptType: v4.00+",
-        "PlayResX: 1280",
-        "PlayResY: 720",
-        "",
-        "[V4+ Styles]",
-        "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Outline, Shadow, Alignment, MarginL, MarginR, MarginV",
-        "Style: Default,Noto Sans CJK SC,28,&H00FFFFFF,&H00000000,&H80000000,-1,2,1,2,70,70,55",
-        "",
-        "[Events]",
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    ]
+    from scripts.build_subtitles import build_ass
+
     cursor = 0.0
+    cues = []
     for idx, beat in enumerate(beats, 1):
         duration = _duration(render_dir / "tts" / f"tts_{idx:02d}.mp3")
-        text = r"\N".join([beat[i : i + 20] for i in range(0, len(beat), 20)][:2])
-        lines.append(f"Dialogue: 0,{_ass_time(cursor)},{_ass_time(cursor + duration)},Default,,0,0,0,,{text}")
+        cues.append((cursor, cursor + duration, beat))
         cursor += duration + 0.5
     path = render_dir / "subtitles.ass"
-    path.write_text("\n".join(lines), encoding="utf-8")
+    path.write_text(build_ass(cues, platform="bilibili"), encoding="utf-8")
     return path
 
 

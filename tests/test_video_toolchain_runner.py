@@ -224,8 +224,8 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             outputs = [Mock(stdout="Instagram profile", returncode=0), Mock(stdout="API dashboard", returncode=0)]
             with patch("scripts.video_toolchain_runner.subprocess.run", side_effect=outputs):
                 selected, evidence = _select_cover_background([
-                    {"background_image": str(first), "purpose": "API workflow"},
-                    {"background_image": str(second), "purpose": "developer dashboard"},
+                    {"background_image": str(first), "purpose": "API workflow", "source_url": "https://pexels.com/photo/interface"},
+                    {"background_image": str(second), "purpose": "developer portrait", "source_url": "https://pexels.com/photo/developer"},
                 ], "kuaishou")
 
         self.assertEqual(selected, str(second))

@@ -2,6 +2,7 @@ import json
 
 from content_platform.media import MediaBridge
 from scripts.film_renderer import validate_render_durations
+from scripts.render_landscape_video import _landscape_visual_copy
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +40,16 @@ def test_video_script_compiler_preserves_english_word_budget():
     assert sum(len(segment.split()) for segment in result["segments"]) == 140
     assert all(17 <= len(segment.split()) <= 18 for segment in result["segments"])
     assert result["max_words_per_segment"] == 18
+
+
+def test_landscape_panel_uses_role_and_keywords_not_full_narration():
+    beat = "An agent plans actions, calls tools, observes results, and adjusts until the goal is complete."
+
+    title, points = _landscape_visual_copy(beat, 4)
+
+    assert title == "How it works"
+    assert beat not in title + points
+    assert "agent" in points.casefold()
 
 
 def test_film_renderer_rejects_runaway_tts_durations_before_rendering():
