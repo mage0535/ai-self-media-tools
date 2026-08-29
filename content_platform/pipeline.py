@@ -413,6 +413,8 @@ class Pipeline:
                     if isinstance(repair_brief.get("bounded_model_input"), dict):
                         repair_brief["bounded_model_input"]["content_blueprint"] = blueprint
                     repaired = self.generator.generate(job.get("topic") or draft["title"], repair_brief)
+                    if self._video_script_budget(repaired, job).get("word_count", 0) > 160:
+                        repaired["body"] = self._fit_english_video_script(repaired.get("body") or "")
                     repaired_budget = self._video_script_budget(repaired, job)
                     if not repaired_budget["passed"]:
                         runner.block("validate_content_structure", "video_script_budget_failed", "video script remained below the platform narration budget after one bounded repair", repaired_budget, depends_on=["generate_content"])
@@ -992,6 +994,27 @@ class Pipeline:
             return {"passed": True, "language": "zh", "word_count": len(body), "min_words": 0, "max_words": 0}
         count = len(re.findall(r"\b[A-Za-z][A-Za-z0-9'-]*\b", body))
         return {"passed": 90 <= count <= 160, "language": "en", "word_count": count, "min_words": 90, "max_words": 160}
+
+    @staticmethod
+    def _fit_english_video_script(body, max_words=160):
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", str(body or "")) if part.strip()]
+        if not paragraphs:
+            return str(body or "")
+        selected = paragraphs[:8]
+        budget = max(12, int(max_words) // max(1, len(selected)))
+        fitted = []
+        used = 0
+        for paragraph in selected:
+            words = re.findall(r"\S+", paragraph)
+            take = min(len(words), budget, max_words - used)
+            if take <= 0:
+                break
+            text = " ".join(words[:take]).rstrip(" ,;:-")
+            if take < len(words):
+                text = text.rstrip(".!?") + "."
+            fitted.append(text)
+            used += take
+        return "\n\n".join(fitted)
 
     def _content_hygiene(self, job):
         if not self.content_hygiene_cfg.get("enabled", True):

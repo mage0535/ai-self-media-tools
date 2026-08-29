@@ -915,6 +915,16 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(self.pipeline._video_script_budget(complete, {"platforms": ["youtube"]})["passed"])
         self.assertTrue(self.pipeline._video_script_budget(short, {"platforms": ["kuaishou"]})["passed"])
 
+    def test_overlong_english_video_script_is_trimmed_without_inventing_words(self):
+        original = "\n\n".join((f"Scene {index} " + " ".join(f"word{index}x{word}" for word in range(55))) for index in range(8))
+
+        fitted = self.pipeline._fit_english_video_script(original)
+        result = self.pipeline._video_script_budget({"body": fitted}, {"platforms": ["youtube"]})
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(len(fitted.split("\n\n")), 8)
+        self.assertNotIn("word0x40", fitted)
+
 
 if __name__ == "__main__":
     unittest.main()
