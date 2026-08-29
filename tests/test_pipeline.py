@@ -909,7 +909,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_youtube_english_script_budget_rejects_short_model_output(self):
         short = {"body": "Plan act observe adapt. " * 8}
-        complete = {"body": "Plan act observe adapt with evidence and a clear operating boundary. " * 10}
+        complete = {"body": "Plan act observe adapt with evidence and a clear operating boundary now. " * 10}
 
         self.assertFalse(self.pipeline._video_script_budget(short, {"platforms": ["youtube"]})["passed"])
         self.assertTrue(self.pipeline._video_script_budget(complete, {"platforms": ["youtube"]})["passed"])

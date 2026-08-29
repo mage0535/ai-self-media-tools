@@ -993,7 +993,7 @@ class Pipeline:
         if not horizontal or not english:
             return {"passed": True, "language": "zh", "word_count": len(body), "min_words": 0, "max_words": 0}
         count = len(re.findall(r"\b[A-Za-z][A-Za-z0-9'-]*\b", body))
-        return {"passed": 90 <= count <= 160, "language": "en", "word_count": count, "min_words": 90, "max_words": 160}
+        return {"passed": 110 <= count <= 160, "language": "en", "word_count": count, "min_words": 110, "max_words": 160}
 
     @staticmethod
     def _fit_english_video_script(body, max_words=160):
