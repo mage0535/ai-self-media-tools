@@ -6,7 +6,7 @@ import tempfile
 import unittest
 import importlib.util
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
@@ -213,6 +213,24 @@ class VideoToolchainRunnerTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["failures"])
         self.assertTrue(all(card["txt"] != card["tts"] for card in cards))
+        self.assertNotEqual(cards[0]["t"], "AI 工具越多，效率为什么反而更低？")
+
+    def test_cover_background_rejects_foreign_platform_ui_from_ocr(self):
+        from scripts.video_toolchain_runner import _select_cover_background
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first.jpg"; first.write_bytes(b"one")
+            second = Path(tmp) / "second.jpg"; second.write_bytes(b"two")
+            outputs = [Mock(stdout="Instagram profile", returncode=0), Mock(stdout="API dashboard", returncode=0)]
+            with patch("scripts.video_toolchain_runner.subprocess.run", side_effect=outputs):
+                selected, evidence = _select_cover_background([
+                    {"background_image": str(first), "purpose": "API workflow"},
+                    {"background_image": str(second), "purpose": "developer dashboard"},
+                ], "kuaishou")
+
+        self.assertEqual(selected, str(second))
+        self.assertTrue(evidence["passed"])
+        self.assertEqual(evidence["ocr_conflicts"], [])
 
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]
