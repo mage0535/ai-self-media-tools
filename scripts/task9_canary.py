@@ -202,6 +202,24 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
     )
     if str(record.get("provenance_hash") or "").strip().lower() != expected_provenance:
         failures.append("hotspot_provenance_hash_mismatch")
+    related_sources = []
+    seen_urls = {source_url}
+    for index, row in enumerate(record.get("related_sources") or [], 1):
+        if not isinstance(row, dict):
+            failures.append(f"related_source_invalid:{index}")
+            continue
+        url = str(row.get("source_url") or "")
+        digest = str(row.get("provenance_hash") or "").lower()
+        title = str(row.get("observed_title") or "").strip()
+        observed = str(row.get("fetched_at") or "").strip()
+        if url in seen_urls or not url.startswith(("https://www.xiaohongshu.com/explore/", "https://www.xiaohongshu.com/discovery/item/")):
+            failures.append(f"related_source_url_invalid:{index}")
+            continue
+        if not re.fullmatch(r"[0-9a-f]{64}", digest) or not title or not observed:
+            failures.append(f"related_source_evidence_incomplete:{index}")
+            continue
+        seen_urls.add(url)
+        related_sources.append(dict(row))
     if failures:
         raise ValueError(";".join(sorted(set(failures))))
     return {
@@ -221,6 +239,7 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
         "provenance_hash": expected_provenance,
         "source_hash": expected_provenance,
         "evidence_verified": True,
+        "related_sources": related_sources,
     }
 
 
