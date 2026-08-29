@@ -221,7 +221,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             first = Path(tmp) / "first.jpg"; first.write_bytes(b"one")
             second = Path(tmp) / "second.jpg"; second.write_bytes(b"two")
-            outputs = [Mock(stdout="Instagram profile", returncode=0), Mock(stdout="API dashboard", returncode=0)]
+            outputs = [Mock(stdout="Instagram profile page with many menu labels", returncode=0), Mock(stdout="", returncode=0)]
             with patch("scripts.video_toolchain_runner.subprocess.run", side_effect=outputs):
                 selected, evidence = _select_cover_background([
                     {"background_image": str(first), "purpose": "API workflow", "source_url": "https://pexels.com/photo/interface"},
@@ -231,6 +231,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertEqual(selected, str(second))
         self.assertTrue(evidence["passed"])
         self.assertEqual(evidence["ocr_conflicts"], [])
+        self.assertFalse(evidence["text_heavy"])
 
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]
