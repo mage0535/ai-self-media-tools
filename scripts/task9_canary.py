@@ -740,7 +740,28 @@ class _PolicySafePublisher:
     def deliver(self, job, platform):
         self.outbox.mkdir(parents=True, exist_ok=True)
         path = self.outbox / f"{platform}-{job['id']}.json"
-        path.write_text(json.dumps({"job_id": job["id"], "platform": platform, "status": self.status}, ensure_ascii=True, sort_keys=True), encoding="utf-8")
+        payload = {"job_id": job["id"], "platform": platform, "status": self.status}
+        if self.status == "handoff_pending":
+            artifacts = []
+            backgrounds = []
+            motion = {}
+            for item in job.get("artifacts") or []:
+                source = Path(str(item.get("path") or ""))
+                if source.is_file() and source.name in {"final.mp4", "cover.png", "cover.jpg", "cover_1920x1080.jpg", "cover_1080x1920.jpg"}:
+                    artifacts.append({"path": str(source), "sha256": sha256_file(source), "kind": item.get("kind")})
+                    root = source.parent
+                    backgrounds.extend(sha256_file(bg) for bg in sorted((root / "backgrounds").glob("bg_*.*")) if bg.is_file())
+                    evidence = _load_json(root / "scene_execution_evidence.json")
+                    scenes = evidence.get("scenes") if isinstance(evidence.get("scenes"), list) else []
+                    if scenes:
+                        motion = {"artifact_verified": all(row.get("artifact_verified") is True for row in scenes), "mean_frame_difference": sum(float(row.get("frame_difference") or 0) for row in scenes) / len(scenes)}
+            payload["handoff_contract"] = {
+                "version": "handoff_contract_v2", "copy_media_version": "task9-isolated-v1",
+                "target_renderer_evidence": {"verified": bool(artifacts), "platform": platform},
+                "artifacts": artifacts, "background_hashes": list(dict.fromkeys(backgrounds)),
+                "motion_evidence": motion,
+            }
+        path.write_text(json.dumps(payload, ensure_ascii=True, sort_keys=True), encoding="utf-8")
         from content_platform.models import DeliveryResult
         return DeliveryResult(True, self.status, str(path), error="Task9 external publisher boundary")
 
@@ -845,6 +866,7 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
         hotspot = {"platform": first.get("platform"), "source_url": first.get("url"), "observed_title": first.get("title"), "mode": "official_native"}
     delivery_rows = store.deliveries(job_id) if job_id and hasattr(store, "deliveries") else (job.get("deliveries") if isinstance(job, dict) else [])
     delivery = next((row for row in delivery_rows or [] if row.get("platform") == case["platform"]), {})
+    delivery_receipt = _load_json(Path(str(delivery.get("external_id") or "")))
     execution = draft_meta.get("capability_execution") if isinstance(draft_meta.get("capability_execution"), dict) else {}
     verified_by_id = {
         str(item.get("capability_id") or ""): item
@@ -887,6 +909,7 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
             "external_verified": bool(delivery.get("external_verified")),
             "receipt_path": delivery.get("external_id", ""),
         },
+        "handoff_contract": delivery_receipt.get("handoff_contract") if isinstance(delivery_receipt.get("handoff_contract"), dict) else None,
         "events": [dict(row) for row in (store.events(job_id) if job_id and hasattr(store, "events") else []) if hasattr(row, "keys")],
         "source_evidence": source_rows,
     }

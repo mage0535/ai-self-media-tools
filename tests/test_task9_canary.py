@@ -432,6 +432,31 @@ def test_canary_artifact_manifest_points_probe_to_job_media_root(tmp_path: Path)
     assert "cover_missing" not in result["failures"]
 
 
+def test_safe_manual_publisher_builds_handoff_from_real_artifacts(tmp_path: Path):
+    from scripts.task9_canary import _PolicySafePublisher
+
+    media = tmp_path / "media"
+    final = _write(media / "final.mp4", b"video")
+    cover = _write(media / "cover.png", b"cover")
+    _write(media / "backgrounds" / "bg_01.jpg", b"bg1")
+    _write(media / "backgrounds" / "bg_02.jpg", b"bg2")
+    _write(media / "scene_execution_evidence.json", json.dumps({"scenes": [
+        {"artifact_verified": True, "frame_difference": 0.03},
+        {"artifact_verified": True, "frame_difference": 0.05},
+    ]}))
+
+    result = _PolicySafePublisher(tmp_path / "outbox", "handoff_pending").deliver(
+        {"id": "job-1", "artifacts": [{"path": str(final), "kind": "video"}, {"path": str(cover), "kind": "cover"}]},
+        "youtube",
+    )
+    receipt = json.loads(Path(result.external_id).read_text())
+
+    contract = receipt["handoff_contract"]
+    assert len(contract["artifacts"]) == 2
+    assert len(contract["background_hashes"]) == 2
+    assert contract["motion_evidence"]["artifact_verified"] is True
+
+
 def test_canary_manifest_merges_verified_capabilities_and_store_deliveries(tmp_path: Path):
     from scripts.task9_canary import _materialize_artifact_manifest
 
