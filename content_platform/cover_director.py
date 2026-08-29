@@ -160,7 +160,10 @@ def render_cover_poster(background: str | Path, output: str | Path, direction: d
 def _cover_title(value: str, platform: str) -> str:
     clean = re.sub(r"[#\n\r]+", " ", str(value or "")).strip()
     clean = re.sub(r"\s+", " ", clean)
-    limit = 24 if platform in {"youtube", "twitter", "x"} and not re.search(r"[\u3400-\u9fff]", clean) else 18
+    if platform == "youtube" and not re.search(r"[\u3400-\u9fff]", clean):
+        limit = 40
+    else:
+        limit = 24 if platform in {"twitter", "x"} and not re.search(r"[\u3400-\u9fff]", clean) else 18
     if len(clean) <= limit:
         return clean
     first = next((part.strip() for part in re.split(r"[：:，,。！？!?|]", clean) if 6 <= len(part.strip()) <= limit), "")
@@ -169,7 +172,8 @@ def _cover_title(value: str, platform: str) -> str:
 
 def _cover_subtitle(body: str, topic: str, title: str, platform: str) -> str:
     rows = [part.strip() for part in re.split(r"[。！？!?\n]+", str(body or "")) if part.strip() and title not in part]
-    value = rows[0] if rows else str(topic or "")
+    declarative = [row for row in rows if not re.match(r"^(?:why|how|what|when|where|who|does|do|can|is|are)\b", row, re.I)]
+    value = declarative[0] if declarative else (rows[0] if rows else str(topic or ""))
     limit = 52 if platform in {"youtube", "twitter", "x"} else 28
     if re.search(r"[\u3400-\u9fff]", value) and len(value) > limit:
         clauses = [part.strip() for part in re.split(r"[，,；;：:]", value) if part.strip()]

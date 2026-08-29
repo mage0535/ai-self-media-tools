@@ -82,3 +82,14 @@ def test_chinese_cover_subtitle_stops_at_a_complete_clause():
 
     assert direction["subtitle_text"] == "市面上AI工具多到数不清，写文案用一个，生图用一个"
     assert not direction["subtitle_text"].endswith("语音")
+
+
+def test_youtube_cover_keeps_complete_question_and_skips_question_subtitle():
+    direction = build_cover_direction(
+        platform="youtube", topic="AI agents",
+        title="Still Think ChatGPT Is an AI Agent? Here's What You're Missing",
+        body="Why does this distinction matter? A chatbot replies once, but an agent plans and acts.",
+    )
+
+    assert direction["title_text"] == "Still Think ChatGPT Is an AI Agent"
+    assert direction["subtitle_text"].startswith("A chatbot replies once")
