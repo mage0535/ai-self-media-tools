@@ -120,14 +120,15 @@ def verify_artifact(video_path: Path, render_manifest: dict, platform: str, *, p
     normalized_platform = str(platform or "").casefold()
     width, height = int(media.get("width") or 0), int(media.get("height") or 0)
     duration = float(media.get("duration_seconds") or 0)
-    if normalized_platform in VERTICAL_SHORT_PLATFORMS and (width, height) != (1080, 1920):
+    is_vertical_short = normalized_platform in VERTICAL_SHORT_PLATFORMS and not (normalized_platform == "youtube" and width > height)
+    if is_vertical_short and (width, height) != (1080, 1920):
         failures.append("vertical_resolution_invalid")
-    if normalized_platform in VERTICAL_SHORT_PLATFORMS and duration > 60:
+    if is_vertical_short and duration > 60:
         failures.append("short_duration_exceeded")
     if any(re.fullmatch(r"scene\s+\d+", title, re.I) for title in _card_titles(render_manifest)):
         failures.append("placeholder_card_title")
     subtitle = render_manifest.get("subtitle") or {}
-    if normalized_platform in VERTICAL_SHORT_PLATFORMS and (int(subtitle.get("width") or 0), int(subtitle.get("height") or 0)) != (1080, 1920):
+    if is_vertical_short and (int(subtitle.get("width") or 0), int(subtitle.get("height") or 0)) != (1080, 1920):
         failures.append("subtitle_resolution_invalid")
     try:
         motion_score = float(render_manifest.get("motion_score")) if render_manifest.get("motion_score") is not None else measure_motion(video_path)
