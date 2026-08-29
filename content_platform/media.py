@@ -563,18 +563,19 @@ class MediaBridge:
         chunks = cls._video_script_chunks(raw)
         segments = []
         english = sum(ch.isascii() and ch.isalpha() for ch in raw) > sum("\u4e00" <= ch <= "\u9fff" for ch in raw) * 2
+        if english:
+            words = re.sub(r"\s+", " ", raw).strip().split()
+            count = min(cls.VIDEO_SCRIPT_MAX_SEGMENTS, max(1, len(words)))
+            base, extra = divmod(len(words), count)
+            cursor = 0
+            for index in range(count):
+                size = base + (1 if index < extra else 0)
+                segments.append(" ".join(words[cursor : cursor + size]))
+                cursor += size
         for chunk in chunks:
-            compact = re.sub(r"\s+", " ", chunk).strip(" -#*\t")
             if english:
-                words = compact.split()
-                while words:
-                    segments.append(" ".join(words[:24]))
-                    words = words[24:]
-                    if len(segments) >= cls.VIDEO_SCRIPT_MAX_SEGMENTS:
-                        break
-                if len(segments) >= cls.VIDEO_SCRIPT_MAX_SEGMENTS:
-                    break
-                continue
+                break
+            compact = re.sub(r"\s+", " ", chunk).strip(" -#*\t")
             while len(compact) > cls.VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT:
                 cut = cls._video_script_cutpoint(compact, cls.VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT)
                 # Do not create an unusable one-word tail. Move the split
@@ -605,7 +606,7 @@ class MediaBridge:
             "output_characters": len(normalized),
             "segment_count": len(segments),
             "max_characters_per_segment": cls.VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT,
-            "max_words_per_segment": 24 if english else 0,
+            "max_words_per_segment": max((len(segment.split()) for segment in segments), default=0) if english else 0,
             "segments": segments,
             "script": normalized,
         }
