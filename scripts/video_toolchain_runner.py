@@ -1070,7 +1070,8 @@ def _select_cover_background(assignments: list[dict], platform: str) -> tuple[st
             pass
         conflicts = sorted(marker for marker in forbidden if marker in ocr)
         purpose = str(item.get("purpose") or item.get("match_reason") or "").casefold()
-        score = sum(token in purpose for token in ("api", "workflow", "developer", "dashboard", "tool")) - 10 * len(conflicts)
+        stock_ui = "pexels.com" in str(item.get("source_url") or "").casefold() and any(token in purpose for token in ("interface", "dashboard", "screen"))
+        score = sum(token in purpose for token in ("api", "workflow", "developer", "dashboard", "tool")) - 10 * len(conflicts) - (4 if stock_ui else 0)
         candidates.append({"path": str(path), "score": score, "ocr_conflicts": conflicts, "assignment_index": index, "purpose": purpose})
     usable = [row for row in candidates if not row["ocr_conflicts"]]
     selected = max(usable or candidates, key=lambda row: (row["score"], -row["assignment_index"]), default=None)
