@@ -30,6 +30,17 @@ def test_video_script_compiler_normalizes_an_oversized_explicit_script():
     assert all(len(segment) <= 40 for segment in result["segments"])
 
 
+def test_video_script_compiler_preserves_english_word_budget():
+    body = " ".join(f"word{index}" for index in range(140))
+
+    result = MediaBridge.compile_video_script({"body": body})
+
+    assert len(result["segments"]) == 6
+    assert sum(len(segment.split()) for segment in result["segments"]) == 140
+    assert all(len(segment.split()) <= 24 for segment in result["segments"])
+    assert result["max_words_per_segment"] == 24
+
+
 def test_film_renderer_rejects_runaway_tts_durations_before_rendering():
     assert validate_render_durations([4.0] * 8)["passed"] is True
 
