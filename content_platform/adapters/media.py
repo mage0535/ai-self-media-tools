@@ -374,7 +374,8 @@ def validate_bgm_contract(bgm: dict[str, Any] | None, *, recent_fingerprints: se
         failures.append("bgm_license_incompatible")
     if not bgm.get("real_instrument"):
         failures.append("bgm_real_instrument_evidence_missing")
-    if any(marker in source for marker in ("local", "library", "procedural", "synthetic", "generated", "midi")):
+    approved_online_libraries = {"youtube_audio_library"}
+    if source not in approved_online_libraries and any(marker in source for marker in ("local", "library", "procedural", "synthetic", "generated", "midi")):
         failures.append("bgm_local_or_synthetic_source_forbidden")
     fingerprint = str(bgm.get("fingerprint") or bgm.get("sha256") or "")
     if fingerprint in {str(item) for item in recent_fingerprints}:

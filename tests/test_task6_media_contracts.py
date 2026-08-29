@@ -320,6 +320,7 @@ def test_bgm_contract_is_online_real_instrument_and_7_day_unique():
         "source": "pixabay_music",
     }
     assert validate_bgm_contract(good, recent_fingerprints={"old"})["passed"] is True
+    assert validate_bgm_contract({**good, "source": "youtube_audio_library"})["passed"] is True
     assert validate_bgm_contract({**good, "source": "local_library"})["passed"] is False
     assert validate_bgm_contract({**good, "license": "CC BY-NC-ND 4.0"})["passed"] is False
     assert validate_bgm_contract({**good, "fingerprint": "old"}, recent_fingerprints={"old"})["passed"] is False

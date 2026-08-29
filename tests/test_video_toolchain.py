@@ -8,6 +8,7 @@ from PIL import Image
 
 from content_platform.media import MediaBridge
 from content_platform.generator import DraftGenerator
+from content_platform.video_artifact import verify_artifact
 from content_platform.strategy_router import choose_content_strategy
 from content_platform.video_recipe import build_visual_recipe
 
@@ -472,3 +473,10 @@ def _valid_repost_video_manifest(video):
             ]
         },
     }
+def test_youtube_landscape_artifact_is_not_misclassified_as_vertical_short():
+    result = verify_artifact(
+        Path("unused.mp4"), {}, "youtube",
+        probe={"width": 1920, "height": 1080, "duration_seconds": 90},
+    )
+    assert "vertical_resolution_invalid" not in result["failed_dimensions"]
+    assert "short_duration_exceeded" not in result["failed_dimensions"]
