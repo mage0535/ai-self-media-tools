@@ -397,7 +397,9 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
     form = str(case.get("content_form") or "")
     probes: dict[str, dict[str, Any]] = {}
 
-    cover_path = next((media_root / name for name in ("cover.jpg", "cover.jpeg", "cover.png", "cover_1080x1920.jpg") if (media_root / name).is_file()), None)
+    platform = str(case.get("platform") or "").casefold()
+    preferred_cover = "cover_1920x1080.jpg" if platform in {"youtube", "bilibili"} else "cover_1080x1920.jpg"
+    cover_path = next((media_root / name for name in (preferred_cover, "cover.jpg", "cover.jpeg", "cover.png") if (media_root / name).is_file()), None)
     cover_evidence = _load_json(media_root / "cover_quality_evidence.json")
     if cover_path:
         cover_result = validate_cover(cover_path, cover_evidence, str(case.get("platform") or ""))

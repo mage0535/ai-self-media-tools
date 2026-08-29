@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -430,6 +431,27 @@ def test_canary_artifact_manifest_points_probe_to_job_media_root(tmp_path: Path)
     result = probe_artifacts({"content_form": "article", "platform": "wechat", "dry_run": True, "delivery_policy": "dry_run"}, tmp_path)
 
     assert "cover_missing" not in result["failures"]
+
+
+def test_youtube_probe_prefers_platform_sized_cover(tmp_path: Path):
+    from scripts.task9_canary import probe_artifacts
+
+    media = tmp_path / "artifacts" / "job-1"
+    _write(media / "cover.png", b"legacy")
+    preferred = _write(media / "cover_1920x1080.jpg", b"preferred")
+    evidence = {"safe_zone_verified": True}
+    _write(media / "cover_quality_evidence.json", json.dumps(evidence))
+    _write(tmp_path / "artifact_manifest.json", json.dumps({
+        "artifact_root": "artifacts/job-1", "artifacts": [],
+        "capabilities": [{"id": "cover", "state": "executed", "output_hash": "sha256:x", "required": False}],
+        "delivery_policy": {"state": "dry_run"},
+    }))
+
+    with patch("scripts.task9_canary.validate_cover", return_value={"passed": True, "failures": []}) as validate:
+        probe_artifacts({"content_form": "article", "platform": "youtube", "dry_run": True, "delivery_policy": "dry_run"}, tmp_path)
+
+    self_path = validate.call_args.args[0]
+    assert self_path == preferred
 
 
 def test_safe_manual_publisher_builds_handoff_from_real_artifacts(tmp_path: Path):
