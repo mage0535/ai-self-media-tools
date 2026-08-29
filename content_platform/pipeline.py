@@ -1010,8 +1010,11 @@ class Pipeline:
             if take <= 0:
                 break
             text = " ".join(words[:take]).rstrip(" ,;:-")
+            text = re.sub(r"[.!?]+(?=\s)", ",", text)
             if take < len(words):
                 text = text.rstrip(".!?") + "."
+            elif not text.endswith((".", "!", "?")):
+                text += "."
             fitted.append(text)
             used += take
         return "\n\n".join(fitted)

@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from content_platform.models import DeliveryResult
 from content_platform.pipeline import Pipeline
 from content_platform.store import Store
+from content_platform.seo import geo_check
 
 
 class PipelineTests(unittest.TestCase):
@@ -924,6 +925,7 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertEqual(len(fitted.split("\n\n")), 8)
         self.assertNotIn("word0x40", fitted)
+        self.assertTrue(geo_check(fitted)["checks"]["short_paragraphs"])
 
 
 if __name__ == "__main__":
