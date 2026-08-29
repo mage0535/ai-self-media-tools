@@ -195,7 +195,7 @@ def test_canary_brief_compiles_independent_related_sources_into_matrix():
     case = {"platform": "xiaohongshu", "language": "zh", "content_form": "carousel", "delivery_policy": "manual_handoff_only", "dry_run": False}
     hotspot = {
         "platform": "xiaohongshu", "observed_title": "AI工具", "source_url": "https://xiaohongshu.com/explore/primary",
-        "fetched_at": "2026-08-22T00:00:00Z", "provenance_hash": "a" * 64, "native_verified": True,
+        "fetched_at": "2026-08-22T00:00:00Z", "provenance_hash": "a" * 64, "native_verified": True, "evidence_verified": True,
         "related_sources": [
             {"source": f"xiaohongshu:hot_work:{index}", "source_url": f"https://xiaohongshu.com/explore/{index}", "observed_title": f"hot {index}", "provenance_hash": str(index) * 64}
             for index in range(1, 5)
