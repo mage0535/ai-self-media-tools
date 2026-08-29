@@ -715,7 +715,7 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
             "platform": platform,
             "attempted_sources": attempted,
             "successful_source_count": len(attempted),
-            "platform_internal_verified": hotspot.get("native_verified") is True,
+            "platform_internal_verified": hotspot.get("evidence_verified") is True,
             "real_platform_collection_verified": True,
             "current_platform_specific_topic": True,
             "native_verified": True,
