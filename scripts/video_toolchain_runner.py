@@ -1025,6 +1025,8 @@ def _generate_video_cover(output_dir: Path, title: str, summary: str, plan: dict
     from content_platform.cover_quality import validate_cover
 
     platform = _primary_platform(plan)
+    if background_selection and background_selection.get("passed") is not True:
+        raise RuntimeError("cover background failed platform/text conflict gate")
     direction = build_cover_direction(
         platform=platform,
         topic=str(plan.get("topic") or title),
@@ -1069,15 +1071,17 @@ def _select_cover_background(assignments: list[dict], platform: str) -> tuple[st
         except (OSError, subprocess.SubprocessError):
             pass
         conflicts = sorted(marker for marker in forbidden if marker in ocr)
+        ocr_tokens = re.findall(r"[A-Za-z0-9\u3400-\u9fff]+", ocr)
+        text_heavy = len(ocr_tokens) > 4
         purpose = str(item.get("purpose") or item.get("match_reason") or "").casefold()
         stock_ui = "pexels.com" in str(item.get("source_url") or "").casefold() and any(token in purpose for token in ("interface", "dashboard", "screen"))
-        score = sum(token in purpose for token in ("api", "workflow", "developer", "dashboard", "tool")) - 10 * len(conflicts) - (4 if stock_ui else 0)
-        candidates.append({"path": str(path), "score": score, "ocr_conflicts": conflicts, "assignment_index": index, "purpose": purpose})
-    usable = [row for row in candidates if not row["ocr_conflicts"]]
+        score = sum(token in purpose for token in ("api", "workflow", "developer", "dashboard", "tool")) - 10 * len(conflicts) - (10 if text_heavy else 0) - (4 if stock_ui else 0)
+        candidates.append({"path": str(path), "score": score, "ocr_conflicts": conflicts, "ocr_token_count": len(ocr_tokens), "text_heavy": text_heavy, "assignment_index": index, "purpose": purpose})
+    usable = [row for row in candidates if not row["ocr_conflicts"] and not row["text_heavy"]]
     selected = max(usable or candidates, key=lambda row: (row["score"], -row["assignment_index"]), default=None)
     if not selected:
         return None, {"passed": False, "reason": "no_cover_background_candidates"}
-    return selected["path"], {"passed": not selected["ocr_conflicts"], **selected, "candidate_count": len(candidates)}
+    return selected["path"], {"passed": not selected["ocr_conflicts"] and not selected["text_heavy"], **selected, "candidate_count": len(candidates)}
 
 
 def _write_visual_treatment_plan(output_dir: Path, plan: dict, assignments: list[dict]) -> Path:
