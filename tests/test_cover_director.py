@@ -92,4 +92,4 @@ def test_youtube_cover_keeps_complete_question_and_skips_question_subtitle():
     )
 
     assert direction["title_text"] == "Still Think ChatGPT Is an AI Agent"
-    assert direction["subtitle_text"].startswith("A chatbot replies once")
+    assert direction["subtitle_text"] == "Chatbots reply. Agents plan, act, and verify."

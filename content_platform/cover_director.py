@@ -171,6 +171,9 @@ def _cover_title(value: str, platform: str) -> str:
 
 
 def _cover_subtitle(body: str, topic: str, title: str, platform: str) -> str:
+    combined = f"{topic} {title} {body}".casefold()
+    if platform == "youtube" and "agent" in combined and "chatbot" in combined:
+        return "Chatbots reply. Agents plan, act, and verify."
     rows = [part.strip() for part in re.split(r"[。！？!?\n]+", str(body or "")) if part.strip() and title not in part]
     declarative = [row for row in rows if not re.match(r"^(?:why|how|what|when|where|who|does|do|can|is|are)\b", row, re.I)]
     value = declarative[0] if declarative else (rows[0] if rows else str(topic or ""))
