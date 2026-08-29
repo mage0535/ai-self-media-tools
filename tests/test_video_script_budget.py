@@ -35,10 +35,10 @@ def test_video_script_compiler_preserves_english_word_budget():
 
     result = MediaBridge.compile_video_script({"body": body})
 
-    assert len(result["segments"]) == 6
+    assert len(result["segments"]) == 8
     assert sum(len(segment.split()) for segment in result["segments"]) == 140
-    assert all(len(segment.split()) <= 24 for segment in result["segments"])
-    assert result["max_words_per_segment"] == 24
+    assert all(17 <= len(segment.split()) <= 18 for segment in result["segments"])
+    assert result["max_words_per_segment"] == 18
 
 
 def test_film_renderer_rejects_runaway_tts_durations_before_rendering():
