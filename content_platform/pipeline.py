@@ -492,6 +492,38 @@ class Pipeline:
                                 {"initial": claim_gate, "repair": repaired_gate},
                                 depends_on=["validate_content_structure"],
                             )
+                post_claim_budget = self._video_script_budget(draft, job)
+                if not post_claim_budget["passed"] and post_claim_budget.get("min_words"):
+                    combined_brief = json.loads(json.dumps(brief, ensure_ascii=False))
+                    blueprint = dict(combined_brief.get("content_blueprint") or {})
+                    blueprint["script_length_requirement"] = {
+                        "language": "en", "min_words": 110, "max_words": 160, "paragraphs": 8,
+                        "rule": "use only verified source facts; explain definitions, boundaries, steps, takeaway, and CTA",
+                    }
+                    combined_brief["content_blueprint"] = blueprint
+                    combined_brief["factual_repair"] = {
+                        "failures": list(claim_gate.get("failures") or []),
+                        "unsupported_claims": [str(row.get("text") or "") for row in claim_gate.get("findings") or [] if isinstance(row, dict) and not row.get("covered")],
+                    }
+                    if isinstance(combined_brief.get("bounded_model_input"), dict):
+                        combined_brief["bounded_model_input"]["content_blueprint"] = blueprint
+                        combined_brief["bounded_model_input"]["factual_repair"] = combined_brief["factual_repair"]
+                    repaired = self.generator.generate(job.get("topic") or draft["title"], combined_brief)
+                    repaired_body = str(repaired.get("body") or "").strip()
+                    if self._video_script_budget(repaired, job).get("word_count", 0) > 160:
+                        repaired_body = self._fit_english_video_script(repaired_body)
+                    repaired_body = sanitize_unsupported_claims(repaired_body, validate_claims(str(repaired.get("title") or "") + "\n" + repaired_body, claim_ledger).get("findings"))
+                    repaired_body = restore_verified_domains(repaired_body, claim_ledger)
+                    repaired_title = str(repaired.get("title") or draft["title"]).strip()
+                    repaired_gate = validate_claims(repaired_title + "\n" + repaired_body, claim_ledger)
+                    repaired_budget = self._video_script_budget({"body": repaired_body}, job)
+                    if not repaired_gate.get("passed") or not repaired_budget.get("passed"):
+                        runner.block("validate_factual_claims", "factual_video_budget_failed", "fact-safe video script did not meet the narration budget after one combined repair", {"claims": repaired_gate, "budget": repaired_budget}, depends_on=["validate_content_structure"])
+                    draft["title"], draft["body"] = repaired_title, repaired_body
+                    text = repaired_title + "\n" + repaired_body
+                    claim_gate = repaired_gate
+                    draft["draft_meta"]["claim_gate"] = repaired_gate
+                    draft["draft_meta"]["factual_budget_repair"] = {"attempted": True, "passed": True, "before": post_claim_budget, "after": repaired_budget}
                 runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"], message="legacy review-only claim findings" if not claim_gate.get("passed") else "")
                 if (job.get("brief") or {}).get("run_contract"):
                     model_depth_plan = (draft.get("draft_meta") or {}).get("content_depth_plan")
