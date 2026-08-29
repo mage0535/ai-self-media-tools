@@ -1475,6 +1475,25 @@ def test_xiaohongshu_auto_packet_requires_mixed_assets_and_disclosure():
     assert "ai_assisted_disclosure" in result["failed_dimensions"]
 
 
+def test_xiaohongshu_carousel_defers_post_generation_evidence_only():
+    packet = complete_xiaohongshu_auto_packet()
+    packet["content_type"] = "carousel"
+    packet["content_form"] = "carousel"
+    packet["short_video_plan"] = {}
+    packet["tool_invocation_manifest"] = {}
+    packet["source_assets"] = []
+    packet["cover_design"] = {}
+    packet["manual_publish_package"] = {}
+    packet["publishing_plan"] = {}
+
+    result = validate_xiaohongshu_auto_packet(packet, phase="generation")
+
+    assert result["gates"]["mixed_content_form"]["passed"] is True
+    assert result["gates"]["short_video_component"]["passed"] is True
+    assert result["gates"]["tool_invocation_manifest"]["deferred"] is True
+    assert result["gates"]["manual_handoff_only"]["deferred"] is True
+
+
 def test_xiaohongshu_auto_packet_rejects_design_cards_without_real_scene_backgrounds():
     packet = complete_xiaohongshu_auto_packet()
     packet["real_scene_background_plan"] = {

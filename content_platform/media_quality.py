@@ -389,7 +389,7 @@ def validate_platform_article_packet(packet: dict[str, Any], platform: str) -> d
     return _result(gates)
 
 
-def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
+def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rendered") -> dict[str, Any]:
     """Validate Xiaohongshu mixed manual-handoff packages before user review."""
     content_type = str(packet.get("content_type") or packet.get("content_form") or "").casefold()
     cards = packet.get("embedded_knowledge_cards") or packet.get("knowledge_card_sequence") or []
@@ -399,6 +399,8 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     disclosure = str(packet.get("ai_assisted_disclosure") or packet.get("disclosure") or packet.get("body") or "")
     video_plan = packet.get("video_plan") or packet.get("short_video_plan") or {}
     mixed_plan = packet.get("mixed_content_plan") or {}
+    generation_phase = str(phase or "rendered").casefold() in {"generation", "pre_generation", "pre-generation"}
+    carousel_only = content_type in {"carousel", "image_text_note", "xiaohongshu_carousel"}
     ops_gates = _full_ops_gates(packet, "xiaohongshu")
     gates = {
         "preflight_manifest": validate_preflight_manifest(packet, str(packet.get("platform") or "")),
@@ -413,6 +415,9 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
                 "image_text_knowledge_card_short_video_mix",
                 "xiaohongshu_mixed_note",
                 "note_knowledge_card_short_video",
+                "carousel",
+                "image_text_note",
+                "xiaohongshu_carousel",
             },
             "actual": content_type,
         },
@@ -428,7 +433,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "tool_selection": validate_tool_selection_evidence(packet, content_kind="article"),
         "tool_invocation_manifest": validate_tool_invocation_manifest(
             packet.get("tool_invocation_manifest"),
-            require_execution=bool(packet.get("runtime_execution_required") or packet.get("run_contract")),
+            require_execution=not generation_phase and bool(packet.get("runtime_execution_required") or packet.get("run_contract")),
         ),
         "image_text_mapping": {
             "passed": len(images) >= 3
@@ -444,7 +449,8 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "section_real_scene_mapping": _section_real_scene_mapping_gate(packet, images),
         "short_video_component": {
-            "passed": all(video_plan.get(key) for key in ["theme", "opening_hook", "visual_alignment_plan"])
+            "passed": carousel_only
+            or all(video_plan.get(key) for key in ["theme", "opening_hook", "visual_alignment_plan"])
             or all(mixed_plan.get(key) for key in ["short_video", "image_text_note", "knowledge_cards"]),
         },
         "authentic_source_evidence": {
@@ -469,6 +475,9 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "growth_plan": validate_growth_package(packet),
     }
+    if generation_phase:
+        for key in ("tool_invocation_manifest", "authentic_source_evidence", "cover_design", "manual_handoff_only"):
+            gates[key] = {"passed": True, "deferred": True, "phase": "generation"}
     return _result(gates)
 
 
