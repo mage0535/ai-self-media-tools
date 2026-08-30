@@ -100,7 +100,9 @@ def score_semantics(expected_concepts: Sequence[str], caption: str, labels: Sequ
             matched_concepts.append(concept)
     if not coverages:
         return 0.0, []
-    score = 0.7 * max(coverages) + 0.3 * (sum(coverages) / len(coverages))
+    concept_match_rate = len(matched_concepts) / len(coverages)
+    token_coverage = sum(coverages) / len(coverages)
+    score = 0.7 * concept_match_rate + 0.3 * token_coverage
     return round(min(1.0, score), 6), matched_concepts
 
 
