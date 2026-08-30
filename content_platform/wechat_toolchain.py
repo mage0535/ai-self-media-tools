@@ -42,6 +42,8 @@ TOOLCHAIN_META_KEYS = {
     "tool_invocations",
     "wechat_image_post_plan",
     "image_text_card_recipe",
+    "digest",
+    "no_ai_slop_repair",
 }
 
 
@@ -83,8 +85,9 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
         if title:
             draft["title"] = title[:80]
         if article_body:
-            draft["body"] = article_body
-            body = article_body
+            body, repair = _repair_ai_slop(article_body)
+            draft["body"] = body
+            meta["no_ai_slop_repair"] = repair
     elif _hermes_writer_fallback_enabled(cfg):
         fallback = _invoke_hermes_writer(cfg, brief_path, article_path)
         fallback["evidence_path"] = str(evidence_path)
@@ -94,8 +97,9 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
             if title:
                 draft["title"] = title[:80]
             if article_body:
-                draft["body"] = article_body
-                body = article_body
+                body, repair = _repair_ai_slop(article_body)
+                draft["body"] = body
+                meta["no_ai_slop_repair"] = repair
         elif required:
             evidence_path.write_text(json.dumps({"tool_invocations": meta.get("tool_invocations", {})}, ensure_ascii=False, indent=2), encoding="utf-8")
             return draft
@@ -103,6 +107,7 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
         evidence_path.write_text(json.dumps({"tool_invocations": meta.get("tool_invocations", {})}, ensure_ascii=False, indent=2), encoding="utf-8")
         return draft
     packet = _build_packet_fields(job, draft, body, invocation, run_dir)
+    packet["digest"] = _wechat_digest(topic, body)
     packet["tool_invocations"] = meta["tool_invocations"]
     for key, value in packet.items():
         if value not in (None, "", [], {}):
@@ -432,3 +437,33 @@ def _opening_hook(body: str) -> str:
         if len(text) >= 35:
             return text[:140]
     return body.strip()[:140]
+
+
+def _wechat_digest(topic: str, body: str) -> str:
+    clean_topic = re.sub(r"\s+", "", str(topic or "")).strip("#，。！？!? ")
+    candidate = f"拆解{clean_topic}的真实卡点，并给出可执行检查清单。"
+    if len(candidate) <= 54:
+        return candidate
+    first = next((part.strip() for part in re.split(r"[。！？!?\n]", str(body or "")) if 12 <= len(part.strip()) <= 54), "")
+    return (first or candidate[:54]).rstrip("，。！？!? ")
+
+
+def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
+    text = str(body or "")
+    changes = []
+
+    def replace_double(match):
+        left = match.group(1).strip("，, ")
+        right = match.group(2).strip("，, ")
+        changes.append({"pattern": "double_negation", "left": left[:40], "right": right[:40]})
+        return f"问题与{left}、{right}都无关。"
+
+    def replace_contrast(match):
+        surface = match.group(1).strip("，, ")
+        point = match.group(2).strip("，, ")
+        changes.append({"pattern": "binary_contrast", "surface": surface[:40], "point": point[:40]})
+        return f"真正关键的是{point}；{surface}只是表面现象。"
+
+    text = re.sub(r"不是([^。！？\n]{2,60})[，,]?也不是([^。！？\n]{2,60})[。！？]", replace_double, text)
+    text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?而是([^。！？\n]{2,100})[。！？]", replace_contrast, text)
+    return text, {"version": "wechat_no_ai_slop_repair_v1", "changed": bool(changes), "change_count": len(changes), "changes": changes}
