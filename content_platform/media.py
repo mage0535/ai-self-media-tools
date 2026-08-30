@@ -405,7 +405,7 @@ class MediaBridge:
             if not output.is_file():
                 raise RuntimeError("image provider produced no output file")
             if item["role"] == "cover":
-                cover_gate = normalize_cover_resolution(output)
+                cover_gate = normalize_cover_resolution(output, minimum=self._cover_minimum(platforms))
                 if not cover_gate.get("passed"):
                     raise RuntimeError("cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
             checksum = hashlib.sha256(output.read_bytes()).hexdigest()
@@ -735,6 +735,11 @@ class MediaBridge:
         if platforms.intersection({"wechat", "zhihu"}) or body_length >= 1000:
             return 3
         return 1
+
+    @staticmethod
+    def _cover_minimum(platforms):
+        normalized = {str(item).casefold() for item in platforms or []}
+        return 1080 if normalized.intersection({"xiaohongshu", "rednote"}) else 1200
 
     @staticmethod
     def _default_image_prompt(job):
