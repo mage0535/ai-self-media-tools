@@ -168,6 +168,7 @@ class ToolRegistryTests(unittest.TestCase):
         assert result["image_providers"]["providers"]["agnes"]["supports_edit"] is True
         assert result["agnes_multimodal"]["supports_text_to_video"] is True
         assert result["agnes_multimodal"]["video_model"] == "agnes-video-2.5-flash"
+        assert result["agnes_multimodal"]["video_auto_enabled"] is False
 
 
 if __name__ == "__main__":

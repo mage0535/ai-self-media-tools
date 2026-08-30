@@ -6,6 +6,7 @@ import json
 import os
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -112,8 +113,12 @@ class AgnesVideoProvider:
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             method="POST" if payload is not None else "GET",
         )
-        with urllib.request.urlopen(request, timeout=180) as response:
-            body = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:300]
+            raise RuntimeError(f"Agnes API HTTP {exc.code}: {detail}") from exc
         if not isinstance(body, dict):
             raise RuntimeError("Agnes response is not a JSON object")
         return body
@@ -126,8 +131,12 @@ def _download(url: str, output: Path) -> None:
 
 
 def probe_agnes() -> dict:
+    configured = bool(load_secret("AGNES_API_KEY"))
     return {
-        "available": bool(load_secret("AGNES_API_KEY")),
+        "available": configured,
+        "configured": configured,
+        "image_auto_enabled": configured and os.environ.get("AGNES_IMAGE_AUTO_ENABLED") == "1",
+        "video_auto_enabled": configured and os.environ.get("AGNES_VIDEO_AUTO_ENABLED") == "1",
         "image_model": load_secret("AGNES_IMAGE_MODEL") or "agnes-image-2.1-flash",
         "video_model": load_secret("AGNES_VIDEO_MODEL") or "agnes-video-2.5-flash",
     }
