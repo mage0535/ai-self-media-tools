@@ -35,6 +35,8 @@ def _provider_config_status(provider: str) -> str:
         return "configured" if (load_secret("SN_IMAGE_GEN_API_KEY") or load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")) else "missing_config"
     if provider == "pixazo":
         return "configured" if load_secret("PIXAZO_API_KEY") else "missing_config"
+    if provider == "agnes":
+        return "configured" if load_secret("AGNES_API_KEY") else "missing_config"
     if provider == "stock":
         return "configured" if (load_secret("PEXELS_API_KEY") or load_secret("PIXABAY_API_KEY")) else "missing_config"
     return "unknown_provider"
@@ -42,7 +44,7 @@ def _provider_config_status(provider: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test image provider chain")
-    parser.add_argument("--providers", default="stock,sense_nova,pixazo,cloudflare,pollinations,auto")
+    parser.add_argument("--providers", default="stock,agnes,sense_nova,pixazo,cloudflare,pollinations,auto")
     parser.add_argument("--output-dir", default="/tmp/image-provider-smoke")
     parser.add_argument("--size", default="768x768")
     parser.add_argument("--prompt", default="clean editorial illustration of automated content production, no text")

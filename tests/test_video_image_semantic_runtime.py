@@ -67,3 +67,41 @@ def test_video_provenance_json_is_written_atomically(tmp_path):
 
     assert json.loads(target.read_text(encoding="utf-8"))["assets"] == [{"id": 1}]
     assert not target.with_suffix(".json.tmp").exists()
+
+
+def test_agnes_footage_generation_materializes_eight_verified_scene_clips(tmp_path, monkeypatch):
+    scenes = [
+        {"scene_id": f"s{i:02d}", "narration": f"workflow step {i}", "visual_claim": f"dashboard {i}"}
+        for i in range(1, 9)
+    ]
+
+    def generate(self, prompt, output, **kwargs):
+        Path(output).write_bytes(b"video" + prompt.encode())
+        return {"model": "agnes-video-2.5-flash", "video_id": Path(output).stem, "source_url": "https://cdn.test/video", "license": "agnes_api_terms"}
+
+    def run(command, **kwargs):
+        Path(command[-1]).write_bytes(b"frame")
+        return type("Result", (), {"returncode": 0})()
+
+    def analyze(path, expected, **kwargs):
+        sha = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        return {
+            "version": "image_semantic_evidence_v1", "passed": True, "caption": "workflow dashboard",
+            "labels": ["workflow", "dashboard"], "matched_concepts": [str(expected[0])],
+            "semantic_match_score": 1.0, "image_sha256": sha,
+            "score_source": "deterministic_caption_label_recall", "evidence_level": "artifact_verified",
+        }
+
+    monkeypatch.setattr("content_platform.agnes_provider.AgnesVideoProvider.generate", generate)
+    monkeypatch.setattr(runner.subprocess, "run", run)
+    monkeypatch.setattr("scripts.image_semantic_analyze.analyze_image", analyze)
+
+    evidence = runner._ensure_agnes_footage(tmp_path, {"scenes": scenes}, platform="douyin_ai")
+
+    assert evidence["passed"] is True
+    assert evidence["scene_count"] == 8
+    provenance = json.loads((tmp_path / "footage_provenance.json").read_text(encoding="utf-8"))
+    assert len(provenance["scenes"]) == 8
+    assert all(row["provider"] == "agnes" for row in provenance["scenes"])
+    manifest = json.loads((tmp_path / "scene_manifest.json").read_text(encoding="utf-8"))
+    assert all(scene["asset"]["provider"] == "agnes" for scene in manifest["scenes"])

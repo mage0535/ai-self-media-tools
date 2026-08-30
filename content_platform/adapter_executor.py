@@ -16,6 +16,7 @@ _SUPPORTED_ADAPTERS = frozenset(
         "python:content_platform.adapters.search:execute",
         "python:content_platform.adapters.mcp:execute",
         "python:content_platform.adapters.runtime:execute",
+        "python:content_platform.adapters.agnes:execute",
     }
 )
 
@@ -205,4 +206,11 @@ def _validate_contract(output: dict[str, Any], contract: str) -> bool:
             isinstance(output.get(field), str)
             for field in ("server_name", "tool_name", "input_hash", "output_hash", "affected_output")
         ) and output.get("status") in {"executed", "skipped", "failed", "fallback", "degraded"}
+    if contract == "agnes_media_plan_v1":
+        return (
+            output.get("version") == contract
+            and output.get("status") in {"planned", "executed", "skipped"}
+            and isinstance(output.get("evidence"), dict)
+            and isinstance(output.get("runtime_evidence"), dict)
+        )
     return False

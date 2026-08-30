@@ -66,6 +66,7 @@ class ToolRegistry:
             "open_notebook": self._probe_open_notebook(),
             "tts_engines": self._probe_tts(),
             "image_providers": self._probe_image_providers(),
+            "agnes_multimodal": self._probe_agnes(),
             "autocli": self._probe_autocli(),
             "browser_ext": self._probe_browser_ext(),
             "khazix_skills": self._probe_skill_dir("khazix-skills"),
@@ -177,6 +178,13 @@ class ToolRegistry:
         from .image_provider import load_secret
 
         providers = {
+            "agnes": {
+                "available": bool(load_secret("AGNES_API_KEY")),
+                "supports_generate": True,
+                "supports_edit": True,
+                "kind": "high_density_generated_image_and_edit",
+                "model": load_secret("AGNES_IMAGE_MODEL") or "agnes-image-2.1-flash",
+            },
             "stock": {
                 "available": bool(load_secret("PEXELS_API_KEY") or load_secret("PIXABAY_API_KEY")),
                 "supports_generate": True,
@@ -213,6 +221,19 @@ class ToolRegistry:
             },
         }
         return {"available": any(item["available"] for item in providers.values()), "kind": "image_provider_registry", "providers": providers}
+
+    @staticmethod
+    def _probe_agnes():
+        from .agnes_provider import probe_agnes
+
+        result = probe_agnes()
+        return {
+            **result,
+            "kind": "image_and_video_generation",
+            "supports_image_edit": result["available"],
+            "supports_text_to_video": result["available"],
+            "supports_keyframe_video": result["available"],
+        }
 
     def choose_provider(self, kind):
         mapping = {

@@ -697,3 +697,55 @@ def test_pixazo_generation_sends_requested_dimensions_and_records_provenance(tmp
     assert result["provenance"]["prompt_sha256"] == image_provider.hashlib.sha256(
         "cinematic editorial illustration for AI workflow".encode("utf-8")
     ).hexdigest()
+def test_agnes_generation_uses_ratio_and_base64_output(tmp_path, monkeypatch):
+    output = tmp_path / "agnes.png"
+    monkeypatch.setenv("AGNES_API_KEY", "agnes-test")
+    captured = {}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self):
+            payload = __import__("base64").b64encode(b"image-bytes").decode()
+            return __import__("json").dumps({"data": [{"b64_json": payload}]}).encode()
+
+    def fake_urlopen(request, timeout):
+        captured["body"] = __import__("json").loads(request.data)
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr("content_platform.image_provider.urllib.request.urlopen", fake_urlopen)
+    result = generate_image("cinematic dashboard", output, provider="agnes", size="1080x1920")
+
+    assert output.read_bytes() == b"image-bytes"
+    assert captured["body"]["model"] == "agnes-image-2.1-flash"
+    assert captured["body"]["size"] == "2K"
+    assert captured["body"]["ratio"] == "9:16"
+    assert captured["body"]["return_base64"] is True
+    assert result["provider"] == "agnes"
+
+
+def test_agnes_edit_sends_reference_image_in_extra_body(tmp_path, monkeypatch):
+    source = tmp_path / "source.png"
+    source.write_bytes(b"source-image")
+    output = tmp_path / "edited.png"
+    monkeypatch.setenv("AGNES_API_KEY", "agnes-test")
+    captured = {}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self):
+            payload = __import__("base64").b64encode(b"edited-image").decode()
+            return __import__("json").dumps({"data": [{"b64_json": payload}]}).encode()
+
+    def fake_urlopen(request, timeout):
+        captured["body"] = __import__("json").loads(request.data)
+        return Response()
+
+    monkeypatch.setattr("content_platform.image_provider.urllib.request.urlopen", fake_urlopen)
+    result = generate_image("preserve composition", output, provider="agnes", input_image=source, size="1024x1024")
+
+    references = captured["body"]["extra_body"]["image"]
+    assert references[0].startswith("data:image/png;base64,")
+    assert result["mode"] == "edit"

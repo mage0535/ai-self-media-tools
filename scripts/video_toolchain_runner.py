@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -390,6 +391,13 @@ def main(argv: list[str] | None = None) -> int:
     if len(materialized_backgrounds) >= 8:
         _write_visual_treatment_plan(output_dir, plan, materialized_backgrounds)
     renderer, plan = _content_driven_renderer(plan, script_body, title, output_dir)
+    agnes_footage_evidence = {}
+    if renderer.name == "cinematic_v11.py" and len(list((output_dir / "footage").glob("scene_*.mp4"))) < 8:
+        agnes_footage_evidence = _ensure_agnes_footage(
+            output_dir,
+            scene_manifest,
+            platform=_primary_platform(plan),
+        )
     template_family = str(visual_recipe.get("template_family") or plan.get("template_family") or "")
     style_variants = visual_recipe.get("style_variants") if isinstance(visual_recipe.get("style_variants"), dict) else {}
     # 2026-08-16 修复：主题按内容赛道适配（不再固定 cyber-neon / 随机哈希）
@@ -415,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest = {
         "ok": False,
         "title": title,
+        "agnes_footage_evidence": agnes_footage_evidence,
         "selected_pipeline": plan.get("selected_pipeline", ""),
         "template_family": template_family,
         "cards_json": str(cards_path),
@@ -1436,6 +1445,88 @@ def _renderer_command(renderer: Path, output_dir: Path, theme: str, title: str, 
         "--height",
         "1920",
     ]
+
+
+def _ensure_agnes_footage(output_dir: Path, scene_manifest: dict, *, platform: str) -> dict:
+    from content_platform.agnes_provider import AgnesVideoProvider
+    from scripts.image_semantic_analyze import analyze_image
+
+    scenes = list(scene_manifest.get("scenes") or [])[:8]
+    if len(scenes) != 8:
+        raise RuntimeError("Agnes footage generation requires eight scenes")
+    footage_dir = output_dir / "footage"
+    frames_dir = output_dir / "agnes_frames"
+    footage_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    aspect = "16:9" if platform in {"youtube", "bilibili"} else "9:16"
+
+    def generate(index_scene):
+        index, scene = index_scene
+        target = footage_dir / f"scene_{index:02d}.mp4"
+        prompt = " ".join(
+            str(scene.get(key) or "").strip()
+            for key in ("visual_claim", "narration", "subtitle")
+            if str(scene.get(key) or "").strip()
+        )
+        prompt += ", cinematic natural motion, coherent subject, no text, no logo, no watermark"
+        provider = AgnesVideoProvider(timeout=720, poll_interval=2)
+        errors = []
+        result = {}
+        for model in ("agnes-video-2.5-flash", "agnes-video-v2.0"):
+            try:
+                result = provider.generate(prompt, target, model=model, seconds=5, aspect_ratio=aspect)
+                break
+            except Exception as exc:
+                errors.append(f"{model}:{type(exc).__name__}:{str(exc)[:160]}")
+        if not target.is_file():
+            raise RuntimeError("Agnes footage providers failed: " + " | ".join(errors))
+        frame = frames_dir / f"scene_{index:02d}.jpg"
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-ss", "1", "-i", str(target), "-frames:v", "1", str(frame)],
+            check=True,
+            timeout=60,
+        )
+        expected = list(scene.get("asset_search_terms") or [])
+        if not expected:
+            expected = [str(scene.get("visual_claim") or scene.get("narration") or "")[:180]]
+        semantic = analyze_image(frame, expected, role="video_scene", platform=platform)
+        if semantic.get("passed") is not True:
+            raise RuntimeError(f"Agnes scene {index} semantic mismatch")
+        return index, scene, result, semantic, target
+
+    rows = []
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="agnes-video") as pool:
+        futures = [pool.submit(generate, item) for item in enumerate(scenes, 1)]
+        for future in as_completed(futures):
+            index, scene, result, semantic, target = future.result()
+            rows.append(
+                {
+                    "scene_id": str(scene.get("scene_id") or f"s{index:02d}"),
+                    "path": str(target),
+                    "source_url": str(result.get("source_url") or ""),
+                    "license": str(result.get("license") or "agnes_api_terms"),
+                    "provider": "agnes",
+                    "model": str(result.get("model") or ""),
+                    "video_id": str(result.get("video_id") or ""),
+                    "observed_subjects": list(semantic.get("labels") or []),
+                    "semantic_match_score": float(semantic.get("semantic_match_score") or 0),
+                    "match_reason": str(semantic.get("caption") or ""),
+                    "semantic_evidence": semantic,
+                }
+            )
+            scene["asset"] = {"source": str(target), "provider": "agnes", "model": str(result.get("model") or "")}
+            scene["asset_search_terms"] = list(semantic.get("matched_concepts") or semantic.get("labels") or [])
+    rows.sort(key=lambda row: row["scene_id"])
+    provenance = {"version": "agnes_footage_provenance_v1", "scenes": rows}
+    _write_json_atomic(output_dir / "footage_provenance.json", provenance)
+    _write_json_atomic(output_dir / "scene_manifest.json", scene_manifest)
+    return {
+        "version": "agnes_footage_generation_v1",
+        "passed": len(rows) == 8,
+        "scene_count": len(rows),
+        "models": sorted(set(row["model"] for row in rows)),
+        "provider": "agnes",
+    }
 
 
 def _bgm_style(cinema_scenes: list[dict], text: str = "") -> str:

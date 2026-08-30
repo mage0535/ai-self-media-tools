@@ -40,6 +40,10 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
     legacy_pipeline = _select_pipeline(platforms, content_form, asset_plan, brief)
     legacy_template_family = _select_template_family(platforms, content_form, brief)
     available_assets = brief.get("available_video_assets") if isinstance(brief.get("available_video_assets"), dict) else {}
+    if "agnes_video_available" not in available_assets:
+        from .agnes_provider import probe_agnes
+
+        available_assets = {**available_assets, "agnes_video_available": probe_agnes()["available"]}
     route = build_video_route(
         platform=platforms[0] if platforms else "",
         title=str(brief.get("topic") or brief.get("title") or ""),
