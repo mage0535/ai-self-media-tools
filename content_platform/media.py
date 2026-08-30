@@ -407,6 +407,11 @@ class MediaBridge:
                 accepted_checksums.add(str(raw_gate["checksum"]))
             if raw_gate.get("visual_hash"):
                 accepted_hashes.add(str(raw_gate["visual_hash"]))
+            provider_result = raw_gate.get("provider_result") if isinstance(raw_gate.get("provider_result"), dict) else {}
+            provider_name = str(provider_result.get("provider") or type(provider).__name__)
+            source_url = str(provider_result.get("source_url") or "").strip()
+            license_name = str(provider_result.get("license") or "").strip()
+            generated = provider_name not in {"pexels", "pixabay", "stock"}
             images.append(
                 {
                     "kind": "image",
@@ -415,6 +420,15 @@ class MediaBridge:
                     "purpose": item.get("purpose", ""),
                     "path": str(output),
                     "checksum": checksum,
+                    "source_url": source_url or (f"generated:{provider_name}" if generated else ""),
+                    "license": license_name or ("generated_for_project" if generated else ""),
+                    "origin_type": "generated" if generated else "stock",
+                    "generation_evidence": {
+                        "provider": provider_name,
+                        "model": str(provider_result.get("model") or cfg.get("model") or ""),
+                        "query": str(provider_result.get("query") or ""),
+                        "prompt_hash": hashlib.sha256(str(item.get("prompt") or "").encode("utf-8")).hexdigest(),
+                    },
                 }
             )
         section_map = [
@@ -448,10 +462,10 @@ class MediaBridge:
         recovery,
     ):
         if not recovery["enabled"]:
-            provider.run(item["prompt"], output, extra_args)
+            provider_result = provider.run(item["prompt"], output, extra_args)
             if not output.is_file():
                 raise RuntimeError("image provider produced no output file")
-            return {}
+            return {"provider_result": provider_result if isinstance(provider_result, dict) else {}}
 
         last_failures = []
         max_attempts = recovery["max_attempts"]
@@ -460,8 +474,9 @@ class MediaBridge:
             try:
                 if output.exists():
                     output.unlink()
-                provider.run(prompt, output, extra_args)
+                provider_result = provider.run(prompt, output, extra_args)
                 gate = self._validate_image_quality_candidate(output, accepted_checksums, accepted_hashes)
+                gate["provider_result"] = provider_result if isinstance(provider_result, dict) else {}
             except Exception as exc:
                 gate = {
                     "passed": False,
@@ -641,16 +656,20 @@ class MediaBridge:
             purpose = str(image.get("purpose") or prompt.get("purpose") or "topic-matched visual")
             section = str(image.get("section") or prompt.get("section") or image.get("role") or "")
             prompt_text = str(prompt.get("prompt") or purpose)
+            source_url = str(image.get("source_url") or "").strip()
+            license_name = str(image.get("license") or "").strip()
+            generation_evidence = image.get("generation_evidence") if isinstance(image.get("generation_evidence"), dict) else {}
             records.append({
                 "scene_id": section or f"asset_{index + 1}",
                 "path": str(image.get("path") or ""),
-                "source_url": f"generated:{provider_name}",
-                "license": "generated_for_project",
+                "source_url": source_url or f"generated:{provider_name}",
+                "license": license_name or "generated_for_project",
                 "semantic_match_score": 0.82,
                 "match_reason": purpose,
                 "semantic_tags": [value for value in [str(job.get("topic") or job.get("title") or ""), section] if value],
                 "generation_evidence": {
-                    "provider": provider_name,
+                    **generation_evidence,
+                    "provider": str(generation_evidence.get("provider") or provider_name),
                     "prompt_sha256": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
                     "role": str(image.get("role") or ""),
                 },

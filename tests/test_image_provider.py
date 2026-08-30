@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from content_platform.image_provider import ImageProviderError, generate_image, load_secret
+from content_platform.image_provider import ImageProviderError, _stock_result_index, generate_image, load_secret
 
 
 def test_load_secret_reads_named_env_file_without_exposing_value(tmp_path, monkeypatch):
@@ -174,6 +174,12 @@ def test_pexels_search_downloads_stock_image(tmp_path, monkeypatch):
     assert result["mode"] == "search"
     assert result["license"] == "Pexels"
     assert Path(result["path"]).read_bytes() == image_bytes
+
+
+def test_stock_candidate_index_changes_with_recovery_prompt():
+    indexes = {_stock_result_index(f"same query quality recovery attempt {index}", 15) for index in range(1, 8)}
+
+    assert len(indexes) >= 3
 
 
 def test_pixabay_search_downloads_stock_image(tmp_path, monkeypatch):

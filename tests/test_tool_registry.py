@@ -44,6 +44,22 @@ class ToolRegistryTests(unittest.TestCase):
             provider = registry.choose_provider("image")
             self.assertIsInstance(provider, ScriptImageProvider)
 
+    def test_image_script_provider_preserves_source_and_license_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "provider.py"
+            script.write_text("# fixture", encoding="utf-8")
+            completed = type("Result", (), {
+                "returncode": 0,
+                "stdout": '{"provider":"pexels","source_url":"https://pexels.test/photo","license":"Pexels"}',
+                "stderr": "",
+            })()
+            with patch("content_platform.tool_adapters.subprocess.run", return_value=completed):
+                result = ScriptImageProvider(str(script)).run("AI workflow", Path(tmp) / "image.png")
+
+        self.assertEqual(result["provider"], "pexels")
+        self.assertEqual(result["source_url"], "https://pexels.test/photo")
+        self.assertEqual(result["license"], "Pexels")
+
     def test_registry_reports_repo_relative_script_paths(self):
         registry = ToolRegistry({"media": {"image": {"script": "scripts/voice_engine.py"}}})
         result = registry.probe()
