@@ -34,6 +34,23 @@ def _write_json_atomic(path: Path, payload: Any) -> None:
     os.replace(temporary, path)
 
 
+def _verified_semantic_evidence(record: dict[str, Any], path: Path) -> bool:
+    evidence = record.get("semantic_evidence") if isinstance(record.get("semantic_evidence"), dict) else {}
+    required = {
+        "version", "analyzer", "caption", "labels", "expected_concepts", "matched_concepts",
+        "semantic_match_score", "threshold", "passed", "image_sha256", "score_source", "evidence_level",
+    }
+    return (
+        required.issubset(evidence)
+        and evidence.get("version") == "image_semantic_evidence_v1"
+        and evidence.get("score_source") == "deterministic_caption_label_recall"
+        and evidence.get("evidence_level") == "artifact_verified"
+        and evidence.get("passed") is True
+        and str(evidence.get("image_sha256") or "") == _sha256(path)
+        and abs(float(evidence.get("semantic_match_score") or 0) - float(record.get("semantic_match_score") or 0)) <= 1e-6
+    )
+
+
 def _probe_public_url(url: str, timeout: float, expected_checksum: str) -> dict[str, Any]:
     """Download the staged object and prove it is the generated local asset."""
     request = urllib.request.Request(url, method="GET")
@@ -127,6 +144,7 @@ def execute_article_media(
     staging_timeout_seconds: float = 5.0,
     max_concurrency: int = 3,
     max_attempts: int = 3,
+    require_semantic_evidence: bool = False,
 ) -> dict[str, Any]:
     """Generate a Juejin article package with bounded, resumable asset work."""
     base_url = str(public_staging_base_url or "").rstrip("/")
@@ -155,6 +173,7 @@ def execute_article_media(
             and previous.get("public_url", "") == public_url
             and (previous.get("source_url") or previous.get("origin_type") == "generated")
             and previous.get("license")
+            and (not require_semantic_evidence or _verified_semantic_evidence(previous, Path(str(previous.get("path") or path))))
         ):
             return dict(previous)
 
@@ -163,7 +182,7 @@ def execute_article_media(
         for _ in range(max(1, int(max_attempts))):
             attempts += 1
             try:
-                evidence = generator(item, path) or {}
+                evidence = generator({**item, "_attempt": attempts}, path) or {}
                 if not path.is_file() or path.stat().st_size <= 0:
                     raise RuntimeError("asset generator produced no readable file")
                 checksum = _sha256(path)
@@ -189,9 +208,13 @@ def execute_article_media(
                     "license": license_name,
                     "semantic_match_score": float(evidence.get("semantic_match_score") or 0),
                     "match_reason": str(evidence.get("match_reason") or item["section"]),
+                    "semantic_required": evidence.get("semantic_required") is True,
+                    "semantic_evidence": dict(evidence.get("semantic_evidence") or {}),
                     "attempts": attempts,
                     "status": "complete",
                 }
+                if require_semantic_evidence and not _verified_semantic_evidence(record, path):
+                    raise RuntimeError("verified semantic evidence is missing or invalid")
                 with lock:
                     checkpoints[asset_id] = record
                     _write_json_atomic(checkpoint_path, checkpoints)
@@ -311,6 +334,8 @@ def validate_handoff_contract(
             failures.append(f"artifact_{index}_public_url_missing")
         if not str(artifact.get("license") or "").strip():
             failures.append(f"artifact_{index}_license_missing")
+        if artifact.get("semantic_required") is True and not _verified_semantic_evidence(artifact, path):
+            failures.append(f"artifact_{index}_semantic_evidence_invalid")
     target = contract.get("target_renderer_evidence") if isinstance(contract.get("target_renderer_evidence"), dict) else {}
     staging = contract.get("public_staging_evidence") if isinstance(contract.get("public_staging_evidence"), dict) else {}
     platform_cdn = contract.get("platform_cdn_evidence") if isinstance(contract.get("platform_cdn_evidence"), dict) else {}

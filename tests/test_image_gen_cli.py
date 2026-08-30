@@ -135,3 +135,30 @@ def test_image_gen_no_text_prompt_without_input_image_stays_generate_route(tmp_p
     assert code == 0
     assert payload["mode"] == "generate"
     assert payload["route_decision"] == "generate_without_reference"
+
+
+def test_image_gen_semantic_required_uses_actual_image_evidence(tmp_path, monkeypatch, capsys):
+    output = tmp_path / "generated.png"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "image_gen.py", "--prompt", "AI workflow", "--output", str(output),
+            "--semantic-required", "--expected-concept", "workflow", "--role", "cover",
+            "--platform", "wechat",
+        ],
+    )
+
+    def fake_generate_image(**kwargs):
+        output.write_bytes(b"image")
+        return {"provider": "fixture"}
+
+    evidence = {"passed": True, "semantic_match_score": 0.9, "image_sha256": "a" * 64}
+    with patch("scripts.image_gen.generate_image", side_effect=fake_generate_image), patch(
+        "scripts.image_gen._run_optional_gate"
+    ), patch("scripts.image_semantic_analyze.analyze_image", return_value=evidence) as analyze:
+        code = image_gen.main()
+
+    assert code == 0
+    analyze.assert_called_once_with(output, ["workflow"], role="cover", platform="wechat")
+    assert __import__("json").loads(capsys.readouterr().out)["semantic_evidence"] == evidence

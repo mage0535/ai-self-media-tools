@@ -14,6 +14,7 @@ from .paths import agent_scripts_dir
 from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
 from .adapters.media import execute_article_media, normalize_article_sections
+from .image_routing import route_image_request
 
 try:
     from PIL import Image, ImageStat, UnidentifiedImageError
@@ -28,11 +29,22 @@ class MediaBridge:
     VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT = 40
     VIDEO_SCRIPT_MIN_CHARS_PER_SEGMENT = 8
 
-    def __init__(self, config, data_dir, guard=None):
+    def __init__(self, config, data_dir, guard=None, tool_config=None):
         self.config = config or {}
         self.data_dir = Path(data_dir)
         self.guard = guard or ResourceGuard(self.data_dir, {})
-        self.registry = ToolRegistry({"media": self.config, **self.config})
+        registry_config = dict(tool_config or {})
+        registry_config["media"] = self.config
+        # Preserve legacy tests/configurations that placed tool settings next
+        # to the media settings while allowing production's top-level tools.
+        for key, value in self.config.items():
+            registry_config.setdefault(key, value)
+        self.registry = ToolRegistry(registry_config)
+        self.semantic_validation_required = bool(
+            registry_config.get("strict_media_contract")
+            or self.config.get("image", {}).get("semantic_validation_required")
+            or registry_config.get("analysis", {}).get("required")
+        )
         self._visual_route: dict | None = None
 
     def inventory(self):
@@ -55,6 +67,79 @@ class MediaBridge:
         if not provider:
             raise FileNotFoundError("analysis script not configured")
         return provider.run(target)
+
+    def _analyze_image_semantics(self, target, request):
+        provider = self.registry.choose_provider("analysis")
+        if not provider:
+            return {
+                "passed": False,
+                "failure": "semantic_analyzer_unavailable",
+                "semantic_match_score": 0.0,
+            }
+        expected = [
+            str(value).strip()
+            for value in request.get("expected_concepts", [])
+            if str(value).strip()
+        ]
+        args = [
+            "--expected-json",
+            json.dumps(expected, ensure_ascii=False),
+            "--role",
+            str(request.get("role") or "image"),
+            "--platform",
+            str(request.get("platform") or ""),
+        ]
+        try:
+            result = provider.run(target, args)
+        except Exception as exc:
+            return {
+                "passed": False,
+                "failure": "semantic_analyzer_failed",
+                "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+                "semantic_match_score": 0.0,
+            }
+        if not isinstance(result, dict):
+            return {
+                "passed": False,
+                "failure": "semantic_analyzer_invalid_output",
+                "semantic_match_score": 0.0,
+            }
+        required = {
+            "analyzer",
+            "caption",
+            "labels",
+            "expected_concepts",
+            "matched_concepts",
+            "semantic_match_score",
+            "threshold",
+            "passed",
+        }
+        if not required.issubset(result):
+            return {
+                "passed": False,
+                "failure": "semantic_analyzer_contract_incomplete",
+                "semantic_match_score": 0.0,
+                "analyzer_output": result,
+            }
+        actual_sha256 = hashlib.sha256(Path(target).read_bytes()).hexdigest()
+        evidence_sha256 = str(result.get("image_sha256") or result.get("output_sha256") or "")
+        if not evidence_sha256 or evidence_sha256 != actual_sha256:
+            return {
+                "passed": False,
+                "failure": "semantic_evidence_hash_mismatch",
+                "semantic_match_score": 0.0,
+                "analyzer_output": result,
+            }
+        result = dict(result)
+        result.update(
+            {
+                "version": "image_semantic_evidence_v1",
+                "image_sha256": actual_sha256,
+                "score_source": "deterministic_caption_label_recall",
+                "evidence_level": "artifact_verified",
+            }
+        )
+        return result
 
     def generate(self, kind, job):
         if kind not in {"image", "cover", "video", "audio", "illustration", "logo", "wechat_format", "magazine_format"}:
@@ -273,6 +358,21 @@ class MediaBridge:
                 if pngs:
                     images = []
                     for idx, png in enumerate(pngs):
+                        semantic = {}
+                        if self.semantic_validation_required:
+                            semantic = self._analyze_image_semantics(
+                                png,
+                                {
+                                    "expected_concepts": [str(title), str(body[:240])],
+                                    "role": "cover" if idx == 0 else "knowledge_card",
+                                    "platform": next(iter(platforms), ""),
+                                },
+                            )
+                            if not semantic.get("passed"):
+                                raise RuntimeError(
+                                    "knowledge card semantic validation failed: "
+                                    + str(semantic.get("failure") or "semantic_mismatch")
+                                )
                         images.append({
                             "kind": "image",
                             "role": "cover" if idx == 0 else "section",
@@ -280,6 +380,7 @@ class MediaBridge:
                             "purpose": f"内容驱动知识图块卡 {idx+1}",
                             "path": str(png),
                             "checksum": hashlib.sha256(png.read_bytes()).hexdigest(),
+                            "semantic_evidence": semantic,
                         })
                     self._persist_asset_provenance(output_dir, images, [], "diagram_knowledge_cards_v2", job)
                     return {"kind": "image", "path": str(pngs[0]),
@@ -308,13 +409,20 @@ class MediaBridge:
         input_image = job.get("draft_meta", {}).get("image_reference") or job.get("draft_meta", {}).get("input_image")
         if input_image:
             extra_args.extend(["--input-image", str(input_image)])
+            if prompts:
+                prompts[0]["intent"] = "image_edit"
         if "juejin" in platforms:
             staging_url = str(cfg.get("public_staging_base_url") or self.config.get("public_staging_base_url") or "").strip()
 
             def generate_article_asset(item, target):
                 prompt_item = next(row for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
-                prompt = prompt_item["prompt"]
-                provider_result = provider.run(prompt, target, [*extra_args, "--intent", str(prompt_item.get("intent") or "auto")])
+                attempt = max(1, int(item.get("_attempt") or 1))
+                prompt = self._image_quality_retry_prompt(prompt_item["prompt"], attempt, ["article_semantic_or_media_gate_failed"])
+                provider_result = provider.run(
+                    prompt,
+                    target,
+                    self._image_provider_args(extra_args, prompt_item, attempt=attempt, rotate=True),
+                )
                 provider_result = provider_result if isinstance(provider_result, dict) else {}
                 if item["role"] == "cover":
                     generated_target = target.with_name("cover-background" + target.suffix)
@@ -330,6 +438,14 @@ class MediaBridge:
                     cover_gate = normalize_cover_resolution(target)
                     if not cover_gate.get("passed"):
                         raise RuntimeError("adaptive cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
+                semantic = {}
+                if self.semantic_validation_required:
+                    semantic = self._analyze_image_semantics(target, self._semantic_request(job, prompt_item))
+                    if not semantic.get("passed"):
+                        raise RuntimeError(
+                            "article image semantic validation failed: "
+                            + str(semantic.get("failure") or "semantic_mismatch")
+                        )
                 selected_provider = str(provider_result.get("provider") or type(provider).__name__)
                 generated = selected_provider not in {"pexels", "pixabay", "stock"}
                 return {
@@ -343,8 +459,10 @@ class MediaBridge:
                         "provenance": provider_result.get("provenance") or {},
                     },
                     "license": str(provider_result.get("license") or ("generated_for_project" if generated else "")),
-                    "semantic_match_score": 0.82,
-                    "match_reason": item["section"],
+                    "semantic_match_score": float(semantic.get("semantic_match_score") or 0),
+                    "match_reason": str(semantic.get("caption") or ""),
+                    "semantic_required": self.semantic_validation_required,
+                    "semantic_evidence": semantic,
                 }
 
             package = execute_article_media(
@@ -357,6 +475,7 @@ class MediaBridge:
                 staging_timeout_seconds=float(cfg.get("staging_timeout_seconds", 5)),
                 max_concurrency=int(cfg.get("max_concurrency", 3)),
                 max_attempts=int(cfg.get("max_attempts", 3)),
+                require_semantic_evidence=self.semantic_validation_required,
             )
             images = [
                 {
@@ -384,6 +503,7 @@ class MediaBridge:
             raw_gate = self._run_image_provider_with_quality_recovery(
                 provider,
                 item,
+                job,
                 output,
                 extra_args,
                 output_dir,
@@ -408,6 +528,14 @@ class MediaBridge:
                 cover_gate = normalize_cover_resolution(output, minimum=self._cover_minimum(platforms))
                 if not cover_gate.get("passed"):
                     raise RuntimeError("cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
+                if self.semantic_validation_required:
+                    final_semantic = self._analyze_image_semantics(output, self._semantic_request(job, item))
+                    if not final_semantic.get("passed"):
+                        raise RuntimeError(
+                            "final cover semantic validation failed: "
+                            + str(final_semantic.get("failure") or "semantic_mismatch")
+                        )
+                    raw_gate["semantic_evidence"] = final_semantic
             checksum = hashlib.sha256(output.read_bytes()).hexdigest()
             accepted_checksums.add(checksum)
             if raw_gate.get("checksum"):
@@ -438,6 +566,8 @@ class MediaBridge:
                         "prompt_hash": hashlib.sha256(str(item.get("prompt") or "").encode("utf-8")).hexdigest(),
                         "provenance": provider_result.get("provenance") or {},
                     },
+                    "semantic_evidence": raw_gate.get("semantic_evidence") or {},
+                    "semantic_required": self.semantic_validation_required,
                 }
             )
         section_map = [
@@ -463,6 +593,7 @@ class MediaBridge:
         self,
         provider,
         item,
+        job,
         output,
         extra_args,
         output_dir,
@@ -471,10 +602,16 @@ class MediaBridge:
         recovery,
     ):
         if not recovery["enabled"]:
-            provider_result = provider.run(item["prompt"], output, [*extra_args, "--intent", str(item.get("intent") or "auto")])
+            provider_result = provider.run(item["prompt"], output, self._image_provider_args(extra_args, item, attempt=1))
             if not output.is_file():
                 raise RuntimeError("image provider produced no output file")
-            return {"provider_result": provider_result if isinstance(provider_result, dict) else {}}
+            gate = {"provider_result": provider_result if isinstance(provider_result, dict) else {}}
+            if self.semantic_validation_required:
+                semantic = self._analyze_image_semantics(output, self._semantic_request(job, item))
+                if not semantic.get("passed"):
+                    raise RuntimeError("image semantic validation failed: " + str(semantic.get("failure") or "semantic_mismatch"))
+                gate["semantic_evidence"] = semantic
+            return gate
 
         last_failures = []
         max_attempts = recovery["max_attempts"]
@@ -483,9 +620,21 @@ class MediaBridge:
             try:
                 if output.exists():
                     output.unlink()
-                provider_result = provider.run(prompt, output, [*extra_args, "--intent", str(item.get("intent") or "auto")])
+                provider_result = provider.run(
+                    prompt,
+                    output,
+                    self._image_provider_args(extra_args, item, attempt=attempt, rotate=True),
+                )
                 gate = self._validate_image_quality_candidate(output, accepted_checksums, accepted_hashes)
                 gate["provider_result"] = provider_result if isinstance(provider_result, dict) else {}
+                if gate.get("passed") and self.semantic_validation_required:
+                    semantic = self._analyze_image_semantics(output, self._semantic_request(job, item))
+                    gate["semantic_evidence"] = semantic
+                    if not semantic.get("passed"):
+                        gate["passed"] = False
+                        gate.setdefault("failures", []).append(
+                            str(semantic.get("failure") or "semantic_match_below_threshold")
+                        )
             except Exception as exc:
                 gate = {
                     "passed": False,
@@ -502,9 +651,12 @@ class MediaBridge:
             + ", ".join(last_failures or ["quality_gate_failed"])
         )
 
-    @classmethod
-    def _image_quality_recovery_plan(cls, job, cfg):
-        enabled = cls._is_xiaohongshu_knowledge_image_job(job)
+    def _image_quality_recovery_plan(self, job, cfg):
+        enabled = bool(
+            self.semantic_validation_required
+            or self._is_xiaohongshu_knowledge_image_job(job)
+            or cfg.get("quality_recovery_enabled", False)
+        )
         raw_attempts = cfg.get("quality_recovery_attempts", cfg.get("max_quality_recovery_attempts", 3))
         try:
             max_attempts = int(raw_attempts)
@@ -515,6 +667,72 @@ class MediaBridge:
             "max_attempts": min(5, max(1, max_attempts)),
             "attempts": [],
         }
+
+    @staticmethod
+    def _semantic_request(job, item):
+        platform = next(iter(job.get("platforms") or []), "")
+        expected = []
+        for value in (
+            *(item.get("expected_concepts") or []),
+            job.get("topic"),
+            job.get("title"),
+            item.get("section"),
+            item.get("purpose"),
+        ):
+            text = " ".join(str(value or "").split()).strip()
+            if text and text not in expected:
+                expected.append(text[:160])
+        return {
+            "expected_concepts": expected,
+            "role": str(item.get("role") or "image"),
+            "platform": str(platform),
+        }
+
+    @staticmethod
+    def _image_provider_args(extra_args, item, *, attempt=1, rotate=False):
+        result = []
+        skip_next = False
+        configured_provider = "auto"
+        for index, value in enumerate(extra_args):
+            if skip_next:
+                skip_next = False
+                continue
+            if value == "--provider" and index + 1 < len(extra_args):
+                configured_provider = str(extra_args[index + 1] or "auto")
+                skip_next = True
+                continue
+            if value in {"--size", "--intent"} and index + 1 < len(extra_args):
+                skip_next = True
+                continue
+            result.append(value)
+        chain = MediaBridge._image_provider_attempt_chain(
+            str(item.get("intent") or "auto"),
+            configured_provider,
+        )
+        selected = (
+            chain[min(max(1, int(attempt)) - 1, len(chain) - 1)]
+            if rotate
+            else configured_provider
+        )
+        result.extend(["--provider", selected])
+        result.extend(["--size", str(item.get("size") or "1024x1024")])
+        result.extend(["--intent", str(item.get("intent") or "auto")])
+        return result
+
+    @staticmethod
+    def _image_provider_attempt_chain(intent, configured_provider):
+        configured = str(configured_provider or "auto").casefold().replace("-", "_")
+        by_intent = {
+            "real_scene": ["stock", "sense_nova", "pixazo", "cloudflare", "pollinations"],
+            "cinematic_cover": ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
+            "editorial_illustration": ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
+            "knowledge_card_background": ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
+            "image_edit": ["sense_nova", "gemini", "openai"],
+        }
+        defaults = by_intent.get(str(intent or "auto"), ["auto", "sense_nova", "pixazo", "cloudflare", "pollinations"])
+        if configured == "auto":
+            return defaults
+        return [configured, *[name for name in defaults if name != configured]]
 
     @staticmethod
     def _is_xiaohongshu_knowledge_image_job(job):
@@ -627,6 +845,7 @@ class MediaBridge:
                 "complexity": gate.get("complexity"),
                 "color_count": gate.get("color_count"),
                 "error": gate.get("error", ""),
+                "semantic_evidence": gate.get("semantic_evidence") or {},
             }
         )
 
@@ -669,14 +888,17 @@ class MediaBridge:
             license_name = str(image.get("license") or "").strip()
             generation_evidence = image.get("generation_evidence") if isinstance(image.get("generation_evidence"), dict) else {}
             derivative = generation_evidence.get("provenance") if isinstance(generation_evidence.get("provenance"), dict) else {}
+            semantic = image.get("semantic_evidence") if isinstance(image.get("semantic_evidence"), dict) else {}
             records.append({
                 "scene_id": section or f"asset_{index + 1}",
                 "path": str(image.get("path") or ""),
                 "source_url": source_url or f"generated:{provider_name}",
                 "license": license_name or "generated_for_project",
-                "semantic_match_score": 0.82,
-                "match_reason": purpose,
-                "semantic_tags": [value for value in [str(job.get("topic") or job.get("title") or ""), section] if value],
+                "semantic_match_score": float(semantic.get("semantic_match_score") or 0),
+                "match_reason": str(semantic.get("caption") or semantic.get("failure") or ""),
+                "semantic_tags": list(semantic.get("labels") or semantic.get("matched_concepts") or []),
+                "semantic_evidence": semantic,
+                "semantic_required": bool(image.get("semantic_required") or semantic),
                 "generation_evidence": {
                     **generation_evidence,
                     "provider": str(generation_evidence.get("provider") or provider_name),
@@ -767,6 +989,7 @@ class MediaBridge:
     @classmethod
     def _image_prompts(cls, job, minimum):
         platforms = {str(item).casefold() for item in job.get("platforms") or []}
+        platform = str(next(iter(job.get("platforms") or []), "")).casefold()
         prompts = [
             {
                 "role": "cover",
@@ -776,6 +999,15 @@ class MediaBridge:
                 "intent": "cinematic_cover",
             }
         ]
+        if platform:
+            route = route_image_request(
+                platform=platform,
+                role="cover",
+                topic=str(job.get("topic") or job.get("title") or "content cover"),
+                section="cover",
+            )
+            prompts[0].update(route)
+            prompts[0]["size"] = "x".join(str(value) for value in route["dimensions"])
         if minimum <= 1:
             return prompts
         sections = cls._article_sections(job)
@@ -788,13 +1020,23 @@ class MediaBridge:
                 "professional editorial illustration style, soft natural lighting, balanced composition, "
                 "clear foreground subject and background context, no logo, no watermark, minimal readable text."
             )
-            prompts.append({
+            row = {
                 "role": "section",
                 "section": section,
                 "purpose": purpose,
                 "prompt": prompt,
                 "intent": "real_scene" if platforms.intersection({"xiaohongshu", "rednote"}) else "editorial_illustration",
-            })
+            }
+            if platform:
+                route = route_image_request(
+                    platform=platform,
+                    role="video_scene" if job.get("_video_asset_generation") else "section",
+                    topic=str(job.get("topic") or job.get("title") or "content"),
+                    section=section,
+                )
+                row.update(route)
+                row["size"] = "x".join(str(value) for value in route["dimensions"])
+            prompts.append(row)
         return prompts
 
     @classmethod

@@ -51,7 +51,7 @@ class ToolRegistry:
                 "kind": "transcription",
             },
             "analysis_script": {
-                "available": self._exists(self.config.get("analysis", {}).get("script", "")),
+                "available": self._exists(self._analysis_config().get("script", "")),
                 "kind": "multimodal_analysis",
             },
             "open_notebook": self._probe_open_notebook(),
@@ -211,9 +211,21 @@ class ToolRegistry:
             "video": (self.config.get("media", {}).get("video", {}), ScriptVideoProvider),
             "ocr": (self.config.get("ocr", {}), ScriptOCRProvider),
             "transcription": (self.config.get("transcription", {}), ScriptTranscriberProvider),
-            "analysis": (self.config.get("analysis", {}), ScriptAnalyzerProvider),
+            "analysis": (self._analysis_config(), ScriptAnalyzerProvider),
         }
         cfg, provider_type = mapping.get(kind, ({}, None))
+        if kind == "analysis" and cfg.get("script") and not self._exists(cfg.get("script")):
+            return None
         if provider_type and cfg.get("script"):
             return provider_type(cfg.get("script", ""), cfg.get("timeout", 120))
         return None
+
+    def _analysis_config(self):
+        configured = dict(self.config.get("analysis", {}) or {})
+        if configured.get("script"):
+            return configured
+        bundled = project_home() / "scripts" / "image_semantic_analyze.py"
+        if bundled.is_file():
+            configured["script"] = str(bundled)
+            configured.setdefault("timeout", 180)
+        return configured

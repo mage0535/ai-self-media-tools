@@ -88,6 +88,10 @@ def main() -> int:
     )
     parser.add_argument("--skip-preflight", action="store_true")
     parser.add_argument("--skip-visual-gate", action="store_true")
+    parser.add_argument("--semantic-required", action="store_true")
+    parser.add_argument("--expected-concept", action="append", default=[])
+    parser.add_argument("--role", default="image")
+    parser.add_argument("--platform", default="")
     # Retained for old MediaBridge callers. The provider now decides the method.
     parser.add_argument("--method", default="")
     args = parser.parse_args()
@@ -114,6 +118,24 @@ def main() -> int:
         )
         if not args.skip_visual_gate:
             _run_optional_gate([sys.executable, str(ROOT / "scripts" / "visual_gate.py"), "--image", str(output)], timeout=30)
+        if args.semantic_required:
+            from scripts.image_semantic_analyze import analyze_image
+
+            expected = list(dict.fromkeys([value.strip() for value in args.expected_concept if value.strip()]))
+            if not expected:
+                expected = [prompt]
+            semantic = analyze_image(
+                output,
+                expected,
+                role=args.role,
+                platform=args.platform,
+            )
+            if semantic.get("passed") is not True:
+                raise RuntimeError(
+                    "image semantic validation failed: score="
+                    + str(semantic.get("semantic_match_score"))
+                )
+            result["semantic_evidence"] = semantic
         checksum = hashlib.sha256(output.read_bytes()).hexdigest()
         result.update({"ok": True, "checksum": checksum})
         print(json.dumps(result, ensure_ascii=False))

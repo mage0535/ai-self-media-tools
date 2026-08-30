@@ -144,6 +144,7 @@ def auto_fetch_backgrounds(
     *,
     force: bool = False,
     excluded_hashes: set[str] | None = None,
+    semantic_required: bool = False,
 ) -> list[dict]:
     """自动下载 8 张背景图（Pexels 实景优先，AI 生图兜底），返回 visual_assets assignments"""
     output_dir = Path(output_dir)
@@ -152,7 +153,7 @@ def auto_fetch_backgrounds(
 
     # 检查是否已有足够背景
     existing = sorted(bg_dir.glob("bg_*.*"))
-    if len(existing) >= 8 and not force:
+    if len(existing) >= 8 and not force and not semantic_required:
         # 已有 8 张，返回现有
         return [{"background_image": str(p), "rights_cleared": True, "real_scene": True} for p in existing[:8]]
 
@@ -186,11 +187,17 @@ def auto_fetch_backgrounds(
             i = len(base_existing) + len(assignments) + 1
             fp = bg_dir / f"bg_{i:02d}.jpg"
             fp.write_bytes(bytes(content))
+            semantic = _semantic_evidence(fp, [q, title], platform) if semantic_required else {}
+            if semantic_required and not semantic.get("passed"):
+                fp.unlink(missing_ok=True)
+                continue
             assignments.append({
                 "background_image": str(fp), "rights_cleared": True, "real_scene": True, "source_query": q,
                 "source_url": photo["source_url"], "license": "Pexels Content License",
-                "semantic_match_score": 0.8, "match_reason": f"Pexels portrait search matched: {q}",
-                "semantic_tags": [q, "photo", "portrait"],
+                "semantic_match_score": float(semantic.get("semantic_match_score") or (0.8 if not semantic_required else 0)),
+                "match_reason": str(semantic.get("caption") or f"Pexels portrait search matched: {q}"),
+                "semantic_tags": list(semantic.get("labels") or [q, "photo", "portrait"]),
+                "semantic_required": semantic_required, "semantic_evidence": semantic,
                 "generation_evidence": {}, "artist": photo["artist"], "artist_url": photo["artist_url"],
                 "asset_id": photo["asset_id"],
             })
@@ -206,24 +213,41 @@ def auto_fetch_backgrounds(
                 attempts += 1
                 i = len(base_existing) + len(assignments) + 1
                 query = queries[(i - 1) % len(queries)]
-                prompt = _ai_prompt(query, platform) + f", distinct scene {i}, composition variant {i}"
+                prompt = _ai_prompt(query, platform) + f", distinct scene {i}, composition variant {i}, candidate attempt {attempts}"
                 fp = bg_dir / f"bg_{i:02d}.jpg"
                 try:
-                    generate_image(prompt, fp, provider="pollinations", size="1080x1920")
+                    generated = generate_image(
+                        prompt,
+                        fp,
+                        provider="auto",
+                        size="1080x1920",
+                        intent="real_scene",
+                    )
                     if fp.is_file() and fp.stat().st_size > 5000:
                         image_hash = hashlib.sha256(fp.read_bytes()).hexdigest()
                         if image_hash in seen_hashes:
+                            fp.unlink(missing_ok=True)
+                            continue
+                        semantic = _semantic_evidence(fp, [query, title], platform) if semantic_required else {}
+                        if semantic_required and not semantic.get("passed"):
                             fp.unlink(missing_ok=True)
                             continue
                         seen_hashes.add(image_hash)
                         assignments.append({
                             "background_image": str(fp), "rights_cleared": True, "real_scene": False,
                             "source_query": query, "ai_generated": True,
-                            "source_url": "generated:pollinations", "license": "generated_for_project",
-                            "semantic_match_score": 0.8,
-                            "match_reason": f"generated image matched: {query}",
-                            "semantic_tags": [query, "generated", "vertical"],
-                            "generation_evidence": {"provider": "pollinations", "prompt": prompt},
+                            "source_url": str(generated.get("source_url") or f"generated:{generated.get('provider') or 'auto'}"),
+                            "license": str(generated.get("license") or "generated_for_project"),
+                            "semantic_match_score": float(semantic.get("semantic_match_score") or (0.8 if not semantic_required else 0)),
+                            "match_reason": str(semantic.get("caption") or f"generated image matched: {query}"),
+                            "semantic_tags": list(semantic.get("labels") or [query, "generated", "vertical"]),
+                            "semantic_required": semantic_required, "semantic_evidence": semantic,
+                            "generation_evidence": {
+                                "provider": str(generated.get("provider") or "auto"),
+                                "model": str(generated.get("model") or ""),
+                                "prompt": prompt,
+                                "provenance": dict(generated.get("provenance") or {}),
+                            },
                         })
                 except Exception:
                     break
@@ -234,6 +258,23 @@ def auto_fetch_backgrounds(
     if not assignments:
         return []
     return assignments
+
+
+def _semantic_evidence(path: Path, expected: list[str], platform: str) -> dict:
+    try:
+        from scripts.image_semantic_analyze import analyze_image
+    except ImportError:
+        from image_semantic_analyze import analyze_image
+    try:
+        return analyze_image(path, [item for item in expected if str(item).strip()], role="video_scene", platform=platform)
+    except Exception as exc:
+        return {
+            "version": "image_semantic_evidence_v1",
+            "passed": False,
+            "failure": "semantic_analyzer_failed",
+            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+            "semantic_match_score": 0.0,
+        }
 
 
 def _ai_prompt(query: str, platform: str = "") -> str:

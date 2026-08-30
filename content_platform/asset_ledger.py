@@ -142,6 +142,35 @@ def validate_asset_set(
             failures.append("semantic_match_below_threshold")
         if not str(record.get("match_reason") or "").strip() or not record.get("semantic_tags"):
             failures.append("semantic_match_evidence_missing")
+        semantic = record.get("semantic_evidence") if isinstance(record.get("semantic_evidence"), dict) else {}
+        required_semantic_fields = {
+            "version",
+            "analyzer",
+            "caption",
+            "labels",
+            "expected_concepts",
+            "matched_concepts",
+            "semantic_match_score",
+            "threshold",
+            "passed",
+            "image_sha256",
+            "score_source",
+            "evidence_level",
+        }
+        require_verified_semantics = record.get("semantic_required") is True or bool(semantic)
+        if require_verified_semantics and not required_semantic_fields.issubset(semantic):
+            failures.append("verified_semantic_evidence_missing")
+        elif require_verified_semantics:
+            actual_sha256 = _sha256(path)
+            if (
+                semantic.get("version") != "image_semantic_evidence_v1"
+                or semantic.get("score_source") != "deterministic_caption_label_recall"
+                or semantic.get("evidence_level") != "artifact_verified"
+                or semantic.get("passed") is not True
+                or str(semantic.get("image_sha256") or "") != actual_sha256
+                or abs(float(semantic.get("semantic_match_score") or 0) - float(record.get("semantic_match_score") or 0)) > 1e-6
+            ):
+                failures.append("verified_semantic_evidence_invalid")
         try:
             normalized.append({
                 **record,

@@ -81,8 +81,9 @@
     "timeout": 300
   },
   "analysis": {
-    "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/multimodal_analyze.py",
-    "timeout": 180
+    "script": "{{CONTENT_PLATFORM_HOME}}/scripts/image_semantic_analyze.py",
+    "timeout": 180,
+    "required": true
   },
   "seo": {
     "openserp_host": "{{OPENSERP_HOST}}",

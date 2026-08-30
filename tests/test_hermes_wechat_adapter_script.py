@@ -13,14 +13,20 @@ def _today_run_date() -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
-def test_generated_image_helpers_accept_image_gen_engine_output_key(tmp_path, monkeypatch):
-    class FakeImageGen:
-        @staticmethod
-        def generate(prompt, platform=None, output_path=""):
-            Path(output_path).write_bytes(b"image")
-            return {"status": "ok", "output": output_path, "provider": "fake"}
+def test_generated_image_helpers_use_unified_semantic_image_cli(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    (project / "scripts").mkdir(parents=True)
+    (project / "scripts" / "image_gen.py").write_text("# fixture", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(project))
+    commands = []
 
-    monkeypatch.setitem(sys.modules, "image_gen_engine", FakeImageGen)
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        output = Path(command[command.index("--output") + 1])
+        output.write_bytes(b"image")
+        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
     packet = {
         "title": "Adapter image generation",
         "cover_design": {"visual_subject": "workflow checklist"},
@@ -34,6 +40,8 @@ def test_generated_image_helpers_accept_image_gen_engine_output_key(tmp_path, mo
     assert inline == tmp_path / "inline_1.jpg"
     assert cover.is_file()
     assert inline.is_file()
+    assert all("--semantic-required" in command for command in commands)
+    assert [command[command.index("--role") + 1] for command in commands] == ["cover", "section"]
 
 
 def test_generated_image_path_keeps_legacy_path_key(tmp_path):
