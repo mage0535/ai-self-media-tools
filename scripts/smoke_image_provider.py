@@ -31,15 +31,23 @@ def _provider_config_status(provider: str) -> str:
         return "configured" if load_secret("PEXELS_API_KEY") else "missing_config"
     if provider == "pixabay":
         return "configured" if load_secret("PIXABAY_API_KEY") else "missing_config"
+    if provider in {"sense_nova", "sensenova"}:
+        return "configured" if (load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")) else "missing_config"
+    if provider == "pixazo":
+        return "configured" if load_secret("PIXAZO_API_KEY") else "missing_config"
+    if provider == "stock":
+        return "configured" if (load_secret("PEXELS_API_KEY") or load_secret("PIXABAY_API_KEY")) else "missing_config"
     return "unknown_provider"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test image provider chain")
-    parser.add_argument("--providers", default="pollinations,cloudflare,auto")
+    parser.add_argument("--providers", default="stock,sense_nova,pixazo,cloudflare,pollinations,auto")
     parser.add_argument("--output-dir", default="/tmp/image-provider-smoke")
     parser.add_argument("--size", default="768x768")
     parser.add_argument("--prompt", default="clean editorial illustration of automated content production, no text")
+    parser.add_argument("--intent", default="editorial_illustration")
+    parser.add_argument("--require-all", action="store_true")
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -56,7 +64,7 @@ def main() -> int:
         output = output_dir / f"{provider.replace(',', '_')}.png"
         start = time.time()
         try:
-            result = generate_image(args.prompt, output, provider=provider, size=args.size)
+            result = generate_image(args.prompt, output, provider=provider, size=args.size, intent=args.intent)
             item.update(
                 {
                     "ok": True,
@@ -71,7 +79,9 @@ def main() -> int:
         except (ImageProviderError, OSError) as exc:
             item.update({"ok": False, "reason": type(exc).__name__, "message": str(exc)[:220]})
         results.append(item)
-    report = {"ok": any(item.get("ok") for item in results), "results": results}
+    any_passed = any(item.get("ok") for item in results)
+    all_passed = bool(results) and all(item.get("ok") for item in results)
+    report = {"ok": all_passed if args.require_all else any_passed, "all_requested_passed": all_passed, "results": results}
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["ok"] else 1
 

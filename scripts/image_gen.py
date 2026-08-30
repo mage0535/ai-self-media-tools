@@ -75,12 +75,17 @@ def main() -> int:
     parser.add_argument("--output", default="/tmp/ai-self-media-image.png")
     parser.add_argument(
         "--provider",
-        choices=["auto", "openai", "gemini", "stock", "pexels", "pixabay", "pollinations", "cloudflare"],
+        choices=["auto", "openai", "gemini", "stock", "pexels", "pixabay", "sense_nova", "sensenova", "pixazo", "pollinations", "cloudflare"],
         default="auto",
     )
     parser.add_argument("--model", default="")
     parser.add_argument("--size", default="1024x1024")
     parser.add_argument("--quality", default="low")
+    parser.add_argument(
+        "--intent",
+        choices=["auto", "real_scene", "cinematic_cover", "editorial_illustration", "knowledge_card_background", "image_edit", "fast_fallback"],
+        default="auto",
+    )
     parser.add_argument("--skip-preflight", action="store_true")
     parser.add_argument("--skip-visual-gate", action="store_true")
     # Retained for old MediaBridge callers. The provider now decides the method.
@@ -105,6 +110,7 @@ def main() -> int:
             size=args.size,
             quality=args.quality,
             input_image=args.input_image,
+            intent=args.intent,
         )
         if not args.skip_visual_gate:
             _run_optional_gate([sys.executable, str(ROOT / "scripts" / "visual_gate.py"), "--image", str(output)], timeout=30)

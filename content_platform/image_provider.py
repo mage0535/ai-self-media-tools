@@ -68,6 +68,7 @@ def generate_image(
     size: str = "1024x1024",
     quality: str = "low",
     input_image: str | Path | None = None,
+    intent: str = "auto",
 ) -> dict:
     """Generate or edit an image and return a structured artifact record."""
     prompt = str(prompt or "").strip()
@@ -75,13 +76,21 @@ def generate_image(
         raise ImageProviderError("image prompt is empty")
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    provider = _normalize_provider_name(provider)
 
-    providers = _provider_chain(provider)
+    normalized_intent = _normalize_image_intent(intent, prompt, input_image)
+    providers = _provider_chain(provider, intent=normalized_intent, input_image=input_image)
     errors: list[str] = []
     for name in providers:
-        cached = _read_cache(prompt, output_path, name, model=model, size=size, input_image=input_image)
+        cached = _read_cache(prompt, output_path, name, model=model, size=size, input_image=input_image, intent=normalized_intent)
         if cached:
-            return cached
+            return _finalize_image_result(
+                cached,
+                prompt=prompt,
+                input_image=input_image,
+                intent=normalized_intent,
+                route="content_aware_auto" if provider == "auto" else "explicit_provider",
+            )
         try:
             if name == "openai":
                 result = _openai_image(prompt, output_path, model=model, size=size, quality=quality, input_image=input_image)
@@ -97,11 +106,25 @@ def generate_image(
                 result = _pollinations_image(prompt, output_path, model=model, size=size, input_image=input_image)
             elif name == "cloudflare":
                 result = _cloudflare_image(prompt, output_path, model=model, size=size, input_image=input_image)
+            elif name == "sense_nova":
+                result = _sensenova_image(prompt, output_path, model=model, size=size, input_image=input_image)
+            elif name == "pixazo":
+                result = _pixazo_image(prompt, output_path, model=model, size=size, input_image=input_image)
             else:
                 raise ImageProviderError(f"unsupported image provider: {name}")
             result["path"] = str(output_path)
             result["bytes"] = output_path.stat().st_size
-            _write_cache(prompt, output_path, name, result, model=model, size=size, input_image=input_image)
+            result["intent"] = normalized_intent
+            if provider == "auto" and name in {"stock", "pexels", "pixabay"} and _needs_ai_retouch(prompt, normalized_intent):
+                result = _retouch_stock_image(prompt, output_path, result, size=size)
+            result = _finalize_image_result(
+                result,
+                prompt=prompt,
+                input_image=input_image,
+                intent=normalized_intent,
+                route="content_aware_auto" if provider == "auto" else "explicit_provider",
+            )
+            _write_cache(prompt, output_path, name, result, model=model, size=size, input_image=input_image, intent=normalized_intent)
             return result
         except Exception as exc:
             errors.append(f"{name}: {type(exc).__name__}: {str(exc)[:180]}")
@@ -519,6 +542,236 @@ def _stock_query(prompt: str) -> str:
     return "technology workspace"
 
 
+def _sensenova_image(
+    prompt: str,
+    output: Path,
+    model: str = "",
+    size: str = "1024x1024",
+    input_image: str | Path | None = None,
+) -> dict:
+    key = load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")
+    if not key:
+        raise ImageProviderError("SN_API_KEY is not configured")
+    base_url = (load_secret("SN_BASE_URL") or "https://token.sensenova.cn/v1").rstrip("/")
+    models = [item.strip() for item in (model or os.environ.get("SN_IMAGE_MODEL") or "sensenova-u1.5-lite,sensenova-u1-fast").split(",") if item.strip()]
+    last_error: Exception | None = None
+    for model_name in models:
+        payload = {
+            "model": model_name,
+            "prompt": prompt[:4000],
+            "size": _sensenova_size(size),
+            "n": 1,
+        }
+        if input_image:
+            source = Path(input_image)
+            if not source.is_file():
+                raise ImageProviderError("SenseNova input image is missing")
+            payload["image"] = base64.b64encode(source.read_bytes()).decode("ascii")
+        request = urllib.request.Request(
+            f"{base_url}/images/generations",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"},
+            method="POST",
+        )
+        try:
+            with _urlopen_retry(request, timeout=240, attempts=2) as response:
+                body = json.loads(response.read().decode("utf-8"))
+            rows = body.get("data") or []
+            if not rows:
+                raise ImageProviderError("SenseNova response contained no image data")
+            url = str(rows[0].get("url") or "")
+            encoded = str(rows[0].get("b64_json") or "")
+            if url:
+                _download_image(url, output)
+            elif encoded:
+                output.write_bytes(base64.b64decode(encoded))
+            else:
+                raise ImageProviderError("SenseNova response had no url or b64_json")
+            return {
+                "provider": "sense_nova",
+                "model": model_name,
+                "mode": "edit" if input_image else "generate",
+                "source_url": "generated:sense_nova",
+                "license": "generated_for_project",
+            }
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")[:180]
+            last_error = ImageProviderError(f"SenseNova {model_name} failed: HTTP {exc.code} {detail}")
+        except (ImageProviderError, OSError, ValueError) as exc:
+            last_error = exc
+    raise ImageProviderError(f"SenseNova image generation failed: {str(last_error or 'unknown')[:180]}")
+
+
+def _sensenova_size(size: str) -> str:
+    width, height = _parse_size(size)
+    ratio = width / max(1, height)
+    if ratio >= 1.45:
+        return "2752x1536"
+    if ratio <= 0.69:
+        return "1536x2752"
+    if ratio >= 1.15:
+        return "2496x1664"
+    if ratio <= 0.87:
+        return "1664x2496"
+    return "2048x2048"
+
+
+def _pixazo_image(
+    prompt: str,
+    output: Path,
+    model: str = "",
+    size: str = "1024x1024",
+    input_image: str | Path | None = None,
+) -> dict:
+    if input_image:
+        raise ImageProviderError("Pixazo provider does not support image editing")
+    key = load_secret("PIXAZO_API_KEY")
+    if not key:
+        raise ImageProviderError("PIXAZO_API_KEY is not configured")
+    request = urllib.request.Request(
+        "https://gateway.pixazo.ai/getImage/v1/getSDXLImage",
+        data=json.dumps({"prompt": prompt}).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": key, "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"},
+        method="POST",
+    )
+    try:
+        with _urlopen_retry(request, timeout=60, attempts=2) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")[:180]
+        raise ImageProviderError(f"Pixazo image call failed: HTTP {exc.code} {detail}") from exc
+    url = str(body.get("imageUrl") or body.get("image_url") or "")
+    if not url:
+        raise ImageProviderError("Pixazo response missing imageUrl")
+    _download_image(url, output)
+    return {
+        "provider": "pixazo",
+        "model": model or "sdxl",
+        "mode": "generate",
+        "source_url": "generated:pixazo",
+        "license": "generated_for_project",
+    }
+
+
+def _normalize_image_intent(intent: str, prompt: str, input_image: str | Path | None) -> str:
+    normalized = str(intent or "auto").casefold().strip().replace("-", "_")
+    if input_image:
+        return "image_edit"
+    if normalized not in {"", "auto"}:
+        return normalized
+    lower = str(prompt or "").casefold()
+    if any(token in lower for token in ("cinematic advertising key art", "movie poster", "电影海报", "广告大片")):
+        return "cinematic_cover"
+    if any(token in lower for token in ("knowledge card", "知识卡", "infographic", "diagram")):
+        return "knowledge_card_background"
+    if any(token in lower for token in ("real scene", "real-scene", "documentary photo", "真实场景", "实景")):
+        return "real_scene"
+    if any(token in lower for token in ("illustration", "插画", "visual metaphor")):
+        return "editorial_illustration"
+    return "real_scene"
+
+
+def _needs_ai_retouch(prompt: str, intent: str) -> bool:
+    flag = os.environ.get("IMAGE_PROVIDER_AUTO_EDIT", "auto").casefold().strip()
+    if flag in {"0", "false", "off", "disable"}:
+        return False
+    if flag in {"1", "true", "on", "force"}:
+        return True
+    if intent == "image_edit":
+        return True
+    lower = str(prompt or "").casefold()
+    verbs = ("修图", "去水印", "换背景", "擦除", "移除人物", "retouch", "inpaint", "remove watermark", "replace background")
+    return any(token in lower for token in verbs)
+
+
+def _retouch_stock_image(prompt: str, output: Path, original: dict, *, size: str) -> dict:
+    evidence_dir = Path(os.environ.get("IMAGE_PROVIDER_ORIGINAL_DIR") or output.parent / "image_edit_evidence")
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    original_copy = evidence_dir / output.name
+    shutil.copy2(output, original_copy)
+    failures: list[str] = []
+    edit_prompt = f"Retouch the supplied image to match this content: {prompt[:1200]}. Preserve the main subject and remove unwanted text or visual clutter."
+    for name in _provider_chain("auto", intent="image_edit", input_image=original_copy):
+        temporary = output.with_name(output.name + ".tmp")
+        try:
+            if name == "sense_nova":
+                edited = _sensenova_image(edit_prompt, temporary, size=size, input_image=original_copy)
+            elif name == "gemini":
+                edited = _gemini_image(edit_prompt, temporary, size=size, input_image=original_copy)
+            elif name == "openai":
+                edited = _openai_image(edit_prompt, temporary, size=size, input_image=original_copy)
+            else:
+                continue
+            _verify_image_file(temporary)
+            temporary.replace(output)
+            return {
+                **edited,
+                "path": str(output),
+                "bytes": output.stat().st_size,
+                "edited": True,
+                "edit_provider": name,
+                "edit_reason": "explicit_retouch_intent",
+                "original_provider": original.get("provider", ""),
+                "original_source_url": original.get("source_url", ""),
+                "original_license": original.get("license", ""),
+                "original_evidence_path": str(original_copy),
+            }
+        except Exception as exc:
+            failures.append(f"{name}:{type(exc).__name__}")
+            temporary.unlink(missing_ok=True)
+    return {
+        **original,
+        "edited": False,
+        "edit_attempted": True,
+        "edit_status": "fallback_kept_stock",
+        "edit_error_provider": failures[-1].split(":", 1)[0] if failures else "",
+        "edit_failures": failures,
+        "original_evidence_path": str(original_copy),
+    }
+
+
+def _verify_image_file(path: Path) -> None:
+    try:
+        from PIL import Image, UnidentifiedImageError
+        with Image.open(path) as image:
+            image.load()
+            if min(image.size) < 256:
+                raise ImageProviderError("edited image resolution is too low")
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise ImageProviderError(f"edited image failed decoding: {exc}") from exc
+
+
+def _normalize_provider_name(provider: str) -> str:
+    normalized = str(provider or "auto").casefold().strip().replace("-", "_")
+    return "sense_nova" if normalized == "sensenova" else normalized
+
+
+def _finalize_image_result(result: dict, *, prompt: str, input_image: str | Path | None, intent: str, route: str) -> dict:
+    payload = dict(result or {})
+    payload["provider"] = _normalize_provider_name(payload.get("provider") or "")
+    input_hash = ""
+    if input_image:
+        try:
+            input_hash = hashlib.sha256(Path(input_image).read_bytes()).hexdigest()
+        except OSError:
+            input_hash = ""
+    payload["provenance"] = {
+        "provider": str(payload.get("provider") or ""),
+        "model": str(payload.get("model") or ""),
+        "mode": str(payload.get("mode") or ""),
+        "route": route,
+        "selected_for": intent,
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+        "input_image_sha256": input_hash,
+        "source_url": str(payload.get("source_url") or ""),
+        "license": str(payload.get("license") or ""),
+        "original_provider": str(payload.get("original_provider") or ""),
+        "original_source_url": str(payload.get("original_source_url") or ""),
+        "original_path": str(payload.get("original_evidence_path") or ""),
+    }
+    return payload
+
+
 def _pollinations_image(
     prompt: str,
     output: Path,
@@ -627,16 +880,25 @@ def _parse_size(size: str) -> tuple[int, int]:
     return (width, height)
 
 
-def _provider_chain(provider: str) -> list[str]:
+def _provider_chain(provider: str, *, intent: str = "auto", input_image: str | Path | None = None) -> list[str]:
     if provider != "auto":
         return [provider]
     configured = os.environ.get("IMAGE_PROVIDER_CHAIN", "").strip()
     if configured:
-        return [p.strip() for p in configured.split(",") if p.strip()]
-    chain = ["stock", "pollinations", "cloudflare"]
+        chain = [_normalize_provider_name(p) for p in configured.split(",") if p.strip()]
+    elif input_image or intent == "image_edit":
+        chain = ["sense_nova"]
+    elif intent in {"cinematic_cover", "editorial_illustration", "knowledge_card_background"}:
+        chain = ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"]
+    elif intent == "fast_fallback":
+        chain = ["cloudflare", "pixazo", "pollinations", "stock"]
+    else:
+        chain = ["stock", "sense_nova", "pixazo", "cloudflare", "pollinations"]
     if os.environ.get("IMAGE_PROVIDER_ALLOW_PAID") == "1":
         chain.extend(["openai", "gemini"])
-    return chain
+    if input_image or intent == "image_edit":
+        chain = [name for name in chain if name in {"sense_nova", "gemini", "openai"}]
+    return list(dict.fromkeys(chain))
 
 
 def _cache_dir() -> Path:
@@ -646,7 +908,7 @@ def _cache_dir() -> Path:
     return path
 
 
-def _cache_key(prompt: str, provider: str, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None) -> str:
+def _cache_key(prompt: str, provider: str, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None, intent: str = "auto") -> str:
     h = hashlib.sha256()
     h.update(provider.encode("utf-8"))
     h.update(b"\0")
@@ -655,6 +917,8 @@ def _cache_key(prompt: str, provider: str, model: str = "", size: str = "1024x10
     h.update(size.encode("utf-8"))
     h.update(b"\0")
     h.update(prompt.encode("utf-8"))
+    h.update(b"\0")
+    h.update(str(intent or "auto").encode("utf-8"))
     if input_image:
         source = Path(input_image)
         h.update(b"\0")
@@ -666,10 +930,10 @@ def _cache_key(prompt: str, provider: str, model: str = "", size: str = "1024x10
     return h.hexdigest()
 
 
-def _read_cache(prompt: str, output: Path, provider: str, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None) -> dict | None:
+def _read_cache(prompt: str, output: Path, provider: str, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None, intent: str = "auto") -> dict | None:
     if os.environ.get("IMAGE_PROVIDER_DISABLE_CACHE") == "1":
         return None
-    key = _cache_key(prompt, provider, model=model, size=size, input_image=input_image)
+    key = _cache_key(prompt, provider, model=model, size=size, input_image=input_image, intent=intent)
     image = _cache_dir() / f"{key}.img"
     meta = _cache_dir() / f"{key}.json"
     if not image.is_file() or image.stat().st_size < 2048 or not meta.is_file():
@@ -683,12 +947,12 @@ def _read_cache(prompt: str, output: Path, provider: str, model: str = "", size:
         return None
 
 
-def _write_cache(prompt: str, output: Path, provider: str, result: dict, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None) -> None:
+def _write_cache(prompt: str, output: Path, provider: str, result: dict, model: str = "", size: str = "1024x1024", input_image: str | Path | None = None, intent: str = "auto") -> None:
     if os.environ.get("IMAGE_PROVIDER_DISABLE_CACHE") == "1":
         return
     if not output.is_file() or output.stat().st_size < 2048:
         return
-    key = _cache_key(prompt, provider, model=model, size=size, input_image=input_image)
+    key = _cache_key(prompt, provider, model=model, size=size, input_image=input_image, intent=intent)
     image = _cache_dir() / f"{key}.img"
     meta = _cache_dir() / f"{key}.json"
     cache_result = {k: v for k, v in result.items() if k not in {"path"}}

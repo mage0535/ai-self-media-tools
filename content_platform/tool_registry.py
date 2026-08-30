@@ -56,6 +56,7 @@ class ToolRegistry:
             },
             "open_notebook": self._probe_open_notebook(),
             "tts_engines": self._probe_tts(),
+            "image_providers": self._probe_image_providers(),
             "autocli": self._probe_autocli(),
             "browser_ext": self._probe_browser_ext(),
             "khazix_skills": self._probe_skill_dir("khazix-skills"),
@@ -162,6 +163,47 @@ class ToolRegistry:
             "kind": "cloud_tts",
         }
         return engines
+
+    def _probe_image_providers(self):
+        from .image_provider import load_secret
+
+        providers = {
+            "stock": {
+                "available": bool(load_secret("PEXELS_API_KEY") or load_secret("PIXABAY_API_KEY")),
+                "supports_generate": True,
+                "supports_edit": False,
+                "kind": "real_scene_search",
+            },
+            "sense_nova": {
+                "available": bool(load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")),
+                "supports_generate": True,
+                "supports_edit": True,
+                "kind": "generated_image_and_edit",
+            },
+            "pixazo": {
+                "available": bool(load_secret("PIXAZO_API_KEY")),
+                "supports_generate": True,
+                "supports_edit": False,
+                "kind": "generated_image",
+            },
+            "cloudflare": {
+                "available": bool(
+                    load_secret("CF_WORKER_URL")
+                    or load_secret("CLOUDFLARE_IMAGE_WORKER_URL")
+                    or (load_secret("CLOUDFLARE_ACCOUNT_ID") and (load_secret("CLOUDFLARE_API_TOKEN") or load_secret("CF_WORKER_KEY")))
+                ),
+                "supports_generate": True,
+                "supports_edit": False,
+                "kind": "fast_generated_image",
+            },
+            "pollinations": {
+                "available": True,
+                "supports_generate": True,
+                "supports_edit": False,
+                "kind": "public_generated_image_fallback",
+            },
+        }
+        return {"available": any(item["available"] for item in providers.values()), "kind": "image_provider_registry", "providers": providers}
 
     def choose_provider(self, kind):
         mapping = {

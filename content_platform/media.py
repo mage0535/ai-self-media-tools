@@ -312,8 +312,9 @@ class MediaBridge:
             staging_url = str(cfg.get("public_staging_base_url") or self.config.get("public_staging_base_url") or "").strip()
 
             def generate_article_asset(item, target):
-                prompt = next(row["prompt"] for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
-                provider.run(prompt, target, extra_args)
+                prompt_item = next(row for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
+                prompt = prompt_item["prompt"]
+                provider.run(prompt, target, [*extra_args, "--intent", str(prompt_item.get("intent") or "auto")])
                 if item["role"] == "cover":
                     generated_target = target.with_name("cover-background" + target.suffix)
                     target.replace(generated_target)
@@ -462,7 +463,7 @@ class MediaBridge:
         recovery,
     ):
         if not recovery["enabled"]:
-            provider_result = provider.run(item["prompt"], output, extra_args)
+            provider_result = provider.run(item["prompt"], output, [*extra_args, "--intent", str(item.get("intent") or "auto")])
             if not output.is_file():
                 raise RuntimeError("image provider produced no output file")
             return {"provider_result": provider_result if isinstance(provider_result, dict) else {}}
@@ -474,7 +475,7 @@ class MediaBridge:
             try:
                 if output.exists():
                     output.unlink()
-                provider_result = provider.run(prompt, output, extra_args)
+                provider_result = provider.run(prompt, output, [*extra_args, "--intent", str(item.get("intent") or "auto")])
                 gate = self._validate_image_quality_candidate(output, accepted_checksums, accepted_hashes)
                 gate["provider_result"] = provider_result if isinstance(provider_result, dict) else {}
             except Exception as exc:
@@ -745,12 +746,14 @@ class MediaBridge:
 
     @classmethod
     def _image_prompts(cls, job, minimum):
+        platforms = {str(item).casefold() for item in job.get("platforms") or []}
         prompts = [
             {
                 "role": "cover",
                 "section": "cover",
                 "purpose": "introduce the article promise with a topic-matched visual",
                 "prompt": cls._cover_prompt(job),
+                "intent": "cinematic_cover",
             }
         ]
         if minimum <= 1:
@@ -765,7 +768,13 @@ class MediaBridge:
                 "professional editorial illustration style, soft natural lighting, balanced composition, "
                 "clear foreground subject and background context, no logo, no watermark, minimal readable text."
             )
-            prompts.append({"role": "section", "section": section, "purpose": purpose, "prompt": prompt})
+            prompts.append({
+                "role": "section",
+                "section": section,
+                "purpose": purpose,
+                "prompt": prompt,
+                "intent": "real_scene" if platforms.intersection({"xiaohongshu", "rednote"}) else "editorial_illustration",
+            })
         return prompts
 
     @classmethod
@@ -778,7 +787,17 @@ class MediaBridge:
     def _article_sections(job):
         meta_sections = (job.get("draft_meta") or {}).get("sections") or []
         if isinstance(meta_sections, list) and meta_sections:
-            return [str(item)[:80] for item in meta_sections if str(item).strip()]
+            values = []
+            for item in meta_sections:
+                if isinstance(item, dict):
+                    value = item.get("title") or item.get("heading") or item.get("text") or item.get("purpose") or ""
+                else:
+                    value = item
+                clean = str(value or "").strip()
+                if clean:
+                    values.append(clean[:80])
+            if values:
+                return values
         body = str(job.get("body") or "")
         parts = [part.strip().replace("\n", " ") for part in body.split("\n\n") if len(part.strip()) > 40]
         return [part[:80] for part in parts[:6]]
