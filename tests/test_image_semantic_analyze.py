@@ -94,6 +94,24 @@ def test_prose_vision_response_is_captioned_and_scored_locally():
     assert matched == ["camera workshop"]
 
 
+def test_compound_concept_accepts_a_visible_anchor_but_multiple_concepts_still_need_coverage():
+    one_score, one_matches = analyzer.score_semantics(
+        ["AI workflow dashboard"],
+        "A monitor displays a dashboard with charts and graphs.",
+        ["monitor", "dashboard"],
+    )
+    many_score, many_matches = analyzer.score_semantics(
+        ["AI workflow dashboard", "developer typing code", "team collaboration"],
+        "A monitor displays a dashboard with charts and graphs.",
+        ["monitor", "dashboard"],
+    )
+
+    assert one_score >= analyzer.DEFAULT_THRESHOLD
+    assert one_matches == ["AI workflow dashboard"]
+    assert many_score < analyzer.DEFAULT_THRESHOLD
+    assert many_matches == ["AI workflow dashboard"]
+
+
 def test_score_is_deterministic_and_supports_multilingual_synonyms():
     score, matched = analyzer.score_semantics(
         ["人工智能", "手机", "猫"],
