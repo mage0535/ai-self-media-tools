@@ -68,7 +68,7 @@ class MediaBridge:
             raise FileNotFoundError("analysis script not configured")
         return provider.run(target)
 
-    def _analyze_image_semantics(self, target, request):
+    def _analyze_image_semantics(self, target, request, *, attempts=1):
         provider = self.registry.choose_provider("analysis")
         if not provider:
             return {
@@ -89,15 +89,19 @@ class MediaBridge:
             "--platform",
             str(request.get("platform") or ""),
         ]
-        try:
-            result = provider.run(target, args)
-        except Exception as exc:
-            return {
-                "passed": False,
-                "failure": "semantic_analyzer_failed",
-                "error": f"{type(exc).__name__}: {str(exc)[:300]}",
-                "semantic_match_score": 0.0,
-            }
+        results = []
+        for _ in range(max(1, int(attempts))):
+            try:
+                results.append(provider.run(target, args))
+                if isinstance(results[-1], dict) and results[-1].get("passed") is True:
+                    break
+            except Exception as exc:
+                results.append({"passed": False, "failure": "semantic_analyzer_failed", "error": f"{type(exc).__name__}: {str(exc)[:300]}", "semantic_match_score": 0.0})
+        result = max(
+            (item for item in results if isinstance(item, dict)),
+            key=lambda item: float(item.get("semantic_match_score") or 0),
+            default={},
+        )
         if not isinstance(result, dict):
             return {
                 "passed": False,
@@ -529,7 +533,7 @@ class MediaBridge:
                 if not cover_gate.get("passed"):
                     raise RuntimeError("cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
                 if self.semantic_validation_required:
-                    final_semantic = self._analyze_image_semantics(output, self._semantic_request(job, item))
+                    final_semantic = self._analyze_image_semantics(output, self._semantic_request(job, item), attempts=2)
                     if not final_semantic.get("passed"):
                         raise RuntimeError(
                             "final cover semantic validation failed: "

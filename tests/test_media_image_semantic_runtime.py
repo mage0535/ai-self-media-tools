@@ -196,3 +196,21 @@ def test_cover_semantic_request_excludes_non_visual_workflow_labels():
     )
 
     assert request["expected_concepts"] == ["AI workflow dashboard"]
+
+
+def test_semantic_analysis_retries_nondeterministic_mismatch(tmp_path, monkeypatch):
+    image = tmp_path / "cover.png"
+    _image(image, (20, 40, 80))
+    bridge = MediaBridge({}, tmp_path)
+    sha = __import__("hashlib").sha256(image.read_bytes()).hexdigest()
+    values = iter([
+        {"analyzer":"fixture","caption":"office","labels":["office"],"expected_concepts":["workflow"],"matched_concepts":[],"semantic_match_score":0.0,"threshold":0.6,"passed":False,"image_sha256":sha},
+        {"analyzer":"fixture","caption":"workflow dashboard","labels":["workflow","dashboard"],"expected_concepts":["workflow"],"matched_concepts":["workflow"],"semantic_match_score":1.0,"threshold":0.6,"passed":True,"image_sha256":sha},
+    ])
+    provider = type("Provider", (), {"run": lambda self, target, args: next(values)})()
+    monkeypatch.setattr(bridge.registry, "choose_provider", lambda kind: provider)
+
+    result = bridge._analyze_image_semantics(image, {"expected_concepts":["workflow"],"role":"cover","platform":"xiaohongshu"}, attempts=2)
+
+    assert result["passed"] is True
+    assert result["semantic_match_score"] == 1.0
