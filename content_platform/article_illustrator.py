@@ -289,7 +289,12 @@ def generate_images(shot_list: dict, output_dir: Path) -> list[str]:
 
         try:
             r = subprocess.run(
-                [sys.executable, str(IMAGE_GEN), "--prompt", prompt, "--output", str(out_path)],
+                [
+                    sys.executable, str(IMAGE_GEN), "--prompt", prompt, "--output", str(out_path),
+                    "--intent", "editorial_illustration", "--semantic-required",
+                    "--expected-concept", str(s.get("topic") or shot_list.get("title") or ""),
+                    "--role", "section", "--platform", "wechat",
+                ],
                 capture_output=True, text=True, timeout=120,
             )
             if r.returncode == 0 and out_path.is_file():

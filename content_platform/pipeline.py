@@ -72,7 +72,12 @@ class Pipeline:
             risk_cfg.get("block_words"), risk_cfg.get("review_words"), risk_cfg.get("legacy_script", ""), risk_cfg.get("timeout", 20)
         )
         self.guard = ResourceGuard(self.data_dir, self.config.get("resources", {}))
-        self.media = MediaBridge(self.config.get("media", {}), self.data_dir, self.guard)
+        self.media = MediaBridge(
+            self.config.get("media", {}),
+            self.data_dir,
+            self.guard,
+            tool_config=self.config,
+        )
         review_cfg = self.config.get("review", {})
         self.review_tokens = ReviewTokens(review_cfg.get("key_path", self.data_dir / "review.key"))
         self.review_ttl = int(review_cfg.get("token_ttl_seconds", 86400))

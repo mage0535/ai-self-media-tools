@@ -39,8 +39,8 @@ class ScriptTranscriberProvider(_BaseScriptProvider):
 
 
 class ScriptAnalyzerProvider(_BaseScriptProvider):
-    def run(self, target):
-        return self._run(target)
+    def run(self, target, extra_args=None):
+        return self._run(target, extra_args)
 
 
 class ScriptImageProvider(_BaseScriptProvider):

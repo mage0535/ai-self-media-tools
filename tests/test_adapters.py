@@ -234,8 +234,8 @@ class AdapterTests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(len(artifact["images"]), 3)
-        self.assertEqual(len(artifact["section_image_map"]), 2)
+        self.assertEqual(len(artifact["images"]), 4)
+        self.assertEqual(len(artifact["section_image_map"]), 3)
 
     def test_image_bridge_defaults_to_carousel_image_package_for_xiaohongshu(self):
         script = self.root / "image_gen.py"

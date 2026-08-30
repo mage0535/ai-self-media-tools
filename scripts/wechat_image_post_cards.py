@@ -119,6 +119,16 @@ def _resolve_background(card: dict[str, Any], out_dir: Path, idx: int, provider:
     bg_path = out_dir / f"bg_{idx:02d}.jpg"
     try:
         result = generate_image(prompt, bg_path, provider=provider, size="1080x1440")
+        from scripts.image_semantic_analyze import analyze_image
+
+        semantic = analyze_image(
+            bg_path,
+            [str(card.get("title") or ""), str(card.get("body") or "")[:160]],
+            role="knowledge_card",
+            platform="wechat",
+        )
+        if semantic.get("passed") is not True:
+            raise ImageProviderError(f"background semantic mismatch for card {idx}")
         return {
             "path": str(bg_path),
             "kind": "real_scene_photo",
@@ -127,6 +137,8 @@ def _resolve_background(card: dict[str, Any], out_dir: Path, idx: int, provider:
             "license": str(result.get("license") or result.get("license_type") or "provider_terms"),
             "query": prompt[:120],
             "match_reason": "background prompt is derived from this card title and article topic",
+            "semantic_evidence": semantic,
+            "semantic_match_score": float(semantic.get("semantic_match_score") or 0),
             "not_gradient_fallback": True,
         }
     except Exception as exc:

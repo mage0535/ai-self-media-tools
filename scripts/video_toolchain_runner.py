@@ -161,20 +161,42 @@ def main(argv: list[str] | None = None) -> int:
         return 5
     visual_assets = _load_visual_assets()
     materialized_backgrounds = _materialize_visual_backgrounds(output_dir, visual_assets)
+    if plan.get("run_contract"):
+        materialized_backgrounds, rejected_semantics = _verify_materialized_semantics(
+            materialized_backgrounds,
+            title=title,
+            script_body=script_body,
+            platform=_primary_platform(plan),
+        )
+        _write_json_atomic(
+            output_dir / "rejected_visual_semantics.json",
+            {"version": "rejected_visual_semantics_v1", "assets": rejected_semantics},
+        )
     # 2026-08-16 新增：背景不足时自动 Pexels 语义下载兜底（取代 Hermes 手动下载）
     if not dry_run and len(materialized_backgrounds) < 8:
         try:
             sys.path.insert(0, str(ROOT / "scripts"))
             from pexels_auto_bg import auto_fetch_backgrounds, write_auto_assets
-            auto_assets = auto_fetch_backgrounds(script_body or title, title or "", output_dir, _primary_platform(plan))
+            auto_assets = auto_fetch_backgrounds(
+                script_body or title,
+                title or "",
+                output_dir,
+                _primary_platform(plan),
+                semantic_required=bool(plan.get("run_contract")),
+            )
             if auto_assets:
                 materialized_backgrounds = _merge_materialized_backgrounds(materialized_backgrounds, auto_assets)
-        except Exception:
-            # 静默失败，不阻断渲染
-            pass
+        except Exception as exc:
+            print(f"[asset-selection] automatic background recovery failed: {exc}", file=sys.stderr)
     # diagram-design 补图通道：结构化主题且背景不足时，自动生成杂志级 diagram 背景
     if not dry_run:
-        materialized_backgrounds = _diagram_background_fill(output_dir, script_body or title, materialized_backgrounds)
+        materialized_backgrounds = _diagram_background_fill(
+            output_dir,
+            script_body or title,
+            materialized_backgrounds,
+            semantic_required=bool(plan.get("run_contract")),
+            platform=_primary_platform(plan),
+        )
     if plan.get("run_contract"):
         ledger = AssetLedger(os.environ.get("ASSET_LEDGER_PATH") or ROOT / "data" / "asset_ledger.db")
         previous_hashes = {str(row.get("sha256") or "") for row in ledger.uses() if str(row.get("sha256") or "")}
@@ -193,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
                     _primary_platform(plan),
                     force=True,
                     excluded_hashes=previous_hashes,
+                    semantic_required=True,
                 )
                 replacement_rows = _merge_materialized_backgrounds([], replacements)
                 if len(replacement_rows) >= 8:
@@ -204,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
     visual_assets = _visual_assets_from_materialized(materialized_backgrounds)
     asset_records = _asset_provenance_records(materialized_backgrounds)
     asset_provenance_path = output_dir / "asset_provenance.json"
-    asset_provenance_path.write_text(json.dumps({"version": "asset_provenance_v1", "assets": asset_records}, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_json_atomic(asset_provenance_path, {"version": "asset_provenance_v1", "assets": asset_records})
     asset_gate = {}
     if plan.get("run_contract"):
         asset_gate = validate_asset_set(
@@ -884,13 +907,22 @@ def _materialize_visual_backgrounds(output_dir: Path, visual_assets: dict) -> li
                 "semantic_match_score": float(item.get("semantic_match_score") or 0),
                 "match_reason": str(item.get("match_reason") or item.get("purpose") or ""),
                 "semantic_tags": list(item.get("semantic_tags") or []),
+                "semantic_required": item.get("semantic_required") is True,
+                "semantic_evidence": dict(item.get("semantic_evidence") or {}),
                 "generation_evidence": dict(item.get("generation_evidence") or {}),
             }
         )
     return copied
 
 
-def _diagram_background_fill(output_dir: Path, text: str, existing: list[dict]) -> list[dict]:
+def _diagram_background_fill(
+    output_dir: Path,
+    text: str,
+    existing: list[dict],
+    *,
+    semantic_required: bool = False,
+    platform: str = "",
+) -> list[dict]:
     """diagram-design 背景补图通道（visual-router 视频侧集成）。
 
     当脚本/标题是结构化主题（流程/架构/对比等）且已有背景图不足时，
@@ -920,6 +952,10 @@ def _diagram_background_fill(output_dir: Path, text: str, existing: list[dict]) 
             ok = render_html_to_png(html_path, png, width=1080, height=1920)
             if not ok:
                 break
+            semantic = _analyze_background_semantics(png, [dtype, text[:160]], platform) if semantic_required else {}
+            if semantic_required and not semantic.get("passed"):
+                png.unlink(missing_ok=True)
+                continue
             existing.append(
                 {
                     "scene": i,
@@ -930,15 +966,82 @@ def _diagram_background_fill(output_dir: Path, text: str, existing: list[dict]) 
                     "diagram": dtype,
                     "source_url": "generated:diagram_html2png",
                     "license": "generated_for_project",
-                    "semantic_match_score": 0.8,
-                    "match_reason": f"diagram visualizes the detected {dtype} structure",
-                    "semantic_tags": [dtype, "diagram", "workflow"],
+                    "semantic_match_score": float(semantic.get("semantic_match_score") or (0.8 if not semantic_required else 0)),
+                    "match_reason": str(semantic.get("caption") or f"diagram visualizes the detected {dtype} structure"),
+                    "semantic_tags": list(semantic.get("labels") or [dtype, "diagram", "workflow"]),
+                    "semantic_required": semantic_required,
+                    "semantic_evidence": semantic,
                     "generation_evidence": {"provider": "diagram_html2png", "source_html": str(html_path)},
                 }
             )
     except Exception as e:
         print(f"[diagram-fill] skipped: {e}", file=sys.stderr)
     return existing
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _analyze_background_semantics(path: Path, expected: list[str], platform: str) -> dict:
+    try:
+        from scripts.image_semantic_analyze import analyze_image
+
+        return analyze_image(path, expected, role="video_scene", platform=platform)
+    except Exception as exc:
+        return {
+            "version": "image_semantic_evidence_v1",
+            "passed": False,
+            "failure": "semantic_analyzer_failed",
+            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+            "semantic_match_score": 0.0,
+        }
+
+
+def _verified_semantic_contract(evidence: dict, path: Path) -> bool:
+    if not isinstance(evidence, dict) or evidence.get("passed") is not True:
+        return False
+    return (
+        evidence.get("version") == "image_semantic_evidence_v1"
+        and evidence.get("score_source") == "deterministic_caption_label_recall"
+        and evidence.get("evidence_level") == "artifact_verified"
+        and str(evidence.get("image_sha256") or "") == hashlib.sha256(path.read_bytes()).hexdigest()
+    )
+
+
+def _verify_materialized_semantics(
+    materialized: list[dict],
+    *,
+    title: str,
+    script_body: str,
+    platform: str,
+) -> tuple[list[dict], list[dict]]:
+    passed: list[dict] = []
+    rejected: list[dict] = []
+    for item in materialized:
+        path = Path(str(item.get("path") or ""))
+        if not path.is_file():
+            rejected.append({**item, "failure": "asset_missing"})
+            continue
+        semantic = item.get("semantic_evidence") if isinstance(item.get("semantic_evidence"), dict) else {}
+        if not _verified_semantic_contract(semantic, path):
+            query = str(item.get("source_query") or item.get("match_reason") or "").strip()
+            semantic = _analyze_background_semantics(path, [value for value in (query, title, script_body[:240]) if value], platform)
+        candidate = {
+            **item,
+            "semantic_required": True,
+            "semantic_evidence": semantic,
+            "semantic_match_score": float(semantic.get("semantic_match_score") or 0),
+            "match_reason": str(semantic.get("caption") or semantic.get("failure") or ""),
+            "semantic_tags": list(semantic.get("labels") or semantic.get("matched_concepts") or []),
+        }
+        if _verified_semantic_contract(semantic, path):
+            passed.append(candidate)
+        else:
+            rejected.append(candidate)
+    return passed, rejected
 
 
 def _asset_provenance_records(materialized: list[dict]) -> list[dict]:
@@ -951,6 +1054,8 @@ def _asset_provenance_records(materialized: list[dict]) -> list[dict]:
             "semantic_match_score": float(item.get("semantic_match_score") or 0),
             "match_reason": str(item.get("match_reason") or ""),
             "semantic_tags": list(item.get("semantic_tags") or []),
+            "semantic_required": item.get("semantic_required") is True,
+            "semantic_evidence": dict(item.get("semantic_evidence") or {}),
             "generation_evidence": dict(item.get("generation_evidence") or {}),
         }
         for index, item in enumerate(materialized, 1)
@@ -976,6 +1081,8 @@ def _visual_assets_from_materialized(materialized: list[dict]) -> dict:
             "semantic_match_score": float(item.get("semantic_match_score") or 0),
             "match_reason": str(item.get("match_reason") or ""),
             "semantic_tags": list(item.get("semantic_tags") or []),
+            "semantic_required": item.get("semantic_required") is True,
+            "semantic_evidence": dict(item.get("semantic_evidence") or {}),
             "generation_evidence": dict(item.get("generation_evidence") or {}),
         })
     return {

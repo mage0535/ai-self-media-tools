@@ -11,6 +11,7 @@ def _image(path: Path, color: tuple[int, int, int]) -> Path:
 
 
 def _record(path: Path, score: float = 0.9) -> dict:
+    sha256 = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
     return {
         "path": str(path),
         "source_url": "https://example.test/asset",
@@ -18,6 +19,20 @@ def _record(path: Path, score: float = 0.9) -> dict:
         "semantic_match_score": score,
         "match_reason": "the visible subject demonstrates the narrated step",
         "semantic_tags": ["workflow", "checklist"],
+        "semantic_evidence": {
+            "version": "image_semantic_evidence_v1",
+            "analyzer": "fixture",
+            "caption": "workflow checklist",
+            "labels": ["workflow", "checklist"],
+            "expected_concepts": ["workflow"],
+            "matched_concepts": ["workflow"],
+            "semantic_match_score": score,
+            "threshold": 0.55,
+            "passed": score >= 0.55,
+            "image_sha256": sha256,
+            "score_source": "deterministic_caption_label_recall",
+            "evidence_level": "artifact_verified",
+        },
     }
 
 

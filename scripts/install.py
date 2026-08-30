@@ -151,7 +151,7 @@ def render_config(home: Path, *, overwrite: bool = False) -> Path:
         },
         "ocr": {"script": str(home / "external" / "scripts" / "ocr_pipeline.py"), "timeout": 120},
         "transcription": {"script": str(home / "external" / "scripts" / "transcribe_pipeline.py"), "timeout": 300},
-        "analysis": {"script": str(home / "external" / "scripts" / "multimodal_analyze.py"), "timeout": 180},
+        "analysis": {"script": str(home / "scripts" / "image_semantic_analyze.py"), "timeout": 180, "required": True},
         "trends": {
             "legacy_data_dir": str(home / "data" / "trend-cache"),
             "legacy_script": str(home / "external" / "scripts" / "trend_collector.py"),

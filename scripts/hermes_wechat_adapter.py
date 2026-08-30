@@ -145,15 +145,27 @@ def _cover_path(packet: dict) -> Path | None:
 
 
 def _generate_image(packet: dict, work_dir: Path, role: str) -> Path | None:
-    try:
-        import image_gen_engine
-    except Exception:
-        return None
     prompt = f"{packet.get('title','')} {role} {packet.get('cover_design',{}).get('visual_subject','')}".strip()
     output = work_dir / f"{role}.jpg"
-    result = image_gen_engine.generate(prompt, platform="gzh_cover", output_path=str(output))
-    path = _generated_image_path(result, output)
-    return path if path and path.is_file() else None
+    project_home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+    image_gen_script = project_home / "scripts" / "image_gen.py"
+    if not image_gen_script.is_file():
+        return None
+    try:
+        import subprocess, sys
+
+        result = subprocess.run(
+            [
+                sys.executable, str(image_gen_script), "--prompt", prompt, "--output", str(output),
+                "--intent", "cinematic_cover", "--semantic-required",
+                "--expected-concept", str(packet.get("title") or ""),
+                "--role", "cover", "--platform", "wechat",
+            ],
+            capture_output=True, text=True, timeout=180,
+        )
+    except Exception:
+        return None
+    return output if result.returncode == 0 and output.is_file() else None
 
 
 def _upload_inline_images(packet: dict, work_dir: Path, token: str, wx) -> list[str]:
@@ -226,7 +238,12 @@ def _generate_section_image(packet: dict, work_dir: Path, item: dict, idx: int) 
             import subprocess, sys
             output = work_dir / f"inline_{idx}.jpg"
             r = subprocess.run(
-                [sys.executable, str(image_gen_script), "--prompt", prompt, "--output", str(output)],
+                [
+                    sys.executable, str(image_gen_script), "--prompt", prompt, "--output", str(output),
+                    "--intent", "editorial_illustration", "--semantic-required",
+                    "--expected-concept", str(item.get("section") or packet.get("title") or ""),
+                    "--role", "section", "--platform", "wechat",
+                ],
                 capture_output=True, text=True, timeout=120
             )
             if r.returncode == 0 and output.is_file():
@@ -234,15 +251,7 @@ def _generate_section_image(packet: dict, work_dir: Path, item: dict, idx: int) 
         except Exception:
             pass
 
-    # Fallback: try old image_gen_engine
-    try:
-        import image_gen_engine as old_engine
-        output = work_dir / f"inline_{idx}.jpg"
-        result = old_engine.generate(prompt, platform="gzh_inline", output_path=str(output))
-        path = _generated_image_path(result, output)
-        return path if path and path.is_file() else None
-    except Exception:
-        return None
+    return None
 
 
 def _generated_image_path(result, fallback: Path) -> Path | None:
