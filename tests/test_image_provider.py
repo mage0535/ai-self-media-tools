@@ -601,7 +601,8 @@ def test_edit_failure_keeps_stock_output_and_reports_fallback(tmp_path, monkeypa
 
 def test_sensenova_edit_sends_source_image_and_aspect_tier(tmp_path, monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
-    monkeypatch.setenv("SENSENOVA_API_KEY", "sense-key")
+    monkeypatch.setenv("SN_API_KEY", "sense-key")
+    monkeypatch.delenv("SENSENOVA_API_KEY", raising=False)
     source = tmp_path / "source.png"
     source.write_bytes(b"\x89PNG\r\n\x1a\nsource-real-image")
     output = tmp_path / "edited.png"
