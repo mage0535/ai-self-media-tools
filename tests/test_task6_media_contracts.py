@@ -151,6 +151,39 @@ def test_juejin_content_route_cannot_bypass_production_four_asset_path(tmp_path,
     execute.assert_called_once()
 
 
+def test_juejin_top_level_sections_and_stock_provenance_reach_media_contract(tmp_path, monkeypatch):
+    from content_platform.media import MediaBridge
+
+    bridge = MediaBridge({"image": {"enabled": True}}, tmp_path)
+    provider = Mock()
+    def generate(prompt, target, args):
+        marker = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
+        _write_image(target, (30 + int(marker[:2], 16) % 100, 60, 90))
+        return {"provider": "pexels", "model": "stock-photo", "source_url": f"https://www.pexels.com/photo/{marker}", "license": "Pexels", "query": "workflow"}
+    provider.run.side_effect = generate
+    monkeypatch.setattr(bridge.registry, "choose_provider", lambda kind: provider)
+
+    result = bridge._generate_image(
+        {
+            "id": "j-stock",
+            "title": "Juejin workflow article",
+            "topic": "Juejin workflow article",
+            "body": "body",
+            "platforms": ["juejin"],
+            "sections": ["problem", "implementation", "verification"],
+        },
+        tmp_path / "artifacts" / "j-stock",
+        {"enabled": True, "min_count": 4},
+    )
+
+    assert len(result["images"]) == 4
+    contract = json.loads(Path(result["article_media_contract"]).read_text(encoding="utf-8"))
+    assert [item["section"] for item in contract["assets"] if item["role"] == "section"] == ["problem", "implementation", "verification"]
+    assert all(item["source_url"].startswith("https://www.pexels.com/photo/") for item in contract["assets"])
+    assert len({item["source_url"] for item in contract["assets"]}) == 4
+    assert all(item["license"] == "Pexels" for item in contract["assets"])
+
+
 def test_article_media_records_staging_failure_and_fails_closed(tmp_path):
     from content_platform.adapters.media import execute_article_media
 

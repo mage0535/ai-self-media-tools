@@ -168,3 +168,29 @@ def test_image_prompts_compile_content_intent_and_clean_section_titles():
     assert "每天切换五个平台浪费两小时" in prompts[1]["prompt"]
     assert "section_1" not in prompts[1]["prompt"]
     assert "'role':" not in prompts[1]["prompt"]
+
+
+def test_asset_provenance_preserves_retouch_source_chain(tmp_path):
+    image = tmp_path / "cover.png"
+    image.write_bytes(b"image")
+    MediaBridge._persist_asset_provenance(
+        tmp_path,
+        [{
+            "path": str(image), "role": "cover", "checksum": "final-sha",
+            "source_url": "generated:sense_nova", "license": "generated_for_project",
+            "original_license": "Pexels",
+            "generation_evidence": {"provider": "sense_nova", "provenance": {
+                "original_provider": "pexels", "original_source_url": "https://www.pexels.com/photo/example",
+                "original_license": "Pexels", "original_path": "/private/original.png",
+            }},
+        }],
+        [{"role": "cover", "section": "cover", "purpose": "cover", "prompt": "cover"}],
+        "ScriptImageProvider",
+        {"topic": "AI workflow", "platforms": ["xiaohongshu"], "draft_meta": {}},
+    )
+
+    payload = json.loads((tmp_path / "asset_provenance.json").read_text(encoding="utf-8"))
+    derivative = payload["assets"][0]["derivative_provenance"]
+    assert derivative["original_provider"] == "pexels"
+    assert derivative["original_source_url"] == "https://www.pexels.com/photo/example"
+    assert derivative["original_license"] == "Pexels"

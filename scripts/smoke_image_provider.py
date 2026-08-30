@@ -32,7 +32,7 @@ def _provider_config_status(provider: str) -> str:
     if provider == "pixabay":
         return "configured" if load_secret("PIXABAY_API_KEY") else "missing_config"
     if provider in {"sense_nova", "sensenova"}:
-        return "configured" if (load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")) else "missing_config"
+        return "configured" if (load_secret("SN_IMAGE_GEN_API_KEY") or load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")) else "missing_config"
     if provider == "pixazo":
         return "configured" if load_secret("PIXAZO_API_KEY") else "missing_config"
     if provider == "stock":

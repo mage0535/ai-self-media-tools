@@ -549,17 +549,18 @@ def _sensenova_image(
     size: str = "1024x1024",
     input_image: str | Path | None = None,
 ) -> dict:
-    key = load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")
+    key = load_secret("SN_IMAGE_GEN_API_KEY") or load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")
     if not key:
         raise ImageProviderError("SN_API_KEY is not configured")
-    base_url = (load_secret("SN_BASE_URL") or "https://token.sensenova.cn/v1").rstrip("/")
-    models = [item.strip() for item in (model or os.environ.get("SN_IMAGE_MODEL") or "sensenova-u1.5-lite,sensenova-u1-fast").split(",") if item.strip()]
+    base_url = (load_secret("SN_IMAGE_GEN_BASE_URL") or load_secret("SN_BASE_URL") or "https://token.sensenova.cn/v1").rstrip("/")
+    models = [item.strip() for item in (model or os.environ.get("SN_IMAGE_GEN_MODEL") or os.environ.get("SN_IMAGE_MODEL") or "sensenova-u1.5-lite,sensenova-u1-fast").split(",") if item.strip()]
     last_error: Exception | None = None
     for model_name in models:
+        selected_size = _sensenova_size(size)
         payload = {
             "model": model_name,
             "prompt": prompt[:4000],
-            "size": _sensenova_size(size),
+            "size": selected_size,
             "n": 1,
         }
         if input_image:
@@ -593,6 +594,8 @@ def _sensenova_image(
                 "mode": "edit" if input_image else "generate",
                 "source_url": "generated:sense_nova",
                 "license": "generated_for_project",
+                "size": selected_size,
+                "requested_size": size,
             }
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")[:180]
@@ -628,9 +631,10 @@ def _pixazo_image(
     key = load_secret("PIXAZO_API_KEY")
     if not key:
         raise ImageProviderError("PIXAZO_API_KEY is not configured")
+    width, height = _parse_size(size)
     request = urllib.request.Request(
         "https://gateway.pixazo.ai/getImage/v1/getSDXLImage",
-        data=json.dumps({"prompt": prompt}).encode("utf-8"),
+        data=json.dumps({"prompt": prompt, "width": width, "height": height}).encode("utf-8"),
         headers={"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": key, "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"},
         method="POST",
     )
@@ -650,6 +654,7 @@ def _pixazo_image(
         "mode": "generate",
         "source_url": "generated:pixazo",
         "license": "generated_for_project",
+        "size": f"{width}x{height}",
     }
 
 

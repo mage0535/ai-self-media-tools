@@ -314,7 +314,8 @@ class MediaBridge:
             def generate_article_asset(item, target):
                 prompt_item = next(row for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
                 prompt = prompt_item["prompt"]
-                provider.run(prompt, target, [*extra_args, "--intent", str(prompt_item.get("intent") or "auto")])
+                provider_result = provider.run(prompt, target, [*extra_args, "--intent", str(prompt_item.get("intent") or "auto")])
+                provider_result = provider_result if isinstance(provider_result, dict) else {}
                 if item["role"] == "cover":
                     generated_target = target.with_name("cover-background" + target.suffix)
                     target.replace(generated_target)
@@ -329,14 +330,19 @@ class MediaBridge:
                     cover_gate = normalize_cover_resolution(target)
                     if not cover_gate.get("passed"):
                         raise RuntimeError("adaptive cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
+                selected_provider = str(provider_result.get("provider") or type(provider).__name__)
+                generated = selected_provider not in {"pexels", "pixabay", "stock"}
                 return {
-                    "origin_type": "generated",
+                    "origin_type": "generated" if generated else "stock",
+                    "source_url": str(provider_result.get("source_url") or (f"generated:{selected_provider}" if generated else "")),
                     "generation_evidence": {
-                        "provider": type(provider).__name__,
-                        "model": str(cfg.get("model") or cfg.get("provider") or "auto"),
+                        "provider": selected_provider,
+                        "model": str(provider_result.get("model") or cfg.get("model") or cfg.get("provider") or "auto"),
                         "prompt_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                        "query": str(provider_result.get("query") or ""),
+                        "provenance": provider_result.get("provenance") or {},
                     },
-                    "license": "generated_for_project",
+                    "license": str(provider_result.get("license") or ("generated_for_project" if generated else "")),
                     "semantic_match_score": 0.82,
                     "match_reason": item["section"],
                 }
@@ -424,11 +430,13 @@ class MediaBridge:
                     "source_url": source_url or (f"generated:{provider_name}" if generated else ""),
                     "license": license_name or ("generated_for_project" if generated else ""),
                     "origin_type": "generated" if generated else "stock",
+                    "original_license": str(provider_result.get("original_license") or ""),
                     "generation_evidence": {
                         "provider": provider_name,
                         "model": str(provider_result.get("model") or cfg.get("model") or ""),
                         "query": str(provider_result.get("query") or ""),
                         "prompt_hash": hashlib.sha256(str(item.get("prompt") or "").encode("utf-8")).hexdigest(),
+                        "provenance": provider_result.get("provenance") or {},
                     },
                 }
             )
@@ -660,6 +668,7 @@ class MediaBridge:
             source_url = str(image.get("source_url") or "").strip()
             license_name = str(image.get("license") or "").strip()
             generation_evidence = image.get("generation_evidence") if isinstance(image.get("generation_evidence"), dict) else {}
+            derivative = generation_evidence.get("provenance") if isinstance(generation_evidence.get("provenance"), dict) else {}
             records.append({
                 "scene_id": section or f"asset_{index + 1}",
                 "path": str(image.get("path") or ""),
@@ -674,6 +683,12 @@ class MediaBridge:
                     "prompt_sha256": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
                     "role": str(image.get("role") or ""),
                 },
+                "derivative_provenance": {
+                    "original_provider": str(derivative.get("original_provider") or ""),
+                    "original_source_url": str(derivative.get("original_source_url") or ""),
+                    "original_license": str(image.get("original_license") or derivative.get("original_license") or ""),
+                    "original_path": str(derivative.get("original_path") or ""),
+                } if derivative.get("original_provider") else {},
                 "render_evidence": {
                     "verified": bool(Path(str(image.get("path") or "")).is_file()),
                     "renderer": provider_name,
@@ -785,7 +800,7 @@ class MediaBridge:
 
     @staticmethod
     def _article_sections(job):
-        meta_sections = (job.get("draft_meta") or {}).get("sections") or []
+        meta_sections = (job.get("draft_meta") or {}).get("sections") or job.get("sections") or []
         if isinstance(meta_sections, list) and meta_sections:
             values = []
             for item in meta_sections:

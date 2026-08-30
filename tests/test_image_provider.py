@@ -674,7 +674,10 @@ def test_pixazo_generation_sends_requested_dimensions_and_records_provenance(tmp
     def fake_urlopen(request, timeout):
         if "gateway.pixazo.ai" in request.full_url:
             assert request.headers["Ocp-apim-subscription-key"] == "pixazo-key"
-            assert json.loads(request.data.decode("utf-8"))["prompt"]
+            payload = json.loads(request.data.decode("utf-8"))
+            assert payload["prompt"]
+            assert payload["width"] == 1536
+            assert payload["height"] == 864
             return ApiResponse()
         return ImageResponse()
 
@@ -689,6 +692,7 @@ def test_pixazo_generation_sends_requested_dimensions_and_records_provenance(tmp
 
     assert result["provider"] == "pixazo"
     assert result["mode"] == "generate"
+    assert result["size"] == "1536x864"
     assert result["provenance"]["provider"] == "pixazo"
     assert result["provenance"]["prompt_sha256"] == image_provider.hashlib.sha256(
         "cinematic editorial illustration for AI workflow".encode("utf-8")
