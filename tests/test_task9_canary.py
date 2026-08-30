@@ -214,6 +214,32 @@ def test_canary_brief_compiles_independent_related_sources_into_matrix():
     assert len(brief["content_depth_plan"]["knowledge_points"]) >= 3
 
 
+def test_wechat_canary_brief_compiles_operational_inputs_from_verified_sources():
+    from scripts.task9_canary import _canary_brief
+
+    case = {"platform": "wechat", "language": "zh", "content_form": "article", "delivery_policy": "draft_first", "dry_run": False}
+    hotspot = {
+        "platform": "wechat", "observed_title": "GEO提及率为何不动", "source_url": "https://mp.weixin.qq.com/s/primary",
+        "fetched_at": "2026-08-21T00:00:00Z", "provenance_hash": "a" * 64, "evidence_verified": True,
+        "related_sources": [
+            {"source_url": f"https://mp.weixin.qq.com/s/{index}", "observed_title": f"wechat {index}", "fetched_at": "2026-08-21T00:00:00Z", "provenance_hash": str(index) * 64}
+            for index in (1, 2)
+        ],
+        "external_sources": [
+            {"platform": platform, "source_url": f"https://example.test/{platform}", "observed_title": platform, "provenance_hash": character * 64}
+            for platform, character in (("xiaohongshu", "b"), ("bilibili", "c"), ("youtube", "d"))
+        ],
+    }
+
+    brief = _canary_brief(case, hotspot)
+
+    assert len(brief["same_lane_account_analysis"]["samples"]) == 3
+    assert len(brief["cross_platform_trend_analysis"]["external_platform_samples"]) == 3
+    assert brief["content_generation_brief"]["provided_to_content_workflow"] is True
+    assert brief["batch_plan"] == {"expected_count": 2, "item_index": 1}
+    assert brief["publishing_plan"]["postcheck"] == "wechat_draft_batchget_or_backend_draft_row"
+
+
 def test_canary_does_not_stage_a_pipeline_blocked_job(tmp_path: Path):
     from scripts.task9_canary import _hotspot_source_hash, _run_pipeline_case
 

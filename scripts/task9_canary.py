@@ -214,7 +214,10 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
         digest = str(row.get("provenance_hash") or "").lower()
         title = str(row.get("observed_title") or "").strip()
         observed = str(row.get("fetched_at") or "").strip()
-        if url in seen_urls or not url.startswith(("https://www.xiaohongshu.com/explore/", "https://www.xiaohongshu.com/discovery/item/")):
+        valid_platform_url = url.startswith(("https://", "http://"))
+        if platform in {"xiaohongshu", "rednote"}:
+            valid_platform_url = url.startswith(("https://www.xiaohongshu.com/explore/", "https://www.xiaohongshu.com/discovery/item/"))
+        if url in seen_urls or not valid_platform_url:
             failures.append(f"related_source_url_invalid:{index}")
             continue
         if not re.fullmatch(r"[0-9a-f]{64}", digest) or not title or not observed:
@@ -222,6 +225,22 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
             continue
         seen_urls.add(url)
         related_sources.append(dict(row))
+    external_sources = []
+    for index, row in enumerate(record.get("external_sources") or [], 1):
+        if not isinstance(row, dict):
+            failures.append(f"external_source_invalid:{index}")
+            continue
+        url = str(row.get("source_url") or "")
+        digest = str(row.get("provenance_hash") or "").lower()
+        title = str(row.get("observed_title") or "").strip()
+        source_platform = str(row.get("platform") or "").strip()
+        if not url.startswith(("https://", "http://")) or not source_platform or source_platform == platform:
+            failures.append(f"external_source_url_invalid:{index}")
+            continue
+        if not re.fullmatch(r"[0-9a-f]{64}", digest) or not title:
+            failures.append(f"external_source_evidence_incomplete:{index}")
+            continue
+        external_sources.append(dict(row))
     if failures:
         raise ValueError(";".join(sorted(set(failures))))
     return {
@@ -242,6 +261,7 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
         "source_hash": expected_provenance,
         "evidence_verified": True,
         "related_sources": related_sources,
+        "external_sources": external_sources,
     }
 
 
@@ -752,7 +772,7 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
     } for row in related)
     trend_samples = [{"title": title, "url": hotspot["source_url"], "source_hash": hotspot["provenance_hash"]}]
     trend_samples.extend({"title": str(row.get("observed_title") or ""), "url": str(row["source_url"]), "source_hash": str(row["provenance_hash"])} for row in related)
-    return {
+    brief = {
         "platform": platform,
         "platforms": [platform],
         "language": case["language"],
@@ -803,6 +823,31 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
             platform=platform,
         ),
     }
+    if platform == "wechat":
+        same_lane = [{"title": title, "url": hotspot["source_url"]}, *[
+            {"title": str(row.get("observed_title") or ""), "url": str(row.get("source_url") or "")}
+            for row in related
+        ]]
+        external = [
+            {"platform": str(row.get("platform") or ""), "title": str(row.get("observed_title") or ""), "url": str(row.get("source_url") or "")}
+            for row in hotspot.get("external_sources") or [] if isinstance(row, dict)
+        ]
+        github_ai = {"repo": "traveler0621/reality-restaged", "url": "https://github.com/traveler0621/reality-restaged", "html_url": "https://github.com/traveler0621/reality-restaged", "screenshot_url": "https://github.com/traveler0621/reality-restaged"}
+        github_non_ai = {"repo": "MickeyWzt/photo-form-transposition", "url": "https://github.com/MickeyWzt/photo-form-transposition", "html_url": "https://github.com/MickeyWzt/photo-form-transposition", "screenshot_url": "https://github.com/MickeyWzt/photo-form-transposition"}
+        brief.update({
+            "account_analysis": {"account_lane": "ai_efficiency_open_source", "current_content_data": {"status": "insufficient", "source": "publication_ledger"}, "audience_profile": "AI workflow builders and creators"},
+            "same_lane_account_analysis": {"source": "verified_wechat_reference_extraction", "samples": same_lane[:3], "borrowable_patterns": ["problem-first hook", "structured answer", "saveable checklist"]},
+            "cross_platform_trend_analysis": {"source": "verified_task9_platform_evidence", "wechat_same_lane_samples": same_lane[:3], "external_platform_samples": external[:3], "hot_topics": [title], "hot_content_items": same_lane[:3]},
+            "topic_selection": {"selected_topic": title, "selection_reason": "verified same-lane WeChat evidence with cross-platform corroboration", "article_angle": "problem diagnosis and actionable checklist"},
+            "content_generation_brief": {"provided_to_content_workflow": True, "source_inputs": ["account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection"], "article_plan": ["problem", "cause", "workflow", "checklist", "boundary"], "headline_hook": title},
+            "content_channels": {"github_selection": "weekly_bundle", "hot_content_generation": "verified_same_lane_topic"},
+            "source_data": {"github_projects": [github_ai, github_non_ai], "github_ai_projects": [github_ai], "github_non_ai_projects": [github_non_ai], "hot_content_items": same_lane[:3]},
+            "selected_project": github_ai,
+            "content_line": "hot_content_generation",
+            "batch_plan": {"expected_count": 2, "item_index": 1},
+            "publishing_plan": {"postcheck": "wechat_draft_batchget_or_backend_draft_row", "manual_review_required": True},
+        })
+    return brief
 
 
 class _DryRunPublisher:

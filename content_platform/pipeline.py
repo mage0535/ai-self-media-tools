@@ -271,7 +271,12 @@ class Pipeline:
                     require_output=True,
                 )
                 draft.setdefault("draft_meta", {})["capability_execution"] = capability_execution
-                for context_key in ("content_profile", "capability_plan", "tool_selection", "compiled_skill_rules"):
+                for context_key in (
+                    "content_profile", "capability_plan", "tool_selection", "compiled_skill_rules",
+                    "account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis",
+                    "topic_selection", "content_generation_brief", "content_channels", "source_data",
+                    "batch_plan", "selected_project", "publishing_plan", "content_line",
+                ):
                     if brief.get(context_key) is not None:
                         draft["draft_meta"][context_key] = brief[context_key]
                 tool_selection = brief.get("tool_selection") if isinstance(brief.get("tool_selection"), dict) else {}
@@ -1993,7 +1998,7 @@ class Pipeline:
     @staticmethod
     def _platform_quality_validator(platform, packet, phase="rendered"):
         if platform in {"wechat", "weixin", "wechat_official"}:
-            return validate_wechat_auto_packet(packet)
+            return validate_wechat_auto_packet(packet, phase=phase)
         if platform == "kuaishou":
             return validate_kuaishou_auto_packet(packet)
         if platform == "shipinhao":
