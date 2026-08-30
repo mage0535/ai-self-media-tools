@@ -105,10 +105,12 @@ def deliver(text: str, paths: list[str], target: str = "", platform: str = "medi
 
 
 def deliver_xiaohongshu_package(package_path: Path, target: str = "") -> dict:
+    package_path = Path(package_path)
     try:
-        package = json.loads(Path(package_path).read_text(encoding="utf-8"))
+        package = json.loads(package_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {"passed": False, "error": "handoff_package_invalid_json", "sent": []}
+    images = [str(item) for item in package.get("images") or []]
     text = "\n".join(
         [
             "【小红书待手动发布】",
@@ -118,7 +120,19 @@ def deliver_xiaohongshu_package(package_path: Path, target: str = "") -> dict:
             "操作：" + str(package.get("manual_publish_guide") or ""),
         ]
     )
-    return deliver(text, [str(item) for item in package.get("images") or []], target=target, platform="xhs")
+    result = deliver(text, images, target=target, platform="xhs")
+    try:
+        result["package_sha256"] = hashlib.sha256(package_path.read_bytes()).hexdigest()
+    except OSError:
+        result["package_sha256"] = ""
+    result["image_count"] = len(images)
+    result["expected_images"] = images
+    result["delivered_image_sha256"] = [
+        hashlib.sha256(Path(item).read_bytes()).hexdigest()
+        for item in images
+        if Path(item).is_file()
+    ] if result.get("passed") else []
+    return result
 
 
 def main() -> int:

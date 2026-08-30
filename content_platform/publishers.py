@@ -15,6 +15,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from PIL import Image, UnidentifiedImageError
+
 from .aitoearn import AitoEarnClient
 from .auth_registry import resolve_cookie_file
 from .content_policy import default_publisher_config, is_manual_handoff_platform, is_short_video_platform, is_xiaohongshu_platform, platform_region
@@ -153,17 +155,103 @@ class XiaohongshuManualHandoffPublisher:
         self.outbox = Path(outbox)
 
     @staticmethod
-    def _images(job):
-        paths = []
+    def _sha256_file(path):
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _image_dimensions(path):
+        try:
+            with Image.open(path) as image:
+                return int(image.width), int(image.height)
+        except (OSError, UnidentifiedImageError):
+            return 0, 0
+
+    @staticmethod
+    def _load_asset_provenance(paths):
+        by_path = {}
+        by_sha = {}
+        roots = []
+        for raw in paths:
+            parent = Path(raw).expanduser().resolve().parent
+            if parent not in roots:
+                roots.append(parent)
+        for root in roots:
+            provenance_path = root / "asset_provenance.json"
+            if not provenance_path.is_file():
+                continue
+            try:
+                payload = json.loads(provenance_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for row in payload.get("assets") or []:
+                if not isinstance(row, dict):
+                    continue
+                raw_path = str(row.get("path") or "").strip()
+                if raw_path:
+                    try:
+                        by_path[str(Path(raw_path).expanduser().resolve())] = row
+                    except OSError:
+                        by_path[str(Path(raw_path))] = row
+                digest = str(row.get("sha256") or row.get("content_sha256") or "").strip()
+                if digest:
+                    by_sha[digest] = row
+        return by_path, by_sha
+
+    @classmethod
+    def _images(cls, job):
+        rows = []
         for artifact in job.get("artifacts", []):
             if not isinstance(artifact, dict) or artifact.get("kind") not in {"image", "cover"}:
                 continue
             path = Path(str(artifact.get("path") or "")).expanduser()
             if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-                resolved = str(path.resolve())
-                if resolved not in paths:
-                    paths.append(resolved)
-        return paths
+                rows.append({**artifact, "path": str(path.resolve())})
+        rows.sort(key=lambda item: 0 if str(item.get("kind") or "").casefold() == "cover" else 1)
+        paths = [str(item["path"]) for item in rows]
+        provenance_by_path, provenance_by_sha = cls._load_asset_provenance(paths)
+        images = []
+        manifest = []
+        for index, item in enumerate(rows, 1):
+            path = Path(str(item["path"]))
+            try:
+                digest = cls._sha256_file(path)
+            except OSError:
+                digest = ""
+            provenance = {**provenance_by_sha.get(digest, {}), **provenance_by_path.get(str(path.resolve()), {})}
+            merged = {**provenance, **item}
+            source_url = str(merged.get("source_url") or merged.get("source") or "").strip()
+            license_name = str(merged.get("license") or merged.get("license_type") or merged.get("rights") or "").strip()
+            render_evidence = merged.get("render_evidence") if isinstance(merged.get("render_evidence"), dict) else {}
+            generation_evidence = merged.get("generation_evidence") if isinstance(merged.get("generation_evidence"), dict) else {}
+            width, height = cls._image_dimensions(path)
+            if not render_evidence and generation_evidence and digest and width and height:
+                render_evidence = {
+                    "verified": True,
+                    "renderer": str(generation_evidence.get("provider") or "image_provider"),
+                    "artifact_sha256": digest,
+                    "dimensions": [width, height],
+                }
+            record = {
+                "index": index,
+                "path": str(path),
+                "sha256": digest,
+                "role": "cover" if index == 1 else "carousel_card",
+                "source_url": source_url,
+                "license": license_name,
+                "render_evidence": render_evidence,
+            }
+            if generation_evidence:
+                record["generation_evidence"] = generation_evidence
+            if index == 1:
+                record["width"] = width
+                record["height"] = height
+            images.append(str(path))
+            manifest.append(record)
+        return images, manifest
 
     @staticmethod
     def _guide():
@@ -172,13 +260,20 @@ class XiaohongshuManualHandoffPublisher:
             "核对图片、敏感词和排版后，仅由账号所有者点击发布。发布后再手动确认数据。"
         )
 
+    @staticmethod
+    def _write_payload(path, payload):
+        path = Path(path)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(path)
+
     def deliver(self, job, platform):
         formatted = job.get("platform_payload") or format_for_platform(job, platform)
-        images = self._images(job)
+        images, image_manifest = self._images(job)
         payload = {
             "job_id": job["id"],
             "platform": "xiaohongshu",
-            "status": "handoff_pending",
+            "status": "validating",
             "publish_mode": "manual",
             "live_publish": False,
             "title": str(formatted.get("title") or job.get("title") or "")[:20],
@@ -186,6 +281,7 @@ class XiaohongshuManualHandoffPublisher:
             "topics": list(formatted.get("hashtags") or [])[:6],
             "cover": images[0] if images else "",
             "images": images,
+            "image_manifest": image_manifest,
             "manual_publish_guide": self._guide(),
             "postcheck": "user_manual_publish_confirmation",
             "growth_strategy": build_recovery_strategy(job, formatted),
@@ -193,18 +289,28 @@ class XiaohongshuManualHandoffPublisher:
         directory = self.outbox / "xiaohongshu"
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{job['id']}.json"
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._write_payload(path, payload)
 
         from scripts.xhs_manual_publish_gate import check_handoff_package
 
-        gate = check_handoff_package(str(path))
+        gate = check_handoff_package(str(path), require_operator_delivery=False)
         if not gate.get("passed"):
+            payload["status"] = "blocked"
+            payload["validation_failures"] = gate.get("failures", [])
+            self._write_payload(path, payload)
             return DeliveryResult(False, "blocked", str(path), error="xiaohongshu handoff gate failed: " + ",".join(gate.get("failures", [])))
         receipt = deliver_xiaohongshu_package(path)
         payload["operator_delivery"] = receipt
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        if not receipt.get("passed"):
-            return DeliveryResult(False, "blocked", str(path), error="xiaohongshu operator delivery failed: " + str(receipt.get("error") or "unknown"))
+        self._write_payload(path, payload)
+        final_gate = check_handoff_package(str(path))
+        if not final_gate.get("passed"):
+            payload["status"] = "blocked"
+            payload["validation_failures"] = final_gate.get("failures", [])
+            self._write_payload(path, payload)
+            return DeliveryResult(False, "blocked", str(path), error="xiaohongshu handoff gate failed after operator delivery: " + ",".join(final_gate.get("failures", [])))
+        payload["status"] = "handoff_pending"
+        payload.pop("validation_failures", None)
+        self._write_payload(path, payload)
         return DeliveryResult(True, "handoff_pending", str(path), error="Xiaohongshu manual publish required")
 
 

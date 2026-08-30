@@ -12,6 +12,42 @@ from content_platform.workflow_runtime import WorkflowBlocked, WorkflowStepRunne
 
 
 class PlatformQualityGateRuntimeTests(unittest.TestCase):
+    def test_xiaohongshu_carousel_requires_image_generation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            pipeline = Pipeline(store, {"data_dir": tmp, "media": {"image": {"enabled": True}}})
+            job = {
+                "platforms": ["xiaohongshu"],
+                "draft_meta": {"content_form": "carousel", "media_plan": ["cover", "inline_images"]},
+            }
+
+            self.assertTrue(pipeline._media_required("image", {}, job))
+
+    def test_xiaohongshu_carousel_blocks_fewer_than_six_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "state.db")
+            store.init()
+            job = store.create_job("Xiaohongshu AI workflow carousel", ["xiaohongshu"], {"platforms": ["xiaohongshu"]})
+            store.save_draft(
+                job["id"],
+                "Xiaohongshu AI workflow carousel",
+                "A six-card saveable workflow note.",
+                "pass",
+                {"level": "pass"},
+                "test",
+                {"content_form": "carousel", "media_plan": ["cover", "inline_images"]},
+            )
+            for index in range(5):
+                path = Path(tmp) / ("cover.png" if index == 0 else f"section-{index:02d}.png")
+                path.write_bytes(b"image")
+                store.add_artifact(job["id"], "cover" if index == 0 else "image", str(path), "")
+            pipeline = Pipeline(store, {"data_dir": tmp, "media": {"image": {"enabled": True}}})
+            runner = WorkflowStepRunner(store, "wf_xhs_carousel", job["id"], "xiaohongshu")
+
+            with self.assertRaises(WorkflowBlocked):
+                pipeline._validate_image_requirements(job["id"], runner)
+
     def test_enforced_platform_quality_gate_flags_incomplete_wechat_packet(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / "state.db")
