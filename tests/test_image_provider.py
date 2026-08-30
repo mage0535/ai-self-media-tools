@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+import content_platform.image_provider as image_provider
 from content_platform.image_provider import ImageProviderError, _stock_result_index, generate_image, load_secret
 
 
@@ -442,3 +443,252 @@ def test_image_provider_cache_reuses_previous_success(tmp_path, monkeypatch):
     assert second["cache_hit"] is True
     assert Path(second["path"]).read_bytes() == image_bytes
     assert urlopen.call_count == 1
+
+
+def test_auto_routes_photographic_prompts_to_stock_before_ai_generation(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.delenv("IMAGE_PROVIDER_CHAIN", raising=False)
+    output = tmp_path / "photo.jpg"
+    ai_calls = []
+
+    def fake_stock(prompt, output_path, **kwargs):
+        Path(output_path).write_bytes(b"\xff\xd8" + b"s" * 3000)
+        return {"provider": "pexels", "mode": "search", "license": "Pexels", "source_url": "https://pexels.test/photo"}
+
+    monkeypatch.setattr(image_provider, "_stock_image", fake_stock)
+
+    def fake_ai_provider(name):
+        def provider(*args, **kwargs):
+            ai_calls.append(name)
+            raise ImageProviderError(f"{name} should not be selected")
+
+        return provider
+
+    monkeypatch.setattr(image_provider, "_pixazo_image", fake_ai_provider("pixazo"), raising=False)
+    monkeypatch.setattr(image_provider, "_sensenova_image", fake_ai_provider("sensenova"), raising=False)
+
+    result = generate_image(
+        "real office photo for an AI workflow article cover, natural lighting",
+        output,
+        provider="auto",
+        size="1200x800",
+    )
+
+    assert result["provider"] == "pexels"
+    assert ai_calls == []
+    assert result["provenance"]["route"] == "content_aware_auto"
+    assert result["provenance"]["selected_for"] == "real_scene"
+
+
+def test_auto_no_text_prompt_does_not_trigger_edit_without_input_image(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "sensenova,pixazo")
+    output = tmp_path / "cover.png"
+
+    def fake_pixazo(prompt, output_path, **kwargs):
+        Path(output_path).write_bytes(b"\x89PNG\r\n\x1a\n" + b"p" * 3000)
+        return {"provider": "pixazo", "mode": "generate", "model": "pixazo-image-v1"}
+
+    def fake_sensenova(prompt, output_path, **kwargs):
+        from PIL import Image
+        Image.new("RGB", (1024, 1024), (20, 40, 60)).save(output_path)
+        return {"provider": "sense_nova", "mode": "generate", "model": "sensenova-u1.5-lite"}
+
+    monkeypatch.setattr(image_provider, "_pixazo_image", fake_pixazo, raising=False)
+    monkeypatch.setattr(image_provider, "_sensenova_image", fake_sensenova, raising=False)
+
+    result = generate_image("minimal product illustration, no text", output, provider="auto", size="1024x1024")
+
+    assert result["provider"] == "sense_nova"
+    assert result["mode"] == "generate"
+    assert result.get("edited") is not True
+    assert result["provenance"]["input_image_sha256"] == ""
+
+
+def test_auto_routes_real_input_image_to_sensenova_edit(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "pixazo,sense_nova,stock")
+    source = tmp_path / "source.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\nsource-real-image")
+    output = tmp_path / "edited.png"
+    generation_calls = []
+
+    def fake_sensenova(prompt, output_path, **kwargs):
+        assert Path(kwargs["input_image"]).read_bytes() == source.read_bytes()
+        Path(output_path).write_bytes(b"\x89PNG\r\n\x1a\n" + b"e" * 3000)
+        return {"provider": "sensenova", "mode": "edit", "model": "sensenova-image-edit"}
+
+    monkeypatch.setattr(image_provider, "_sensenova_image", fake_sensenova, raising=False)
+
+    def fake_pixazo(*args, **kwargs):
+        generation_calls.append("pixazo")
+        raise ImageProviderError("Pixazo cannot edit")
+
+    monkeypatch.setattr(image_provider, "_pixazo_image", fake_pixazo, raising=False)
+
+    result = generate_image("make the uploaded image warmer but keep its composition", output, provider="auto", input_image=source)
+
+    assert result["provider"] == "sense_nova"
+    assert result["mode"] == "edit"
+    assert generation_calls == []
+    assert result["provenance"]["input_image_sha256"]
+    assert result["provenance"]["route"] == "content_aware_auto"
+
+
+def test_stock_original_is_preserved_and_temp_edit_atomically_replaces_output(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "stock,sense_nova")
+    output = tmp_path / "final.png"
+    calls = []
+    stock_color = (16, 32, 48)
+    edited_color = (200, 120, 40)
+
+    def fake_stock(prompt, output_path, **kwargs):
+        calls.append(("stock", Path(output_path).name))
+        from PIL import Image
+
+        Image.new("RGB", (512, 512), stock_color).save(output_path)
+        return {"provider": "pexels", "mode": "search", "license": "Pexels", "source_url": "https://pexels.test/photo"}
+
+    def fake_sensenova(prompt, output_path, **kwargs):
+        assert Path(output_path) != output
+        calls.append(("edit", Path(output_path).name))
+        from PIL import Image
+
+        Image.new("RGB", (512, 512), edited_color).save(output_path, format="PNG")
+        return {"provider": "sensenova", "mode": "edit", "model": "sensenova-image-edit"}
+
+    monkeypatch.setattr(image_provider, "_stock_image", fake_stock)
+    monkeypatch.setattr(image_provider, "_sensenova_image", fake_sensenova, raising=False)
+
+    result = generate_image("editorial cover, remove watermark-like text", output, provider="auto")
+
+    from PIL import Image
+
+    assert Image.open(output).getpixel((0, 0)) == edited_color
+    original_copy = Path(result["provenance"]["original_path"])
+    assert original_copy.is_file()
+    assert Image.open(original_copy).getpixel((0, 0)) == stock_color
+    assert calls[0] == ("stock", "final.png")
+    assert calls[1][0] == "edit"
+    assert result["provider"] == "sense_nova"
+    assert result["provenance"]["original_provider"] == "pexels"
+
+
+def test_edit_failure_keeps_stock_output_and_reports_fallback(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "stock,sense_nova")
+    output = tmp_path / "fallback.png"
+
+    def fake_stock(prompt, output_path, **kwargs):
+        Path(output_path).write_bytes(b"\x89PNG\r\n\x1a\n" + b"s" * 3000)
+        return {"provider": "pixabay", "mode": "search", "license": "Pixabay", "source_url": "https://pixabay.test/photo"}
+
+    def failing_sensenova(*args, **kwargs):
+        raise ImageProviderError("edit provider unavailable")
+
+    monkeypatch.setattr(image_provider, "_stock_image", fake_stock)
+    monkeypatch.setattr(image_provider, "_sensenova_image", failing_sensenova, raising=False)
+
+    result = generate_image("editorial cover, remove watermark-like text", output, provider="auto")
+
+    assert result["provider"] == "pixabay"
+    assert result["mode"] == "search"
+    assert result["edit_status"] == "fallback_kept_stock"
+    assert result["edit_error_provider"] == "sense_nova"
+    assert output.read_bytes().endswith(b"s" * 3000)
+
+
+def test_sensenova_edit_sends_source_image_and_aspect_tier(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.setenv("SENSENOVA_API_KEY", "sense-key")
+    source = tmp_path / "source.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\nsource-real-image")
+    output = tmp_path / "edited.png"
+    from PIL import Image
+    import io
+    buffer = io.BytesIO()
+    Image.new("RGB", (768, 1024), (20, 40, 60)).save(buffer, format="PNG")
+    image_bytes = buffer.getvalue()
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return json.dumps({"data": [{"b64_json": base64.b64encode(image_bytes).decode("ascii")}]}).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        assert request.headers["Authorization"] == "Bearer sense-key"
+        payload = json.loads(request.data.decode("utf-8"))
+        assert payload["size"] == "1664x2496"
+        assert base64.b64decode(payload["image"]) == source.read_bytes()
+        return Response()
+
+    with patch("content_platform.image_provider.urllib.request.urlopen", side_effect=fake_urlopen):
+        result = generate_image(
+            "preserve the original subject and adjust lighting",
+            output,
+            provider="sensenova",
+            model="sensemirage-edit-test",
+            size="768x1024",
+            input_image=source,
+        )
+
+    assert result["provider"] == "sense_nova"
+    assert result["mode"] == "edit"
+    assert result["model"] == "sensemirage-edit-test"
+    assert result["provenance"]["input_image_sha256"]
+
+
+def test_pixazo_generation_sends_requested_dimensions_and_records_provenance(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.setenv("PIXAZO_API_KEY", "pixazo-key")
+    output = tmp_path / "generated.png"
+    image_bytes = b"\x89PNG\r\n\x1a\n" + b"p" * 3000
+
+    class ApiResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return json.dumps({"imageUrl": "https://cdn.pixazo.test/generated.png"}).encode("utf-8")
+
+    class Headers:
+        def get(self, name, default=None):
+            return "image/png" if name == "Content-Type" else default
+
+    class ImageResponse:
+        headers = Headers()
+        def __enter__(self): return self
+        def __exit__(self, *args): return None
+        def read(self): return image_bytes
+
+    def fake_urlopen(request, timeout):
+        if "gateway.pixazo.ai" in request.full_url:
+            assert request.headers["Ocp-apim-subscription-key"] == "pixazo-key"
+            assert json.loads(request.data.decode("utf-8"))["prompt"]
+            return ApiResponse()
+        return ImageResponse()
+
+    with patch("content_platform.image_provider.urllib.request.urlopen", side_effect=fake_urlopen):
+        result = generate_image(
+            "cinematic editorial illustration for AI workflow",
+            output,
+            provider="pixazo",
+            model="pixazo-image-test",
+            size="1536x864",
+        )
+
+    assert result["provider"] == "pixazo"
+    assert result["mode"] == "generate"
+    assert result["provenance"]["provider"] == "pixazo"
+    assert result["provenance"]["prompt_sha256"] == image_provider.hashlib.sha256(
+        "cinematic editorial illustration for AI workflow".encode("utf-8")
+    ).hexdigest()

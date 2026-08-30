@@ -147,3 +147,24 @@ def test_xiaohongshu_knowledge_image_stops_after_bounded_quality_retries(tmp_pat
     assert evidence["max_attempts"] == 2
     assert len(evidence["attempts"]) == 2
     assert all("low_complexity" in item["failures"] for item in evidence["attempts"])
+
+
+def test_image_prompts_compile_content_intent_and_clean_section_titles():
+    job = {
+        "topic": "AI workflow content system",
+        "platforms": ["xiaohongshu"],
+        "draft_meta": {
+            "sections": [
+                {"id": "section_1", "title": "每天切换五个平台浪费两小时", "role": "hook"},
+                {"id": "section_2", "title": "把选题写作配图串成工作流", "role": "method"},
+            ],
+        },
+    }
+
+    prompts = MediaBridge._image_prompts(job, 3)
+
+    assert prompts[0]["intent"] == "cinematic_cover"
+    assert [item["intent"] for item in prompts[1:]] == ["real_scene", "real_scene"]
+    assert "每天切换五个平台浪费两小时" in prompts[1]["prompt"]
+    assert "section_1" not in prompts[1]["prompt"]
+    assert "'role':" not in prompts[1]["prompt"]

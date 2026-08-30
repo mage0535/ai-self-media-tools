@@ -123,6 +123,25 @@ class ToolRegistryTests(unittest.TestCase):
                 result = ToolRegistry().probe()
         self.assertEqual(result["tts_engines"]["qwen3-tts"]["model"], "qwen-audio-3.0-tts-flash")
 
+    def test_registry_reports_image_provider_capabilities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                "HOME": tmp,
+                "USERPROFILE": tmp,
+                "SN_API_KEY": "sense-key",
+                "PIXAZO_API_KEY": "pixazo-key",
+                "PEXELS_API_KEY": "pexels-key",
+            }
+            with patch.dict("os.environ", env, clear=True):
+                result = ToolRegistry({"fast_probe": True}).probe()
+
+        registry = result["image_providers"]
+        self.assertTrue(registry["available"])
+        self.assertEqual(registry["kind"], "image_provider_registry")
+        self.assertTrue(registry["providers"]["sense_nova"]["supports_edit"])
+        self.assertTrue(registry["providers"]["pixazo"]["supports_generate"])
+        self.assertTrue(registry["providers"]["stock"]["available"])
+
 
 if __name__ == "__main__":
     unittest.main()
