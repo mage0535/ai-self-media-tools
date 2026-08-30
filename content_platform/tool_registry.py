@@ -175,7 +175,7 @@ class ToolRegistry:
                 "kind": "real_scene_search",
             },
             "sense_nova": {
-                "available": bool(load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")),
+                "available": bool(load_secret("SN_IMAGE_GEN_API_KEY") or load_secret("SN_API_KEY") or load_secret("SENSENOVA_API_KEY")),
                 "supports_generate": True,
                 "supports_edit": True,
                 "kind": "generated_image_and_edit",
