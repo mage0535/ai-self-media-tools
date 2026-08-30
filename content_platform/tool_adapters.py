@@ -40,7 +40,23 @@ class ScriptTranscriberProvider(_BaseScriptProvider):
 
 class ScriptAnalyzerProvider(_BaseScriptProvider):
     def run(self, target, extra_args=None):
-        return self._run(target, extra_args)
+        proc = subprocess.run(
+            [sys.executable, self.script, str(target), *(extra_args or [])],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=self.timeout,
+            check=False,
+        )
+        # Semantic mismatch is a valid analyzed result, not a provider crash.
+        if proc.returncode not in {0, 3}:
+            detail = (proc.stderr or proc.stdout or "provider failed")[-500:]
+            raise RuntimeError(detail)
+        payload = (proc.stdout or "").strip()
+        if not payload:
+            raise RuntimeError("analyzer returned no JSON evidence")
+        return json.loads(payload)
 
 
 class ScriptImageProvider(_BaseScriptProvider):

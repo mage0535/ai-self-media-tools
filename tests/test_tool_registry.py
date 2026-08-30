@@ -35,6 +35,17 @@ class ToolRegistryTests(unittest.TestCase):
                 self.assertEqual(ocr.run(str(sample))["labels"][0], "automation")
                 self.assertEqual(transcriber.run(str(sample))["summary"], "ok")
 
+    def test_analyzer_preserves_semantic_mismatch_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "provider.py"
+            script.write_text("# fixture", encoding="utf-8")
+            completed = type("Result", (), {"returncode": 3, "stdout": '{"passed":false,"semantic_match_score":0.2}', "stderr": ""})()
+            with patch("content_platform.tool_adapters.subprocess.run", return_value=completed):
+                result = ScriptAnalyzerProvider(str(script)).run("image.png")
+
+        assert result["passed"] is False
+        assert result["semantic_match_score"] == 0.2
+
     def test_registry_can_build_provider_instances(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
