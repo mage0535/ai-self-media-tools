@@ -13,7 +13,7 @@ from .tool_registry import ToolRegistry
 from .paths import agent_scripts_dir
 from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
-from .adapters.media import execute_article_media
+from .adapters.media import execute_article_media, normalize_article_sections
 
 try:
     from PIL import Image, ImageStat, UnidentifiedImageError
@@ -800,22 +800,7 @@ class MediaBridge:
 
     @staticmethod
     def _article_sections(job):
-        meta_sections = (job.get("draft_meta") or {}).get("sections") or job.get("sections") or []
-        if isinstance(meta_sections, list) and meta_sections:
-            values = []
-            for item in meta_sections:
-                if isinstance(item, dict):
-                    value = item.get("title") or item.get("heading") or item.get("text") or item.get("purpose") or ""
-                else:
-                    value = item
-                clean = str(value or "").strip()
-                if clean:
-                    values.append(clean[:80])
-            if values:
-                return values
-        body = str(job.get("body") or "")
-        parts = [part.strip().replace("\n", " ") for part in body.split("\n\n") if len(part.strip()) > 40]
-        return [part[:80] for part in parts[:6]]
+        return normalize_article_sections(job, limit=6)
 
     @staticmethod
     def _video_duration(path):
