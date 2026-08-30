@@ -144,25 +144,38 @@ def _invoke_wewrite(cfg: dict[str, Any], brief_path: Path, article_path: Path, t
         run_id = _extract_run_id(start.stdout)
         if run_id:
             base["run_id"] = run_id
-        write = subprocess.run(
-            [*command_prefix, "llm-write", "--brief", str(brief_path), "--output", str(article_path), "--system-extra", _system_extra()],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
-            timeout=timeout,
-            check=False,
-        )
-        base["commands"].append({"name": "llm-write", "returncode": write.returncode})
-        base["article_path"] = str(article_path)
-        if write.returncode == 0 and article_path.is_file() and article_path.stat().st_size > 1000:
+        write = None
+        err = ""
+        max_attempts = max(1, min(int(cfg.get("writer_max_attempts", 2)), 3))
+        for attempt in range(1, max_attempts + 1):
+            attempt_timeout = timeout if attempt == 1 else min(600, max(300, timeout + 120))
             try:
-                summary = json.loads((write.stdout or "{}").strip() or "{}")
-            except json.JSONDecodeError:
-                summary = {}
-            return {**base, "status": "used", "summary": {k: summary.get(k) for k in ["chars", "model", "tokens_in", "tokens_out"] if k in summary}}
-        err = (write.stderr or write.stdout or start.stderr or start.stdout or "wewrite llm-write produced no article")[:500]
+                write = subprocess.run(
+                    [*command_prefix, "llm-write", "--brief", str(brief_path), "--output", str(article_path), "--system-extra", _system_extra()],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    env=env,
+                    timeout=attempt_timeout,
+                    check=False,
+                )
+                err = (write.stderr or write.stdout or start.stderr or start.stdout or "wewrite llm-write produced no article")[:500]
+                base["commands"].append({"name": "llm-write", "attempt": attempt, "timeout": attempt_timeout, "returncode": write.returncode})
+            except subprocess.TimeoutExpired:
+                err = f"wewrite command timed out after {attempt_timeout}s"
+                base["commands"].append({"name": "llm-write", "attempt": attempt, "timeout": attempt_timeout, "returncode": None, "error": "timeout"})
+                write = None
+            base["article_path"] = str(article_path)
+            if write is not None and write.returncode == 0 and article_path.is_file() and article_path.stat().st_size > 1000:
+                try:
+                    summary = json.loads((write.stdout or "{}").strip() or "{}")
+                except json.JSONDecodeError:
+                    summary = {}
+                return {**base, "status": "used", "attempts": attempt, "summary": {k: summary.get(k) for k in ["chars", "model", "tokens_in", "tokens_out"] if k in summary}}
+            if not _transient_writer_failure(err):
+                break
+            time.sleep(min(2, attempt))
         failed = {**base, "error": err}
         _record_writer_failure(circuit_path, failed)
         return failed
@@ -184,6 +197,14 @@ def _writer_circuit_open(path: Path, cooldown_seconds: int) -> bool:
         return time.time() - float(payload.get("failed_at", 0)) < cooldown_seconds
     except (OSError, ValueError, json.JSONDecodeError):
         return False
+
+
+def _transient_writer_failure(message: str) -> bool:
+    text = str(message or "").casefold()
+    return any(token in text for token in (
+        "timeout", "timed out", "readtimeout", "429", "rate limit",
+        "http 500", "http 502", "http 503", "http 504", "connection reset", "temporarily unavailable",
+    ))
 
 
 def _record_writer_failure(path: Path | None, invocation: dict[str, Any]) -> None:
