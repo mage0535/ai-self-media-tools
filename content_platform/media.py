@@ -730,6 +730,8 @@ class MediaBridge:
             "image_edit": ["agnes", "sense_nova", "gemini", "openai"],
         }
         defaults = by_intent.get(str(intent or "auto"), ["auto", "sense_nova", "pixazo", "cloudflare", "pollinations"])
+        if os.environ.get("AGNES_IMAGE_AUTO_ENABLED") != "1":
+            defaults = [name for name in defaults if name != "agnes"]
         if configured == "auto":
             return defaults
         return [configured, *[name for name in defaults if name != configured]]
