@@ -1381,6 +1381,19 @@ class Pipeline:
         platforms = {str(item).casefold() for item in (job or {}).get("platforms", [])}
         draft_meta = (job or {}).get("draft_meta") or {}
         media_plan = {str(item).casefold() for item in draft_meta.get("media_plan", [])}
+        content_form = str(
+            draft_meta.get("content_form")
+            or ((draft_meta.get("strategy") or {}).get("content_form") if isinstance(draft_meta.get("strategy"), dict) else "")
+            or ""
+        ).casefold()
+        if kind == "image" and platforms.intersection({"xiaohongshu", "rednote"}) and content_form in {
+            "carousel",
+            "image_carousel",
+            "image_text_note",
+            "manual_carousel",
+            "xiaohongshu_carousel",
+        }:
+            return True
         if kind == "image" and bool(self.config.get("strict_media_contract", False)) and platforms.intersection({"juejin", "zhihu", "wechat", "weixin"}):
             return bool(media_plan.intersection({"cover", "article", "inline_images", "project_screenshot"})) or bool(draft_meta.get("content_form") in {"article", "long_article"})
         if kind != "video":
@@ -1397,20 +1410,28 @@ class Pipeline:
         if not required and not image_cfg.get("enabled", False):
             runner.skipped("validate_image_requirements", "image_not_required", "current config does not require images", required=False, depends_on=["generate_or_collect_images"])
             return
-        minimum = int(image_cfg.get("min_count", 2 if required and {str(item).casefold() for item in job.get("platforms", [])}.intersection({"juejin", "zhihu"}) else (1 if required else 0)))
+        platforms = {str(item).casefold() for item in job.get("platforms", [])}
+        default_minimum = 6 if required and platforms.intersection({"xiaohongshu", "rednote"}) else (
+            2 if required and platforms.intersection({"juejin", "zhihu"}) else (1 if required else 0)
+        )
+        minimum = int(image_cfg.get("min_count", default_minimum))
         verified = []
+        checksums = []
         failures = []
         for item in artifacts:
             path = Path(item.get("path", ""))
             if path.is_file() and path.stat().st_size > 0 and path.suffix.casefold() in {".png", ".jpg", ".jpeg", ".webp"}:
                 verified.append(str(path))
+                checksums.append(str(item.get("checksum") or hashlib.sha256(path.read_bytes()).hexdigest()))
             else:
                 failures.append(str(path))
+        unique_images = len(checksums) == len(set(checksums))
         gate = {
-            "passed": len(verified) >= minimum and not failures and (not required or bool(cover_artifacts)),
+            "passed": len(verified) >= minimum and not failures and unique_images and (not required or bool(cover_artifacts)),
             "checks": [
                 {"rule_id": "image.required_count", "required": required, "passed": len(verified) >= minimum, "actual": len(verified), "expected_min": minimum, "blocking": required},
                 {"rule_id": "image.file_readable", "required": required, "passed": not failures, "failed_paths": failures, "blocking": required},
+                {"rule_id": "image.unique_content", "required": required, "passed": unique_images, "actual": len(set(checksums)), "expected": len(checksums), "blocking": required},
                 {"rule_id": "image.cover_present", "required": required, "passed": bool(cover_artifacts), "actual": len(cover_artifacts), "blocking": required},
             ],
         }

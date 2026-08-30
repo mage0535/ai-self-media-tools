@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from PIL import Image, UnidentifiedImageError
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -354,7 +356,57 @@ def validate_full_handoff_render_contract(contract: dict[str, Any] | None, root:
     root = Path(root).resolve()
     contract = contract if isinstance(contract, dict) else {}
     if content_form not in {"vertical_video", "horizontal_video"}:
-        return validate_handoff_contract(contract)
+        if content_form != "carousel" or str(contract.get("platform") or "").casefold() not in {"xiaohongshu", "rednote"}:
+            return validate_handoff_contract(contract)
+        failures: list[str] = []
+        if contract.get("publish_boundary") != "manual_handoff_only":
+            failures.append("xiaohongshu_publish_boundary_not_manual_handoff_only")
+        if contract.get("version") != "handoff_contract_v2":
+            failures.append("handoff_contract_version_missing")
+        if not str(contract.get("copy_media_version") or "").strip():
+            failures.append("copy_media_version_missing")
+        target = contract.get("target_renderer_evidence") if isinstance(contract.get("target_renderer_evidence"), dict) else {}
+        if target.get("verified") is not True:
+            failures.append("target_renderer_evidence_missing")
+        cover = contract.get("cover") if isinstance(contract.get("cover"), dict) else {}
+        cover_path = _relative_file(root, cover.get("path"))
+        if cover_path is None or not cover_path.is_file() or cover_path.stat().st_size <= 0:
+            failures.append("xiaohongshu_cover_unreadable")
+        elif str(cover.get("sha256") or "") != sha256_file(cover_path):
+            failures.append("xiaohongshu_cover_checksum_mismatch")
+        if cover.get("width") != 1080 or cover.get("height") != 1440:
+            failures.append("xiaohongshu_cover_platform_size_missing")
+        carousel = contract.get("carousel") if isinstance(contract.get("carousel"), dict) else {}
+        images = carousel.get("images") if isinstance(carousel.get("images"), list) else []
+        image_hashes: list[str] = []
+        for index, item in enumerate(images, 1):
+            row = item if isinstance(item, dict) else {"path": item}
+            path = _relative_file(root, row.get("path"))
+            if path is None or not path.is_file() or path.stat().st_size <= 0:
+                failures.append(f"xiaohongshu_card_{index}_unreadable")
+                continue
+            try:
+                with Image.open(path) as image:
+                    image.load()
+            except (OSError, UnidentifiedImageError, ValueError):
+                failures.append(f"xiaohongshu_card_{index}_unreadable")
+                continue
+            digest = sha256_file(path)
+            image_hashes.append(digest)
+            if str(row.get("sha256") or "") != digest:
+                failures.append(f"xiaohongshu_card_{index}_checksum_mismatch")
+            if not str(row.get("source_url") or "").startswith(("https://", "http://", "generated:")):
+                failures.append(f"xiaohongshu_card_{index}_source_missing")
+            if not str(row.get("license") or "").strip():
+                failures.append(f"xiaohongshu_card_{index}_license_missing")
+            render = row.get("render_evidence") if isinstance(row.get("render_evidence"), dict) else {}
+            if render.get("verified") is not True or render.get("artifact_sha256") != digest:
+                failures.append(f"xiaohongshu_card_{index}_render_evidence_missing")
+        if len(images) != 6:
+            failures.append("xiaohongshu_carousel_requires_exactly_six_cards")
+        if len(set(image_hashes)) != len(image_hashes):
+            failures.append("xiaohongshu_card_sha256_not_unique")
+        return {"passed": not failures, "failures": failures, "target_renderer": target, "artifact_count": len(images), "cover": cover}
     failures: list[str] = []
     if not str(contract.get("version") or "").strip():
         failures.append("handoff_contract_version_missing")
@@ -417,7 +469,7 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
     probes: dict[str, dict[str, Any]] = {}
 
     platform = str(case.get("platform") or "").casefold()
-    preferred_cover = "cover_1920x1080.jpg" if platform in {"youtube", "bilibili"} else "cover_1080x1920.jpg"
+    preferred_cover = "cover_1920x1080.jpg" if platform in {"youtube", "bilibili"} else ("cover_1080x1440.jpg" if platform in {"xiaohongshu", "rednote"} else "cover_1080x1920.jpg")
     cover_path = next((media_root / name for name in (preferred_cover, "cover.jpg", "cover.jpeg", "cover.png") if (media_root / name).is_file()), None)
     cover_evidence = _load_json(media_root / "cover_quality_evidence.json")
     if cover_path:
@@ -432,11 +484,15 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
     if form == "carousel":
         carousel = manifest.get("carousel", {}) if isinstance(manifest.get("carousel"), dict) else {}
         images = []
-        for raw in carousel.get("images", []):
-            path = _relative_file(root, raw)
+        image_rows = carousel.get("images", []) if isinstance(carousel.get("images"), list) else []
+        for raw in image_rows:
+            row = raw if isinstance(raw, dict) else {"path": raw}
+            path = _relative_file(root, row.get("path"))
             if path and path.is_file() and path.stat().st_size > 0:
                 images.append(path)
-        carousel_passed = len(images) >= 3 and len({sha256_file(path) for path in images}) == len(images)
+        required_count = 6 if platform in {"xiaohongshu", "rednote"} else 3
+        count_passed = len(images) == required_count if platform in {"xiaohongshu", "rednote"} else len(images) >= required_count
+        carousel_passed = count_passed and len({sha256_file(path) for path in images}) == len(images)
         probes["carousel"] = _probe("carousel", carousel_passed, details={"count": len(images)}, failures=[] if carousel_passed else ["carousel_images_not_unique_or_missing"], level="artifact_verified" if carousel_passed else "declared")
         if not carousel_passed:
             failures.append("carousel_images_not_unique_or_missing")
@@ -764,6 +820,134 @@ class _DryRunPublisher:
         return DeliveryResult(True, "dry_run", str(path))
 
 
+def _task9_artifact_path(root: Path, source: Path) -> str:
+    try:
+        return source.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(source)
+
+
+def _artifact_source_url(item: dict[str, Any], fallback: str = "") -> str:
+    source_url = str(item.get("source_url") or item.get("url") or "").strip()
+    if source_url:
+        return source_url
+    generation = item.get("generation_evidence") if isinstance(item.get("generation_evidence"), dict) else {}
+    prompt_hash = str(generation.get("prompt_hash") or item.get("prompt_hash") or "").strip()
+    return f"generated:{prompt_hash}" if prompt_hash else fallback
+
+
+def _artifact_license(item: dict[str, Any]) -> str:
+    return str(item.get("license") or item.get("license_type") or item.get("rights") or "").strip()
+
+
+def _xhs_cover_dimensions(path: Path, item: dict[str, Any]) -> tuple[int, int]:
+    width = int(item.get("width") or 0)
+    height = int(item.get("height") or 0)
+    if width and height:
+        return width, height
+    try:
+        with Image.open(path) as image:
+            return int(image.width), int(image.height)
+    except (OSError, UnidentifiedImageError):
+        pass
+    return width, height
+
+
+def _xhs_artifact_record(root: Path, item: dict[str, Any], *, role: str, index: int | None = None) -> dict[str, Any] | None:
+    source = Path(str(item.get("path") or ""))
+    if not source.is_file() or source.stat().st_size <= 0:
+        return None
+    try:
+        with Image.open(source) as image:
+            image.load()
+            width, height = int(image.width), int(image.height)
+    except (OSError, UnidentifiedImageError, ValueError):
+        return None
+    digest = sha256_file(source)
+    render_evidence = item.get("render_evidence") if isinstance(item.get("render_evidence"), dict) else {}
+    record = {
+        "path": _task9_artifact_path(root, source),
+        "sha256": digest,
+        "role": role,
+        "kind": item.get("kind") or role,
+        "source_url": _artifact_source_url(item),
+        "license": _artifact_license(item),
+        "render_evidence": render_evidence,
+    }
+    if index is not None:
+        record["index"] = index
+    if role == "cover":
+        record["width"] = width
+        record["height"] = height
+    return record
+
+
+def _build_xiaohongshu_handoff_contract(root: Path, job: dict[str, Any], platform: str) -> dict[str, Any]:
+    artifact_rows = [item for item in (job.get("artifacts") or []) if isinstance(item, dict)]
+    provenance_by_path: dict[str, dict[str, Any]] = {}
+    for item in artifact_rows:
+        source = Path(str(item.get("path") or ""))
+        payload = _load_json(source.parent / "asset_provenance.json") if source.parent else {}
+        for record in payload.get("assets") or []:
+            if not isinstance(record, dict) or not record.get("path"):
+                continue
+            provenance_by_path[str(Path(str(record["path"])).resolve())] = record
+    artifact_rows = [
+        {**provenance_by_path.get(str(Path(str(item.get("path") or "")).resolve()), {}), **item}
+        for item in artifact_rows
+    ]
+    cover_names = {"cover_1080x1440.jpg", "cover.jpg", "cover.jpeg", "cover.png"}
+    cover_item = next((item for item in artifact_rows if str(item.get("kind") or "").casefold() == "cover" or Path(str(item.get("path") or "")).name in cover_names), {})
+    cover = _xhs_artifact_record(root, cover_item, role="cover") if cover_item else None
+    card_items = [
+        item for item in artifact_rows
+        if item is not cover_item and (
+            str(item.get("kind") or "").casefold() in {"carousel_card", "card", "image", "knowledge_card"}
+            or re.match(r"card[_-]?\d+", Path(str(item.get("path") or "")).stem)
+        )
+    ]
+    section_cards = [
+        record for record in (
+            _xhs_artifact_record(root, item, role="carousel_card", index=index)
+            for index, item in enumerate(card_items, 1)
+        )
+        if record is not None
+    ]
+    slides = ([cover] if cover else []) + section_cards
+    render_verified = bool(
+        cover
+        and len(slides) >= 6
+        and len({row["sha256"] for row in slides}) == len(slides)
+        and all(row.get("source_url") and row.get("license") for row in slides)
+        and all(
+            row.get("render_evidence", {}).get("verified") is True
+            and row.get("render_evidence", {}).get("artifact_sha256") == row.get("sha256")
+            for row in slides
+        )
+    )
+    return {
+        "version": "handoff_contract_v2",
+        "copy_media_version": "task9-xiaohongshu-carousel-v1",
+        "platform": platform,
+        "state": "handoff_pending",
+        "publish_boundary": "manual_handoff_only",
+        "target_renderer_evidence": {
+            "verified": render_verified,
+            "platform": platform,
+            "renderer": "xiaohongshu_manual_carousel_handoff",
+            "card_count": len(slides),
+            "cover_size": [cover.get("width"), cover.get("height")] if cover else [],
+        },
+        "cover": cover or {},
+        "carousel": {"minimum_required": 6, "images": slides},
+        "source_license_evidence": [
+            {"path": row["path"], "source_url": row["source_url"], "license": row["license"]}
+            for row in slides
+        ],
+        "artifacts": slides,
+    }
+
+
 class _PolicySafePublisher:
     """External publisher boundary for canary routes; never performs network I/O."""
 
@@ -772,10 +956,17 @@ class _PolicySafePublisher:
         self.status = status
 
     def deliver(self, job, platform):
+        if str(platform).casefold() in {"xiaohongshu", "rednote"} and self.status != "handoff_pending":
+            self.status = "handoff_pending"
         self.outbox.mkdir(parents=True, exist_ok=True)
         path = self.outbox / f"{platform}-{job['id']}.json"
         payload = {"job_id": job["id"], "platform": platform, "status": self.status}
         if self.status == "handoff_pending":
+            if str(platform).casefold() in {"xiaohongshu", "rednote"}:
+                payload["handoff_contract"] = _build_xiaohongshu_handoff_contract(self.outbox.parent, job, platform)
+                path.write_text(json.dumps(payload, ensure_ascii=True, sort_keys=True), encoding="utf-8")
+                from content_platform.models import DeliveryResult
+                return DeliveryResult(True, self.status, str(path), error="Task9 external publisher boundary")
             artifacts = []
             backgrounds = []
             motion = {}
@@ -905,6 +1096,13 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
     delivery_rows = store.deliveries(job_id) if job_id and hasattr(store, "deliveries") else (job.get("deliveries") if isinstance(job, dict) else [])
     delivery = next((row for row in delivery_rows or [] if row.get("platform") == case["platform"]), {})
     delivery_receipt = _load_json(Path(str(delivery.get("external_id") or "")))
+    handoff_contract = delivery_receipt.get("handoff_contract") if isinstance(delivery_receipt.get("handoff_contract"), dict) else None
+    carousel_contract = handoff_contract.get("carousel") if isinstance(handoff_contract, dict) and isinstance(handoff_contract.get("carousel"), dict) else {}
+    carousel_images = carousel_contract.get("images") if isinstance(carousel_contract.get("images"), list) else []
+    carousel_assets = [dict(row) for row in carousel_images if isinstance(row, dict)]
+    cover_contract = handoff_contract.get("cover") if isinstance(handoff_contract, dict) and isinstance(handoff_contract.get("cover"), dict) else {}
+    target_renderer = handoff_contract.get("target_renderer_evidence") if isinstance(handoff_contract, dict) and isinstance(handoff_contract.get("target_renderer_evidence"), dict) else {}
+    source_license = handoff_contract.get("source_license_evidence") if isinstance(handoff_contract, dict) and isinstance(handoff_contract.get("source_license_evidence"), list) else []
     execution = draft_meta.get("capability_execution") if isinstance(draft_meta.get("capability_execution"), dict) else {}
     verified_by_id = {
         str(item.get("capability_id") or ""): item
@@ -947,10 +1145,19 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
             "external_verified": bool(delivery.get("external_verified")),
             "receipt_path": delivery.get("external_id", ""),
         },
-        "handoff_contract": delivery_receipt.get("handoff_contract") if isinstance(delivery_receipt.get("handoff_contract"), dict) else None,
+        "handoff_contract": handoff_contract,
         "events": [dict(row) for row in (store.events(job_id) if job_id and hasattr(store, "events") else []) if hasattr(row, "keys")],
         "source_evidence": source_rows,
     }
+    if case.get("content_form") == "carousel" and case.get("platform") in {"xiaohongshu", "rednote"}:
+        manifest["carousel"] = {
+            "minimum_required": 6,
+            "images": [row.get("path") for row in carousel_assets if row.get("path")],
+            "assets": carousel_assets,
+            "cover": cover_contract,
+        }
+        manifest["source_license_evidence"] = [dict(row) for row in source_license if isinstance(row, dict)]
+        manifest["render_evidence"] = {"target_renderer_evidence": target_renderer, "cover": cover_contract, "card_count": len(carousel_assets)}
     (root / "artifact_manifest.json").write_text(json.dumps(manifest, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     return manifest
 

@@ -502,6 +502,51 @@ def test_safe_manual_publisher_builds_handoff_from_real_artifacts(tmp_path: Path
     assert contract["motion_evidence"]["artifact_verified"] is True
 
 
+def test_xiaohongshu_safe_publisher_requires_six_unique_readable_cards_and_manual_handoff(tmp_path: Path):
+    from scripts.task9_canary import _PolicySafePublisher, validate_full_handoff_render_contract
+
+    media = tmp_path / "media"
+    from PIL import Image
+    cover = media / "cover.png"
+    cover.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (1080, 1440), (20, 30, 40)).save(cover)
+    cards = []
+    for index in range(1, 6):
+        path = media / f"card_{index:02d}.jpg"
+        Image.new("RGB", (1080, 1440), (index * 35, index * 17, index * 43)).save(path, quality=95)
+        cards.append(path)
+    def artifact(path, kind, source_url):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        return {"path": str(path), "kind": kind, "source_url": source_url, "license": "self_owned", "render_evidence": {"verified": True, "renderer": "unit_test", "artifact_sha256": digest}}
+    artifacts = [artifact(cover, "cover", "https://example.test/cover")]
+    artifacts.extend(
+        artifact(path, "carousel_card", f"https://example.test/card-{index}")
+        for index, path in enumerate(cards, 1)
+    )
+
+    result = _PolicySafePublisher(tmp_path / "outbox", "handoff_pending").deliver({"id": "job-1", "artifacts": artifacts}, "xiaohongshu")
+    receipt = json.loads(Path(result.external_id).read_text())
+    contract = receipt["handoff_contract"]
+
+    assert receipt["status"] == "handoff_pending"
+    assert contract["publish_boundary"] == "manual_handoff_only"
+    assert contract["cover"]["path"].endswith("cover.png")
+    assert len(contract["carousel"]["images"]) == 6
+    assert validate_full_handoff_render_contract(contract, tmp_path, "carousel")["passed"] is True
+
+    seventh = media / "card_07.jpg"
+    Image.new("RGB", (1080, 1440), (77, 30, 40)).save(seventh)
+    seventh_digest = hashlib.sha256(seventh.read_bytes()).hexdigest()
+    contract["carousel"]["images"].append({
+        "path": seventh.relative_to(tmp_path).as_posix(),
+        "sha256": seventh_digest,
+        "source_url": "https://example.test/card-7",
+        "license": "self_owned",
+        "render_evidence": {"verified": True, "renderer": "unit_test", "artifact_sha256": seventh_digest},
+    })
+    assert validate_full_handoff_render_contract(contract, tmp_path, "carousel")["passed"] is False
+
+
 def test_canary_manifest_merges_verified_capabilities_and_store_deliveries(tmp_path: Path):
     from scripts.task9_canary import _materialize_artifact_manifest
 
@@ -526,6 +571,62 @@ def test_canary_manifest_merges_verified_capabilities_and_store_deliveries(tmp_p
     assert capabilities["voice_engine"]["state"] == "artifact_verified"
     assert capabilities["optional_search"]["required"] is False
     assert manifest["delivery_policy"]["state"] == "dry_run"
+
+
+def test_xiaohongshu_manifest_materializes_carousel_source_license_and_render_evidence(tmp_path: Path):
+    from scripts.task9_canary import _PolicySafePublisher, _materialize_artifact_manifest, probe_artifacts
+
+    media = tmp_path / "artifacts" / "job-xhs"
+    from PIL import Image
+    cover = media / "cover.png"
+    cover.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (1080, 1440), (20, 30, 40)).save(cover)
+    cards = []
+    for index in range(1, 6):
+        path = media / f"card_{index:02d}.jpg"
+        Image.new("RGB", (1080, 1440), (index * 31, index * 19, index * 47)).save(path, quality=95)
+        cards.append(path)
+    _write(media / "cover_quality_evidence.json", json.dumps({"safe_zone_verified": True, "width": 1080, "height": 1440}))
+    def artifact(path, kind, source_url):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        return {"path": str(path), "kind": kind, "source_url": source_url, "license": "self_owned", "render_evidence": {"verified": True, "renderer": "unit_test", "artifact_sha256": digest}}
+    artifacts = [artifact(cover, "cover", "https://example.test/cover")]
+    artifacts.extend(
+        artifact(path, "carousel_card", f"https://example.test/card-{index}")
+        for index, path in enumerate(cards, 1)
+    )
+    receipt = _PolicySafePublisher(tmp_path / "outbox", "handoff_pending").deliver({"id": "job-xhs", "artifacts": artifacts}, "xiaohongshu")
+
+    class Store:
+        def get_job(self, _job_id):
+            return {"id": "job-xhs", "draft_meta": {"capability_execution": {
+                "executed": [{"capability_id": "knowledge_card_renderer", "output_hash": "sha256:cards", "required": True, "artifact_relevant": True}],
+                "artifact_verified": [{"capability_id": "knowledge_card_renderer", "output_hash": "sha256:cards"}],
+            }}}
+        def deliveries(self, _job_id):
+            return [{"platform": "xiaohongshu", "status": "handoff_pending", "external_id": receipt.external_id, "external_verified": False}]
+        def source_items(self, _job_id):
+            return [{"platform": "xiaohongshu", "url": "https://www.xiaohongshu.com/explore/source", "title": "source"}]
+        def events(self, _job_id): return []
+
+    manifest = _materialize_artifact_manifest(
+        {"platform": "xiaohongshu", "content_form": "carousel", "delivery_policy": "manual_handoff_only"},
+        Store(), {"id": "job-xhs"}, tmp_path,
+        {"platform": "xiaohongshu", "source_url": "https://www.xiaohongshu.com/explore/source", "observed_title": "source", "provenance_hash": "a" * 64},
+    )
+
+    assert manifest["delivery_policy"]["state"] == "handoff_pending"
+    assert manifest["delivery_policy"]["expected"] == "manual_handoff_only"
+    assert len(manifest["carousel"]["images"]) == 6
+    assert len({item["sha256"] for item in manifest["carousel"]["assets"]}) == 6
+    assert all(item["source_url"].startswith("https://") and item["license"] for item in manifest["carousel"]["assets"])
+    assert manifest["render_evidence"]["target_renderer_evidence"]["verified"] is True
+    with patch("scripts.task9_canary.validate_cover", return_value={"passed": True, "failures": []}):
+        probe = probe_artifacts({"platform": "xiaohongshu", "content_form": "carousel", "delivery_policy": "manual_handoff_only"}, tmp_path)
+    assert probe["probes"]["cover"]["passed"] is True
+    assert probe["probes"]["carousel"]["passed"] is True
+    assert probe["probes"]["handoff"]["passed"] is True
+    assert probe["probes"]["delivery_policy"]["passed"] is True
 
 
 def test_delivery_scenarios_use_real_ledger_and_prove_unknown_boundaries(tmp_path: Path):

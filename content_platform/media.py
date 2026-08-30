@@ -15,6 +15,13 @@ from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
 from .adapters.media import execute_article_media
 
+try:
+    from PIL import Image, ImageStat, UnidentifiedImageError
+except ImportError:  # pragma: no cover - image generation already depends on Pillow in production/test paths.
+    Image = None
+    ImageStat = None
+    UnidentifiedImageError = OSError
+
 
 class MediaBridge:
     VIDEO_SCRIPT_MAX_SEGMENTS = 8
@@ -362,9 +369,21 @@ class MediaBridge:
                 "article_media_contract": str(output_dir / "article_media_contract.json"),
             }
         images = []
+        recovery = self._image_quality_recovery_plan(job, cfg)
+        accepted_checksums: set[str] = set()
+        accepted_hashes: set[str] = set()
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
-            provider.run(item["prompt"], output, extra_args)
+            raw_gate = self._run_image_provider_with_quality_recovery(
+                provider,
+                item,
+                output,
+                extra_args,
+                output_dir,
+                accepted_checksums,
+                accepted_hashes,
+                recovery,
+            )
             if item["role"] == "cover" and output.is_file():
                 generated_output = output.with_name("cover-background.png")
                 output.replace(generated_output)
@@ -383,6 +402,11 @@ class MediaBridge:
                 if not cover_gate.get("passed"):
                     raise RuntimeError("cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
             checksum = hashlib.sha256(output.read_bytes()).hexdigest()
+            accepted_checksums.add(checksum)
+            if raw_gate.get("checksum"):
+                accepted_checksums.add(str(raw_gate["checksum"]))
+            if raw_gate.get("visual_hash"):
+                accepted_hashes.add(str(raw_gate["visual_hash"]))
             images.append(
                 {
                     "kind": "image",
@@ -406,7 +430,208 @@ class MediaBridge:
         if section_map:
             (output_dir / "section_image_map.json").write_text(json.dumps(section_map, ensure_ascii=False, indent=2), encoding="utf-8")
         self._persist_asset_provenance(output_dir, images, prompts, type(provider).__name__, job)
-        return {"kind": "image", "path": images[0]["path"], "checksum": images[0]["checksum"], "images": images, "section_image_map": section_map}
+        result = {"kind": "image", "path": images[0]["path"], "checksum": images[0]["checksum"], "images": images, "section_image_map": section_map}
+        if recovery["enabled"]:
+            self._write_image_quality_recovery(output_dir, recovery, passed=True)
+            result["quality_recovery"] = self._image_quality_recovery_summary(recovery, passed=True)
+        return result
+
+    def _run_image_provider_with_quality_recovery(
+        self,
+        provider,
+        item,
+        output,
+        extra_args,
+        output_dir,
+        accepted_checksums,
+        accepted_hashes,
+        recovery,
+    ):
+        if not recovery["enabled"]:
+            provider.run(item["prompt"], output, extra_args)
+            if not output.is_file():
+                raise RuntimeError("image provider produced no output file")
+            return {}
+
+        last_failures = []
+        max_attempts = recovery["max_attempts"]
+        for attempt in range(1, max_attempts + 1):
+            prompt = self._image_quality_retry_prompt(item["prompt"], attempt, last_failures)
+            try:
+                if output.exists():
+                    output.unlink()
+                provider.run(prompt, output, extra_args)
+                gate = self._validate_image_quality_candidate(output, accepted_checksums, accepted_hashes)
+            except Exception as exc:
+                gate = {
+                    "passed": False,
+                    "failures": ["provider_or_quality_exception"],
+                    "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                }
+            self._record_image_quality_attempt(output_dir, recovery, item, output, prompt, attempt, gate)
+            if gate.get("passed"):
+                return gate
+            last_failures = list(gate.get("failures") or ["quality_gate_failed"])
+        self._write_image_quality_recovery(output_dir, recovery, passed=False)
+        raise RuntimeError(
+            "image quality recovery exhausted: "
+            + ", ".join(last_failures or ["quality_gate_failed"])
+        )
+
+    @classmethod
+    def _image_quality_recovery_plan(cls, job, cfg):
+        enabled = cls._is_xiaohongshu_knowledge_image_job(job)
+        raw_attempts = cfg.get("quality_recovery_attempts", cfg.get("max_quality_recovery_attempts", 3))
+        try:
+            max_attempts = int(raw_attempts)
+        except (TypeError, ValueError):
+            max_attempts = 3
+        return {
+            "enabled": enabled,
+            "max_attempts": min(5, max(1, max_attempts)),
+            "attempts": [],
+        }
+
+    @staticmethod
+    def _is_xiaohongshu_knowledge_image_job(job):
+        platforms = {str(item).casefold() for item in job.get("platforms") or []}
+        if not platforms.intersection({"xiaohongshu", "rednote"}):
+            return False
+        meta = job.get("draft_meta") or {}
+        signals = [
+            job.get("content_type"),
+            job.get("content_form"),
+            job.get("selected_pipeline"),
+            meta.get("content_type"),
+            meta.get("content_form"),
+            meta.get("selected_pipeline"),
+        ]
+        joined = " ".join(str(item).casefold() for item in signals if item)
+        return any(
+            token in joined
+            for token in ("knowledge_card", "image_text", "carousel", "manual_carousel")
+        )
+
+    @staticmethod
+    def _image_quality_retry_prompt(base_prompt, attempt, failures):
+        if attempt <= 1:
+            return base_prompt
+        failure_text = ", ".join(failures or ["previous candidate failed quality checks"])
+        return (
+            f"{base_prompt}\n\nQuality recovery attempt {attempt}: choose a different real-scene candidate, "
+            f"with richer foreground/background detail, distinct composition and subject from prior attempts. "
+            f"Avoid the previous failure modes: {failure_text}."
+        )
+
+    @classmethod
+    def _validate_image_quality_candidate(cls, path, accepted_checksums, accepted_hashes):
+        path = Path(path)
+        failures = []
+        if not path.is_file() or path.stat().st_size <= 0:
+            return {"passed": False, "failures": ["image_missing"]}
+        checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+        if checksum in accepted_checksums:
+            failures.append("duplicate_checksum")
+        if Image is None or ImageStat is None:
+            raise RuntimeError("Pillow is required for image quality validation")
+        try:
+            with Image.open(path) as raw:
+                image = raw.convert("RGB")
+                width, height = image.size
+                probe = image.resize((64, 64))
+                stat = ImageStat.Stat(probe)
+                complexity = sum(float(value) for value in stat.stddev) / max(1, len(stat.stddev))
+                colors = probe.getcolors(maxcolors=4096) or []
+                visual_hash = cls._average_hash(probe)
+        except (OSError, UnidentifiedImageError, ValueError) as exc:
+            return {
+                "passed": False,
+                "failures": ["image_decode_failed"],
+                "checksum": checksum,
+                "error": str(exc)[:200],
+            }
+        if min(width, height) < 512:
+            failures.append("resolution_too_low")
+        if complexity < 18 or len(colors) < 24:
+            failures.append("low_complexity")
+        if visual_hash and any(cls._hamming_distance(visual_hash, previous) <= 2 for previous in accepted_hashes):
+            failures.append("duplicate_visual_hash")
+        return {
+            "passed": not failures,
+            "failures": failures,
+            "checksum": checksum,
+            "visual_hash": visual_hash,
+            "dimensions": [width, height],
+            "complexity": round(complexity, 3),
+            "color_count": len(colors),
+        }
+
+    @staticmethod
+    def _average_hash(image):
+        gray = image.convert("L").resize((8, 8))
+        values = list(gray.tobytes())
+        average = sum(values) / len(values)
+        return "".join("1" if value >= average else "0" for value in values)
+
+    @staticmethod
+    def _hamming_distance(left, right):
+        return sum(1 for a, b in zip(str(left), str(right)) if a != b) + abs(len(str(left)) - len(str(right)))
+
+    @staticmethod
+    def _record_image_quality_attempt(output_dir, recovery, item, output, prompt, attempt, gate):
+        failed_candidate_path = ""
+        if not gate.get("passed") and Path(output).is_file():
+            evidence_dir = output_dir / "image_quality_recovery"
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            suffix = Path(output).suffix or ".bin"
+            failed_candidate = evidence_dir / f"{item['role']}-{len(recovery['attempts']) + 1:02d}-attempt-{attempt}{suffix}"
+            shutil.copy2(output, failed_candidate)
+            failed_candidate_path = str(failed_candidate)
+        recovery["attempts"].append(
+            {
+                "role": item.get("role", ""),
+                "section": item.get("section", ""),
+                "attempt": attempt,
+                "passed": gate.get("passed") is True,
+                "failures": list(gate.get("failures") or []),
+                "prompt_sha256": hashlib.sha256(str(prompt).encode("utf-8")).hexdigest(),
+                "candidate_path": str(output),
+                "failed_candidate_path": failed_candidate_path,
+                "checksum": gate.get("checksum", ""),
+                "visual_hash": gate.get("visual_hash", ""),
+                "dimensions": gate.get("dimensions", []),
+                "complexity": gate.get("complexity"),
+                "color_count": gate.get("color_count"),
+                "error": gate.get("error", ""),
+            }
+        )
+
+    @classmethod
+    def _write_image_quality_recovery(cls, output_dir, recovery, passed):
+        payload = cls._image_quality_recovery_summary(recovery, passed)
+        payload["attempts"] = recovery["attempts"]
+        (output_dir / "image_quality_recovery.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _image_quality_recovery_summary(recovery, passed):
+        failures = [
+            failure
+            for attempt in recovery["attempts"]
+            if not attempt.get("passed")
+            for failure in attempt.get("failures", [])
+        ]
+        return {
+            "version": "image_quality_recovery_v1",
+            "passed": passed,
+            "max_attempts": recovery["max_attempts"],
+            "attempt_count": len(recovery["attempts"]),
+            "retry_count": max(0, len(recovery["attempts"]) - len([item for item in recovery["attempts"] if item.get("attempt") == 1])),
+            "failure_count": len([item for item in recovery["attempts"] if not item.get("passed")]),
+            "failure_types": sorted(set(failures)),
+        }
 
     @staticmethod
     def _persist_asset_provenance(output_dir, images, prompts, provider_name, job):
@@ -428,6 +653,11 @@ class MediaBridge:
                     "provider": provider_name,
                     "prompt_sha256": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
                     "role": str(image.get("role") or ""),
+                },
+                "render_evidence": {
+                    "verified": bool(Path(str(image.get("path") or "")).is_file()),
+                    "renderer": provider_name,
+                    "artifact_sha256": str(image.get("checksum") or ""),
                 },
             })
         (output_dir / "asset_provenance.json").write_text(json.dumps({"version": "asset_provenance_v1", "assets": records}, ensure_ascii=False, indent=2), encoding="utf-8")
