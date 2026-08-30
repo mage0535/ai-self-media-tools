@@ -258,7 +258,7 @@ def _pexels_image(
     orientation = _stock_orientation(width, height)
     query = _stock_query(prompt)
     url = "https://api.pexels.com/v1/search?" + urllib.parse.urlencode(
-        {"query": query, "per_page": "3", "orientation": orientation}
+        {"query": query, "per_page": "15", "orientation": orientation}
     )
     req = urllib.request.Request(
         url,
@@ -273,7 +273,7 @@ def _pexels_image(
     photos = body.get("photos") or []
     if not photos:
         raise ImageProviderError("Pexels search returned no photos")
-    photo = photos[0]
+    photo = photos[_stock_result_index(prompt, len(photos))]
     src = photo.get("src") or {}
     image_url = src.get("large2x") or src.get("large") or src.get("original")
     if not image_url:
@@ -309,7 +309,7 @@ def _pixabay_image(
             "key": key,
             "q": query,
             "image_type": "photo",
-            "per_page": "3",
+            "per_page": "15",
             "safesearch": "true",
             "orientation": orientation,
         }
@@ -324,7 +324,7 @@ def _pixabay_image(
     hits = body.get("hits") or []
     if not hits:
         raise ImageProviderError("Pixabay search returned no images")
-    hit = hits[0]
+    hit = hits[_stock_result_index(prompt, len(hits))]
     image_url = hit.get("largeImageURL") or hit.get("webformatURL")
     if not image_url:
         raise ImageProviderError("Pixabay image had no downloadable URL")
@@ -362,6 +362,13 @@ def _stock_orientation(width: int, height: int) -> str:
     if height > width:
         return "portrait"
     return "square"
+
+
+def _stock_result_index(prompt: str, count: int) -> int:
+    if count <= 1:
+        return 0
+    digest = hashlib.sha256(str(prompt or "").encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % count
 
 
 def _stock_query(prompt: str) -> str:

@@ -45,8 +45,8 @@ class ScriptAnalyzerProvider(_BaseScriptProvider):
 
 class ScriptImageProvider(_BaseScriptProvider):
     def run(self, prompt, output, extra_args=None):
-        self._run(prompt, ["--output", str(output), *(extra_args or [])])
-        return {"path": str(output)}
+        payload = self._run(prompt, ["--output", str(output), *(extra_args or [])])
+        return {**(payload if isinstance(payload, dict) else {}), "path": str(output)}
 
 
 class ScriptVideoProvider(_BaseScriptProvider):
