@@ -1507,6 +1507,30 @@ def test_xiaohongshu_rendered_carousel_defers_delivery_only_evidence():
     assert result["gates"]["manual_handoff_only"]["deferred"] is True
 
 
+def test_xiaohongshu_rendered_carousel_accepts_generated_cover_with_three_real_assets():
+    packet = complete_xiaohongshu_auto_packet()
+    packet["content_type"] = "carousel"
+    packet["content_form"] = "carousel"
+    packet["source_assets"] = [
+        {"asset_type": "generated_image", "source_url": "generated:sense_nova", "rights_cleared": True},
+        *[
+            {"asset_type": "real_scene_photo", "source_url": f"https://pexels.test/{index}", "rights_cleared": True, "real_scene": True}
+            for index in range(3)
+        ],
+    ]
+    packet["cover_design"] = {
+        "version": "cover_direction_v2", "visual_subject": "AI workflow dashboard", "layout_key": "evidence_interface",
+        "hook": "别再手动管5个平台", "conflict_or_payoff": "每天省两小时", "content_match_reason": "topic matched",
+        "safe_zone_verified": True, "degraded": False,
+    }
+
+    result = validate_xiaohongshu_auto_packet(packet, phase="rendered")
+
+    assert result["gates"]["authentic_source_evidence"]["passed"] is True
+    assert result["gates"]["authentic_source_evidence"]["count"] == 3
+    assert result["gates"]["cover_design"]["passed"] is True
+
+
 def test_xiaohongshu_auto_packet_rejects_design_cards_without_real_scene_backgrounds():
     packet = complete_xiaohongshu_auto_packet()
     packet["real_scene_background_plan"] = {

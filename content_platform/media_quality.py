@@ -401,6 +401,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rende
     images = packet.get("section_image_map") or packet.get("image_text_plan") or []
     cover = packet.get("cover_design") or {}
     source_assets = packet.get("source_assets") or packet.get("authentic_source_evidence") or []
+    valid_source_assets = [item for item in source_assets if isinstance(item, dict) and _valid_real_scene_asset(item)] if isinstance(source_assets, list) else []
     disclosure = str(packet.get("ai_assisted_disclosure") or packet.get("disclosure") or packet.get("body") or "")
     video_plan = packet.get("video_plan") or packet.get("short_video_plan") or {}
     mixed_plan = packet.get("mixed_content_plan") or {}
@@ -460,17 +461,21 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rende
             or all(mixed_plan.get(key) for key in ["short_video", "image_text_note", "knowledge_cards"]),
         },
         "authentic_source_evidence": {
-            "passed": isinstance(source_assets, list)
-            and len(source_assets) >= 3
-            and all(isinstance(item, dict) and _valid_real_scene_asset(item) for item in source_assets),
-            "count": len(source_assets) if isinstance(source_assets, list) else 0,
+            "passed": len(valid_source_assets) >= 3,
+            "count": len(valid_source_assets),
+            "total_assets": len(source_assets) if isinstance(source_assets, list) else 0,
         },
         "real_scene_backgrounds": _real_scene_background_gate(packet, minimum=3),
         "ai_assisted_disclosure": {
             "passed": "AI" in disclosure or "ai" in disclosure.casefold() or "辅助" in disclosure,
         },
         "cover_design": {
-            "passed": all(
+            "passed": (
+                cover.get("version") == "cover_direction_v2"
+                and all(cover.get(key) for key in ["visual_subject", "layout_key", "hook", "conflict_or_payoff", "content_match_reason"])
+                and cover.get("safe_zone_verified") is True
+                and cover.get("degraded") is not True
+            ) or all(
                 cover.get(key)
                 for key in ["visual_subject", "topic_alignment", "mobile_readable", "visual_hierarchy", "template_family"]
             ),

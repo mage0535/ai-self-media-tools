@@ -12,6 +12,32 @@ from content_platform.workflow_runtime import WorkflowBlocked, WorkflowStepRunne
 
 
 class PlatformQualityGateRuntimeTests(unittest.TestCase):
+    def test_runtime_packet_prefers_canonical_draft_meta_over_model_top_level(self):
+        draft = {
+            "cover_design": {"version": "legacy"},
+            "draft_meta": {"cover_design": {"version": "cover_direction_v2"}, "source_assets": [{"source_url": "https://example.test"}]},
+        }
+
+        packet = Pipeline._generation_platform_packet("job", draft, ["xiaohongshu"], "xiaohongshu")
+
+        self.assertEqual(packet["cover_design"]["version"], "cover_direction_v2")
+        self.assertEqual(packet["source_assets"][0]["source_url"], "https://example.test")
+
+    def test_tool_manifest_does_not_mark_unexecuted_optional_capability_missing(self):
+        execution = {
+            "planned": [
+                {"capability_id": "required_gate", "stage": "gate", "required_or_optional": "required"},
+                {"capability_id": "optional_search", "stage": "collection", "required_or_optional": "optional"},
+            ],
+            "executed": [{"capability_id": "required_gate", "stage": "gate", "output_hash": "sha256:ok"}],
+            "completed_stages": ["collection", "gate"],
+        }
+
+        manifest = Pipeline._tool_invocation_manifest_from_execution(execution)
+
+        self.assertEqual(manifest["missing_tools"], [])
+        self.assertNotIn("optional_search", manifest["planned_tools"])
+
     def test_image_render_evidence_compiles_provenance_into_platform_packet(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
