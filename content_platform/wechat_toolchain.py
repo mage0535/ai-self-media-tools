@@ -464,8 +464,23 @@ def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
         changes.append({"pattern": "binary_contrast", "surface": surface[:40], "point": point[:40]})
         return f"真正关键的是{point}；{surface}只是表面现象。"
 
+    def replace_triple(match):
+        first = match.group(1).strip("，, ")
+        second = match.group(2).strip("，, ")
+        point = match.group(3).strip("，, ")
+        changes.append({"pattern": "triple_contrast", "first": first[:40], "second": second[:40], "point": point[:40]})
+        return f"真正可用的是{point}；{first}和{second}都无法直接进入检索流程。"
+
+    def replace_simple(match):
+        surface = match.group(1).strip("，, ")
+        point = match.group(2).strip("，, ")
+        changes.append({"pattern": "simple_contrast", "surface": surface[:40], "point": point[:40]})
+        return f"关键在{point}，而非{surface}。"
+
+    text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?也不是([^，,。！？\n]{2,60})[，,]?(?:它读的)?是([^。！？\n]{2,100})", replace_triple, text)
     text = re.sub(r"不是([^。！？\n]{2,60})[，,]?也不是([^。！？\n]{2,60})[。！？]", replace_double, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?而是([^。！？\n]{2,100})[。！？]", replace_contrast, text)
+    text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?是([^。！？\n]{2,100})[。！？]", replace_simple, text)
     for source, replacement in (("赋能", "提供支持"), ("闭环", "完整流程")):
         count = text.count(source)
         if count:
