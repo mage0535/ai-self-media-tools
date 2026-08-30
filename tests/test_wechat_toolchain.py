@@ -1,7 +1,7 @@
 ﻿import json
 from pathlib import Path
 
-from content_platform.wechat_toolchain import prepare_wechat_professional_draft, requires_wechat_toolchain
+from content_platform.wechat_toolchain import _repair_ai_slop, _wechat_digest, prepare_wechat_professional_draft, requires_wechat_toolchain
 
 
 def _fake_wewrite(path: Path) -> Path:
@@ -53,6 +53,18 @@ def test_requires_wechat_toolchain_only_for_enforced_wechat():
     assert requires_wechat_toolchain({"feature_flags": {"channel_auto_workflow_gate": "enforce"}}, ["wechat"])
     assert not requires_wechat_toolchain({"feature_flags": {"channel_auto_workflow_gate": "enforce"}}, ["devto"])
     assert not requires_wechat_toolchain({}, ["wechat"])
+
+
+def test_wechat_postwriter_repairs_binary_slop_and_builds_bounded_digest():
+    body = "不是平台算法，也不是流量池。不是更新不够勤奋，而是AI无法读取正文。"
+
+    repaired, evidence = _repair_ai_slop(body)
+    digest = _wechat_digest("一直更新图文，GEO提及率为何不动", repaired)
+
+    assert "不是" not in repaired
+    assert evidence["changed"] is True
+    assert evidence["change_count"] == 2
+    assert 1 <= len(digest) <= 54
 
 
 def test_prepare_wechat_professional_draft_records_wewrite_evidence(tmp_path):
