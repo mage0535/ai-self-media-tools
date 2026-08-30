@@ -87,10 +87,24 @@ def verify_public_staging(
     return {"passed": bool(urls) and all(item["passed"] for item in results), "urls": results}
 
 
+def normalize_article_sections(job: dict[str, Any], limit: int = 6) -> list[str]:
+    raw = job.get("sections") or (job.get("draft_meta") or {}).get("sections") or []
+    sections = []
+    for item in raw:
+        if isinstance(item, dict):
+            value = item.get("title") or item.get("heading") or item.get("text") or item.get("purpose") or ""
+        else:
+            value = item
+        clean = str(value or "").strip().replace("\n", " ")[:80]
+        if clean:
+            sections.append(clean)
+    if not sections:
+        sections = [part.strip().replace("\n", " ")[:80] for part in str(job.get("body") or "").split("\n\n") if len(part.strip()) > 40]
+    return sections[: max(1, int(limit))]
+
+
 def _article_assets(job: dict[str, Any]) -> list[dict[str, str]]:
-    sections = [str(item).strip() for item in job.get("sections") or (job.get("draft_meta") or {}).get("sections") or [] if str(item).strip()]
-    if len(sections) < 3:
-        sections = [part.strip().replace("\n", " ")[:80] for part in str(job.get("body") or "").split("\n\n") if len(part.strip()) > 40][:3]
+    sections = normalize_article_sections(job, limit=3)
     if len(sections) < 3:
         raise ValueError("article media requires at least three mapped sections")
     return [

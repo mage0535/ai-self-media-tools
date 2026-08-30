@@ -184,6 +184,33 @@ def test_juejin_top_level_sections_and_stock_provenance_reach_media_contract(tmp
     assert all(item["license"] == "Pexels" for item in contract["assets"])
 
 
+def test_juejin_runtime_section_dicts_share_the_same_normalized_asset_keys(tmp_path, monkeypatch):
+    from content_platform.media import MediaBridge
+
+    bridge = MediaBridge({"image": {"enabled": True}}, tmp_path)
+    provider = Mock()
+    def generate(prompt, target, args):
+        marker = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
+        _write_image(target, (20 + int(marker[:2], 16) % 120, 70, 100))
+        return {"provider": "pexels", "model": "stock-photo", "source_url": f"https://www.pexels.com/photo/{marker}", "license": "Pexels"}
+    provider.run.side_effect = generate
+    monkeypatch.setattr(bridge.registry, "choose_provider", lambda kind: provider)
+    sections = [
+        {"id": "section_1", "title": "Problem evidence", "role": "problem"},
+        {"id": "section_2", "title": "Implementation steps", "role": "method"},
+        {"id": "section_3", "title": "Verification results", "role": "proof"},
+    ]
+
+    result = bridge._generate_image(
+        {"id": "j-dicts", "title": "Runtime article", "topic": "Runtime article", "body": "body", "platforms": ["juejin"], "draft_meta": {"sections": sections}},
+        tmp_path / "artifacts" / "j-dicts",
+        {"enabled": True, "min_count": 4},
+    )
+
+    contract = json.loads(Path(result["article_media_contract"]).read_text(encoding="utf-8"))
+    assert [item["section"] for item in contract["assets"] if item["role"] == "section"] == ["Problem evidence", "Implementation steps", "Verification results"]
+
+
 def test_article_media_records_staging_failure_and_fails_closed(tmp_path):
     from content_platform.adapters.media import execute_article_media
 
