@@ -56,14 +56,16 @@ def test_requires_wechat_toolchain_only_for_enforced_wechat():
 
 
 def test_wechat_postwriter_repairs_binary_slop_and_builds_bounded_digest():
-    body = "不是平台算法，也不是流量池。不是更新不够勤奋，而是AI无法读取正文。"
+    body = "不是平台算法，也不是流量池。不是更新不够勤奋，而是AI无法读取正文。工具用于赋能团队，形成数据闭环。"
 
     repaired, evidence = _repair_ai_slop(body)
     digest = _wechat_digest("一直更新图文，GEO提及率为何不动", repaired)
 
     assert "不是" not in repaired
     assert evidence["changed"] is True
-    assert evidence["change_count"] == 2
+    assert evidence["change_count"] == 4
+    assert "赋能" not in repaired
+    assert "闭环" not in repaired
     assert 1 <= len(digest) <= 54
 
 
