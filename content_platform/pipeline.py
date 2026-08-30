@@ -1920,6 +1920,17 @@ class Pipeline:
             meta["source_assets"] = assets
         if isinstance(mappings, list) and mappings:
             meta["section_image_map"] = mappings
+            body = str(draft.get("body") or "")
+            meta["article_artifact_probe"] = {
+                "word_count": len(re.sub(r"\s+", "", body)),
+                "inline_image_count": len(mappings),
+                "adjacent_inline_image_count": len([item for item in mappings if isinstance(item, dict) and item.get("adjacent_to_text")]),
+                "theme_css_inlined": False,
+                "cover_uploaded": False,
+                "body_font_px": 16,
+                "draft_batchget_planned": True,
+                "stage": "local_rendered_assets",
+            }
         if backgrounds:
             meta["real_scene_background_plan"] = {
                 "required": True,

@@ -200,3 +200,7 @@ def test_xiaohongshu_cover_normalization_preserves_platform_target_size():
     assert MediaBridge._cover_minimum(["xiaohongshu"]) == 1080
     assert MediaBridge._cover_minimum(["rednote"]) == 1080
     assert MediaBridge._cover_minimum(["wechat"]) == 1200
+
+
+def test_wechat_article_requires_cover_plus_three_inline_images():
+    assert MediaBridge._required_image_count({"platforms": ["wechat"], "body": "article"}, {}) == 4

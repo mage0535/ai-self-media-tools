@@ -1546,6 +1546,26 @@ def test_wechat_generation_defers_render_and_delivery_evidence_only():
     assert result["gates"]["topic_and_article_plan"]["passed"] is True
 
 
+def test_wechat_rendered_phase_accepts_local_artifacts_before_cdn_upload():
+    packet = complete_wechat_auto_packet()
+    packet["cover_design"] = {
+        "version": "cover_direction_v2", "visual_subject": "GEO workflow", "layout_key": "evidence_interface",
+        "hook": "GEO为何不动", "conflict_or_payoff": "四步检查", "content_match_reason": "topic matched",
+        "safe_zone_verified": True, "degraded": False,
+    }
+    packet["article_artifact_probe"] = {
+        "word_count": 1800, "inline_image_count": 3, "adjacent_inline_image_count": 3,
+        "theme_css_inlined": False, "cover_uploaded": False, "body_font_px": 16, "draft_batchget_planned": True,
+    }
+    packet["digest"] = "拆解GEO提及率不增长的真实原因，并给出四步清单。"
+
+    result = validate_wechat_auto_packet(packet, phase="rendered")
+
+    assert result["gates"]["inline_img_tags"]["deferred"] is True
+    assert result["gates"]["cover_cdn"]["deferred"] is True
+    assert result["gates"]["article_artifact_probe"]["passed"] is True
+
+
 def test_xiaohongshu_auto_packet_rejects_design_cards_without_real_scene_backgrounds():
     packet = complete_xiaohongshu_auto_packet()
     packet["real_scene_background_plan"] = {

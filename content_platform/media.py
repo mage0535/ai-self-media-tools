@@ -730,9 +730,9 @@ class MediaBridge:
             return 8
         if "xiaohongshu" in platforms:
             return 6
-        if "juejin" in platforms:
+        if platforms.intersection({"juejin", "wechat", "weixin", "wechat_official"}):
             return 4
-        if platforms.intersection({"wechat", "zhihu"}) or body_length >= 1000:
+        if platforms.intersection({"zhihu"}) or body_length >= 1000:
             return 3
         return 1
 

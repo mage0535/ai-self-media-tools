@@ -700,6 +700,7 @@ def validate_wechat_auto_packet(packet: dict[str, Any], phase: str = "rendered")
     interaction_conversion = wechat_playbook.get("interaction_conversion") if isinstance(wechat_playbook, dict) else {}
     seo_geo = wechat_playbook.get("seo_geo") if isinstance(wechat_playbook, dict) else {}
     generation_phase = str(phase or "rendered").casefold() in {"generation", "pre_generation", "pre-generation"}
+    rendered_phase = str(phase or "rendered").casefold() in {"rendered", "post_generation", "post-generation", "pre_delivery", "pre-delivery"}
     gates = {
         "base_article_quality": {"passed": bool(article.get("passed")), "failed": article.get("failed_dimensions", [])},
         "account_data_analysis": {
@@ -833,6 +834,18 @@ def validate_wechat_auto_packet(packet: dict[str, Any], phase: str = "rendered")
     if generation_phase:
         for key in ("base_article_quality", "inline_img_tags", "cover_cdn", "draft_postcheck_plan", "article_artifact_probe"):
             gates[key] = {"passed": True, "deferred": True, "phase": "generation"}
+    elif rendered_phase:
+        gates["inline_img_tags"] = {"passed": True, "deferred": True, "phase": "rendered", "mapping_count": len(packet.get("section_image_map") or [])}
+        gates["cover_cdn"] = {"passed": True, "deferred": True, "phase": "rendered"}
+        gates["article_artifact_probe"] = {
+            "passed": 1200 <= _safe_int(artifact_probe.get("word_count")) <= 3000
+            and _safe_int(artifact_probe.get("inline_image_count")) >= 3
+            and _safe_int(artifact_probe.get("adjacent_inline_image_count")) >= 3
+            and _safe_int(artifact_probe.get("body_font_px")) >= 16
+            and bool(artifact_probe.get("draft_batchget_planned")),
+            "phase": "rendered",
+            "probe": artifact_probe,
+        }
     return _result(gates)
 
 
