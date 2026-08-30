@@ -74,7 +74,7 @@ class ToolRegistryTests(unittest.TestCase):
             previous = __import__("os").getcwd()
             try:
                 __import__("os").chdir(cwd_tmp)
-                with patch("content_platform.tool_registry.project_home", return_value=project):
+                with patch.dict("os.environ", {"CONTENT_PLATFORM_CODE_ROOT": str(project)}):
                     registry = ToolRegistry({"analysis": {"script": "scripts/analyze.py"}})
                     provider = registry.choose_provider("analysis")
                     probe = registry.probe()
