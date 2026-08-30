@@ -1,7 +1,8 @@
 ﻿import json
 from pathlib import Path
+import subprocess
 
-from content_platform.wechat_toolchain import _repair_ai_slop, _wechat_digest, prepare_wechat_professional_draft, requires_wechat_toolchain
+from content_platform.wechat_toolchain import _invoke_wewrite, _repair_ai_slop, _wechat_digest, prepare_wechat_professional_draft, requires_wechat_toolchain
 
 
 def _fake_wewrite(path: Path) -> Path:
@@ -78,6 +79,35 @@ def test_wechat_postwriter_repairs_triple_and_simple_contrasts():
     assert "结构化文本" in repaired
     assert "信息匹配" in repaired
     assert {item["pattern"] for item in evidence["changes"]} == {"triple_contrast", "simple_contrast"}
+
+
+def test_wewrite_retries_transient_timeout_then_succeeds(tmp_path, monkeypatch):
+    brief = tmp_path / "brief.md"
+    article = tmp_path / "article.md"
+    binary = tmp_path / "wewrite"
+    brief.write_text("brief", encoding="utf-8")
+    binary.write_text("fixture", encoding="utf-8")
+    responses = [
+        subprocess.CompletedProcess([], 0, '{"run_id":"run"}', ""),
+        subprocess.CompletedProcess([], 4, "", "WRITER_FAILED: ReadTimeout: read timed out"),
+        subprocess.CompletedProcess([], 0, '{"chars":2000,"model":"mimo"}', ""),
+    ]
+
+    def run(command, **kwargs):
+        result = responses.pop(0)
+        if command[1] == "llm-write" and result.returncode == 0:
+            article.write_text("# Title\n\n" + ("useful paragraph " * 100), encoding="utf-8")
+        return result
+
+    monkeypatch.setattr("content_platform.wechat_toolchain.subprocess.run", run)
+    monkeypatch.setattr("content_platform.wechat_toolchain.time.sleep", lambda _: None)
+
+    result = _invoke_wewrite({"wewrite_bin": str(binary), "timeout": 180}, brief, article, "topic")
+
+    assert result["status"] == "used"
+    assert result["attempts"] == 2
+    writes = [item for item in result["commands"] if item["name"] == "llm-write"]
+    assert [item["timeout"] for item in writes] == [180, 300]
 
 
 def test_prepare_wechat_professional_draft_records_wewrite_evidence(tmp_path):
