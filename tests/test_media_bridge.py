@@ -194,3 +194,9 @@ def test_asset_provenance_preserves_retouch_source_chain(tmp_path):
     assert derivative["original_provider"] == "pexels"
     assert derivative["original_source_url"] == "https://www.pexels.com/photo/example"
     assert derivative["original_license"] == "Pexels"
+
+
+def test_xiaohongshu_cover_normalization_preserves_platform_target_size():
+    assert MediaBridge._cover_minimum(["xiaohongshu"]) == 1080
+    assert MediaBridge._cover_minimum(["rednote"]) == 1080
+    assert MediaBridge._cover_minimum(["wechat"]) == 1200
