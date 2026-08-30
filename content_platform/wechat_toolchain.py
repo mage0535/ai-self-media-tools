@@ -466,4 +466,9 @@ def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
 
     text = re.sub(r"不是([^。！？\n]{2,60})[，,]?也不是([^。！？\n]{2,60})[。！？]", replace_double, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?而是([^。！？\n]{2,100})[。！？]", replace_contrast, text)
+    for source, replacement in (("赋能", "提供支持"), ("闭环", "完整流程")):
+        count = text.count(source)
+        if count:
+            text = text.replace(source, replacement)
+            changes.append({"pattern": "empty_buzzword", "source": source, "replacement": replacement, "count": count})
     return text, {"version": "wechat_no_ai_slop_repair_v1", "changed": bool(changes), "change_count": len(changes), "changes": changes}
