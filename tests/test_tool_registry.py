@@ -65,6 +65,25 @@ class ToolRegistryTests(unittest.TestCase):
         result = registry.probe()
         self.assertTrue(result["image_script"]["available"])
 
+    def test_relative_provider_paths_resolve_from_project_root_not_cwd(self):
+        with tempfile.TemporaryDirectory() as project_tmp, tempfile.TemporaryDirectory() as cwd_tmp:
+            project = Path(project_tmp)
+            script = project / "scripts" / "analyze.py"
+            script.parent.mkdir()
+            script.write_text("print('{}')\n", encoding="utf-8")
+            previous = __import__("os").getcwd()
+            try:
+                __import__("os").chdir(cwd_tmp)
+                with patch("content_platform.tool_registry.project_home", return_value=project):
+                    registry = ToolRegistry({"analysis": {"script": "scripts/analyze.py"}})
+                    provider = registry.choose_provider("analysis")
+                    probe = registry.probe()
+            finally:
+                __import__("os").chdir(previous)
+
+        self.assertTrue(probe["analysis_script"]["available"])
+        self.assertEqual(provider.script, str(script))
+
     def test_skills_adapter_status_handles_missing_autocli_without_crashing(self):
         with patch("content_platform.skills_adapter.shutil.which", return_value=""):
             status = get_status()

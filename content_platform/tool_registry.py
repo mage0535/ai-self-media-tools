@@ -21,10 +21,17 @@ class ToolRegistry:
         if not value:
             return False
         text = str(value)
-        path = Path(text).expanduser()
+        path = self._resolve_path(text)
         if path.is_absolute() or text.startswith(".") or "/" in text or "\\" in text:
             return path.exists()
         return bool(shutil.which(text))
+
+    @staticmethod
+    def _resolve_path(value):
+        path = Path(str(value or "")).expanduser()
+        if not path.is_absolute() and ("/" in str(value) or "\\" in str(value) or str(value).startswith(".")):
+            path = project_home() / path
+        return path
 
     def probe(self):
         media_cfg = self.config.get("media", {})
@@ -217,7 +224,7 @@ class ToolRegistry:
         if kind == "analysis" and cfg.get("script") and not self._exists(cfg.get("script")):
             return None
         if provider_type and cfg.get("script"):
-            return provider_type(cfg.get("script", ""), cfg.get("timeout", 120))
+            return provider_type(str(self._resolve_path(cfg.get("script", ""))), cfg.get("timeout", 120))
         return None
 
     def _analysis_config(self):
