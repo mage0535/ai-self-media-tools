@@ -69,6 +69,17 @@ def test_wechat_postwriter_repairs_binary_slop_and_builds_bounded_digest():
     assert 1 <= len(digest) <= 54
 
 
+def test_wechat_postwriter_repairs_triple_and_simple_contrasts():
+    body = "读的不是视频画面，也不是图片构图，它读的是结构化文本。GEO不是内容大赛，是信息匹配。"
+
+    repaired, evidence = _repair_ai_slop(body)
+
+    assert "不是" not in repaired
+    assert "结构化文本" in repaired
+    assert "信息匹配" in repaired
+    assert {item["pattern"] for item in evidence["changes"]} == {"triple_contrast", "simple_contrast"}
+
+
 def test_prepare_wechat_professional_draft_records_wewrite_evidence(tmp_path):
     fake = _fake_wewrite(tmp_path)
     draft = {"title": "Old", "body": "short seed", "draft_meta": {}}
