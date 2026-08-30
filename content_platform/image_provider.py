@@ -675,7 +675,8 @@ def _agnes_image(
     model_name = model or load_secret("AGNES_IMAGE_MODEL") or "agnes-image-2.1-flash"
     width, height = _requested_dimensions(size)
     ratio = _agnes_ratio(width, height)
-    tier = "2K" if max(width, height) > 1024 else "1K"
+    configured_tier = load_secret("AGNES_IMAGE_QUALITY_TIER").upper()
+    tier = configured_tier if configured_tier in {"1K", "2K", "3K", "4K"} else "1K"
     payload: dict = {
         "model": model_name,
         "prompt": prompt,
@@ -702,7 +703,7 @@ def _agnes_image(
         method="POST",
     )
     try:
-        with _urlopen_retry(request, timeout=180, attempts=2) as response:
+        with _urlopen_retry(request, timeout=120, attempts=1) as response:
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:240]

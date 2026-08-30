@@ -719,7 +719,7 @@ def test_agnes_generation_uses_ratio_and_base64_output(tmp_path, monkeypatch):
 
     assert output.read_bytes() == b"image-bytes"
     assert captured["body"]["model"] == "agnes-image-2.1-flash"
-    assert captured["body"]["size"] == "2K"
+    assert captured["body"]["size"] == "1K"
     assert captured["body"]["ratio"] == "9:16"
     assert captured["body"]["return_base64"] is True
     assert result["provider"] == "agnes"
