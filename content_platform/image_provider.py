@@ -985,6 +985,8 @@ def _provider_chain(provider: str, *, intent: str = "auto", input_image: str | P
         chain = ["cloudflare", "pixazo", "pollinations", "stock"]
     else:
         chain = ["stock", "agnes", "sense_nova", "pixazo", "cloudflare", "pollinations"]
+    if os.environ.get("AGNES_IMAGE_AUTO_ENABLED") != "1":
+        chain = [name for name in chain if name != "agnes"]
     if os.environ.get("IMAGE_PROVIDER_ALLOW_PAID") == "1":
         chain.extend(["openai", "gemini"])
     if input_image or intent == "image_edit":

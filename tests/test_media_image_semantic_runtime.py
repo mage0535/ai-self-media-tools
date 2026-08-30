@@ -163,7 +163,8 @@ def test_semantic_mismatch_reselects_candidate_before_acceptance(tmp_path: Path,
     assert recovery["attempts"][1]["passed"] is True
 
 
-def test_provider_retry_order_is_content_intent_specific():
+def test_provider_retry_order_is_content_intent_specific(monkeypatch):
+    monkeypatch.setenv("AGNES_IMAGE_AUTO_ENABLED", "1")
     first = MediaBridge._image_provider_args(
         ["--provider", "auto", "--size", "1024x1024"],
         {"intent": "real_scene", "size": "1080x1920"},
