@@ -1494,6 +1494,19 @@ def test_xiaohongshu_carousel_defers_post_generation_evidence_only():
     assert result["gates"]["manual_handoff_only"]["deferred"] is True
 
 
+def test_xiaohongshu_rendered_carousel_defers_delivery_only_evidence():
+    packet = complete_xiaohongshu_auto_packet()
+    packet["content_type"] = "carousel"
+    packet["content_form"] = "carousel"
+    packet["manual_publish_package"] = {}
+    packet["publishing_plan"] = {}
+
+    result = validate_xiaohongshu_auto_packet(packet, phase="rendered")
+
+    assert result["gates"]["manual_handoff_only"]["passed"] is True
+    assert result["gates"]["manual_handoff_only"]["deferred"] is True
+
+
 def test_xiaohongshu_auto_packet_rejects_design_cards_without_real_scene_backgrounds():
     packet = complete_xiaohongshu_auto_packet()
     packet["real_scene_background_plan"] = {

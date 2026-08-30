@@ -12,6 +12,33 @@ from content_platform.workflow_runtime import WorkflowBlocked, WorkflowStepRunne
 
 
 class PlatformQualityGateRuntimeTests(unittest.TestCase):
+    def test_image_render_evidence_compiles_provenance_into_platform_packet(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_dir = root / "artifacts" / "job-xhs"
+            artifact_dir.mkdir(parents=True)
+            image = artifact_dir / "section-01.png"
+            image.write_bytes(b"image")
+            (artifact_dir / "asset_provenance.json").write_text(json.dumps({
+                "assets": [{
+                    "scene_id": "section_1", "path": str(image),
+                    "source_url": "https://www.pexels.com/photo/example", "license": "Pexels",
+                    "match_reason": "AI workflow dashboard", "semantic_match_score": 0.82,
+                    "render_evidence": {"verified": True, "renderer": "ScriptImageProvider", "artifact_sha256": "abc"},
+                }],
+            }), encoding="utf-8")
+            (artifact_dir / "section_image_map.json").write_text(json.dumps([{
+                "section": "section_1", "image": str(image), "purpose": "show workflow dashboard",
+            }]), encoding="utf-8")
+            draft = {"draft_meta": {}}
+
+            Pipeline._attach_image_render_evidence(draft, artifact_dir)
+
+            meta = draft["draft_meta"]
+            self.assertEqual(meta["source_assets"][0]["source_url"], "https://www.pexels.com/photo/example")
+            self.assertTrue(meta["source_assets"][0]["rights_cleared"])
+            self.assertEqual(meta["section_image_map"][0]["section"], "section_1")
+
     def test_xiaohongshu_carousel_requires_image_generation(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / "state.db")

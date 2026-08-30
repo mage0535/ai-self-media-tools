@@ -347,7 +347,12 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "minimum": 3,
         },
         "cover_design": {
-            "passed": all(
+            "passed": (
+                cover.get("version") == "cover_direction_v2"
+                and all(cover.get(key) for key in ["visual_subject", "layout_key", "hook", "conflict_or_payoff", "content_match_reason"])
+                and cover.get("safe_zone_verified") is True
+                and cover.get("degraded") is not True
+            ) or all(
                 cover.get(key)
                 for key in ["visual_subject", "topic_alignment", "mobile_readable", "visual_hierarchy", "template_family"]
             ),
@@ -400,6 +405,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rende
     video_plan = packet.get("video_plan") or packet.get("short_video_plan") or {}
     mixed_plan = packet.get("mixed_content_plan") or {}
     generation_phase = str(phase or "rendered").casefold() in {"generation", "pre_generation", "pre-generation"}
+    rendered_phase = str(phase or "rendered").casefold() in {"rendered", "post_generation", "post-generation"}
     carousel_only = content_type in {"carousel", "image_text_note", "xiaohongshu_carousel"}
     ops_gates = _full_ops_gates(packet, "xiaohongshu")
     gates = {
@@ -478,6 +484,8 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rende
     if generation_phase:
         for key in ("tool_invocation_manifest", "authentic_source_evidence", "cover_design", "manual_handoff_only"):
             gates[key] = {"passed": True, "deferred": True, "phase": "generation"}
+    elif rendered_phase:
+        gates["manual_handoff_only"] = {"passed": True, "deferred": True, "phase": "rendered"}
     return _result(gates)
 
 

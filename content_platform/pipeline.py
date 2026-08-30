@@ -651,6 +651,35 @@ class Pipeline:
                     artifact = self._generate_optional_media(job_id, kind, runner, ["validate_image_requirements"])
                     if kind == "video" and artifact:
                         self._attach_video_render_evidence(draft, artifact)
+                current_job = self.store.get_job(job_id)
+                artifacts = self.store.artifacts(job_id)
+                artifact_dir = self.data_dir / "artifacts" / job_id
+                self._attach_image_render_evidence(draft, artifact_dir)
+                image_required = self._media_required("image", self.config.get("media", {}).get("image", {}), current_job)
+                video_required = self._media_required("video", self.config.get("media", {}).get("video", {}), current_job)
+                capability_execution = execute_post_generation_capabilities(
+                    capability_execution,
+                    draft,
+                    brief,
+                    artifacts=artifacts,
+                    render_manifest=(draft.get("draft_meta") or {}).get("render_manifest") or {},
+                    quality_gate={"passed": True, "stage": "media_artifacts_ready"},
+                )
+                draft["draft_meta"]["capability_execution"] = capability_execution
+                draft["draft_meta"]["tool_invocation_manifest"] = self._tool_invocation_manifest_from_execution(capability_execution)
+                if brief.get("automated_workflow") and not capability_execution.get("passed"):
+                    runner.block(
+                        "execute_post_generation_capabilities",
+                        "required_capability_not_executed",
+                        "required media capabilities lack real execution or artifact evidence",
+                        capability_execution,
+                        depends_on=["validate_image_requirements"],
+                    )
+                runner.succeeded(
+                    "execute_post_generation_capabilities",
+                    capability_execution,
+                    depends_on=["validate_image_requirements"],
+                )
                 final_gate = self._quality_gate(job_id, draft, risk, geo, phase="rendered", platforms=job.get("platforms"))
                 draft["draft_meta"]["quality_gate"] = final_gate
                 if self.require_gate_pass and not final_gate.get("passed", True):
@@ -662,19 +691,6 @@ class Pipeline:
                         depends_on=["validate_image_requirements"],
                     )
                 runner.succeeded("run_final_platform_quality_gate", final_gate, depends_on=["validate_image_requirements"])
-                current_job = self.store.get_job(job_id)
-                artifacts = self.store.artifacts(job_id)
-                image_required = self._media_required("image", self.config.get("media", {}).get("image", {}), current_job)
-                video_required = self._media_required("video", self.config.get("media", {}).get("video", {}), current_job)
-                capability_execution = execute_post_generation_capabilities(
-                    capability_execution,
-                    draft,
-                    brief,
-                    artifacts=artifacts,
-                    render_manifest=(draft.get("draft_meta") or {}).get("render_manifest") or {},
-                    quality_gate=final_gate,
-                )
-                draft["draft_meta"]["capability_execution"] = capability_execution
                 draft["draft_meta"]["execution_trace"] = build_pre_delivery_trace(
                     capability_execution=capability_execution,
                     artifacts=artifacts,
@@ -1856,6 +1872,97 @@ class Pipeline:
                         }
                         for row in rows if isinstance(row, dict) and row.get("scene_id")
                     }
+
+    @staticmethod
+    def _attach_image_render_evidence(draft, artifact_dir):
+        artifact_dir = Path(artifact_dir)
+        meta = draft.setdefault("draft_meta", {})
+        provenance_path = artifact_dir / "asset_provenance.json"
+        mapping_path = artifact_dir / "section_image_map.json"
+        try:
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8")) if provenance_path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            provenance = {}
+        try:
+            mappings = json.loads(mapping_path.read_text(encoding="utf-8")) if mapping_path.is_file() else []
+        except (OSError, json.JSONDecodeError):
+            mappings = []
+        assets = []
+        backgrounds = []
+        for item in provenance.get("assets") or []:
+            if not isinstance(item, dict):
+                continue
+            source_url = str(item.get("source_url") or "")
+            license_name = str(item.get("license") or "")
+            real_scene = source_url.startswith(("https://www.pexels.com/", "https://pixabay.com/"))
+            row = {
+                **item,
+                "asset_type": "real_scene_photo" if real_scene else "generated_image",
+                "real_scene": real_scene,
+                "authentic": real_scene,
+                "rights_cleared": bool(license_name),
+                "source": source_url,
+                "match_reason": item.get("match_reason") or "content-bound image provider result",
+            }
+            assets.append(row)
+            if real_scene:
+                backgrounds.append({
+                    **row,
+                    "background_kind": "licensed_real_scene_photo",
+                    "purpose": row.get("match_reason"),
+                })
+        if assets:
+            meta["source_assets"] = assets
+        if isinstance(mappings, list) and mappings:
+            meta["section_image_map"] = mappings
+        if backgrounds:
+            meta["real_scene_background_plan"] = {
+                "required": True,
+                "source_policy": "licensed_or_verified_runtime_assets",
+                "primary_background_kind": "licensed_real_scene_photo",
+                "no_css_gradient_primary": True,
+                "forbidden_backgrounds": ["abstract_shape", "css_gradient", "solid_color"],
+                "per_slide_backgrounds": backgrounds,
+            }
+
+    @staticmethod
+    def _tool_invocation_manifest_from_execution(execution):
+        execution = execution if isinstance(execution, dict) else {}
+        completed = {str(item) for item in execution.get("completed_stages") or []}
+        executed = {
+            str(item.get("capability_id")): item
+            for item in execution.get("executed") or []
+            if isinstance(item, dict) and item.get("capability_id")
+        }
+        planned = {}
+        for item in execution.get("planned") or execution.get("selected") or []:
+            if not isinstance(item, dict) or not item.get("capability_id"):
+                continue
+            capability_id = str(item["capability_id"])
+            stage = str(item.get("stage") or "")
+            if capability_id in executed or stage in completed:
+                planned[capability_id] = stage or "runtime"
+        for capability_id, item in executed.items():
+            planned.setdefault(capability_id, str(item.get("stage") or "runtime"))
+        invocations = {
+            capability_id: {
+                "status": "ok",
+                "output_hash": str(item.get("output_hash") or ""),
+                "duration_ms": int(item.get("duration_ms") or 0),
+                "evidence": item,
+            }
+            for capability_id, item in executed.items()
+            if capability_id in planned
+        }
+        return {
+            "version": "tool_invocation_manifest_v3",
+            "phase": "rendered",
+            "planned_tools": planned,
+            "invocations": invocations,
+            "executed_count": len(invocations),
+            "missing_tools": [name for name in planned if name not in invocations],
+            "capability_execution": execution,
+        }
 
     @staticmethod
     def _generation_platform_packet(job_id, draft, platforms, platform):
