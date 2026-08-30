@@ -20,9 +20,10 @@ def execute(inputs: dict[str, Any]) -> dict[str, Any]:
     visual_treatment = str(profile.get("visual_treatment") or blueprint.get("visual_treatment") or "editorial")
     content_format = str(profile.get("content_format") or blueprint.get("content_format") or "")
     is_video = "video" in content_format
+    status = probe_agnes()
     selected = (
         capability_id == "agnes_image_21_flash" and __import__("os").environ.get("AGNES_IMAGE_AUTO_ENABLED") == "1"
-    ) or is_video and capability_id == "agnes_video_25_flash"
+    ) or is_video and capability_id == "agnes_video_25_flash" and status["video_auto_enabled"]
     reason = (
         "high-density image/edit provider selected for cinematic or editorial assets"
         if capability_id == "agnes_image_21_flash"

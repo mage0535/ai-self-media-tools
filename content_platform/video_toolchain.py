@@ -43,7 +43,7 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
     if "agnes_video_available" not in available_assets:
         from .agnes_provider import probe_agnes
 
-        available_assets = {**available_assets, "agnes_video_available": probe_agnes()["available"]}
+        available_assets = {**available_assets, "agnes_video_available": probe_agnes()["video_auto_enabled"]}
     route = build_video_route(
         platform=platforms[0] if platforms else "",
         title=str(brief.get("topic") or brief.get("title") or ""),

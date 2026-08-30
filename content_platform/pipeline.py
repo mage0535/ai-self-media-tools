@@ -382,7 +382,7 @@ class Pipeline:
                     from .agnes_provider import probe_agnes
                     plan = dict(draft["draft_meta"].get("video_toolchain_plan") or {})
                     available_video_assets = dict(brief.get("available_video_assets") or {})
-                    available_video_assets.setdefault("agnes_video_available", probe_agnes()["available"])
+                    available_video_assets.setdefault("agnes_video_available", probe_agnes()["video_auto_enabled"])
                     route = build_video_route(
                         platform=target_platform,
                         title=str(draft.get("title") or job.get("topic") or ""),
