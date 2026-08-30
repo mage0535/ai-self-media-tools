@@ -187,3 +187,12 @@ def test_provider_retry_order_is_content_intent_specific(monkeypatch):
     assert first[first.index("--provider") + 1] == "stock"
     assert second[second.index("--provider") + 1] == "agnes"
     assert cover[cover.index("--provider") + 1] == "agnes"
+
+
+def test_cover_semantic_request_excludes_non_visual_workflow_labels():
+    request = MediaBridge._semantic_request(
+        {"platforms": ["xiaohongshu"], "topic": "AI workflow dashboard", "title": "AI workflow dashboard"},
+        {"role": "cover", "section": "cover", "purpose": "introduce the article promise with a topic-matched visual", "expected_concepts": ["AI workflow dashboard", "cover"]},
+    )
+
+    assert request["expected_concepts"] == ["AI workflow dashboard"]
