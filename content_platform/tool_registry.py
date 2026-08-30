@@ -30,7 +30,9 @@ class ToolRegistry:
     def _resolve_path(value):
         path = Path(str(value or "")).expanduser()
         if not path.is_absolute() and ("/" in str(value) or "\\" in str(value) or str(value).startswith(".")):
-            path = project_home() / path
+            explicit = os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip()
+            code_root = Path(explicit).expanduser() if explicit else Path(__file__).resolve().parents[1]
+            path = code_root / path
         return path
 
     def probe(self):
@@ -231,7 +233,9 @@ class ToolRegistry:
         configured = dict(self.config.get("analysis", {}) or {})
         if configured.get("script"):
             return configured
-        bundled = project_home() / "scripts" / "image_semantic_analyze.py"
+        explicit = os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip()
+        code_root = Path(explicit).expanduser() if explicit else Path(__file__).resolve().parents[1]
+        bundled = code_root / "scripts" / "image_semantic_analyze.py"
         if bundled.is_file():
             configured["script"] = str(bundled)
             configured.setdefault("timeout", 180)
