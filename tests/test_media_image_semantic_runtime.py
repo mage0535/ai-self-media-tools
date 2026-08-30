@@ -184,5 +184,5 @@ def test_provider_retry_order_is_content_intent_specific():
     )
 
     assert first[first.index("--provider") + 1] == "stock"
-    assert second[second.index("--provider") + 1] == "sense_nova"
-    assert cover[cover.index("--provider") + 1] == "sense_nova"
+    assert second[second.index("--provider") + 1] == "agnes"
+    assert cover[cover.index("--provider") + 1] == "agnes"

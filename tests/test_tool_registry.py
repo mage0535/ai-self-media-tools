@@ -161,6 +161,14 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertTrue(registry["providers"]["pixazo"]["supports_generate"])
         self.assertTrue(registry["providers"]["stock"]["available"])
 
+    def test_registry_reports_agnes_image_and_video_capabilities(self):
+        with patch.dict("os.environ", {"AGNES_API_KEY": "test-key"}, clear=False):
+            result = ToolRegistry({"fast_probe": True}).probe()
+
+        assert result["image_providers"]["providers"]["agnes"]["supports_edit"] is True
+        assert result["agnes_multimodal"]["supports_text_to_video"] is True
+        assert result["agnes_multimodal"]["video_model"] == "agnes-video-2.5-flash"
+
 
 if __name__ == "__main__":
     unittest.main()

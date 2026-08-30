@@ -75,7 +75,7 @@ def main() -> int:
     parser.add_argument("--output", default="/tmp/ai-self-media-image.png")
     parser.add_argument(
         "--provider",
-        choices=["auto", "openai", "gemini", "stock", "pexels", "pixabay", "sense_nova", "sensenova", "pixazo", "pollinations", "cloudflare"],
+        choices=["auto", "openai", "gemini", "stock", "pexels", "pixabay", "agnes", "sense_nova", "sensenova", "pixazo", "pollinations", "cloudflare"],
         default="auto",
     )
     parser.add_argument("--model", default="")

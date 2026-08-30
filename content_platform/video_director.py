@@ -41,6 +41,7 @@ def build_video_route(
         int(assets.get("footage_count") or 0),
         int(assets.get("screenshot_count") or assets.get("ui_asset_count") or 0),
         content_form,
+        bool(assets.get("agnes_video_available")),
     )
     renderer_id = _renderer(platform, modality)
     palettes = _palettes(platform, modality)
@@ -79,7 +80,7 @@ def build_video_route(
     return route
 
 
-def _modality(text: str, footage_count: int, screenshot_count: int, content_form: str) -> str:
+def _modality(text: str, footage_count: int, screenshot_count: int, content_form: str, agnes_video_available: bool = False) -> str:
     if footage_count >= 8:
         return "real_footage_story"
     if any(token in text for token in ("vs", "versus", "对比", "区别", "a平台", "b平台", "before", "after")):
@@ -88,6 +89,11 @@ def _modality(text: str, footage_count: int, screenshot_count: int, content_form
         return "data_story"
     if screenshot_count > 0 and any(token in text for token in ("界面", "截图", "api", "操作", "演示", "demo", "screen")):
         return "screen_demo"
+    if agnes_video_available and any(
+        token in text
+        for token in ("cinematic", "movie", "brand film", "visual story", "电影感", "品牌片", "故事短片", "视觉隐喻")
+    ):
+        return "real_footage_story"
     if any(token in text for token in ("第一步", "第二步", "清单", "步骤", "避坑", "checklist")):
         return "layered_checklist"
     return "cinematic_explainer"

@@ -723,11 +723,11 @@ class MediaBridge:
     def _image_provider_attempt_chain(intent, configured_provider):
         configured = str(configured_provider or "auto").casefold().replace("-", "_")
         by_intent = {
-            "real_scene": ["stock", "sense_nova", "pixazo", "cloudflare", "pollinations"],
-            "cinematic_cover": ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
-            "editorial_illustration": ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
-            "knowledge_card_background": ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
-            "image_edit": ["sense_nova", "gemini", "openai"],
+            "real_scene": ["stock", "agnes", "sense_nova", "pixazo", "cloudflare", "pollinations"],
+            "cinematic_cover": ["agnes", "sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
+            "editorial_illustration": ["agnes", "sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
+            "knowledge_card_background": ["agnes", "sense_nova", "pixazo", "cloudflare", "pollinations", "stock"],
+            "image_edit": ["agnes", "sense_nova", "gemini", "openai"],
         }
         defaults = by_intent.get(str(intent or "auto"), ["auto", "sense_nova", "pixazo", "cloudflare", "pollinations"])
         if configured == "auto":

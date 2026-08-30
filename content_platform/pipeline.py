@@ -379,13 +379,16 @@ class Pipeline:
                 )
                 if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
                     from .video_director import build_video_route
+                    from .agnes_provider import probe_agnes
                     plan = dict(draft["draft_meta"].get("video_toolchain_plan") or {})
+                    available_video_assets = dict(brief.get("available_video_assets") or {})
+                    available_video_assets.setdefault("agnes_video_available", probe_agnes()["available"])
                     route = build_video_route(
                         platform=target_platform,
                         title=str(draft.get("title") or job.get("topic") or ""),
                         body=str(draft.get("body") or ""),
                         content_form=str(draft["draft_meta"].get("content_form") or plan.get("content_form") or "short_video"),
-                        available_assets=dict(brief.get("available_video_assets") or {}),
+                        available_assets=available_video_assets,
                         recent_style_ids=list(brief.get("recent_video_style_ids") or []),
                     )
                     plan.update({

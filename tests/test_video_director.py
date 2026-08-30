@@ -60,3 +60,18 @@ def test_screen_demo_requires_verified_ui_assets_and_falls_back_without_them():
     assert without_ui["presentation_mode"] == "layered_checklist"
     assert without_ui["renderer_id"] == "layered_card_renderer"
     assert with_ui["presentation_mode"] == "screen_demo"
+
+
+def test_agnes_is_selected_only_for_explicit_cinematic_story_signals():
+    cinematic = build_video_route(
+        platform="douyin_ai", title="AI workflow brand film", body="cinematic visual story",
+        content_form="short_video", available_assets={"agnes_video_available": True},
+    )
+    factual = build_video_route(
+        platform="douyin_ai", title="AI workflow checklist", body="three practical steps",
+        content_form="short_video", available_assets={"agnes_video_available": True},
+    )
+
+    assert cinematic["renderer_id"] == "real_footage_renderer"
+    assert "eight_verified_footage_clips" in cinematic["required_assets"]
+    assert factual["renderer_id"] != "real_footage_renderer"

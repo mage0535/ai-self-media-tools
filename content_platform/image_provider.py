@@ -37,6 +37,7 @@ def load_secret(name: str, extra_files: Iterable[str | Path] = ()) -> str:
         *[Path(p) for p in extra_files if p],
         content_home / "secrets" / "provider.env",
         content_home / "secrets" / "image.env",
+        content_home / "secrets" / "agnes.env",
         content_home / "secrets" / "channel_matrix.env",
         hermes_home / ".env",
         hermes_home / "secrets" / "provider.env",
@@ -110,6 +111,8 @@ def generate_image(
                 result = _sensenova_image(prompt, output_path, model=model, size=size, input_image=input_image)
             elif name == "pixazo":
                 result = _pixazo_image(prompt, output_path, model=model, size=size, input_image=input_image)
+            elif name == "agnes":
+                result = _agnes_image(prompt, output_path, model=model, size=size, input_image=input_image)
             else:
                 raise ImageProviderError(f"unsupported image provider: {name}")
             result["path"] = str(output_path)
@@ -658,6 +661,88 @@ def _pixazo_image(
     }
 
 
+def _agnes_image(
+    prompt: str,
+    output: Path,
+    model: str = "",
+    size: str = "1024x1024",
+    input_image: str | Path | None = None,
+) -> dict:
+    key = load_secret("AGNES_API_KEY")
+    if not key:
+        raise ImageProviderError("AGNES_API_KEY is not configured")
+    base_url = load_secret("AGNES_BASE_URL") or "https://apihub.agnes-ai.com/v1"
+    model_name = model or load_secret("AGNES_IMAGE_MODEL") or "agnes-image-2.1-flash"
+    width, height = _requested_dimensions(size)
+    ratio = _agnes_ratio(width, height)
+    tier = "2K" if max(width, height) > 1024 else "1K"
+    payload: dict = {
+        "model": model_name,
+        "prompt": prompt,
+        "size": tier,
+        "ratio": ratio,
+        "return_base64": True,
+    }
+    if input_image:
+        source = Path(input_image)
+        if not source.is_file():
+            raise ImageProviderError("Agnes input image does not exist")
+        mime = mimetypes.guess_type(source.name)[0] or "image/png"
+        data_uri = f"data:{mime};base64,{base64.b64encode(source.read_bytes()).decode('ascii')}"
+        payload["extra_body"] = {"image": [data_uri], "response_format": "b64_json"}
+        payload.pop("return_base64", None)
+    request = urllib.request.Request(
+        base_url.rstrip("/") + "/images/generations",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "User-Agent": "ai-self-media-tools/agnes-image",
+        },
+        method="POST",
+    )
+    try:
+        with _urlopen_retry(request, timeout=180, attempts=2) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")[:240]
+        raise ImageProviderError(f"Agnes image call failed: HTTP {exc.code} {detail}") from exc
+    row = (body.get("data") or [{}])[0] if isinstance(body, dict) else {}
+    encoded = str(row.get("b64_json") or "") if isinstance(row, dict) else ""
+    url = str(row.get("url") or "") if isinstance(row, dict) else ""
+    if encoded:
+        output.write_bytes(base64.b64decode(encoded))
+    elif url:
+        _download_image(url, output)
+    else:
+        raise ImageProviderError("Agnes image response missing url or b64_json")
+    return {
+        "provider": "agnes",
+        "model": model_name,
+        "mode": "edit" if input_image else "generate",
+        "source_url": "generated:agnes",
+        "license": "agnes_api_terms",
+        "size": f"{width}x{height}",
+        "native_tier": tier,
+        "native_ratio": ratio,
+    }
+
+
+def _agnes_ratio(width: int, height: int) -> str:
+    supported = [(1, 1), (3, 4), (4, 3), (16, 9), (9, 16), (2, 3), (3, 2), (21, 9)]
+    target = width / max(1, height)
+    left, right = min(supported, key=lambda pair: abs(pair[0] / pair[1] - target))
+    return f"{left}:{right}"
+
+
+def _requested_dimensions(size: str) -> tuple[int, int]:
+    try:
+        width, height = [int(part) for part in str(size).lower().split("x", 1)]
+        return max(1, width), max(1, height)
+    except Exception:
+        return 1024, 1024
+
+
 def _normalize_image_intent(intent: str, prompt: str, input_image: str | Path | None) -> str:
     normalized = str(intent or "auto").casefold().strip().replace("-", "_")
     if input_image:
@@ -892,17 +977,17 @@ def _provider_chain(provider: str, *, intent: str = "auto", input_image: str | P
     if configured:
         chain = [_normalize_provider_name(p) for p in configured.split(",") if p.strip()]
     elif input_image or intent == "image_edit":
-        chain = ["sense_nova"]
+        chain = ["agnes", "sense_nova"]
     elif intent in {"cinematic_cover", "editorial_illustration", "knowledge_card_background"}:
-        chain = ["sense_nova", "pixazo", "cloudflare", "pollinations", "stock"]
+        chain = ["agnes", "sense_nova", "pixazo", "cloudflare", "pollinations", "stock"]
     elif intent == "fast_fallback":
         chain = ["cloudflare", "pixazo", "pollinations", "stock"]
     else:
-        chain = ["stock", "sense_nova", "pixazo", "cloudflare", "pollinations"]
+        chain = ["stock", "agnes", "sense_nova", "pixazo", "cloudflare", "pollinations"]
     if os.environ.get("IMAGE_PROVIDER_ALLOW_PAID") == "1":
         chain.extend(["openai", "gemini"])
     if input_image or intent == "image_edit":
-        chain = [name for name in chain if name in {"sense_nova", "gemini", "openai"}]
+        chain = [name for name in chain if name in {"agnes", "sense_nova", "gemini", "openai"}]
     return list(dict.fromkeys(chain))
 
 
