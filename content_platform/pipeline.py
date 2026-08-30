@@ -1940,7 +1940,8 @@ class Pipeline:
                 continue
             capability_id = str(item["capability_id"])
             stage = str(item.get("stage") or "")
-            if capability_id in executed or stage in completed:
+            required = str(item.get("required_or_optional") or "required") != "optional"
+            if capability_id in executed or required:
                 planned[capability_id] = stage or "runtime"
         for capability_id, item in executed.items():
             planned.setdefault(capability_id, str(item.get("stage") or "runtime"))
@@ -1972,6 +1973,12 @@ class Pipeline:
         for source in (strategy, draft_meta, draft):
             if isinstance(source, dict):
                 packet.update(source)
+        for key in (
+            "cover_design", "source_assets", "section_image_map", "real_scene_background_plan",
+            "tool_invocation_manifest", "capability_execution", "preflight_manifest",
+        ):
+            if key in draft_meta:
+                packet[key] = draft_meta[key]
         packet.setdefault("id", job_id)
         packet.setdefault("title", draft.get("title", ""))
         packet.setdefault("body", draft.get("body", ""))
