@@ -672,19 +672,21 @@ class MediaBridge:
     def _semantic_request(job, item):
         platform = next(iter(job.get("platforms") or []), "")
         expected = []
-        for value in (
-            *(item.get("expected_concepts") or []),
-            job.get("topic"),
-            job.get("title"),
-            item.get("section"),
-            item.get("purpose"),
-        ):
+        role = str(item.get("role") or "image").casefold()
+        values = [*(item.get("expected_concepts") or []), job.get("topic"), job.get("title")]
+        if role != "cover":
+            values.extend([item.get("section"), item.get("purpose")])
+        for value in values:
             text = " ".join(str(value or "").split()).strip()
+            if text.casefold() in {"cover", "section", "image", "topic-matched visual"}:
+                continue
+            if text.startswith("introduce the article promise") or text.startswith("explain or prove"):
+                continue
             if text and text not in expected:
                 expected.append(text[:160])
         return {
             "expected_concepts": expected,
-            "role": str(item.get("role") or "image"),
+            "role": role,
             "platform": str(platform),
         }
 
