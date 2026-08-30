@@ -1531,6 +1531,21 @@ def test_xiaohongshu_rendered_carousel_accepts_generated_cover_with_three_real_a
     assert result["gates"]["cover_design"]["passed"] is True
 
 
+def test_wechat_generation_defers_render_and_delivery_evidence_only():
+    packet = complete_wechat_auto_packet()
+    packet["section_image_map"] = []
+    packet["cover_design"] = {}
+    packet["article_artifact_probe"] = {}
+    packet["publishing_plan"] = {}
+
+    result = validate_wechat_auto_packet(packet, phase="generation")
+
+    for key in ("base_article_quality", "inline_img_tags", "cover_cdn", "draft_postcheck_plan", "article_artifact_probe"):
+        assert result["gates"][key]["deferred"] is True
+    assert result["gates"]["account_data_analysis"]["passed"] is True
+    assert result["gates"]["topic_and_article_plan"]["passed"] is True
+
+
 def test_xiaohongshu_auto_packet_rejects_design_cards_without_real_scene_backgrounds():
     packet = complete_xiaohongshu_auto_packet()
     packet["real_scene_background_plan"] = {

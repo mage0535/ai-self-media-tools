@@ -642,7 +642,7 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
     return _result(gates)
 
 
-def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
+def validate_wechat_auto_packet(packet: dict[str, Any], phase: str = "rendered") -> dict[str, Any]:
     """Validate a WeChat auto-workflow packet before draft upload.
 
     This is stricter than the generic article gate because WeChat automation
@@ -699,6 +699,7 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     article_structure = wechat_playbook.get("article_structure") if isinstance(wechat_playbook, dict) else {}
     interaction_conversion = wechat_playbook.get("interaction_conversion") if isinstance(wechat_playbook, dict) else {}
     seo_geo = wechat_playbook.get("seo_geo") if isinstance(wechat_playbook, dict) else {}
+    generation_phase = str(phase or "rendered").casefold() in {"generation", "pre_generation", "pre-generation"}
     gates = {
         "base_article_quality": {"passed": bool(article.get("passed")), "failed": article.get("failed_dimensions", [])},
         "account_data_analysis": {
@@ -829,6 +830,9 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "note": "run no_ai_slop_check.py on body",
         },
     }
+    if generation_phase:
+        for key in ("base_article_quality", "inline_img_tags", "cover_cdn", "draft_postcheck_plan", "article_artifact_probe"):
+            gates[key] = {"passed": True, "deferred": True, "phase": "generation"}
     return _result(gates)
 
 
