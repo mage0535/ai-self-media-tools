@@ -29,6 +29,27 @@
     "mcp_memory_context": "output_verified",
     "mcp_ai_self_media_content": "output_verified"
   },
+  "inventory_dispositions": {
+    "hermes_operating_strategy": {"mode":"compiled_reference","reason":"strategy rules are compiled into bounded model input by deterministic code"},
+    "trend_collector": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "same_lane_hot_analysis": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "wechat_image_post_cards": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "carousel_design_patterns": {"mode":"compiled_reference","reason":"public methodology is consumed through compiled skill rules"},
+    "knowledge-card-designer": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "image_gen_engine": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "unsplash": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "ai_seo": {"mode":"compiled_reference","reason":"public methodology is consumed through compiled skill rules"},
+    "same_lane_hot_video_analysis": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "yt_dlp": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "cinema_composition": {"mode":"compiled_reference","reason":"public composition rules are consumed through compiled skill rules"},
+    "postcheck": {"mode":"planned_adapter","reason":"publisher-specific verified postcheck adapter is scheduled for P9"},
+    "cinema_dna_composition": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "life_force_portrait_upgrade": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "regional_culture_poster_gen": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "photography_style_simulation": {"mode":"license_excluded","reason":"source license is unverified; production routing forbidden"},
+    "emotion_hooks_expansion": {"mode":"compiled_reference","reason":"public hook rules are consumed through compiled skill rules"},
+    "ai_script_six_step": {"mode":"compiled_reference","reason":"public script rules are consumed through compiled skill rules"}
+  },
   "groups": [
     {"id":"ops_strategy","applies_to":["article","carousel","short_video","long_video"],"required_policy":"optional","candidate_ids":["hermes_operating_strategy","growth_strategy_latest"]},
     {"id":"trend_collection","applies_to":["article","carousel","short_video","long_video"],"required_policy":"optional","candidate_ids":["platform_source_matrix","trend_collector","same_lane_hot_analysis"]},

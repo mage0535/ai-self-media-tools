@@ -94,13 +94,23 @@ def match_capabilities(
             "verification_level": capability.get("verification_level", "output_verified"),
             "required_or_optional": "required" if capability["id"] in required_ids else "optional",
         }
+        lifecycle = capability.get("lifecycle")
+        if lifecycle == "inventory_only":
+            disposition = capability.get("inventory_disposition") or {}
+            inventory.append(
+                {
+                    "capability_id": capability["id"],
+                    "reason": str(disposition.get("reason") or "inventory_only"),
+                    "disposition": str(disposition.get("mode") or "unclassified"),
+                }
+            )
+            continue
         if capability.get("kind") == "methodology" and capability.get("license") == "unverified":
             inventory.append({"capability_id": capability["id"], "reason": "license_unverified"})
             continue
         if capability.get("kind") == "methodology":
             consulted.append({**item, "status": "consulted", "rules_applied": []})
             continue
-        lifecycle = capability.get("lifecycle")
         if lifecycle not in {"executable", "parent_executed"}:
             inventory.append({"capability_id": capability["id"], "reason": "inventory_only"})
             continue

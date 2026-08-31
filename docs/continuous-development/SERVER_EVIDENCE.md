@@ -87,3 +87,13 @@ Observed read-only on 2026-08-31.
 - Failure injection confirmed that an assets-stage adapter with no file evidence fails a required artifact contract, and an unbound effect hash fails effect verification.
 - Focused capability/router/DAG/MCP/Pipeline/Canary regression: 150 passed. Full regression: 1550 passed plus 37 subtests.
 - This is local implementation evidence only. Server capability runs and real media artifacts have not yet been revalidated against this branch; timers remain disabled.
+
+## P5 inventory governance evidence
+
+- All 19 inventory-only capabilities now have an explicit disposition and reason in the checked-in registry.
+- Twelve unverified-license entries are `license_excluded` and cannot enter consulted, selected, or executed states.
+- Six public/internal methodology entries are `compiled_reference`; their rules are consumed through deterministic compiled-skill context rather than false standalone calls.
+- Publisher-specific `postcheck` remains `planned_adapter` for P9 and cannot be claimed as executed before that implementation.
+- Router tests prove inventory-only entries do not appear in consulted or executable candidates and always expose disposition plus reason.
+- Focused registry/router/evidence regression: 60 passed. Full regression: 1551 passed plus 37 subtests.
+- No live server capability smoke was run in this phase; production release and timers remain unchanged.
