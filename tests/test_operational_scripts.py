@@ -267,10 +267,21 @@ shared_trend_only: false
         for path in sorted(Path("systemd").glob("*.service")):
             text = path.read_text(encoding="utf-8")
             self.assertIn("Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current", text, path)
+            self.assertIn("Environment=CONTENT_PLATFORM_CODE_ROOT=%h/.ai-self-media-tools-current", text, path)
             self.assertIn("Environment=PYTHONPATH=%h/.ai-self-media-tools-current", text, path)
             self.assertIn("Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data", text, path)
             self.assertIn("Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets", text, path)
+            self.assertIn("Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json", text, path)
+            self.assertIn("Environment=CONTENT_PLATFORM_RUNTIME_MODE=production", text, path)
             self.assertNotIn("%h/.local/bin/content-platform", text, path)
+
+    def test_overnight_entrypoints_require_private_runtime_roots(self):
+        for name in ("scripts/run_overnight_batch.sh", "scripts/run_overnight_supervisor.sh"):
+            text = Path(name).read_text(encoding="utf-8")
+            self.assertIn('CONTENT_PLATFORM_DATA_DIR:?CONTENT_PLATFORM_DATA_DIR is required', text)
+            self.assertIn('CONTENT_PLATFORM_SECRETS_DIR:?CONTENT_PLATFORM_SECRETS_DIR is required', text)
+            self.assertIn('CONTENT_PLATFORM_CONFIG:?CONTENT_PLATFORM_CONFIG is required', text)
+            self.assertNotIn('$release_root/config.json', text)
 
     def test_overnight_script_refreshes_growth_strategy_before_prepare(self):
         text = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")

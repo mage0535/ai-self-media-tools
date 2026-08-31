@@ -149,9 +149,12 @@ def _validate_systemd_unit(path: Path, text: str) -> None:
     required = (
         f"WorkingDirectory={SYSTEMD_CURRENT_ROOT}",
         f"Environment=CONTENT_PLATFORM_HOME={SYSTEMD_CURRENT_ROOT}",
+        f"Environment=CONTENT_PLATFORM_CODE_ROOT={SYSTEMD_CURRENT_ROOT}",
         f"Environment=PYTHONPATH={SYSTEMD_CURRENT_ROOT}",
         f"Environment=CONTENT_PLATFORM_DATA_DIR={SYSTEMD_DATA_ROOT}",
         f"Environment=CONTENT_PLATFORM_SECRETS_DIR={SYSTEMD_SECRETS_ROOT}",
+        f"Environment=CONTENT_PLATFORM_CONFIG={SYSTEMD_MUTABLE_ROOT}/config.json",
+        "Environment=CONTENT_PLATFORM_RUNTIME_MODE=production",
     )
     missing = [value for value in required if value not in text]
     if missing:
@@ -368,6 +371,12 @@ def _verify_effective_systemd_units(
         environment = values.get("Environment", "")
         if f"CONTENT_PLATFORM_HOME={SYSTEMD_CURRENT_ROOT}" not in environment:
             raise ReleaseAuditError(f"systemd unit {name} has the wrong effective CONTENT_PLATFORM_HOME")
+        if f"CONTENT_PLATFORM_CODE_ROOT={SYSTEMD_CURRENT_ROOT}" not in environment:
+            raise ReleaseAuditError(f"systemd unit {name} has the wrong effective CONTENT_PLATFORM_CODE_ROOT")
+        if f"CONTENT_PLATFORM_CONFIG={SYSTEMD_MUTABLE_ROOT}/config.json" not in environment:
+            raise ReleaseAuditError(f"systemd unit {name} has the wrong effective CONTENT_PLATFORM_CONFIG")
+        if "CONTENT_PLATFORM_RUNTIME_MODE=production" not in environment:
+            raise ReleaseAuditError(f"systemd unit {name} is not fail-closed in production mode")
         if f"{SYSTEMD_MUTABLE_ROOT}/scripts/" in values.get("ExecStart", ""):
             raise ReleaseAuditError(f"systemd unit {name} has a stale effective script path")
         if "/scripts/" in text and SYSTEMD_CURRENT_ROOT not in values.get("ExecStart", ""):

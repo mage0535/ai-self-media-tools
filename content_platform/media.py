@@ -509,7 +509,7 @@ class MediaBridge:
             image_checkpoints = {}
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
-            checkpoint_key = f"{item.get('role')}:{item.get('section')}"
+            checkpoint_key = f"{idx}:{item.get('role')}:{item.get('section')}"
             signature = hashlib.sha256(json.dumps({
                 "item": item,
                 "cover_design": (job.get("draft_meta") or {}).get("cover_design") or {},
@@ -1386,7 +1386,7 @@ class MediaBridge:
         image_cfg = dict(self.config.get("image", {}))
         required_count = max(1, int(self.config.get("video", {}).get("visual_image_count", 8)))
         if not image_paths and image_cfg.get("enabled", False):
-            image_cfg.setdefault("min_count", required_count)
+            image_cfg["min_count"] = max(required_count, int(image_cfg.get("min_count") or 1))
             job["_video_asset_generation"] = True
             try:
                 image_artifact = self._generate_image(job, output_dir, image_cfg)

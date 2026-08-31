@@ -4,20 +4,20 @@ Observed read-only on 2026-08-31.
 
 ## Runtime drift
 
-- Current release: `/root/.ai-self-media-tools-releases/unified-capability-v7-149362f`
+- Current release: `$RELEASES/unified-capability-v7-149362f`
 - GitHub feature branch: `149362f`
 - GitHub main: `b059d07`
 - Local checkout at audit time: `f625eeb`
 - Server dirty checkout: `6f4c88a` plus modified and untracked files
-- Private config `data_dir`: `/root/.ai-self-media-tools-releases/aebd7a9/data` (invalid production coupling)
+- Private config `data_dir`: `$RELEASES/aebd7a9/data` (invalid production coupling)
 - Current release contains no `config.json`.
 - MCP fallback database: current release `data/state.db`.
-- Shared production database: `/root/.ai-self-media-tools/data/state.db`.
+- Shared production database: `$SHARED_DATA/state.db`.
 
 ## Hermes execution evidence
 
 - Telegram session history: 544 messages, approximately 400k input tokens, 206 tool turns.
-- Hermes created `/root/.hermes/scripts/clear_workflow_lock.py` and directly deleted `workflow_locks`.
+- Hermes created a private `clear_workflow_lock.py` helper and directly deleted `workflow_locks`.
 - gbrain MCP repeatedly failed because no brain was configured.
 - Content-platform MCP exposed 26 tools; the unified content registry formally routed three content MCP capabilities.
 
@@ -37,3 +37,12 @@ Observed read-only on 2026-08-31.
 - Xiaohongshu capability Canary remains failed; four image checkpoints existed at audit time.
 - Shared Publication Ledger counts: identities=0, windows=0, observations=0, attempts=0.
 
+## P1 local implementation evidence
+
+- Added a single runtime-path resolver for immutable code and private mutable config/data/secrets.
+- MCP config and database resolution now use the shared runtime contract.
+- All project-owned systemd services declare the same five production roots/mode, and release deployment verifies their effective environment.
+- Overnight batch and supervisor now reject missing private config/data/secrets instead of falling back into the release.
+- Focused regression: 85 passed. Full regression: 1532 passed plus 37 subtests.
+- Video visual-asset regression found and fixed a checkpoint-key collision that reduced four requested scene images to two unique assets.
+- Server deployment, gateway drop-in, symlink switch, and shared-database inode verification have not run yet; timers remain disabled.

@@ -2,9 +2,9 @@
 
 ## D1: Immutable code, mutable private state
 
-- Code is loaded only from `/root/.ai-self-media-tools-current`.
-- Config is loaded only from `/root/.ai-self-media-tools/config.json` in production.
-- Data and SQLite state live only under `/root/.ai-self-media-tools/data`.
+- Code is loaded only from the immutable `$CURRENT_RELEASE` symlink.
+- Config is loaded only from `$PRIVATE_RUNTIME/config.json` in production.
+- Data and SQLite state live only under `$SHARED_DATA`.
 - Release directories must never own production databases, cookies, credentials, or mutable job data.
 
 ## D2: Hermes is a content worker, not the safety controller
@@ -39,3 +39,9 @@
 - Account performance improvement requires real publication identity plus 1h/24h/72h metrics.
 - Missing metrics are `insufficient`, never zero.
 
+## D7: Production runtime roots are explicit and fail closed
+
+- Every production service declares code, config, data, secrets, and production mode explicitly.
+- MCP and CLI resolve the same shared database and private config; production never falls back to release-local state.
+- Missing production config is a startup error, not a default-media-disabled runtime.
+- Coordination documents use logical path aliases and never publish server-private absolute paths.

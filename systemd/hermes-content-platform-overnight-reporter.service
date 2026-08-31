@@ -7,8 +7,11 @@ Wants=network-online.target
 Type=oneshot
 Environment=HOME=%h
 Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
+Environment=CONTENT_PLATFORM_CODE_ROOT=%h/.ai-self-media-tools-current
 Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
 Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
+Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json
+Environment=CONTENT_PLATFORM_RUNTIME_MODE=production
 Environment=PYTHONPATH=%h/.ai-self-media-tools-current
 EnvironmentFile=-%h/.ai-self-media-tools/secrets/notifications.env
 ExecStart=/bin/bash %h/.ai-self-media-tools-current/scripts/run_overnight_reporter.sh
