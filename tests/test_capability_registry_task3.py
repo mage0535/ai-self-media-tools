@@ -314,6 +314,21 @@ def test_parent_executed_children_route_to_one_parent_invocation_with_child_tele
     assert {"pexels", "pixabay", "knowledge_card_renderer", "cover_renderer"} <= set(media[0]["child_capability_ids"])
 
 
+def test_internal_runtime_children_are_not_left_as_inventory_and_unverified_methodology_is_not_consulted():
+    from content_platform.capability_router import match_capabilities, load_registry
+
+    registry = load_registry("kuaishou")
+    internal_runtime_ids = {
+        "historical_feedback", "anti_spam_similarity_gate", "source_asset_matcher",
+        "animated_card_pipeline", "css_motion_transitions",
+    }
+    capabilities = {row["id"]: row for row in registry["capabilities"]}
+    assert all(capabilities[item]["lifecycle"] == "parent_executed" for item in internal_runtime_ids)
+
+    plan = match_capabilities({"platform": "kuaishou", "content_format": "short_video"}, registry)
+    assert "cinema_dna_composition" not in {row["capability_id"] for row in plan["consulted"]}
+
+
 def test_runtime_registry_records_are_internal_and_have_evidence_contracts():
     registry = load_capability_registry(REGISTRY_PATH)
     target_ids = {
