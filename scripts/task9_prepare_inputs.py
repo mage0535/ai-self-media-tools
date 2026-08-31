@@ -57,6 +57,7 @@ def prepare_inputs(data_root: Path, artifact_root: Path) -> dict[str, Any]:
         support = case["hotspot_contract"]
         selected: dict[str, Any] = {}
         hot = (pack.get("platforms") or {}).get(platform) or {}
+        eligible_samples = []
         for sample in hot.get("top_samples") or []:
             title = str(sample.get("title") or "").strip()
             score = _fit(title, platform)
@@ -67,14 +68,15 @@ def prepare_inputs(data_root: Path, artifact_root: Path) -> dict[str, Any]:
                 and sample.get("evidence_strength") in {"strong", "verified", "high", "strong_logged_search_result"}
                 and "same_lane_hot_work" in support.get("allowed_evidence_types", [])
             ):
-                selected = {
+                eligible_samples.append({
                     "source_url": sample["url"], "observed_title": title,
                     "fetched_at": sample["captured_at"], "evidence_type": "same_lane_hot_work",
                     "native_verified": False, "association_mode": "manual_handoff",
                     "lane_fit_score": score, "semantic_fit_score": score,
                     "source_record": sample,
-                }
-                break
+                })
+        if eligible_samples:
+            selected = eligible_samples[0]
         if not selected:
             row = official.get(platform) or (official.get("douyin_ai") if platform == "douyin_pet" else {}) or {}
             if row.get("status") in VERIFIED_OFFICIAL_STATUSES:
@@ -111,6 +113,29 @@ def prepare_inputs(data_root: Path, artifact_root: Path) -> dict[str, Any]:
             "association_mode": selected["association_mode"], "lane_fit_score": selected["lane_fit_score"],
             "semantic_fit_score": selected["semantic_fit_score"],
         }
+        related_sources = []
+        seen_urls = {record["source_url"]}
+        for candidate in eligible_samples[1:]:
+            url = str(candidate.get("source_url") or "")
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            related_payload = {
+                "platform": platform,
+                "source_url": url,
+                "observed_title": str(candidate.get("observed_title") or ""),
+                "fetched_at": str(candidate.get("fetched_at") or ""),
+            }
+            related_sources.append({
+                **related_payload,
+                "source": f"{platform}:same_lane_hot_work",
+                "provenance_hash": hashlib.sha256(
+                    json.dumps(related_payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
+                ).hexdigest(),
+            })
+            if len(related_sources) >= 4:
+                break
+        record["related_sources"] = related_sources
         record["provenance_hash"] = _hotspot_source_hash(
             platform, record["source_url"], record["observed_title"], fetched_at=record["fetched_at"],
             status=record["status"], snapshot_path=snapshot_rel, snapshot_sha256=snapshot_hash,
