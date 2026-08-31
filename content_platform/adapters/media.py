@@ -120,7 +120,7 @@ def normalize_article_sections(job: dict[str, Any], limit: int = 6) -> list[str]
     for section in sections:
         chinese_chars = sum("\u4e00" <= char <= "\u9fff" for char in section)
         word_count = len(section.split())
-        too_short = (bool(chinese_chars) and chinese_chars < 12) or (not chinese_chars and word_count < 5)
+        too_short = bool(chinese_chars) and chinese_chars < 12 and section.endswith(("。", "！", "？", ".", "!", "?"))
         if too_short:
             pending = f"{pending} {section}".strip()
             continue

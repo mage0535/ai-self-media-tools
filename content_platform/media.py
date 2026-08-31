@@ -689,7 +689,17 @@ class MediaBridge:
                 " ".join(str(item) for item in (design.get("focal_subjects") or [])),
                 str(design.get("content_match_reason") or ""),
             ])
-            values = visual_concepts(concept_text) or list(item.get("expected_concepts") or [])
+            supplied = [
+                str(value).strip() for value in (item.get("expected_concepts") or [])
+                if str(value).strip() and str(value).casefold() not in {"cover", "image"}
+            ]
+            concise_visual = [
+                value for value in supplied
+                if value.isascii() and len(value.split()) <= 5 and any(
+                    token in value.casefold() for token in ("dashboard", "workflow", "diagram", "office", "agent")
+                )
+            ]
+            values = concise_visual or visual_concepts(concept_text) or supplied
         else:
             section_text = " ".join([str(item.get("section") or ""), str(item.get("purpose") or "")])
             topic_text = " ".join([str(job.get("topic") or ""), str(job.get("title") or "")])
