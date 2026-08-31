@@ -2178,6 +2178,11 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     assert "identity profile card" in identity["expected_concepts"]
     assert "time cost clock calendar" in identity["expected_concepts"]
 
+    feeding = MediaBridge._semantic_request(job, {
+        "role": "section", "section": "直到使用 AI Agent，才发现自己一直在手动喂饭。", "purpose": "show manual feeding"
+    })
+    assert feeding["expected_concepts"] == ["human feeding computer"]
+
 
 def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):
     from content_platform.media import MediaBridge
