@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-08-31 Asia/Shanghai (P8 local verification complete)
+Last updated: 2026-08-31 Asia/Shanghai (P9 identity/retry submilestone verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-08-31 Asia/Shanghai (P8 local verification complete)
 - Production release observed: `149362f`
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1567 passed + 37 subtests.
+- Latest complete regression on this branch: 1569 passed + 37 subtests.
 
 ## Active work
 
@@ -22,8 +22,8 @@ Last updated: 2026-08-31 Asia/Shanghai (P8 local verification complete)
 | Unified capability execution evidence | Codex primary | capability registry/router/DAG and P5 tests | committed `c629116`, `1f7e93e` | server capability smoke during deployment |
 | Bounded Hermes worker sessions | Codex primary | generator/run contract/pipeline and P6 tests | committed `6e6abf5` | server generation fault test during deployment |
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
-| Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | local_complete | audit and commit P8 |
-| Delivery postcheck and ledger | unassigned | publisher postchecks, publication ledger, P9 tests | pending | register only verified online publication identity |
+| Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
+| Delivery postcheck and ledger | Codex primary | publication ledger/store/collector and P9 tests | in_progress | commit identity/retry; implement unified postcheck capability evidence |
 | 12-platform Canary | unassigned | Task9 scripts/reports only | pending | 12/12 artifact-verified |
 
 ## Confirmed blockers
@@ -73,6 +73,10 @@ Last updated: 2026-08-31 Asia/Shanghai (P8 local verification complete)
 - Each shot retries locally up to two times; exhaustion stops before later shots and writes an atomic checkpoint.
 - Scene execution evidence v2 binds final.mp4 SHA to all scene plans, real assets, renderer modes, transitions, and measured motion probes.
 - `video_toolchain_runner` now requires effect verification; final file existence alone is rejected.
+- P9 identity/metric focused regression: `111 passed`; full regression: `1569 passed, 37 subtests passed`.
+- Bare manual confirmation cannot create a publication identity or metric windows; management/API/browser/URL-probe verification levels are explicit.
+- Unavailable metric collection remains pending with delayed retry; only the third failed attempt becomes `insufficient`.
+- P9 remains in progress until publisher-specific postchecks enter the unified delivery capability evidence.
 
 ## Production release gate
 

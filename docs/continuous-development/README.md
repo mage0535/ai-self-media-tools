@@ -32,4 +32,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - P6 bounded Hermes worker sessions and generation SLOs are a committed local milestone.
 - P7 image checkpoint and verified provider fallback is a committed local milestone.
 - P8 video shot retry, checkpoint, and final-effect evidence is a committed local milestone.
-- P9 delivery postchecks and Publication Ledger is the next workstream; start with its row in `STATUS.md`.
+- P9 publication identity and metric retry are a committed submilestone.
+- P9 remains active for unified publisher-specific postcheck capability evidence; start with its row in `STATUS.md`.

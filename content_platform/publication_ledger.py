@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-VERIFIED_LEVELS = {"url_verified", "postcheck_verified", "management_page_verified", "manual_verified"}
+VERIFIED_LEVELS = {"url_verified", "postcheck_verified", "management_page_verified"}
 NON_PUBLICATION_STATUSES = {"drafted", "handoff_pending", "handoff_ready", "review_required", "scheduled", "created"}
 REQUIRED_METRICS = ("views", "likes", "comments", "shares", "favorites", "saves", "followers", "follows")
 REVIEW_RESULTS = {"auth_failed", "authentication_failed", "conflict", "conflicting_match", "inconclusive", "query_failed"}
@@ -63,6 +63,17 @@ def _digest(value: Any) -> str:
 
 def _description_digest(value: str) -> str:
     return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
+
+
+def verification_level_for_source(source: str) -> str:
+    normalized = str(source or "").casefold()
+    if "management" in normalized:
+        return "management_page_verified"
+    if any(token in normalized for token in ("postcheck", "api", "browser")):
+        return "postcheck_verified"
+    if any(token in normalized for token in ("url_probe", "public_url", "canonical_url")):
+        return "url_verified"
+    return ""
 
 
 class PublicationLedger:
@@ -419,7 +430,7 @@ class PublicationLedger:
             _now(fields["published_at"])
         except ValueError:
             return {"passed": False, "reason": "publication_time_invalid"}
-        level = str(payload.get("verification_level") or ("manual_verified" if fields["source"] == "manual" else "postcheck_verified"))
+        level = str(payload.get("verification_level") or verification_level_for_source(fields["source"]))
         if level not in VERIFIED_LEVELS:
             return {"passed": False, "reason": "publication_not_independently_verified"}
         with self._connect() as conn:
@@ -560,7 +571,7 @@ class PublicationLedger:
             conn.execute("INSERT INTO metric_collection_leases(window_id,attempt_id,owner,expires_at) VALUES(?,?,?,?)", (int(window_id), attempt_id, str(owner), expires))
         return {"attempt_id": attempt_id, "window_id": int(window_id), "owner": str(owner), "expires_at": expires}
 
-    def finish_metric_collection(self, window_id: int, attempt_id: int, state: str, error: str = "", now: datetime | str | None = None) -> None:
+    def finish_metric_collection(self, window_id: int, attempt_id: int, state: str, error: str = "", now: datetime | str | None = None, retry_after_seconds: int = 0) -> None:
         finished = _iso(now)
         with self._connect() as conn:
             updated = conn.execute("UPDATE metric_collection_attempts SET state=?,error=?,finished_at=? WHERE id=? AND window_id=?", (str(state), str(error or ""), finished, int(attempt_id), int(window_id)))
@@ -568,7 +579,20 @@ class PublicationLedger:
                 raise KeyError(f"metric collection attempt not found: {attempt_id}")
             conn.execute("DELETE FROM metric_collection_leases WHERE window_id=? AND attempt_id=?", (int(window_id), int(attempt_id)))
             if str(error or ""):
-                conn.execute("INSERT INTO metric_collection_retries(window_id,reason,eligible_at,created_at) VALUES(?,?,?,?)", (int(window_id), str(error)[:300], finished, finished))
+                eligible_at = _iso(_now(now) + timedelta(seconds=max(0, int(retry_after_seconds))))
+                conn.execute("INSERT INTO metric_collection_retries(window_id,reason,eligible_at,created_at) VALUES(?,?,?,?)", (int(window_id), str(error)[:300], eligible_at, finished))
+
+    def metric_attempt_count(self, window_id: int) -> int:
+        with self._connect() as conn:
+            return int(conn.execute("SELECT count(*) FROM metric_collection_attempts WHERE window_id=?", (int(window_id),)).fetchone()[0])
+
+    def metric_retry_due(self, window_id: int, now: datetime | str | None = None) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT eligible_at FROM metric_collection_retries WHERE window_id=? ORDER BY id DESC LIMIT 1",
+                (int(window_id),),
+            ).fetchone()
+        return row is None or _now(row["eligible_at"]) <= _now(now)
 
     @staticmethod
     def validate_kuaishou_scheduled_postcheck(intent: dict[str, Any], evidence: dict[str, Any] | None) -> dict[str, Any]:
