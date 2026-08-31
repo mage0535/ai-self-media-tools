@@ -214,3 +214,16 @@ def test_semantic_analysis_retries_nondeterministic_mismatch(tmp_path, monkeypat
 
     assert result["passed"] is True
     assert result["semantic_match_score"] == 1.0
+
+
+def test_cover_derivative_rebinds_parent_semantics_to_final_artifact(tmp_path):
+    output = tmp_path / "cover.png"
+    _image(output, (30, 80, 140))
+    parent = {"passed": True, "image_sha256": "a" * 64, "semantic_match_score": 0.9, "caption": "workflow dashboard"}
+
+    result = MediaBridge._derive_cover_semantic_evidence(parent, output, {"passed": True, "renderer": "poster"})
+
+    assert result["passed"] is True
+    assert result["derivative_of_sha256"] == "a" * 64
+    assert result["image_sha256"] == __import__("hashlib").sha256(output.read_bytes()).hexdigest()
+    assert result["derivative_transform"] == "cover_title_and_layout_overlay"
