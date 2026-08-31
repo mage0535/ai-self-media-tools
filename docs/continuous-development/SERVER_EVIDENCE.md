@@ -129,3 +129,13 @@ Observed read-only on 2026-08-31.
 - Runtime adapter and registry now require `video_toolchain_runner` effect verification; file existence without scene evidence fails.
 - Focused renderer/effect/runner/Pipeline/Canary regression: 222 passed. Full regression: 1567 passed plus 37 subtests.
 - No live FFmpeg/Playwright server render was run in this phase; production video Canary remains required and timers remain disabled.
+
+## P9 local publication identity and metric retry evidence
+
+- Added source-to-verification-level mapping for management page, platform postcheck/API/browser, and canonical URL probes.
+- Fault injection with complete URL/ID/time fields but `source=manual` was rejected and created zero identities and zero windows.
+- A management-page manual receipt produced `management_page_verified` rather than the previous blanket `manual_verified` state.
+- Metric collector unavailability now records and releases an attempt lease, keeps the window pending, and delays the next eligible attempt.
+- Tests ran three unavailable attempts at eligible times: attempts one and two remained retry-pending; attempt three wrote `insufficient` without synthetic zero metrics.
+- Focused ledger/store/CLI/Pipeline regression: 111 passed. Full regression: 1569 passed plus 37 subtests.
+- P9 is not complete: publisher-specific postchecks still need unified capability execution evidence. No live platform publication or metric API was invoked; timers remain disabled.

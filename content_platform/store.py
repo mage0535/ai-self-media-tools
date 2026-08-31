@@ -1457,6 +1457,8 @@ class Store:
         verified.setdefault("source", source)
         if not all(str(verified.get(key) or "").strip() for key in ("account_alias", "content_id", "url", "published_at", "source")):
             raise ValueError("manual publication verification is required: account alias, real content ID, canonical URL, published_at, and verification source")
+        from .publication_ledger import verification_level_for_source
+
         identity = self.publication_ledger.register_verified_publication({
             "platform": normalized_platform,
             "internal_account_alias": verified["account_alias"],
@@ -1464,7 +1466,7 @@ class Store:
             "canonical_url": verified["url"],
             "published_at": verified["published_at"],
             "identity_source": verified["source"],
-            "verification_level": "manual_verified",
+            "verification_level": verification_level_for_source(str(verified["source"])),
             "verification": verified,
         })
         if not identity.get("passed"):

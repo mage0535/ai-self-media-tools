@@ -113,3 +113,17 @@
 - Shot progress and attempt counts are written atomically after each successful shot and on terminal shot failure.
 - Scene execution evidence binds every plan field, source-asset SHA, renderer mode, transition mapping, and measured motion probe to the final MP4 SHA.
 - A final MP4 path alone is not renderer execution proof; the capability reaches `effect_verified` only with artifact-bound passing scene evidence.
+
+## D17: Publication identity requires independent verification
+
+- User/manual confirmation alone cannot create a publication identity or performance windows.
+- Accepted identity levels are URL probe, platform postcheck, or management-page verification, derived from explicit evidence source.
+- Draft IDs, handoff paths, scheduled task IDs, uploader return values, and unverified external IDs remain delivery receipts only.
+- A verified identity creates idempotent 1h/24h/72h windows from the real `published_at` timestamp.
+
+## D18: Metric unavailability retries before becoming insufficient
+
+- A due window is leased for each collection attempt and the lease is always released.
+- Unavailable/empty collection remains pending with a delayed retry for a bounded maximum of three attempts.
+- Only exhausted retries write an `insufficient` observation; missing data is never written as zero.
+- Retry eligibility is checked before invoking a collector, preventing hot-loop retries.

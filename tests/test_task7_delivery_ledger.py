@@ -133,6 +133,41 @@ def test_store_migration_exposes_task7_tables_and_manual_record_needs_verificati
     assert store.publication_ledger.identities() == []
 
 
+def test_manual_confirmation_alone_cannot_create_publication_identity(tmp_path):
+    ledger = PublicationLedger(tmp_path / "state.db")
+
+    result = ledger.register_verified_publication({
+        "platform": "xiaohongshu",
+        "internal_account_alias": "xiaohongshu_main",
+        "platform_content_id": "note-1",
+        "canonical_url": "https://www.xiaohongshu.com/explore/note-1",
+        "published_at": "2026-08-25T12:00:00+08:00",
+        "identity_source": "manual",
+        "verification": {
+            "account_alias": "xiaohongshu_main", "content_id": "note-1",
+            "url": "https://www.xiaohongshu.com/explore/note-1",
+            "published_at": "2026-08-25T12:00:00+08:00", "source": "manual",
+        },
+    })
+
+    assert result["passed"] is False
+    assert result["reason"] == "publication_not_independently_verified"
+    assert ledger.identities() == []
+    assert ledger.due_windows() == []
+
+
+def test_management_page_manual_record_gets_independent_verification_level(tmp_path):
+    store = Store(tmp_path / "state.db")
+
+    store.record_manual_publication(
+        "kuaishou", "Verified topic", external_id="ks-1",
+        account_alias="kuaishou_main", url="https://www.kuaishou.com/short-video/ks-1",
+        published_at="2026-08-25T12:00:00+08:00", source="management_page_postcheck",
+    )
+
+    assert store.publication_ledger.identities()[0]["verification_level"] == "management_page_verified"
+
+
 def test_pipeline_persists_intent_before_publisher_and_timeout_is_not_retried(tmp_path, monkeypatch):
     store = Store(tmp_path / "state.db")
     pipeline = Pipeline(store, {"data_dir": str(tmp_path), "delivery_health": {"allow_unknown_health": True}, "publishers": {"default": {"type": "file"}}})
@@ -304,7 +339,7 @@ def test_kuaishou_scheduled_postcheck_requires_all_management_page_evidence(tmp_
     assert valid["passed"] is True
 
 
-def test_due_metric_collector_binds_real_identity_and_marks_missing_data_insufficient(tmp_path):
+def test_due_metric_collector_retries_then_marks_missing_data_insufficient(tmp_path):
     store = Store(tmp_path / "state.db")
     published_at = datetime.now(timezone.utc) - timedelta(hours=2)
     identity = store.publication_ledger.register_verified_publication({
@@ -327,7 +362,12 @@ def test_due_metric_collector_binds_real_identity_and_marks_missing_data_insuffi
         "published_at": published_at.isoformat(),
         "verification": {"account_alias": "wechat_main", "content_id": "wx-2", "url": "https://wechat.test/wx-2", "published_at": published_at.isoformat(), "source": "management_page"},
     })
-    report = collect_due_metric_windows(store.publication_ledger, lambda _: {"status": "unavailable", "source": "backend", "confidence": "low"})
+    checked = datetime.now(timezone.utc)
+    report = collect_due_metric_windows(store.publication_ledger, lambda _: {"status": "unavailable", "source": "backend", "confidence": "low"}, now=checked)
+    assert report["retry_pending"] == 1
+    report = collect_due_metric_windows(store.publication_ledger, lambda _: {"status": "unavailable", "source": "backend", "confidence": "low"}, now=checked + timedelta(seconds=301))
+    assert report["retry_pending"] == 1
+    report = collect_due_metric_windows(store.publication_ledger, lambda _: {"status": "unavailable", "source": "backend", "confidence": "low"}, now=checked + timedelta(seconds=602))
     assert report["insufficient"] == 1
     assert any(row["identity_id"] == identity2["identity_id"] and row["state"] == "insufficient" for row in store.publication_ledger.observations())
 
@@ -426,11 +466,12 @@ def test_metric_collection_persists_attempt_and_releases_lease(tmp_path):
     })
     report = collect_due_metric_windows(store.publication_ledger, lambda _: {"status": "unavailable", "reason": "backend down"})
 
-    assert report["insufficient"] == 1
+    assert report["retry_pending"] == 1
     with store.connect() as conn:
         assert conn.execute("SELECT count(*) FROM metric_collection_attempts").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM metric_collection_leases").fetchone()[0] == 0
         assert conn.execute("SELECT count(*) FROM metric_collection_retries").fetchone()[0] == 1
+        assert conn.execute("SELECT state FROM metric_windows WHERE identity_id=? AND hours=1", (identity["identity_id"],)).fetchone()[0] == "pending"
 
 
 def test_analysis_ready_publication_requires_three_collected_windows_and_preserves_attribution(tmp_path):
