@@ -1978,6 +1978,12 @@ class Pipeline:
                     "background_kind": "licensed_real_scene_photo",
                     "purpose": row.get("match_reason"),
                 })
+            elif row.get("verified_generated_fallback") is True and row.get("stock_fallback_evidence"):
+                backgrounds.append({
+                    **row,
+                    "background_kind": "verified_generated_fallback",
+                    "purpose": row.get("match_reason"),
+                })
         if assets:
             meta["source_assets"] = assets
         if isinstance(mappings, list) and mappings:
@@ -1994,10 +2000,13 @@ class Pipeline:
                 "stage": "local_rendered_assets",
             }
         if backgrounds:
+            real_count = len([item for item in backgrounds if item.get("real_scene") is True])
             meta["real_scene_background_plan"] = {
                 "required": True,
                 "source_policy": "licensed_or_verified_runtime_assets",
                 "primary_background_kind": "licensed_real_scene_photo",
+                "real_scene_count": real_count,
+                "verified_generated_fallback_count": len(backgrounds) - real_count,
                 "no_css_gradient_primary": True,
                 "forbidden_backgrounds": ["abstract_shape", "css_gradient", "solid_color"],
                 "per_slide_backgrounds": backgrounds,
