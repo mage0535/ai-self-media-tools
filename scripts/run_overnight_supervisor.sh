@@ -8,9 +8,9 @@ if ! [[ -n "$release_root" && -d "$release_root" ]]; then
   printf '%s\n' 'CONTENT_PLATFORM_HOME must resolve to a non-empty existing release root' >&2
   exit 1
 fi
-data_root="${CONTENT_PLATFORM_DATA_DIR:-$(dirname -- "$release_root")/data}"
-secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:-$(dirname -- "$release_root")/secrets}"
-config_path="${CONTENT_PLATFORM_CONFIG:-$release_root/config.json}"
+data_root="${CONTENT_PLATFORM_DATA_DIR:?CONTENT_PLATFORM_DATA_DIR is required}"
+secrets_root="${CONTENT_PLATFORM_SECRETS_DIR:?CONTENT_PLATFORM_SECRETS_DIR is required}"
+config_path="${CONTENT_PLATFORM_CONFIG:?CONTENT_PLATFORM_CONFIG is required}"
 metadata_path="${CONTENT_PLATFORM_RELEASE_METADATA:-$release_root/release-metadata.json}"
 attestation_path="${CONTENT_PLATFORM_RELEASE_ATTESTATION:-$data_root/release-attestations/$(basename -- "$release_root").sha256}"
 signing_key="${CONTENT_PLATFORM_RELEASE_SIGNING_KEY:-$secrets_root/release-signing.key}"

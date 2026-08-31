@@ -11,6 +11,8 @@ import inspect
 import uuid
 from pathlib import Path
 
+from .runtime_paths import resolve_runtime_paths
+
 try:
     from mcp.server.fastmcp import FastMCP
     HAS_MCP = True
@@ -28,18 +30,14 @@ _CONTENT_PRODUCTION_MCP_TOOLS = frozenset(
 
 
 def _get_db_path():
-    configured_home = os.environ.get("CONTENT_PLATFORM_HOME")
-    home = Path(configured_home) if configured_home else Path.home() / ".ai-self-media-tools"
-    return str(home / "data" / "state.db")
+    return str(resolve_runtime_paths().database)
 
 
 def _load_config(db_path):
-    configured_home = os.environ.get("CONTENT_PLATFORM_HOME")
-    home = Path(configured_home) if configured_home else Path.home() / ".ai-self-media-tools"
-    config_path = home / "config.json"
-    if config_path.is_file():
-        return json.loads(config_path.read_text(encoding="utf-8"))
-    return {"data_dir": str(home / "data")}
+    from .cli import load_config
+
+    runtime = resolve_runtime_paths()
+    return load_config(str(runtime.config) if runtime.config.is_file() else "", db_path)
 
 
 def _pipeline():

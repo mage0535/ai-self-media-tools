@@ -14,7 +14,7 @@ This directory is the coordination source of truth for the production-runtime-v8
 - Branch: `codex/production-runtime-v8`
 - Worktree: `D:/Onedrive/CodeX/worktrees/ai-self-media-production-runtime-v8`
 - Base: `149362f23a93f64d35ae16d2f17bb38080ec9dd3`
-- Do not edit `/root/.ai-self-media-tools` directly.
+- Do not edit the private mutable runtime (`$PRIVATE_RUNTIME`) directly.
 - Do not enable overnight timers until `STATUS.md` records all production gates as passed.
 - Before editing a shared file, record the owner and file list in `STATUS.md`.
 - Each change uses failing test -> minimal implementation -> targeted tests -> full tests -> commit.
@@ -24,4 +24,3 @@ This directory is the coordination source of truth for the production-runtime-v8
 ## Shared-file lock convention
 
 Record one row per active work item in `STATUS.md`. Only one owner may hold a file at a time. If work overlaps, split by adapter/test file rather than editing the same core module concurrently.
-

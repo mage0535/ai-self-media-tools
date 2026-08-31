@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-08-31 Asia/Shanghai
+Last updated: 2026-08-31 Asia/Shanghai (P1 local verification complete)
 
 ## Current state
 
@@ -15,7 +15,7 @@ Last updated: 2026-08-31 Asia/Shanghai
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Runtime code/config/data convergence | Codex primary | `content_platform/runtime_paths.py`, `content_platform/mcp_server.py`, `content_platform/cli.py`, runtime tests | in_progress | focused runtime/MCP tests |
+| Runtime code/config/data convergence | Codex primary | `content_platform/runtime_paths.py`, `content_platform/mcp_server.py`, systemd/deploy/runtime tests | local_complete | commit P1; verify gateway drop-in and shared DB during deployment |
 | Automated admission contract | unassigned | `content_platform/task_admission.py`, MCP admission tests | pending | reject production job without run contract |
 | Platform artifact completion contract | unassigned | pipeline acceptance modules and tests | pending | no media means no review/approved |
 | Renderer retry/checkpoint | unassigned | `scripts/film_renderer.py`, renderer tests | pending | failed shot retries and stops early |
@@ -32,6 +32,14 @@ Last updated: 2026-08-31 Asia/Shanghai
 7. Film renderer continues after a failed shot and discards the remaining successful work.
 8. The current 12-platform Canary and publication metrics feedback are not complete.
 
+## Latest verification
+
+- Focused runtime/MCP/systemd/deploy regression: `85 passed`.
+- Full regression: `1532 passed, 37 subtests passed`.
+- License audit: `65` capabilities, zero issues.
+- Project/privacy audit initially detected private absolute paths in coordination docs; paths were replaced with stable logical aliases and must be re-audited before commit.
+- A full-suite failure exposed a video checkpoint collision: repeated fallback section labels reused one image. The checkpoint identity now includes the scene index, and the focused video test passes.
+
 ## Production release gate
 
 - [ ] One code root, private config path, shared data root, and shared database proven for CLI/MCP/systemd.
@@ -44,4 +52,3 @@ Last updated: 2026-08-31 Asia/Shanghai
 - [ ] 12 serial platform Canaries pass.
 - [ ] Rollback rehearsal passes.
 - [ ] Timers explicitly approved and restored.
-
