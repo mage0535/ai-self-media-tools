@@ -2129,3 +2129,28 @@ def test_delivery_result_cannot_treat_local_preparation_as_platform_delivery():
         "postcheck": {"passed": True, "evidence_path": ".codex-server-runtime/private/evidence.png"},
     }
     assert validate_delivery_result(delivered)["passed"] is True
+
+
+def test_cover_semantic_request_uses_visual_concepts_not_only_full_marketing_title():
+    from content_platform.media import MediaBridge
+
+    job = {
+        "topic": "别再喂 AI 了，让 Hermes 自己找饭吃",
+        "title": "别再喂AI了，让它自己找饭吃",
+        "platforms": ["xiaohongshu"],
+        "draft_meta": {
+            "cover_design": {
+                "focal_subjects": ["AI agent", "autonomous information retrieval"],
+                "content_match_reason": "agent independently searches and organizes workflow evidence",
+            },
+            "content_blueprint": {
+                "core_question": "How can an AI agent retrieve its own evidence?",
+                "reader_or_viewer_payoff": "autonomous workflow checklist",
+            },
+        },
+    }
+    request = MediaBridge._semantic_request(job, {"role": "cover", "expected_concepts": [job["topic"]]})
+
+    assert "AI software agent" in request["expected_concepts"]
+    assert "information retrieval search" in request["expected_concepts"]
+    assert any("workflow" in value.casefold() for value in request["expected_concepts"])

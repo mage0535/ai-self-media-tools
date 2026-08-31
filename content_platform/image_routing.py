@@ -99,6 +99,16 @@ _EDITORIAL_SIGNALS = (
     "自动化",
 )
 
+_VISUAL_CONCEPT_GROUPS = (
+    (("ai", "人工智能", "大模型", "hermes", "智能体", "agent"), "AI software agent"),
+    (("工作流", "workflow", "自动化", "automation"), "connected workflow task nodes"),
+    (("检索", "搜索", "自己找", "research", "search", "retrieval"), "information retrieval search"),
+    (("内容管理", "自媒体", "content management"), "content management dashboard"),
+    (("代码", "开发", "code", "developer"), "software development interface"),
+    (("数据", "指标", "data", "metric"), "data analytics dashboard"),
+    (("宠物", "猫", "狗", "pet", "cat", "dog"), "real playful cat and dog"),
+)
+
 _REAL_SCENE_TIEBREAK_PLATFORMS = {
     "douyin_pet",
     "kuaishou",
@@ -194,4 +204,13 @@ def _expected_concepts(topic: str, section: str) -> list[str]:
     return concepts
 
 
-__all__ = ["SUPPORTED_PLATFORMS", "SUPPORTED_ROLES", "route_image_request"]
+def visual_concepts(text: str) -> list[str]:
+    value = str(text or "").casefold()
+    concepts = []
+    for signals, concept in _VISUAL_CONCEPT_GROUPS:
+        if any(_contains_signal(value, signal) for signal in signals):
+            concepts.append(concept)
+    return concepts[:4]
+
+
+__all__ = ["SUPPORTED_PLATFORMS", "SUPPORTED_ROLES", "route_image_request", "visual_concepts"]
