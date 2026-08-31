@@ -115,6 +115,23 @@ def normalize_article_sections(job: dict[str, Any], limit: int = 6) -> list[str]
         clean = str(value or "").strip().replace("\n", " ")[:80]
         if clean:
             sections.append(clean)
+    merged = []
+    pending = ""
+    for section in sections:
+        chinese_chars = sum("\u4e00" <= char <= "\u9fff" for char in section)
+        word_count = len(section.split())
+        too_short = (bool(chinese_chars) and chinese_chars < 12) or (not chinese_chars and word_count < 5)
+        if too_short:
+            pending = f"{pending} {section}".strip()
+            continue
+        merged.append(f"{pending} {section}".strip()[:160])
+        pending = ""
+    if pending:
+        if merged:
+            merged[-1] = f"{merged[-1]} {pending}"[:160]
+        else:
+            merged.append(pending[:160])
+    sections = merged
     if not sections:
         sections = [part.strip().replace("\n", " ")[:80] for part in str(job.get("body") or "").split("\n\n") if len(part.strip()) > 40]
     return sections[: max(1, int(limit))]
