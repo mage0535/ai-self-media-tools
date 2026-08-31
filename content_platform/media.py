@@ -691,7 +691,13 @@ class MediaBridge:
             ])
             values = visual_concepts(concept_text) or list(item.get("expected_concepts") or [])
         else:
-            values = [*(item.get("expected_concepts") or []), job.get("topic"), job.get("title")]
+            concept_text = " ".join([
+                str(job.get("topic") or ""), str(job.get("title") or ""),
+                str(item.get("section") or ""), str(item.get("purpose") or ""),
+            ])
+            values = visual_concepts(concept_text) or [
+                *(item.get("expected_concepts") or []), job.get("topic"), job.get("title")
+            ]
         if role != "cover":
             values.extend([item.get("section"), item.get("purpose")])
         for value in values:
@@ -1084,6 +1090,9 @@ class MediaBridge:
                 )
                 row.update(route)
                 row["size"] = "x".join(str(value) for value in route["dimensions"])
+                section_concepts = cls._semantic_request(job, row).get("expected_concepts") or []
+                if section_concepts:
+                    row["prompt"] += "; explicit visual subjects: " + ", ".join(section_concepts)
             prompts.append(row)
         return prompts
 
