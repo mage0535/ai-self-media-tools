@@ -1019,12 +1019,13 @@ class DraftGenerator:
             stdout_file.close()
             stderr_file.close()
             raise
-        soft = int(self.config.get("soft_deadline", 240))
-        hard = int(self.config.get("hard_deadline", 420))
-        heartbeat_interval = max(1, int(self.config.get("heartbeat_interval", 30)))
+        slo = self._generation_slo(brief)
+        soft = slo["soft"]
+        hard = slo["hard"]
+        heartbeat_interval = slo["heartbeat"]
         output_limit = self._provider_response_limit(brief)
         # elapsed is relative to started, so keep heartbeat thresholds relative too.
-        next_heartbeat_at = soft
+        next_heartbeat_at = heartbeat_interval
         try:
             while proc.poll() is None:
                 elapsed = clock() - started
@@ -1069,8 +1070,11 @@ class DraftGenerator:
                     raise GenerationTimeoutError("Hermes hard deadline exceeded")
                 if elapsed >= next_heartbeat_at:
                     heartbeat_at = clock()
+                    after_soft_deadline = elapsed >= soft
                     self._write_generation_checkpoint(self._checkpoint_payload(
-                        attempt=2 if retry else 1, status="running_after_soft_deadline", error_class="soft_deadline",
+                        attempt=2 if retry else 1,
+                        status="running_after_soft_deadline" if after_soft_deadline else "running",
+                        error_class="soft_deadline" if after_soft_deadline else "",
                         prompt_hash=compiled["sha256"], prompt_length=len(prompt), started_at=started, finished_at=heartbeat_at,
                         elapsed=heartbeat_at - started, heartbeat_at=heartbeat_at,
                     ))
@@ -1205,6 +1209,26 @@ class DraftGenerator:
     def _provider_response_limit(brief):
         contract = brief.get("run_contract") if isinstance(brief, dict) else None
         return max(1024, int(((contract or {}).get("bounds") or {}).get("provider_response_bytes") or 1_048_576))
+
+    def _generation_slo(self, brief):
+        contract = brief.get("run_contract") if isinstance(brief, dict) else None
+        bounds = (contract or {}).get("bounds") if isinstance(contract, dict) else {}
+        bounds = bounds if isinstance(bounds, dict) else {}
+        heartbeat = max(1, int(bounds.get("generation_heartbeat_seconds") or self.config.get("heartbeat_interval", 30)))
+        hard = int(bounds.get("generation_hard_deadline_seconds") or self.config.get("hard_deadline", 420))
+        soft = int(bounds.get("generation_soft_deadline_seconds") or self.config.get("soft_deadline", 240))
+        if hard <= 0:
+            hard = 0
+            soft = 0
+        else:
+            hard = max(2, hard)
+            soft = max(1, min(soft, hard - 1))
+        return {
+            "soft": soft,
+            "hard": hard,
+            "heartbeat": heartbeat,
+            "max_attempts": min(2, max(1, int(bounds.get("generation_max_attempts") or 2))),
+        }
 
     @staticmethod
     def _truncate_utf8(value, max_bytes):

@@ -328,8 +328,40 @@ def test_soft_deadline_writes_bounded_periodic_heartbeats_until_success(monkeypa
     assert result["title"] == "T"
     assert len(heartbeat_rows) >= 2
     assert all(row["error_class"] == "soft_deadline" for row in heartbeat_rows)
-    assert all(row["attempt"] == 1 and row["prompt_length"] > 0 for row in heartbeat_rows)
-    assert [row["heartbeat_at"] for row in heartbeat_rows] == sorted(row["heartbeat_at"] for row in heartbeat_rows)
+
+
+def test_heartbeat_is_written_before_soft_deadline(monkeypatch, tmp_path):
+    class FakeClock:
+        now = 100
+
+        def time(self):
+            return self.now
+
+        def sleep(self, seconds):
+            self.now += seconds
+
+    clock = FakeClock()
+    process = FakeProcess([None, None, (0, '{"title":"T","body":"body"}')])
+    checkpoints = []
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", lambda *a, **k: process)
+    generator = DraftGenerator({
+        "provider": "hermes-cli", "checkpoint_dir": str(tmp_path),
+        "clock": clock.time, "sleep": lambda _: clock.sleep(5),
+        "soft_deadline": 90, "heartbeat_interval": 5, "hard_deadline": 180,
+    })
+    generator._write_generation_checkpoint = lambda payload: checkpoints.append(payload)
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    generator._hermes_attempt(
+        "topic", {"platform": "wechat"}, {"language": "zh", "platform_rules": ""},
+        retry=False, language_instruction="", factual_boundary="", body_requirement="", style_limit=100,
+    )
+
+    running = [row for row in checkpoints if row["status"] == "running"]
+    assert running
+    assert all(row["elapsed"] < 90 for row in running)
+    assert all(row["attempt"] == 1 and row["prompt_length"] > 0 for row in running)
+    assert [row["heartbeat_at"] for row in running] == sorted(row["heartbeat_at"] for row in running)
     assert checkpoints[-1]["status"] == "success"
 
 

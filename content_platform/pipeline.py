@@ -155,6 +155,7 @@ class Pipeline:
                 brief["claim_ledger"] = compile_verified_claim_ledger(brief)
                 self.generator.config["generation_attempts_path"] = str(self.data_dir / "jobs" / job_id / "generation_attempts.json")
                 self.generator.config["checkpoint_dir"] = str(self.data_dir / "jobs" / job_id)
+                self.generator.config["session_id"] = f"content-job:{job_id}"
                 if len(platform_contexts) == 1:
                     platform_name = str(next(iter(platform_contexts)))
                     platform_context = next(iter(platform_contexts.values()))

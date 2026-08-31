@@ -37,6 +37,10 @@ BOUNDS = {
     "source_rows": 64,
     "video_segments": 8,
     "image_prompt_chars": 1_200,
+    "generation_soft_deadline_seconds": 90,
+    "generation_hard_deadline_seconds": 180,
+    "generation_heartbeat_seconds": 15,
+    "generation_max_attempts": 2,
 }
 
 

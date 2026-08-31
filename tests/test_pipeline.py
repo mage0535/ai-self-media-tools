@@ -72,6 +72,7 @@ class PipelineTests(unittest.TestCase):
                 conn.execute("UPDATE jobs SET body=? WHERE id=?", ("Prepared body " * 20, job["id"]))
             self.pipeline.run(job["id"])
             assert self.pipeline.generator.config["checkpoint_dir"] == str(self.pipeline.data_dir / "jobs" / job["id"])
+            assert self.pipeline.generator.config["session_id"] == f"content-job:{job['id']}"
 
     def test_rendered_gate_recovers_manifest_after_later_optional_media_failure(self):
         import json

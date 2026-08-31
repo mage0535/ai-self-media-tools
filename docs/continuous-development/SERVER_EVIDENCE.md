@@ -97,3 +97,13 @@ Observed read-only on 2026-08-31.
 - Router tests prove inventory-only entries do not appear in consulted or executable candidates and always expose disposition plus reason.
 - Focused registry/router/evidence regression: 60 passed. Full regression: 1551 passed plus 37 subtests.
 - No live server capability smoke was run in this phase; production release and timers remain unchanged.
+
+## P6 local generation SLO evidence
+
+- Added signed run-contract bounds: 90-second soft deadline, 180-second hard deadline, 15-second heartbeat, and maximum two attempts.
+- Generator reads the contract before looser local defaults and normalizes invalid non-production SLO relationships without breaking zero-second fault injection.
+- Heartbeats now begin at the first heartbeat interval; tests prove a running checkpoint is written before the soft deadline.
+- Pipeline assigns each job a distinct execution correlation ID and already isolates checkpoint and attempt files by job ID.
+- Existing process-group termination, output byte limit, reduced-context retry, non-transient no-retry, and atomic checkpoint tests remain green.
+- Focused generator/run-contract/pipeline regression: 89 passed. Full regression: 1555 passed plus 37 subtests.
+- Server Hermes execution has not been exercised with these limits yet; production release and timers remain unchanged.
