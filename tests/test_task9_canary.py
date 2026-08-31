@@ -338,10 +338,10 @@ def test_canary_config_preserves_real_media_toolchain_but_isolates_delivery(tmp_
     config_path = _write(tmp_path / "config.json", json.dumps({
         "data_dir": str(tmp_path / "production"),
         "media": {
-            "video": {"enabled": True, "quality_profile": "high", "script": "/root/.ai-self-media-tools-current/scripts/video_toolchain_runner.py"},
+            "video": {"enabled": True, "quality_profile": "high", "script": "/srv/.ai-self-media-tools-current/scripts/video_toolchain_runner.py"},
             "cover": {"enabled": True},
         },
-        "analysis": {"script": "/root/.ai-self-media-tools-current/scripts/image_semantic_analyze.py"},
+        "analysis": {"script": "/srv/.ai-self-media-tools-current/scripts/image_semantic_analyze.py"},
         "generator": {"timeout": 600},
         "delivery": {"auto_stage_review_required": True},
     }))
