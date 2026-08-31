@@ -87,7 +87,7 @@ def compile_generation_context(
             "version": consumption["version"],
             "consumption_hash": consumption["consumption_hash"],
             "affected_outputs": consumption["affected_outputs"],
-            "rule_ids": [item["id"] for item in consumption["rules"]],
+            "rule_count": len(consumption["rules"]),
         },
     }
     limit = max(512, min(int(byte_limit or (8000 if retry else 12000)), 8000 if retry else 12000))
