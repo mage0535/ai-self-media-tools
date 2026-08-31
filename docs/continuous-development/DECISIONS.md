@@ -89,3 +89,11 @@
 - Public/internal methodologies consumed through compiled skill rules are recorded as compiled references, not separate tool executions.
 - A future adapter is named as planned work and remains unavailable until its real adapter, contract, probe, and tests land.
 - Parent-executed capabilities remain valid only with parent availability and a child telemetry contract.
+
+## D14: Generation SLOs are signed workflow policy
+
+- Production generation limits are carried in the run contract, not chosen by the active model or long-lived Hermes chat.
+- The current production bounds are 90 seconds soft deadline, 180 seconds hard deadline, 15 seconds heartbeat, and at most two attempts.
+- A heartbeat is emitted from the first interval; soft-deadline status is a later state, not the start of observability.
+- Every job writes attempts and atomic checkpoints in its own directory and records a pipeline execution correlation ID.
+- The Hermes CLI process is isolated as a process group and must exit before retry; a failed termination is terminal and cannot spawn a second attempt.
