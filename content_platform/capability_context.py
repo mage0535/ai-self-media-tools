@@ -29,7 +29,11 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
         for source in compiled_skill_rules.get("sources", [])
     ]
     compiled_skill_rules["rules"] = [
-        {"id": rule["id"], "source": rule["source"], "section": rule["section"], "text": str(rule.get("text") or "")[:160]}
+        {
+            "id": rule["id"], "source": rule["source"], "source_hash": rule.get("source_hash", ""),
+            "section": rule["section"], "text": str(rule.get("text") or "")[:160],
+            "affected_outputs": list(rule.get("affected_outputs") or ["generation_context", "provider_brief"]),
+        }
         for rule in select_platform_rules(compiled_skill_rules.get("rules", []), platform)[:32]
     ]
     assets = load_compiled_assets(project_root / "config" / "content_assets")

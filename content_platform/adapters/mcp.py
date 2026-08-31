@@ -92,6 +92,14 @@ def _can_bind(signature: inspect.Signature, *args: Any) -> bool:
 
 
 def _evidence(namespace: str, tool: str, input_hash: str, status: str, affected: str, started: float, *, output_hash: str = "", reason: str = "", fallback_used: bool = False, transport: str = "", session_id: str = "") -> dict[str, Any]:
+    consumption_payload = {
+        "server_name": namespace,
+        "tool_name": tool,
+        "input_hash": input_hash,
+        "output_hash": output_hash or "sha256:" + hashlib.sha256(b"").hexdigest(),
+        "affected_output": affected,
+        "transport": transport,
+    }
     result = {
         "version": "mcp_evidence_v1",
         "server_name": namespace,
@@ -105,6 +113,9 @@ def _evidence(namespace: str, tool: str, input_hash: str, status: str, affected:
         "fallback_used": fallback_used,
         "transport": transport,
         "session_id": session_id,
+        "consumption_hash": _hash(consumption_payload),
+        "effect_status": "consulted",
+        "effect_verified": False,
     }
     if reason:
         result["reason"] = reason
@@ -138,7 +149,26 @@ def execute(inputs: dict[str, Any]) -> dict[str, Any]:
         session_id = str(raw_output.get("_mcp_session_id") or "") if isinstance(raw_output, dict) else ""
         if not transport or not session_id:
             return _evidence(namespace, tool, input_hash, "failed", affected, started, reason="mcp_transport_evidence_missing")
-        return _evidence(namespace, tool, input_hash, "executed", affected, started, output_hash=_hash(raw_output), transport=transport, session_id=session_id)
+        semantic_output = (
+            {key: value for key, value in raw_output.items() if not str(key).startswith("_mcp_")}
+            if isinstance(raw_output, dict) else raw_output
+        )
+        evidence = _evidence(namespace, tool, input_hash, "executed", affected, started, output_hash=_hash(semantic_output), transport=transport, session_id=session_id)
+        downstream = {str(item) for item in (inputs.get("downstream_consumption_hashes") or [])}
+        trusted_transport = transport == "in_process_registered_mcp"
+        verified = trusted_transport and evidence["consumption_hash"] in downstream
+        evidence.update(
+            effect_status="effect_verified" if verified else "consulted",
+            effect_verified=verified,
+            effect_reason=(
+                "downstream_consumption_hash_matched"
+                if verified else
+                "mcp_transport_session_evidence_unverified"
+                if not trusted_transport else
+                "downstream_consumption_hash_missing"
+            ),
+        )
+        return evidence
     except FutureTimeout:
         reason = "mcp_timeout"
     except Exception as exc:

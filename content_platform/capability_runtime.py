@@ -23,6 +23,12 @@ def validate_generation_execution(result: dict, *, required: bool = True) -> dic
         and (not completed_stages or str(item.get("stage") or "generation") in completed_stages)
     ]
     missing_required = [capability_id for capability_id in selected_required if capability_id not in executed_ids]
+    required_pending = [
+        item for item in result.get("pending", [])
+        if isinstance(item, dict)
+        and str(item.get("required_or_optional") or "required") != "optional"
+        and str(item.get("stage") or "") in completed_stages
+    ]
     if required and not executed:
         result["passed"] = False
         result["failures"] = list(result.get("failures") or []) + ["required_capability_not_executed"]
@@ -31,8 +37,14 @@ def validate_generation_execution(result: dict, *, required: bool = True) -> dic
         result["failures"] = list(result.get("failures") or []) + [
             f"required_capability_not_executed:{capability_id}" for capability_id in missing_required
         ]
-    else:
-        result["passed"] = not bool(result.get("failures"))
+    if required and required_pending:
+        failures = list(result.get("failures") or [])
+        failures.extend(
+            f"required_capability_pending:{item.get('stage')}:{item.get('capability_id')}"
+            for item in required_pending
+        )
+        result["failures"] = list(dict.fromkeys(failures))
+    result["passed"] = not bool(result.get("failures"))
     return result
 
 
@@ -139,7 +151,7 @@ def execute_post_generation_capabilities(
 
     late = execute_capability_dag(plan, draft, brief, executor=executor, stages={"assets", "render", "gate"})
     merged = dict(prior)
-    for key in ("executed", "artifact_verified", "skipped", "optional_failures"):
+    for key in ("executed", "output_verified", "artifact_verified", "effect_verified", "skipped", "optional_failures"):
         values = [*(prior.get(key) or []), *(late.get(key) or [])]
         deduped = {}
         for value in values:

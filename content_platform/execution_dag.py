@@ -114,7 +114,9 @@ def execute_capability_dag(
     consulted = [dict(item, status="consulted") for item in (plan.get("consulted") or [])]
     planned = list(selected)
     executed: list[dict[str, Any]] = []
+    output_verified: list[dict[str, Any]] = []
     artifact_verified: list[dict[str, Any]] = []
+    effect_verified: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     failures: list[dict[str, Any] | str] = list(plan.get("selection_failures") or plan.get("failures") or [])
     optional_failures: list[dict[str, Any]] = []
@@ -137,7 +139,16 @@ def execute_capability_dag(
         if record.get("status") == "executed":
             executed.append(record)
             if record.get("contract_valid") is True and record.get("output_hash"):
-                artifact_verified.append({**record, "status": "artifact_verified"})
+                stage = str(record.get("stage") or "generation")
+                verified = {**record, "status": "output_verified"}
+                if stage in {"assets", "render"}:
+                    verified["status"] = "artifact_verified"
+                    artifact_verified.append(verified)
+                elif stage == "gate":
+                    verified["status"] = "effect_verified"
+                    effect_verified.append(verified)
+                else:
+                    output_verified.append(verified)
             else:
                 record["reason"] = "artifact_verification_failed"
                 if required:
@@ -161,7 +172,9 @@ def execute_capability_dag(
         "planned": planned,
         "consulted": consulted,
         "executed": executed,
+        "output_verified": output_verified,
         "artifact_verified": artifact_verified,
+        "effect_verified": effect_verified,
         "skipped": skipped,
         "pending": pending,
         "completed_stages": [stage for stage in _EXECUTION_STAGES if stage in active_stages],

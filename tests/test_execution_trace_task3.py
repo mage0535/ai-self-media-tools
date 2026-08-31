@@ -176,7 +176,7 @@ def test_capability_dag_execution_records_retain_selected_stage():
     )
 
     assert {(row["capability_id"], row["stage"]) for row in result["executed"]} == {("source", "collection"), ("dedup", "selection")}
-    assert {(row["capability_id"], row["stage"]) for row in result["artifact_verified"]} == {("source", "collection"), ("dedup", "selection")}
+    assert {(row["capability_id"], row["stage"]) for row in result["output_verified"]} == {("source", "collection"), ("dedup", "selection")}
 
 
 def test_delivery_completion_makes_canonical_trace_pass():

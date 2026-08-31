@@ -10,6 +10,7 @@ from typing import Any
 
 from .cover_quality import validate_cover
 from .asset_ledger import AssetLedger, validate_asset_set
+from .content_hygiene import validate_generated_text
 
 
 LONG_FORM_PLATFORMS = {"wechat", "zhihu", "juejin"}
@@ -26,6 +27,9 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     failures: list[str] = []
     asset_gate: dict[str, Any] = {}
     brief = job.get("brief") or {}
+    content_hygiene = validate_generated_text(body)
+    if brief.get("automated_workflow") is True and not content_hygiene["passed"]:
+        failures.append("content_hygiene_failed")
     matrix = brief.get("platform_source_matrix") or {}
     if not _has_valid_selection_evidence(brief, matrix):
         failures.append("platform_evidence_missing")
@@ -57,6 +61,7 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
         "body_source": body_source,
         "artifacts_dir": str(artifacts),
         "asset_quality_gate": asset_gate,
+        "content_hygiene": content_hygiene,
     }
     if result["passed"] and asset_gate.get("passed"):
         payload = json.loads((artifacts / "asset_provenance.json").read_text(encoding="utf-8"))

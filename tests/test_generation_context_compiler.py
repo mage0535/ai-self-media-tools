@@ -109,3 +109,20 @@ def test_selected_rules_include_stable_hash_and_hash_changes_when_text_is_tamper
 
     assert len(original["sha256"]) == 64
     assert original["sha256"] != tampered["sha256"]
+
+
+def test_generation_context_embeds_auditable_skill_rule_consumption_hash():
+    result = compile_generation_context(
+        platform="wechat",
+        content_format="article",
+        stage="generate",
+        brief={
+            "compiled_skill_rules": {
+                "version": "compiled_skill_rules_v1",
+                "rules": [{"id": "project:1", "source": "skill:project", "source_hash": "source-sha", "text": "Open with a concrete outcome."}],
+            }
+        },
+    )
+    payload = json.loads(result["text"])
+    assert payload["skill_rule_consumption"]["consumption_hash"] == result["skill_rule_consumption"]["consumption_hash"]
+    assert payload["skill_rule_consumption"]["affected_outputs"] == ["bounded_model_input", "draft"]

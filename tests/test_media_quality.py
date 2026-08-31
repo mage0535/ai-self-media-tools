@@ -1475,6 +1475,23 @@ def test_xiaohongshu_auto_packet_requires_mixed_assets_and_disclosure():
     assert "ai_assisted_disclosure" in result["failed_dimensions"]
 
 
+def test_xiaohongshu_production_automation_rejects_repeated_cta():
+    packet = complete_xiaohongshu_auto_packet()
+    packet["automated_workflow"] = True
+    packet["workflow_mode"] = "production"
+    packet["body"] = (
+        "Check account positioning and source evidence before generation. "
+        "Every card must support one concrete point. "
+        "Please save and follow for more. Please save and follow for more."
+    )
+
+    result = validate_xiaohongshu_auto_packet(packet)
+
+    assert result["passed"] is False
+    assert "content_hygiene" in result["failed_dimensions"]
+    assert "repeated_sentence" in result["gates"]["content_hygiene"]["reasons"]
+
+
 def test_xiaohongshu_carousel_defers_post_generation_evidence_only():
     packet = complete_xiaohongshu_auto_packet()
     packet["content_type"] = "carousel"

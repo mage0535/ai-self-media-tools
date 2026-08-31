@@ -82,6 +82,7 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
     }
     registry_mcp_tools: set[str] = set()
     capability_ids: set[str] = set()
+    by_id: dict[str, dict[str, Any]] = {}
     for capability in capabilities:
         if not isinstance(capability, dict):
             failures.append("capability_not_object")
@@ -93,6 +94,7 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
         if capability_id in capability_ids:
             failures.append(f"{capability_id}.duplicate")
         capability_ids.add(capability_id)
+        by_id[capability_id] = capability
         for field in REQUIRED_CAPABILITY_FIELDS:
             if field not in capability:
                 failures.append(f"{capability_id}.{field}_missing")
@@ -142,6 +144,16 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
                 failures.append(f"{capability_id}.runtime_evidence_missing")
             if "fallback_chain" not in capability:
                 failures.append(f"{capability_id}.fallback_chain_missing")
+
+    for capability_id, capability in by_id.items():
+        if capability.get("lifecycle") != "parent_executed":
+            continue
+        parent_id = str(capability.get("parent_id") or "").strip()
+        parent = by_id.get(parent_id)
+        if not parent or parent.get("lifecycle") != "executable":
+            failures.append(f"{capability_id}.parent_not_executable:{parent_id}")
+        if not str(capability.get("telemetry_contract") or "").strip():
+            failures.append(f"{capability_id}.telemetry_contract_missing")
 
     for capability_id in sorted(set(referenced_ids) - capability_ids):
         failures.append(f"group_orphan_reference:{capability_id}")

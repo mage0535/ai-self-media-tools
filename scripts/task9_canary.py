@@ -584,13 +584,13 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
 
     capabilities = manifest.get("capabilities") if isinstance(manifest.get("capabilities"), list) else []
     capability_failures = []
-    allowed_states = {"planned", "consulted", "executed", "artifact_verified", "skipped"}
+    allowed_states = {"planned", "pending", "consulted", "executed", "output_verified", "artifact_verified", "effect_verified", "skipped"}
     for item in capabilities:
         if not isinstance(item, dict) or str(item.get("state") or "") not in allowed_states:
             capability_failures.append("capability_state_invalid")
-        elif item.get("required", True) and item.get("state") in {"planned", "consulted"}:
+        elif item.get("required", True) and item.get("state") in {"planned", "pending", "consulted"}:
             capability_failures.append(f"required_capability_not_executed:{item.get('id', '')}")
-        elif item.get("state") in {"executed", "artifact_verified"} and not item.get("output_hash"):
+        elif item.get("state") in {"executed", "output_verified", "artifact_verified", "effect_verified"} and not item.get("output_hash"):
             capability_failures.append(f"capability_output_hash_missing:{item.get('id', '')}")
         elif item.get("artifact_relevant") and item.get("state") != "artifact_verified":
             capability_failures.append(f"artifact_capability_not_verified:{item.get('id', '')}")
@@ -1149,31 +1149,49 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
     target_renderer = handoff_contract.get("target_renderer_evidence") if isinstance(handoff_contract, dict) and isinstance(handoff_contract.get("target_renderer_evidence"), dict) else {}
     source_license = handoff_contract.get("source_license_evidence") if isinstance(handoff_contract, dict) and isinstance(handoff_contract.get("source_license_evidence"), list) else []
     execution = draft_meta.get("capability_execution") if isinstance(draft_meta.get("capability_execution"), dict) else {}
-    verified_by_id = {
-        str(item.get("capability_id") or ""): item
-        for item in execution.get("artifact_verified") or []
-        if isinstance(item, dict) and item.get("capability_id")
-    }
+    verification_by_id = {}
+    for verification_state in ("output_verified", "artifact_verified", "effect_verified"):
+        for verified_item in execution.get(verification_state) or []:
+            if isinstance(verified_item, dict) and verified_item.get("capability_id"):
+                verification_by_id[str(verified_item["capability_id"])] = (verification_state, verified_item)
     capabilities = []
     for item in execution.get("executed") or []:
         if isinstance(item, dict):
             capability_id = str(item.get("capability_id") or "")
-            verified = verified_by_id.get(capability_id)
+            state, verified = verification_by_id.get(capability_id, ("executed", None))
             capabilities.append({
                 "id": item.get("capability_id"),
-                "state": "artifact_verified" if verified else "executed",
+                "state": state,
                 "output_hash": (verified or item).get("output_hash", ""),
-                "artifact_verified": bool(verified),
+                "artifact_verified": state == "artifact_verified",
                 "required": item.get("required", True) is not False,
-                "artifact_relevant": item.get("artifact_relevant", False) is True,
+                "artifact_relevant": str(item.get("stage") or "") in {"assets", "render"},
                 "evidence": item,
             })
+    pending_ids = {
+        str(item.get("capability_id") or "")
+        for item in execution.get("pending") or []
+        if isinstance(item, dict)
+    }
     for item in execution.get("planned") or []:
         if isinstance(item, dict) and not any(row.get("id") == item.get("capability_id") for row in capabilities):
             required = item.get("required")
             if required is None:
                 required = str(item.get("required_or_optional") or "required") != "optional"
-            capabilities.append({"id": item.get("capability_id"), "state": "planned", "output_hash": "", "required": required is True, "artifact_relevant": item.get("artifact_relevant", False) is True, "evidence": item})
+            capability_id = str(item.get("capability_id") or "")
+            capabilities.append({"id": capability_id, "state": "pending" if capability_id in pending_ids else "planned", "output_hash": "", "required": required is True, "artifact_relevant": str(item.get("stage") or "") in {"assets", "render"}, "evidence": item})
+    for item in execution.get("pending") or []:
+        if not isinstance(item, dict) or any(row.get("id") == item.get("capability_id") for row in capabilities):
+            continue
+        required = str(item.get("required_or_optional") or "required") != "optional"
+        capabilities.append({
+            "id": item.get("capability_id"),
+            "state": "pending",
+            "output_hash": "",
+            "required": required,
+            "artifact_relevant": str(item.get("stage") or "") in {"assets", "render"},
+            "evidence": item,
+        })
     manifest = {
         "schema": "task9_artifact_manifest_v2",
         "job_id": job_id,
