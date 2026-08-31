@@ -1047,6 +1047,24 @@ def _canary_config(root: Path, runtime_config_path: Path | str | None = None) ->
         config = copy.deepcopy(load_config(str(config_path), str(root / "state.db")))
     else:
         config = {}
+
+    candidate_root = Path(__file__).resolve().parents[1]
+
+    def rebase_code_paths(value):
+        if isinstance(value, dict):
+            return {key: rebase_code_paths(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [rebase_code_paths(item) for item in value]
+        text = str(value) if isinstance(value, (str, Path)) else ""
+        marker = ".ai-self-media-tools-current/"
+        if marker in text.replace("\\", "/"):
+            relative = text.replace("\\", "/").split(marker, 1)[1]
+            candidate = candidate_root / relative
+            if candidate.exists():
+                return str(candidate)
+        return value
+
+    config = rebase_code_paths(config)
     config["data_dir"] = str(root)
     config.setdefault("profiles", {})["task9"] = {}
     generator = config.setdefault("generator", {})
