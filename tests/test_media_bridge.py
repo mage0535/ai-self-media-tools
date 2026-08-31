@@ -20,6 +20,15 @@ def test_normalize_article_sections_merges_short_transition_into_next_substantiv
     assert len(sections) == 3
 
 
+def test_image_checkpoint_contract_is_declared_in_media_bridge_source():
+    source = Path(MediaBridge.__module__.replace(".", "/") + ".py")
+    project = Path(__file__).resolve().parents[1]
+    text = (project / source).read_text(encoding="utf-8")
+    assert "image_asset_checkpoints.json" in text
+    assert 'saved.get("signature") == signature' in text
+    assert "os.replace(temporary, checkpoint_path)" in text
+
+
 def test_cover_generation_reuses_existing_verified_cover(tmp_path):
     output = tmp_path / "artifacts" / "job-1"
     output.mkdir(parents=True)
