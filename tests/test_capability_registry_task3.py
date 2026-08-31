@@ -12,7 +12,7 @@ from content_platform.capability_catalog import (
     load_capability_registry,
     validate_capability_registry,
 )
-from content_platform.capability_router import legacy_tool_group_plan, load_registry
+from content_platform.capability_router import legacy_tool_group_plan, load_registry, match_capabilities
 from content_platform.execution_dag import execute_capability_dag
 from content_platform.tool_selection import (
     build_tools_capability_analysis,
@@ -36,6 +36,23 @@ def test_registry_has_complete_group_coverage_and_valid_candidate_references():
     executable = {item["id"] for item in registry["capabilities"] if item["lifecycle"] == "executable"}
     assert set(registry["verification_levels"]) == executable
     assert set(registry["verification_levels"].values()) <= {"output_verified", "artifact_verified", "effect_verified"}
+    inventory = {item["id"] for item in registry["capabilities"] if item["lifecycle"] == "inventory_only"}
+    assert set(registry["inventory_dispositions"]) == inventory
+    assert all(registry["inventory_dispositions"][item]["reason"] for item in inventory)
+
+
+def test_inventory_only_capabilities_are_not_reported_as_consulted_or_executed():
+    result = match_capabilities(
+        {"content_format": "article", "platform": "juejin"},
+        load_registry(),
+    )
+    inventory_ids = {item["capability_id"] for item in result["inventory"]}
+    consulted_ids = {item["capability_id"] for item in result["consulted"]}
+    candidate_ids = {item["capability_id"] for item in result["candidates"]}
+
+    assert "hermes_operating_strategy" in inventory_ids
+    assert "hermes_operating_strategy" not in consulted_ids | candidate_ids
+    assert all(item.get("disposition") and item.get("reason") for item in result["inventory"])
 
 
 def test_catalog_does_not_synthesize_legacy_or_external_entries():

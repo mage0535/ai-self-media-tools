@@ -81,3 +81,11 @@
 - Routers pass the declaration to the DAG; adapters cannot self-promote by returning a status string.
 - `output_verified` remains valid for analyzers, plans, MCP results, and receipts that do not directly create a file.
 - File-producing capabilities may declare `artifact_verified` only when their adapter emits path and SHA-256 evidence; effect claims require a separate artifact-bound probe.
+
+## D13: Inventory is a governed state, not implied execution
+
+- Every inventory-only capability has one machine-readable disposition and a non-empty reason.
+- Unverified-license capabilities are excluded from production routing even if their files exist on the server.
+- Public/internal methodologies consumed through compiled skill rules are recorded as compiled references, not separate tool executions.
+- A future adapter is named as planned work and remains unavailable until its real adapter, contract, probe, and tests land.
+- Parent-executed capabilities remain valid only with parent availability and a child telemetry contract.

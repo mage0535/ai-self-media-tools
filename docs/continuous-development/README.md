@@ -28,5 +28,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 ## Current handoff
 
 - P1-P4 are committed local milestones; production deployment remains prohibited.
-- P5 evidence-level enforcement is the current workstream.
-- Start with the `Unified capability execution evidence` row in `STATUS.md`; do not begin renderer or Canary edits until its reserved files are released.
+- P5 capability evidence and inventory governance are committed local milestones.
+- P6 bounded Hermes worker sessions and generation SLOs are the next workstream; start with its row in `STATUS.md`.

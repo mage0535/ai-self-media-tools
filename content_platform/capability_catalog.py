@@ -38,6 +38,7 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
     groups = registry.get("groups")
     capabilities = registry.get("capabilities")
     verification_levels = registry.get("verification_levels")
+    inventory_dispositions = registry.get("inventory_dispositions")
     if not isinstance(groups, list) or not groups:
         failures.append("groups_missing")
         groups = []
@@ -47,6 +48,9 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
     if not isinstance(verification_levels, dict):
         failures.append("verification_levels_missing")
         verification_levels = {}
+    if not isinstance(inventory_dispositions, dict):
+        failures.append("inventory_dispositions_missing")
+        inventory_dispositions = {}
     if len(groups) != 22:
         failures.append(f"group_coverage_count:{len(groups)}")
 
@@ -169,6 +173,24 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
             failures.append(f"{capability_id}.verification_level_missing_or_invalid")
     for capability_id in sorted(set(verification_levels) - executable_ids):
         failures.append(f"verification_level_orphan:{capability_id}")
+    inventory_ids = {
+        capability_id
+        for capability_id, capability in by_id.items()
+        if capability.get("lifecycle") == "inventory_only"
+    }
+    for capability_id in sorted(inventory_ids):
+        disposition = inventory_dispositions.get(capability_id)
+        if not isinstance(disposition, dict):
+            failures.append(f"{capability_id}.inventory_disposition_missing")
+            continue
+        if disposition.get("mode") not in {"compiled_reference", "license_excluded", "planned_adapter"}:
+            failures.append(f"{capability_id}.inventory_disposition_invalid")
+        if not str(disposition.get("reason") or "").strip():
+            failures.append(f"{capability_id}.inventory_disposition_reason_missing")
+        if capability.get("license") == "unverified" and disposition.get("mode") != "license_excluded":
+            failures.append(f"{capability_id}.unverified_license_not_excluded")
+    for capability_id in sorted(set(inventory_dispositions) - inventory_ids):
+        failures.append(f"inventory_disposition_orphan:{capability_id}")
 
     for capability_id in sorted(set(referenced_ids) - capability_ids):
         failures.append(f"group_orphan_reference:{capability_id}")
@@ -201,11 +223,16 @@ def build_capability_catalog(
     if not result["passed"]:
         raise ValueError("invalid capability registry: " + ";".join(result["failures"]))
     levels = registry["verification_levels"]
+    dispositions = registry["inventory_dispositions"]
     return {
         "version": "capability_catalog_v2",
         "groups": [dict(group) for group in registry["groups"]],
         "capabilities": [
-            {**dict(capability), **({"verification_level": levels[capability["id"]]} if capability["id"] in levels else {})}
+            {
+                **dict(capability),
+                **({"verification_level": levels[capability["id"]]} if capability["id"] in levels else {}),
+                **({"inventory_disposition": dispositions[capability["id"]]} if capability["id"] in dispositions else {}),
+            }
             for capability in registry["capabilities"]
         ],
     }
