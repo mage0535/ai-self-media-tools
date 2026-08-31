@@ -1968,6 +1968,8 @@ class Pipeline:
                     execution = json.loads(execution_path.read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError):
                     execution = {}
+                if isinstance(execution, dict) and execution:
+                    meta["scene_execution_evidence"] = execution
                 rows = execution.get("scenes") if isinstance(execution, dict) else []
                 if isinstance(rows, list):
                     meta["observed_scene_evidence"] = {

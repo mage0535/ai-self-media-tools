@@ -138,6 +138,8 @@ def execute_post_generation_capabilities(
             "content_blueprint": brief.get("content_blueprint") or {},
             "artifacts": artifacts,
             "render_manifest": render_manifest,
+            "video_artifact": meta.get("video_artifact") or {},
+            "scene_execution_evidence": meta.get("scene_execution_evidence") or {},
             "video_toolchain_plan": meta.get("video_toolchain_plan") or {},
             "shotcraft_plan": render_manifest.get("shotcraft_motion_plan") or {},
             "tts_fingerprint": meta.get("tts_fingerprint") or {},

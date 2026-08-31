@@ -164,9 +164,30 @@ def _visual_recipe(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]
 
 def _video_template_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
     rendered = _dict_value(inputs, "render_manifest")
-    output = Path(str(rendered.get("output") or ""))
+    video_artifact = _dict_value(inputs, "video_artifact")
+    output = Path(str(rendered.get("output") or video_artifact.get("path") or ""))
     if rendered.get("status") == "rendered" and rendered.get("ok") is True and output.is_file():
-        return _executed(capability_id, "video_template_plan_v1", rendered)
+        scene_execution = _dict_value(inputs, "scene_execution_evidence")
+        digest = hashlib.sha256(output.read_bytes()).hexdigest()
+        effect = scene_execution.get("effect_evidence") if isinstance(scene_execution.get("effect_evidence"), dict) else {}
+        if (
+            scene_execution.get("passed") is True
+            and str(scene_execution.get("artifact_sha256") or "") == digest
+            and effect.get("passed") is True
+            and str(effect.get("artifact_sha256") or "") == digest
+            and str(effect.get("probe") or "")
+        ):
+            return _executed(
+                capability_id,
+                "video_template_plan_v1",
+                {
+                    **rendered,
+                    "artifact_evidence": [{"path": str(output), "sha256": digest}],
+                    "effect_evidence": effect,
+                    "scene_execution_evidence": scene_execution,
+                },
+            )
+        return _failure(capability_id, "video_template_plan_v1", "invalid_evidence:scene_effect_not_verified")
     from ..video_toolchain import build_video_toolchain_plan
 
     plan = _dict_value(inputs, "video_toolchain_plan", "video_template_plan")

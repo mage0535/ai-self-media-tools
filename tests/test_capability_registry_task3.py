@@ -39,6 +39,7 @@ def test_registry_has_complete_group_coverage_and_valid_candidate_references():
     inventory = {item["id"] for item in registry["capabilities"] if item["lifecycle"] == "inventory_only"}
     assert set(registry["inventory_dispositions"]) == inventory
     assert all(registry["inventory_dispositions"][item]["reason"] for item in inventory)
+    assert registry["verification_levels"]["video_toolchain_runner"] == "effect_verified"
 
 
 def test_inventory_only_capabilities_are_not_reported_as_consulted_or_executed():
@@ -533,7 +534,7 @@ def test_router_inherits_requiredness_from_applicable_tool_groups():
     assert by_id["performance_cycle"]["required_or_optional"] == "optional"
 
 
-def test_render_adapter_only_executes_after_real_renderer_output(tmp_path):
+def test_render_adapter_does_not_execute_from_file_existence_without_scene_effect(tmp_path):
     registry = load_capability_registry(REGISTRY_PATH)
     capability = next(item for item in registry["capabilities"] if item["id"] == "video_toolchain_runner")
     output = tmp_path / "final.mp4"
@@ -548,8 +549,9 @@ def test_render_adapter_only_executes_after_real_renderer_output(tmp_path):
         },
     )
 
-    assert result["status"] == "executed"
-    assert result["contract_valid"] is True
+    assert result["status"] == "failed"
+    assert result["contract_valid"] is False
+    assert "scene_effect_not_verified" in result["output"]["reason"]
 
 
 def test_every_tool_group_has_an_executable_adapter_candidate():
