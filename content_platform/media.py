@@ -502,8 +502,34 @@ class MediaBridge:
         recovery = self._image_quality_recovery_plan(job, cfg)
         accepted_checksums: set[str] = set()
         accepted_hashes: set[str] = set()
+        checkpoint_path = output_dir / "image_asset_checkpoints.json"
+        try:
+            image_checkpoints = json.loads(checkpoint_path.read_text(encoding="utf-8")) if checkpoint_path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            image_checkpoints = {}
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
+            checkpoint_key = f"{item.get('role')}:{item.get('section')}"
+            signature = hashlib.sha256(json.dumps({
+                "item": item,
+                "cover_design": (job.get("draft_meta") or {}).get("cover_design") or {},
+                "semantic_required": self.semantic_validation_required,
+            }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+            saved = image_checkpoints.get(checkpoint_key) if isinstance(image_checkpoints.get(checkpoint_key), dict) else {}
+            saved_record = saved.get("record") if isinstance(saved.get("record"), dict) else {}
+            saved_path = Path(str(saved_record.get("path") or output))
+            if (
+                saved.get("signature") == signature
+                and saved_path.is_file()
+                and saved_record.get("checksum") == hashlib.sha256(saved_path.read_bytes()).hexdigest()
+                and (
+                    not self.semantic_validation_required
+                    or ((saved_record.get("semantic_evidence") or {}).get("passed") is True)
+                )
+            ):
+                images.append(saved_record)
+                accepted_checksums.add(str(saved_record["checksum"]))
+                continue
             raw_gate = self._run_image_provider_with_quality_recovery(
                 provider,
                 item,
@@ -577,6 +603,10 @@ class MediaBridge:
                     "semantic_required": self.semantic_validation_required,
                 }
             )
+            image_checkpoints[checkpoint_key] = {"signature": signature, "record": images[-1]}
+            temporary = checkpoint_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(image_checkpoints, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temporary, checkpoint_path)
         section_map = [
             {
                 "section": item["section"],
