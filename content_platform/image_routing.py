@@ -110,6 +110,8 @@ _VISUAL_CONCEPT_GROUPS = (
     (("每天", "重复", "反复", "循环", "repeat", "repetitive", "loop"), "repetitive task loop"),
     (("手动", "人工操作", "每天喂", "喂", "manual"), "human working"),
     (("记忆", "上下文", "memory", "context"), "organized memory archive"),
+    (("我是谁", "身份", "profile", "identity"), "identity profile card"),
+    (("时间", "耗时", "一个月", "deadline", "time cost"), "time cost clock calendar"),
 )
 
 _REAL_SCENE_TIEBREAK_PLATFORMS = {
