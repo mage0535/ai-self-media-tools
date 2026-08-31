@@ -1,15 +1,15 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-08-31 Asia/Shanghai (P6 local verification complete)
+Last updated: 2026-08-31 Asia/Shanghai (P7 local verification complete)
 
 ## Current state
 
-- Phase: P7 image checkpoint and verified provider fallback
+- Phase: P8 video shot retry, checkpoint, and final-effect evidence
 - Production timer: disabled/inactive
 - Production release observed: `149362f`
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1555 passed + 37 subtests.
+- Latest complete regression on this branch: 1559 passed + 37 subtests.
 
 ## Active work
 
@@ -20,9 +20,9 @@ Last updated: 2026-08-31 Asia/Shanghai (P6 local verification complete)
 | Platform artifact completion contract | Codex primary | `content_platform/artifact_contract.py`, pipeline/store recovery, P3 tests | committed `277f1e3` | server fault injection during deployment |
 | Pre-generation operations/source gates | Codex primary | `content_platform/pre_generation_gate.py`, pipeline and P4 tests | committed `6b9052b` | production fault injection during deployment |
 | Unified capability execution evidence | Codex primary | capability registry/router/DAG and P5 tests | committed `c629116`, `1f7e93e` | server capability smoke during deployment |
-| Bounded Hermes worker sessions | Codex primary | generator/run contract/pipeline and P6 tests | local_complete | audit and commit P6 |
-| Image checkpoint/provider fallback | unassigned | image provider/MediaBridge/checkpoints and P7 tests | pending | inject provider timeout and resume only missing assets |
-| Renderer retry/checkpoint | unassigned | `scripts/film_renderer.py`, renderer tests | pending | failed shot retries and stops early |
+| Bounded Hermes worker sessions | Codex primary | generator/run contract/pipeline and P6 tests | committed `6e6abf5` | server generation fault test during deployment |
+| Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | local_complete | audit and commit P7 |
+| Renderer retry/checkpoint | unassigned | `scripts/film_renderer.py`, renderer tests | pending | failed shot retries locally and stops before later shots |
 | 12-platform Canary | unassigned | Task9 scripts/reports only | pending | 12/12 artifact-verified |
 
 ## Confirmed blockers
@@ -64,6 +64,10 @@ Last updated: 2026-08-31 Asia/Shanghai (P6 local verification complete)
 - P6 focused generator/pipeline regression: `89 passed`; full regression: `1555 passed, 37 subtests passed`.
 - Production generation SLO: 90s soft, 180s hard, 15s heartbeat, maximum two attempts; run contract remains the source of truth.
 - Heartbeats begin before the soft deadline, and each job has a private checkpoint/attempt directory plus pipeline execution correlation ID.
+- P7 focused image/provider/video-asset regression: `69 passed`; full regression: `1559 passed, 37 subtests passed`.
+- Mid-batch timeout recovery reuses the verified cover and regenerates only the missing section image.
+- Provider timeout records the attempted provider, rotates to the next provider, and preserves verified fallback evidence.
+- Image checkpoint signatures include provider/model/quality/method; resumed perceptual hashes remain part of duplicate detection.
 
 ## Production release gate
 

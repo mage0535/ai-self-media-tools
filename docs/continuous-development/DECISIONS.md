@@ -97,3 +97,11 @@
 - A heartbeat is emitted from the first interval; soft-deadline status is a later state, not the start of observability.
 - Every job writes attempts and atomic checkpoints in its own directory and records a pipeline execution correlation ID.
 - The Hermes CLI process is isolated as a process group and must exit before retry; a failed termination is terminal and cannot spawn a second attempt.
+
+## D15: Image recovery is per asset and configuration-bound
+
+- Every accepted image is checkpointed atomically with prompt/role signature, provider configuration, checksum, and perceptual hash.
+- Resume reuses only a readable file whose signature and SHA-256 still match; provider/model/quality/method changes invalidate the checkpoint.
+- An automated image task always enables bounded quality recovery even if an operator omitted the optional flag.
+- Provider exceptions record the attempted provider before rotating, so generated fallback can be proven rather than inferred.
+- Completed images are not regenerated after a later asset timeout; missing or invalid assets resume independently.

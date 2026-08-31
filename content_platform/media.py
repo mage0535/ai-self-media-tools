@@ -514,6 +514,10 @@ class MediaBridge:
                 "item": item,
                 "cover_design": (job.get("draft_meta") or {}).get("cover_design") or {},
                 "semantic_required": self.semantic_validation_required,
+                "provider_config": {
+                    key: cfg.get(key)
+                    for key in ("provider", "model", "quality", "method")
+                },
             }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
             saved = image_checkpoints.get(checkpoint_key) if isinstance(image_checkpoints.get(checkpoint_key), dict) else {}
             saved_record = saved.get("record") if isinstance(saved.get("record"), dict) else {}
@@ -529,6 +533,8 @@ class MediaBridge:
             ):
                 images.append(saved_record)
                 accepted_checksums.add(str(saved_record["checksum"]))
+                if saved_record.get("visual_hash"):
+                    accepted_hashes.add(str(saved_record["visual_hash"]))
                 continue
             recovery_start = len(recovery["attempts"])
             raw_gate = self._run_image_provider_with_quality_recovery(
@@ -571,6 +577,13 @@ class MediaBridge:
                         raise RuntimeError("final cover semantic validation failed: semantic_mismatch")
                     raw_gate["semantic_evidence"] = final_semantic
             checksum = hashlib.sha256(output.read_bytes()).hexdigest()
+            final_visual_hash = str(raw_gate.get("visual_hash") or "")
+            if Image is not None:
+                try:
+                    with Image.open(output) as final_image:
+                        final_visual_hash = self._average_hash(final_image)
+                except (OSError, UnidentifiedImageError, ValueError):
+                    final_visual_hash = ""
             accepted_checksums.add(checksum)
             if raw_gate.get("checksum"):
                 accepted_checksums.add(str(raw_gate["checksum"]))
@@ -594,6 +607,7 @@ class MediaBridge:
                     "purpose": item.get("purpose", ""),
                     "path": str(output),
                     "checksum": checksum,
+                    "visual_hash": final_visual_hash,
                     "source_url": source_url or (f"generated:{provider_name}" if generated else ""),
                     "license": license_name or ("generated_for_project" if generated else ""),
                     "origin_type": "generated" if generated else "stock",
@@ -662,13 +676,15 @@ class MediaBridge:
         max_attempts = recovery["max_attempts"]
         for attempt in range(1, max_attempts + 1):
             prompt = self._image_quality_retry_prompt(item["prompt"], attempt, last_failures)
+            provider_args = self._image_provider_args(extra_args, item, attempt=attempt, rotate=True)
+            attempted_provider = self._provider_arg_value(provider_args)
             try:
                 if output.exists():
                     output.unlink()
                 provider_result = provider.run(
                     prompt,
                     output,
-                    self._image_provider_args(extra_args, item, attempt=attempt, rotate=True),
+                    provider_args,
                 )
                 gate = self._validate_image_quality_candidate(output, accepted_checksums, accepted_hashes)
                 gate["provider_result"] = provider_result if isinstance(provider_result, dict) else {}
@@ -685,6 +701,7 @@ class MediaBridge:
                     "passed": False,
                     "failures": ["provider_or_quality_exception"],
                     "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                    "provider_result": {"provider": attempted_provider},
                 }
             self._record_image_quality_attempt(output_dir, recovery, item, output, prompt, attempt, gate)
             if gate.get("passed"):
@@ -699,6 +716,7 @@ class MediaBridge:
     def _image_quality_recovery_plan(self, job, cfg):
         enabled = bool(
             self.semantic_validation_required
+            or (job.get("brief") or {}).get("automated_workflow") is True
             or self._is_xiaohongshu_knowledge_image_job(job)
             or cfg.get("quality_recovery_enabled", False)
         )
@@ -799,6 +817,13 @@ class MediaBridge:
         result.extend(["--size", str(item.get("size") or "1024x1024")])
         result.extend(["--intent", str(item.get("intent") or "auto")])
         return result
+
+    @staticmethod
+    def _provider_arg_value(args):
+        try:
+            return str(args[args.index("--provider") + 1])
+        except (ValueError, IndexError):
+            return ""
 
     @staticmethod
     def _image_provider_attempt_chain(intent, configured_provider):
