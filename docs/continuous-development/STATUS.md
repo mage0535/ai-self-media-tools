@@ -4,7 +4,7 @@ Last updated: 2026-08-31 Asia/Shanghai (P4 local verification complete)
 
 ## Current state
 
-- Phase: P4 pre-generation operations and source gates
+- Phase: P5 unified capability/MCP/Skill execution evidence
 - Production timer: disabled/inactive
 - Production release observed: `149362f`
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
@@ -18,7 +18,8 @@ Last updated: 2026-08-31 Asia/Shanghai (P4 local verification complete)
 | Runtime code/config/data convergence | Codex primary | `content_platform/runtime_paths.py`, `content_platform/mcp_server.py`, systemd/deploy/runtime tests | committed `c9babbd` | verify gateway drop-in and shared DB during deployment |
 | Automated admission contract | Codex primary | `content_platform/task_admission.py`, `content_platform/pipeline.py`, `content_platform/mcp_server.py`, admission tests | committed `4d9c567` | server verification during deployment |
 | Platform artifact completion contract | Codex primary | `content_platform/artifact_contract.py`, pipeline/store recovery, P3 tests | committed `277f1e3` | server fault injection during deployment |
-| Pre-generation operations/source gates | Codex primary | `content_platform/pre_generation_gate.py`, pipeline and P4 tests | local_complete | audit and commit P4 |
+| Pre-generation operations/source gates | Codex primary | `content_platform/pre_generation_gate.py`, pipeline and P4 tests | committed `6b9052b` | production fault injection during deployment |
+| Unified capability execution evidence | Codex primary | capability registry/runtime/executor and P5 tests | in_progress | scan inventory-only and pending execution paths |
 | Renderer retry/checkpoint | unassigned | `scripts/film_renderer.py`, renderer tests | pending | failed shot retries and stops early |
 | 12-platform Canary | unassigned | Task9 scripts/reports only | pending | 12/12 artifact-verified |
 
@@ -49,6 +50,8 @@ Last updated: 2026-08-31 Asia/Shanghai (P4 local verification complete)
 - P4 pre-generation focused regression: `100 passed`.
 - P4 full regression: `1546 passed, 37 subtests passed`.
 - Missing/mismatched native evidence, generation context, media capability, or publisher route blocks before the model call.
+- P5 inventory scan: 65 capabilities = 26 executable, 20 parent-executed with telemetry, 19 inventory-only.
+- P5 next failing test: an assets/render adapter without file/hash evidence must remain `output_verified`, not be promoted to `artifact_verified` by stage alone.
 
 ## Production release gate
 

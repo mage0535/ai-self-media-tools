@@ -66,3 +66,10 @@
 - Generated prose fields are not invented or required by the pre-generation gate.
 - Native evidence from another platform is a hard mismatch; a bounded editorial-calendar fallback must carry its own strategy, date, and dedupe evidence.
 - A pre-generation failure records an explicit workflow gate and model invocation count remains zero.
+
+## D11: Evidence levels are proven, not inferred from execution stage
+
+- `executed` proves an adapter ran; `output_verified` proves its output contract and hash.
+- `artifact_verified` additionally requires a real artifact path, readable bytes, and matching SHA-256 evidence.
+- `effect_verified` additionally requires an artifact-level probe showing the intended rule, motion, subtitle, audio, or quality effect in the final output.
+- An assets/render/gate stage name alone never upgrades evidence level.
