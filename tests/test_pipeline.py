@@ -707,6 +707,25 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(meta["knowledge_card_plan"]["count"], 6)
         self.assertEqual(meta["growth_plan"]["goal"], "completion_rate")
 
+    def test_pre_populated_checkpoint_preserves_generated_metadata_for_media_resume(self):
+        job = self.pipeline.create("Checkpoint resume", ["file"], {"audience": "operators"})
+        persisted = {
+            "knowledge_card_recipe": {"version": "knowledge_card_recipe_v1", "card_count": 3},
+            "platform_source_matrix": {"successful_source_count": 5},
+            "growth_strategy": {"policy_id": "resume-policy"},
+        }
+        with self.store.connect() as conn:
+            conn.execute(
+                "UPDATE jobs SET body=?, draft_meta_json=? WHERE id=?",
+                ("This is an evidence-backed checkpoint body. " * 8, json.dumps(persisted), job["id"]),
+            )
+
+        reviewed = self.pipeline.run(job["id"])
+
+        assert reviewed["draft_meta"]["knowledge_card_recipe"]["card_count"] == 3
+        assert reviewed["draft_meta"]["platform_source_matrix"]["successful_source_count"] == 5
+        assert reviewed["draft_meta"]["growth_strategy"]["policy_id"] == "resume-policy"
+
     def test_enforced_wechat_requires_professional_toolchain_before_quality_gate(self):
         pipeline = Pipeline(
             self.store,
