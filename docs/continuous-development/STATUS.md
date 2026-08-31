@@ -1,15 +1,15 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-08-31 Asia/Shanghai (P3 local verification complete)
+Last updated: 2026-08-31 Asia/Shanghai (P4 local verification complete)
 
 ## Current state
 
-- Phase: P3 completion contract and stale lease recovery
+- Phase: P4 pre-generation operations and source gates
 - Production timer: disabled/inactive
 - Production release observed: `149362f`
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1543 passed + 37 subtests.
+- Latest complete regression on this branch: 1546 passed + 37 subtests.
 
 ## Active work
 
@@ -17,7 +17,8 @@ Last updated: 2026-08-31 Asia/Shanghai (P3 local verification complete)
 |---|---|---|---|---|
 | Runtime code/config/data convergence | Codex primary | `content_platform/runtime_paths.py`, `content_platform/mcp_server.py`, systemd/deploy/runtime tests | committed `c9babbd` | verify gateway drop-in and shared DB during deployment |
 | Automated admission contract | Codex primary | `content_platform/task_admission.py`, `content_platform/pipeline.py`, `content_platform/mcp_server.py`, admission tests | committed `4d9c567` | server verification during deployment |
-| Platform artifact completion contract | Codex primary | `content_platform/artifact_contract.py`, pipeline/store recovery, P3 tests | local_complete | audit and commit P3 |
+| Platform artifact completion contract | Codex primary | `content_platform/artifact_contract.py`, pipeline/store recovery, P3 tests | committed `277f1e3` | server fault injection during deployment |
+| Pre-generation operations/source gates | Codex primary | `content_platform/pre_generation_gate.py`, pipeline and P4 tests | local_complete | audit and commit P4 |
 | Renderer retry/checkpoint | unassigned | `scripts/film_renderer.py`, renderer tests | pending | failed shot retries and stops early |
 | 12-platform Canary | unassigned | Task9 scripts/reports only | pending | 12/12 artifact-verified |
 
@@ -45,6 +46,9 @@ Last updated: 2026-08-31 Asia/Shanghai (P3 local verification complete)
 - P3 completion/recovery focused regression: `89 passed`.
 - P3 full regression: `1543 passed, 37 subtests passed`.
 - Production review/approval cannot pass required zero/missing artifacts; expired generation leases recover by job ID and resume through Pipeline.
+- P4 pre-generation focused regression: `100 passed`.
+- P4 full regression: `1546 passed, 37 subtests passed`.
+- Missing/mismatched native evidence, generation context, media capability, or publisher route blocks before the model call.
 
 ## Production release gate
 

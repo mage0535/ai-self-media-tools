@@ -59,6 +59,7 @@ from .workflow_runtime import (
 from .platform_workflow_context import load_platform_workflow_context
 from .task_admission import validate_task_admission
 from .artifact_contract import validate_platform_artifacts
+from .pre_generation_gate import validate_pre_generation
 
 
 class Pipeline:
@@ -219,7 +220,21 @@ class Pipeline:
                                 "compiled_skill_rules": capability_context["compiled_skill_rules"],
                             },
                         )
-                runner.succeeded("run_operation_strategy", {"historical_feedback": bool(brief.get("historical_feedback"))}, depends_on=["load_content_strategy"])
+                pre_generation = validate_pre_generation(job, brief, self.config)
+                if not pre_generation["passed"]:
+                    runner.block(
+                        "validate_pre_generation_contract",
+                        "pre_generation_contract_failed",
+                        "pre-generation requirements failed: " + ",".join(pre_generation["failures"]),
+                        pre_generation,
+                        depends_on=["load_content_strategy"],
+                    )
+                runner.succeeded(
+                    "validate_pre_generation_contract",
+                    pre_generation,
+                    depends_on=["load_content_strategy"],
+                )
+                runner.succeeded("run_operation_strategy", {"historical_feedback": bool(brief.get("historical_feedback"))}, depends_on=["validate_pre_generation_contract"])
                 # Check if job has pre-populated body content (manually written, not a stub)
                 existing_body = (job.get("body") or "").strip()
                 if len(existing_body) > 100:

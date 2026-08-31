@@ -62,3 +62,11 @@ Observed read-only on 2026-08-31.
 - Text-only X/Twitter delivery remains valid without invented media requirements.
 - Added targeted stale generation lease recovery; it clears only the expired job lease, records `stale_job_recovered`, and resumes through normal workflow locking/claiming.
 - Focused completion/store/pipeline regression: 89 passed. Full regression: 1543 passed plus 37 subtests.
+
+## P4 local implementation evidence
+
+- Added a production pre-generation gate after deterministic strategy/capability compilation and before any provider/model call.
+- The gate validates same-platform source identity or explicit editorial fallback, content blueprint, profile, capability plan, compiled skill rules, bounded model input, required media runtime, and publisher route.
+- Fault injection with missing platform source evidence ended in `blocked` and asserted that `generator.generate` was never called.
+- Cross-platform native identity is rejected rather than relabeled.
+- Focused pre-generation/pipeline/overnight regression: 100 passed. Full regression: 1546 passed plus 37 subtests.

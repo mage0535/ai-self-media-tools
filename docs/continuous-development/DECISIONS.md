@@ -59,3 +59,10 @@
 - Article/carousel platforms require real non-empty inline image and cover artifacts.
 - Platforms that explicitly permit text-only delivery are not forced to invent media.
 - Expired generation leases are recovered through a targeted store transaction and normal Pipeline claim, never by deleting locks with ad hoc SQL.
+
+## D10: Pre-generation gates consume only facts available before generation
+
+- Source identity, blueprint, compiled rule/capability context, required media runtime, and publisher route are validated before invoking the model.
+- Generated prose fields are not invented or required by the pre-generation gate.
+- Native evidence from another platform is a hard mismatch; a bounded editorial-calendar fallback must carry its own strategy, date, and dedupe evidence.
+- A pre-generation failure records an explicit workflow gate and model invocation count remains zero.
