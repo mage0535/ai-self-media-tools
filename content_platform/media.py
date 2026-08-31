@@ -14,7 +14,7 @@ from .paths import agent_scripts_dir
 from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
 from .adapters.media import execute_article_media, normalize_article_sections
-from .image_routing import route_image_request
+from .image_routing import route_image_request, visual_concepts
 
 try:
     from PIL import Image, ImageStat, UnidentifiedImageError
@@ -680,7 +680,18 @@ class MediaBridge:
         platform = next(iter(job.get("platforms") or []), "")
         expected = []
         role = str(item.get("role") or "image").casefold()
-        values = [*(item.get("expected_concepts") or []), job.get("topic"), job.get("title")]
+        if role == "cover":
+            meta = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
+            design = meta.get("cover_design") if isinstance(meta.get("cover_design"), dict) else {}
+            concept_text = " ".join([
+                str(job.get("topic") or ""), str(job.get("title") or ""),
+                str(job.get("body") or "")[:800], str(design.get("visual_subject") or ""),
+                " ".join(str(item) for item in (design.get("focal_subjects") or [])),
+                str(design.get("content_match_reason") or ""),
+            ])
+            values = visual_concepts(concept_text) or list(item.get("expected_concepts") or [])
+        else:
+            values = [*(item.get("expected_concepts") or []), job.get("topic"), job.get("title")]
         if role != "cover":
             values.extend([item.get("section"), item.get("purpose")])
         for value in values:
@@ -1042,6 +1053,9 @@ class MediaBridge:
             )
             prompts[0].update(route)
             prompts[0]["size"] = "x".join(str(value) for value in route["dimensions"])
+            cover_concepts = cls._semantic_request(job, prompts[0]).get("expected_concepts") or []
+            if cover_concepts:
+                prompts[0]["prompt"] += "; explicit visual subjects: " + ", ".join(cover_concepts)
         if minimum <= 1:
             return prompts
         sections = cls._article_sections(job)
