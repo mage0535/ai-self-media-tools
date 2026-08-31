@@ -337,7 +337,11 @@ def test_canary_config_preserves_real_media_toolchain_but_isolates_delivery(tmp_
 
     config_path = _write(tmp_path / "config.json", json.dumps({
         "data_dir": str(tmp_path / "production"),
-        "media": {"video": {"enabled": True, "quality_profile": "high"}, "cover": {"enabled": True}},
+        "media": {
+            "video": {"enabled": True, "quality_profile": "high", "script": "/root/.ai-self-media-tools-current/scripts/video_toolchain_runner.py"},
+            "cover": {"enabled": True},
+        },
+        "analysis": {"script": "/root/.ai-self-media-tools-current/scripts/image_semantic_analyze.py"},
         "generator": {"timeout": 600},
         "delivery": {"auto_stage_review_required": True},
     }))
@@ -350,6 +354,8 @@ def test_canary_config_preserves_real_media_toolchain_but_isolates_delivery(tmp_
     assert config["generator"]["timeout"] == 600
     assert config["delivery"]["auto_stage_review_required"] is False
     assert config["data_dir"] == str(tmp_path / "case")
+    assert config["media"]["video"]["script"] == str(ROOT / "scripts" / "video_toolchain_runner.py")
+    assert config["analysis"]["script"] == str(ROOT / "scripts" / "image_semantic_analyze.py")
 
 
 def test_scheduled_and_direct_publish_canaries_remain_non_publishing_dry_runs():
