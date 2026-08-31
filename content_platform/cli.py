@@ -744,7 +744,7 @@ def execute(args):
                     "error": "no verified platform hot-work collector is configured",
                 })
 
-        paths = save_collection(items, statuses, output_dir)
+        paths = save_collection(items, statuses, output_dir, publish_latest=not bool(args.output_dir))
         result = {"ok": True, "items": len(items), "collection_status": statuses, "paths": paths}
         store.save_tool_inventory("hot_work_parameter_pack:latest", result)
         return result

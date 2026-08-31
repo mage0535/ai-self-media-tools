@@ -831,7 +831,10 @@ def load_samples(path: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
-def save_collection(items: list[dict[str, Any]], statuses: list[dict[str, Any]], output_dir: str | Path) -> dict[str, str]:
+def save_collection(
+    items: list[dict[str, Any]], statuses: list[dict[str, Any]], output_dir: str | Path,
+    *, publish_latest: bool = True,
+) -> dict[str, str]:
     base = Path(output_dir)
     base.mkdir(parents=True, exist_ok=True)
     payload = {"generated_at": datetime.now().isoformat(timespec="seconds"), "items": items, "collection_status": statuses}
@@ -843,6 +846,7 @@ def save_collection(items: list[dict[str, Any]], statuses: list[dict[str, Any]],
     report_path = save_hot_work_strategy_report(pack, base / "hot_work_strategy_report.md")
     mutable_root = Path(os.environ.get("CONTENT_PLATFORM_DATA_DIR") or os.environ.get("AI_SELF_MEDIA_DATA_DIR") or "data")
     latest = mutable_root / "intel" / "hot_work_parameter_pack_latest.json"
-    latest.parent.mkdir(parents=True, exist_ok=True)
-    latest.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"raw": str(raw_path), "pack": str(pack_path), "report": str(report_path), "latest": str(latest)}
+    if publish_latest:
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        latest.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"raw": str(raw_path), "pack": str(pack_path), "report": str(report_path), "latest": str(latest) if publish_latest else ""}

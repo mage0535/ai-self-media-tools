@@ -25,6 +25,17 @@ def test_save_collection_writes_latest_to_mutable_data_root(tmp_path, monkeypatc
     assert Path(paths["latest"]).is_file()
 
 
+def test_save_collection_can_isolate_explicit_canary_output_without_overwriting_latest(tmp_path, monkeypatch):
+    from content_platform.hot_work_intelligence import save_collection
+
+    mutable = tmp_path / "production-data"
+    monkeypatch.setenv("CONTENT_PLATFORM_DATA_DIR", str(mutable))
+    paths = save_collection([], [], tmp_path / "canary", publish_latest=False)
+
+    assert paths["latest"] == ""
+    assert not (mutable / "intel" / "hot_work_parameter_pack_latest.json").exists()
+
+
 def test_normalize_browser_cookies_converts_extension_exports_to_playwright_state():
     cookies = [{
         "domain": ".tiktok.com",
