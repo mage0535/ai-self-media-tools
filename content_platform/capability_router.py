@@ -93,6 +93,9 @@ def match_capabilities(
             "quality_gate": capability.get("quality_gate"),
             "required_or_optional": "required" if capability["id"] in required_ids else "optional",
         }
+        if capability.get("kind") == "methodology" and capability.get("license") == "unverified":
+            inventory.append({"capability_id": capability["id"], "reason": "license_unverified"})
+            continue
         if capability.get("kind") == "methodology":
             consulted.append({**item, "status": "consulted", "rules_applied": []})
             continue
