@@ -107,3 +107,14 @@ Observed read-only on 2026-08-31.
 - Existing process-group termination, output byte limit, reduced-context retry, non-transient no-retry, and atomic checkpoint tests remain green.
 - Focused generator/run-contract/pipeline regression: 89 passed. Full regression: 1555 passed plus 37 subtests.
 - Server Hermes execution has not been exercised with these limits yet; production release and timers remain unchanged.
+
+## P7 local image recovery evidence
+
+- Fault injection generated and checkpointed a cover, timed out the following section image, then resumed the same job.
+- The resumed run did not call the cover provider again and generated only the missing section; the checkpoint contained one accepted record after the failed first run.
+- A stock timeout rotated to SenseNova. Recovery evidence retained the failed stock provider, timeout error, and successful generated fallback identity.
+- Accepted checkpoints now persist and reload perceptual hashes so resumed jobs still reject near-duplicate visuals.
+- Checkpoint signatures include provider, model, quality, and method; changing provider from stock to SenseNova invalidated and regenerated the asset in test.
+- Automated workflows enable bounded image quality recovery by default, with the existing maximum-attempt cap retained.
+- Focused media/image/provider regression: 69 passed. Full regression: 1559 passed plus 37 subtests.
+- No paid or live server provider was invoked by these tests; production image Canary remains a deployment gate and timers remain disabled.

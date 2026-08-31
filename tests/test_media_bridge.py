@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 from PIL import Image
@@ -217,6 +218,123 @@ def test_asset_provenance_preserves_retouch_source_chain(tmp_path):
     assert derivative["original_provider"] == "pexels"
     assert derivative["original_source_url"] == "https://www.pexels.com/photo/example"
     assert derivative["original_license"] == "Pexels"
+
+
+def _noise_image(path: Path, seed: int = 30) -> None:
+    image = Image.new("RGB", (64, 64))
+    pixels = image.load()
+    for x in range(64):
+        for y in range(64):
+            pixels[x, y] = ((x * 37 + seed) % 256, (y * 53 + seed) % 256, ((x + y) * 29 + seed) % 256)
+    image.resize((1200, 1200), Image.Resampling.NEAREST).save(path)
+
+
+def test_image_batch_resumes_only_missing_asset_after_timeout(tmp_path, monkeypatch):
+    script = tmp_path / "image_gen.py"
+    script.write_text("# fixture", encoding="utf-8")
+    bridge = MediaBridge(
+        {"image": {"enabled": True, "script": str(script), "provider": "stock", "min_count": 2, "quality_recovery_enabled": True, "quality_recovery_attempts": 1}},
+        tmp_path,
+    )
+    calls = []
+    timed_out = {"value": False}
+
+    def fake_run(command, **kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        calls.append(output.name)
+        if output.name.startswith("section-") and not timed_out["value"]:
+            timed_out["value"] = True
+            raise subprocess.TimeoutExpired(command, 30)
+        _noise_image(output, 20 + len(calls))
+        return type("Result", (), {"returncode": 0, "stdout": '{"ok":true,"provider":"stock","license":"Pexels"}', "stderr": ""})()
+
+    monkeypatch.setattr("content_platform.tool_adapters.subprocess.run", fake_run)
+    job = {"id": "resume-images", "topic": "AI workflow", "body": "First section.\n\nSecond section.", "platforms": ["twitter"]}
+
+    try:
+        bridge.generate("image", job)
+    except RuntimeError as exc:
+        assert "image quality recovery exhausted" in str(exc)
+    else:
+        raise AssertionError("expected injected timeout")
+
+    checkpoint = json.loads((tmp_path / "artifacts" / "resume-images" / "image_asset_checkpoints.json").read_text(encoding="utf-8"))
+    assert len(checkpoint) == 1
+    artifact = bridge.generate("image", job)
+
+    assert len(artifact["images"]) == 2
+    assert calls.count("cover.png") == 1
+    assert calls.count("section-01.png") == 2
+
+
+def test_stock_timeout_rotates_provider_and_records_verified_fallback(tmp_path, monkeypatch):
+    script = tmp_path / "image_gen.py"
+    script.write_text("# fixture", encoding="utf-8")
+    bridge = MediaBridge(
+        {"image": {"enabled": True, "script": str(script), "provider": "stock", "min_count": 1, "quality_recovery_enabled": True, "quality_recovery_attempts": 2}},
+        tmp_path,
+    )
+    providers = []
+
+    def fake_run(command, **kwargs):
+        provider = command[command.index("--provider") + 1]
+        providers.append(provider)
+        output = Path(command[command.index("--output") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if provider == "stock":
+            raise subprocess.TimeoutExpired(command, 30)
+        _noise_image(output, 55)
+        return type("Result", (), {"returncode": 0, "stdout": '{"ok":true,"provider":"sense_nova"}', "stderr": ""})()
+
+    monkeypatch.setattr("content_platform.tool_adapters.subprocess.run", fake_run)
+    artifact = bridge.generate("image", {"id": "fallback-image", "topic": "AI workflow", "platforms": ["twitter"]})
+    image = artifact["images"][0]
+
+    assert providers == ["stock", "sense_nova"]
+    assert image["verified_generated_fallback"] is True
+    assert image["stock_fallback_evidence"][0]["provider"] == "stock"
+    assert image["stock_fallback_evidence"][0]["passed"] is False
+
+
+def test_automated_image_job_enables_bounded_recovery_by_default(tmp_path):
+    bridge = MediaBridge({"image": {"enabled": True}}, tmp_path)
+
+    recovery = bridge._image_quality_recovery_plan(
+        {"brief": {"automated_workflow": True}},
+        {},
+    )
+
+    assert recovery["enabled"] is True
+    assert recovery["max_attempts"] == 3
+
+
+def test_changed_provider_config_invalidates_image_checkpoints(tmp_path, monkeypatch):
+    script = tmp_path / "image_gen.py"
+    script.write_text("# fixture", encoding="utf-8")
+    calls = []
+
+    def fake_run(command, **kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        calls.append(command[command.index("--provider") + 1])
+        _noise_image(output, 40 + len(calls))
+        return type("Result", (), {"returncode": 0, "stdout": '{"ok":true,"provider":"generated"}', "stderr": ""})()
+
+    monkeypatch.setattr("content_platform.tool_adapters.subprocess.run", fake_run)
+    job = {"id": "provider-fingerprint", "topic": "AI workflow", "platforms": ["twitter"]}
+    first = MediaBridge(
+        {"image": {"enabled": True, "script": str(script), "provider": "stock", "min_count": 1, "quality_recovery_enabled": True}},
+        tmp_path,
+    )
+    first.generate("image", job)
+    second = MediaBridge(
+        {"image": {"enabled": True, "script": str(script), "provider": "sense_nova", "min_count": 1, "quality_recovery_enabled": True}},
+        tmp_path,
+    )
+    second.generate("image", job)
+
+    assert calls == ["stock", "sense_nova"]
 
 
 def test_xiaohongshu_cover_normalization_preserves_platform_target_size():

@@ -30,4 +30,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - P1-P4 are committed local milestones; production deployment remains prohibited.
 - P5 capability evidence and inventory governance are committed local milestones.
 - P6 bounded Hermes worker sessions and generation SLOs are a committed local milestone.
-- P7 image checkpoint and verified provider fallback is the next workstream; start with its row in `STATUS.md`.
+- P7 image checkpoint and verified provider fallback is a committed local milestone.
+- P8 video shot retry, checkpoint, and final-effect evidence is the next workstream; start with its row in `STATUS.md`.
