@@ -530,6 +530,7 @@ class MediaBridge:
                 images.append(saved_record)
                 accepted_checksums.add(str(saved_record["checksum"]))
                 continue
+            recovery_start = len(recovery["attempts"])
             raw_gate = self._run_image_provider_with_quality_recovery(
                 provider,
                 item,
@@ -580,6 +581,11 @@ class MediaBridge:
             source_url = str(provider_result.get("source_url") or "").strip()
             license_name = str(provider_result.get("license") or "").strip()
             generated = provider_name not in {"pexels", "pixabay", "stock"}
+            item_attempts = recovery["attempts"][recovery_start:]
+            failed_stock_attempts = [
+                attempt for attempt in item_attempts
+                if attempt.get("provider") in {"pexels", "pixabay", "stock"} and attempt.get("passed") is not True
+            ]
             images.append(
                 {
                     "kind": "image",
@@ -591,6 +597,8 @@ class MediaBridge:
                     "source_url": source_url or (f"generated:{provider_name}" if generated else ""),
                     "license": license_name or ("generated_for_project" if generated else ""),
                     "origin_type": "generated" if generated else "stock",
+                    "verified_generated_fallback": bool(generated and failed_stock_attempts),
+                    "stock_fallback_evidence": failed_stock_attempts,
                     "original_license": str(provider_result.get("original_license") or ""),
                     "generation_evidence": {
                         "provider": provider_name,
@@ -935,11 +943,13 @@ class MediaBridge:
             failed_candidate = evidence_dir / f"{item['role']}-{len(recovery['attempts']) + 1:02d}-attempt-{attempt}{suffix}"
             shutil.copy2(output, failed_candidate)
             failed_candidate_path = str(failed_candidate)
+        provider_result = gate.get("provider_result") if isinstance(gate.get("provider_result"), dict) else {}
         recovery["attempts"].append(
             {
                 "role": item.get("role", ""),
                 "section": item.get("section", ""),
                 "attempt": attempt,
+                "provider": str(provider_result.get("provider") or ""),
                 "passed": gate.get("passed") is True,
                 "failures": list(gate.get("failures") or []),
                 "prompt_sha256": hashlib.sha256(str(prompt).encode("utf-8")).hexdigest(),

@@ -415,6 +415,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rende
     cover = packet.get("cover_design") or {}
     source_assets = packet.get("source_assets") or packet.get("authentic_source_evidence") or []
     valid_source_assets = [item for item in source_assets if isinstance(item, dict) and _valid_real_scene_asset(item)] if isinstance(source_assets, list) else []
+    verified_fallback_assets = [item for item in source_assets if isinstance(item, dict) and _valid_generated_fallback(item)] if isinstance(source_assets, list) else []
     disclosure = str(packet.get("ai_assisted_disclosure") or packet.get("disclosure") or packet.get("body") or "")
     video_plan = packet.get("video_plan") or packet.get("short_video_plan") or {}
     mixed_plan = packet.get("mixed_content_plan") or {}
@@ -475,8 +476,9 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rende
             or all(mixed_plan.get(key) for key in ["short_video", "image_text_note", "knowledge_cards"]),
         },
         "authentic_source_evidence": {
-            "passed": len(valid_source_assets) >= 3,
+            "passed": len(valid_source_assets) >= 1 and len(valid_source_assets) + len(verified_fallback_assets) >= 3,
             "count": len(valid_source_assets),
+            "verified_generated_fallback_count": len(verified_fallback_assets),
             "total_assets": len(source_assets) if isinstance(source_assets, list) else 0,
         },
         "real_scene_backgrounds": _real_scene_background_gate(packet, minimum=3),
@@ -1434,14 +1436,17 @@ def _real_scene_background_gate(packet: dict[str, Any], minimum: int = 3) -> dic
     primary_kind = str(plan.get("primary_background_kind") or "").casefold()
     forbidden = {str(item).casefold() for item in plan.get("forbidden_backgrounds") or []}
     valid_backgrounds = [item for item in backgrounds if isinstance(item, dict) and _valid_real_scene_background(item)]
+    fallback_backgrounds = [item for item in backgrounds if isinstance(item, dict) and _valid_generated_fallback(item)]
     return {
         "passed": bool(plan.get("required"))
         and source_policy in REAL_SCENE_BACKGROUND_SOURCE_POLICY
         and (bool(plan.get("no_css_gradient_primary")) or "css_gradient" in forbidden)
         and primary_kind not in FORBIDDEN_PRIMARY_BACKGROUNDS
-        and len(valid_backgrounds) >= int(minimum)
-        and len(valid_backgrounds) == len(backgrounds),
+        and len(valid_backgrounds) >= 1
+        and len(valid_backgrounds) + len(fallback_backgrounds) >= int(minimum)
+        and len(valid_backgrounds) + len(fallback_backgrounds) == len(backgrounds),
         "count": len(valid_backgrounds),
+        "verified_generated_fallback_count": len(fallback_backgrounds),
         "minimum": int(minimum),
         "source_policy": source_policy,
         "primary_background_kind": primary_kind,
@@ -1502,7 +1507,10 @@ def _valid_real_scene_backgrounds(packet: dict[str, Any]) -> list[dict[str, Any]
     backgrounds = plan.get("per_slide_backgrounds") or plan.get("backgrounds") or packet.get("background_assets") or []
     if not isinstance(backgrounds, list):
         return []
-    return [item for item in backgrounds if isinstance(item, dict) and _valid_real_scene_background(item)]
+    return [
+        item for item in backgrounds
+        if isinstance(item, dict) and (_valid_real_scene_background(item) or _valid_generated_fallback(item))
+    ]
 
 
 def _mapping_item_has_real_background(item: dict[str, Any], backgrounds: list[dict[str, Any]], fields: list[str]) -> bool:
@@ -1567,6 +1575,19 @@ def _valid_real_scene_asset(item: dict[str, Any]) -> bool:
     has_real_scene = bool(item.get("real_scene") or item.get("real_photo") or item.get("authentic") or item.get("verified_real_material"))
     has_source = bool(item.get("source") or item.get("source_url") or item.get("asset_id") or item.get("path"))
     return has_real_scene and has_source and bool(item.get("rights_cleared"))
+
+
+def _valid_generated_fallback(item: dict[str, Any]) -> bool:
+    if item.get("verified_generated_fallback") is not True or not item.get("rights_cleared"):
+        return False
+    evidence = item.get("stock_fallback_evidence") or []
+    return bool(evidence) and all(
+        isinstance(row, dict)
+        and str(row.get("provider") or "") in {"stock", "pexels", "pixabay"}
+        and row.get("passed") is not True
+        and bool(row.get("failures") or row.get("error"))
+        for row in evidence
+    )
 
 
 def _failure(code: str, rule_ref: str, message: str, remediation: str) -> GateFailure:

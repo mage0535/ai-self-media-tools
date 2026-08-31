@@ -2204,3 +2204,32 @@ def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_pa
 
     assert derived["passed"] is True
     assert derived["derived_from_background_semantics"] is True
+
+
+def test_real_scene_gate_accepts_generated_assets_only_after_verified_stock_failure():
+    from content_platform.media_quality import _real_scene_background_gate
+
+    real = {
+        "asset_type": "real_scene_photo", "real_scene": True, "source_url": "https://www.pexels.com/photo/1/",
+        "rights_cleared": True, "match_reason": "matched", "section": "one",
+    }
+    fallback = {
+        "asset_type": "generated_image", "source_url": "generated:sense_nova", "rights_cleared": True,
+        "verified_generated_fallback": True, "match_reason": "semantic fallback", "section": "two",
+        "stock_fallback_evidence": [{"provider": "stock", "passed": False, "failures": ["semantic_match_below_threshold"]}],
+    }
+    packet = {"real_scene_background_plan": {
+        "required": True, "source_policy": "licensed_or_verified_runtime_assets",
+        "primary_background_kind": "licensed_real_scene_photo", "no_css_gradient_primary": True,
+        "per_slide_backgrounds": [real, fallback, {**fallback, "section": "three"}],
+    }}
+    result = _real_scene_background_gate(packet, minimum=3)
+    assert result["passed"] is True
+    assert result["count"] == 1
+    assert result["verified_generated_fallback_count"] == 2
+
+    no_real = {"real_scene_background_plan": {**packet["real_scene_background_plan"], "per_slide_backgrounds": [fallback] * 3}}
+    assert _real_scene_background_gate(no_real, minimum=3)["passed"] is False
+    no_proof = {**fallback, "stock_fallback_evidence": []}
+    invalid = {"real_scene_background_plan": {**packet["real_scene_background_plan"], "per_slide_backgrounds": [real, no_proof, no_proof]}}
+    assert _real_scene_background_gate(invalid, minimum=3)["passed"] is False
