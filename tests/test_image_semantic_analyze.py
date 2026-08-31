@@ -136,6 +136,17 @@ def test_visual_equivalents_ground_agent_search_and_dashboard_concepts():
     assert "data analytics dashboard" in matched
 
 
+def test_bookshelf_documents_and_robot_assistant_ground_memory_archive():
+    score, matched = analyzer.score_semantics(
+        ["organized memory archive"],
+        "A woman works at a desk in front of a bookshelf while a robot arm hands her a document. Books and boxes are organized behind the laptop.",
+        ["bookshelf", "documents", "library", "laptop"],
+    )
+
+    assert score >= analyzer.DEFAULT_THRESHOLD
+    assert matched == ["organized memory archive"]
+
+
 def test_model_numeric_score_is_ignored(tmp_path, monkeypatch):
     image = tmp_path / "unrelated.jpg"
     image.write_bytes(b"not-a-real-jpeg-but-valid-test-input")
