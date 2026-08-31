@@ -61,6 +61,17 @@ def build_tools_capability_analysis(
         inventory = []
         for candidate_id in group["candidate_ids"]:
             capability = capabilities[candidate_id]
+            if capability.get("lifecycle") == "parent_executed":
+                parent_id = str(capability.get("parent_id") or "")
+                parent = capabilities.get(parent_id) or {}
+                override = probed.get(parent_id)
+                is_available = override.get("available") is True if isinstance(override, dict) else capability_available(parent)[0]
+                if is_available:
+                    executable.append(candidate_id)
+                    available.add(candidate_id)
+                else:
+                    inventory.append(candidate_id)
+                continue
             if capability.get("lifecycle") != "executable":
                 inventory.append(candidate_id)
                 continue
@@ -131,9 +142,9 @@ def build_tool_selection_plan(
         if not canonical:
             return None
         capability = capabilities.get(canonical)
-        if not capability or capability.get("lifecycle") != "executable" or canonical not in available:
+        if not capability or capability.get("lifecycle") not in {"executable", "parent_executed"} or canonical not in available:
             return None
-        return canonical
+        return str(capability.get("parent_id") or canonical)
 
     if use_manifest:
         for name in requested:
@@ -182,7 +193,16 @@ def build_tool_selection_plan(
                 for name in (analysis.get("analyzed_tool_groups") or {}).get(group, [])
             )
         ],
-        "invocation_order": selected,
+        "invocation_order": list(dict.fromkeys(selected_canonical)),
+        "child_capability_telemetry": [
+            {
+                "capability_id": name,
+                "parent_id": canonical,
+                "telemetry_contract": str(capabilities[name].get("telemetry_contract") or ""),
+            }
+            for name, canonical in zip(selected, selected_canonical)
+            if name in capabilities and capabilities[name].get("lifecycle") == "parent_executed"
+        ],
         "fallback_plan": "record failure and follow the registry fallback_chain; never promote inventory-only candidates",
         "not_default_only": True,
         "resolved_capability_ids": selected_canonical,

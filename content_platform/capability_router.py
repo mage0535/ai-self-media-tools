@@ -96,8 +96,37 @@ def match_capabilities(
         if capability.get("kind") == "methodology":
             consulted.append({**item, "status": "consulted", "rules_applied": []})
             continue
-        if capability.get("lifecycle") != "executable":
+        lifecycle = capability.get("lifecycle")
+        if lifecycle not in {"executable", "parent_executed"}:
             inventory.append({"capability_id": capability["id"], "reason": "inventory_only"})
+            continue
+        if lifecycle == "parent_executed":
+            parent_id = str(capability.get("parent_id") or "")
+            parent = next((row for row in registry.get("capabilities", []) if row.get("id") == parent_id), None)
+            if not parent:
+                skipped.append({"capability_id": capability["id"], "reason": "parent_capability_missing"})
+                continue
+            available, reason = capability_available(parent, dict(runtime_context or {}))
+            if not available:
+                skipped.append({"capability_id": capability["id"], "reason": reason})
+                continue
+            existing = next((row for row in candidates if row.get("capability_id") == parent_id), None)
+            if existing is None:
+                existing = {
+                    **item,
+                    "capability_id": parent_id,
+                    "child_capability_ids": [],
+                    "child_telemetry_contracts": {},
+                    "adapter": parent.get("adapter"),
+                    "output_contract": parent.get("output_contract"),
+                    "quality_gate": parent.get("quality_gate"),
+                    "status": "planned",
+                }
+                candidates.append(existing)
+            child_ids = existing.setdefault("child_capability_ids", [])
+            if capability["id"] not in child_ids:
+                child_ids.append(capability["id"])
+            existing.setdefault("child_telemetry_contracts", {})[capability["id"]] = capability.get("telemetry_contract")
             continue
         probe_inputs = dict(runtime_context or {})
         if capability.get("kind") == "mcp_tool":
@@ -107,7 +136,9 @@ def match_capabilities(
         if not available:
             skipped.append({"capability_id": capability["id"], "reason": reason})
             continue
-        candidates.append({**item, "status": "planned"})
+        existing = next((row for row in candidates if row.get("capability_id") == capability["id"]), None)
+        if existing is None:
+            candidates.append({**item, "status": "planned"})
 
     from .tool_selection import build_tools_capability_analysis
 

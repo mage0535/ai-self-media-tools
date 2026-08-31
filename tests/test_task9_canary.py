@@ -599,6 +599,53 @@ def test_canary_manifest_merges_verified_capabilities_and_store_deliveries(tmp_p
     assert manifest["delivery_policy"]["state"] == "dry_run"
 
 
+def test_kuaishou_canary_rejects_required_pending_capability(tmp_path: Path):
+    from scripts.task9_canary import _materialize_artifact_manifest, probe_artifacts
+
+    class Store:
+        def get_job(self, _job_id):
+            return {"id": "job-pending", "draft_meta": {"capability_execution": {
+                "executed": [{
+                    "capability_id": "structure",
+                    "stage": "generation",
+                    "output_hash": "sha256:" + "a" * 64,
+                    "contract_valid": True,
+                }],
+                "output_verified": [{"capability_id": "structure", "output_hash": "sha256:" + "a" * 64}],
+                "pending": [{
+                    "capability_id": "video_toolchain_runner",
+                    "stage": "render",
+                    "required_or_optional": "required",
+                    "status": "pending",
+                }],
+            }}}
+
+        def deliveries(self, _job_id):
+            return [{"platform": "kuaishou", "status": "dry_run", "external_id": ""}]
+
+        def source_items(self, _job_id): return []
+        def events(self, _job_id): return []
+
+    _write(tmp_path / "draft.txt", "generated output")
+    manifest = _materialize_artifact_manifest(
+        {"platform": "kuaishou", "content_form": "article", "delivery_policy": "dry_run", "dry_run": True},
+        Store(),
+        {"id": "job-pending"},
+        tmp_path,
+    )
+    probe = probe_artifacts(
+        {"platform": "kuaishou", "content_form": "article", "delivery_policy": "dry_run", "dry_run": True},
+        tmp_path,
+    )
+
+    capabilities = {row["id"]: row for row in manifest["capabilities"]}
+    assert capabilities["structure"]["state"] == "output_verified"
+    assert capabilities["structure"]["artifact_verified"] is False
+    assert capabilities["video_toolchain_runner"]["state"] == "pending"
+    assert probe["probes"]["capabilities"]["passed"] is False
+    assert "required_capability_not_executed:video_toolchain_runner" in probe["failures"]
+
+
 def test_xiaohongshu_manifest_materializes_carousel_source_license_and_render_evidence(tmp_path: Path):
     from scripts.task9_canary import _PolicySafePublisher, _materialize_artifact_manifest, probe_artifacts
 

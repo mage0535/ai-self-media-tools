@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
@@ -175,11 +176,20 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
             if len(normalized) < 8:
                 return
             index += 1
+            identity = json.dumps(
+                {"source": source_id, "section": section, "text": normalized},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            stable_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
             rules.append({
-                "id": f"{source_id}:{index}",
+                "id": f"{source_id}:{stable_id}",
                 "source": source_id,
+                "source_hash": source_hash,
                 "section": section,
                 "text": normalized[:500],
+                "affected_outputs": ["generation_context", "provider_brief"],
             })
 
         def flush_paragraph() -> None:
@@ -235,6 +245,45 @@ def compile_skill_rules(paths: list[str | Path], *, root: str | Path, platform: 
             },
         )
     return result
+
+
+def compile_rule_consumption(
+    compiled: dict[str, Any], *, selected_rule_ids: list[str], affected_outputs: list[str]
+) -> dict[str, Any]:
+    """Build deterministic proof that selected rules entered named downstream inputs."""
+    selected = set(str(item) for item in selected_rule_ids if str(item).strip())
+    rules = [
+        {
+            "id": str(rule.get("id") or ""),
+            "source": str(rule.get("source") or ""),
+            "source_hash": str(rule.get("source_hash") or ""),
+            "text_hash": "sha256:" + hashlib.sha256(str(rule.get("text") or "").encode("utf-8")).hexdigest(),
+        }
+        for rule in compiled.get("rules") or []
+        if isinstance(rule, dict) and str(rule.get("id") or "") in selected
+    ]
+    payload = {
+        "compiled_version": str(compiled.get("version") or ""),
+        "rules": sorted(rules, key=lambda item: item["id"]),
+        "affected_outputs": sorted({str(item) for item in affected_outputs if str(item).strip()}),
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {
+        "version": "skill_rule_consumption_v1",
+        **payload,
+        "consumption_hash": "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+    }
+
+
+def verify_rule_effect(consumption: dict[str, Any], downstream_consumption_hashes: list[str]) -> dict[str, Any]:
+    expected = str(consumption.get("consumption_hash") or "")
+    verified = bool(expected and expected in {str(item) for item in downstream_consumption_hashes})
+    return {
+        **consumption,
+        "effect_status": "effect_verified" if verified else "consulted",
+        "effect_verified": verified,
+        "effect_reason": "downstream_consumption_hash_matched" if verified else "downstream_consumption_hash_missing",
+    }
 
 
 def default_skill_paths(platform: str, *, root: str | Path, hermes_skills_root: str | Path | None = None) -> list[Path]:

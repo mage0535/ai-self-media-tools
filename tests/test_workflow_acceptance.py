@@ -51,6 +51,31 @@ def test_acceptance_rejects_video_handoff_without_scene_or_tts_evidence(tmp_path
     assert "tts_config_missing" in result["failures"]
 
 
+def test_acceptance_fails_closed_for_automated_content_hygiene(tmp_path: Path):
+    from content_platform.workflow_acceptance import evaluate_job_acceptance
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job(
+        "youtube fragment",
+        ["youtube"],
+        {"platform_source_matrix": _real_matrix("youtube"), "automated_workflow": True},
+    )
+    store.save_draft(
+        job["id"],
+        "title",
+        "The workflow has enough evidence for a complete explanation. If it cannot plan a.",
+        "pass",
+        {},
+        draft_meta={"quality_gate": {"passed": True}},
+    )
+
+    result = evaluate_job_acceptance(store, job["id"], "youtube", artifacts_dir=tmp_path / "missing-media")
+
+    assert result["passed"] is False
+    assert "content_hygiene_failed" in result["failures"]
+    assert "sentence_fragment" in result["content_hygiene"]["reasons"]
+
+
 def test_acceptance_uses_registered_video_and_cover_paths(tmp_path: Path):
     from content_platform.workflow_acceptance import evaluate_job_acceptance
 

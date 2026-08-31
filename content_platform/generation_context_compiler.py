@@ -6,7 +6,7 @@ import hashlib
 import json
 from typing import Any
 
-from .skill_rule_compiler import select_platform_rules
+from .skill_rule_compiler import compile_rule_consumption, select_platform_rules
 
 
 def _short(value: Any, limit: int) -> str:
@@ -68,6 +68,12 @@ def compile_generation_context(
         "samples": [_short((item.get("title") or item.get("url") or item.get("source") or ""), 180) for item in (evidence.get("samples") or [])[:6]] if isinstance(evidence, dict) else [],
     }
     capability = brief.get("selected_capability") or ((brief.get("capability_plan") or {}).get("executed") or [])
+    selected_rules = _selected_rules(brief, platform)
+    consumption = compile_rule_consumption(
+        brief.get("compiled_skill_rules") if isinstance(brief.get("compiled_skill_rules"), dict) else {},
+        selected_rule_ids=[str(item.get("id") or "") for item in selected_rules],
+        affected_outputs=["bounded_model_input", "draft"],
+    )
     payload = {
         "platform": _short(platform, 40),
         "content_format": _short(content_format, 80),
@@ -76,7 +82,13 @@ def compile_generation_context(
         "claims": claims,
         "evidence": evidence_summary,
         "selected_capability": [_short(item, 120) for item in capability[:12]] if isinstance(capability, list) else [_short(capability, 120)],
-        "selected_rule_ids": _selected_rules(brief, platform),
+        "selected_rule_ids": selected_rules,
+        "skill_rule_consumption": {
+            "version": consumption["version"],
+            "consumption_hash": consumption["consumption_hash"],
+            "affected_outputs": consumption["affected_outputs"],
+            "rule_ids": [item["id"] for item in consumption["rules"]],
+        },
     }
     limit = max(512, min(int(byte_limit or (8000 if retry else 12000)), 8000 if retry else 12000))
     text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -87,11 +99,24 @@ def compile_generation_context(
         payload["selected_rule_ids"] = payload["selected_rule_ids"][:12 if not retry else 6]
         text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         if _utf8_size(text) > limit:
-            payload["selected_rule_ids"] = []
             payload["claims"] = []
             payload["evidence"]["samples"] = []
             payload["selected_capability"] = []
+            # Retain at least one compact rule from every selected source. The
+            # previous all-or-nothing truncation silently erased platform rules.
+            compact_rules = []
+            seen_sources = set()
+            for rule in payload["selected_rule_ids"]:
+                source = str(rule.get("source") or "")
+                if source in seen_sources:
+                    continue
+                seen_sources.add(source)
+                compact_rules.append({**rule, "text": _short(rule.get("text"), 96)})
+            payload["selected_rule_ids"] = compact_rules
             text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            while _utf8_size(text) > limit and len(payload["selected_rule_ids"]) > 1:
+                payload["selected_rule_ids"].pop()
+                text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         while _utf8_size(text) > limit and payload["content_blueprint"].get("topic"):
             payload["content_blueprint"]["topic"] = payload["content_blueprint"]["topic"][:-16]
             text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -103,4 +128,5 @@ def compile_generation_context(
         "byte_count": _utf8_size(text),
         "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
         "retry": retry,
+        "skill_rule_consumption": consumption,
     }

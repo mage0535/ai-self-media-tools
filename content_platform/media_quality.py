@@ -13,6 +13,7 @@ from .preflight_manifest import validate_preflight_manifest
 from .video_recipe import load_effect_module_registry, validate_visual_recipe
 from .content_recipe import validate_article_recipe, validate_image_text_card_recipe, validate_knowledge_card_recipe, validate_tool_invocation_manifest
 from .tool_selection import validate_tool_selection_evidence
+from .content_hygiene import validate_generated_text
 
 TIKTOK_REPOST_LINE = "tiktok_hot_localized_repost"
 ALLOWED_VISUAL_REVIEWS = {"passed", "approved", "verified", "manual_passed"}
@@ -204,6 +205,17 @@ def _packet_value(packet: dict[str, Any], *names: str) -> Any:
     return None
 
 
+def _content_hygiene_gate(packet: dict[str, Any]) -> dict[str, Any]:
+    automated = packet.get("automated_workflow") is True
+    mode = str(packet.get("workflow_mode") or packet.get("mode") or "production").casefold()
+    required = automated and mode not in {"draft", "shadow", "review", "manual"}
+    if not required:
+        return {"passed": True, "required": False, "deferred": True}
+    text = _packet_value(packet, "body_or_script", "body", "script", "localized_script", "voiceover_text", "caption")
+    result = validate_generated_text(str(text or ""))
+    return {**result, "required": True}
+
+
 def validate_douyin_tiktok_repost_packet(packet: dict[str, Any], *, require_visual_review: bool = False) -> list[str]:
     """Validate that a Douyin TikTok repost packet is not generic cat knowledge content."""
     required = [
@@ -287,6 +299,7 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
     length = _text_length(body)
     gates = {
         "preflight_manifest": validate_preflight_manifest(packet, str(packet.get("platform") or "")),
+        "content_hygiene": _content_hygiene_gate(packet),
         "visual_content_policy": {
             "passed": packet_uses_current_policy(packet),
             "required_policy": "visual_content_design_policy_v1",
@@ -411,6 +424,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any], phase: str = "rende
     ops_gates = _full_ops_gates(packet, "xiaohongshu")
     gates = {
         "preflight_manifest": validate_preflight_manifest(packet, str(packet.get("platform") or "")),
+        "content_hygiene": _content_hygiene_gate(packet),
         "visual_content_policy": {
             "passed": packet_uses_current_policy(packet),
             "required_policy": "visual_content_design_policy_v1",

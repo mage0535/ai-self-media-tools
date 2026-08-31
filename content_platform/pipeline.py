@@ -332,7 +332,28 @@ class Pipeline:
                 }
                 generated_hygiene = validate_generated_text(str(draft.get("title") or "") + "\n" + str(draft.get("body") or ""))
                 draft.setdefault("draft_meta", {})["generated_text_hygiene"] = generated_hygiene
-                if not generated_hygiene.get("passed"):
+                rule_consumption = draft["draft_meta"].get("skill_rule_consumption")
+                if isinstance(rule_consumption, dict) and rule_consumption.get("consumption_hash"):
+                    from .skill_rule_compiler import verify_rule_effect
+
+                    effect = verify_rule_effect(rule_consumption, [rule_consumption["consumption_hash"]])
+                    effect.update(
+                        effect_verified=bool(effect.get("effect_verified") and generated_hygiene.get("passed")),
+                        effect_status="effect_verified" if effect.get("effect_verified") and generated_hygiene.get("passed") else "consulted",
+                        draft_output_hash="sha256:" + hashlib.sha256(
+                            (str(draft.get("title") or "") + "\n" + str(draft.get("body") or "")).encode("utf-8")
+                        ).hexdigest(),
+                        quality_probes={"generated_text_hygiene": bool(generated_hygiene.get("passed"))},
+                    )
+                    draft["draft_meta"]["skill_rule_consumption"] = effect
+                contamination_reasons = {
+                    "source_page_code_contamination",
+                    "source_page_navigation_contamination",
+                }.intersection(generated_hygiene.get("reasons") or [])
+                # Always fail scraped code/navigation. Prose-quality findings
+                # are production gates only for automated workflows; ordinary
+                # drafts continue to the existing review boundary.
+                if contamination_reasons:
                     runner.block(
                         "validate_content_structure",
                         "source_page_code_contamination",
@@ -1131,6 +1152,32 @@ class Pipeline:
         }
 
     @staticmethod
+    def _publication_attribution(job):
+        meta = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
+        invocation = meta.get("tool_invocation_manifest") if isinstance(meta.get("tool_invocation_manifest"), dict) else {}
+        execution = invocation.get("capability_execution") if isinstance(invocation.get("capability_execution"), dict) else {}
+        route = meta.get("video_route") if isinstance(meta.get("video_route"), dict) else {}
+        if not route:
+            plan = meta.get("video_toolchain_plan") if isinstance(meta.get("video_toolchain_plan"), dict) else {}
+            route = plan.get("video_route") if isinstance(plan.get("video_route"), dict) else plan
+        capabilities = [
+            {
+                "capability_id": str(row.get("capability_id") or ""),
+                "output_hash": str(row.get("output_hash") or ""),
+                "stage": str(row.get("stage") or ""),
+            }
+            for row in execution.get("executed") or []
+            if isinstance(row, dict) and row.get("capability_id")
+        ]
+        return {
+            "topic_fingerprint": str(meta.get("topic_fingerprint") or job.get("topic_fingerprint") or ""),
+            "associated_hotspot": dict(meta.get("associated_hotspot") or {}),
+            "capabilities": capabilities,
+            "template_family": str(route.get("template_family") or route.get("renderer_family") or ""),
+            "style_id": str(route.get("style_id") or ""),
+        }
+
+    @staticmethod
     def _result_metadata(result):
         metadata = getattr(result, "metadata", None) or getattr(result, "details", None) or {}
         return metadata if isinstance(metadata, dict) else {}
@@ -1241,7 +1288,12 @@ class Pipeline:
         if result.status == "published" and not metadata.get("verification"):
             result = DeliveryResult(False, "unknown_requires_review", result.external_id, "publisher returned published without URL/content/account/time verification")
         elif result.status == "published":
-            verified_identity = self.publication_ledger.register_verified_publication({"intent_id": intent_id, "platform": platform, **metadata["verification"]})
+            verified_identity = self.publication_ledger.register_verified_publication({
+                "intent_id": intent_id,
+                "platform": platform,
+                **metadata["verification"],
+                "attribution": self._publication_attribution(job),
+            })
             if not verified_identity.get("passed"):
                 result = DeliveryResult(False, "unknown_requires_review", result.external_id, "publisher returned invalid publication verification: " + str(verified_identity.get("reason") or "unknown"))
         if platform.casefold() == "kuaishou" and result.status == "scheduled":

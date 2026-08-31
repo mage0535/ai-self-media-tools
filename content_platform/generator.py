@@ -1135,7 +1135,15 @@ class DraftGenerator:
         payload = self._checkpoint_payload(attempt=attempt, status="success", error_class="", **prompt_evidence)
         self._write_generation_checkpoint(payload)
         self._record_generation_attempt(payload)
-        return self._normalize(draft, context, "hermes-cli", topic, brief)
+        normalized = self._normalize(draft, context, "hermes-cli", topic, brief)
+        normalized.setdefault("draft_meta", {})["skill_rule_consumption"] = {
+            **compiled["skill_rule_consumption"],
+            "effect_status": "consulted",
+            "effect_verified": False,
+            "effect_reason": "final_output_quality_probe_pending",
+            "provider_prompt_hash": compiled["sha256"],
+        }
+        return normalized
 
     def _terminate_generation_process(self, proc):
         grace = float(self.config.get("termination_grace", self.config.get("process_termination_grace", 5)))

@@ -72,6 +72,54 @@ def test_catalog_rejects_missing_group_reference_and_incomplete_executable():
     assert any("broken_executable.adapter_not_supported" in item for item in result["failures"])
 
 
+def test_real_nested_tools_are_executable_or_parent_executed_with_telemetry():
+    registry = load_capability_registry(REGISTRY_PATH)
+    capabilities = {item["id"]: item for item in registry["capabilities"]}
+    nested_ids = {
+        "pexels",
+        "pixabay",
+        "cloudflare_workers_ai",
+        "pollinations",
+        "sense_nova",
+        "pixazo",
+        "agnes_image_21_flash",
+        "agnes_video_25_flash",
+        "agnes_video_v20",
+        "knowledge_card_renderer",
+        "cover_renderer",
+        "template_family_registry",
+        "edge_tts",
+        "kokoro",
+        "subtitle_burner",
+        "online_real_instrument_bgm_resolver",
+        "bgm_fingerprint_gate",
+        "loudness_probe",
+    }
+
+    assert nested_ids <= set(capabilities)
+    for capability_id in nested_ids:
+        capability = capabilities[capability_id]
+        assert capability["lifecycle"] in {"executable", "parent_executed"}
+        if capability["lifecycle"] == "parent_executed":
+            parent = capabilities[capability["parent_id"]]
+            assert parent["lifecycle"] == "executable"
+            assert capability["telemetry_contract"]
+
+
+def test_registry_rejects_parent_executed_capability_without_valid_parent_contract():
+    registry = load_capability_registry(REGISTRY_PATH)
+    broken = copy.deepcopy(registry)
+    child = next(item for item in broken["capabilities"] if item["id"] == "pexels")
+    child.update({"lifecycle": "parent_executed", "parent_id": "missing_parent"})
+    child.pop("telemetry_contract", None)
+
+    result = validate_capability_registry(broken)
+
+    assert result["passed"] is False
+    assert "pexels.parent_not_executable:missing_parent" in result["failures"]
+    assert "pexels.telemetry_contract_missing" in result["failures"]
+
+
 def test_registry_mcp_capabilities_exactly_match_content_production_mcp_inventory():
     from content_platform.mcp_server import mcp_tool_inventory
 
@@ -179,6 +227,31 @@ def test_planned_manifest_accepts_declared_aliases_and_rejects_unknowns():
     assert plan["selection_status"] == "ready"
 
 
+def test_planned_child_capability_routes_through_parent_with_telemetry_contract():
+    plan = build_tool_selection_plan(
+        platform="wechat",
+        content_type="article",
+        planned_manifest={"planned_tools": ["pexels", "knowledge_card_renderer"]},
+    )
+
+    assert plan["selected_tools"] == ["pexels", "knowledge_card_renderer"]
+    assert plan["resolved_capability_ids"] == ["media_asset_pipeline", "media_asset_pipeline"]
+    assert plan["invocation_order"] == ["media_asset_pipeline"]
+    assert plan["child_capability_telemetry"] == [
+        {
+            "capability_id": "pexels",
+            "parent_id": "media_asset_pipeline",
+            "telemetry_contract": "media_asset_provider_telemetry_v1",
+        },
+        {
+            "capability_id": "knowledge_card_renderer",
+            "parent_id": "media_asset_pipeline",
+            "telemetry_contract": "media_asset_renderer_telemetry_v1",
+        },
+    ]
+    assert plan["selection_status"] == "ready"
+
+
 def test_empty_declared_manifest_does_not_fall_back_to_auto_selection():
     plan = build_tool_selection_plan(
         platform="wechat",
@@ -218,15 +291,27 @@ def test_structure_adapter_contract_produces_deterministic_hash():
     assert second["output_hash"] == first["output_hash"]
 
 
-def test_broken_bgm_entry_is_inventory_only_and_never_executable():
+def test_bgm_fingerprint_gate_is_executed_by_the_real_audio_parent():
     capability = next(
         item for item in load_capability_registry(REGISTRY_PATH)["capabilities"]
         if item["id"] == "bgm_fingerprint_gate"
     )
 
-    assert capability["lifecycle"] == "inventory_only"
-    result = execute_capability(capability, {"bgm_file_path": "x.mp3", "platform": "douyin"})
-    assert result["status"] != "executed"
+    assert capability["lifecycle"] == "parent_executed"
+    assert capability["parent_id"] == "mix_bgm_with_gate"
+    assert capability["telemetry_contract"] == "bgm_gate_telemetry_v1"
+
+
+def test_parent_executed_children_route_to_one_parent_invocation_with_child_telemetry():
+    from content_platform.capability_router import match_capabilities, load_registry
+
+    plan = match_capabilities(
+        {"platform": "wechat", "content_format": "article"},
+        load_registry("wechat"),
+    )
+    media = [row for row in plan["candidates"] if row["capability_id"] == "media_asset_pipeline"]
+    assert len(media) == 1
+    assert {"pexels", "pixabay", "knowledge_card_renderer", "cover_renderer"} <= set(media[0]["child_capability_ids"])
 
 
 def test_runtime_registry_records_are_internal_and_have_evidence_contracts():
@@ -327,7 +412,7 @@ def test_execution_dag_records_transitions_and_keeps_optional_failure_nonblockin
     assert [item["capability_id"] for item in result["planned"]] == ["required_ok", "optional_bad"]
     assert [item["capability_id"] for item in result["consulted"]] == ["methodology"]
     assert [item["capability_id"] for item in result["executed"]] == ["required_ok"]
-    assert [item["capability_id"] for item in result["artifact_verified"]] == ["required_ok"]
+    assert [item["capability_id"] for item in result["output_verified"]] == ["required_ok"]
     assert [item["capability_id"] for item in result["optional_failures"]] == ["optional_bad"]
     assert result["passed"] is True
 

@@ -1,4 +1,5 @@
 from content_platform.capability_runtime import execute_generation_capabilities, validate_generation_execution
+from content_platform.execution_dag import execute_capability_dag
 
 
 def test_automated_generation_rejects_planned_but_unexecuted_capabilities():
@@ -28,6 +29,52 @@ def test_generation_execution_rejects_each_selected_required_capability_that_is_
     assert result["passed"] is False
     assert "required_capability_not_executed:media" in result["failures"]
     assert all("optional_probe" not in failure for failure in result["failures"])
+
+
+def test_generation_execution_rejects_required_pending_in_a_completed_stage():
+    result = validate_generation_execution(
+        {
+            "selected": [{"capability_id": "video_toolchain_runner", "stage": "render"}],
+            "executed": [{"capability_id": "structure", "output_hash": "sha256:x"}],
+            "pending": [
+                {
+                    "capability_id": "video_toolchain_runner",
+                    "stage": "render",
+                    "required_or_optional": "required",
+                    "status": "pending",
+                }
+            ],
+            "completed_stages": ["render"],
+        },
+        required=True,
+    )
+
+    assert result["passed"] is False
+    assert "required_capability_pending:render:video_toolchain_runner" in result["failures"]
+
+
+def test_dag_distinguishes_output_artifact_and_effect_verification():
+    result = execute_capability_dag(
+        {
+            "candidates": [
+                {"capability_id": "structure", "stage": "generation"},
+                {"capability_id": "voice_engine", "stage": "assets"},
+                {"capability_id": "media_quality", "stage": "gate"},
+            ]
+        },
+        {},
+        {},
+        executor=lambda *_args: {
+            "status": "executed",
+            "contract_valid": True,
+            "output_hash": "sha256:" + "a" * 64,
+        },
+    )
+
+    assert {row["capability_id"] for row in result["output_verified"]} == {"structure"}
+    assert {row["capability_id"] for row in result["artifact_verified"]} == {"voice_engine"}
+    assert {row["capability_id"] for row in result["effect_verified"]} == {"media_quality"}
+    assert all(row["capability_id"] != "structure" for row in result["artifact_verified"])
 
 
 def test_generation_runtime_receives_compiled_growth_strategy():

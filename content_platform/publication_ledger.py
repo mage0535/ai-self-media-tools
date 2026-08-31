@@ -492,6 +492,50 @@ class PublicationLedger:
             row["metrics"] = json.loads(row.pop("metrics_json") or "{}")
         return rows
 
+    def analysis_ready_publications(self) -> list[dict[str, Any]]:
+        """Return only publications with complete, collected 1h/24h/72h evidence."""
+        ready: list[dict[str, Any]] = []
+        with self._connect() as conn:
+            identities = [dict(row) for row in conn.execute("SELECT * FROM publication_identities ORDER BY id")]
+            for identity in identities:
+                windows = [
+                    dict(row)
+                    for row in conn.execute(
+                        "SELECT * FROM metric_windows WHERE identity_id=? ORDER BY hours",
+                        (identity["id"],),
+                    )
+                ]
+                if {int(row["hours"]) for row in windows} != {1, 24, 72}:
+                    continue
+                if any(row["state"] != "collected" for row in windows):
+                    continue
+                metrics_by_window: dict[str, Any] = {}
+                complete = True
+                for window in windows:
+                    observation = conn.execute(
+                        "SELECT * FROM metric_observations WHERE window_id=? AND state='collected' ORDER BY id DESC LIMIT 1",
+                        (window["id"],),
+                    ).fetchone()
+                    if observation is None:
+                        complete = False
+                        break
+                    metrics_by_window[str(window["hours"])] = json.loads(observation["metrics_json"] or "{}")
+                if not complete:
+                    continue
+                metadata = json.loads(identity.get("metadata_json") or "{}")
+                ready.append(
+                    {
+                        "identity_id": identity["id"],
+                        "platform": identity["platform"],
+                        "internal_account_alias": identity["internal_account_alias"] or identity["account_id"],
+                        "platform_content_id": identity["platform_content_id"],
+                        "published_at": identity["published_at"],
+                        "attribution": metadata.get("attribution") or {},
+                        "metrics_by_window": metrics_by_window,
+                    }
+                )
+        return ready
+
     def invalidate_window(self, window_id: int, reason: str) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE metric_windows SET state='invalidated',invalidated_reason=? WHERE id=?", (str(reason), int(window_id)))

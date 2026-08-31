@@ -1,4 +1,5 @@
 import re
+import html
 from collections import Counter
 
 
@@ -93,5 +94,139 @@ def validate_generated_text(text):
     code_hits = [marker for marker in code_markers if marker in head]
     chrome_hits = [marker for marker in chrome_markers if marker in head]
     hits = code_hits + chrome_hits
-    reason = "source_page_code_contamination" if code_hits else ("source_page_navigation_contamination" if chrome_hits else "")
-    return {"passed": not hits, "reason": reason, "markers": hits}
+    reasons = []
+    findings = []
+    if code_hits:
+        reasons.append("source_page_code_contamination")
+        findings.append({"reason": reasons[-1], "matches": code_hits})
+    if chrome_hits:
+        reasons.append("source_page_navigation_contamination")
+        findings.append({"reason": reasons[-1], "matches": chrome_hits})
+
+    prose = _prose_without_code(value)
+    paragraphs = _prose_paragraphs(prose)
+    normalized_paragraphs = [_normalize_prose(item) for item in paragraphs]
+    repeated_paragraphs = [
+        paragraph
+        for paragraph, count in Counter(item for item in normalized_paragraphs if len(item) >= 30).items()
+        if count > 1
+    ]
+    if repeated_paragraphs:
+        reasons.append("repeated_paragraph")
+        findings.append({"reason": reasons[-1], "matches": repeated_paragraphs[:3]})
+
+    sentences = re.findall(r"[^.!?。！？\n]+[.!?。！？]+", prose)
+    normalized_sentences = [_normalize_prose(item) for item in sentences]
+    repeated_sentences = [
+        sentence
+        for sentence, count in Counter(item for item in normalized_sentences if len(item) >= 10).items()
+        if count > 1
+    ]
+    if repeated_sentences:
+        reasons.append("repeated_sentence")
+        findings.append({"reason": reasons[-1], "matches": repeated_sentences[:3]})
+
+    duplicated_conclusions = _duplicated_conclusions(value)
+    if duplicated_conclusions:
+        reasons.append("duplicated_conclusion")
+        findings.append({"reason": reasons[-1], "matches": duplicated_conclusions[:3]})
+
+    quote_issues = _quote_issues(prose)
+    if quote_issues:
+        reasons.append("malformed_quotes")
+        findings.append({"reason": reasons[-1], "matches": quote_issues})
+
+    fragments = [sentence.strip() for sentence in sentences if _is_obvious_fragment(sentence)]
+    if fragments:
+        reasons.append("sentence_fragment")
+        findings.append({"reason": reasons[-1], "matches": fragments[:3]})
+
+    terminal = _terminal_prose_line(prose)
+    if terminal and not re.search(r"[.!?。！？…][\"'”’」』）》】]*$", terminal):
+        reasons.append("truncated_terminal_sentence")
+        findings.append({"reason": reasons[-1], "matches": [terminal[-160:]]})
+
+    reason = reasons[0] if reasons else ""
+    return {
+        "passed": not reasons,
+        "reason": reason,
+        "reasons": reasons,
+        "markers": hits,
+        "findings": findings,
+    }
+
+
+def _prose_without_code(text):
+    value = re.sub(r"```[^\n]*\n.*?```", "\n", str(text or ""), flags=re.S)
+    value = re.sub(r"~~~[^\n]*\n.*?~~~", "\n", value, flags=re.S)
+    value = re.sub(r"`[^`\n]+`", "", value)
+    value = re.sub(r"!\[([^]]*)\]\([^)]+\)", r"\1", value)
+    value = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", value)
+    value = re.sub(r"</?(?:p|div|section|article|h[1-6]|li|blockquote|br)\b[^>]*>", "\n", value, flags=re.I)
+    value = re.sub(r"<[^>]+>", " ", value)
+    return html.unescape(value)
+
+
+def _prose_paragraphs(text):
+    paragraphs = []
+    for block in re.split(r"\n\s*\n+", text):
+        lines = []
+        for raw_line in block.splitlines():
+            line = raw_line.strip()
+            if not line or re.match(r"^(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|\|)", line):
+                continue
+            lines.append(re.sub(r"^>\s?", "", line))
+        paragraph = " ".join(lines).strip()
+        if paragraph:
+            paragraphs.append(paragraph)
+    return paragraphs
+
+
+def _normalize_prose(text):
+    return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(text or "").casefold())
+
+
+def _quote_issues(text):
+    issues = []
+    pairs = (("“", "”"), ("‘", "’"), ("「", "」"), ("『", "』"))
+    for opening, closing in pairs:
+        if text.count(opening) != text.count(closing):
+            issues.append(f"{opening}{closing}")
+    straight = re.sub(r"(?<=\w)'(?=\w)", "", text)
+    if straight.count('"') % 2:
+        issues.append('"')
+    if straight.count("'") % 2:
+        issues.append("'")
+    return issues
+
+
+def _is_obvious_fragment(sentence):
+    value = re.sub(r"[.!?。！？\s]+$", "", str(sentence or "").strip()).casefold()
+    if re.search(r"\b(?:a|an|the|this|that|these|those|to|of|for|with|and|or|but)$", value):
+        return True
+    return bool(re.search(r"(?:因为|所以|但是|以及|或者|一个|一种|这个|那个)$", value))
+
+
+def _terminal_prose_line(text):
+    for raw_line in reversed(text.splitlines()):
+        line = raw_line.strip()
+        if not line or re.match(r"^(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|\|)", line):
+            continue
+        return re.sub(r"^>\s?", "", line)
+    return ""
+
+
+def _duplicated_conclusions(text):
+    conclusion_headings = re.compile(
+        r"^#{1,6}\s*(?:conclusion|final takeaway|takeaway|summary|结论|总结|最后总结|写在最后)\s*$",
+        flags=re.I | re.M,
+    )
+    matches = list(conclusion_headings.finditer(str(text or "")))
+    conclusions = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        section = _prose_without_code(text[match.end():end])
+        paragraphs = _prose_paragraphs(section)
+        if paragraphs:
+            conclusions.append(_normalize_prose(paragraphs[0]))
+    return [item for item, count in Counter(item for item in conclusions if len(item) >= 20).items() if count > 1]

@@ -257,6 +257,44 @@ def test_delivery_callback_can_prove_real_publication_identity(tmp_path, monkeyp
     assert [row["hours"] for row in store.publication_ledger.due_windows()] == [1, 24, 72]
 
 
+def test_pipeline_publication_identity_preserves_generation_attribution(tmp_path, monkeypatch):
+    store = Store(tmp_path / "state.db")
+    pipeline = Pipeline(store, {"data_dir": str(tmp_path), "delivery_health": {"allow_unknown_health": True}, "publishers": {"default": {"type": "file"}}})
+    published_at = datetime.now(timezone.utc).isoformat()
+
+    class Publisher:
+        def set_delivery_callback(self, callback):
+            self.callback = callback
+
+        def deliver(self, job, platform):
+            self.callback({"status": "published", "verification": {"account_alias": "default", "content_id": "content-attributed", "url": "https://b.test/content-attributed", "published_at": published_at, "source": "management_page"}})
+            return DeliveryResult(True, "published", "content-attributed")
+
+    job = {
+        "id": "job-attributed",
+        "topic": "Agent workflow",
+        "title": "Title",
+        "body": "Body",
+        "platform_payload": {"title": "Title", "text": "Body"},
+        "artifacts": [],
+        "draft_meta": {
+            "topic_fingerprint": "topic-sha",
+            "associated_hotspot": {"hotspot_id": "hot-1", "association_mode": "auto_browser"},
+            "tool_invocation_manifest": {"capability_execution": {"executed": [{"capability_id": "media_asset_pipeline", "output_hash": "sha256:asset"}]}},
+            "video_route": {"template_family": "cinematic_explainer", "style_id": "bilibili:cinematic:amber"},
+        },
+    }
+    monkeypatch.setattr("content_platform.pipeline.build_publisher", lambda *args, **kwargs: Publisher())
+
+    assert pipeline._deliver("bilibili", job).status == "published"
+    with store.connect() as conn:
+        metadata = __import__("json").loads(conn.execute("SELECT metadata_json FROM publication_identities").fetchone()[0])
+    assert metadata["attribution"]["topic_fingerprint"] == "topic-sha"
+    assert metadata["attribution"]["associated_hotspot"]["hotspot_id"] == "hot-1"
+    assert metadata["attribution"]["capabilities"][0]["capability_id"] == "media_asset_pipeline"
+    assert metadata["attribution"]["style_id"] == "bilibili:cinematic:amber"
+
+
 def test_kuaishou_scheduled_postcheck_requires_all_management_page_evidence(tmp_path):
     ledger = PublicationLedger(tmp_path / "state.db")
     intent = ledger.create_delivery_intent(_intent())
@@ -393,3 +431,37 @@ def test_metric_collection_persists_attempt_and_releases_lease(tmp_path):
         assert conn.execute("SELECT count(*) FROM metric_collection_attempts").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM metric_collection_leases").fetchone()[0] == 0
         assert conn.execute("SELECT count(*) FROM metric_collection_retries").fetchone()[0] == 1
+
+
+def test_analysis_ready_publication_requires_three_collected_windows_and_preserves_attribution(tmp_path):
+    ledger = PublicationLedger(tmp_path / "state.db")
+    published_at = "2026-08-25T12:00:00+00:00"
+    attribution = {
+        "topic_fingerprint": "topic-sha",
+        "associated_hotspot": {"hotspot_id": "hot-1", "association_mode": "auto_browser"},
+        "capabilities": [{"capability_id": "media_asset_pipeline", "output_hash": "sha256:asset"}],
+        "template_family": "cinematic_explainer",
+        "style_id": "kuaishou:cinematic:amber",
+    }
+    identity = ledger.register_verified_publication({
+        "platform": "kuaishou",
+        "internal_account_alias": "kuaishou_main",
+        "platform_content_id": "ks-analysis-ready",
+        "canonical_url": "https://kuaishou.test/ks-analysis-ready",
+        "published_at": published_at,
+        "verification": {"account_alias": "kuaishou_main", "content_id": "ks-analysis-ready", "url": "https://kuaishou.test/ks-analysis-ready", "published_at": published_at, "source": "management_page"},
+        "attribution": attribution,
+    })
+
+    windows = ledger.due_windows(identity["identity_id"], include_all=True)
+    for window in windows[:2]:
+        ledger.record_metrics(window["id"], {"views": 100, "likes": 10}, source="backend", confidence="high")
+    assert ledger.analysis_ready_publications() == []
+
+    ledger.record_metrics(windows[2]["id"], {"views": 180, "likes": 17}, source="backend", confidence="high")
+    ready = ledger.analysis_ready_publications()
+
+    assert len(ready) == 1
+    assert ready[0]["identity_id"] == identity["identity_id"]
+    assert ready[0]["attribution"] == attribution
+    assert set(ready[0]["metrics_by_window"]) == {"1", "24", "72"}
