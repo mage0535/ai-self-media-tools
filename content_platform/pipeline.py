@@ -226,20 +226,22 @@ class Pipeline:
                         # diagnostic scores and notes.
                         rewrite["body"] = existing_body
                         rewrite.setdefault("rewrite_notes", []).append("preserved fenced code and markdown structure")
+                    persisted_meta = dict(job.get("draft_meta") or {})
+                    persisted_meta.update({
+                        k: v for k, v in ctx.items()
+                        if k in {"trend_stage", "trend_angle", "reference_titles", "style",
+                                 "source_summary", "source_catalog", "topic_clusters",
+                                 "niche_report", "viral_score", "viral_growth_report", "strategy",
+                                 "image_prompt", "video_prompt", "hashtags", "narration_guide",
+                                 "open_notebook_research", "content_hygiene",
+                                 "geo_score", "geo_details"}
+                    })
                     draft = {
                         "title": job.get("title") or job["topic"],
                         "body": rewrite["body"],
                         "provider": "pre_populated",
                         "prompt_version": self.generator.PROMPT_VERSION,
-                        "draft_meta": {
-                            k: v for k, v in ctx.items()
-                            if k in {"trend_stage", "trend_angle", "reference_titles", "style",
-                                      "source_summary", "source_catalog", "topic_clusters",
-                                      "niche_report", "viral_score", "viral_growth_report", "strategy",
-                                      "image_prompt", "video_prompt", "hashtags", "narration_guide",
-                                      "open_notebook_research", "content_hygiene",
-                                      "geo_score", "geo_details"}
-                        },
+                        "draft_meta": persisted_meta,
                     }
                     user_brief = job.get("brief") or {}
                     for _field in [
