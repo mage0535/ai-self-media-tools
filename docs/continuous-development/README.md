@@ -24,3 +24,9 @@ This directory is the coordination source of truth for the production-runtime-v8
 ## Shared-file lock convention
 
 Record one row per active work item in `STATUS.md`. Only one owner may hold a file at a time. If work overlaps, split by adapter/test file rather than editing the same core module concurrently.
+
+## Current handoff
+
+- P1-P4 are committed local milestones; production deployment remains prohibited.
+- P5 evidence-level enforcement is the current workstream.
+- Start with the `Unified capability execution evidence` row in `STATUS.md`; do not begin renderer or Canary edits until its reserved files are released.

@@ -91,6 +91,7 @@ def match_capabilities(
             "adapter": capability.get("adapter"),
             "output_contract": capability.get("output_contract"),
             "quality_gate": capability.get("quality_gate"),
+            "verification_level": capability.get("verification_level", "output_verified"),
             "required_or_optional": "required" if capability["id"] in required_ids else "optional",
         }
         if capability.get("kind") == "methodology" and capability.get("license") == "unverified":
@@ -123,6 +124,7 @@ def match_capabilities(
                     "adapter": parent.get("adapter"),
                     "output_contract": parent.get("output_contract"),
                     "quality_gate": parent.get("quality_gate"),
+                    "verification_level": parent.get("verification_level", "output_verified"),
                     "status": "planned",
                 }
                 candidates.append(existing)
