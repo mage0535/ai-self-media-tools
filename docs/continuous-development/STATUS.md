@@ -1,23 +1,23 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-08-31 Asia/Shanghai (P2 local verification complete)
+Last updated: 2026-08-31 Asia/Shanghai (P3 local verification complete)
 
 ## Current state
 
-- Phase: P2 automated admission
+- Phase: P3 completion contract and stale lease recovery
 - Production timer: disabled/inactive
 - Production release observed: `149362f`
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1537 passed + 37 subtests.
+- Latest complete regression on this branch: 1543 passed + 37 subtests.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
 | Runtime code/config/data convergence | Codex primary | `content_platform/runtime_paths.py`, `content_platform/mcp_server.py`, systemd/deploy/runtime tests | committed `c9babbd` | verify gateway drop-in and shared DB during deployment |
-| Automated admission contract | Codex primary | `content_platform/task_admission.py`, `content_platform/pipeline.py`, `content_platform/mcp_server.py`, admission tests | local_complete | audit and commit P2 |
-| Platform artifact completion contract | unassigned | pipeline acceptance modules and tests | pending | no media means no review/approved |
+| Automated admission contract | Codex primary | `content_platform/task_admission.py`, `content_platform/pipeline.py`, `content_platform/mcp_server.py`, admission tests | committed `4d9c567` | server verification during deployment |
+| Platform artifact completion contract | Codex primary | `content_platform/artifact_contract.py`, pipeline/store recovery, P3 tests | local_complete | audit and commit P3 |
 | Renderer retry/checkpoint | unassigned | `scripts/film_renderer.py`, renderer tests | pending | failed shot retries and stops early |
 | 12-platform Canary | unassigned | Task9 scripts/reports only | pending | 12/12 artifact-verified |
 
@@ -42,6 +42,9 @@ Last updated: 2026-08-31 Asia/Shanghai (P2 local verification complete)
 - Automated admission focused regression: `102 passed`.
 - P2 full regression: `1537 passed, 37 subtests passed`.
 - Production automated create/run requires one platform and a current validated run contract; MCP compiles the contract deterministically.
+- P3 completion/recovery focused regression: `89 passed`.
+- P3 full regression: `1543 passed, 37 subtests passed`.
+- Production review/approval cannot pass required zero/missing artifacts; expired generation leases recover by job ID and resume through Pipeline.
 
 ## Production release gate
 
