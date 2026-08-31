@@ -45,6 +45,7 @@ _SYNONYM_GROUPS = (
     ("text", "words", "typography", "文字", "文本"),
     ("agent", "software agent", "ai agent", "robot", "assistant", "机器人", "智能体"),
     ("search", "information retrieval", "retrieval", "magnifying glass", "searching", "检索", "搜索"),
+    ("loop", "repetitive", "repeated", "daily", "cycle", "circular arrows", "循环", "重复"),
     ("office", "workspace", "办公室", "办公空间"),
 )
 

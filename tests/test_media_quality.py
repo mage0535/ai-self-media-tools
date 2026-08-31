@@ -2154,3 +2154,15 @@ def test_cover_semantic_request_uses_visual_concepts_not_only_full_marketing_tit
     assert "AI software agent" in request["expected_concepts"]
     assert "information retrieval search" in request["expected_concepts"]
     assert any("workflow" in value.casefold() for value in request["expected_concepts"])
+
+
+def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
+    from content_platform.media import MediaBridge
+
+    job = {"topic": "AI workflow", "title": "AI workflow", "platforms": ["xiaohongshu"], "draft_meta": {}}
+    item = {"role": "section", "section": "每天喂，每天忘，每天重复，像养宠物", "purpose": "explain dependency"}
+    request = MediaBridge._semantic_request(job, item)
+
+    assert "AI software agent" in request["expected_concepts"]
+    assert "repetitive task loop" in request["expected_concepts"]
+    assert "real playful cat and dog" in request["expected_concepts"]

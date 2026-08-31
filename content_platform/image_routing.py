@@ -107,6 +107,9 @@ _VISUAL_CONCEPT_GROUPS = (
     (("代码", "开发", "code", "developer"), "software development interface"),
     (("数据", "指标", "data", "metric"), "data analytics dashboard"),
     (("宠物", "猫", "狗", "pet", "cat", "dog"), "real playful cat and dog"),
+    (("每天", "重复", "反复", "循环", "repeat", "repetitive", "loop"), "repetitive task loop"),
+    (("手动", "人工操作", "manual"), "manual human operation"),
+    (("记忆", "上下文", "memory", "context"), "organized memory archive"),
 )
 
 _REAL_SCENE_TIEBREAK_PLATFORMS = {
