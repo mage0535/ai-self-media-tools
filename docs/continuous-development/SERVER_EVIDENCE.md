@@ -46,3 +46,11 @@ Observed read-only on 2026-08-31.
 - Focused regression: 85 passed. Full regression: 1532 passed plus 37 subtests.
 - Video visual-asset regression found and fixed a checkpoint-key collision that reduced four requested scene images to two unique assets.
 - Server deployment, gateway drop-in, symlink switch, and shared-database inode verification have not run yet; timers remain disabled.
+
+## P2 local implementation evidence
+
+- Added deterministic automated-task admission before mutable job creation and before legacy job execution.
+- Production automated tasks without a valid run contract fail with an explicit admission reason and leave no new database row.
+- Hermes MCP accepts one platform per task, replaces untrusted model contract fields with a rulebook-compiled contract, and marks the job automated.
+- Legacy automated tasks lacking a contract remain in their original state and cannot enter generation.
+- Focused admission/pipeline/overnight regression: 102 passed. Full regression: 1537 passed plus 37 subtests.

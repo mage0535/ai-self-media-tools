@@ -45,3 +45,10 @@
 - MCP and CLI resolve the same shared database and private config; production never falls back to release-local state.
 - Missing production config is a startup error, not a default-media-disabled runtime.
 - Coordination documents use logical path aliases and never publish server-private absolute paths.
+
+## D8: Automated admission is deterministic and single-platform
+
+- Production automated jobs require exactly one platform and a validated current run contract before database creation.
+- MCP creates the run contract from the checked-in rulebook; model-provided contracts are not trusted.
+- Existing automated jobs are revalidated before execution, so legacy no-contract rows cannot be force-run.
+- Manual/non-production creation remains available for bounded tests and operator drafting, but cannot acquire automated production semantics implicitly.
