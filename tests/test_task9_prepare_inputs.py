@@ -29,6 +29,28 @@ def test_prepare_inputs_uses_real_same_lane_evidence_and_reports_missing(tmp_pat
     assert saved["source_url"].startswith("https://juejin.cn/")
 
 
+def test_prepare_inputs_preserves_four_distinct_related_same_platform_sources(tmp_path: Path):
+    data = tmp_path / "data"
+    pack = data / "intel" / "hot_work_parameter_pack_latest.json"
+    pack.parent.mkdir(parents=True)
+    samples = [
+        {
+            "title": f"AI workflow engineering {index}",
+            "url": f"https://juejin.cn/post/{index}",
+            "captured_at": "2026-08-26T00:00:00Z",
+            "evidence_strength": "strong_logged_search_result",
+        }
+        for index in range(5)
+    ]
+    pack.write_text(json.dumps({"platforms": {"juejin": {"top_samples": samples}}}), encoding="utf-8")
+
+    prepare_inputs(data, tmp_path / "canary")
+    saved = json.loads((tmp_path / "canary" / "_inputs" / "hotspots" / "juejin.json").read_text(encoding="utf-8"))
+    assert len(saved["related_sources"]) == 4
+    assert len({row["source_url"] for row in saved["related_sources"]}) == 4
+    assert all(len(row["provenance_hash"]) == 64 for row in saved["related_sources"])
+
+
 def test_prepare_inputs_script_entrypoint_imports_from_repo_root():
     result = subprocess.run(
         [sys.executable, "scripts/task9_prepare_inputs.py", "--help"],
