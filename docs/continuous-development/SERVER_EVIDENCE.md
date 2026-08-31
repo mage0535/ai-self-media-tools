@@ -70,3 +70,10 @@ Observed read-only on 2026-08-31.
 - Fault injection with missing platform source evidence ended in `blocked` and asserted that `generator.generate` was never called.
 - Cross-platform native identity is rejected rather than relabeled.
 - Focused pre-generation/pipeline/overnight regression: 100 passed. Full regression: 1546 passed plus 37 subtests.
+
+## P5 gap scan
+
+- Registry count: 65 capabilities; 26 executable, 20 parent-executed with parent telemetry contracts, and 19 inventory-only.
+- The current DAG promotes any contract-valid `assets` or `render` execution to `artifact_verified` based only on stage.
+- Several adapters return plans or structured evidence rather than files, so stage-based promotion can overstate final-artifact impact.
+- P5 must add explicit verification-level contracts and artifact/effect probes before expanding remaining adapters.
