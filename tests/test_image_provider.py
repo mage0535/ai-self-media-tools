@@ -9,6 +9,20 @@ import content_platform.image_provider as image_provider
 from content_platform.image_provider import ImageProviderError, _stock_result_index, generate_image, load_secret
 
 
+def test_stock_query_prefers_compiled_visual_subjects_over_raw_chinese_section():
+    prompt = (
+        "Section illustration for: 每天整理上下文。 Topic context: AI workflow. "
+        "explicit visual subjects: organized memory archive"
+    )
+    assert image_provider._stock_query(prompt) == "person organizing documents bookshelf office"
+
+    pet_prompt = (
+        "Section illustration for: 每天喂养。 Topic context: AI workflow. "
+        "explicit visual subjects: cat and dog, human working"
+    )
+    assert image_provider._stock_query(pet_prompt) == "person working home office cat dog"
+
+
 def test_load_secret_reads_named_env_file_without_exposing_value(tmp_path, monkeypatch):
     env_file = tmp_path / "provider.env"
     env_file.write_text("OPENAI_API_KEY=secret-value\nOTHER=ignored\n", encoding="utf-8")

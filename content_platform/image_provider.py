@@ -400,6 +400,20 @@ def _stock_result_index(prompt: str, count: int) -> int:
 def _stock_query(prompt: str) -> str:
     text = " ".join(str(prompt or "").replace("\n", " ").split())
     lower = text.casefold()
+    if "explicit visual subjects:" in lower:
+        subjects = lower.split("explicit visual subjects:", 1)[1].split("quality recovery attempt", 1)[0]
+        concept_queries = (
+            (("cat and dog", "human working"), "person working home office cat dog"),
+            (("organized memory archive",), "person organizing documents bookshelf office"),
+            (("identity profile card", "time cost clock calendar"), "calendar clock office desk documents"),
+            (("human feeding computer",), "person using laptop desk spoon"),
+            (("connected workflow task nodes",), "team workflow planning whiteboard"),
+            (("information retrieval search",), "person searching information laptop"),
+            (("data analytics dashboard",), "data analytics dashboard office"),
+        )
+        for required, query in concept_queries:
+            if all(concept in subjects for concept in required):
+                return query
     topic_map = {
         "ai": "artificial intelligence workspace",
         "人工智能": "artificial intelligence workspace",
