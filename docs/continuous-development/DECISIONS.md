@@ -73,3 +73,11 @@
 - `artifact_verified` additionally requires a real artifact path, readable bytes, and matching SHA-256 evidence.
 - `effect_verified` additionally requires an artifact-level probe showing the intended rule, motion, subtitle, audio, or quality effect in the final output.
 - An assets/render/gate stage name alone never upgrades evidence level.
+
+## D12: Verification level is part of the executable capability contract
+
+- Every executable capability has exactly one declared minimum verification level in the checked-in registry.
+- The registry validator rejects missing, invalid, or orphan verification declarations.
+- Routers pass the declaration to the DAG; adapters cannot self-promote by returning a status string.
+- `output_verified` remains valid for analyzers, plans, MCP results, and receipts that do not directly create a file.
+- File-producing capabilities may declare `artifact_verified` only when their adapter emits path and SHA-256 evidence; effect claims require a separate artifact-bound probe.

@@ -37,12 +37,16 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
 
     groups = registry.get("groups")
     capabilities = registry.get("capabilities")
+    verification_levels = registry.get("verification_levels")
     if not isinstance(groups, list) or not groups:
         failures.append("groups_missing")
         groups = []
     if not isinstance(capabilities, list) or not capabilities:
         failures.append("capabilities_missing")
         capabilities = []
+    if not isinstance(verification_levels, dict):
+        failures.append("verification_levels_missing")
+        verification_levels = {}
     if len(groups) != 22:
         failures.append(f"group_coverage_count:{len(groups)}")
 
@@ -155,6 +159,17 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
         if not str(capability.get("telemetry_contract") or "").strip():
             failures.append(f"{capability_id}.telemetry_contract_missing")
 
+    executable_ids = {
+        capability_id
+        for capability_id, capability in by_id.items()
+        if capability.get("lifecycle") == "executable"
+    }
+    for capability_id in sorted(executable_ids):
+        if verification_levels.get(capability_id) not in {"output_verified", "artifact_verified", "effect_verified"}:
+            failures.append(f"{capability_id}.verification_level_missing_or_invalid")
+    for capability_id in sorted(set(verification_levels) - executable_ids):
+        failures.append(f"verification_level_orphan:{capability_id}")
+
     for capability_id in sorted(set(referenced_ids) - capability_ids):
         failures.append(f"group_orphan_reference:{capability_id}")
     if registry_mcp_tools != expected_mcp_tools:
@@ -185,10 +200,14 @@ def build_capability_catalog(
     result = validate_capability_registry(registry)
     if not result["passed"]:
         raise ValueError("invalid capability registry: " + ";".join(result["failures"]))
+    levels = registry["verification_levels"]
     return {
         "version": "capability_catalog_v2",
         "groups": [dict(group) for group in registry["groups"]],
-        "capabilities": [dict(capability) for capability in registry["capabilities"]],
+        "capabilities": [
+            {**dict(capability), **({"verification_level": levels[capability["id"]]} if capability["id"] in levels else {})}
+            for capability in registry["capabilities"]
+        ],
     }
 
 

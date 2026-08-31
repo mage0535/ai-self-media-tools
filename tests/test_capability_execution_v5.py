@@ -1,3 +1,5 @@
+import hashlib
+
 from content_platform.capability_runtime import execute_generation_capabilities, validate_generation_execution
 from content_platform.execution_dag import execute_capability_dag
 
@@ -53,13 +55,16 @@ def test_generation_execution_rejects_required_pending_in_a_completed_stage():
     assert "required_capability_pending:render:video_toolchain_runner" in result["failures"]
 
 
-def test_dag_distinguishes_output_artifact_and_effect_verification():
+def test_dag_distinguishes_output_artifact_and_effect_verification(tmp_path):
+    artifact = tmp_path / "artifact.bin"
+    artifact.write_bytes(b"artifact")
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     result = execute_capability_dag(
         {
             "candidates": [
                 {"capability_id": "structure", "stage": "generation"},
-                {"capability_id": "voice_engine", "stage": "assets"},
-                {"capability_id": "media_quality", "stage": "gate"},
+                {"capability_id": "voice_engine", "stage": "assets", "verification_level": "artifact_verified"},
+                {"capability_id": "media_quality", "stage": "gate", "verification_level": "effect_verified"},
             ]
         },
         {},
@@ -68,11 +73,15 @@ def test_dag_distinguishes_output_artifact_and_effect_verification():
             "status": "executed",
             "contract_valid": True,
             "output_hash": "sha256:" + "a" * 64,
+            "output": {
+                "artifact_evidence": [{"path": str(artifact), "sha256": digest}],
+                "effect_evidence": {"passed": True, "artifact_sha256": digest, "probe": "quality_probe"},
+            },
         },
     )
 
-    assert {row["capability_id"] for row in result["output_verified"]} == {"structure"}
-    assert {row["capability_id"] for row in result["artifact_verified"]} == {"voice_engine"}
+    assert {row["capability_id"] for row in result["output_verified"]} == {"structure", "voice_engine", "media_quality"}
+    assert {row["capability_id"] for row in result["artifact_verified"]} == {"voice_engine", "media_quality"}
     assert {row["capability_id"] for row in result["effect_verified"]} == {"media_quality"}
     assert all(row["capability_id"] != "structure" for row in result["artifact_verified"])
 

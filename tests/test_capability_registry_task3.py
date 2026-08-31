@@ -33,6 +33,9 @@ def test_registry_has_complete_group_coverage_and_valid_candidate_references():
     assert set(appearances) <= capability_ids
     assert all(group["candidate_ids"] for group in groups)
     assert all(group["required_policy"] in {"required", "optional"} for group in groups)
+    executable = {item["id"] for item in registry["capabilities"] if item["lifecycle"] == "executable"}
+    assert set(registry["verification_levels"]) == executable
+    assert set(registry["verification_levels"].values()) <= {"output_verified", "artifact_verified", "effect_verified"}
 
 
 def test_catalog_does_not_synthesize_legacy_or_external_entries():

@@ -77,3 +77,13 @@ Observed read-only on 2026-08-31.
 - The current DAG promotes any contract-valid `assets` or `render` execution to `artifact_verified` based only on stage.
 - Several adapters return plans or structured evidence rather than files, so stage-based promotion can overstate final-artifact impact.
 - P5 must add explicit verification-level contracts and artifact/effect probes before expanding remaining adapters.
+
+## P5 evidence-level implementation evidence
+
+- Added an explicit verification-level map covering all 26 executable registry capabilities; registry validation rejects omissions and orphan entries.
+- Router candidates carry the declared level into the execution DAG.
+- Contract-valid adapter output is recorded as `output_verified`; stage names no longer imply artifact or effect proof.
+- Artifact proof now checks a real non-empty file and recomputes SHA-256. Effect proof additionally checks a named passing probe whose artifact hash matches the verified file.
+- Failure injection confirmed that an assets-stage adapter with no file evidence fails a required artifact contract, and an unbound effect hash fails effect verification.
+- Focused capability/router/DAG/MCP/Pipeline/Canary regression: 150 passed. Full regression: 1550 passed plus 37 subtests.
+- This is local implementation evidence only. Server capability runs and real media artifacts have not yet been revalidated against this branch; timers remain disabled.

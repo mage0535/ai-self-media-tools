@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 import re
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -88,6 +90,46 @@ def _artifact_required(record: dict[str, Any]) -> bool:
     return record.get("artifact_required") is True or record.get("requires_artifact_verification") is True
 
 
+def _verification_level(record: dict[str, Any]) -> str:
+    value = str(record.get("verification_level") or "output_verified")
+    if value not in {"output_verified", "artifact_verified", "effect_verified"}:
+        raise ValueError(f"unsupported verification level: {value}")
+    return value
+
+
+def _artifact_evidence(output: Any) -> list[dict[str, str]]:
+    if not isinstance(output, dict):
+        return []
+    raw = output.get("artifact_evidence")
+    if not isinstance(raw, list):
+        evidence = output.get("evidence") if isinstance(output.get("evidence"), dict) else {}
+        raw = evidence.get("artifacts") if isinstance(evidence.get("artifacts"), list) else []
+    verified = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        path = Path(str(item.get("path") or ""))
+        expected = str(item.get("sha256") or item.get("checksum") or "").removeprefix("sha256:")
+        if not path.is_file() or path.stat().st_size <= 0 or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            continue
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual == expected:
+            verified.append({"path": str(path), "sha256": actual})
+    return verified
+
+
+def _effect_evidence(output: Any, artifacts: list[dict[str, str]]) -> dict[str, Any] | None:
+    if not isinstance(output, dict):
+        return None
+    evidence = output.get("effect_evidence")
+    if not isinstance(evidence, dict) or evidence.get("passed") is not True or not str(evidence.get("probe") or "").strip():
+        return None
+    artifact_sha = str(evidence.get("artifact_sha256") or "").removeprefix("sha256:")
+    if artifact_sha not in {item["sha256"] for item in artifacts}:
+        return None
+    return dict(evidence, artifact_sha256=artifact_sha)
+
+
 def execute_capability_dag(
     plan: dict[str, Any],
     draft: dict[str, Any],
@@ -139,16 +181,28 @@ def execute_capability_dag(
         if record.get("status") == "executed":
             executed.append(record)
             if record.get("contract_valid") is True and record.get("output_hash"):
-                stage = str(record.get("stage") or "generation")
-                verified = {**record, "status": "output_verified"}
-                if stage in {"assets", "render"}:
-                    verified["status"] = "artifact_verified"
-                    artifact_verified.append(verified)
-                elif stage == "gate":
-                    verified["status"] = "effect_verified"
-                    effect_verified.append(verified)
-                else:
-                    output_verified.append(verified)
+                level = _verification_level(item)
+                verified = {**record, "status": "output_verified", "verification_level": level}
+                output_verified.append(verified)
+                artifacts = _artifact_evidence(record.get("output"))
+                if level in {"artifact_verified", "effect_verified"} and artifacts:
+                    artifact_verified.append({**verified, "status": "artifact_verified", "verified_artifacts": artifacts})
+                if level == "effect_verified":
+                    effect = _effect_evidence(record.get("output"), artifacts)
+                    if effect:
+                        effect_verified.append({**verified, "status": "effect_verified", "verified_artifacts": artifacts, "verified_effect": effect})
+                if level in {"artifact_verified", "effect_verified"} and not artifacts:
+                    failure = {**record, "reason": "required_artifact_not_verified"}
+                    if required:
+                        failures.append(failure)
+                    else:
+                        optional_failures.append(failure)
+                elif level == "effect_verified" and not _effect_evidence(record.get("output"), artifacts):
+                    failure = {**record, "reason": "required_effect_not_verified"}
+                    if required:
+                        failures.append(failure)
+                    else:
+                        optional_failures.append(failure)
             else:
                 record["reason"] = "artifact_verification_failed"
                 if required:
