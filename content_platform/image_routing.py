@@ -106,9 +106,9 @@ _VISUAL_CONCEPT_GROUPS = (
     (("内容管理", "自媒体", "content management"), "content management dashboard"),
     (("代码", "开发", "code", "developer"), "software development interface"),
     (("数据", "指标", "data", "metric"), "data analytics dashboard"),
-    (("宠物", "猫", "狗", "pet", "cat", "dog"), "real playful cat and dog"),
+    (("宠物", "猫", "狗", "pet", "cat", "dog"), "cat and dog"),
     (("每天", "重复", "反复", "循环", "repeat", "repetitive", "loop"), "repetitive task loop"),
-    (("手动", "人工操作", "manual"), "manual human operation"),
+    (("手动", "人工操作", "每天喂", "喂", "manual"), "human working"),
     (("记忆", "上下文", "memory", "context"), "organized memory archive"),
 )
 
