@@ -126,3 +126,20 @@ def test_generation_context_embeds_auditable_skill_rule_consumption_hash():
     payload = json.loads(result["text"])
     assert payload["skill_rule_consumption"]["consumption_hash"] == result["skill_rule_consumption"]["consumption_hash"]
     assert payload["skill_rule_consumption"]["affected_outputs"] == ["bounded_model_input", "draft"]
+
+
+def test_consumption_proof_does_not_duplicate_large_rule_id_inventory_into_provider_input():
+    rules = [
+        {"id": f"skill:large:{index}:" + "x" * 120, "source": "skill:large", "source_hash": "source-sha", "text": f"Rule {index}: " + "detail " * 80}
+        for index in range(100)
+    ]
+    result = compile_generation_context(
+        platform="wechat",
+        content_format="article",
+        stage="generate",
+        brief={"compiled_skill_rules": {"version": "compiled_skill_rules_v1", "rules": rules}},
+    )
+    payload = json.loads(result["text"])
+    assert result["byte_count"] <= 12000
+    assert payload["skill_rule_consumption"]["rule_count"] == 100
+    assert "rule_ids" not in payload["skill_rule_consumption"]
