@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import hashlib
 import json
 import os
 import re
@@ -503,6 +504,12 @@ def parse_logged_short_video_search_text(text: str, *, platform: str, query: str
     return rows
 
 
+def logged_search_artifact_stem(platform: str, query: str) -> str:
+    readable = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(query))[:32].strip("_") or "query"
+    digest = hashlib.sha256(str(query).encode("utf-8")).hexdigest()[:10]
+    return f"{platform}_{readable}_{digest}_search"
+
+
 def collect_logged_short_video_search(
     platform: str,
     query: str,
@@ -542,8 +549,9 @@ def collect_logged_short_video_search(
     base = Path(output_dir)
     base.mkdir(parents=True, exist_ok=True)
     status: dict[str, Any] = {"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0, "route": route_name}
-    text_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.txt"
-    screenshot_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.png"
+    artifact_stem = logged_search_artifact_stem(platform, query)
+    text_path = base / f"{artifact_stem}.txt"
+    screenshot_path = base / f"{artifact_stem}.png"
     dom_snapshot_path = base / f"{platform}_{re.sub(r'[^a-zA-Z0-9_-]+', '_', query)[:40]}_search.html"
     for artifact in (screenshot_path, dom_snapshot_path):
         artifact.unlink(missing_ok=True)

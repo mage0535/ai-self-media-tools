@@ -10,7 +10,15 @@ from content_platform.hot_work_intelligence import (
     parse_tiktok_search_text,
     parse_xiaohongshu_search_text,
     should_use_regional_proxy,
+    logged_search_artifact_stem,
 )
+
+
+def test_logged_search_artifact_stem_keeps_distinct_chinese_queries_unique():
+    first = logged_search_artifact_stem("xiaohongshu", "AI工作流")
+    second = logged_search_artifact_stem("xiaohongshu", "AI效率工具")
+    assert first != second
+    assert first.startswith("xiaohongshu_AI_")
 
 
 def test_save_collection_writes_latest_to_mutable_data_root(tmp_path, monkeypatch):
