@@ -2172,6 +2172,12 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     })
     assert memory["expected_concepts"] == ["organized memory archive"]
 
+    identity = MediaBridge._semantic_request(job, {
+        "role": "section", "section": "一个月下来，反复教它我是谁，花了不少时间。", "purpose": "show identity setup cost"
+    })
+    assert "identity profile card" in identity["expected_concepts"]
+    assert "time cost clock calendar" in identity["expected_concepts"]
+
 
 def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):
     from content_platform.media import MediaBridge

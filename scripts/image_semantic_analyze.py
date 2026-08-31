@@ -47,6 +47,8 @@ _SYNONYM_GROUPS = (
     ("search", "information retrieval", "retrieval", "magnifying glass", "searching", "检索", "搜索"),
     ("loop", "repetitive", "repeated", "daily", "cycle", "circular arrows", "循环", "重复"),
     ("archive", "memory archive", "bookshelf", "bookshelves", "library", "books", "documents", "document", "papers", "folders", "organized boxes", "档案", "归档", "文档", "书架"),
+    ("identity", "profile card", "id card", "profile", "personal information", "avatar card", "身份", "个人资料"),
+    ("time", "clock", "calendar", "deadline", "watch", "hourglass", "时间", "日历", "时钟", "沙漏"),
     ("office", "workspace", "办公室", "办公空间"),
 )
 
