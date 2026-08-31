@@ -70,13 +70,29 @@ def _tools():
         return {"count": len(ranked), "trends": ranked}
 
     async def mcp_create_job(topic: str, platforms: str = "wechat", brief: str = "{}") -> dict:
+        from content_platform.run_contract import build_run_contract
+
         pipeline, _store = pipeline_and_store()
         plats = [p.strip() for p in platforms.split(",") if p.strip()]
-        job = pipeline.create(topic, plats, json.loads(brief))
+        if len(plats) != 1:
+            raise ValueError("MCP automated jobs require exactly one platform")
+        parsed = json.loads(brief)
+        if not isinstance(parsed, dict):
+            raise ValueError("brief must be a JSON object")
+        parsed = dict(parsed)
+        parsed["automated_workflow"] = True
+        parsed["run_contract"] = build_run_contract(plats[0])
+        job = pipeline.create(topic, plats, parsed)
         return {"job_id": job["id"], "state": job["state"], "topic": topic}
 
     async def mcp_run_job(job_id: str) -> dict:
-        pipeline, _store = pipeline_and_store()
+        from content_platform.task_admission import validate_task_admission
+
+        pipeline, store = pipeline_and_store()
+        existing = store.get_job(job_id)
+        brief = dict(existing.get("brief") or {})
+        brief["automated_workflow"] = True
+        validate_task_admission(existing["platforms"], brief)
         job = pipeline.run(job_id)
         return {"job_id": job_id, "state": job.get("state", "unknown")}
 

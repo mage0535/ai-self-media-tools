@@ -57,6 +57,7 @@ from .workflow_runtime import (
     write_platform_report,
 )
 from .platform_workflow_context import load_platform_workflow_context
+from .task_admission import validate_task_admission
 
 
 class Pipeline:
@@ -106,10 +107,12 @@ class Pipeline:
         explicit_language = any(key in explicit_brief for key in ("language", "locale", "language_locked"))
         if platforms and all(str(p).casefold() in GLOBAL_EN_PLATFORMS for p in platforms) and not explicit_language:
             resolved["language"] = "en"
+        validate_task_admission(platforms, resolved)
         return self.store.create_job(topic, platforms, resolved, profile, topic_fingerprint)
 
     def run(self, job_id, force=False):
         job = self.store.get_job(job_id)
+        validate_task_admission(job["platforms"], job.get("brief") or {})
         if job["state"] != "created" and not force:
             return self._hydrate(job)
         if force and job["state"] not in {"created", "failed", "blocked", "rejected"}:
