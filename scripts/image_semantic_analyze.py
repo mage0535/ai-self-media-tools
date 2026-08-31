@@ -46,6 +46,7 @@ _SYNONYM_GROUPS = (
     ("agent", "software agent", "ai agent", "robot", "assistant", "机器人", "智能体"),
     ("search", "information retrieval", "retrieval", "magnifying glass", "searching", "检索", "搜索"),
     ("loop", "repetitive", "repeated", "daily", "cycle", "circular arrows", "循环", "重复"),
+    ("archive", "memory archive", "bookshelf", "bookshelves", "library", "books", "documents", "document", "papers", "folders", "organized boxes", "档案", "归档", "文档", "书架"),
     ("office", "workspace", "办公室", "办公空间"),
 )
 
