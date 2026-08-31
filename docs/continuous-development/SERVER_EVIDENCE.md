@@ -118,3 +118,14 @@ Observed read-only on 2026-08-31.
 - Automated workflows enable bounded image quality recovery by default, with the existing maximum-attempt cap retained.
 - Focused media/image/provider regression: 69 passed. Full regression: 1559 passed plus 37 subtests.
 - No paid or live server provider was invoked by these tests; production image Canary remains a deployment gate and timers remain disabled.
+
+## P8 local renderer recovery and effect evidence
+
+- Fault injection rendered shot 1, failed shot 2 twice, and proved shot 3 was never invoked.
+- A second test failed shot 2 once, retried only shot 2, then continued to shot 3 after success.
+- The renderer writes `shot_render_checkpoint.json` atomically with completed records, attempt counts, or the terminal failed shot.
+- Scene execution evidence v2 recomputes final MP4 SHA and validates each scene's purpose, source-asset SHA, camera, subject/text motion, transition, rhythm, interaction prompt, two renderer records, and motion probe.
+- High-quality mode rejects scene fallback, missing motion, transition mismatch, asset-hash mismatch, or incomplete renderer records.
+- Runtime adapter and registry now require `video_toolchain_runner` effect verification; file existence without scene evidence fails.
+- Focused renderer/effect/runner/Pipeline/Canary regression: 222 passed. Full regression: 1567 passed plus 37 subtests.
+- No live FFmpeg/Playwright server render was run in this phase; production video Canary remains required and timers remain disabled.

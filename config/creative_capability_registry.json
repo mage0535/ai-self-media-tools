@@ -13,7 +13,7 @@
     "agnes_video_v20": "output_verified",
     "seo_geo_check": "output_verified",
     "content_platform.video_recipe": "output_verified",
-    "video_toolchain_runner": "output_verified",
+    "video_toolchain_runner": "effect_verified",
     "shotcraft_moves": "output_verified",
     "voice_engine": "output_verified",
     "lower_third_subtitle_renderer": "output_verified",

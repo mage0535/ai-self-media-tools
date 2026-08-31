@@ -63,6 +63,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(meta["tts_fingerprint"]["provider"], "edge-tts")
         self.assertTrue(meta["subtitle_evidence"]["passed"])
         self.assertEqual(meta["observed_scene_evidence"]["s01"]["frame_difference"], 0.02)
+        self.assertEqual(meta["scene_execution_evidence"]["scenes"][0]["scene_id"], "s01")
 
     def test_each_job_overwrites_generator_checkpoint_dir(self):
         first = self.pipeline.create("First topic", ["wechat"], {"audience": "operators"})

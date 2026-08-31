@@ -105,3 +105,11 @@
 - An automated image task always enables bounded quality recovery even if an operator omitted the optional flag.
 - Provider exceptions record the attempted provider before rotating, so generated fallback can be proven rather than inferred.
 - Completed images are not regenerated after a later asset timeout; missing or invalid assets resume independently.
+
+## D16: Video rendering fails locally and proves final effects
+
+- Shots render serially with a bounded local retry budget; an exhausted shot stops the renderer before any later shot starts.
+- A valid cached shot must meet file-size and measured-duration requirements; invalid partial output is deleted before retry.
+- Shot progress and attempt counts are written atomically after each successful shot and on terminal shot failure.
+- Scene execution evidence binds every plan field, source-asset SHA, renderer mode, transition mapping, and measured motion probe to the final MP4 SHA.
+- A final MP4 path alone is not renderer execution proof; the capability reaches `effect_verified` only with artifact-bound passing scene evidence.

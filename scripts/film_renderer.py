@@ -363,6 +363,104 @@ def segment_shot_durations(tts_duration: float, *, element_motion: bool) -> tupl
         b_duration = float(tts_duration) - a_duration + XFADE_DUR_LONG + 1.50
     return a_duration, b_duration
 
+
+async def execute_shot_sequence(shot_durs, render_one, *, max_attempts: int = 2, checkpoint=None):
+    """Render shots serially, retrying only the current shot and failing fast."""
+    if int(max_attempts) < 1:
+        raise ValueError("max_attempts must be at least 1")
+    records: list[dict[str, object]] = []
+    for name, duration in shot_durs:
+        attempts = []
+        final_record = None
+        for attempt in range(1, int(max_attempts) + 1):
+            result = await render_one(name, duration, attempt)
+            attempts.append({"attempt": attempt, "passed": bool(result)})
+            if result:
+                final_record = dict(result)
+                final_record.setdefault("name", name)
+                final_record["attempt_count"] = attempt
+                final_record["attempts"] = list(attempts)
+                records.append(final_record)
+                if checkpoint:
+                    checkpoint({"passed": True, "failed_shot": "", "records": records})
+                break
+        if final_record is None:
+            failure = {
+                "passed": False,
+                "failed_shot": name,
+                "failed_attempts": attempts,
+                "records": records,
+            }
+            if checkpoint:
+                checkpoint(failure)
+            return failure
+    return {"passed": True, "failed_shot": "", "records": records}
+
+
+def _write_json_atomic(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def build_scene_effect_evidence(
+    final: Path,
+    scenes: list[dict[str, object]],
+    *,
+    quality_profile: str,
+    expected_scene_count: int,
+) -> dict[str, object]:
+    """Prove the declared scene plan reached measured final-video execution."""
+    final = Path(final)
+    artifact_sha256 = _sha256_file(final) if final.is_file() and final.stat().st_size > 0 else ""
+    failures: list[str] = []
+    if not artifact_sha256:
+        failures.append("final_video_missing")
+    if len(scenes) != int(expected_scene_count):
+        failures.append(f"scene_count:{len(scenes)}:{expected_scene_count}")
+    required = {
+        "scene_id", "display_purpose", "asset_path", "asset_sha256", "camera_language", "camera_index",
+        "subject_motion", "text_motion", "text_motion_index", "transition", "declared_transition",
+        "rhythm_beat", "interaction_prompt", "renderer_modes", "actual_transition_after", "motion_probe",
+    }
+    for scene in scenes:
+        scene_id = str(scene.get("scene_id") or "unknown")
+        missing = sorted(field for field in required if field not in scene)
+        if missing:
+            failures.append(f"{scene_id}:fields_missing:{','.join(missing)}")
+            continue
+        asset = Path(str(scene.get("asset_path") or ""))
+        actual_asset_hash = _sha256_file(asset) if asset.is_file() else ""
+        if not actual_asset_hash or actual_asset_hash != str(scene.get("asset_sha256") or ""):
+            failures.append(f"{scene_id}:asset_hash_mismatch")
+        renderer_modes = [str(value or "") for value in scene.get("renderer_modes") or []]
+        if len(renderer_modes) != 2 or not all(renderer_modes):
+            failures.append(f"{scene_id}:renderer_modes_incomplete")
+        actual_transition = str(scene.get("actual_transition_after") or "")
+        if actual_transition != "end_hold" and actual_transition != str(scene.get("transition") or ""):
+            failures.append(f"{scene_id}:transition_not_applied")
+        motion = scene.get("motion_probe") if isinstance(scene.get("motion_probe"), dict) else {}
+        if motion.get("passed") is not True:
+            failures.append(f"{scene_id}:motion_probe_failed")
+        if str(quality_profile).casefold() == "high" and scene.get("fallback") is True:
+            failures.append(f"{scene_id}:cinematic_fallback")
+    passed = not failures
+    return {
+        "version": "scene_execution_evidence_v2",
+        "renderer_version": RENDERER_VERSION,
+        "passed": passed,
+        "artifact_sha256": artifact_sha256,
+        "failures": failures,
+        "scenes": scenes,
+        "effect_evidence": {
+            "passed": passed,
+            "artifact_sha256": artifact_sha256,
+            "probe": "scene_motion_and_director_mapping",
+            "scene_count": len(scenes),
+        },
+    }
+
 # 镜头A 背景运动（建立镜头）：8 种电影运镜轮换（推入/拉出/摇移/呼吸/斜推）
 # 08-14 增强：从 4 种微动升级为 8 种电影运镜，增加视觉层次
 KB_A = [
@@ -1545,18 +1643,18 @@ def main() -> int:
             webm = await record_bounded(name, html_path, duration + 0.5, frame_driven=True)
             return _finalize_recorded_shot(webm, out / "shots" / f"{name}.mp4", duration) if webm else None
 
-        failed_shots = []
-        for name, sd in shot_durs:
+        async def render_one(name: str, sd: float, attempt: int):
             hp = out / "html" / f"{name}.html"
             target = out / "shots" / f"{name}.mp4"
             # 复用校验：文件存在 + 大小达标 + **时长接近目标**（防 timeout 中断的残废产物被复用）
-            if target.is_file() and target.stat().st_size > 50_000:
+            if attempt == 1 and target.is_file() and target.stat().st_size > 50_000:
                 existing_dur = _duration(str(target))
                 if existing_dur >= sd - 0.35:
                     print(f"{name}: 复用已有镜头 ({existing_dur:.2f}s)")
-                    shot_records.append({"name": name, "renderer": "cinematic-cache", "fallback": False, "reused": True})
-                    continue
+                    return {"name": name, "renderer": "cinematic-cache", "fallback": False, "reused": True}
                 print(f"{name}: 已有镜头时长异常 ({existing_dur:.2f}s vs 目标 {sd:.2f}s)，重渲染", file=sys.stderr)
+            if target.is_file():
+                target.unlink()
             # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → Playwright CSS 录制。
             # high/cinematic 模式绝不静默降级为 still-motion。
             seg_i = int(name[5:7])
@@ -1566,32 +1664,37 @@ def main() -> int:
                 if not mp4:
                     if render_policy["motion_mode"] == "safe":
                         mp4 = await render_still(name, str(hp), sd)
-                        shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
-                    else:
-                        failed_shots.append(name)
-                    shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": True, "reused": False})
-                else:
-                    shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False})
-                continue
+                        if mp4:
+                            return {"name": name, "renderer": "still-motion", "fallback": True, "reused": False}
+                    return None
+                return {"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False}
             if render_policy["motion_mode"] == "cinematic":
                 webm = await record_bounded(name, str(hp), sd + 0.5)
                 mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
                 if mp4:
-                    shot_records.append({"name": name, "renderer": "playwright-video", "fallback": False, "reused": False})
-                else:
-                    failed_shots.append(name)
-                    shot_records.append({"name": name, "renderer": "playwright-video", "fallback": True, "reused": False})
+                    return {"name": name, "renderer": "playwright-video", "fallback": False, "reused": False}
+                return None
             else:
                 mp4 = await render_still(name, str(hp), sd)
                 if mp4:
-                    shot_records.append({"name": name, "renderer": "still-motion", "fallback": False, "reused": False})
-                else:
-                    failed_shots.append(name)
-                    shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
-        if failed_shots:
-            print(f"镜头渲染失败: {', '.join(failed_shots)}", file=sys.stderr)
-            return False
-        return True
+                    return {"name": name, "renderer": "still-motion", "fallback": False, "reused": False}
+                return None
+
+        retry_budget = max(1, int(os.environ.get("FILM_SHOT_MAX_ATTEMPTS", "2")))
+        checkpoint_path = out / "shot_render_checkpoint.json"
+        result = await execute_shot_sequence(
+            shot_durs,
+            render_one,
+            max_attempts=retry_budget,
+            checkpoint=lambda payload: _write_json_atomic(checkpoint_path, payload),
+        )
+        shot_records.extend(result["records"])
+        if not result["passed"]:
+            print(
+                f"镜头渲染失败: {result['failed_shot']}，已在本镜头重试 {len(result['failed_attempts'])} 次并立即停止",
+                file=sys.stderr,
+            )
+        return bool(result["passed"])
     if not asyncio.run(_render()):
         return 3
 
@@ -1888,22 +1991,15 @@ def main() -> int:
             "static_ratio": scene_static_ratio(scene_motion),
             "motion_probe": scene_motion,
         })
-    execution_failures = [
-        row["scene_id"] for row in execution_scenes
-        if row["fallback"] or not row["renderer_modes"]
-    ]
-    execution_evidence = {
-        "version": "scene_execution_evidence_v1",
-        "renderer_version": RENDERER_VERSION,
-        "passed": not execution_failures,
-        "failures": execution_failures,
-        "scenes": execution_scenes,
-    }
-    (out / "scene_execution_evidence.json").write_text(
-        json.dumps(execution_evidence, ensure_ascii=False, indent=2), encoding="utf-8"
+    execution_evidence = build_scene_effect_evidence(
+        final,
+        execution_scenes,
+        quality_profile=str(render_policy["quality_profile"]),
+        expected_scene_count=8,
     )
+    _write_json_atomic(out / "scene_execution_evidence.json", execution_evidence)
     if render_policy["quality_profile"] == "high" and not execution_evidence["passed"]:
-        print(f"视觉导演执行验证失败: {execution_failures}", file=sys.stderr)
+        print(f"视觉导演执行验证失败: {execution_evidence['failures']}", file=sys.stderr)
         return 4
 
     # cinema visual gate：从 16 镜头抽帧生成 8 张主卡 PNG（runner 检查 cards/*.png）
