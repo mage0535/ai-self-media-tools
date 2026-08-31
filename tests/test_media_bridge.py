@@ -4,6 +4,20 @@ from pathlib import Path
 from PIL import Image
 
 from content_platform.media import MediaBridge
+from content_platform.adapters.media import normalize_article_sections
+
+
+def test_normalize_article_sections_merges_short_transition_into_next_substantive_section():
+    sections = normalize_article_sections({"draft_meta": {"sections": [
+        {"title": "A complete opening that explains the concrete reader problem."},
+        {"title": "我之前也是这样。"},
+        {"title": "每天打开工具，整理上下文，再反复检查输出是否跑偏。"},
+        {"title": "最后用清单确认来源、负责人和截止时间。"},
+    ]}}, limit=4)
+
+    assert "我之前也是这样" in sections[1]
+    assert "整理上下文" in sections[1]
+    assert len(sections) == 3
 
 
 def test_cover_generation_reuses_existing_verified_cover(tmp_path):
