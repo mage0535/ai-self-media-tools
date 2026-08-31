@@ -766,7 +766,14 @@ class MediaBridge:
     def _derive_cover_semantic_evidence(parent, output, cover_evidence):
         if not isinstance(parent, dict) or parent.get("passed") is not True:
             return {"passed": False, "failure": "cover_parent_semantic_evidence_missing"}
-        if not isinstance(cover_evidence, dict) or cover_evidence.get("passed") is not True:
+        measured_v2 = isinstance(cover_evidence, dict) and all(
+            cover_evidence.get(key) is True
+            for key in (
+                "typography_overlay_verified", "title_safe_zone_verified",
+                "horizontal_safe_zone_verified", "visual_variance_verified",
+            )
+        ) and len(cover_evidence.get("dimensions") or []) == 2
+        if not isinstance(cover_evidence, dict) or not (cover_evidence.get("passed") is True or measured_v2):
             return {"passed": False, "failure": "cover_transform_evidence_invalid"}
         path = Path(output)
         if not path.is_file():
@@ -779,6 +786,7 @@ class MediaBridge:
                 "derivative_of_sha256": str(parent.get("image_sha256") or parent.get("output_sha256") or ""),
                 "derivative_transform": "cover_title_and_layout_overlay",
                 "derivative_renderer": str(cover_evidence.get("renderer") or "cover_director"),
+                "derived_from_background_semantics": True,
                 "evidence_level": "artifact_verified",
                 "passed": True,
             }
