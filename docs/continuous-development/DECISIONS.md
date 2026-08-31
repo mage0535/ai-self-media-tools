@@ -52,3 +52,10 @@
 - MCP creates the run contract from the checked-in rulebook; model-provided contracts are not trusted.
 - Existing automated jobs are revalidated before execution, so legacy no-contract rows cannot be force-run.
 - Manual/non-production creation remains available for bounded tests and operator drafting, but cannot acquire automated production semantics implicitly.
+
+## D9: Platform artifact requirements do not depend on mutable media flags
+
+- Short-video platforms require a real non-empty video and cover before production review or approval.
+- Article/carousel platforms require real non-empty inline image and cover artifacts.
+- Platforms that explicitly permit text-only delivery are not forced to invent media.
+- Expired generation leases are recovered through a targeted store transaction and normal Pipeline claim, never by deleting locks with ad hoc SQL.

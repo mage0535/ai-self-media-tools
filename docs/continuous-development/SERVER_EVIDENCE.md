@@ -54,3 +54,11 @@ Observed read-only on 2026-08-31.
 - Hermes MCP accepts one platform per task, replaces untrusted model contract fields with a rulebook-compiled contract, and marks the job automated.
 - Legacy automated tasks lacking a contract remain in their original state and cannot enter generation.
 - Focused admission/pipeline/overnight regression: 102 passed. Full regression: 1537 passed plus 37 subtests.
+
+## P3 local implementation evidence
+
+- Added a platform artifact contract independent of mutable media-enabled settings.
+- Production review/approval rejects zero, missing, empty, or unreadable required video/cover/image files.
+- Text-only X/Twitter delivery remains valid without invented media requirements.
+- Added targeted stale generation lease recovery; it clears only the expired job lease, records `stale_job_recovered`, and resumes through normal workflow locking/claiming.
+- Focused completion/store/pipeline regression: 89 passed. Full regression: 1543 passed plus 37 subtests.

@@ -560,6 +560,26 @@ class Store:
                 recovered += 1
         return recovered
 
+    def recover_stale_job(self, job_id):
+        """Recover one expired generation lease without touching other jobs."""
+        now = utc_now()
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """SELECT id,state FROM jobs
+                WHERE id=? AND state='generating' AND lease_expires_at<>'' AND lease_expires_at<=?""",
+                (job_id, now),
+            ).fetchone()
+            if not row:
+                return False
+            conn.execute(
+                """UPDATE jobs SET state='failed',lease_owner='',lease_expires_at='',
+                last_error='stale lease recovered',updated_at=? WHERE id=?""",
+                (now, job_id),
+            )
+            self._event(conn, job_id, "stale_job_recovered", {"from": "generating", "to": "failed"})
+            return True
+
     def record_event(self, job_id, event, detail=None):
         with self.connect() as conn:
             self._event(conn, job_id, event, detail or {})

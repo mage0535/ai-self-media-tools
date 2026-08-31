@@ -58,6 +58,7 @@ from .workflow_runtime import (
 )
 from .platform_workflow_context import load_platform_workflow_context
 from .task_admission import validate_task_admission
+from .artifact_contract import validate_platform_artifacts
 
 
 class Pipeline:
@@ -111,8 +112,11 @@ class Pipeline:
         return self.store.create_job(topic, platforms, resolved, profile, topic_fingerprint)
 
     def run(self, job_id, force=False):
+        recovered_stale = self.store.recover_stale_job(job_id)
         job = self.store.get_job(job_id)
         validate_task_admission(job["platforms"], job.get("brief") or {})
+        if recovered_stale:
+            force = True
         if job["state"] != "created" and not force:
             return self._hydrate(job)
         if force and job["state"] not in {"created", "failed", "blocked", "rejected"}:
@@ -749,6 +753,20 @@ class Pipeline:
                 self.store.save_draft(
                     job_id, draft["title"], draft["body"], risk["level"], risk, draft.get("prompt_version", ""), draft.get("draft_meta", {})
                 )
+                artifact_contract = validate_platform_artifacts(self.store.get_job(job_id), self.store.artifacts(job_id))
+                if os.environ.get("CONTENT_PLATFORM_RUNTIME_MODE", "").casefold() == "production" and not artifact_contract["passed"]:
+                    runner.block(
+                        "validate_platform_artifact_contract",
+                        "platform_artifact_contract_failed",
+                        "required platform deliverables are missing or unreadable",
+                        artifact_contract,
+                        depends_on=["run_final_platform_quality_gate"],
+                    )
+                runner.succeeded(
+                    "validate_platform_artifact_contract",
+                    artifact_contract,
+                    depends_on=["run_final_platform_quality_gate"],
+                )
                 reviewed = self.store.release_claim(job_id, owner, "review_required", "review_requested", detail={"risk": risk["level"]})
                 if self.config.get("delivery", {}).get("auto_stage_review_required"):
                     reviewed = self.stage_drafts(job_id, owner=owner, already_locked=True)
@@ -776,6 +794,9 @@ class Pipeline:
         job = self.store.get_job(job_id)
         if job["state"] != "review_required":
             raise ValueError(f"only review_required jobs can be approved, got: {job['state']}")
+        artifact_contract = validate_platform_artifacts(job, self.store.artifacts(job_id))
+        if os.environ.get("CONTENT_PLATFORM_RUNTIME_MODE", "").casefold() == "production" and not artifact_contract["passed"]:
+            raise ValueError("platform artifact contract failed: " + ",".join(artifact_contract["missing_kinds"]))
         self.store.record_approval(job_id, actor, "approved", note)
         approved = self.store.transition(job_id, {"review_required"}, "approved", "human_approved", {"actor": actor})
         self.notifier.send("approved", approved)
