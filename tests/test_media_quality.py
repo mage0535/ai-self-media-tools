@@ -2163,9 +2163,10 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     item = {"role": "section", "section": "每天喂，每天忘，每天重复，像养宠物", "purpose": "explain dependency"}
     request = MediaBridge._semantic_request(job, item)
 
-    assert "AI software agent" in request["expected_concepts"]
     assert "repetitive task loop" in request["expected_concepts"]
-    assert "real playful cat and dog" in request["expected_concepts"]
+    assert "cat and dog" in request["expected_concepts"]
+    assert "human working" in request["expected_concepts"]
+    assert "information retrieval search" not in request["expected_concepts"]
 
 
 def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):

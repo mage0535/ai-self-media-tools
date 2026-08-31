@@ -691,14 +691,15 @@ class MediaBridge:
             ])
             values = visual_concepts(concept_text) or list(item.get("expected_concepts") or [])
         else:
-            concept_text = " ".join([
-                str(job.get("topic") or ""), str(job.get("title") or ""),
-                str(item.get("section") or ""), str(item.get("purpose") or ""),
-            ])
-            values = visual_concepts(concept_text) or [
+            section_text = " ".join([str(item.get("section") or ""), str(item.get("purpose") or "")])
+            topic_text = " ".join([str(job.get("topic") or ""), str(job.get("title") or "")])
+            section_concepts = visual_concepts(section_text)
+            if len(section_concepts) > 2 and "AI software agent" in section_concepts:
+                section_concepts.remove("AI software agent")
+            values = section_concepts or visual_concepts(topic_text) or [
                 *(item.get("expected_concepts") or []), job.get("topic"), job.get("title")
             ]
-        if role != "cover":
+        if role != "cover" and not section_concepts:
             values.extend([item.get("section"), item.get("purpose")])
         for value in values:
             text = " ".join(str(value or "").split()).strip()
