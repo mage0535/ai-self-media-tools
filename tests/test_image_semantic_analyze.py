@@ -123,6 +123,19 @@ def test_score_is_deterministic_and_supports_multilingual_synonyms():
     assert matched == ["人工智能", "手机", "猫"]
 
 
+def test_visual_equivalents_ground_agent_search_and_dashboard_concepts():
+    score, matched = analyzer.score_semantics(
+        ["AI software agent", "connected workflow task nodes", "information retrieval search", "data analytics dashboard"],
+        "A futuristic robot uses a magnifying glass beside several digital displays in a modern office.",
+        ["artificial intelligence", "robot", "screen", "magnifying glass"],
+    )
+
+    assert score >= analyzer.DEFAULT_THRESHOLD
+    assert "AI software agent" in matched
+    assert "information retrieval search" in matched
+    assert "data analytics dashboard" in matched
+
+
 def test_model_numeric_score_is_ignored(tmp_path, monkeypatch):
     image = tmp_path / "unrelated.jpg"
     image.write_bytes(b"not-a-real-jpeg-but-valid-test-input")

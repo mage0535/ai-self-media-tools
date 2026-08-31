@@ -39,11 +39,12 @@ _SYNONYM_GROUPS = (
     ("dog", "dogs", "canine", "puppy", "狗", "狗狗"),
     ("phone", "smartphone", "mobile", "cellphone", "手机", "智能手机"),
     ("computer", "laptop", "notebook", "电脑", "笔记本电脑"),
-    ("dashboard", "control panel", "仪表盘", "控制面板"),
+    ("dashboard", "control panel", "digital display", "digital displays", "display", "screen", "仪表盘", "控制面板"),
     ("workflow", "process", "流程", "工作流"),
     ("person", "people", "human", "人物", "人", "用户"),
     ("text", "words", "typography", "文字", "文本"),
-    ("robot", "机器人"),
+    ("agent", "software agent", "ai agent", "robot", "assistant", "机器人", "智能体"),
+    ("search", "information retrieval", "retrieval", "magnifying glass", "searching", "检索", "搜索"),
     ("office", "workspace", "办公室", "办公空间"),
 )
 
