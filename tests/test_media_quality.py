@@ -2166,3 +2166,25 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     assert "AI software agent" in request["expected_concepts"]
     assert "repetitive task loop" in request["expected_concepts"]
     assert "real playful cat and dog" in request["expected_concepts"]
+
+
+def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):
+    from content_platform.media import MediaBridge
+
+    cover = tmp_path / "cover.png"
+    cover.write_bytes(b"composite")
+    parent = {"passed": True, "semantic_match_score": 0.8, "matched_concepts": ["AI software agent"]}
+    evidence = {
+        "version": "cover_quality_evidence_v2",
+        "typography_overlay_verified": True,
+        "title_safe_zone_verified": True,
+        "horizontal_safe_zone_verified": True,
+        "visual_variance_verified": True,
+        "dimensions": [1080, 1440],
+        "composite_sha256": "sha256",
+    }
+
+    derived = MediaBridge._derive_cover_semantic_evidence(parent, cover, evidence)
+
+    assert derived["passed"] is True
+    assert derived["derived_from_background_semantics"] is True
