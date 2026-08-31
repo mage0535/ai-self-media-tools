@@ -7,6 +7,7 @@ from typing import Any
 from .adapter_executor import capability_available
 from .capability_catalog import load_capability_registry
 from .tool_catalog import catalog_snapshot
+from .content_policy import delivery_mode
 
 
 def _is_video(content_type: str) -> bool:
@@ -158,6 +159,9 @@ def build_tool_selection_plan(
     else:
         for group_id in analysis.get("required_tool_groups") or []:
             candidates = ((analysis.get("group_status") or {}).get(group_id) or {}).get("executable_candidates") or []
+            if group_id == "publisher_or_handoff":
+                wanted = "handoff_package_builder" if delivery_mode(platform) == "manual_handoff" else "pipeline_publisher"
+                candidates = [name for name in candidates if name == wanted]
             for candidate in candidates:
                 canonical = resolve(str(candidate))
                 if canonical is None or canonical in selected_canonical:

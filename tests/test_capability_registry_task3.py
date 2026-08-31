@@ -556,6 +556,11 @@ def test_delivery_router_selects_exactly_one_policy_compatible_capability():
     assert "pipeline_publisher" in {item["capability_id"] for item in automatic["candidates"]}
     assert "handoff_package_builder" not in {item["capability_id"] for item in automatic["candidates"]}
 
+    from content_platform.tool_selection import build_tool_selection_plan
+    manual_plan = build_tool_selection_plan(platform="xiaohongshu", content_type="carousel")
+    assert "handoff_package_builder" in manual_plan["selected_tools"]
+    assert "pipeline_publisher" not in manual_plan["selected_tools"]
+
 
 def test_delivery_router_does_not_claim_publisher_execution_in_dry_run():
     from content_platform.capability_router import match_capabilities
