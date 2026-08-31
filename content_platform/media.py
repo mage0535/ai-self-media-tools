@@ -738,6 +738,8 @@ class MediaBridge:
                 section_concepts.remove("AI software agent")
             if "organized memory archive" in section_concepts:
                 section_concepts = ["organized memory archive"]
+            elif "human feeding computer" in section_concepts:
+                section_concepts = ["human feeding computer"]
             elif "cat and dog" in section_concepts:
                 section_concepts = [item for item in section_concepts if item in {"cat and dog", "human working"}]
             values = section_concepts or visual_concepts(topic_text) or [
@@ -1119,7 +1121,7 @@ class MediaBridge:
             return prompts
         sections = cls._article_sections(job)
         for idx in range(1, minimum):
-            section = sections[idx - 1] if idx - 1 < len(sections) else f"section {idx}"
+            section = sections[idx - 1] if idx - 1 < len(sections) else "summary checklist workflow diagram"
             purpose = "explain or prove the adjacent article point"
             prompt = (
                 f"Section illustration for: {section}. Topic context: {job.get('topic') or job.get('title') or 'article'}. "
