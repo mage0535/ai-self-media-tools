@@ -696,6 +696,10 @@ class MediaBridge:
             section_concepts = visual_concepts(section_text)
             if len(section_concepts) > 2 and "AI software agent" in section_concepts:
                 section_concepts.remove("AI software agent")
+            if "organized memory archive" in section_concepts:
+                section_concepts = ["organized memory archive"]
+            elif "cat and dog" in section_concepts:
+                section_concepts = [item for item in section_concepts if item in {"cat and dog", "human working"}]
             values = section_concepts or visual_concepts(topic_text) or [
                 *(item.get("expected_concepts") or []), job.get("topic"), job.get("title")
             ]

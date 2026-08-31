@@ -2168,6 +2168,11 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     assert "human working" in request["expected_concepts"]
     assert "information retrieval search" not in request["expected_concepts"]
 
+    memory = MediaBridge._semantic_request(job, {
+        "role": "section", "section": "每天整理提示词和上下文，避免记忆混乱", "purpose": "explain memory organization"
+    })
+    assert memory["expected_concepts"] == ["organized memory archive"]
+
 
 def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):
     from content_platform.media import MediaBridge
