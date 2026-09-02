@@ -213,4 +213,19 @@ def _validate_contract(output: dict[str, Any], contract: str) -> bool:
             and isinstance(output.get("evidence"), dict)
             and isinstance(output.get("runtime_evidence"), dict)
         )
+    if contract == "postcheck_evidence_v1":
+        return (
+            output.get("version") == contract
+            and output.get("status") == "skipped"
+            and isinstance(output.get("reason"), str)
+        ) or (
+            output.get("version") == contract
+            and output.get("status") == "executed"
+            and isinstance(output.get("evidence"), dict)
+            and isinstance(output.get("runtime_evidence"), dict)
+        ) or (
+            output.get("version") == contract
+            and output.get("status") == "failed"
+            and isinstance(output.get("runtime_evidence"), dict)
+        )
     return False

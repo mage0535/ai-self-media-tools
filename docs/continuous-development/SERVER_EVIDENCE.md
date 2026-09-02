@@ -139,3 +139,12 @@ Observed read-only on 2026-08-31.
 - Tests ran three unavailable attempts at eligible times: attempts one and two remained retry-pending; attempt three wrote `insufficient` without synthetic zero metrics.
 - Focused ledger/store/CLI/Pipeline regression: 111 passed. Full regression: 1569 passed plus 37 subtests.
 - P9 is not complete: publisher-specific postchecks still need unified capability execution evidence. No live platform publication or metric API was invoked; timers remain disabled.
+
+## P9 local postcheck capability evidence
+
+- Converted `postcheck` from inventory-only/planned adapter to an allowlisted executable runtime capability.
+- Registry verification now covers 27 executable capabilities and 18 governed inventory-only entries.
+- Adapter tests proved: verified published identity executes; drafted delivery skips with `non_publication_status`; published task/external ID without identity fails.
+- Output contract distinguishes executed, skipped, and failed evidence without promoting drafts or schedules to publication.
+- Focused registry/adapter/ledger regression: 71 passed. Full regression: 1572 passed plus 37 subtests.
+- Pipeline delivery trace persistence is still pending, so P9 remains in progress. No live publisher was called and timers remain disabled.

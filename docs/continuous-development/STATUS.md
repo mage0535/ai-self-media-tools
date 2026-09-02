@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-08-31 Asia/Shanghai (P9 identity/retry submilestone verified)
+Last updated: 2026-09-02 Asia/Shanghai (P9 postcheck capability submilestone verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-08-31 Asia/Shanghai (P9 identity/retry submilestone verified)
 - Production release observed: `149362f`
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1569 passed + 37 subtests.
+- Latest complete regression on this branch: 1572 passed + 37 subtests.
 
 ## Active work
 
@@ -23,7 +23,7 @@ Last updated: 2026-08-31 Asia/Shanghai (P9 identity/retry submilestone verified)
 | Bounded Hermes worker sessions | Codex primary | generator/run contract/pipeline and P6 tests | committed `6e6abf5` | server generation fault test during deployment |
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
-| Delivery postcheck and ledger | Codex primary | publication ledger/store/collector and P9 tests | in_progress | commit identity/retry; implement unified postcheck capability evidence |
+| Delivery postcheck and ledger | Codex primary | registry/runtime postcheck, ledger/store/collector and P9 tests | in_progress | commit postcheck adapter; persist execution into delivery trace |
 | 12-platform Canary | unassigned | Task9 scripts/reports only | pending | 12/12 artifact-verified |
 
 ## Confirmed blockers
@@ -77,6 +77,9 @@ Last updated: 2026-08-31 Asia/Shanghai (P9 identity/retry submilestone verified)
 - Bare manual confirmation cannot create a publication identity or metric windows; management/API/browser/URL-probe verification levels are explicit.
 - Unavailable metric collection remains pending with delayed retry; only the third failed attempt becomes `insufficient`.
 - P9 remains in progress until publisher-specific postchecks enter the unified delivery capability evidence.
+- P9 postcheck capability focused regression: `71 passed`; full regression: `1572 passed, 37 subtests passed`.
+- Registry now contains 27 executable and 18 inventory-only capabilities; postcheck is an allowlisted runtime adapter.
+- Verified publication executes postcheck; drafted/scheduled/handoff results skip with explicit non-publication reason; published without identity fails.
 
 ## Production release gate
 
