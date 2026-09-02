@@ -737,6 +737,110 @@ def attest_existing_release(
             _git(source, "worktree", "prune")
 
 
+def prepare_bootstrap_release(
+    *,
+    source_root: Path | str,
+    releases_root: Path | str,
+    current_link: Path | str | None = None,
+    config_path: Path | str,
+    data_root: Path | str,
+    release_name: str,
+    secrets_root: Path | str | None = None,
+    signing_key: Path | str | None = None,
+    min_tests: int = 900,
+    evidence_runner=None,
+) -> dict:
+    """Build and sign a clean bootstrap rollback release without activating it."""
+    source = Path(source_root).expanduser().resolve()
+    releases = Path(releases_root).expanduser().resolve()
+    current = _current_path(current_link)
+    config = Path(config_path).expanduser().resolve()
+    data = Path(data_root).expanduser().resolve()
+    secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else data.parent / "secrets"
+    key = Path(signing_key).expanduser().resolve() if signing_key is not None else secrets / "release-signing.key"
+    for value, label in ((source, "source_root"), (releases, "releases_root"), (config, "config_path"), (data, "data_root")):
+        _validate_raw_path(value, label)
+    _validate_signing_key_boundary(key, secrets, data, releases, current)
+    if not key.is_file():
+        init_signing_key(secrets)
+    name = str(release_name or "").strip()
+    if not name or Path(name).name != name:
+        raise ReleaseAuditError("release_name must be a single non-empty path component")
+    release = releases / name
+    with _exclusive_lock(data / "runtime-release.lock"):
+        if _git(source, "status", "--porcelain").strip():
+            raise ReleaseAuditError("source root is dirty or has uncommitted changes")
+        if release.exists() or release.is_symlink():
+            raise ReleaseAuditError(f"release already exists: {release}")
+        commit = _git(source, "rev-parse", "HEAD").strip()
+        releases.mkdir(parents=True, exist_ok=True)
+        temporary = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=str(releases)))
+        staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
+        try:
+            temporary.rmdir()
+            _git(source, "worktree", "add", "--detach", str(staging), commit)
+            evidence = _generate_evidence(staging, data, name, commit, runner=evidence_runner)
+            tracked_modes = _tracked_modes(staging)
+            for relative in _tracked_paths(staging):
+                source_path = staging / relative
+                if source_path.is_symlink() or not source_path.is_file():
+                    raise ReleaseAuditError(f"tracked source file is not a regular file: {relative}")
+                destination = temporary / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination)
+                destination.chmod(0o755 if tracked_modes.get(relative.as_posix()) == "100755" else 0o644)
+            os.replace(temporary, release)
+            temporary = None
+            attestation = data / "release-attestations" / f"{name}.sha256"
+            previous = {
+                key_name: os.environ.get(key_name)
+                for key_name in ("CONTENT_PLATFORM_CODE_ROOT", "CONTENT_PLATFORM_DATA_DIR", "CONTENT_PLATFORM_SECRETS_DIR")
+            }
+            os.environ.update({
+                "CONTENT_PLATFORM_CODE_ROOT": str(release),
+                "CONTENT_PLATFORM_DATA_DIR": str(data),
+                "CONTENT_PLATFORM_SECRETS_DIR": str(secrets),
+            })
+            try:
+                _validate_runtime_config(config, release, data, secrets)
+                metadata = audit_release(
+                    source_root=staging, release_root=release, configured_script_root=release / "scripts",
+                    config_path=config, test_report_path=evidence["junit"], rollback_target="",
+                    attestation_path=attestation, signing_key_path=key, trusted_secrets_root=secrets,
+                    project_audit_report_path=evidence["project_audit"], evidence_manifest_path=evidence["manifest"],
+                    expected_commit=commit, min_tests=min_tests, bootstrap=True,
+                )
+                write_metadata(metadata, release / "release-metadata.json", signing_key_path=key)
+            finally:
+                for key_name, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key_name, None)
+                    else:
+                        os.environ[key_name] = value
+            _freeze_release(release)
+            return {
+                "ok": True, "prepared": True, "activated": False, "release_root": str(release),
+                "metadata_path": str(release / "release-metadata.json"), "attestation_path": str(attestation),
+                "signing_key_path": str(key), "commit": commit,
+            }
+        except Exception:
+            if release.exists() and not release.is_symlink():
+                release.chmod(0o755)
+                for path in release.rglob("*"):
+                    if path.is_file():
+                        path.chmod(0o644)
+                    elif path.is_dir():
+                        path.chmod(0o755)
+                shutil.rmtree(release)
+            raise
+        finally:
+            if temporary is not None and temporary.exists():
+                shutil.rmtree(temporary)
+            if staging.exists() or staging.is_symlink():
+                _git(source, "worktree", "remove", "--force", str(staging))
+            _git(source, "worktree", "prune")
+
+
 def deploy_release(
     *,
     source_root: Path | str,

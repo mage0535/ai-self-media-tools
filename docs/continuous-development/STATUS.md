@@ -9,7 +9,7 @@ Last updated: 2026-09-02 Asia/Shanghai (P9 local closure verified)
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1593 passed + 37 subtests; JUnit totals 1630 tests, 0 failures, 0 errors.
+- Latest complete regression on this branch: 1594 passed + 37 subtests.
 
 ## Active work
 
@@ -24,7 +24,7 @@ Last updated: 2026-09-02 Asia/Shanghai (P9 local closure verified)
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | Task9 scripts/reports, release/deploy evidence only | in_progress | server baseline refreshed; build signed release candidate with timers disabled |
+| 12-platform Canary and deployment | Codex primary | deploy/release evidence and Task9 Canaries | in_progress | bootstrap prepare verified locally; commit/push then prepare signed server rollback |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -116,3 +116,6 @@ These describe the audited production release, not the current development code.
 - Shared database contains 433 jobs; release-local database contains 0 jobs and remains a separate inode.
 - Private config still points `data_dir` at an obsolete release directory. Current release has no `release-metadata.json`.
 - Current production is therefore still the old split runtime. Do not run production jobs until P10 activation fixes gateway environment and private config.
+- Linux staging at `e1d6068` passed 70 focused tests and JUnit 1630 tests with zero failures/errors; project audit 573 files clean and license audit 65 capabilities clean.
+- Legacy release comparison against Git `149362f`: 10 tracked files differ and 130 extra runtime files exist, including release-local DB/cache/pyc. It must not be adopted as a signed rollback.
+- New local `prepare_bootstrap_release` builds a tracked-only signed rollback from clean Git without changing current/systemd. Deployment-focused regression: 116 passed; full local: 1594 passed plus 37 subtests.
