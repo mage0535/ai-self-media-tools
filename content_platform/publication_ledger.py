@@ -440,7 +440,7 @@ class PublicationLedger:
                 conn.execute("INSERT OR IGNORE INTO metric_windows(identity_id,hours,due_at,state) VALUES(?,?,?,'pending')", (row["id"], hours, _iso(_now(fields["published_at"]) + timedelta(hours=hours))))
             if payload.get("intent_id"):
                 conn.execute("UPDATE delivery_intents SET status='published',retry_allowed=0,updated_at=? WHERE intent_id=?", (_iso(), str(payload["intent_id"])))
-            return {"passed": True, "identity_id": row["id"], "platform": fields["platform"], "internal_account_alias": fields["alias"], "platform_content_id": fields["content_id"], "published_at": row["published_at"]}
+            return {"passed": True, "identity_id": row["id"], "platform": fields["platform"], "internal_account_alias": fields["alias"], "platform_content_id": fields["content_id"], "canonical_url": row["canonical_url"], "published_at": row["published_at"]}
 
     def register_identity(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Compatibility API for already postchecked records."""

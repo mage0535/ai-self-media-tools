@@ -318,6 +318,9 @@ def _postcheck(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
     required = ("platform_content_id", "published_at")
     if identity.get("passed") is not True or not all(str(identity.get(key) or "").strip() for key in required):
         return _failure(capability_id, "postcheck_evidence_v1", "publication_identity_not_verified")
+    external_id = str(result.get("external_id") or "")
+    if not external_id or external_id not in {str(identity["platform_content_id"]), str(identity.get("canonical_url") or "")}:
+        return _failure(capability_id, "postcheck_evidence_v1", "publication_identity_mismatch")
     return _executed(capability_id, "postcheck_evidence_v1", {"delivery_status": status, "publication_identity": identity})
 
 

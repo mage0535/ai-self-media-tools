@@ -134,4 +134,16 @@
 - A verified published identity produces executed/output-verified evidence.
 - Drafted, scheduled, handoff, and review states produce an explicit skipped record because they are valid delivery boundaries but not publications.
 - A publisher claiming `published` without an independently verified identity fails the postcheck adapter.
-- Adapter success alone is not enough; the next P9 step must persist this execution into the canonical delivery trace.
+- Adapter success alone is not enough; its execution must be persisted into the canonical delivery trace.
+
+## D20: Delivery Evidence Is Durable And Scoped
+
+- A published trace always includes a required postcheck node, even when no evidence was supplied.
+- Only contract-valid executed output with matching adapter-output hash and current content identity satisfies this node.
+- Platform-scoped planned nodes require evidence from that platform. Rechecking a platform replaces its previous terminal nodes instead of retaining stale success.
+- Save postcheck output with the delivery attempt before draft metadata projection; projection failure must not leave a known external outcome recorded only as in-flight.
+- Validate callback account, content ID/URL, and platform against the delivery intent before creating publication metrics windows.
+- Non-publication postcheck skips only the online-publication identity check; it does not waive draft readback, scheduling verification, or handoff quality gates.
+- No source label or unit-test boolean alone proves a live independent postcheck. Record local integration evidence separately from platform/browser evidence.
+- An automated job without its pre-delivery trace persists a failed canonical trace and stops; delivery completion cannot silently return without execution evidence.
+- Postcheck evidence participates in the delivery manifest hash, and its adapter output hash is recomputed before accepting executed state.

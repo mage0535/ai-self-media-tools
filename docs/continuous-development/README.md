@@ -4,10 +4,12 @@ This directory is the coordination source of truth for the production-runtime-v8
 
 ## Required reading order
 
-1. `STATUS.md` - current phase, active owner, blockers, and next command.
-2. `DECISIONS.md` - architecture decisions that must not be silently reversed.
-3. `SERVER_EVIDENCE.md` - observed production facts and verification evidence.
-4. `../superpowers/plans/2026-08-31-production-runtime-v8.md` - implementation sequence and acceptance gates.
+1. `README.md` (this file) - coordination and ownership protocol.
+2. `STATUS.md` - current phase, active owner, blockers, and next command.
+3. `DECISIONS.md` - architecture decisions that must not be silently reversed.
+4. `SERVER_EVIDENCE.md` - observed production facts and verification evidence.
+
+Then read `../superpowers/plans/2026-08-31-production-runtime-v8.md` for the implementation sequence and acceptance gates. Re-read all four coordination files after an interruption; an earlier chat summary is not the current source of truth.
 
 ## Collaboration protocol
 
@@ -34,4 +36,6 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - P8 video shot retry, checkpoint, and final-effect evidence is a committed local milestone.
 - P9 publication identity and metric retry are a committed submilestone.
 - P9 postcheck capability is implemented and verified as a local submilestone.
-- P9 remains active to persist postcheck execution into the delivery trace; start with its row in `STATUS.md`.
+- P9 delivery trace persistence and negative-path hardening are a locally verified milestone.
+- P10 real media Canaries, Linux deployment, live publisher verification, and rollback rehearsal are the next workstream. Tests with replacement publishers are not live platform proof.
+- At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

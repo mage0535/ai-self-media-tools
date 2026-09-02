@@ -13,7 +13,7 @@ from .claim_ledger import compile_verified_claim_ledger, restore_verified_domain
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
-from .capability_runtime import execute_generation_capabilities, execute_post_generation_capabilities
+from .capability_runtime import execute_delivery_postcheck_capability, execute_generation_capabilities, execute_post_generation_capabilities
 from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
@@ -1330,12 +1330,23 @@ class Pipeline:
         if result.status == "published" and not metadata.get("verification"):
             result = DeliveryResult(False, "unknown_requires_review", result.external_id, "publisher returned published without URL/content/account/time verification")
         elif result.status == "published":
-            verified_identity = self.publication_ledger.register_verified_publication({
-                "intent_id": intent_id,
-                "platform": platform,
-                **metadata["verification"],
-                "attribution": self._publication_attribution(job),
-            })
+            verification = metadata["verification"]
+            if not isinstance(verification, dict):
+                verification = {}
+            account = str(verification.get("internal_account_alias") or verification.get("account_alias") or "")
+            content_id = str(verification.get("platform_content_id") or verification.get("content_id") or "")
+            canonical_url = str(verification.get("canonical_url") or verification.get("url") or "")
+            if (account != str(intent["internal_account_alias"])
+                    or str(verification.get("platform") or platform).casefold() != platform.casefold()
+                    or not result.external_id or result.external_id not in {content_id, canonical_url}):
+                verified_identity = {"passed": False, "reason": "publication_identity_intent_mismatch"}
+            else:
+                verified_identity = self.publication_ledger.register_verified_publication({
+                    **verification,
+                    "intent_id": intent_id,
+                    "platform": platform,
+                    "attribution": self._publication_attribution(job),
+                })
             if not verified_identity.get("passed"):
                 result = DeliveryResult(False, "unknown_requires_review", result.external_id, "publisher returned invalid publication verification: " + str(verified_identity.get("reason") or "unknown"))
         if platform.casefold() == "kuaishou" and result.status == "scheduled":
@@ -1343,9 +1354,15 @@ class Pipeline:
             if not postcheck["passed"]:
                 result = DeliveryResult(False, "unknown_requires_review", result.external_id, "Kuaishou scheduled management-page postcheck failed")
                 metadata = {"postcheck": postcheck}
+        postcheck_execution = execute_delivery_postcheck_capability(
+            {"ok": result.ok, "status": result.status, "external_id": result.external_id, "error": result.error},
+            verified_identity,
+        )
+        metadata["postcheck_execution"] = postcheck_execution
         self.publication_ledger.finish_attempt(intent_id, attempt["attempt_id"], result.status, external_id=result.external_id, error=result.error, metadata=metadata)
         if not (result.status == "published" and verified_identity and verified_identity.get("passed")):
             self.publication_ledger.record_delivery_result(intent_id, {"status": result.status, "external_id": result.external_id, "error": result.error})
+        self._persist_delivery_postcheck(job, platform, postcheck_execution)
         return result
 
     def _save_delivery_result(self, job_id, platform, result):
@@ -1370,14 +1387,16 @@ class Pipeline:
                     register_review_tasks(self.store, package_id, platform, job_id=job_id)
 
     def _complete_execution_trace(self, job, platform, result):
+        job = self.store.get_job(job["id"])
         meta = dict(job.get("draft_meta") or {})
         pending = meta.get("execution_trace") if isinstance(meta.get("execution_trace"), dict) else {}
-        if not pending:
+        if not pending and (job.get("brief") or {}).get("automated_workflow") is not True:
             return
         trace = complete_delivery_trace(
             pending,
             platform=platform,
             result={"ok": result.ok, "status": result.status, "external_id": result.external_id, "error": result.error},
+            postcheck_evidence=(meta.get("delivery_postcheck_execution") or {}).get(platform),
         )
         meta["execution_trace"] = trace
         self.store.save_draft(
@@ -1386,6 +1405,21 @@ class Pipeline:
         )
         if (job.get("brief") or {}).get("automated_workflow") and not trace.get("passed"):
             raise RuntimeError("canonical execution trace failed: " + ", ".join(trace.get("failures") or []))
+
+    def _persist_delivery_postcheck(self, job, platform, evidence):
+        try:
+            persisted = self.store.get_job(job["id"])
+        except KeyError:
+            return False
+        meta = dict(persisted.get("draft_meta") or job.get("draft_meta") or {})
+        records = dict(meta.get("delivery_postcheck_execution") or {})
+        records[str(platform)] = dict(evidence or {})
+        meta["delivery_postcheck_execution"] = records
+        self.store.save_draft(
+            persisted["id"], persisted.get("title") or job.get("title") or "", persisted.get("body") or job.get("body") or "",
+            persisted.get("risk_level") or "pass", persisted.get("risk") or {}, persisted.get("prompt_version") or "", meta,
+        )
+        return True
 
     def _send_platform_report(self, job, platform, report):
         payload = dict(job)

@@ -1,15 +1,15 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-02 Asia/Shanghai (P9 postcheck capability submilestone verified)
+Last updated: 2026-09-02 Asia/Shanghai (P9 local closure verified)
 
 ## Current state
 
-- Phase: P9 delivery postchecks and Publication Ledger
-- Production timer: disabled/inactive
-- Production release observed: `149362f`
+- Phase: P10 real Canaries, deployment, rollback, and controlled activation
+- Production timer last observed on 2026-08-31: disabled/inactive; not rechecked in this local development turn.
+- Production release last observed on 2026-08-31: `149362f`; not rechecked in this turn.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1572 passed + 37 subtests.
+- Latest complete regression on this branch: 1593 passed + 37 subtests; JUnit totals 1630 tests, 0 failures, 0 errors.
 
 ## Active work
 
@@ -23,10 +23,12 @@ Last updated: 2026-09-02 Asia/Shanghai (P9 postcheck capability submilestone ver
 | Bounded Hermes worker sessions | Codex primary | generator/run contract/pipeline and P6 tests | committed `6e6abf5` | server generation fault test during deployment |
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
-| Delivery postcheck and ledger | Codex primary | registry/runtime postcheck, ledger/store/collector and P9 tests | in_progress | commit postcheck adapter; persist execution into delivery trace |
-| 12-platform Canary | unassigned | Task9 scripts/reports only | pending | 12/12 artifact-verified |
+| Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
+| 12-platform Canary and deployment | unassigned | Task9 scripts/reports, release/deploy evidence only | pending | 12/12 artifact-verified, Linux 0 failures, rollback rehearsal |
 
-## Confirmed blockers
+## Server Blockers From The 2026-08-31 Audit
+
+These describe the audited production release, not the current development code. Local fixes below require Linux and live workflow verification before these server blockers can be closed.
 
 1. MCP searches only `$CONTENT_PLATFORM_HOME/config.json`; immutable releases contain no private config.
 2. MCP can create a release-local `data/state.db`, while operators monitor the shared production database.
@@ -42,7 +44,7 @@ Last updated: 2026-09-02 Asia/Shanghai (P9 postcheck capability submilestone ver
 - Focused runtime/MCP/systemd/deploy regression: `85 passed`.
 - Full regression: `1532 passed, 37 subtests passed`.
 - License audit: `65` capabilities, zero issues.
-- Project/privacy audit initially detected private absolute paths in coordination docs; paths were replaced with stable logical aliases and must be re-audited before commit.
+- Project/privacy audit initially detected private absolute paths in coordination docs; logical aliases replaced them and subsequent phase audits passed.
 - A full-suite failure exposed a video checkpoint collision: repeated fallback section labels reused one image. The checkpoint identity now includes the scene index, and the focused video test passes.
 - Automated admission focused regression: `102 passed`.
 - P2 full regression: `1537 passed, 37 subtests passed`.
@@ -80,6 +82,19 @@ Last updated: 2026-09-02 Asia/Shanghai (P9 postcheck capability submilestone ver
 - P9 postcheck capability focused regression: `71 passed`; full regression: `1572 passed, 37 subtests passed`.
 - Registry now contains 27 executable and 18 inventory-only capabilities; postcheck is an allowlisted runtime adapter.
 - Verified publication executes postcheck; drafted/scheduled/handoff results skip with explicit non-publication reason; published without identity fails.
+
+## Current P9 Handoff
+
+- Adapter output is now persisted in delivery-attempt metadata before updating the job's draft metadata; the canonical trace reads the latest stored job.
+- Published results always require postcheck, including when evidence is absent. Invalid contract/output hash and different content identity fail.
+- Required trace evidence is platform-scoped. A previous successful delivery cannot satisfy a later failed check on this or another platform.
+- Publication account/content/platform bindings are checked against the immutable intent before registering identity/windows.
+- Failure evidence participates in the delivery manifest hash. Missing pre-delivery trace on an automated job persists a failed trace and raises.
+- Focused verification: `146 passed` before the final identity/hash tests; final full regression: `1593 passed + 37 subtests`.
+- Remaining live gap: source names such as `management_page` are labels, not independent browser/API proof. All publication identity adapters, draft readback, scheduled-time postcheck, and manual-handoff boundaries still need real-platform verification.
+- Final negative-path coverage includes absent/invalid/tampered postcheck, account/content/platform mismatch, cross-platform and same-platform stale-success masking, draft metadata write failure, and missing automated pre-delivery trace.
+- JUnit: `artifacts/test-reports/p9-trace-closure.xml` => 1630 tests, 0 failures, 0 errors, 290.565 seconds.
+- Final audits: project/privacy 574 files with zero issues; license 65 capabilities with zero issues; `git diff --check` clean.
 
 ## Production release gate
 

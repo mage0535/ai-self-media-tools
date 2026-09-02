@@ -1,6 +1,7 @@
 import pytest
 
 from content_platform.capability_runtime import (
+    execute_delivery_postcheck_capability,
     merge_execution_manifests,
     record_execution_stage,
 )
@@ -266,6 +267,10 @@ def test_full_selected_plan_maps_to_registry_ids_and_terminal_evidence():
         trace,
         platform="douyin",
         result={"ok": True, "status": "published", "external_id": "post-1"},
+        postcheck_evidence=execute_delivery_postcheck_capability(
+            {"ok": True, "status": "published", "external_id": "post-1"},
+            {"passed": True, "platform_content_id": "post-1", "published_at": "2026-09-02T12:00:00+08:00"},
+        ),
     )
 
     assert trace["passed"] is True
