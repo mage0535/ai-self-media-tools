@@ -33,4 +33,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - P7 image checkpoint and verified provider fallback is a committed local milestone.
 - P8 video shot retry, checkpoint, and final-effect evidence is a committed local milestone.
 - P9 publication identity and metric retry are a committed submilestone.
-- P9 remains active for unified publisher-specific postcheck capability evidence; start with its row in `STATUS.md`.
+- P9 postcheck capability is implemented and verified as a local submilestone.
+- P9 remains active to persist postcheck execution into the delivery trace; start with its row in `STATUS.md`.

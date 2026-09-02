@@ -36,6 +36,7 @@ def execute(inputs: dict[str, Any]) -> dict[str, Any]:
         "media_asset_pipeline": _media_assets,
         "pipeline_publisher": _delivery_receipt,
         "handoff_package_builder": _delivery_receipt,
+        "postcheck": _postcheck,
     }
     handler = handlers.get(capability_id)
     if handler is None:
@@ -301,6 +302,23 @@ def _delivery_receipt(inputs: dict[str, Any], capability_id: str) -> dict[str, A
     if receipt.get("ok") is not True or receipt.get("status") not in {"published", "drafted", "scheduled", "handoff_pending"} or not receipt.get("external_id"):
         return _failure(capability_id, "delivery_receipt_v1", "missing_evidence:delivery_receipt")
     return _executed(capability_id, "delivery_receipt_v1", receipt)
+
+
+def _postcheck(inputs: dict[str, Any], capability_id: str) -> dict[str, Any]:
+    result = _dict_value(inputs, "delivery_result")
+    status = str(result.get("status") or "").casefold()
+    if status in {"drafted", "scheduled", "handoff_pending", "review_required"}:
+        return {
+            "version": "postcheck_evidence_v1", "status": "skipped", "capability_id": capability_id,
+            "reason": f"non_publication_status:{status}", "publication_verified": False,
+        }
+    if status != "published":
+        return _failure(capability_id, "postcheck_evidence_v1", "publication_status_not_verified")
+    identity = _dict_value(inputs, "publication_identity")
+    required = ("platform_content_id", "published_at")
+    if identity.get("passed") is not True or not all(str(identity.get(key) or "").strip() for key in required):
+        return _failure(capability_id, "postcheck_evidence_v1", "publication_identity_not_verified")
+    return _executed(capability_id, "postcheck_evidence_v1", {"delivery_status": status, "publication_identity": identity})
 
 
 def _dict_value(inputs: dict[str, Any], *keys: str) -> dict[str, Any]:

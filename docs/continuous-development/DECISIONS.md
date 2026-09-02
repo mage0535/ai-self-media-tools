@@ -127,3 +127,11 @@
 - Unavailable/empty collection remains pending with a delayed retry for a bounded maximum of three attempts.
 - Only exhausted retries write an `insufficient` observation; missing data is never written as zero.
 - Retry eligibility is checked before invoking a collector, preventing hot-loop retries.
+
+## D19: Postcheck is a capability with publication-aware semantics
+
+- `postcheck` is an allowlisted executable delivery-stage capability, not an inventory placeholder.
+- A verified published identity produces executed/output-verified evidence.
+- Drafted, scheduled, handoff, and review states produce an explicit skipped record because they are valid delivery boundaries but not publications.
+- A publisher claiming `published` without an independently verified identity fails the postcheck adapter.
+- Adapter success alone is not enough; the next P9 step must persist this execution into the canonical delivery trace.
