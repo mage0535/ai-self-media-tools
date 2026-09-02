@@ -5,8 +5,8 @@ Last updated: 2026-09-02 Asia/Shanghai (P9 local closure verified)
 ## Current state
 
 - Phase: P10 real Canaries, deployment, rollback, and controlled activation
-- Production timer last observed on 2026-08-31: disabled/inactive; not rechecked in this local development turn.
-- Production release last observed on 2026-08-31: `149362f`; not rechecked in this turn.
+- Production timers observed on 2026-09-02: all related timers disabled; overnight/supervisor inactive.
+- Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
 - Latest complete regression on this branch: 1593 passed + 37 subtests; JUnit totals 1630 tests, 0 failures, 0 errors.
@@ -24,7 +24,7 @@ Last updated: 2026-09-02 Asia/Shanghai (P9 local closure verified)
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | unassigned | Task9 scripts/reports, release/deploy evidence only | pending | 12/12 artifact-verified, Linux 0 failures, rollback rehearsal |
+| 12-platform Canary and deployment | Codex primary | Task9 scripts/reports, release/deploy evidence only | in_progress | server baseline refreshed; build signed release candidate with timers disabled |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -108,3 +108,11 @@ These describe the audited production release, not the current development code.
 - [ ] 12 serial platform Canaries pass.
 - [ ] Rollback rehearsal passes.
 - [ ] Timers explicitly approved and restored.
+
+## 2026-09-02 Server Refresh
+
+- System `hermes-gateway.service` is enabled and active; ai-self-media timers are disabled.
+- Gateway-launched MCP has only `CONTENT_PLATFORM_HOME` and `PYTHONPATH`; it still lacks explicit config/data/secrets/runtime-mode roots.
+- Shared database contains 433 jobs; release-local database contains 0 jobs and remains a separate inode.
+- Private config still points `data_dir` at an obsolete release directory. Current release has no `release-metadata.json`.
+- Current production is therefore still the old split runtime. Do not run production jobs until P10 activation fixes gateway environment and private config.

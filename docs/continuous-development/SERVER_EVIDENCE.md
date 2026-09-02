@@ -161,3 +161,14 @@ Observed read-only on 2026-08-31.
 - Final full suite: `python -m pytest -q --junitxml=artifacts/test-reports/p9-trace-closure.xml` => 1593 passed plus 37 subtests; JUnit 1630 tests, 0 failures, 0 errors, 290.565 seconds.
 - Final project/privacy audit: 574 scanned files, zero issues. License audit: 65 capabilities, zero issues. Diff check passed.
 - Production services, symlinks, database, and timer configuration were not modified or re-probed this turn. Server-state claims above remain dated 2026-08-31 observations.
+
+## 2026-09-02 P10 Read-Only Server Refresh
+
+- Current symlink resolves to `$RELEASES/unified-capability-v7-149362f`; the immutable directory has no Git metadata and no `release-metadata.json`.
+- Dirty mutable checkout remains at `6f4c88a`.
+- System `hermes-gateway.service` is enabled/active. All listed ai-self-media timers are disabled; overnight and supervisor timers are inactive.
+- MCP processes are in the gateway cgroup. Effective MCP environment contains only `$CURRENT_RELEASE` as `CONTENT_PLATFORM_HOME`/`PYTHONPATH`; config/data/secrets/production-mode variables are absent.
+- Private config media flags are enabled, but its data root still points to `$RELEASES/aebd7a9/data`.
+- `$SHARED_DATA/state.db`: 63,143,936 bytes, inode 1642977, 433 jobs. Release-local `data/state.db`: 196,608 bytes, inode 3411510, 0 jobs.
+- Root filesystem is 84% used with roughly 14 GB free.
+- No changes, restarts, symlink switches, database writes, or timer enables were performed during this refresh.
