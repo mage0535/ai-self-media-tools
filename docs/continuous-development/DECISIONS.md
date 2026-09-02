@@ -145,5 +145,13 @@
 - Validate callback account, content ID/URL, and platform against the delivery intent before creating publication metrics windows.
 - Non-publication postcheck skips only the online-publication identity check; it does not waive draft readback, scheduling verification, or handoff quality gates.
 - No source label or unit-test boolean alone proves a live independent postcheck. Record local integration evidence separately from platform/browser evidence.
+
+## D21: P10 Activation Is A Transaction
+
+- Build and attest one immutable release from the clean development commit; never run from the dirty server checkout.
+- Snapshot symlink, systemd units/environment, private config, and database inode/count evidence before switching.
+- Correct private config and gateway runtime roots as part of the same bounded activation; a code-only symlink switch is invalid.
+- Keep every timer disabled through Linux tests, MCP shared-database verification, rollback rehearsal, and serial Canaries.
+- Roll back symlink and runtime environment together if any mandatory verification fails. Mutable shared data is never rolled back or copied into a release.
 - An automated job without its pre-delivery trace persists a failed canonical trace and stops; delivery completion cannot silently return without execution evidence.
 - Postcheck evidence participates in the delivery manifest hash, and its adapter output hash is recomputed before accepting executed state.

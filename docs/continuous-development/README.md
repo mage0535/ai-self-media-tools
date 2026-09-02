@@ -38,4 +38,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - P9 postcheck capability is implemented and verified as a local submilestone.
 - P9 delivery trace persistence and negative-path hardening are a locally verified milestone.
 - P10 real media Canaries, Linux deployment, live publisher verification, and rollback rehearsal are the next workstream. Tests with replacement publishers are not live platform proof.
+- P10 starts with a read-only server baseline, then a signed immutable release candidate with timers kept disabled. Activation and rollback evidence must be recorded before any live Canary.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
