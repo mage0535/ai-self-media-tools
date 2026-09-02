@@ -15,6 +15,7 @@ from scripts.deploy_release import (
     deploy_release as _deploy_release,
     init_signing_key,
     rollback_release,
+    prepare_bootstrap_release,
 )
 from scripts.runtime_release_audit import ReleaseAuditError, audit_release, verify_metadata, write_metadata
 
@@ -146,6 +147,29 @@ def test_attest_existing_rejects_source_release_mismatch(tmp_path: Path):
             source_root=source, target_release=release, current_link=current,
             config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
         )
+
+
+def test_prepare_bootstrap_builds_signed_release_without_switching_current(tmp_path, monkeypatch):
+    source, config, report, _rollback = _case(tmp_path)
+    releases = tmp_path / "releases"
+    current = tmp_path / ".ai-self-media-tools-current"
+    old = tmp_path / "old-current"
+    old.mkdir()
+    current.symlink_to(old, target_is_directory=True)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    result = prepare_bootstrap_release(
+        source_root=source, releases_root=releases, current_link=current,
+        config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        release_name="bootstrap-clean", evidence_runner=_fixture_evidence_runner,
+    )
+
+    release = releases / "bootstrap-clean"
+    assert result["prepared"] is True
+    assert result["activated"] is False
+    assert current.resolve() == old.resolve()
+    assert json.loads((release / "release-metadata.json").read_text(encoding="utf-8"))["bootstrap"] is True
+    assert (tmp_path / "data" / "release-attestations" / "bootstrap-clean.sha256").is_file()
 
 
 def test_attest_existing_rejects_non_current_release(tmp_path: Path):

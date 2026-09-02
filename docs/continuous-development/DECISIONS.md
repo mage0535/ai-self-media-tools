@@ -153,5 +153,7 @@
 - Correct private config and gateway runtime roots as part of the same bounded activation; a code-only symlink switch is invalid.
 - Keep every timer disabled through Linux tests, MCP shared-database verification, rollback rehearsal, and serial Canaries.
 - Roll back symlink and runtime environment together if any mandatory verification fails. Mutable shared data is never rolled back or copied into a release.
+- Do not sanitize or sign an already drifted legacy release. Build a clean tracked-only bootstrap rollback from its intended Git source and leave current untouched until activation.
+- A bootstrap prepare runs full evidence generation, config validation, signing, and freeze but deliberately performs no symlink or systemd operation.
 - An automated job without its pre-delivery trace persists a failed canonical trace and stops; delivery completion cannot silently return without execution evidence.
 - Postcheck evidence participates in the delivery manifest hash, and its adapter output hash is recomputed before accepting executed state.

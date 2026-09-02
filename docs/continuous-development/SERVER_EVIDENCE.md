@@ -172,3 +172,14 @@ Observed read-only on 2026-08-31.
 - `$SHARED_DATA/state.db`: 63,143,936 bytes, inode 1642977, 433 jobs. Release-local `data/state.db`: 196,608 bytes, inode 3411510, 0 jobs.
 - Root filesystem is 84% used with roughly 14 GB free.
 - No changes, restarts, symlink switches, database writes, or timer enables were performed during this refresh.
+
+## 2026-09-02 P10 Staging And Bootstrap Preparation
+
+- GitHub branch `codex/production-runtime-v8@e1d6068` cloned to isolated server staging; Python 3.12.3.
+- Linux focused P1-P9 suite: 70 passed in 12.11 seconds.
+- Linux full JUnit: 1630 tests, 0 failures, 0 errors, 370.276 seconds. Project audit: 573 files, zero issues. License audit: 65 capabilities, zero issues.
+- Legacy current release compared with clean Git `149362f`: 557 tracked paths, 10 hash mismatches, 130 extra files. Extras include `data/state.db`, compiled caches, and runtime hook cache.
+- Because the legacy release cannot satisfy tracked-only attestation, no files were removed and it was not signed.
+- Added and tested `prepare_bootstrap_release`: creates a signed/frozen tracked-only release from clean Git while leaving current symlink and systemd untouched.
+- Deployment-focused local suite: 116 passed. Full local suite after this change: 1594 passed plus 37 subtests, 291.11 seconds.
+- No production activation, restart, private-config rewrite, shared-database mutation, publisher call, or timer enable occurred in this step.
