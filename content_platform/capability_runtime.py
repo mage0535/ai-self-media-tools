@@ -171,6 +171,19 @@ def execute_post_generation_capabilities(
     return merged
 
 
+def execute_delivery_postcheck_capability(result: dict, publication_identity: dict | None = None) -> dict:
+    """Execute the registered postcheck adapter against the normalized delivery result."""
+    registry = load_registry()
+    capability = next(item for item in registry["capabilities"] if item["id"] == "postcheck")
+    return execute_capability(
+        capability,
+        {
+            "delivery_result": dict(result or {}),
+            "publication_identity": dict(publication_identity or {}),
+        },
+    )
+
+
 def _dedup_evidence(hygiene: dict) -> dict:
     if not isinstance(hygiene, dict) or not hygiene:
         return {}

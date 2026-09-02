@@ -139,7 +139,9 @@ def build_pre_delivery_trace(
     return merge_execution_manifests(records, allow_incomplete=True)
 
 
-def complete_delivery_trace(trace: dict[str, Any], *, platform: str, result: dict[str, Any]) -> dict[str, Any]:
+def complete_delivery_trace(trace: dict[str, Any], *, platform: str, result: dict[str, Any], postcheck_evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+    from .adapter_executor import _stable_hash_value
+
     status = str(result.get("status") or "")
     accepted = bool(result.get("ok")) and status in {"published", "drafted", "scheduled", "handoff_pending", "dry_run"}
     node_id = (
@@ -147,12 +149,37 @@ def complete_delivery_trace(trace: dict[str, Any], *, platform: str, result: dic
         else "handoff_package_builder" if status == "handoff_pending"
         else "pipeline_publisher"
     )
+    postcheck = dict(postcheck_evidence or {})
+    postcheck_required = status == "published"
+    planned = [{"node_id": node_id, "platform": platform, "selected": True, "required": True, "artifact_required": True}]
+    executed = [{"node_id": node_id, "platform": platform, "status": result.get("status")}] if accepted else []
+    verified = [{"node_id": node_id, "platform": platform, "external_id": result.get("external_id")}] if accepted and result.get("external_id") else []
+    skipped = []
+    if postcheck or postcheck_required:
+        planned.append({"node_id": "postcheck", "platform": platform, "selected": True, "required": postcheck_required, "artifact_required": False})
+        output = postcheck.get("output") if isinstance(postcheck.get("output"), dict) else {}
+        identity = output.get("publication_identity") if isinstance(output.get("publication_identity"), dict) else {}
+        output_digest = "sha256:" + hashlib.sha256(json.dumps(
+            _stable_hash_value(output), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
+        bound_identity = identity.get("passed") is True and str(identity.get("platform") or platform) == platform and str(result.get("external_id") or "") in {
+            str(identity.get("platform_content_id") or ""), str(identity.get("canonical_url") or ""),
+        }
+        if (accepted and postcheck.get("status") == "executed" and postcheck.get("contract_valid") is True
+                and _HASH_PATTERN.fullmatch(str(postcheck.get("output_hash") or ""))
+                and postcheck.get("output_hash") == output_digest
+                and output.get("delivery_status") == status and bound_identity):
+            executed.append({"node_id": "postcheck", "platform": platform, "output_hash": postcheck["output_hash"]})
+        elif postcheck.get("status") == "skipped" and str(postcheck.get("reason") or ""):
+            skipped.append({"node_id": "postcheck", "platform": platform, "reason": postcheck["reason"]})
     delivery = record_execution_stage(
-        "delivery", manifest_hash=manifest_hash(result), manifest_kind="delivery_receipt",
-        planned=[{"node_id": node_id, "selected": True, "required": True, "artifact_required": True}],
-        executed=[{"node_id": node_id, "platform": platform, "status": result.get("status")}] if accepted else [],
-        artifact_verified=[{"node_id": node_id, "platform": platform, "external_id": result.get("external_id")}] if accepted and result.get("external_id") else [],
+        "delivery", manifest_hash=manifest_hash({"platform": platform, "result": result, "postcheck": postcheck}), manifest_kind="delivery_receipt",
+        planned=planned,
+        executed=executed,
+        artifact_verified=verified,
+        skipped=skipped,
     )
+    postchecks = {platform: postcheck} if postcheck or postcheck_required else {}
     records = [dict(row) for row in trace.get("stages") or [] if isinstance(row, dict)]
     existing = next((row for row in records if row.get("stage") == "delivery"), None)
     if existing is not None:
@@ -161,15 +188,18 @@ def complete_delivery_trace(trace: dict[str, Any], *, platform: str, result: dic
             "previous": existing.get("manifest_ref"),
             "platform": platform,
             "result": result,
+            "postcheck": postcheck,
         }
         delivery = record_execution_stage(
             "delivery", manifest_hash=manifest_hash(combined_result), manifest_kind="delivery_receipts",
-            planned=_dedupe_evidence([*(existing.get("planned") or []), *(delivery.get("planned") or [])]),
+            planned=_dedupe_evidence([*[row for row in existing.get("planned") or [] if row.get("platform") != platform], *(delivery.get("planned") or [])]),
             consulted=existing.get("consulted") or [],
-            executed=_dedupe_evidence([*(existing.get("executed") or []), *(delivery.get("executed") or [])]),
-            artifact_verified=_dedupe_evidence([*(existing.get("artifact_verified") or []), *(delivery.get("artifact_verified") or [])]),
-            skipped=_dedupe_evidence([*(existing.get("skipped") or []), *(delivery.get("skipped") or [])]),
+            executed=_dedupe_evidence([*[row for row in existing.get("executed") or [] if row.get("platform") != platform], *(delivery.get("executed") or [])]),
+            artifact_verified=_dedupe_evidence([*[row for row in existing.get("artifact_verified") or [] if row.get("platform") != platform], *(delivery.get("artifact_verified") or [])]),
+            skipped=_dedupe_evidence([*[row for row in existing.get("skipped") or [] if row.get("platform") != platform], *(delivery.get("skipped") or [])]),
         )
+        postchecks = {**(existing.get("postcheck_evidence") or {}), **postchecks}
+    delivery["postcheck_evidence"] = postchecks
     return merge_execution_manifests([*records, delivery])
 
 

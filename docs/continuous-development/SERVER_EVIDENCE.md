@@ -148,3 +148,16 @@ Observed read-only on 2026-08-31.
 - Output contract distinguishes executed, skipped, and failed evidence without promoting drafts or schedules to publication.
 - Focused registry/adapter/ledger regression: 71 passed. Full regression: 1572 passed plus 37 subtests.
 - Pipeline delivery trace persistence is still pending, so P9 remains in progress. No live publisher was called and timers remain disabled.
+
+## 2026-09-02 P9 Delivery Trace Integration (Local Only)
+
+- Resumed the uncommitted trace wiring from `ea8cf57`; re-read all four coordination documents before editing.
+- Added SQLite-backed delivery integration tests across published/drafted/scheduled/handoff outcomes, using replacement publishers (no platform network calls).
+- Confirmed eight initial failures for absent/invalid evidence, mismatched identity, and missing attempt-level evidence; repaired each and reran focused tests.
+- Additional fault tests exposed cross-platform success masking, tampered output acceptance, and missing automated pre-delivery trace bypass; all now fail closed.
+- Wrong account/content/platform is rejected before inserting any identity or metric window.
+- Metadata projection failure leaves the finished attempt, postcheck evidence, and released lease durable in SQLite.
+- Focused suite: `python -m pytest tests/test_postcheck_capability_v8.py tests/test_execution_trace_task3.py tests/test_task7_delivery_ledger.py tests/test_pipeline.py tests/test_capability_registry_task3.py -q --junitxml=artifacts/test-reports/p9-trace-focused.xml` => 146 passed before the final identity/hash additions.
+- Final full suite: `python -m pytest -q --junitxml=artifacts/test-reports/p9-trace-closure.xml` => 1593 passed plus 37 subtests; JUnit 1630 tests, 0 failures, 0 errors, 290.565 seconds.
+- Final project/privacy audit: 574 scanned files, zero issues. License audit: 65 capabilities, zero issues. Diff check passed.
+- Production services, symlinks, database, and timer configuration were not modified or re-probed this turn. Server-state claims above remain dated 2026-08-31 observations.

@@ -56,11 +56,20 @@ def validate_execution_trace(records: list[dict[str, Any]]) -> list[str]:
             if not _is_selected_required(planned):
                 continue
             node_id = _node_id(planned)
+            platform = str(planned.get("platform") or "")
+            scoped_executed = _evidence_ids([
+                item for item in record.get("executed") or []
+                if isinstance(item, dict) and item.get("platform") == platform
+            ]) if platform else executed_ids
+            scoped_verified = _evidence_ids([
+                item for item in record.get("artifact_verified") or []
+                if isinstance(item, dict) and item.get("platform") == platform
+            ]) if platform else verified_ids
             if node_id in _GENERIC_PLACEHOLDERS:
                 failures.append(f"generic_placeholder_node_forbidden:{stage}:{node_id}")
-            if node_id not in executed_ids:
+            if node_id not in scoped_executed:
                 failures.append(f"required_node_not_executed:{stage}:{node_id}")
-            if _artifact_required(planned) and node_id not in verified_ids:
+            if _artifact_required(planned) and node_id not in scoped_verified:
                 failures.append(f"required_artifact_not_verified:{stage}:{node_id}")
         for node_id, item in skipped.items():
             if not str(item.get("reason") or "").strip():
