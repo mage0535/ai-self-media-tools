@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import deploy_release as deploy_release_module
-from scripts.deploy_release import deploy_release, rollback_release
+from scripts.deploy_release import _systemd_run, default_systemd_unit_dir, deploy_release, query_systemd_unit_states, rollback_release
 
 
 CURRENT = "%h/.ai-self-media-tools-current"
@@ -14,6 +14,77 @@ MUTABLE = "%h/.ai-self-media-tools"
 
 def _systemd_result(returncode=0, stdout=""):
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr="")
+
+
+def test_system_scope_omits_user_bus_flag():
+    calls = []
+
+    def runner(argv):
+        calls.append(argv)
+        return _systemd_result()
+
+    _systemd_run(["daemon-reload"], runner, scope="system")
+    assert calls == [["systemctl", "daemon-reload"]]
+
+
+def test_default_unit_directory_matches_scope():
+    assert default_systemd_unit_dir("system") == Path("/etc/systemd/system")
+    assert default_systemd_unit_dir("user") == Path.home() / ".config" / "systemd" / "user"
+    with pytest.raises(Exception, match="scope"):
+        default_systemd_unit_dir("global")
+
+
+def test_invalid_systemd_scope_fails_before_runner():
+    calls = []
+    with pytest.raises(Exception, match="scope"):
+        query_systemd_unit_states(["worker.service"], runner=lambda argv: calls.append(argv), scope="global")
+    assert calls == []
+
+
+def test_acceptance_queries_system_scope_without_user_flag():
+    from scripts.task9_deployment_acceptance import query_timer_states
+
+    calls = []
+
+    def runner(argv):
+        calls.append(argv)
+        operation = argv[1]
+        return _systemd_result(1 if operation == "is-enabled" else 3, "disabled\n" if operation == "is-enabled" else "inactive\n")
+
+    states = query_timer_states(["hermes-content-platform.timer"], systemd_runner=runner, systemd_scope="system")
+    assert states["hermes-content-platform.timer"]["enabled"] is False
+    assert all(command[:2] != ["systemctl", "--user"] for command in calls)
+
+
+def test_deploy_and_rollback_propagate_system_scope_to_every_command(tmp_path):
+    from tests.test_deploy_release import _case, _fixture_evidence_runner
+
+    source, config, report, rollback = _case(tmp_path)
+    systemd_dir = tmp_path / "systemd-system"
+    fake = FakeSystemd(systemd_dir)
+    commands = []
+
+    def system_runner(argv):
+        commands.append(list(argv))
+        assert argv[0] == "systemctl"
+        assert "--user" not in argv
+        return fake([argv[0], "--user", *argv[1:]])
+
+    deployed = deploy_release(
+        source_root=source, releases_root=tmp_path / "releases",
+        current_link=tmp_path / ".ai-self-media-tools-current", config_path=config,
+        test_report_path=report, rollback_target=rollback, data_root=tmp_path / "data",
+        release_name="system-scope", secrets_root=tmp_path / "secrets",
+        evidence_runner=_fixture_evidence_runner, systemd_unit_dir=systemd_dir,
+        systemd_runner=system_runner, systemd_scope="system",
+    )
+    rollback_release(
+        target_release=deployed["release_root"], current_link=tmp_path / ".ai-self-media-tools-current",
+        data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        systemd_unit_dir=systemd_dir, systemd_runner=system_runner, systemd_scope="system",
+    )
+    assert commands
+    assert all("--user" not in command for command in commands)
 
 
 class FakeSystemd:

@@ -40,8 +40,12 @@ SYSTEMD_SECRETS_ROOT = "%h/.ai-self-media-tools/secrets"
 SYSTEMD_UNIT_PREFIXES = ("ai-self-media", "hermes-content-platform")
 
 
-def default_systemd_unit_dir() -> Path:
-    return Path.home() / ".config" / "systemd" / "user"
+def default_systemd_unit_dir(scope: str = "user") -> Path:
+    if scope == "system":
+        return Path("/etc/systemd/system")
+    if scope == "user":
+        return Path.home() / ".config" / "systemd" / "user"
+    raise ReleaseAuditError("systemd scope must be 'user' or 'system'")
 
 
 @contextlib.contextmanager
@@ -121,8 +125,10 @@ def _activate(current_link: Path, release_root: Path) -> None:
             temporary.unlink()
 
 
-def _systemd_run(argv: list[str], runner=None, *, allow_failure: bool = False):
-    command = ["systemctl", "--user", *argv]
+def _systemd_run(argv: list[str], runner=None, *, allow_failure: bool = False, scope: str = "user"):
+    if scope not in {"user", "system"}:
+        raise ReleaseAuditError("systemd scope must be 'user' or 'system'")
+    command = ["systemctl", *(["--user"] if scope == "user" else []), *argv]
     result = runner(command) if runner is not None else subprocess.run(command, capture_output=True, text=True)
     if result.returncode and not allow_failure:
         detail = (getattr(result, "stderr", "") or getattr(result, "stdout", "")).strip()
@@ -175,7 +181,7 @@ def _validate_systemd_unit(path: Path, text: str) -> None:
                 raise ReleaseAuditError(f"systemd unit {path.name} points mutable runtime data at the release root")
 
 
-def _install_systemd_units(release_root: Path, unit_dir: Path, runner=None) -> tuple[list[str], list[str]]:
+def _install_systemd_units(release_root: Path, unit_dir: Path, runner=None, *, scope: str = "user") -> tuple[list[str], list[str]]:
     services, timers = _systemd_unit_paths(release_root)
     unit_dir.mkdir(parents=True, exist_ok=True)
     release_names = {path.name for path in [*services, *timers]}
@@ -191,12 +197,12 @@ def _install_systemd_units(release_root: Path, unit_dir: Path, runner=None) -> t
             _remove_path(destination)
         shutil.copy2(path, destination)
         destination.chmod(0o644)
-    _systemd_run(["daemon-reload"], runner)
+    _systemd_run(["daemon-reload"], runner, scope=scope)
     return [path.name for path in services], [path.name for path in timers]
 
 
-def _timer_enabled(timer: str, runner=None) -> bool:
-    result = _systemd_run(["is-enabled", timer], runner, allow_failure=True)
+def _timer_enabled(timer: str, runner=None, *, scope: str = "user") -> bool:
+    result = _systemd_run(["is-enabled", timer], runner, allow_failure=True, scope=scope)
     if result.returncode not in (0, 1, 3):
         raise ReleaseAuditError(f"could not inspect systemd timer state: {timer}")
     return result.returncode == 0
@@ -241,22 +247,22 @@ def _snapshot_current_link(current: Path | None) -> dict[str, object]:
     return {"kind": "missing"}
 
 
-def _snapshot_systemd_transaction(unit_dir: Path, unit_names: list[str], current: Path | None, runner=None) -> dict:
+def _snapshot_systemd_transaction(unit_dir: Path, unit_names: list[str], current: Path | None, runner=None, *, scope: str = "user") -> dict:
     unit_dir_exists = unit_dir.is_dir()
     paths = {name: _snapshot_unit_file(unit_dir / name) for name in unit_names}
     return {
         "unit_dir_exists": unit_dir_exists,
         "files": paths,
-        "states": query_systemd_unit_states(unit_names, runner=runner),
+        "states": query_systemd_unit_states(unit_names, runner=runner, scope=scope),
         "current_link": _snapshot_current_link(current),
     }
 
 
-def query_systemd_unit_states(unit_names: list[str], runner=None) -> dict[str, dict[str, object]]:
+def query_systemd_unit_states(unit_names: list[str], runner=None, *, scope: str = "user") -> dict[str, dict[str, object]]:
     states = {}
     for unit in unit_names:
-        enabled_result = _systemd_run(["is-enabled", unit], runner, allow_failure=True)
-        active_result = _systemd_run(["is-active", unit], runner, allow_failure=True)
+        enabled_result = _systemd_run(["is-enabled", unit], runner, allow_failure=True, scope=scope)
+        active_result = _systemd_run(["is-active", unit], runner, allow_failure=True, scope=scope)
         if enabled_result.returncode not in (0, 1, 3, 5) or active_result.returncode not in (0, 1, 3, 5):
             raise ReleaseAuditError(f"could not inspect systemd unit state: {unit}")
         states[unit] = {
@@ -271,26 +277,26 @@ def query_systemd_unit_states(unit_names: list[str], runner=None) -> dict[str, d
     return states
 
 
-def query_systemd_timer_states(timer_names: list[str], runner=None) -> dict[str, dict[str, object]]:
-    return query_systemd_unit_states(timer_names, runner=runner)
+def query_systemd_timer_states(timer_names: list[str], runner=None, *, scope: str = "user") -> dict[str, dict[str, object]]:
+    return query_systemd_unit_states(timer_names, runner=runner, scope=scope)
 
 
-def _disable_systemd_timers(timer_names: list[str], runner=None) -> None:
+def _disable_systemd_timers(timer_names: list[str], runner=None, *, scope: str = "user") -> None:
     if timer_names:
-        _systemd_run(["disable", "--now", *timer_names], runner)
+        _systemd_run(["disable", "--now", *timer_names], runner, scope=scope)
 
 
-def _restore_systemd_timers(timer_states: dict[str, dict[str, object]], runner=None) -> None:
-    _restore_systemd_states(timer_states, runner=runner)
+def _restore_systemd_timers(timer_states: dict[str, dict[str, object]], runner=None, *, scope: str = "user") -> None:
+    _restore_systemd_states(timer_states, runner=runner, scope=scope)
 
 
-def _stop_systemd_units(unit_names: list[str], runner=None) -> None:
+def _stop_systemd_units(unit_names: list[str], runner=None, *, scope: str = "user") -> None:
     for unit in unit_names:
-        _systemd_run(["stop", unit], runner, allow_failure=True)
+        _systemd_run(["stop", unit], runner, allow_failure=True, scope=scope)
 
 
-def _run_state_command(argv: list[str], runner=None, *, allow_missing: bool = False) -> None:
-    result = _systemd_run(argv, runner, allow_failure=True)
+def _run_state_command(argv: list[str], runner=None, *, allow_missing: bool = False, scope: str = "user") -> None:
+    result = _systemd_run(argv, runner, allow_failure=True, scope=scope)
     if result.returncode == 0:
         return
     if allow_missing and result.returncode in (1, 3, 5):
@@ -299,21 +305,21 @@ def _run_state_command(argv: list[str], runner=None, *, allow_missing: bool = Fa
     raise ReleaseAuditError(f"systemd state restore failed ({' '.join(argv)}): {detail}")
 
 
-def _restore_systemd_states(states: dict[str, dict[str, object]], runner=None) -> None:
+def _restore_systemd_states(states: dict[str, dict[str, object]], runner=None, *, scope: str = "user") -> None:
     for unit in states:
-        _run_state_command(["stop", unit], runner, allow_missing=True)
+        _run_state_command(["stop", unit], runner, allow_missing=True, scope=scope)
     for unit, state in states.items():
         enabled = bool(state["enabled"])
         active = bool(state["active"])
         if enabled and active:
-            _run_state_command(["enable", "--now", unit], runner)
+            _run_state_command(["enable", "--now", unit], runner, scope=scope)
         elif enabled:
-            _run_state_command(["enable", unit], runner)
+            _run_state_command(["enable", unit], runner, scope=scope)
         elif active:
-            _run_state_command(["disable", unit], runner, allow_missing=True)
-            _run_state_command(["start", unit], runner)
+            _run_state_command(["disable", unit], runner, allow_missing=True, scope=scope)
+            _run_state_command(["start", unit], runner, scope=scope)
         else:
-            _run_state_command(["disable", unit], runner, allow_missing=True)
+            _run_state_command(["disable", unit], runner, allow_missing=True, scope=scope)
 
 
 def _restore_unit_files(unit_dir: Path, snapshot: dict[str, object]) -> None:
@@ -352,6 +358,8 @@ def _verify_effective_systemd_units(
     unit_dir: Path,
     service_names: list[str],
     runner=None,
+    *,
+    scope: str = "user",
 ) -> None:
     for name in service_names:
         path = unit_dir / name
@@ -359,7 +367,7 @@ def _verify_effective_systemd_units(
         _validate_systemd_unit(path, text)
         result = _systemd_run(
             ["show", name, "--property=ExecStart", "--property=WorkingDirectory", "--property=Environment"],
-            runner,
+            runner, scope=scope,
         )
         values = {}
         for line in (getattr(result, "stdout", "") or "").splitlines():
@@ -387,10 +395,12 @@ def _prepare_systemd_switch(
     release_root: Path,
     unit_dir: Path,
     runner=None,
+    *,
+    scope: str = "user",
 ) -> tuple[list[str], list[str], dict[str, dict[str, object]]]:
-    services, timers = _install_systemd_units(release_root, unit_dir, runner)
-    timer_states = query_systemd_timer_states(timers, runner)
-    _disable_systemd_timers(timers, runner)
+    services, timers = _install_systemd_units(release_root, unit_dir, runner, scope=scope)
+    timer_states = query_systemd_timer_states(timers, runner, scope=scope)
+    _disable_systemd_timers(timers, runner, scope=scope)
     return services, timers, timer_states
 
 
@@ -400,10 +410,12 @@ def _finish_systemd_switch(
     service_names: list[str],
     timer_states: dict[str, dict[str, object]],
     runner=None,
+    *,
+    scope: str = "user",
 ) -> None:
-    _systemd_run(["daemon-reload"], runner)
-    _verify_effective_systemd_units(release_root, unit_dir, service_names, runner)
-    _restore_systemd_timers(timer_states, runner)
+    _systemd_run(["daemon-reload"], runner, scope=scope)
+    _verify_effective_systemd_units(release_root, unit_dir, service_names, runner, scope=scope)
+    _restore_systemd_timers(timer_states, runner, scope=scope)
 
 
 def _systemd_switch(
@@ -413,7 +425,10 @@ def _systemd_switch(
     activate=None,
     current: Path | None = None,
     previous_release: Path | None = None,
+    scope: str = "user",
 ) -> dict:
+    if scope not in {"user", "system"}:
+        raise ReleaseAuditError("systemd scope must be 'user' or 'system'")
     if unit_dir is None:
         if activate is not None:
             activate(current, release_root)
@@ -423,7 +438,7 @@ def _systemd_switch(
     release_names = [path.name for path in [*services, *timers]]
     installed_names = [path.name for path in _installed_related_unit_paths(unit_path)]
     related_names = sorted(set(installed_names) | set(release_names))
-    snapshot = _snapshot_systemd_transaction(unit_path, related_names, current, runner)
+    snapshot = _snapshot_systemd_transaction(unit_path, related_names, current, runner, scope=scope)
     timer_states = {name: snapshot["states"][name] for name in related_names if name.endswith(".timer")}
     mutated = False
     try:
@@ -437,27 +452,27 @@ def _systemd_switch(
             if name.endswith(".timer") and snapshot["states"].get(name, {}).get("enabled")
             and name not in existing_timers
         )
-        _disable_systemd_timers(existing_timers, runner)
-        _install_systemd_units(release_root, unit_path, runner)
-        _disable_systemd_timers(timers, runner)
+        _disable_systemd_timers(existing_timers, runner, scope=scope)
+        _install_systemd_units(release_root, unit_path, runner, scope=scope)
+        _disable_systemd_timers(timers, runner, scope=scope)
         if activate is not None:
             activate(current, release_root)
-        _verify_effective_systemd_units(release_root, unit_path, [path.name for path in services], runner)
+        _verify_effective_systemd_units(release_root, unit_path, [path.name for path in services], runner, scope=scope)
         _restore_systemd_states(
             {name: snapshot["states"][name] for name in release_names},
-            runner=runner,
+            runner=runner, scope=scope,
         )
     except Exception as exc:
         rollback_errors = []
         try:
-            _stop_systemd_units(related_names, runner)
+            _stop_systemd_units(related_names, runner, scope=scope)
         except Exception as rollback_error:
             rollback_errors.append(rollback_error)
         try:
             _restore_unit_files(unit_path, snapshot)
-            _systemd_run(["daemon-reload"], runner)
+            _systemd_run(["daemon-reload"], runner, scope=scope)
             _restore_current_link(current, snapshot["current_link"])
-            _restore_systemd_states(snapshot["states"], runner=runner)
+            _restore_systemd_states(snapshot["states"], runner=runner, scope=scope)
         except Exception as rollback_error:
             rollback_errors.append(rollback_error)
         if rollback_errors:
@@ -877,6 +892,7 @@ def deploy_release(
     evidence_runner=None,
     systemd_unit_dir: Path | str | None = None,
     systemd_runner=None,
+    systemd_scope: str = "user",
 ) -> dict:
     """Deploy one clean source revision while holding the runtime release lock."""
     _validate_raw_path(source_root, "source_root")
@@ -980,6 +996,7 @@ def deploy_release(
                 activate=_activate,
                 current=current,
                 previous_release=previous_release,
+                scope=systemd_scope,
             )
             return {
                 "ok": True,
@@ -1017,6 +1034,7 @@ def rollback_release(
     secrets_root: Path | str | None = None,
     systemd_unit_dir: Path | str | None = None,
     systemd_runner=None,
+    systemd_scope: str = "user",
 ) -> dict:
     """Verify an audited frozen release and atomically activate it as current."""
     _validate_raw_path(target_release, "target_release")
@@ -1055,6 +1073,7 @@ def rollback_release(
             activate=_activate,
             current=current,
             previous_release=previous_release,
+            scope=systemd_scope,
         )
         return {
             "ok": True,
@@ -1083,8 +1102,14 @@ def main() -> int:
     parser.add_argument("--signing-key")
     parser.add_argument("--project-audit-report")
     parser.add_argument("--min-tests", type=int, default=900)
-    parser.add_argument("--systemd-unit-dir", default=str(default_systemd_unit_dir()))
+    parser.add_argument("--systemd-unit-dir")
+    parser.add_argument("--systemd-scope", choices=("user", "system"), default="user")
     args = parser.parse_args()
+    systemd_unit_dir = (
+        args.systemd_unit_dir
+        if args.systemd_unit_dir is not None
+        else str(default_systemd_unit_dir(args.systemd_scope))
+    )
     if args.operation == "init-signing-key":
         if not args.secrets_root:
             parser.error("init-signing-key requires --secrets-root")
@@ -1103,7 +1128,8 @@ def main() -> int:
             data_root=args.data_root,
             signing_key=args.signing_key,
             secrets_root=args.secrets_root,
-            systemd_unit_dir=args.systemd_unit_dir or None,
+            systemd_unit_dir=systemd_unit_dir or None,
+            systemd_scope=args.systemd_scope,
         )
     elif args.operation == "attest-existing":
         required = {
@@ -1151,7 +1177,8 @@ def main() -> int:
             signing_key=args.signing_key,
             project_audit_report=args.project_audit_report,
             min_tests=args.min_tests,
-            systemd_unit_dir=args.systemd_unit_dir or None,
+            systemd_unit_dir=systemd_unit_dir or None,
+            systemd_scope=args.systemd_scope,
         )
     print(result)
     return 0

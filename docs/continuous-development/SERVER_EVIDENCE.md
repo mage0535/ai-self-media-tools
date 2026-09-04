@@ -196,3 +196,16 @@ Observed read-only on 2026-08-31.
 - Project/privacy audit: 574 scanned files, zero issues. License audit: 65 capabilities, zero issues. `git diff --check` passed.
 - Code inspection confirmed the deploy helper still fixes all `systemctl` calls to user scope, while the 2026-09-02 server refresh observed system-scoped production services. This is a separate activation blocker and is not waived by the bootstrap test result.
 - No server file, release, symlink, service, timer, private config, shared database, publisher, or media provider was modified or invoked during this local milestone.
+
+## 2026-09-04 Read-Only Resume Refresh And Scope Work
+
+- SSH observation at 12:33 BJT: current remains `$RELEASES/unified-capability-v7-149362f`; mutable repository HEAD remains `6f4c88a`. Its tracked diff covers 17 files, 459 insertions and 36 deletions, with additional untracked files. No server checkout cleanup or overwrite was attempted.
+- Image provider timestamp: August 30; film renderer: August 28; private config: August 30. Top-level `content_platform`/`scripts` scan found no files newer than September 2. These timestamps do not prove nested/private assets or file contents unchanged across all prior runs.
+- Image provider SHA-256: `b86fc8f5b8f5eabd8053323cb5127bb3d6d9d39f5d3db5486bfeff50f6107940`; film renderer SHA-256: `ba850a4dc85d55c697ce4f20c3102018afa0345429f993e736ac1fc4f8582a31`.
+- Gateway active; all 11 listed project timers disabled. Root filesystem 74% used, about 23 GB available. Staging remains `e1d6068`.
+- System manager reports system-level unit fragments and expanded WorkingDirectory for the content service. The local verifier's literal `%h` comparison therefore remains a real activation blocker, not just a hypothetical test concern.
+- Scope implementation routes deploy/rollback/query/acceptance to the requested manager and selects the matching CLI default unit directory. It does not yet resolve expanded runtime-path verification or gateway/private-config convergence.
+- An earlier focused command named a nonexistent test file and ran zero tests; it is not accepted as evidence. The corrected suite used `tests/test_task9_canary.py` and passed 168 tests before two later tests; the systemd-only final subset passed 10 tests.
+- No production service restart, symlink switch, config write, database mutation, publishing, or timer enable was performed during this refresh.
+- Final scope regression: `python -m pytest -q --junitxml=artifacts/test-reports/p10-systemd-scope-full.xml` => 1612 passed plus 37 subtests, 285.26 seconds, exit 0. All five new scope tests are included in this full run.
+- Project/privacy audit after documentation updates: 574 files, zero issues. License audit: 65 capabilities, zero issues. Diff whitespace check passed.

@@ -42,4 +42,6 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - The legacy current release is not a valid rollback artifact because runtime files and tracked drift are present. Use `prepare_bootstrap_release` from a clean Git source to create a signed rollback without activating it.
 - Bootstrap preparation now rejects unsafe names and unresolved path boundaries before side effects, and cleans up only outputs proven to belong to its own transaction. Do not bypass these guards with ad hoc copies.
 - Server activation must use the same systemd scope as the installed production units. The current server uses system scope; scope convergence remains a P10 gate.
+- Deployment and acceptance now accept `--systemd-scope user|system`; this is command routing, not proof of a completed activation. Expanded effective paths and gateway-root convergence still require Linux verification.
+- On every resume, compare server HEAD, dirty-file names, and available timestamps/hashes before deployment. Preserve uncommitted server work; unchanged HEAD alone does not establish unchanged content.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
