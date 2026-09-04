@@ -110,6 +110,48 @@ def test_gateway_runtime_dropin_is_installed_verified_and_preserves_other_dropin
     assert result["gateway_dropin"] == str(managed)
 
 
+def test_systemd_switch_removes_only_conflicting_project_dropins(tmp_path):
+    release = tmp_path / "release"
+    shutil.copytree(Path("systemd"), release / "systemd")
+    unit_dir = tmp_path / "units"
+    unit_dir.mkdir()
+    dropins = unit_dir / "hermes-content-platform-overnight.service.d"
+    dropins.mkdir()
+    stale = dropins / "70-old-current.conf"
+    stale.write_text("[Service]\nEnvironment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools-current/config.json\nExecStart=\nExecStart=/bin/false\n", encoding="utf-8")
+    resource = dropins / "40-memory.conf"
+    resource.write_text("[Service]\nMemoryMax=2G\n", encoding="utf-8")
+    fake = FakeSystemd(unit_dir)
+
+    deploy_release_module._systemd_switch(release, unit_dir, fake)
+
+    assert not stale.exists()
+    assert resource.is_file()
+
+
+def test_failed_systemd_switch_restores_conflicting_project_dropin(tmp_path):
+    release = tmp_path / "release"
+    shutil.copytree(Path("systemd"), release / "systemd")
+    unit_dir = tmp_path / "units"
+    unit_dir.mkdir()
+    dropins = unit_dir / "hermes-content-platform-overnight.service.d"
+    dropins.mkdir()
+    stale = dropins / "70-old-current.conf"
+    original = b"[Service]\nWorkingDirectory=/old\n"
+    stale.write_bytes(original)
+    fake = FakeSystemd(unit_dir)
+
+    def fail_gateway(argv):
+        result = fake(argv)
+        if argv[2] == "show" and argv[3] == "hermes-gateway.service":
+            result.stdout = "Environment=\n"
+        return result
+
+    with pytest.raises(Exception, match="gateway|CONTENT_PLATFORM"):
+        deploy_release_module._systemd_switch(release, unit_dir, fail_gateway)
+    assert stale.read_bytes() == original
+
+
 def test_gateway_dropin_and_current_are_restored_after_effective_check_failure(tmp_path):
     release = tmp_path / "release"
     shutil.copytree(Path("systemd"), release / "systemd")
