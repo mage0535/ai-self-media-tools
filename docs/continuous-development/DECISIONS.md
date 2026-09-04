@@ -172,3 +172,6 @@
 - Preserve existing user-scope defaults for compatibility; production must explicitly select the observed system scope.
 - Unit templates and effective runtime paths are distinct: effective-path verification must handle systemd expansion and validate the configured runtime identity, not merely compare template strings.
 - No successful fake-systemd test authorizes activation; Linux root convergence, rollback, and live Canaries remain separate gates.
+- For the current home-based installation, effective paths must equal the invoking deployment user's expanded home paths. Cross-user deployment requires a separately validated runtime identity and is not inferred from observed output.
+- Parse environment assignments before comparison; prefix matches are insufficient for code/config/data/secrets/PYTHONPATH or production mode.
+- Check release script paths only for ExecStart templates that invoke release scripts; an external scraper in an environment variable does not turn module-based ExecStart into a script invocation.

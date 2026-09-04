@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1612 passed + 37 subtests.
+- Latest complete regression on this branch: 1617 passed + 37 subtests.
 
 ## Active work
 
@@ -24,7 +24,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `scripts/task9_deployment_acceptance.py`, `tests/test_release_systemd.py`, four coordination documents | in_progress | finish scope regression and commit; fix expanded effective paths before Linux activation |
+| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, four coordination documents | in_progress | TDD expanded effective-path and exact environment verification; Linux activation remains gated |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -132,3 +132,11 @@ These describe the audited production release, not the current development code.
 - Available disk is about 23 GB (74% used). Server staging is still `e1d6068`.
 - Effective systemd WorkingDirectory is expanded, not literal `%h`; current effective-unit verifier still compares literal templates. This remains a separate activation blocker after scope command routing.
 - Scope propagation full regression: 1612 passed plus 37 subtests (285.26s); project/privacy 574 files clean, license 65 capabilities clean. No production activation performed.
+
+## Effective-Path Follow-Up
+
+- Scope propagation committed as `9748bff`. Local effective-path fix now expands the deployment user's home and checks exact environment assignments; module-based ExecStart is no longer confused with scraper environment paths.
+- Five new tests first failed against the old implementation. Focused deploy/systemd/release/Canary regression: 133 passed.
+- Fresh 12:40 BJT SSH check: same current release, mutable HEAD, 17-file diff summary and two recorded image/renderer hashes. No claim is made that all private assets are byte-identical.
+- Current content service environment lacks explicit CODE_ROOT and production mode. Gateway/root convergence and actual Linux activation remain required; no services or timers changed.
+- Effective-path full regression: 1617 passed plus 37 subtests, 283.41 seconds. Linux staging verification is next; this is not production activation evidence.
