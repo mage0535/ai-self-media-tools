@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -794,6 +795,54 @@ def test_deploy_rewrites_old_internal_config_paths_and_rejects_external_script(t
             data_root=tmp_path / "data-2",
             release_name="rejected",
         )
+
+
+def _external_bridge_config(tmp_path: Path, *, digest: str | None = None, config_key: str = "tools.agent_reach.bridge"):
+    hermes = tmp_path / ".hermes"
+    bridge = hermes / "scripts" / "reach_bridge.py"
+    bridge.parent.mkdir(parents=True)
+    bridge.write_text("print('bridge')\n", encoding="utf-8")
+    actual = hashlib.sha256(bridge.read_bytes()).hexdigest()
+    config = tmp_path / "external-config.json"
+    config.write_text(json.dumps({
+        "data_dir": str(tmp_path / "data"),
+        "tools": {"agent_reach": {"bridge": str(bridge)}},
+        "external_runtime_dependencies": {
+            "schema": "external_runtime_dependencies_v1",
+            "items": [{
+                "id": "agent_reach_bridge", "kind": "hermes_bridge",
+                "config_key": config_key, "path": str(bridge), "sha256": digest or actual,
+            }],
+        },
+    }), encoding="utf-8")
+    return hermes, bridge, config
+
+
+def test_config_preflight_accepts_hash_bound_hermes_bridge(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    _git_source(source)
+    hermes, _, config = _external_bridge_config(tmp_path)
+    monkeypatch.setenv("HERMES_HOME", str(hermes))
+    deploy_release_module.preflight_runtime_config(config, source, tmp_path / "data", tmp_path / "secrets")
+
+
+@pytest.mark.parametrize("fault", ["hash", "config_key", "symlink"])
+def test_config_preflight_rejects_untrusted_hermes_bridge(tmp_path, monkeypatch, fault):
+    source = tmp_path / "source"
+    source.mkdir()
+    _git_source(source)
+    hermes, bridge, config = _external_bridge_config(
+        tmp_path, digest="0" * 64 if fault == "hash" else None,
+        config_key="tools.other.bridge" if fault == "config_key" else "tools.agent_reach.bridge",
+    )
+    monkeypatch.setenv("HERMES_HOME", str(hermes))
+    if fault == "symlink":
+        target = bridge.with_name("actual.py")
+        bridge.rename(target)
+        bridge.symlink_to(target)
+    with pytest.raises(ReleaseAuditError, match="external|bridge|hash|config_key|symlink"):
+        deploy_release_module.preflight_runtime_config(config, source, tmp_path / "data", tmp_path / "secrets")
 
 
 def test_rollback_verifies_target_and_atomically_switches_current(tmp_path: Path, monkeypatch):

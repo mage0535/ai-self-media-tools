@@ -183,3 +183,10 @@
 - Retain post-build config validation: early preflight is an optimization, not a replacement for final candidate verification.
 - External Hermes bridges are real dependencies, not release-owned scripts. They remain blocked until their trust boundary, version/hash, input/output contract, and runtime availability verification are governed explicitly.
 - Do not disable configured tools, copy unreviewed external scripts into public releases, or allow all external script paths simply to pass deployment gates.
+
+## D25: External Dependency Identity Is Not Execution Evidence
+
+- External Hermes scripts may pass release validation only through a private `external_runtime_dependencies_v1` contract bound to dependency ID, kind, config key, exact path and SHA-256.
+- External bridge paths must remain under the current Hermes home, be regular non-symlink files and match their digest. Every attestation record must bind to a configured script; unused records fail.
+- A trusted dependency remains only identity-verified. Capability availability, adapter execution, output contract, artifact/effect verification and quality impact require their own runtime evidence.
+- Public repository files do not contain server bridge paths or private manifests. Candidate private config stays outside immutable releases and is promoted only within the activation transaction.
