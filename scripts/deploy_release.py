@@ -535,13 +535,42 @@ def _validate_runtime_config(config_path: Path, release_root: Path, data_root: P
         if not delivery_policy["passed"]:
             raise ReleaseAuditError("runtime delivery policy mismatch: " + ";".join(delivery_policy["failures"]))
 
+    dependency_block = raw_config.get("external_runtime_dependencies") or {}
+    if dependency_block and dependency_block.get("schema") != "external_runtime_dependencies_v1":
+        raise ReleaseAuditError("external runtime dependency schema is invalid")
+    records = dependency_block.get("items", []) if isinstance(dependency_block, dict) else []
+    if not isinstance(records, list):
+        raise ReleaseAuditError("external runtime dependency items must be a list")
+    external_by_key = {}
+    seen_ids = set()
+    for record in records:
+        if not isinstance(record, dict):
+            raise ReleaseAuditError("external runtime dependency record must be an object")
+        required = {"id", "kind", "config_key", "path", "sha256"}
+        if set(record) != required or record.get("kind") != "hermes_bridge":
+            raise ReleaseAuditError("external runtime dependency contract is invalid")
+        dependency_id = str(record["id"]).strip()
+        config_key = str(record["config_key"]).strip()
+        digest = str(record["sha256"]).strip().lower()
+        if not dependency_id or dependency_id in seen_ids or not config_key or config_key in external_by_key:
+            raise ReleaseAuditError("external runtime dependency identity is invalid or duplicated")
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            raise ReleaseAuditError(f"external runtime dependency hash is invalid: {dependency_id}")
+        seen_ids.add(dependency_id)
+        external_by_key[config_key] = record
+    used_external = set()
+    hermes_root = Path(os.environ.get("HERMES_HOME", "").strip() or Path.home() / ".hermes").expanduser().resolve()
+
     def visit(value, key: str = ""):
         if isinstance(value, dict):
             for child_key, child_value in value.items():
-                visit(child_value, str(child_key))
+                child_path = f"{key}.{child_key}" if key else str(child_key)
+                if child_path == "external_runtime_dependencies":
+                    continue
+                visit(child_value, child_path)
         elif isinstance(value, list):
-            for child in value:
-                visit(child, key)
+            for index, child in enumerate(value):
+                visit(child, f"{key}.{index}")
         elif isinstance(value, str) and value.lower().endswith((".py", ".sh")):
             candidate = Path(value).expanduser()
             if not candidate.is_absolute():
@@ -549,12 +578,28 @@ def _validate_runtime_config(config_path: Path, release_root: Path, data_root: P
             resolved = candidate.resolve()
             try:
                 resolved.relative_to(release_root.resolve())
-            except ValueError as exc:
-                raise ReleaseAuditError(f"configured {key} script is outside release: {value}") from exc
+            except ValueError:
+                record = external_by_key.get(key)
+                if record is None or Path(str(record["path"])).expanduser().resolve() != resolved:
+                    raise ReleaseAuditError(f"configured {key} script is outside release without matching external contract: {value}")
+                _validate_raw_path(value, f"external dependency {record['id']}")
+                try:
+                    resolved.relative_to(hermes_root)
+                except ValueError as exc:
+                    raise ReleaseAuditError(f"external bridge is outside Hermes root: {record['id']}") from exc
+                if not resolved.is_file() or resolved.is_symlink():
+                    raise ReleaseAuditError(f"external bridge is missing or symlinked: {record['id']}")
+                if _sha256(resolved) != record["sha256"]:
+                    raise ReleaseAuditError(f"external bridge hash mismatch: {record['id']}")
+                used_external.add(key)
+                return
             if not resolved.is_file():
                 raise ReleaseAuditError(f"configured {key} script does not exist in release: {value}")
 
     visit(loaded)
+    unused = sorted(set(external_by_key) - used_external)
+    if unused:
+        raise ReleaseAuditError("external runtime dependencies are not bound to configured scripts: " + ",".join(unused))
 
 
 def _validate_signing_key_boundary(

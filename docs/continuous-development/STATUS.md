@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1619 passed + 37 subtests.
+- Latest complete regression on this branch: 1623 passed + 37 subtests.
 
 ## Active work
 
@@ -151,3 +151,10 @@ These describe the audited production release, not the current development code.
 - Bootstrap/deploy now preflight config before evidence generation and candidate creation; retain final post-build check and restore caller environment. Focused regression: 99 passed.
 - Next implementation must govern the three external dependencies without bypassing security/quality gates, then resume signed candidate preparation.
 - Config-preflight full regression: 1619 passed plus 37 subtests, 273.90 seconds, exit 0; project/privacy and license audits remain clean.
+
+## External Hermes Bridge Governance
+
+- Private config may attest a `hermes_bridge` only with exact config key, exact path under Hermes home, regular non-symlink file, and SHA-256. Duplicate, malformed, unused, missing, symlinked, wrong-key or drifted records fail closed.
+- This is deployment dependency trust only. Agent-Reach, Lux and knowledge-card bridge runtime probes/adapters/effect evidence remain separate P10 work.
+- Focused deployment suite: 145 passed. Full regression: 1623 passed plus 37 subtests, 284.78 seconds.
+- Next: commit/push, Linux test, create a permission-restricted candidate config copy with current hashes, and preflight it without changing production config.

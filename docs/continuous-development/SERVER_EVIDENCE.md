@@ -235,3 +235,12 @@ Observed read-only on 2026-08-31.
 - Focused command: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py tests/test_runtime_release_audit.py -q --tb=short` => 99 passed in 54.30 seconds.
 - No candidate build/signing, production config edit, tool removal, service restart, publish operation, or timer activation occurred. External bridge governance remains unresolved.
 - Full local command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-config-preflight-full.xml` => 1619 passed plus 37 subtests, 273.90 seconds, exit 0. Project/privacy audit 574 files clean; license audit 65 capabilities clean.
+
+## 2026-09-04 External Bridge Trust Contract (Local Only)
+
+- Added `external_runtime_dependencies_v1` validation for configured Python/shell bridges outside the immutable release. Required binding is dependency ID, `hermes_bridge` kind, full config key, exact path and SHA-256.
+- Validation restricts paths to Hermes home, rejects symlink boundaries and missing/non-regular files, checks digest, and rejects duplicate or unconsumed records. Existing release-owned scripts retain the original release boundary check.
+- Tests first demonstrated that a correct attestation was still rejected while unregistered/hash/key/symlink faults failed. After implementation, all four scenarios pass with only the correct contract accepted.
+- Focused command: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py tests/test_runtime_release_audit.py tests/test_operational_scripts.py -q --junitxml=artifacts/test-reports/p10-external-bridge-focused.xml` => 145 passed in 54.45 seconds.
+- Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-external-bridge-full.xml` => 1623 passed plus 37 subtests, 284.78 seconds, exit 0.
+- No private config or server bridge was changed during local implementation. Passing deployment validation will not be reported as runtime adapter execution or final-artifact impact.
