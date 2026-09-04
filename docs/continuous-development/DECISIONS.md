@@ -165,3 +165,10 @@
 - Reserve the final candidate directory exclusively after evidence generation and before publishing files. Never replace an existing directory, even if empty.
 - Failure cleanup removes a release directory or attestation only when the current transaction proves ownership. Concurrent or pre-existing files are never cleanup targets.
 - Systemd scope is an explicit production input. A user-scoped deployment command must not be used against system-scoped production units, or vice versa.
+
+## D23: Scope Propagation Is Not Activation Acceptance
+
+- Deploy, rollback, timer-state queries, and deployment acceptance pass the same explicit `user` or `system` scope; CLI default unit directories follow that scope.
+- Preserve existing user-scope defaults for compatibility; production must explicitly select the observed system scope.
+- Unit templates and effective runtime paths are distinct: effective-path verification must handle systemd expansion and validate the configured runtime identity, not merely compare template strings.
+- No successful fake-systemd test authorizes activation; Linux root convergence, rollback, and live Canaries remain separate gates.

@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1607 passed + 37 subtests.
+- Latest complete regression on this branch: 1612 passed + 37 subtests.
 
 ## Active work
 
@@ -24,7 +24,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | deploy/systemd tests and four coordination documents | in_progress | commit/push bootstrap hardening; implement explicit system/user scope before signed server preparation |
+| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `scripts/task9_deployment_acceptance.py`, `tests/test_release_systemd.py`, four coordination documents | in_progress | finish scope regression and commit; fix expanded effective paths before Linux activation |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -122,3 +122,13 @@ These describe the audited production release, not the current development code.
 - P10 bootstrap hardening added pre-side-effect validation for release names and raw path boundaries, explicit-key fail-closed behavior, exclusive target reservation, and transaction-owned cleanup. Bootstrap subset: 16 passed; deployment/release focused suite: 129 passed.
 - P10 full regression: 1607 passed plus 37 subtests; JUnit 1644 tests, zero failures/errors/skips. Project/privacy audit: 574 files, zero issues. License audit: 65 capabilities, zero issues.
 - Newly confirmed activation blocker: deploy helpers invoke `systemctl --user`, while the observed production gateway and content units are system-scoped. Explicit scope support and Linux fault tests are required before activation.
+
+## 2026-09-04 Resume And Server Drift Review
+
+- Bootstrap hardening is committed/pushed as `d4db062`. Explicit scope propagation is the current local work; production has not been activated.
+- Fresh read-only SSH observation: current release remains `unified-capability-v7-149362f`, mutable checkout remains `6f4c88a`, gateway active, all 11 listed project timers disabled.
+- Mutable checkout has 17 modified tracked files (459 insertions, 36 deletions) plus untracked assets/config/backups. None were overwritten or attributed to a particular author.
+- Image provider, film renderer, and private config timestamps precede September 2; no top-level source/script files newer than that cutoff were found. This limited check is not an exhaustive proof that all private/nested assets are unchanged.
+- Available disk is about 23 GB (74% used). Server staging is still `e1d6068`.
+- Effective systemd WorkingDirectory is expanded, not literal `%h`; current effective-unit verifier still compares literal templates. This remains a separate activation blocker after scope command routing.
+- Scope propagation full regression: 1612 passed plus 37 subtests (285.26s); project/privacy 574 files clean, license 65 capabilities clean. No production activation performed.

@@ -17,14 +17,14 @@ from scripts.task9_rollback import rehearse_rollback
 from scripts.deploy_release import query_systemd_timer_states
 
 
-def query_timer_states(timer_names: list[str] | None = None, systemd_runner=None) -> dict:
+def query_timer_states(timer_names: list[str] | None = None, systemd_runner=None, *, systemd_scope: str = "user") -> dict:
     names = timer_names or sorted(
         path.name for path in (ROOT / "systemd").glob("*.timer")
         if path.stem.startswith(("ai-self-media", "hermes-content-platform"))
     )
     if not names:
         raise RuntimeError("no ai-self-media systemd timers are defined")
-    return query_systemd_timer_states(names, runner=systemd_runner)
+    return query_systemd_timer_states(names, runner=systemd_runner, scope=systemd_scope)
 
 
 def timers_are_safe(timer_states: dict[str, dict[str, object]]) -> bool:
@@ -43,6 +43,7 @@ def main() -> int:
     parser.add_argument("--current-link")
     parser.add_argument("--output", required=True)
     parser.add_argument("--execute", action="store_true", help="Perform rollback, health checks, and forward recovery")
+    parser.add_argument("--systemd-scope", choices=("user", "system"), default="user")
     parser.add_argument("--health-command", nargs=argparse.REMAINDER, default=[])
     args = parser.parse_args()
     report = json.loads(Path(args.report).read_text(encoding="utf-8"))
@@ -62,7 +63,7 @@ def main() -> int:
         health_check=health_check,
     )
     try:
-        timer_states = query_timer_states()
+        timer_states = query_timer_states(systemd_scope=args.systemd_scope)
         timers_enabled = bool(timer_states) and all(state["enabled"] for state in timer_states.values())
         timers_safe = timers_are_safe(timer_states)
         timer_error = ""
