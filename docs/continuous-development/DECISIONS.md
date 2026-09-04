@@ -225,3 +225,10 @@
 - Forward activation promotes the release snapshot to stable private config. Rollback verifies metadata/attestation and promotes the target release snapshot before gateway startup.
 - Snapshot files remain outside Git and immutable code releases. Failed transactions remove only snapshots whose inode ownership belongs to that transaction.
 - Older prepared releases whose metadata references staging configs are retained as historical evidence but are not final production rollback targets.
+
+## D30: Failed Release Transactions Are Durable And Self-Cleaning
+
+- Persist release failure type/message privately under shared data before returning the original exception. Never rely on an SSH stream as the only failure evidence.
+- Remove attestation and config snapshot only when the transaction recorded ownership and the attestation hash or snapshot inode remains unchanged.
+- Preserve JUnit, project audit, journal and pre-activation snapshots after failure. Failed release code directories may be removed when transaction ownership is proven.
+- A successful rollback of current/config/services does not make the failed deployment successful; diagnose and fix the recorded cause before a new named attempt.

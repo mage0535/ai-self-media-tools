@@ -512,3 +512,8 @@ def test_deploy_restores_unit_files_symlink_states_and_data_after_fault(tmp_path
     assert protected.read_bytes() == b"mutable-state"
     assert any(command[2] == "daemon-reload" for command in fake.commands)
     assert any(command[2:4] == ["enable", "--now"] for command in fake.commands)
+    assert not (data / "release-attestations" / "fault-injected.sha256").exists()
+    assert not (data / "release-configs" / "fault-injected.json").exists()
+    failure = json.loads((data / "release-failures" / "fault-injected.json").read_text(encoding="utf-8"))
+    assert failure["operation"] == "deploy"
+    assert "injected effective-unit failure" in failure["error"]
