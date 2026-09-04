@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1626 passed + 37 subtests.
+- Latest complete regression on this branch: 1628 passed + 37 subtests.
 
 ## Active work
 
@@ -168,3 +168,6 @@ These describe the audited production release, not the current development code.
 - Gateway focused deployment suite: 148 passed. Full JUnit: 1663 tests, zero failures/errors/skips, 286.505 seconds; equivalent pytest scale 1626 plus 37 subtests.
 - Privacy audit initially rejected a test-only literal private path; it was replaced with `Path.home()`. Systemd subset 17 passed and privacy scan 575 files clean afterward.
 - Next: commit/push, Linux gateway fault tests, prepare a signed forward candidate from the new commit, then perform controlled system-scope activation and rollback rehearsal with timers disabled.
+- Candidate private-config promotion is now part of local deploy transaction. It occurs after release signing/freeze and before gateway restart; activation failure restores prior config bytes/mode.
+- Private-config focused suite: 108 passed. Full regression: 1628 passed plus 37 subtests; JUnit 1665 zero failures/errors/skips, 287.140 seconds. Privacy 575 files and license 65 capabilities clean.
+- Next: commit/push and run Linux POSIX mode/failure tests before any system-scope activation.

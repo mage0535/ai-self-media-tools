@@ -51,4 +51,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Stable `$CURRENT_RELEASE` script aliases are rewritten to the explicitly supplied candidate code root before filesystem resolution. Canary callers pass their code root directly rather than relying on ambient environment.
 - Signed bootstrap rollback is now the clean `7bfa13c` runtime, not the failing historical `149362f` source. It is prepared and frozen but inactive. Gateway runtime-root drop-in remains required before forward activation.
 - The project owns only `ai-self-media-runtime.conf` under the Hermes gateway drop-in directory. Activation snapshots and restores that file and gateway state while preserving unrelated Hermes drop-ins.
+- Forward deployment may validate an isolated candidate config and atomically promote it to the stable private config before gateway restart. A failed activation restores the previous private config bytes and mode.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
