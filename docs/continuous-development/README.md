@@ -56,4 +56,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Linux staging at `ec08d1c` passed 109 operational/deployment/systemd tests, including POSIX mode and config-before-restart checks. Live activation and rollback rehearsal remain pending.
 - Release metadata must reference a durable mode-600 private config snapshot under shared data, never a staging candidate path. Rollback promotes that signed snapshot before gateway start and restores the previous active config on failure.
 - Failed deployments persist a private failure report and remove only transaction-owned release, config snapshot and attestation. Preserve the report and system journal before retrying.
+- Deployment removes only service drop-ins that override project-managed runtime roots, WorkingDirectory or ExecStart. Other resource/provider/function drop-ins remain; conflicts are restored on failure.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

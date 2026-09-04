@@ -232,3 +232,10 @@
 - Remove attestation and config snapshot only when the transaction recorded ownership and the attestation hash or snapshot inode remains unchanged.
 - Preserve JUnit, project audit, journal and pre-activation snapshots after failure. Failed release code directories may be removed when transaction ownership is proven.
 - A successful rollback of current/config/services does not make the failed deployment successful; diagnose and fix the recorded cause before a new named attempt.
+
+## D31: Remove Only Runtime-Conflicting Service Drop-Ins
+
+- Project unit files are authoritative for runtime roots, WorkingDirectory and ExecStart; existing drop-ins overriding those fields are transactional conflicts.
+- Preserve drop-ins that only define resource limits, provider env files, admission windows, writer fallback or other non-runtime settings.
+- Snapshot each conflicting file before removal and restore exact bytes/mode/symlink on activation failure before restoring old service states.
+- Never delete an entire service drop-in directory merely because one file is stale.
