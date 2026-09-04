@@ -360,6 +360,22 @@ def _restore_snapshot_path(destination: Path, record: dict[str, object]) -> None
     os.replace(temporary, destination)
 
 
+def _promote_private_config(candidate: Path, destination: Path) -> None:
+    if candidate.resolve() == destination.resolve():
+        return
+    if not candidate.is_file() or candidate.is_symlink():
+        raise ReleaseAuditError("candidate runtime config must be a regular file")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{destination.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        shutil.copyfile(candidate, temporary)
+        temporary.chmod(0o600)
+        os.replace(temporary, destination)
+    finally:
+        if temporary.exists() or temporary.is_symlink():
+            temporary.unlink()
+
+
 def _runtime_environment_expected() -> dict[str, str]:
     home = Path.home().as_posix()
     return {
@@ -1040,6 +1056,7 @@ def deploy_release(
     systemd_unit_dir: Path | str | None = None,
     systemd_runner=None,
     systemd_scope: str = "user",
+    active_config_path: Path | str | None = None,
 ) -> dict:
     """Deploy one clean source revision while holding the runtime release lock."""
     _validate_raw_path(source_root, "source_root")
@@ -1047,10 +1064,13 @@ def deploy_release(
     _validate_raw_path(config_path, "config_path")
     _validate_raw_path(rollback_target, "rollback_target")
     _validate_raw_path(data_root, "data_root")
+    if active_config_path is not None:
+        _validate_raw_path(active_config_path, "active_config_path")
     source = Path(source_root).expanduser().resolve()
     releases = Path(releases_root).expanduser().resolve()
     current = _current_path(current_link)
     config = Path(config_path).expanduser().resolve()
+    active_config = Path(active_config_path).expanduser().resolve() if active_config_path is not None else config
     rollback = Path(rollback_target).expanduser().resolve()
     data = Path(data_root).expanduser().resolve()
     if signing_key is not None:
@@ -1077,6 +1097,8 @@ def deploy_release(
         releases.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=str(releases)))
         staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
+        config_snapshot = None
+        config_promoted = False
         try:
             temporary.rmdir()
             _git(source, "worktree", "add", "--detach", str(staging), commit)
@@ -1121,6 +1143,9 @@ def deploy_release(
                     min_tests=min_tests,
                 )
                 metadata["rollback_rehearsal"] = rollback_rehearsal
+                if active_config != config:
+                    metadata["config_path"] = str(active_config)
+                    metadata["config_hash"] = _sha256(config)
                 write_metadata(metadata, release / "release-metadata.json", signing_key_path=signing_key_path)
             finally:
                 if previous_root is None:
@@ -1136,6 +1161,10 @@ def deploy_release(
                 else:
                     os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = previous_secrets
             _freeze_release(release)
+            if active_config != config:
+                config_snapshot = _snapshot_unit_file(active_config)
+                _promote_private_config(config, active_config)
+                config_promoted = True
             previous_release = current.resolve() if current.is_symlink() else None
             systemd = _systemd_switch(
                 release,
@@ -1155,7 +1184,13 @@ def deploy_release(
                 "commit": commit,
                 "systemd": systemd,
             }
-        except Exception:
+        except Exception as exc:
+            config_rollback_error = None
+            if config_promoted and config_snapshot is not None:
+                try:
+                    _restore_snapshot_path(active_config, config_snapshot)
+                except Exception as rollback_error:
+                    config_rollback_error = rollback_error
             if release.exists() and not release.is_symlink():
                 for path in sorted(release.rglob("*"), key=lambda item: len(item.parts), reverse=True):
                     if path.is_file():
@@ -1164,6 +1199,8 @@ def deploy_release(
                         path.chmod(0o755)
                 release.chmod(0o755)
                 shutil.rmtree(release)
+            if config_rollback_error is not None:
+                raise ReleaseAuditError(f"deployment failed and active config rollback failed: {config_rollback_error}") from exc
             raise
         finally:
             if temporary is not None and temporary.exists():
@@ -1241,6 +1278,7 @@ def main() -> int:
     parser.add_argument("--releases-root")
     parser.add_argument("--current-link")
     parser.add_argument("--config-path")
+    parser.add_argument("--active-config-path")
     parser.add_argument("--test-report-path")
     parser.add_argument("--rollback-target")
     parser.add_argument("--target-release")
@@ -1317,6 +1355,7 @@ def main() -> int:
             releases_root=args.releases_root,
             current_link=args.current_link,
             config_path=args.config_path,
+            active_config_path=args.active_config_path,
             test_report_path=None,
             rollback_target=args.rollback_target,
             data_root=args.data_root,

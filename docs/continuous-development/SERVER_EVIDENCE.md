@@ -271,3 +271,13 @@ Observed read-only on 2026-08-31.
 - Full JUnit `p10-gateway-dropin-full.xml`: 1663 tests, zero failures/errors/skips, 286.505 seconds; no Python test process remained afterward.
 - Project audit then found one test-only literal private path. Replaced it with runtime `Path.home()` construction; `tests/test_release_systemd.py` => 17 passed in 6.61 seconds and project/privacy audit => 575 files, zero issues. License audit remained 65 capabilities, zero issues; diff check passed.
 - No production gateway file, current link, content unit, private config, shared database or timer was changed by this local implementation.
+
+## 2026-09-04 Candidate Private-Config Transaction (Local Only)
+
+- Added optional active-config path to forward deployment. Candidate config remains the evidence input; release metadata is rebound to the stable active path and candidate hash before signing.
+- Deployment promotes the candidate atomically after release freeze and before gateway/systemd switch. An outer failure handler restores the prior active config independently of systemd/current rollback.
+- Two red tests first failed because the API did not exist. After implementation, ordering and byte restoration worked; POSIX mode assertions were then limited to non-Windows because Windows chmod cannot prove 0600/0640 semantics.
+- Focused command: `python -m pytest tests/test_release_systemd.py tests/test_deploy_release.py tests/test_runtime_release_audit.py -q --junitxml=artifacts/test-reports/p10-private-config-focused.xml` => 108 passed in 65.35 seconds.
+- Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-private-config-full.xml` => 1628 passed plus 37 subtests. JUnit 1665 tests, zero failures/errors/skips, 287.140 seconds.
+- Project/privacy audit: 575 files, zero issues. License audit: 65 capabilities, zero issues. Diff check passed.
+- No server candidate config promotion, gateway restart, current switch, DB mutation, publisher call or timer enable occurred in this local phase.

@@ -205,3 +205,11 @@
 - Snapshot the managed drop-in and gateway enabled/active state before mutation. If installation, daemon reload, restart or effective environment verification fails, restore the drop-in, current link, project units and gateway state.
 - Restart an active gateway after current-link activation so MCP children inherit the new code/config/data/secrets/runtime-mode roots. Verify all seven assignments exactly from systemd effective state.
 - A passing fake-systemd transaction remains local evidence. Linux system-scope fault tests, forward activation, MCP shared-database proof and rollback rehearsal are separate gates.
+
+## D28: Candidate Private Config Is Promoted Inside Activation
+
+- Deployment may use an isolated candidate config for evidence and a separate stable active config path for runtime. Metadata binds the stable path to the candidate hash.
+- Promote the candidate atomically with mode 0600 after release signing/freezing and before current-dependent gateway restart.
+- Snapshot the previous stable config bytes, type and mode. Any later activation failure restores that snapshot; a missing prior file is removed on rollback.
+- When candidate and active paths are identical, retain legacy behavior and do not rewrite the file. Private config remains outside immutable releases and Git.
+- Windows tests verify bytes and ordering; POSIX permission semantics require Linux evidence before activation.

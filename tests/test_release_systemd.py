@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -138,6 +139,72 @@ def test_gateway_dropin_and_current_are_restored_after_effective_check_failure(t
         )
     assert dropin.read_bytes() == old
     assert current.resolve() == old_release.resolve()
+
+
+def test_deploy_promotes_candidate_config_before_gateway_restart(tmp_path):
+    from tests.test_deploy_release import _case, _fixture_evidence_runner
+
+    source, _, report, rollback = _case(tmp_path)
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text('{"mode":"candidate"}\n', encoding="utf-8")
+    candidate.chmod(0o600)
+    active = tmp_path / "runtime" / "config.json"
+    active.parent.mkdir()
+    active.write_text('{"mode":"old"}\n', encoding="utf-8")
+    systemd_dir = tmp_path / "units"
+    fake = FakeSystemd(systemd_dir)
+    fake.active["hermes-gateway.service"] = True
+
+    def observe(argv):
+        if argv[2:4] == ["restart", "hermes-gateway.service"]:
+            assert active.read_bytes() == candidate.read_bytes()
+        return fake(argv)
+
+    deploy_release(
+        source_root=source, releases_root=tmp_path / "releases",
+        current_link=tmp_path / ".ai-self-media-tools-current", config_path=candidate,
+        active_config_path=active, test_report_path=report, rollback_target=rollback,
+        data_root=tmp_path / "data", release_name="promote-config",
+        secrets_root=tmp_path / "secrets", evidence_runner=_fixture_evidence_runner,
+        systemd_unit_dir=systemd_dir, systemd_runner=observe,
+    )
+    assert active.read_bytes() == candidate.read_bytes()
+    if os.name != "nt":
+        assert active.stat().st_mode & 0o777 == 0o600
+
+
+def test_deploy_restores_active_config_after_gateway_failure(tmp_path):
+    from tests.test_deploy_release import _case, _fixture_evidence_runner
+
+    source, _, report, rollback = _case(tmp_path)
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text('{"mode":"candidate"}\n', encoding="utf-8")
+    active = tmp_path / "runtime" / "config.json"
+    active.parent.mkdir()
+    original = b'{"mode":"old"}\n'
+    active.write_bytes(original)
+    active.chmod(0o640)
+    systemd_dir = tmp_path / "units"
+    fake = FakeSystemd(systemd_dir)
+    fake.active["hermes-gateway.service"] = True
+
+    def fail_restart(argv):
+        if argv[2:4] == ["restart", "hermes-gateway.service"]:
+            return _systemd_result(1)
+        return fake(argv)
+
+    with pytest.raises(Exception, match="systemd|gateway"):
+        deploy_release(
+            source_root=source, releases_root=tmp_path / "releases",
+            current_link=tmp_path / ".ai-self-media-tools-current", config_path=candidate,
+            active_config_path=active, test_report_path=report, rollback_target=rollback,
+            data_root=tmp_path / "data", release_name="restore-config",
+            secrets_root=tmp_path / "secrets", evidence_runner=_fixture_evidence_runner,
+            systemd_unit_dir=systemd_dir, systemd_runner=fail_restart,
+        )
+    assert active.read_bytes() == original
+    if os.name != "nt":
+        assert active.stat().st_mode & 0o777 == 0o640
 
 
 class FakeSystemd:
