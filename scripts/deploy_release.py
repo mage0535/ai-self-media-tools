@@ -42,6 +42,11 @@ SYSTEMD_UNIT_PREFIXES = ("ai-self-media", "hermes-content-platform")
 GATEWAY_UNIT = "hermes-gateway.service"
 GATEWAY_DROPIN_SOURCE = "hermes-gateway-ai-self-media.conf"
 GATEWAY_DROPIN_NAME = "ai-self-media-runtime.conf"
+MANAGED_RUNTIME_ENVIRONMENT = {
+    "CONTENT_PLATFORM_HOME", "CONTENT_PLATFORM_CODE_ROOT", "PYTHONPATH",
+    "CONTENT_PLATFORM_DATA_DIR", "CONTENT_PLATFORM_SECRETS_DIR",
+    "CONTENT_PLATFORM_CONFIG", "CONTENT_PLATFORM_RUNTIME_MODE",
+}
 
 
 def default_systemd_unit_dir(scope: str = "user") -> Path:
@@ -222,6 +227,30 @@ def _installed_related_unit_paths(unit_dir: Path) -> list[Path]:
         and path.suffix in {".service", ".timer"}
         and path.stem.startswith(SYSTEMD_UNIT_PREFIXES)
     )
+
+
+def _dropin_overrides_runtime(text: str) -> bool:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith(("WorkingDirectory=", "ExecStart=")):
+            return True
+        if line.startswith("Environment="):
+            assignment = line.removeprefix("Environment=").strip().strip('"')
+            if assignment.split("=", 1)[0] in MANAGED_RUNTIME_ENVIRONMENT:
+                return True
+    return False
+
+
+def _conflicting_project_dropins(unit_dir: Path, service_names: list[str]) -> list[Path]:
+    conflicts = []
+    for name in service_names:
+        root = unit_dir / f"{name}.d"
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.conf")):
+            if (path.is_file() or path.is_symlink()) and _dropin_overrides_runtime(path.read_text(encoding="utf-8")):
+                conflicts.append(path)
+    return conflicts
 
 
 def _remove_path(path: Path) -> None:
@@ -589,6 +618,8 @@ def _systemd_switch(
     gateway_dropin = unit_path / f"{GATEWAY_UNIT}.d" / GATEWAY_DROPIN_NAME
     gateway_dropin_snapshot = _snapshot_unit_file(gateway_dropin)
     gateway_state = query_systemd_unit_states([GATEWAY_UNIT], runner=runner, scope=scope)
+    conflicting_dropins = _conflicting_project_dropins(unit_path, [path.name for path in services])
+    conflicting_snapshots = {path: _snapshot_unit_file(path) for path in conflicting_dropins}
     timer_states = {name: snapshot["states"][name] for name in related_names if name.endswith(".timer")}
     mutated = False
     try:
@@ -603,6 +634,8 @@ def _systemd_switch(
             and name not in existing_timers
         )
         _disable_systemd_timers(existing_timers, runner, scope=scope)
+        for path in conflicting_dropins:
+            _remove_path(path)
         _install_systemd_units(release_root, unit_path, runner, scope=scope)
         _install_gateway_dropin(release_root, unit_path)
         _disable_systemd_timers(timers, runner, scope=scope)
@@ -625,6 +658,8 @@ def _systemd_switch(
             rollback_errors.append(rollback_error)
         try:
             _restore_unit_files(unit_path, snapshot)
+            for path, record in conflicting_snapshots.items():
+                _restore_snapshot_path(path, record)
             _restore_snapshot_path(gateway_dropin, gateway_dropin_snapshot)
             _systemd_run(["daemon-reload"], runner, scope=scope)
             _restore_current_link(current, snapshot["current_link"])
