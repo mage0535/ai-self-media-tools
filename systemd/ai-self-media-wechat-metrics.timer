@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily ai-self-media-tools WeChat MP metrics refresh
+
+[Timer]
+OnCalendar=*-*-* 07:20:00 Asia/Shanghai
+Persistent=true
+Unit=ai-self-media-wechat-metrics.service
+
+[Install]
+WantedBy=timers.target

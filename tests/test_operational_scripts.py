@@ -476,6 +476,17 @@ shared_trend_only: false
         self.assertIn("run_wechat_metrics_refresh.sh", wechat)
         self.assertIn("secrets/notifications.env", wechat)
 
+    def test_wechat_metrics_timer_retains_dedicated_schedule(self):
+        path = Path("systemd/ai-self-media-wechat-metrics.timer")
+        self.assertTrue(path.is_file(), "release must retain the installed WeChat metrics timer")
+        text = path.read_text(encoding="utf-8")
+        self.assertIn("OnCalendar=*-*-* 07:20:00 Asia/Shanghai", text)
+        self.assertIn("Unit=ai-self-media-wechat-metrics.service", text)
+        self.assertIn("Persistent=true", text)
+        from scripts.deploy_release import _systemd_unit_paths
+        _, timers = _systemd_unit_paths(Path.cwd())
+        self.assertIn(path.name, [timer.name for timer in timers])
+
     def test_overnight_monitor_loads_the_private_notification_environment(self):
         text = Path("scripts/create_hermes_overnight_monitor.py").read_text(encoding="utf-8")
 

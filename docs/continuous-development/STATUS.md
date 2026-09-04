@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1628 passed + 37 subtests.
+- Latest complete regression on this branch: 1629 passed + 37 subtests.
 
 ## Active work
 
@@ -171,3 +171,6 @@ These describe the audited production release, not the current development code.
 - Candidate private-config promotion is now part of local deploy transaction. It occurs after release signing/freeze and before gateway restart; activation failure restores prior config bytes/mode.
 - Private-config focused suite: 108 passed. Full regression: 1628 passed plus 37 subtests; JUnit 1665 zero failures/errors/skips, 287.140 seconds. Privacy 575 files and license 65 capabilities clean.
 - Next: commit/push and run Linux POSIX mode/failure tests before any system-scope activation.
+- Linux at `03b4b66`: 65 gateway/deploy tests passed. A newer inactive signed bootstrap from `cad932c` was prepared because the earlier `7bfa13c` lacks the gateway drop-in.
+- Pre-activation unit inventory found a missing dedicated WeChat metrics timer. Added its existing 07:20 Asia/Shanghai definition without enabling it; focused 62 passed, full 1629 plus 37 subtests (293.31s).
+- New activation blocker: outer config rollback currently runs after inner systemd recovery starts old services. Must restore old config before any old-service restart; final file-state tests alone are insufficient.

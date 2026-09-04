@@ -213,3 +213,5 @@
 - Snapshot the previous stable config bytes, type and mode. Any later activation failure restores that snapshot; a missing prior file is removed on rollback.
 - When candidate and active paths are identical, retain legacy behavior and do not rewrite the file. Private config remains outside immutable releases and Git.
 - Windows tests verify bytes and ordering; POSIX permission semantics require Linux evidence before activation.
+- Rollback must restore configuration before restarting old content services or gateway, not merely before the deploy function returns.
+- Preserve installed feature-specific timers unless retirement is explicitly established. Checking in an existing schedule does not enable it.
