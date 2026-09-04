@@ -177,3 +177,4 @@ These describe the audited production release, not the current development code.
 - Startup-time assertion reproduced old gateway reading candidate config during rollback. Local correction invokes config restoration before restoring service states; restoration failure prevents starts/enables. Systemd subset: 20 passed. Production not activated.
 - Current signed `cad932c` bootstrap predates the restored WeChat timer and rollback-order fix; do not describe it as a fully compatible rehearsed rollback for newer code without explicit compatibility verification.
 - Rollback-order full regression: 1630 passed plus 37 subtests in 288.58s, zero failures. Linux verification next; no production activation.
+- Linux staging `ec08d1c`: 109 operational/deployment/systemd tests passed in 5.92s, including POSIX config mode checks. Current remains v7 and gateway active; next is forward/rollback compatibility review, not automatic timer restoration.

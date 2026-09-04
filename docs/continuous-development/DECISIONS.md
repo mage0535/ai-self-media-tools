@@ -216,3 +216,4 @@
 - Rollback must restore configuration before restarting old content services or gateway, not merely before the deploy function returns.
 - Preserve installed feature-specific timers unless retirement is explicitly established. Checking in an existing schedule does not enable it.
 - During failed activation, stop affected units/gateway, restore unit files/current/config, and only then restore service states. If configuration restoration fails, do not start or enable services and surface rollback failure.
+- Runtime read timing is an acceptance criterion: recovering old gateway must read the old config at startup. File restoration after startup does not satisfy rollback correctness.
