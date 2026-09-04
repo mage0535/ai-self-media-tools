@@ -281,3 +281,11 @@ Observed read-only on 2026-08-31.
 - Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-private-config-full.xml` => 1628 passed plus 37 subtests. JUnit 1665 tests, zero failures/errors/skips, 287.140 seconds.
 - Project/privacy audit: 575 files, zero issues. License audit: 65 capabilities, zero issues. Diff check passed.
 - No server candidate config promotion, gateway restart, current switch, DB mutation, publisher call or timer enable occurred in this local phase.
+
+## 2026-09-04 Release Inventory And Rollback Ordering Review
+
+- Linux `03b4b66` gateway/deploy suite passed 65 tests in 4.78s. Inactive signed bootstrap `bootstrap-runtime-v8-cad932c-20260904` prepared successfully from clean `cad932c` source after its full evidence run; earlier bootstrap remains intact.
+- Installed unit comparison identified `ai-self-media-wechat-metrics.timer` missing from release. Its 07:20 Asia/Shanghai schedule targets WeChat metrics collection, not the generic Prometheus export service. Added the same definition to prevent unintended removal; did not enable it.
+- Red test failed on missing timer; focused operational/systemd suite passed 62 tests in 9.58s. Full timer regression: 1629 passed plus 37 subtests, 293.31s, exit 0, JUnit `p10-wechat-timer-full.xml`.
+- At 19:00 BJT, current still v7, gateway active, all 11 project timers disabled; mutable HEAD and status-list hash unchanged. Project/privacy audit 576 files clean, license 65 capabilities clean.
+- Code review found configuration restoration after old-service restart in the nested failure path. This remains a blocking defect despite passing final-state tests; add startup-time assertions and repair ordering before activation.
