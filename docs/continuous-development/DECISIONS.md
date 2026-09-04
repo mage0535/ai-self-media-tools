@@ -190,3 +190,4 @@
 - External bridge paths must remain under the current Hermes home, be regular non-symlink files and match their digest. Every attestation record must bind to a configured script; unused records fail.
 - A trusted dependency remains only identity-verified. Capability availability, adapter execution, output contract, artifact/effect verification and quality impact require their own runtime evidence.
 - Public repository files do not contain server bridge paths or private manifests. Candidate private config stays outside immutable releases and is promoted only within the activation transaction.
+- Stable current-release aliases are recognized before symlink resolution and rebound only to an explicit candidate code root. Canary and deployment code must supply that root; ambient project-home inference is not acceptable for candidate verification.

@@ -1042,13 +1042,12 @@ class _PolicySafePublisher:
 
 def _canary_config(root: Path, runtime_config_path: Path | str | None = None) -> dict[str, Any]:
     """Load real production capabilities while keeping delivery isolated."""
+    candidate_root = Path(__file__).resolve().parents[1]
     config_path = Path(runtime_config_path).expanduser() if runtime_config_path else None
     if config_path and config_path.is_file():
-        config = copy.deepcopy(load_config(str(config_path), str(root / "state.db")))
+        config = copy.deepcopy(load_config(str(config_path), str(root / "state.db"), code_root=str(candidate_root)))
     else:
         config = {}
-
-    candidate_root = Path(__file__).resolve().parents[1]
 
     def rebase_code_paths(value):
         if isinstance(value, dict):

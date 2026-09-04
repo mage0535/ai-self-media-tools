@@ -96,7 +96,7 @@ def _rewrite_runtime_paths(value, code_root, data_root, secrets_root):
     if not isinstance(value, str):
         return value
     match = re.match(
-        r"^.*[\\/]\.ai-self-media-tools-releases[\\/][^\\/]+[\\/](data|secrets|scripts)([\\/].*)?$",
+        r"^.*[\\/](?:\.ai-self-media-tools-releases[\\/][^\\/]+|\.ai-self-media-tools-current)[\\/](data|secrets|scripts)([\\/].*)?$",
         value,
     )
     if not match:
@@ -106,7 +106,7 @@ def _rewrite_runtime_paths(value, code_root, data_root, secrets_root):
     return str(Path(base + suffix))
 
 
-def load_config(path, db_path):
+def load_config(path, db_path, code_root=None):
     config = {}
     if path and Path(path).is_file():
         config = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -115,8 +115,8 @@ def load_config(path, db_path):
     secrets_root = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", "").strip() or str(Path(data_root).parent / "secrets")
     home_root = project_home()
     release_root = home_root.parent / f"{home_root.name}-current"
-    code_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip() or (str(release_root) if release_root.exists() else str(project_home()))
-    config = _rewrite_runtime_paths(config, code_root, data_root, secrets_root)
+    resolved_code_root = str(code_root or "").strip() or os.environ.get("CONTENT_PLATFORM_CODE_ROOT", "").strip() or (str(release_root) if release_root.exists() else str(project_home()))
+    config = _rewrite_runtime_paths(config, resolved_code_root, data_root, secrets_root)
     config["data_dir"] = data_root
     config.setdefault("generator", {"allow_fallback": True})
     config.setdefault("publishers", {"default": {"type": "file"}})
