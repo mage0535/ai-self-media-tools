@@ -186,3 +186,7 @@ These describe the audited production release, not the current development code.
 - Bootstrap/deploy metadata binds the durable snapshot and hash. Rollback with an active config path promotes the verified snapshot before gateway start and restores the previous config on failure.
 - Focused deploy/systemd suite: 70 passed. Full regression: 1634 passed plus 37 subtests, 299.30 seconds. Privacy 576 files and license 65 capabilities clean.
 - Next: commit/push, Linux verify, rebuild final compatible bootstrap, then prepare forward release/controlled activation with timers disabled.
+- Linux durable-snapshot suite at `9734dd4`: 70 passed. Final durable rollback `ec08d1c` prepared with JUnit 1667, zero failures, mode-600 shared config snapshot and successful metadata verification.
+- First forward activation attempt rolled back automatically: old config hash/mode, current, gateway, disabled timers and shared DB inode/size/433 jobs were restored. The failed release/config were removed, but an orphan attestation and no durable error report exposed two cleanup defects.
+- Failure cleanup now removes only an unchanged transaction-owned attestation and writes mode-600 `release_failure_v1` evidence. Focused 156 passed; full 1634 plus 37 subtests in 282.71s. Privacy 576 files/license 65 capabilities clean.
+- Next: commit/push, Linux failure-path verification, archive the orphan attestation as failure evidence, then retry with a new release name to capture the actual systemd failure reason.

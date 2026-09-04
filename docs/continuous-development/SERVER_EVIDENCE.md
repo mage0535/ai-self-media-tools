@@ -306,3 +306,14 @@ Observed read-only on 2026-08-31.
 - Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-durable-config-snapshot-full.xml` => 1634 passed plus 37 subtests, 299.30 seconds, exit 0.
 - Project/privacy audit: 576 files, zero issues. License audit: 65 capabilities, zero issues. Diff check passed.
 - No production config promotion, current switch, service restart, database mutation, publisher call or timer enable occurred in this local phase.
+
+## 2026-09-04/05 Durable Rollback And Failed Forward Activation
+
+- Durable bootstrap `bootstrap-runtime-v8-ec08d1c-durable-20260904` prepared inactive. Metadata config path is under shared `release-configs`, mode 0600; JUnit 1667 tests, zero failures; WeChat timer and gateway drop-in present; metadata verification passed.
+- Before forward activation, created a private pre-activation snapshot containing current/config hash+backup/DB inode+size+job count/gateway state/mutable status digest. No secret content was emitted.
+- Forward `9734dd4` ran full JUnit but failed during live systemd transaction. Automatic rollback restored the old current, exact config hash and mode, gateway active, zero enabled timers, and shared DB inode 1642977/63,143,936 bytes/433 jobs. Managed gateway drop-in was removed.
+- Journal records gateway stop at 19:55:20 and restart at 19:55:38. No failed systemd units remained. The original exception was lost with the SSH stream; an orphan 170-byte attestation remained while release/config snapshot were removed.
+- Added red failure test proving orphan attestation and absent failure report. Implementation records private `release_failure_v1`, deletes only transaction-owned unchanged attestation/config, and retains original failure semantics.
+- Focused command: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py tests/test_runtime_release_audit.py tests/test_operational_scripts.py -q --junitxml=artifacts/test-reports/p10-release-failure-focused.xml` => 156 passed in 60.47 seconds.
+- Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-release-failure-full.xml` => 1634 passed plus 37 subtests, 282.71 seconds. Privacy 576 files and license 65 capabilities clean; diff check passed.
+- Production remains on old v7 after rollback. No timer was enabled. The orphan attestation remains preserved until Linux verification and explicit failure-evidence archival.

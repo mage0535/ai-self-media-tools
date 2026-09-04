@@ -416,6 +416,24 @@ def _remove_owned_file(path: Path, ownership: tuple[int, int] | None) -> None:
         path.unlink()
 
 
+def _write_release_failure(data_root: Path, release_name: str, operation: str, error: Exception) -> Path:
+    destination = data_root / "release-failures" / f"{release_name}.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{destination.name}.{uuid.uuid4().hex}.tmp"
+    payload = {
+        "schema": "release_failure_v1",
+        "operation": operation,
+        "release_name": release_name,
+        "error_type": type(error).__name__,
+        "error": str(error),
+        "recorded_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    temporary.write_text(json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    temporary.chmod(0o600)
+    os.replace(temporary, destination)
+    return destination
+
+
 def _runtime_environment_expected() -> dict[str, str]:
     home = Path.home().as_posix()
     return {
@@ -1152,6 +1170,7 @@ def deploy_release(
         active_config_snapshot = None
         config_promoted = False
         owned_release_config = None
+        owned_attestation_hash = None
         try:
             temporary.rmdir()
             _git(source, "worktree", "add", "--detach", str(staging), commit)
@@ -1197,6 +1216,7 @@ def deploy_release(
                 )
                 metadata["rollback_rehearsal"] = rollback_rehearsal
                 write_metadata(metadata, release / "release-metadata.json", signing_key_path=signing_key_path)
+                owned_attestation_hash = _sha256(attestation)
             finally:
                 if previous_root is None:
                     os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
@@ -1257,7 +1277,13 @@ def deploy_release(
                         path.chmod(0o755)
                 release.chmod(0o755)
                 shutil.rmtree(release)
+            if owned_attestation_hash is not None and attestation.is_file() and not attestation.is_symlink() and _sha256(attestation) == owned_attestation_hash:
+                attestation.unlink()
             _remove_owned_file(release_config, owned_release_config)
+            try:
+                _write_release_failure(data, name, "deploy", exc)
+            except Exception:
+                pass
             if config_rollback_error is not None:
                 raise ReleaseAuditError(f"deployment failed and active config rollback failed: {config_rollback_error}") from exc
             raise
