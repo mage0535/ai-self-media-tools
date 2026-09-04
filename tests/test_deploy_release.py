@@ -172,6 +172,130 @@ def test_prepare_bootstrap_builds_signed_release_without_switching_current(tmp_p
     assert (tmp_path / "data" / "release-attestations" / "bootstrap-clean.sha256").is_file()
 
 
+@pytest.mark.parametrize("name", [".", "..", "../escape", "nested/name", "nested\\name", ""])
+def test_bootstrap_invalid_name_has_no_side_effects(tmp_path, name):
+    with pytest.raises(ReleaseAuditError, match="release_name"):
+        prepare_bootstrap_release(
+            source_root=tmp_path / "source", releases_root=tmp_path / "releases",
+            config_path=tmp_path / "config.json", data_root=tmp_path / "data",
+            release_name=name,
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("path_kind", ["traversal", "symlink"])
+def test_bootstrap_validates_raw_source_before_resolving(tmp_path, path_kind):
+    source, config, _, _ = _case(tmp_path)
+    if path_kind == "traversal":
+        supplied = source / ".." / "source"
+    else:
+        supplied = tmp_path / "source-alias"
+        supplied.symlink_to(source, target_is_directory=True)
+    with pytest.raises(ReleaseAuditError, match="source_root.*(forbidden|symlink)"):
+        prepare_bootstrap_release(
+            source_root=supplied, releases_root=tmp_path / "releases",
+            config_path=config, data_root=tmp_path / "data", release_name="candidate",
+            evidence_runner=_fixture_evidence_runner,
+        )
+    assert not (tmp_path / "releases").exists()
+
+
+def test_bootstrap_missing_explicit_key_does_not_create_default(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    _git_source(source)
+    with pytest.raises(ReleaseAuditError, match="signing key.*exist"):
+        prepare_bootstrap_release(
+            source_root=source, releases_root=tmp_path / "releases",
+            config_path=tmp_path / "config.json", data_root=tmp_path / "data",
+            signing_key=tmp_path / "secrets" / "custom.key", release_name="candidate",
+        )
+    assert not (tmp_path / "secrets").exists()
+    assert not (tmp_path / "releases").exists()
+
+
+def test_bootstrap_failed_evidence_preserves_foreign_target(tmp_path):
+    source, config, _, _ = _case(tmp_path)
+    target = tmp_path / "releases" / "candidate"
+
+    def fail_with_foreign_target(*args, **kwargs):
+        target.mkdir()
+        (target / "sentinel").write_text("other builder", encoding="utf-8")
+        raise RuntimeError("evidence failed")
+
+    with pytest.raises(RuntimeError, match="evidence failed"):
+        prepare_bootstrap_release(
+            source_root=source, releases_root=target.parent, config_path=config,
+            data_root=tmp_path / "data", release_name=target.name,
+            evidence_runner=fail_with_foreign_target,
+        )
+    assert (target / "sentinel").read_text(encoding="utf-8") == "other builder"
+    assert not list(tmp_path.glob("source-release-staging-*"))
+
+
+def test_bootstrap_target_created_during_evidence_is_not_overwritten(tmp_path):
+    source, config, _, _ = _case(tmp_path)
+    target = tmp_path / "releases" / "candidate"
+
+    def evidence_with_foreign_target(*args, **kwargs):
+        target.mkdir(exist_ok=True)
+        return _fixture_evidence_runner(*args, **kwargs)
+
+    with pytest.raises((ReleaseAuditError, FileExistsError)):
+        prepare_bootstrap_release(
+            source_root=source, releases_root=target.parent, config_path=config,
+            data_root=tmp_path / "data", release_name=target.name,
+            evidence_runner=evidence_with_foreign_target,
+        )
+    assert target.is_dir()
+    assert list(target.iterdir()) == []
+
+
+def test_bootstrap_freeze_failure_removes_only_own_output(tmp_path, monkeypatch):
+    source, config, _, _ = _case(tmp_path)
+    target = tmp_path / "releases" / "candidate"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    def fail_freeze(_release):
+        raise RuntimeError("freeze failed")
+
+    monkeypatch.setattr(deploy_release_module, "_freeze_release", fail_freeze)
+    with pytest.raises(RuntimeError, match="freeze failed"):
+        prepare_bootstrap_release(
+            source_root=source, releases_root=target.parent, config_path=config,
+            data_root=tmp_path / "data", release_name=target.name,
+            evidence_runner=_fixture_evidence_runner,
+        )
+    assert not target.exists()
+    assert not (tmp_path / "data" / "release-attestations" / "candidate.sha256").exists()
+    assert (tmp_path / "data" / "release-attestations" / "rollback.sha256").is_file()
+    assert os.environ["CONTENT_PLATFORM_CODE_ROOT"] == str(source)
+
+
+def test_bootstrap_metadata_failure_removes_own_attestation(tmp_path, monkeypatch):
+    source, config, _, _ = _case(tmp_path)
+    target = tmp_path / "releases" / "candidate"
+    attestation = tmp_path / "data" / "release-attestations" / "candidate.sha256"
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+
+    real_write_metadata = deploy_release_module.write_metadata
+
+    def fail_metadata(*args, **kwargs):
+        real_write_metadata(*args, **kwargs)
+        raise RuntimeError("metadata failed")
+
+    monkeypatch.setattr(deploy_release_module, "write_metadata", fail_metadata)
+    with pytest.raises(RuntimeError, match="metadata failed"):
+        prepare_bootstrap_release(
+            source_root=source, releases_root=target.parent, config_path=config,
+            data_root=tmp_path / "data", release_name=target.name,
+            evidence_runner=_fixture_evidence_runner,
+        )
+    assert not target.exists()
+    assert not attestation.exists()
+    assert (tmp_path / "data" / "release-attestations" / "rollback.sha256").is_file()
+
+
 def test_attest_existing_rejects_non_current_release(tmp_path: Path):
     source, config, report, rollback, releases, release, current = _existing_release_case(tmp_path)
     other = releases / "other"

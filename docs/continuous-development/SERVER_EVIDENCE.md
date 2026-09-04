@@ -183,3 +183,16 @@ Observed read-only on 2026-08-31.
 - Added and tested `prepare_bootstrap_release`: creates a signed/frozen tracked-only release from clean Git while leaving current symlink and systemd untouched.
 - Deployment-focused local suite: 116 passed. Full local suite after this change: 1594 passed plus 37 subtests, 291.11 seconds.
 - No production activation, restart, private-config rewrite, shared-database mutation, publisher call, or timer enable occurred in this step.
+
+## 2026-09-04 P10 Bootstrap Safety Hardening (Local Only)
+
+- Re-read the four coordination documents after interruption and confirmed the worktree contained only the registered bootstrap work; the interrupted full-test process was no longer running.
+- Fault injection reproduced twelve unsafe or incomplete paths in the first bootstrap implementation: validation after path normalization, acceptance of dot/dot-dot release names, unintended default-key creation for a missing explicit key, concurrent target replacement/cleanup, and orphan attestation cleanup.
+- The corrected implementation validates names and raw paths before side effects, fails closed for missing explicit keys, reserves the inactive target exclusively, and tracks ownership before cleanup.
+- Negative tests prove that traversal and symlink inputs are rejected, invalid names create no files, foreign/concurrent targets survive, and metadata/freeze failures remove only the transaction's release and attestation while retaining prior rollback evidence.
+- Bootstrap subset: `python -m pytest tests/test_deploy_release.py -k bootstrap -q --tb=short` => 16 passed, 23 deselected.
+- Deployment/release focused suite: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py tests/test_runtime_release_audit.py tests/test_operational_scripts.py -q --junitxml=artifacts/test-reports/p10-bootstrap-hardening-focused.xml` => 129 passed.
+- Full suite: `python -m pytest -q --junitxml=artifacts/test-reports/p10-bootstrap-hardening-full.xml` => 1607 passed plus 37 subtests. JUnit records 1644 tests, zero failures, zero errors, zero skipped, 278.965 seconds.
+- Project/privacy audit: 574 scanned files, zero issues. License audit: 65 capabilities, zero issues. `git diff --check` passed.
+- Code inspection confirmed the deploy helper still fixes all `systemctl` calls to user scope, while the 2026-09-02 server refresh observed system-scoped production services. This is a separate activation blocker and is not waived by the bootstrap test result.
+- No server file, release, symlink, service, timer, private config, shared database, publisher, or media provider was modified or invoked during this local milestone.

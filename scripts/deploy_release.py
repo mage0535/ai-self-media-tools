@@ -751,6 +751,16 @@ def prepare_bootstrap_release(
     evidence_runner=None,
 ) -> dict:
     """Build and sign a clean bootstrap rollback release without activating it."""
+    name = str(release_name or "").strip()
+    if not name or name in {".", ".."} or any(char in name for char in "/\\:\0") or Path(name).name != name:
+        raise ReleaseAuditError("release_name must be a single non-empty path component")
+    for value, label in (
+        (source_root, "source_root"), (releases_root, "releases_root"),
+        (config_path, "config_path"), (data_root, "data_root"),
+        (secrets_root, "secrets_root"), (signing_key, "signing_key"),
+    ):
+        if value is not None:
+            _validate_raw_path(value, label)
     source = Path(source_root).expanduser().resolve()
     releases = Path(releases_root).expanduser().resolve()
     current = _current_path(current_link)
@@ -758,26 +768,27 @@ def prepare_bootstrap_release(
     data = Path(data_root).expanduser().resolve()
     secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else data.parent / "secrets"
     key = Path(signing_key).expanduser().resolve() if signing_key is not None else secrets / "release-signing.key"
-    for value, label in ((source, "source_root"), (releases, "releases_root"), (config, "config_path"), (data, "data_root")):
-        _validate_raw_path(value, label)
     _validate_signing_key_boundary(key, secrets, data, releases, current)
-    if not key.is_file():
-        init_signing_key(secrets)
-    name = str(release_name or "").strip()
-    if not name or Path(name).name != name:
-        raise ReleaseAuditError("release_name must be a single non-empty path component")
+    if signing_key is not None and not key.is_file():
+        raise ReleaseAuditError("explicit signing key does not exist")
     release = releases / name
     with _exclusive_lock(data / "runtime-release.lock"):
         if _git(source, "status", "--porcelain").strip():
             raise ReleaseAuditError("source root is dirty or has uncommitted changes")
         if release.exists() or release.is_symlink():
             raise ReleaseAuditError(f"release already exists: {release}")
+        attestation = data / "release-attestations" / f"{name}.sha256"
+        _validate_raw_path(attestation, "attestation_path")
+        if attestation.exists():
+            raise ReleaseAuditError("release attestation already exists")
+        if not key.is_file():
+            init_signing_key(secrets)
         commit = _git(source, "rev-parse", "HEAD").strip()
         releases.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=str(releases)))
         staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
+        owned_release = None
         try:
-            temporary.rmdir()
             _git(source, "worktree", "add", "--detach", str(staging), commit)
             evidence = _generate_evidence(staging, data, name, commit, runner=evidence_runner)
             tracked_modes = _tracked_modes(staging)
@@ -789,9 +800,13 @@ def prepare_bootstrap_release(
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source_path, destination)
                 destination.chmod(0o755 if tracked_modes.get(relative.as_posix()) == "100755" else 0o644)
-            os.replace(temporary, release)
-            temporary = None
-            attestation = data / "release-attestations" / f"{name}.sha256"
+            # Reserve the inactive candidate exclusively; never replace another
+            # builder's directory, including an empty one on POSIX.
+            release.mkdir()
+            owned_stat = release.stat()
+            owned_release = (owned_stat.st_dev, owned_stat.st_ino)
+            for child in temporary.iterdir():
+                os.replace(child, release / child.name)
             previous = {
                 key_name: os.environ.get(key_name)
                 for key_name in ("CONTENT_PLATFORM_CODE_ROOT", "CONTENT_PLATFORM_DATA_DIR", "CONTENT_PLATFORM_SECRETS_DIR")
@@ -824,9 +839,13 @@ def prepare_bootstrap_release(
                 "signing_key_path": str(key), "commit": commit,
             }
         except Exception:
-            if release.exists() and not release.is_symlink():
+            if owned_release is not None and attestation.is_file() and not attestation.is_symlink():
+                attestation.unlink()
+            if owned_release is not None and release.is_dir() and not release.is_symlink() and (release.stat().st_dev, release.stat().st_ino) == owned_release:
                 release.chmod(0o755)
                 for path in release.rglob("*"):
+                    if path.is_symlink():
+                        continue
                     if path.is_file():
                         path.chmod(0o644)
                     elif path.is_dir():

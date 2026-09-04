@@ -40,4 +40,6 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - P10 real media Canaries, Linux deployment, live publisher verification, and rollback rehearsal are the next workstream. Tests with replacement publishers are not live platform proof.
 - P10 starts with a read-only server baseline, then a signed immutable release candidate with timers kept disabled. Activation and rollback evidence must be recorded before any live Canary.
 - The legacy current release is not a valid rollback artifact because runtime files and tracked drift are present. Use `prepare_bootstrap_release` from a clean Git source to create a signed rollback without activating it.
+- Bootstrap preparation now rejects unsafe names and unresolved path boundaries before side effects, and cleans up only outputs proven to belong to its own transaction. Do not bypass these guards with ad hoc copies.
+- Server activation must use the same systemd scope as the installed production units. The current server uses system scope; scope convergence remains a P10 gate.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
