@@ -217,3 +217,11 @@
 - Preserve installed feature-specific timers unless retirement is explicitly established. Checking in an existing schedule does not enable it.
 - During failed activation, stop affected units/gateway, restore unit files/current/config, and only then restore service states. If configuration restoration fails, do not start or enable services and surface rollback failure.
 - Runtime read timing is an acceptance criterion: recovering old gateway must read the old config at startup. File restoration after startup does not satisfy rollback correctness.
+
+## D29: Every Signed Release Has A Durable Private Config Snapshot
+
+- Copy the validated candidate config into `$SHARED_DATA/release-configs/<release>.json` with exclusive creation and mode 0600 before signing metadata. Handle partial OS writes and fsync before use.
+- Metadata signs the durable snapshot path and hash. Staging candidate paths are never long-term rollback dependencies.
+- Forward activation promotes the release snapshot to stable private config. Rollback verifies metadata/attestation and promotes the target release snapshot before gateway startup.
+- Snapshot files remain outside Git and immutable code releases. Failed transactions remove only snapshots whose inode ownership belongs to that transaction.
+- Older prepared releases whose metadata references staging configs are retained as historical evidence but are not final production rollback targets.

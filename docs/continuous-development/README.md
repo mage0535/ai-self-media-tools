@@ -54,4 +54,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Forward deployment may validate an isolated candidate config and atomically promote it to the stable private config before gateway restart. A failed activation restores the previous private config bytes and mode.
 - Retain the dedicated WeChat metrics timer in release inventory; its definition is not authorization to enable it. Config rollback now precedes old-service restart in the failure path; Linux/live transaction verification remains required.
 - Linux staging at `ec08d1c` passed 109 operational/deployment/systemd tests, including POSIX mode and config-before-restart checks. Live activation and rollback rehearsal remain pending.
+- Release metadata must reference a durable mode-600 private config snapshot under shared data, never a staging candidate path. Rollback promotes that signed snapshot before gateway start and restores the previous active config on failure.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

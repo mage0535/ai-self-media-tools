@@ -177,6 +177,34 @@ def test_prepare_bootstrap_builds_signed_release_without_switching_current(tmp_p
     assert (tmp_path / "data" / "release-attestations" / "bootstrap-clean.sha256").is_file()
 
 
+def test_bootstrap_persists_signed_private_config_snapshot(tmp_path, monkeypatch):
+    source, config, _, _ = _case(tmp_path)
+    current = tmp_path / ".ai-self-media-tools-current"
+    old = tmp_path / "old-current"
+    old.mkdir()
+    current.symlink_to(old, target_is_directory=True)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    result = prepare_bootstrap_release(
+        source_root=source, releases_root=tmp_path / "releases", current_link=current,
+        config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        release_name="durable-config", evidence_runner=_fixture_evidence_runner,
+    )
+    metadata_path = Path(result["metadata_path"])
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    snapshot = tmp_path / "data" / "release-configs" / "durable-config.json"
+    assert Path(metadata["config_path"]) == snapshot.resolve()
+    assert snapshot.is_file()
+    if os.name != "nt":
+        assert snapshot.stat().st_mode & 0o777 == 0o600
+    config.unlink()
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", result["release_root"])
+    verify_metadata(
+        metadata_path, current_release_root=result["release_root"],
+        signing_key_path=tmp_path / "secrets" / "release-signing.key",
+        trusted_secrets_root=tmp_path / "secrets",
+    )
+
+
 @pytest.mark.parametrize("operation", ["bootstrap", "deploy"])
 def test_config_preflight_stops_before_evidence_and_preserves_environment(tmp_path, monkeypatch, operation):
     source, config, _, rollback = _case(tmp_path)
@@ -325,7 +353,36 @@ def test_bootstrap_metadata_failure_removes_own_attestation(tmp_path, monkeypatc
         )
     assert not target.exists()
     assert not attestation.exists()
+    assert not (tmp_path / "data" / "release-configs" / "candidate.json").exists()
     assert (tmp_path / "data" / "release-attestations" / "rollback.sha256").is_file()
+
+
+def test_bootstrap_private_config_snapshot_preserves_large_payload(tmp_path, monkeypatch):
+    source, config, _, _ = _case(tmp_path)
+    payload = {"mode": "safe", "padding": "x" * 1_000_000}
+    config.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    result = prepare_bootstrap_release(
+        source_root=source, releases_root=tmp_path / "releases",
+        config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        release_name="large-config", evidence_runner=_fixture_evidence_runner,
+    )
+    metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
+    assert json.loads(Path(metadata["config_path"]).read_text(encoding="utf-8")) == payload
+
+
+def test_private_config_snapshot_handles_partial_os_write(tmp_path, monkeypatch):
+    source = tmp_path / "candidate.json"
+    source.write_bytes(b"0123456789" * 100)
+    destination = tmp_path / "data" / "release-configs" / "partial.json"
+    original_write = os.write
+
+    def partial(descriptor, payload):
+        return original_write(descriptor, payload[: max(1, len(payload) // 2)])
+
+    monkeypatch.setattr(deploy_release_module.os, "write", partial)
+    deploy_release_module._create_private_config_snapshot(source, destination)
+    assert destination.read_bytes() == source.read_bytes()
 
 
 def test_attest_existing_rejects_non_current_release(tmp_path: Path):

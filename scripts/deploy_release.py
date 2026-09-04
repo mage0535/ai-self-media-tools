@@ -376,6 +376,46 @@ def _promote_private_config(candidate: Path, destination: Path) -> None:
             temporary.unlink()
 
 
+def _create_private_config_snapshot(candidate: Path, destination: Path) -> tuple[int, int]:
+    if not candidate.is_file() or candidate.is_symlink():
+        raise ReleaseAuditError("candidate runtime config must be a regular file")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    descriptor = None
+    try:
+        descriptor = os.open(destination, flags, 0o600)
+        payload = memoryview(candidate.read_bytes())
+        while payload:
+            written = os.write(descriptor, payload)
+            if written <= 0:
+                raise OSError("release config snapshot write made no progress")
+            payload = payload[written:]
+        os.fsync(descriptor)
+    except FileExistsError as exc:
+        raise ReleaseAuditError(f"release config snapshot already exists: {destination}") from exc
+    except Exception:
+        if descriptor is not None:
+            os.close(descriptor)
+            descriptor = None
+        if destination.is_file() and not destination.is_symlink():
+            destination.unlink()
+        raise
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    destination.chmod(0o600)
+    stat = destination.stat()
+    return stat.st_dev, stat.st_ino
+
+
+def _remove_owned_file(path: Path, ownership: tuple[int, int] | None) -> None:
+    if ownership is None or not path.is_file() or path.is_symlink():
+        return
+    stat = path.stat()
+    if (stat.st_dev, stat.st_ino) == ownership:
+        path.unlink()
+
+
 def _runtime_environment_expected() -> dict[str, str]:
     home = Path.home().as_posix()
     return {
@@ -958,9 +998,11 @@ def prepare_bootstrap_release(
         if release.exists() or release.is_symlink():
             raise ReleaseAuditError(f"release already exists: {release}")
         attestation = data / "release-attestations" / f"{name}.sha256"
+        config_snapshot = data / "release-configs" / f"{name}.json"
         _validate_raw_path(attestation, "attestation_path")
-        if attestation.exists():
-            raise ReleaseAuditError("release attestation already exists")
+        _validate_raw_path(config_snapshot, "release_config_snapshot")
+        if attestation.exists() or config_snapshot.exists() or config_snapshot.is_symlink():
+            raise ReleaseAuditError("release attestation or config snapshot already exists")
         preflight_runtime_config(config, source, data, secrets)
         if not key.is_file():
             init_signing_key(secrets)
@@ -969,6 +1011,7 @@ def prepare_bootstrap_release(
         temporary = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=str(releases)))
         staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
         owned_release = None
+        owned_config_snapshot = None
         try:
             _git(source, "worktree", "add", "--detach", str(staging), commit)
             evidence = _generate_evidence(staging, data, name, commit, runner=evidence_runner)
@@ -988,6 +1031,7 @@ def prepare_bootstrap_release(
             owned_release = (owned_stat.st_dev, owned_stat.st_ino)
             for child in temporary.iterdir():
                 os.replace(child, release / child.name)
+            owned_config_snapshot = _create_private_config_snapshot(config, config_snapshot)
             previous = {
                 key_name: os.environ.get(key_name)
                 for key_name in ("CONTENT_PLATFORM_CODE_ROOT", "CONTENT_PLATFORM_DATA_DIR", "CONTENT_PLATFORM_SECRETS_DIR")
@@ -998,10 +1042,10 @@ def prepare_bootstrap_release(
                 "CONTENT_PLATFORM_SECRETS_DIR": str(secrets),
             })
             try:
-                _validate_runtime_config(config, release, data, secrets)
+                _validate_runtime_config(config_snapshot, release, data, secrets)
                 metadata = audit_release(
                     source_root=staging, release_root=release, configured_script_root=release / "scripts",
-                    config_path=config, test_report_path=evidence["junit"], rollback_target="",
+                    config_path=config_snapshot, test_report_path=evidence["junit"], rollback_target="",
                     attestation_path=attestation, signing_key_path=key, trusted_secrets_root=secrets,
                     project_audit_report_path=evidence["project_audit"], evidence_manifest_path=evidence["manifest"],
                     expected_commit=commit, min_tests=min_tests, bootstrap=True,
@@ -1020,6 +1064,7 @@ def prepare_bootstrap_release(
                 "signing_key_path": str(key), "commit": commit,
             }
         except Exception:
+            _remove_owned_file(config_snapshot, owned_config_snapshot)
             if owned_release is not None and attestation.is_file() and not attestation.is_symlink():
                 attestation.unlink()
             if owned_release is not None and release.is_dir() and not release.is_symlink() and (release.stat().st_dev, release.stat().st_ino) == owned_release:
@@ -1097,11 +1142,16 @@ def deploy_release(
         release = releases / name
         if release.exists() or release.is_symlink():
             raise ReleaseAuditError(f"release already exists: {release}")
+        attestation = data / "release-attestations" / f"{name}.sha256"
+        release_config = data / "release-configs" / f"{name}.json"
+        if attestation.exists() or release_config.exists() or release_config.is_symlink():
+            raise ReleaseAuditError("release attestation or config snapshot already exists")
         releases.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=str(releases)))
         staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
-        config_snapshot = None
+        active_config_snapshot = None
         config_promoted = False
+        owned_release_config = None
         try:
             temporary.rmdir()
             _git(source, "worktree", "add", "--detach", str(staging), commit)
@@ -1121,7 +1171,7 @@ def deploy_release(
                 destination.chmod(0o755 if tracked_modes.get(relative.as_posix()) == "100755" else 0o644)
             os.replace(temporary, release)
             temporary = None
-            attestation = data / "release-attestations" / f"{name}.sha256"
+            owned_release_config = _create_private_config_snapshot(config, release_config)
             previous_root = os.environ.get("CONTENT_PLATFORM_CODE_ROOT")
             previous_data = os.environ.get("CONTENT_PLATFORM_DATA_DIR")
             previous_secrets = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR")
@@ -1129,12 +1179,12 @@ def deploy_release(
             os.environ["CONTENT_PLATFORM_DATA_DIR"] = str(data)
             os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = str(secrets)
             try:
-                _validate_runtime_config(config, release, data, secrets)
+                _validate_runtime_config(release_config, release, data, secrets)
                 metadata = audit_release(
                     source_root=staging,
                     release_root=release,
                     configured_script_root=release / "scripts",
-                    config_path=config,
+                    config_path=release_config,
                     test_report_path=report,
                     rollback_target=rollback,
                     attestation_path=attestation,
@@ -1146,9 +1196,6 @@ def deploy_release(
                     min_tests=min_tests,
                 )
                 metadata["rollback_rehearsal"] = rollback_rehearsal
-                if active_config != config:
-                    metadata["config_path"] = str(active_config)
-                    metadata["config_hash"] = _sha256(config)
                 write_metadata(metadata, release / "release-metadata.json", signing_key_path=signing_key_path)
             finally:
                 if previous_root is None:
@@ -1164,15 +1211,15 @@ def deploy_release(
                 else:
                     os.environ["CONTENT_PLATFORM_SECRETS_DIR"] = previous_secrets
             _freeze_release(release)
-            if active_config != config:
-                config_snapshot = _snapshot_unit_file(active_config)
-                _promote_private_config(config, active_config)
+            if active_config_path is not None and active_config != release_config:
+                active_config_snapshot = _snapshot_unit_file(active_config)
+                _promote_private_config(release_config, active_config)
                 config_promoted = True
 
             def restore_runtime_config():
                 nonlocal config_promoted
-                if config_promoted and config_snapshot is not None:
-                    _restore_snapshot_path(active_config, config_snapshot)
+                if config_promoted and active_config_snapshot is not None:
+                    _restore_snapshot_path(active_config, active_config_snapshot)
                     config_promoted = False
 
             previous_release = current.resolve() if current.is_symlink() else None
@@ -1197,9 +1244,9 @@ def deploy_release(
             }
         except Exception as exc:
             config_rollback_error = None
-            if config_promoted and config_snapshot is not None:
+            if config_promoted and active_config_snapshot is not None:
                 try:
-                    _restore_snapshot_path(active_config, config_snapshot)
+                    _restore_snapshot_path(active_config, active_config_snapshot)
                 except Exception as rollback_error:
                     config_rollback_error = rollback_error
             if release.exists() and not release.is_symlink():
@@ -1210,6 +1257,7 @@ def deploy_release(
                         path.chmod(0o755)
                 release.chmod(0o755)
                 shutil.rmtree(release)
+            _remove_owned_file(release_config, owned_release_config)
             if config_rollback_error is not None:
                 raise ReleaseAuditError(f"deployment failed and active config rollback failed: {config_rollback_error}") from exc
             raise
@@ -1231,13 +1279,17 @@ def rollback_release(
     systemd_unit_dir: Path | str | None = None,
     systemd_runner=None,
     systemd_scope: str = "user",
+    active_config_path: Path | str | None = None,
 ) -> dict:
     """Verify an audited frozen release and atomically activate it as current."""
     _validate_raw_path(target_release, "target_release")
     _validate_raw_path(data_root, "data_root")
+    if active_config_path is not None:
+        _validate_raw_path(active_config_path, "active_config_path")
     target = Path(target_release).expanduser().resolve()
     data = Path(data_root).expanduser().resolve()
     current = _current_path(current_link)
+    active_config = Path(active_config_path).expanduser().resolve() if active_config_path is not None else None
     if signing_key is not None:
         key = Path(signing_key).expanduser().resolve()
         secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else key.parent
@@ -1261,16 +1313,39 @@ def rollback_release(
                 os.environ.pop("CONTENT_PLATFORM_CODE_ROOT", None)
             else:
                 os.environ["CONTENT_PLATFORM_CODE_ROOT"] = previous_root
-        previous_release = current.resolve() if current.is_symlink() else None
-        systemd = _systemd_switch(
-            target,
-            systemd_unit_dir,
-            systemd_runner,
-            activate=_activate,
-            current=current,
-            previous_release=previous_release,
-            scope=systemd_scope,
-        )
+        release_config = Path(metadata["config_path"]).expanduser().resolve()
+        if active_config is not None:
+            try:
+                release_config.relative_to((data / "release-configs").resolve())
+            except ValueError as exc:
+                raise ReleaseAuditError("rollback release config is outside the durable snapshot root") from exc
+        active_snapshot = _snapshot_unit_file(active_config) if active_config is not None else None
+        config_promoted = False
+
+        def restore_runtime_config():
+            nonlocal config_promoted
+            if config_promoted and active_config is not None and active_snapshot is not None:
+                _restore_snapshot_path(active_config, active_snapshot)
+                config_promoted = False
+
+        try:
+            if active_config is not None:
+                _promote_private_config(release_config, active_config)
+                config_promoted = True
+            previous_release = current.resolve() if current.is_symlink() else None
+            systemd = _systemd_switch(
+                target,
+                systemd_unit_dir,
+                systemd_runner,
+                activate=_activate,
+                current=current,
+                previous_release=previous_release,
+                scope=systemd_scope,
+                restore_runtime_config=restore_runtime_config,
+            )
+        except Exception:
+            restore_runtime_config()
+            raise
         return {
             "ok": True,
             "operation": "rollback",
@@ -1325,6 +1400,7 @@ def main() -> int:
             data_root=args.data_root,
             signing_key=args.signing_key,
             secrets_root=args.secrets_root,
+            active_config_path=args.active_config_path,
             systemd_unit_dir=systemd_unit_dir or None,
             systemd_scope=args.systemd_scope,
         )

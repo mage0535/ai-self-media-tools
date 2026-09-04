@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1630 passed + 37 subtests.
+- Latest complete regression on this branch: 1634 passed + 37 subtests.
 
 ## Active work
 
@@ -178,3 +178,11 @@ These describe the audited production release, not the current development code.
 - Current signed `cad932c` bootstrap predates the restored WeChat timer and rollback-order fix; do not describe it as a fully compatible rehearsed rollback for newer code without explicit compatibility verification.
 - Rollback-order full regression: 1630 passed plus 37 subtests in 288.58s, zero failures. Linux verification next; no production activation.
 - Linux staging `ec08d1c`: 109 operational/deployment/systemd tests passed in 5.92s, including POSIX config mode checks. Current remains v7 and gateway active; next is forward/rollback compatibility review, not automatic timer restoration.
+
+## Durable Release Config Snapshots
+
+- Post-signing review found all prepared bootstrap metadata pointed to the staging candidate config. These releases remain evidence artifacts but are not final durable rollback targets.
+- New release config snapshots live under shared `release-configs`, are created exclusively with mode 0600, handle partial writes, and are removed only when owned by a failed transaction.
+- Bootstrap/deploy metadata binds the durable snapshot and hash. Rollback with an active config path promotes the verified snapshot before gateway start and restores the previous config on failure.
+- Focused deploy/systemd suite: 70 passed. Full regression: 1634 passed plus 37 subtests, 299.30 seconds. Privacy 576 files and license 65 capabilities clean.
+- Next: commit/push, Linux verify, rebuild final compatible bootstrap, then prepare forward release/controlled activation with timers disabled.
