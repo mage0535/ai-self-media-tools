@@ -295,3 +295,14 @@ Observed read-only on 2026-08-31.
 - Full rollback-order command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-rollback-order-full.xml` => 1630 passed plus 37 subtests in 288.58s, exit 0.
 - Clean Linux staging advanced to `ec08d1c`. `python3 -m pytest tests/test_release_systemd.py tests/test_deploy_release.py tests/test_operational_scripts.py -q --junitxml=$SHARED_DATA/release-evidence/p10-rollback-order-ec08d1c-linux.xml` => 109 passed in 5.92s, exit 0. Includes POSIX permission assertions; systemd runner is simulated, not live service switching.
 - Post-test current remained v7 and gateway active. Production config/data/services and disabled timers were not changed. Full Linux candidate suite and actual forward/rollback rehearsal remain pending.
+
+## 2026-09-04 Durable Release Config Snapshot (Local Only)
+
+- Postchecked `bootstrap-runtime-v8-ec08d1c-20260904`: JUnit 1667 with zero failures and WeChat timer present, but metadata config path pointed to staging private config. It is not accepted as the final durable rollback.
+- Added red tests showing bootstrap metadata did not persist a private snapshot and rollback lacked an active-config promotion interface. Both pass after implementation.
+- Added failure cleanup, one-megabyte payload and injected partial `os.write` tests. The partial-write test first produced truncated bytes; implementation now loops until complete and fsyncs.
+- Deployment and bootstrap create exclusive shared release config snapshots; release metadata uses the snapshot. Rollback requires target snapshots under the durable snapshot root when promoting a stable active config.
+- Focused command: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py -q --tb=short` => 70 passed in 51.92 seconds.
+- Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-durable-config-snapshot-full.xml` => 1634 passed plus 37 subtests, 299.30 seconds, exit 0.
+- Project/privacy audit: 576 files, zero issues. License audit: 65 capabilities, zero issues. Diff check passed.
+- No production config promotion, current switch, service restart, database mutation, publisher call or timer enable occurred in this local phase.

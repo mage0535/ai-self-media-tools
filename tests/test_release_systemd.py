@@ -236,6 +236,41 @@ def test_config_restore_failure_keeps_old_services_stopped(tmp_path):
     assert not any(command[2] in {"start", "enable"} for command in fake.commands)
 
 
+def test_rollback_promotes_release_config_before_gateway_start(tmp_path, monkeypatch):
+    from tests.test_deploy_release import _case, _fixture_evidence_runner
+
+    source, config, _, _ = _case(tmp_path)
+    current = tmp_path / ".ai-self-media-tools-current"
+    old = tmp_path / "old-current"
+    old.mkdir()
+    current.symlink_to(old, target_is_directory=True)
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", str(source))
+    prepared = deploy_release_module.prepare_bootstrap_release(
+        source_root=source, releases_root=tmp_path / "releases", current_link=current,
+        config_path=config, data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        release_name="rollback-snapshot", evidence_runner=_fixture_evidence_runner,
+    )
+    active = tmp_path / "runtime" / "config.json"
+    active.parent.mkdir()
+    active.write_text('{"mode":"newer"}\n', encoding="utf-8")
+    systemd_dir = tmp_path / "units"
+    fake = FakeSystemd(systemd_dir)
+    fake.active["hermes-gateway.service"] = True
+    expected = tmp_path / "data" / "release-configs" / "rollback-snapshot.json"
+
+    def observe(argv):
+        if argv[2:4] in (["restart", "hermes-gateway.service"], ["start", "hermes-gateway.service"]):
+            assert active.read_bytes() == expected.read_bytes()
+        return fake(argv)
+
+    rollback_release(
+        target_release=prepared["release_root"], current_link=current,
+        data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
+        active_config_path=active, systemd_unit_dir=systemd_dir, systemd_runner=observe,
+    )
+    assert active.read_bytes() == expected.read_bytes()
+
+
 class FakeSystemd:
     def __init__(self, systemd_dir: Path):
         self.systemd_dir = systemd_dir
