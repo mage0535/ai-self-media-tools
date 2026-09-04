@@ -157,3 +157,11 @@
 - A bootstrap prepare runs full evidence generation, config validation, signing, and freeze but deliberately performs no symlink or systemd operation.
 - An automated job without its pre-delivery trace persists a failed canonical trace and stops; delivery completion cannot silently return without execution evidence.
 - Postcheck evidence participates in the delivery manifest hash, and its adapter output hash is recomputed before accepting executed state.
+
+## D22: Release Preparation Owns Only Its Transaction Outputs
+
+- Validate release names and every raw path boundary before normalization, lock creation, key generation, evidence output, or release-directory creation.
+- An explicitly requested signing key must already exist; bootstrap preparation may create only the stable default key when no explicit key was requested.
+- Reserve the final candidate directory exclusively after evidence generation and before publishing files. Never replace an existing directory, even if empty.
+- Failure cleanup removes a release directory or attestation only when the current transaction proves ownership. Concurrent or pre-existing files are never cleanup targets.
+- Systemd scope is an explicit production input. A user-scoped deployment command must not be used against system-scoped production units, or vice versa.
