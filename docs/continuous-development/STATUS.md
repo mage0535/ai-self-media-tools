@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1629 passed + 37 subtests.
+- Latest complete regression on this branch: 1630 passed + 37 subtests.
 
 ## Active work
 
@@ -24,7 +24,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | gateway drop-in/deploy transaction tests and four coordination documents | in_progress | signed bootstrap `7bfa13c` prepared inactive; implement rollback-safe gateway root convergence before activation |
+| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, four coordination documents | in_progress | finish rollback-order full regression and Linux fault tests; reconcile forward/rollback unit inventories before activation |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -174,3 +174,6 @@ These describe the audited production release, not the current development code.
 - Linux at `03b4b66`: 65 gateway/deploy tests passed. A newer inactive signed bootstrap from `cad932c` was prepared because the earlier `7bfa13c` lacks the gateway drop-in.
 - Pre-activation unit inventory found a missing dedicated WeChat metrics timer. Added its existing 07:20 Asia/Shanghai definition without enabling it; focused 62 passed, full 1629 plus 37 subtests (293.31s).
 - New activation blocker: outer config rollback currently runs after inner systemd recovery starts old services. Must restore old config before any old-service restart; final file-state tests alone are insufficient.
+- Startup-time assertion reproduced old gateway reading candidate config during rollback. Local correction invokes config restoration before restoring service states; restoration failure prevents starts/enables. Systemd subset: 20 passed. Production not activated.
+- Current signed `cad932c` bootstrap predates the restored WeChat timer and rollback-order fix; do not describe it as a fully compatible rehearsed rollback for newer code without explicit compatibility verification.
+- Rollback-order full regression: 1630 passed plus 37 subtests in 288.58s, zero failures. Linux verification next; no production activation.

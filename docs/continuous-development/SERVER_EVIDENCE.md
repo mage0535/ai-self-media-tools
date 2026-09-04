@@ -289,3 +289,7 @@ Observed read-only on 2026-08-31.
 - Red test failed on missing timer; focused operational/systemd suite passed 62 tests in 9.58s. Full timer regression: 1629 passed plus 37 subtests, 293.31s, exit 0, JUnit `p10-wechat-timer-full.xml`.
 - At 19:00 BJT, current still v7, gateway active, all 11 project timers disabled; mutable HEAD and status-list hash unchanged. Project/privacy audit 576 files clean, license 65 capabilities clean.
 - Code review found configuration restoration after old-service restart in the nested failure path. This remains a blocking defect despite passing final-state tests; add startup-time assertions and repair ordering before activation.
+- Added an assertion capturing config bytes when the recovery runner starts old gateway. Red result captured candidate bytes, conclusively reproducing incorrect ordering.
+- Added a config-restore callback before old service state restoration; after successful restoration the outer handler does not restore again. Config restore failure skips all service starts/enables and surfaces rollback failure.
+- Systemd subset passed 20 tests in 9.23 seconds, including failed config restore with no subsequent start/enable commands. This is simulated systemd evidence, not live service recovery.
+- Full rollback-order command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-rollback-order-full.xml` => 1630 passed plus 37 subtests in 288.58s, exit 0.

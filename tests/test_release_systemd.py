@@ -191,8 +191,11 @@ def test_deploy_restores_active_config_after_gateway_failure(tmp_path):
     def fail_restart(argv):
         if argv[2:4] == ["restart", "hermes-gateway.service"]:
             return _systemd_result(1)
+        if argv[2:4] == ["start", "hermes-gateway.service"]:
+            observed_configs.append(active.read_bytes())
         return fake(argv)
 
+    observed_configs = []
     with pytest.raises(Exception, match="systemd|gateway"):
         deploy_release(
             source_root=source, releases_root=tmp_path / "releases",
@@ -203,8 +206,34 @@ def test_deploy_restores_active_config_after_gateway_failure(tmp_path):
             systemd_unit_dir=systemd_dir, systemd_runner=fail_restart,
         )
     assert active.read_bytes() == original
+    assert observed_configs == [original]
     if os.name != "nt":
         assert active.stat().st_mode & 0o777 == 0o640
+
+
+def test_config_restore_failure_keeps_old_services_stopped(tmp_path):
+    release = tmp_path / "release"
+    shutil.copytree(Path("systemd"), release / "systemd")
+    unit_dir = tmp_path / "units"
+    unit_dir.mkdir()
+    fake = FakeSystemd(unit_dir)
+    fake.active["hermes-gateway.service"] = True
+
+    def fail_gateway(argv):
+        result = fake(argv)
+        if argv[2:4] == ["restart", "hermes-gateway.service"]:
+            return _systemd_result(1)
+        return result
+
+    def fail_config_restore():
+        raise OSError("config restore unavailable")
+
+    with pytest.raises(deploy_release_module.ReleaseAuditError, match="rollback failed.*config restore unavailable"):
+        deploy_release_module._systemd_switch(
+            release, unit_dir, fail_gateway, restore_runtime_config=fail_config_restore,
+        )
+    assert any(command[2:4] == ["stop", "hermes-gateway.service"] for command in fake.commands)
+    assert not any(command[2] in {"start", "enable"} for command in fake.commands)
 
 
 class FakeSystemd:
