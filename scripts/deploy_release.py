@@ -514,6 +514,7 @@ def _systemd_switch(
     current: Path | None = None,
     previous_release: Path | None = None,
     scope: str = "user",
+    restore_runtime_config=None,
 ) -> dict:
     if scope not in {"user", "system"}:
         raise ReleaseAuditError("systemd scope must be 'user' or 'system'")
@@ -561,7 +562,7 @@ def _systemd_switch(
     except Exception as exc:
         rollback_errors = []
         try:
-            _stop_systemd_units(related_names, runner, scope=scope)
+            _stop_systemd_units([*related_names, GATEWAY_UNIT], runner, scope=scope)
         except Exception as rollback_error:
             rollback_errors.append(rollback_error)
         try:
@@ -569,6 +570,8 @@ def _systemd_switch(
             _restore_snapshot_path(gateway_dropin, gateway_dropin_snapshot)
             _systemd_run(["daemon-reload"], runner, scope=scope)
             _restore_current_link(current, snapshot["current_link"])
+            if restore_runtime_config is not None:
+                restore_runtime_config()
             _restore_systemd_states(snapshot["states"], runner=runner, scope=scope)
             _restore_systemd_states(gateway_state, runner=runner, scope=scope)
         except Exception as rollback_error:
@@ -1165,6 +1168,13 @@ def deploy_release(
                 config_snapshot = _snapshot_unit_file(active_config)
                 _promote_private_config(config, active_config)
                 config_promoted = True
+
+            def restore_runtime_config():
+                nonlocal config_promoted
+                if config_promoted and config_snapshot is not None:
+                    _restore_snapshot_path(active_config, config_snapshot)
+                    config_promoted = False
+
             previous_release = current.resolve() if current.is_symlink() else None
             systemd = _systemd_switch(
                 release,
@@ -1174,6 +1184,7 @@ def deploy_release(
                 current=current,
                 previous_release=previous_release,
                 scope=systemd_scope,
+                restore_runtime_config=restore_runtime_config,
             )
             return {
                 "ok": True,
