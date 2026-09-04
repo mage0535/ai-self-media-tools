@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -87,6 +88,58 @@ def test_deploy_and_rollback_propagate_system_scope_to_every_command(tmp_path):
     assert all("--user" not in command for command in commands)
 
 
+def test_gateway_runtime_dropin_is_installed_verified_and_preserves_other_dropins(tmp_path):
+    release = tmp_path / "release"
+    shutil.copytree(Path("systemd"), release / "systemd")
+    unit_dir = tmp_path / "units"
+    unit_dir.mkdir()
+    unrelated = unit_dir / "hermes-gateway.service.d" / "proxy.conf"
+    unrelated.parent.mkdir()
+    unrelated.write_text("[Service]\nEnvironment=HTTPS_PROXY=existing\n", encoding="utf-8")
+    fake = FakeSystemd(unit_dir)
+    fake.active["hermes-gateway.service"] = True
+
+    result = deploy_release_module._systemd_switch(release, unit_dir, fake, scope="user")
+
+    managed = unrelated.parent / "ai-self-media-runtime.conf"
+    assert managed.is_file()
+    assert "CONTENT_PLATFORM_RUNTIME_MODE=production" in managed.read_text(encoding="utf-8")
+    assert unrelated.read_text(encoding="utf-8").endswith("existing\n")
+    assert any(command[2:4] == ["restart", "hermes-gateway.service"] for command in fake.commands)
+    assert result["gateway_dropin"] == str(managed)
+
+
+def test_gateway_dropin_and_current_are_restored_after_effective_check_failure(tmp_path):
+    release = tmp_path / "release"
+    shutil.copytree(Path("systemd"), release / "systemd")
+    unit_dir = tmp_path / "units"
+    dropin = unit_dir / "hermes-gateway.service.d" / "ai-self-media-runtime.conf"
+    dropin.parent.mkdir(parents=True)
+    old = b"[Service]\nEnvironment=OLD=1\n"
+    dropin.write_bytes(old)
+    old_release = tmp_path / "old-release"
+    old_release.mkdir()
+    current = tmp_path / ".ai-self-media-tools-current"
+    current.symlink_to(old_release, target_is_directory=True)
+    fake = FakeSystemd(unit_dir)
+    fake.active["hermes-gateway.service"] = True
+
+    def fail_gateway_show(argv):
+        result = fake(argv)
+        if argv[2] == "show" and argv[3] == "hermes-gateway.service":
+            home = Path.home().as_posix()
+            result.stdout = f"WorkingDirectory={home}/.hermes\nEnvironment=HOME={home}\n"
+        return result
+
+    with pytest.raises(Exception, match="gateway|CONTENT_PLATFORM"):
+        deploy_release_module._systemd_switch(
+            release, unit_dir, fail_gateway_show, activate=deploy_release_module._activate,
+            current=current, scope="user",
+        )
+    assert dropin.read_bytes() == old
+    assert current.resolve() == old_release.resolve()
+
+
 class FakeSystemd:
     def __init__(self, systemd_dir: Path):
         self.systemd_dir = systemd_dir
@@ -102,6 +155,14 @@ class FakeSystemd:
         if operation == "is-enabled":
             return _systemd_result(0 if self.enabled.get(argv[3], False) else 1, "enabled\n" if self.enabled.get(argv[3], False) else "disabled\n")
         if operation == "show":
+            if argv[3] == "hermes-gateway.service":
+                dropin = self.systemd_dir / "hermes-gateway.service.d" / "ai-self-media-runtime.conf"
+                text = dropin.read_text(encoding="utf-8")
+                return _systemd_result(
+                    stdout=("Environment=" + " ".join(
+                        line.removeprefix("Environment=") for line in text.splitlines() if line.startswith("Environment=")
+                    )).replace("%h", Path.home().as_posix()) + "\n"
+                )
             unit = self.systemd_dir / argv[3]
             text = unit.read_text(encoding="utf-8")
             return _systemd_result(

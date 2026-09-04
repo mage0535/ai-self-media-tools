@@ -39,6 +39,9 @@ SYSTEMD_MUTABLE_ROOT = "%h/.ai-self-media-tools"
 SYSTEMD_DATA_ROOT = "%h/.ai-self-media-tools/data"
 SYSTEMD_SECRETS_ROOT = "%h/.ai-self-media-tools/secrets"
 SYSTEMD_UNIT_PREFIXES = ("ai-self-media", "hermes-content-platform")
+GATEWAY_UNIT = "hermes-gateway.service"
+GATEWAY_DROPIN_SOURCE = "hermes-gateway-ai-self-media.conf"
+GATEWAY_DROPIN_NAME = "ai-self-media-runtime.conf"
 
 
 def default_systemd_unit_dir(scope: str = "user") -> Path:
@@ -342,6 +345,72 @@ def _restore_unit_files(unit_dir: Path, snapshot: dict[str, object]) -> None:
             os.replace(temporary, destination)
 
 
+def _restore_snapshot_path(destination: Path, record: dict[str, object]) -> None:
+    if destination.exists() or destination.is_symlink():
+        _remove_path(destination)
+    if record["kind"] == "missing":
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{destination.name}.{uuid.uuid4().hex}.restore"
+    if record["kind"] == "file":
+        temporary.write_bytes(record["bytes"])
+        temporary.chmod(record["mode"])
+    elif record["kind"] == "symlink":
+        os.symlink(record["target"], temporary)
+    os.replace(temporary, destination)
+
+
+def _runtime_environment_expected() -> dict[str, str]:
+    home = Path.home().as_posix()
+    return {
+        "CONTENT_PLATFORM_HOME": SYSTEMD_CURRENT_ROOT.replace("%h", home),
+        "CONTENT_PLATFORM_CODE_ROOT": SYSTEMD_CURRENT_ROOT.replace("%h", home),
+        "PYTHONPATH": SYSTEMD_CURRENT_ROOT.replace("%h", home),
+        "CONTENT_PLATFORM_CONFIG": f"{SYSTEMD_MUTABLE_ROOT.replace('%h', home)}/config.json",
+        "CONTENT_PLATFORM_DATA_DIR": SYSTEMD_DATA_ROOT.replace("%h", home),
+        "CONTENT_PLATFORM_SECRETS_DIR": SYSTEMD_SECRETS_ROOT.replace("%h", home),
+        "CONTENT_PLATFORM_RUNTIME_MODE": "production",
+    }
+
+
+def _parse_effective_environment(value: str, unit: str) -> dict[str, str]:
+    try:
+        return dict(item.split("=", 1) for item in shlex.split(value))
+    except (ValueError, TypeError) as exc:
+        raise ReleaseAuditError(f"systemd unit {unit} has malformed effective Environment") from exc
+
+
+def _install_gateway_dropin(release_root: Path, unit_dir: Path) -> Path:
+    source = release_root / "systemd" / GATEWAY_DROPIN_SOURCE
+    if not source.is_file() or source.is_symlink():
+        raise ReleaseAuditError("release is missing the managed Hermes gateway runtime drop-in")
+    text = source.read_text(encoding="utf-8")
+    for key, value in _runtime_environment_expected().items():
+        template_value = value.replace(Path.home().as_posix(), "%h", 1)
+        if f"Environment={key}={template_value}" not in text:
+            raise ReleaseAuditError(f"gateway runtime drop-in is missing {key}")
+    destination = unit_dir / f"{GATEWAY_UNIT}.d" / GATEWAY_DROPIN_NAME
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{destination.name}.{uuid.uuid4().hex}.tmp"
+    temporary.write_text(text, encoding="utf-8", newline="\n")
+    temporary.chmod(0o644)
+    os.replace(temporary, destination)
+    return destination
+
+
+def _verify_gateway_runtime_environment(runner=None, *, scope: str = "user") -> None:
+    result = _systemd_run(["show", GATEWAY_UNIT, "--property=Environment"], runner, scope=scope)
+    values = {}
+    for line in (getattr(result, "stdout", "") or "").splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key] = value
+    environment = _parse_effective_environment(values.get("Environment", ""), GATEWAY_UNIT)
+    for key, expected in _runtime_environment_expected().items():
+        if environment.get(key) != expected:
+            raise ReleaseAuditError(f"Hermes gateway has the wrong effective {key}")
+
+
 def _restore_current_link(current: Path | None, snapshot: dict[str, object]) -> None:
     if current is None:
         return
@@ -375,24 +444,12 @@ def _verify_effective_systemd_units(
             key, separator, value = line.partition("=")
             if separator:
                 values[key] = value
-        home = Path.home().as_posix()
-        current_root = SYSTEMD_CURRENT_ROOT.replace("%h", home)
-        mutable_root = SYSTEMD_MUTABLE_ROOT.replace("%h", home)
+        expected = _runtime_environment_expected()
+        current_root = expected["CONTENT_PLATFORM_HOME"]
+        mutable_root = str(Path(expected["CONTENT_PLATFORM_CONFIG"]).parent)
         if values.get("WorkingDirectory") != current_root:
             raise ReleaseAuditError(f"systemd unit {name} has the wrong effective WorkingDirectory")
-        try:
-            environment = dict(item.split("=", 1) for item in shlex.split(values.get("Environment", "")))
-        except ValueError as exc:
-            raise ReleaseAuditError(f"systemd unit {name} has malformed effective Environment") from exc
-        expected = {
-            "CONTENT_PLATFORM_HOME": current_root,
-            "CONTENT_PLATFORM_CODE_ROOT": current_root,
-            "PYTHONPATH": current_root,
-            "CONTENT_PLATFORM_CONFIG": f"{mutable_root}/config.json",
-            "CONTENT_PLATFORM_DATA_DIR": SYSTEMD_DATA_ROOT.replace("%h", home),
-            "CONTENT_PLATFORM_SECRETS_DIR": SYSTEMD_SECRETS_ROOT.replace("%h", home),
-            "CONTENT_PLATFORM_RUNTIME_MODE": "production",
-        }
+        environment = _parse_effective_environment(values.get("Environment", ""), name)
         for key, value in expected.items():
             if environment.get(key) != value:
                 raise ReleaseAuditError(f"systemd unit {name} has the wrong effective {key}")
@@ -454,6 +511,9 @@ def _systemd_switch(
     installed_names = [path.name for path in _installed_related_unit_paths(unit_path)]
     related_names = sorted(set(installed_names) | set(release_names))
     snapshot = _snapshot_systemd_transaction(unit_path, related_names, current, runner, scope=scope)
+    gateway_dropin = unit_path / f"{GATEWAY_UNIT}.d" / GATEWAY_DROPIN_NAME
+    gateway_dropin_snapshot = _snapshot_unit_file(gateway_dropin)
+    gateway_state = query_systemd_unit_states([GATEWAY_UNIT], runner=runner, scope=scope)
     timer_states = {name: snapshot["states"][name] for name in related_names if name.endswith(".timer")}
     mutated = False
     try:
@@ -469,10 +529,15 @@ def _systemd_switch(
         )
         _disable_systemd_timers(existing_timers, runner, scope=scope)
         _install_systemd_units(release_root, unit_path, runner, scope=scope)
+        _install_gateway_dropin(release_root, unit_path)
         _disable_systemd_timers(timers, runner, scope=scope)
         if activate is not None:
             activate(current, release_root)
         _verify_effective_systemd_units(release_root, unit_path, [path.name for path in services], runner, scope=scope)
+        _systemd_run(["daemon-reload"], runner, scope=scope)
+        if gateway_state[GATEWAY_UNIT]["active"]:
+            _systemd_run(["restart", GATEWAY_UNIT], runner, scope=scope)
+        _verify_gateway_runtime_environment(runner, scope=scope)
         _restore_systemd_states(
             {name: snapshot["states"][name] for name in release_names},
             runner=runner, scope=scope,
@@ -485,9 +550,11 @@ def _systemd_switch(
             rollback_errors.append(rollback_error)
         try:
             _restore_unit_files(unit_path, snapshot)
+            _restore_snapshot_path(gateway_dropin, gateway_dropin_snapshot)
             _systemd_run(["daemon-reload"], runner, scope=scope)
             _restore_current_link(current, snapshot["current_link"])
             _restore_systemd_states(snapshot["states"], runner=runner, scope=scope)
+            _restore_systemd_states(gateway_state, runner=runner, scope=scope)
         except Exception as rollback_error:
             rollback_errors.append(rollback_error)
         if rollback_errors:
@@ -496,7 +563,7 @@ def _systemd_switch(
                 + "; ".join(str(error) for error in rollback_errors)
             ) from exc
         raise
-    return {"verified": True, "services": services, "timers": timers, "timer_states": timer_states}
+    return {"verified": True, "services": services, "timers": timers, "timer_states": timer_states, "gateway_dropin": str(gateway_dropin)}
 
 
 def preflight_runtime_config(config_path: Path, source_root: Path, data_root: Path, secrets_root: Path) -> None:

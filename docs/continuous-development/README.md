@@ -50,4 +50,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - External bridge trust uses an explicit private-config contract bound to config key, absolute path under Hermes home, regular-file status, and SHA-256. Passing this contract proves dependency identity only, not invocation or content impact.
 - Stable `$CURRENT_RELEASE` script aliases are rewritten to the explicitly supplied candidate code root before filesystem resolution. Canary callers pass their code root directly rather than relying on ambient environment.
 - Signed bootstrap rollback is now the clean `7bfa13c` runtime, not the failing historical `149362f` source. It is prepared and frozen but inactive. Gateway runtime-root drop-in remains required before forward activation.
+- The project owns only `ai-self-media-runtime.conf` under the Hermes gateway drop-in directory. Activation snapshots and restores that file and gateway state while preserving unrelated Hermes drop-ins.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

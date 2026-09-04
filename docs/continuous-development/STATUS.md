@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1624 passed + 37 subtests.
+- Latest complete regression on this branch: 1626 passed + 37 subtests.
 
 ## Active work
 
@@ -164,4 +164,7 @@ These describe the audited production release, not the current development code.
 - Linux alias/bridge subset: 7 passed; private candidate config preflight passed in 10ms.
 - Historical `149362f` bootstrap attempt failed correctly: JUnit 1565 tests, 1 failure because required four video visual assets produced two. It was not signed; no candidate directory remains.
 - Clean runtime bootstrap `7bfa13c` succeeded with JUnit 1661, zero failures/errors/skips. Signed/frozen release is prepared but inactive; current remains v7, timers remain disabled, gateway active, shared DB unchanged.
-- New blocker: gateway service has no project-managed drop-in for all production roots/mode. Forward activation is prohibited until its install/verify/rollback transaction is tested.
+- Gateway drop-in transaction is implemented locally: install the one project-owned file, restart active gateway, verify seven exact roots/mode, and restore prior drop-in/current/gateway state on failure. Unrelated gateway drop-ins remain untouched.
+- Gateway focused deployment suite: 148 passed. Full JUnit: 1663 tests, zero failures/errors/skips, 286.505 seconds; equivalent pytest scale 1626 plus 37 subtests.
+- Privacy audit initially rejected a test-only literal private path; it was replaced with `Path.home()`. Systemd subset 17 passed and privacy scan 575 files clean afterward.
+- Next: commit/push, Linux gateway fault tests, prepare a signed forward candidate from the new commit, then perform controlled system-scope activation and rollback rehearsal with timers disabled.
