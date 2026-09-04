@@ -220,3 +220,7 @@ Observed read-only on 2026-08-31.
 - Focused command: `python -m pytest tests/test_release_systemd.py tests/test_deploy_release.py tests/test_runtime_release_audit.py tests/test_task9_canary.py -q --junitxml=artifacts/test-reports/p10-effective-paths-focused.xml` => 133 passed in 56.89 seconds.
 - No production activation, mutable file overwrite, restart, database write, publishing, or timer enable occurred.
 - Full local command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-effective-paths-full.xml` => 1617 passed plus 37 subtests, 283.41 seconds, exit 0. Privacy audit 574 files clean; license audit 65 capabilities clean.
+- After checking staging had no dirty files, fetched the development branch and detached staging at `de506e2`. The private mutable checkout and current symlink were not altered.
+- Linux command: `python3 -m pytest tests/test_release_systemd.py tests/test_deploy_release.py tests/test_runtime_release_audit.py -q --junitxml=$SHARED_DATA/release-evidence/p10-effective-paths-de506e2-linux.xml` => 97 passed in 5.55 seconds, exit 0.
+- Linux project/privacy audit: 574 files, zero issues; license audit: 65 capabilities, zero issues. Staging Git status clean. Post-test current remains the v7 release and gateway is active.
+- The new server writes were confined to isolated staging and the named test evidence output (plus ordinary test caches); no business DB, production config, current link, or service activation changed. Full Linux suite on this commit and real Canaries have not run.

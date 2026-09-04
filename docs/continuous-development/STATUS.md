@@ -24,7 +24,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, four coordination documents | in_progress | TDD expanded effective-path and exact environment verification; Linux activation remains gated |
+| 12-platform Canary and deployment | Codex primary | deployment/runtime tests and four coordination documents | in_progress | effective-path fix committed `de506e2`; prepare signed candidates and reconcile gateway/private config before controlled activation |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -140,3 +140,5 @@ These describe the audited production release, not the current development code.
 - Fresh 12:40 BJT SSH check: same current release, mutable HEAD, 17-file diff summary and two recorded image/renderer hashes. No claim is made that all private assets are byte-identical.
 - Current content service environment lacks explicit CODE_ROOT and production mode. Gateway/root convergence and actual Linux activation remain required; no services or timers changed.
 - Effective-path full regression: 1617 passed plus 37 subtests, 283.41 seconds. Linux staging verification is next; this is not production activation evidence.
+- Linux staging advanced cleanly to `de506e2`: 97 deploy/systemd/release tests passed in 5.55 seconds; project/privacy 574 files clean, license 65 capabilities clean. Current production remains old release and gateway active.
+- No full Linux suite on `de506e2` yet; previous full Linux evidence at `e1d6068` is historical, not interchangeable. Candidate signing, gateway/config convergence, rollback rehearsal and live Canaries remain pending.

@@ -175,3 +175,4 @@
 - For the current home-based installation, effective paths must equal the invoking deployment user's expanded home paths. Cross-user deployment requires a separately validated runtime identity and is not inferred from observed output.
 - Parse environment assignments before comparison; prefix matches are insufficient for code/config/data/secrets/PYTHONPATH or production mode.
 - Check release script paths only for ExecStart templates that invoke release scripts; an external scraper in an environment variable does not turn module-based ExecStart into a script invocation.
+- Record staging commit and scope of Linux tests separately from production identity. A focused Linux regression does not substitute for full candidate evidence or live activation verification.
