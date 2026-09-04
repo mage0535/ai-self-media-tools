@@ -176,3 +176,10 @@
 - Parse environment assignments before comparison; prefix matches are insufficient for code/config/data/secrets/PYTHONPATH or production mode.
 - Check release script paths only for ExecStart templates that invoke release scripts; an external scraper in an environment variable does not turn module-based ExecStart into a script invocation.
 - Record staging commit and scope of Linux tests separately from production identity. A focused Linux regression does not substitute for full candidate evidence or live activation verification.
+
+## D24: Configuration Preflight Precedes Expensive Release Evidence
+
+- Validate the real config against clean source and explicit runtime roots before generating evidence or creating release directories; restore caller environment on both success and failure.
+- Retain post-build config validation: early preflight is an optimization, not a replacement for final candidate verification.
+- External Hermes bridges are real dependencies, not release-owned scripts. They remain blocked until their trust boundary, version/hash, input/output contract, and runtime availability verification are governed explicitly.
+- Do not disable configured tools, copy unreviewed external scripts into public releases, or allow all external script paths simply to pass deployment gates.

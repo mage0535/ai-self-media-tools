@@ -172,6 +172,33 @@ def test_prepare_bootstrap_builds_signed_release_without_switching_current(tmp_p
     assert (tmp_path / "data" / "release-attestations" / "bootstrap-clean.sha256").is_file()
 
 
+@pytest.mark.parametrize("operation", ["bootstrap", "deploy"])
+def test_config_preflight_stops_before_evidence_and_preserves_environment(tmp_path, monkeypatch, operation):
+    source, config, _, rollback = _case(tmp_path)
+    config = tmp_path / "candidate-config.json"
+    config.write_text(json.dumps({"tools": {"bridge": str(tmp_path / "external.py")}}), encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_CODE_ROOT", "untouched-code")
+    monkeypatch.setenv("CONTENT_PLATFORM_DATA_DIR", "untouched-data")
+    before = dict(os.environ)
+    calls = []
+
+    def evidence(*args, **kwargs):
+        calls.append(args)
+        return _fixture_evidence_runner(*args, **kwargs)
+
+    kwargs = dict(source_root=source, releases_root=tmp_path / "releases", config_path=config,
+                  data_root=tmp_path / "data", release_name="preflight", evidence_runner=evidence)
+    function = prepare_bootstrap_release
+    if operation == "deploy":
+        function = deploy_release
+        kwargs["rollback_target"] = rollback
+    with pytest.raises(ReleaseAuditError, match="outside release"):
+        function(**kwargs)
+    assert calls == []
+    assert not (tmp_path / "releases").exists()
+    assert os.environ == before
+
+
 @pytest.mark.parametrize("name", [".", "..", "../escape", "nested/name", "nested\\name", ""])
 def test_bootstrap_invalid_name_has_no_side_effects(tmp_path, name):
     with pytest.raises(ReleaseAuditError, match="release_name"):
