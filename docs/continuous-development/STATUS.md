@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1634 passed + 37 subtests.
+- Latest complete regression on this branch: 1636 passed + 37 subtests.
 
 ## Active work
 
@@ -190,3 +190,7 @@ These describe the audited production release, not the current development code.
 - First forward activation attempt rolled back automatically: old config hash/mode, current, gateway, disabled timers and shared DB inode/size/433 jobs were restored. The failed release/config were removed, but an orphan attestation and no durable error report exposed two cleanup defects.
 - Failure cleanup now removes only an unchanged transaction-owned attestation and writes mode-600 `release_failure_v1` evidence. Focused 156 passed; full 1634 plus 37 subtests in 282.71s. Privacy 576 files/license 65 capabilities clean.
 - Next: commit/push, Linux failure-path verification, archive the orphan attestation as failure evidence, then retry with a new release name to capture the actual systemd failure reason.
+- Linux failure cleanup passed; the first orphan attestation was checksum-verified and archived privately before removal.
+- Second activation persisted its failure: stale supervisor drop-ins overrode CONTENT_PLATFORM_CONFIG. Automatic rollback restored old current/config/gateway/timers and removed owned release artifacts.
+- Selective conflict removal now governs only runtime env, WorkingDirectory and ExecStart; resource/Qwen/recovery/writer drop-ins are preserved. Focused 158 passed; full 1636 plus 37 subtests in 279.00s.
+- Next: Linux selective-dropin tests, third named activation attempt, post-activation MCP/shared-DB checks and rollback rehearsal before Canaries.

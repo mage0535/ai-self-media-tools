@@ -317,3 +317,12 @@ Observed read-only on 2026-08-31.
 - Focused command: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py tests/test_runtime_release_audit.py tests/test_operational_scripts.py -q --junitxml=artifacts/test-reports/p10-release-failure-focused.xml` => 156 passed in 60.47 seconds.
 - Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-release-failure-full.xml` => 1634 passed plus 37 subtests, 282.71 seconds. Privacy 576 files and license 65 capabilities clean; diff check passed.
 - Production remains on old v7 after rollback. No timer was enabled. The orphan attestation remains preserved until Linux verification and explicit failure-evidence archival.
+
+## 2026-09-05 Second Activation Failure And Drop-In Governance
+
+- Linux failure cleanup passed. Archived the first orphan attestation privately with SHA-256 `ba9d3ed1c6c2248ae5a040f6e2fbee99595bae2d7ddc139a8b6be4d286cd313e` before removing the active orphan.
+- Second activation completed full evidence and switched current briefly, then failed because overnight supervisor effective CONTENT_PLATFORM_CONFIG was overridden by stale drop-ins. `release_failure_v1` preserved the exact error.
+- Rollback restored old v7 current, active gateway and zero enabled timers; failed release, attestation and config snapshot are absent.
+- Stale runtime override drop-ins coexist with valid Qwen TTS env, MemoryMax, recovery window and writer fallback settings. New selection removes only overrides of seven managed env variables, WorkingDirectory or ExecStart and restores them on failure.
+- Focused suite: 158 passed in 61.38s. Full suite: 1636 passed plus 37 subtests in 279.00s. Privacy 576 files and license 65 capabilities clean.
+- Production remains old v7. Third activation has not started.
