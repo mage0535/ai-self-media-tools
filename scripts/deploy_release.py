@@ -499,6 +499,25 @@ def _systemd_switch(
     return {"verified": True, "services": services, "timers": timers, "timer_states": timer_states}
 
 
+def preflight_runtime_config(config_path: Path, source_root: Path, data_root: Path, secrets_root: Path) -> None:
+    """Reject incompatible config before building; keep caller environment intact."""
+    roots = {
+        "CONTENT_PLATFORM_CODE_ROOT": str(source_root),
+        "CONTENT_PLATFORM_DATA_DIR": str(data_root),
+        "CONTENT_PLATFORM_SECRETS_DIR": str(secrets_root),
+    }
+    previous = {key: os.environ.get(key) for key in roots}
+    try:
+        os.environ.update(roots)
+        _validate_runtime_config(config_path, source_root, data_root, secrets_root)
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def _validate_runtime_config(config_path: Path, release_root: Path, data_root: Path, secrets_root: Path) -> None:
     if not config_path.is_file():
         raise ReleaseAuditError(f"runtime config does not exist: {config_path}")
@@ -811,6 +830,7 @@ def prepare_bootstrap_release(
         _validate_raw_path(attestation, "attestation_path")
         if attestation.exists():
             raise ReleaseAuditError("release attestation already exists")
+        preflight_runtime_config(config, source, data, secrets)
         if not key.is_file():
             init_signing_key(secrets)
         commit = _git(source, "rev-parse", "HEAD").strip()
@@ -935,6 +955,7 @@ def deploy_release(
             raise ReleaseAuditError("source root is dirty or has uncommitted changes")
         commit = _git(source, "rev-parse", "HEAD").strip()
         rollback_rehearsal = _signed_rollback_dry_run(rollback, signing_key_path, secrets)
+        preflight_runtime_config(config, source, data, secrets)
         name = release_name or commit[:12]
         if not name or name in {".", ".."} or Path(name).name != name:
             raise ReleaseAuditError("release_name must be a single non-empty path component")

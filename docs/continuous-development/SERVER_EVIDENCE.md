@@ -224,3 +224,14 @@ Observed read-only on 2026-08-31.
 - Linux command: `python3 -m pytest tests/test_release_systemd.py tests/test_deploy_release.py tests/test_runtime_release_audit.py -q --junitxml=$SHARED_DATA/release-evidence/p10-effective-paths-de506e2-linux.xml` => 97 passed in 5.55 seconds, exit 0.
 - Linux project/privacy audit: 574 files, zero issues; license audit: 65 capabilities, zero issues. Staging Git status clean. Post-test current remains the v7 release and gateway is active.
 - The new server writes were confined to isolated staging and the named test evidence output (plus ordinary test caches); no business DB, production config, current link, or service activation changed. Full Linux suite on this commit and real Canaries have not run.
+
+## 2026-09-04 Real Config Preflight Blocker
+
+- SSH refresh at 12:52 BJT: release and mutable HEAD unchanged; porcelain listing digest and two previously recorded script digests unchanged; gateway active. Local worktree initially clean at `cd9ca36`.
+- Ran staging `_validate_runtime_config` read-only with explicit source/data/secrets roots; first failure: configured Agent-Reach bridge is outside release.
+- Enumerated only script-valued configuration fields: Agent-Reach, Lux, and knowledge-card designer bridges are external Hermes paths and exist. Project video/image scripts use current release; legacy publisher script paths are subject to existing loader rewriting. Relative paths were not declared missing solely because they do not resolve from the SSH login directory.
+- Read Agent-Reach bridge entrypoint: it delegates to agent-reach, mcporter/Exa, Jina/curl and gh. This is an external dependency boundary, not justification to bypass release-only validation.
+- Added two red tests proving bootstrap and deploy previously ran expensive evidence commands before rejecting invalid config; implementation now preflights first and restores environment. The signed rollback fixture remains immutable in the tests.
+- Focused command: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py tests/test_runtime_release_audit.py -q --tb=short` => 99 passed in 54.30 seconds.
+- No candidate build/signing, production config edit, tool removal, service restart, publish operation, or timer activation occurred. External bridge governance remains unresolved.
+- Full local command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-config-preflight-full.xml` => 1619 passed plus 37 subtests, 273.90 seconds, exit 0. Project/privacy audit 574 files clean; license audit 65 capabilities clean.

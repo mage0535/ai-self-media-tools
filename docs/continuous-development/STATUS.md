@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1617 passed + 37 subtests.
+- Latest complete regression on this branch: 1619 passed + 37 subtests.
 
 ## Active work
 
@@ -24,7 +24,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | deployment/runtime tests and four coordination documents | in_progress | effective-path fix committed `de506e2`; prepare signed candidates and reconcile gateway/private config before controlled activation |
+| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `tests/test_deploy_release.py`, four coordination documents | in_progress | preflight real configuration before expensive evidence; govern three external Hermes tool bridges before candidate signing |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -142,3 +142,12 @@ These describe the audited production release, not the current development code.
 - Effective-path full regression: 1617 passed plus 37 subtests, 283.41 seconds. Linux staging verification is next; this is not production activation evidence.
 - Linux staging advanced cleanly to `de506e2`: 97 deploy/systemd/release tests passed in 5.55 seconds; project/privacy 574 files clean, license 65 capabilities clean. Current production remains old release and gateway active.
 - No full Linux suite on `de506e2` yet; previous full Linux evidence at `e1d6068` is historical, not interchangeable. Candidate signing, gateway/config convergence, rollback rehearsal and live Canaries remain pending.
+
+## Real Configuration Preflight
+
+- Read-only 12:52 BJT refresh: same release/HEAD/status-list hash and provider/renderer hashes as previous refresh; gateway active. No claim of an exhaustive private-asset comparison.
+- Real config validation fails on external Agent-Reach bridge; Lux and knowledge-card bridges are also configured outside the release. All three exist on server; tool presence is not a governed runtime dependency contract.
+- No candidate was signed or activated. Existing release-only script gate remains enforced.
+- Bootstrap/deploy now preflight config before evidence generation and candidate creation; retain final post-build check and restore caller environment. Focused regression: 99 passed.
+- Next implementation must govern the three external dependencies without bypassing security/quality gates, then resume signed candidate preparation.
+- Config-preflight full regression: 1619 passed plus 37 subtests, 273.90 seconds, exit 0; project/privacy and license audits remain clean.
