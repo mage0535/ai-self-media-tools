@@ -198,3 +198,10 @@
 - Prepare a clean, signed, inactive runtime commit that passes full Linux evidence as the bootstrap rollback for the later forward activation.
 - Forward activation still requires a distinct transaction and rollback rehearsal; a prepared bootstrap does not prove current production or live platforms.
 - Gateway environment convergence is part of that transaction because Hermes-hosted MCP children inherit gateway roots. A code symlink switch without gateway root verification is invalid.
+
+## D27: Gateway Root Convergence Owns One Reversible Drop-In
+
+- The project installs only `ai-self-media-runtime.conf` for `hermes-gateway.service`; existing proxy, resource, Telegram, memory and other Hermes drop-ins are never replaced or removed.
+- Snapshot the managed drop-in and gateway enabled/active state before mutation. If installation, daemon reload, restart or effective environment verification fails, restore the drop-in, current link, project units and gateway state.
+- Restart an active gateway after current-link activation so MCP children inherit the new code/config/data/secrets/runtime-mode roots. Verify all seven assignments exactly from systemd effective state.
+- A passing fake-systemd transaction remains local evidence. Linux system-scope fault tests, forward activation, MCP shared-database proof and rollback rehearsal are separate gates.

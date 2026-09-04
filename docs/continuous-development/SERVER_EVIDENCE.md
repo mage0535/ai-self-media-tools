@@ -261,3 +261,13 @@ Observed read-only on 2026-08-31.
 - Shared database remains inode 1642977, 63,143,936 bytes, 433 jobs. Current still points to the old v7 release; zero project timers are enabled; gateway remains active.
 - First postcheck script assumed a nonexistent metadata key and failed with KeyError. The corrected schema-aware check produced the evidence above; the failed command is not counted as verification.
 - `systemctl cat` confirms Hermes gateway is independently owned and has several existing drop-ins. No checked-in project gateway root drop-in exists, and effective gateway environment lacks project CODE_ROOT/CONFIG/DATA/SECRETS/production mode. Forward activation remains blocked.
+
+## 2026-09-04 Gateway Runtime-Root Transaction (Local Only)
+
+- Added a checked-in gateway environment drop-in containing current code/home/PYTHONPATH, private config, shared data, stable secrets and production mode. The deployment transaction writes only its named managed drop-in.
+- Fault tests prove unrelated gateway drop-ins survive; an active gateway is restarted and effective assignments verified; an injected bad gateway environment restores the prior managed drop-in and current symlink.
+- The first expanded focused run found two fixture hash failures because the new tracked file had inconsistent Windows checkout line endings. A first attempted LF normalization still differed from the test Git checkout; byte comparison isolated only this file. Restoring platform-consistent fixture writing made the two signed-release tests pass. Production hash checks were not weakened.
+- Final focused command: `python -m pytest tests/test_release_systemd.py tests/test_deploy_release.py tests/test_runtime_release_audit.py tests/test_operational_scripts.py -q --junitxml=artifacts/test-reports/p10-gateway-dropin-focused-final.xml` => 148 passed in 54.91 seconds.
+- Full JUnit `p10-gateway-dropin-full.xml`: 1663 tests, zero failures/errors/skips, 286.505 seconds; no Python test process remained afterward.
+- Project audit then found one test-only literal private path. Replaced it with runtime `Path.home()` construction; `tests/test_release_systemd.py` => 17 passed in 6.61 seconds and project/privacy audit => 575 files, zero issues. License audit remained 65 capabilities, zero issues; diff check passed.
+- No production gateway file, current link, content unit, private config, shared database or timer was changed by this local implementation.

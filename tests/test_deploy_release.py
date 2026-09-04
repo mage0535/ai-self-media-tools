@@ -59,6 +59,10 @@ def _git_source(root: Path) -> None:
         "[Timer]\nOnCalendar=*-*-* 00:00:00\n",
         encoding="utf-8",
     )
+    (root / "systemd" / "hermes-gateway-ai-self-media.conf").write_text(
+        (Path(__file__).parents[1] / "systemd" / "hermes-gateway-ai-self-media.conf").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     (root / "README.md").write_text("release\n", encoding="utf-8")
     subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
     subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
