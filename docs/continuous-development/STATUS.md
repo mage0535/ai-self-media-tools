@@ -24,7 +24,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `tests/test_deploy_release.py`, four coordination documents | in_progress | preflight real configuration before expensive evidence; govern three external Hermes tool bridges before candidate signing |
+| 12-platform Canary and deployment | Codex primary | gateway drop-in/deploy transaction tests and four coordination documents | in_progress | signed bootstrap `7bfa13c` prepared inactive; implement rollback-safe gateway root convergence before activation |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -161,3 +161,7 @@ These describe the audited production release, not the current development code.
 - Linux bridge tests at `ef39e15`: 6 passed. A mode-600 candidate config copy was created in isolated staging with three current bridge hashes; production config was not changed.
 - First candidate preflight then failed on an internal `$CURRENT_RELEASE` image script resolving into old production. One red test reproduced it; loader now supports explicit code root and Canary supplies its candidate root.
 - First full regression exposed one Canary path regression (1 failed, 1623 passed); targeted repair passed 103 tests. Final full regression: 1624 passed plus 37 subtests, 286.97 seconds.
+- Linux alias/bridge subset: 7 passed; private candidate config preflight passed in 10ms.
+- Historical `149362f` bootstrap attempt failed correctly: JUnit 1565 tests, 1 failure because required four video visual assets produced two. It was not signed; no candidate directory remains.
+- Clean runtime bootstrap `7bfa13c` succeeded with JUnit 1661, zero failures/errors/skips. Signed/frozen release is prepared but inactive; current remains v7, timers remain disabled, gateway active, shared DB unchanged.
+- New blocker: gateway service has no project-managed drop-in for all production roots/mode. Forward activation is prohibited until its install/verify/rollback transaction is tested.

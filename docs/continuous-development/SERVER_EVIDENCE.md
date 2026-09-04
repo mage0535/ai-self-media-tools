@@ -250,3 +250,14 @@ Observed read-only on 2026-08-31.
 - Added a failing stable-alias test and expanded `_rewrite_runtime_paths` to cover current-release aliases. The first full suite then found one real Canary regression because `load_config` inferred a default code root before Canary rebasing.
 - Added optional explicit `code_root` to `load_config`; Task9 Canary now supplies its candidate root directly. Targeted deploy/CLI/Canary regression: 103 passed in 53.61 seconds.
 - Final full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-current-alias-fixed-full.xml` => 1624 passed plus 37 subtests, 286.97 seconds, exit 0. The earlier 1-failure full run is retained as root-cause evidence, not counted as passing.
+
+## 2026-09-04 Signed Bootstrap Rollback Preparation
+
+- Linux staging at `7bfa13c` passed 7 focused alias/bridge/config tests. The mode-600 private candidate config then passed real preflight in 10ms without modifying production config.
+- Attempted tracked-only bootstrap from clean historical `149362f`. Full evidence produced JUnit 1565 tests with one failure: original-video media bridge expected four visual assignments but produced two. Project audit passed, but release evidence failed; no release directory was retained and current remained unchanged.
+- The failed historical evidence is preserved under the named shared evidence directory. It is not accepted as a rollback and was not repaired by editing the historical source.
+- Prepared `bootstrap-runtime-v8-7bfa13c-20260904` from clean staging using the same private candidate config. Result: prepared true, activated false, commit `7bfa13c7c10250678d466e5d089fc3b3958dfa39`.
+- Bootstrap metadata records JUnit 1661 tests, zero failures/errors/skips. Release and metadata modes are 0555/0444. No config, state database, or secrets directory exists inside the release.
+- Shared database remains inode 1642977, 63,143,936 bytes, 433 jobs. Current still points to the old v7 release; zero project timers are enabled; gateway remains active.
+- First postcheck script assumed a nonexistent metadata key and failed with KeyError. The corrected schema-aware check produced the evidence above; the failed command is not counted as verification.
+- `systemctl cat` confirms Hermes gateway is independently owned and has several existing drop-ins. No checked-in project gateway root drop-in exists, and effective gateway environment lacks project CODE_ROOT/CONFIG/DATA/SECRETS/production mode. Forward activation remains blocked.
