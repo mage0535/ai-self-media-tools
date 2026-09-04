@@ -827,6 +827,21 @@ def test_config_preflight_accepts_hash_bound_hermes_bridge(tmp_path, monkeypatch
     deploy_release_module.preflight_runtime_config(config, source, tmp_path / "data", tmp_path / "secrets")
 
 
+def test_config_preflight_rewrites_stable_current_script_to_candidate(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    _git_source(source)
+    old = tmp_path / "old-release"
+    (old / "scripts").mkdir(parents=True)
+    (old / "scripts" / "run.py").write_text("print('old')\n", encoding="utf-8")
+    current = tmp_path / ".ai-self-media-tools-current"
+    current.symlink_to(old, target_is_directory=True)
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"data_dir": str(tmp_path / "data"), "media": {"script": str(current / "scripts" / "run.py")}}), encoding="utf-8")
+
+    deploy_release_module.preflight_runtime_config(config, source, tmp_path / "data", tmp_path / "secrets")
+
+
 @pytest.mark.parametrize("fault", ["hash", "config_key", "symlink"])
 def test_config_preflight_rejects_untrusted_hermes_bridge(tmp_path, monkeypatch, fault):
     source = tmp_path / "source"

@@ -9,7 +9,7 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 - Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
 - GitHub feature branch: `codex/unified-capability-closure@149362f`
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1623 passed + 37 subtests.
+- Latest complete regression on this branch: 1624 passed + 37 subtests.
 
 ## Active work
 
@@ -158,3 +158,6 @@ These describe the audited production release, not the current development code.
 - This is deployment dependency trust only. Agent-Reach, Lux and knowledge-card bridge runtime probes/adapters/effect evidence remain separate P10 work.
 - Focused deployment suite: 145 passed. Full regression: 1623 passed plus 37 subtests, 284.78 seconds.
 - Next: commit/push, Linux test, create a permission-restricted candidate config copy with current hashes, and preflight it without changing production config.
+- Linux bridge tests at `ef39e15`: 6 passed. A mode-600 candidate config copy was created in isolated staging with three current bridge hashes; production config was not changed.
+- First candidate preflight then failed on an internal `$CURRENT_RELEASE` image script resolving into old production. One red test reproduced it; loader now supports explicit code root and Canary supplies its candidate root.
+- First full regression exposed one Canary path regression (1 failed, 1623 passed); targeted repair passed 103 tests. Final full regression: 1624 passed plus 37 subtests, 286.97 seconds.

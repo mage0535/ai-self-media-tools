@@ -244,3 +244,9 @@ Observed read-only on 2026-08-31.
 - Focused command: `python -m pytest tests/test_deploy_release.py tests/test_release_systemd.py tests/test_runtime_release_audit.py tests/test_operational_scripts.py -q --junitxml=artifacts/test-reports/p10-external-bridge-focused.xml` => 145 passed in 54.45 seconds.
 - Full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-external-bridge-full.xml` => 1623 passed plus 37 subtests, 284.78 seconds, exit 0.
 - No private config or server bridge was changed during local implementation. Passing deployment validation will not be reported as runtime adapter execution or final-artifact impact.
+- Linux staging fetched `ef39e15`; bridge/config-preflight subset passed 6 tests in 0.62 seconds. Three bridge SHA-256 values were measured without modifying those files.
+- Created a private mode-600 candidate config copy under isolated staging, adding only the three external dependency attestations. The production config was not rewritten.
+- Candidate preflight failed in 3ms on `media.image.script`: `$CURRENT_RELEASE/scripts/image_gen.py` resolved through the active symlink into the old release before candidate rebasing. It was correctly not treated as an external bridge.
+- Added a failing stable-alias test and expanded `_rewrite_runtime_paths` to cover current-release aliases. The first full suite then found one real Canary regression because `load_config` inferred a default code root before Canary rebasing.
+- Added optional explicit `code_root` to `load_config`; Task9 Canary now supplies its candidate root directly. Targeted deploy/CLI/Canary regression: 103 passed in 53.61 seconds.
+- Final full command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-current-alias-fixed-full.xml` => 1624 passed plus 37 subtests, 286.97 seconds, exit 0. The earlier 1-failure full run is retained as root-cause evidence, not counted as passing.
