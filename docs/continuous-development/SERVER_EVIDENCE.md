@@ -209,3 +209,14 @@ Observed read-only on 2026-08-31.
 - No production service restart, symlink switch, config write, database mutation, publishing, or timer enable was performed during this refresh.
 - Final scope regression: `python -m pytest -q --junitxml=artifacts/test-reports/p10-systemd-scope-full.xml` => 1612 passed plus 37 subtests, 285.26 seconds, exit 0. All five new scope tests are included in this full run.
 - Project/privacy audit after documentation updates: 574 files, zero issues. License audit: 65 capabilities, zero issues. Diff whitespace check passed.
+
+## 2026-09-04 Expanded Effective-Path Follow-Up
+
+- Read-only SSH at 12:40 BJT confirmed unchanged current release, mutable HEAD, 17-file diff summary, and the two provider/renderer hashes above. Gateway active; all 11 listed timers disabled. Existing dirty work was left intact.
+- Git porcelain status-list SHA-256: `3b996bb639e59f75c3e66b6a741311cf76d59af3e93b45266b047b6c6ab83427`. This hashes status/path listings, not file contents.
+- Filtered systemd Environment output confirms expanded HOME/PYTHONPATH/data/secrets/config roots, but no explicit CONTENT_PLATFORM_CODE_ROOT or CONTENT_PLATFORM_RUNTIME_MODE for the content service. This does not inspect or disclose other environment values.
+- Five failing tests reproduced rejection of valid expanded paths and inability to diagnose incorrect individual runtime roots. The fix uses exact parsed environment values and expanded deployment-home paths.
+- A real checked-in module-based service template exposed a second bug: scraper environment paths triggered the ExecStart script check. Validation is now scoped to release-script ExecStart lines only.
+- Focused command: `python -m pytest tests/test_release_systemd.py tests/test_deploy_release.py tests/test_runtime_release_audit.py tests/test_task9_canary.py -q --junitxml=artifacts/test-reports/p10-effective-paths-focused.xml` => 133 passed in 56.89 seconds.
+- No production activation, mutable file overwrite, restart, database write, publishing, or timer enable occurred.
+- Full local command: `python -m pytest -q --junitxml=artifacts/test-reports/p10-effective-paths-full.xml` => 1617 passed plus 37 subtests, 283.41 seconds, exit 0. Privacy audit 574 files clean; license audit 65 capabilities clean.

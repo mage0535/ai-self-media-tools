@@ -7,6 +7,7 @@ import json
 import hashlib
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -374,20 +375,34 @@ def _verify_effective_systemd_units(
             key, separator, value = line.partition("=")
             if separator:
                 values[key] = value
-        if values.get("WorkingDirectory") != SYSTEMD_CURRENT_ROOT:
+        home = Path.home().as_posix()
+        current_root = SYSTEMD_CURRENT_ROOT.replace("%h", home)
+        mutable_root = SYSTEMD_MUTABLE_ROOT.replace("%h", home)
+        if values.get("WorkingDirectory") != current_root:
             raise ReleaseAuditError(f"systemd unit {name} has the wrong effective WorkingDirectory")
-        environment = values.get("Environment", "")
-        if f"CONTENT_PLATFORM_HOME={SYSTEMD_CURRENT_ROOT}" not in environment:
-            raise ReleaseAuditError(f"systemd unit {name} has the wrong effective CONTENT_PLATFORM_HOME")
-        if f"CONTENT_PLATFORM_CODE_ROOT={SYSTEMD_CURRENT_ROOT}" not in environment:
-            raise ReleaseAuditError(f"systemd unit {name} has the wrong effective CONTENT_PLATFORM_CODE_ROOT")
-        if f"CONTENT_PLATFORM_CONFIG={SYSTEMD_MUTABLE_ROOT}/config.json" not in environment:
-            raise ReleaseAuditError(f"systemd unit {name} has the wrong effective CONTENT_PLATFORM_CONFIG")
-        if "CONTENT_PLATFORM_RUNTIME_MODE=production" not in environment:
-            raise ReleaseAuditError(f"systemd unit {name} is not fail-closed in production mode")
-        if f"{SYSTEMD_MUTABLE_ROOT}/scripts/" in values.get("ExecStart", ""):
+        try:
+            environment = dict(item.split("=", 1) for item in shlex.split(values.get("Environment", "")))
+        except ValueError as exc:
+            raise ReleaseAuditError(f"systemd unit {name} has malformed effective Environment") from exc
+        expected = {
+            "CONTENT_PLATFORM_HOME": current_root,
+            "CONTENT_PLATFORM_CODE_ROOT": current_root,
+            "PYTHONPATH": current_root,
+            "CONTENT_PLATFORM_CONFIG": f"{mutable_root}/config.json",
+            "CONTENT_PLATFORM_DATA_DIR": SYSTEMD_DATA_ROOT.replace("%h", home),
+            "CONTENT_PLATFORM_SECRETS_DIR": SYSTEMD_SECRETS_ROOT.replace("%h", home),
+            "CONTENT_PLATFORM_RUNTIME_MODE": "production",
+        }
+        for key, value in expected.items():
+            if environment.get(key) != value:
+                raise ReleaseAuditError(f"systemd unit {name} has the wrong effective {key}")
+        if f"{mutable_root}/scripts/" in values.get("ExecStart", ""):
             raise ReleaseAuditError(f"systemd unit {name} has a stale effective script path")
-        if "/scripts/" in text and SYSTEMD_CURRENT_ROOT not in values.get("ExecStart", ""):
+        starts_release_script = any(
+            line.startswith("ExecStart=") and f"{SYSTEMD_CURRENT_ROOT}/scripts/" in line
+            for line in text.splitlines()
+        )
+        if starts_release_script and f"{current_root}/scripts/" not in values.get("ExecStart", ""):
             raise ReleaseAuditError(f"systemd unit {name} did not resolve its script from the current release")
 
 

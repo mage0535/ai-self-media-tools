@@ -44,4 +44,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Server activation must use the same systemd scope as the installed production units. The current server uses system scope; scope convergence remains a P10 gate.
 - Deployment and acceptance now accept `--systemd-scope user|system`; this is command routing, not proof of a completed activation. Expanded effective paths and gateway-root convergence still require Linux verification.
 - On every resume, compare server HEAD, dirty-file names, and available timestamps/hashes before deployment. Preserve uncommitted server work; unchanged HEAD alone does not establish unchanged content.
+- Effective-unit validation compares expanded runtime paths and exact environment assignments. External scraper environment paths must not be mistaken for the service's ExecStart; missing production roots still block activation.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

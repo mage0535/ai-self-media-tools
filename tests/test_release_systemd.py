@@ -111,10 +111,35 @@ class FakeSystemd:
                         next(line for line in text.splitlines() if line.startswith("WorkingDirectory=")),
                         "Environment=" + " ".join(line.removeprefix("Environment=") for line in text.splitlines() if line.startswith("Environment=")),
                     ]
-                )
+                ).replace("%h", Path.home().as_posix())
                 + "\n"
             )
         return _systemd_result()
+
+
+@pytest.mark.parametrize("bad_field", [None, "CONTENT_PLATFORM_DATA_DIR", "CONTENT_PLATFORM_SECRETS_DIR", "PYTHONPATH", "CONTENT_PLATFORM_CONFIG"])
+def test_effective_expanded_paths_require_exact_runtime_roots(tmp_path, bad_field):
+    unit_dir = tmp_path / "units"
+    unit_dir.mkdir()
+    name = "hermes-content-platform.service"
+    template = (Path("systemd") / name).read_text(encoding="utf-8")
+    (unit_dir / name).write_text(template, encoding="utf-8")
+    home = Path.home().as_posix()
+    fake = FakeSystemd(unit_dir)
+
+    def expanded(argv):
+        result = fake(argv)
+        result.stdout = result.stdout.replace("%h", home)
+        if bad_field:
+            import re
+            result.stdout = re.sub(rf"{bad_field}=([^\s]+)", rf"{bad_field}=\1-stale", result.stdout)
+        return result
+
+    if bad_field:
+        with pytest.raises(deploy_release_module.ReleaseAuditError, match=bad_field):
+            deploy_release_module._verify_effective_systemd_units(tmp_path, unit_dir, [name], expanded)
+    else:
+        deploy_release_module._verify_effective_systemd_units(tmp_path, unit_dir, [name], expanded)
 
 
 def test_all_service_templates_use_current_code_root_and_mutable_runtime_roots():
