@@ -379,6 +379,7 @@ def test_effective_expanded_paths_require_exact_runtime_roots(tmp_path, bad_fiel
 def test_all_service_templates_use_current_code_root_and_mutable_runtime_roots():
     for path in sorted(Path("systemd").glob("*.service")):
         text = path.read_text(encoding="utf-8")
+        assert "Environment=PYTHONDONTWRITEBYTECODE=1" in text, path
         assert f"WorkingDirectory={CURRENT}" in text, path
         assert f"Environment=CONTENT_PLATFORM_HOME={CURRENT}" in text, path
         lines = text.splitlines()

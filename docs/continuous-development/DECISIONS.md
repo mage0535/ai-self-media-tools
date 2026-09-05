@@ -239,3 +239,10 @@
 - Preserve drop-ins that only define resource limits, provider env files, admission windows, writer fallback or other non-runtime settings.
 - Snapshot each conflicting file before removal and restore exact bytes/mode/symlink on activation failure before restoring old service states.
 - Never delete an entire service drop-in directory merely because one file is stale.
+
+## D32: Signed Releases Must Remain Byte-Stable At Runtime
+
+- Set `PYTHONDONTWRITEBYTECODE=1` in every project systemd service and the Hermes gateway project drop-in; validate it from effective systemd environment.
+- Root permissions can bypass read-only mode bits, so mode 0555/0444 alone does not prove runtime immutability.
+- Any untracked `__pycache__` or `.pyc` invalidates release verification. Do not clean and reuse a release built without this policy as final production; build a new signed release.
+- Preserve contaminated releases as evidence until their status is documented. Never weaken the tracked-only attestation check to allow runtime caches.

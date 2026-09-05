@@ -44,6 +44,7 @@ GATEWAY_DROPIN_SOURCE = "hermes-gateway-ai-self-media.conf"
 GATEWAY_DROPIN_NAME = "ai-self-media-runtime.conf"
 MANAGED_RUNTIME_ENVIRONMENT = {
     "CONTENT_PLATFORM_HOME", "CONTENT_PLATFORM_CODE_ROOT", "PYTHONPATH",
+    "PYTHONDONTWRITEBYTECODE",
     "CONTENT_PLATFORM_DATA_DIR", "CONTENT_PLATFORM_SECRETS_DIR",
     "CONTENT_PLATFORM_CONFIG", "CONTENT_PLATFORM_RUNTIME_MODE",
 }
@@ -469,6 +470,7 @@ def _runtime_environment_expected() -> dict[str, str]:
         "CONTENT_PLATFORM_HOME": SYSTEMD_CURRENT_ROOT.replace("%h", home),
         "CONTENT_PLATFORM_CODE_ROOT": SYSTEMD_CURRENT_ROOT.replace("%h", home),
         "PYTHONPATH": SYSTEMD_CURRENT_ROOT.replace("%h", home),
+        "PYTHONDONTWRITEBYTECODE": "1",
         "CONTENT_PLATFORM_CONFIG": f"{SYSTEMD_MUTABLE_ROOT.replace('%h', home)}/config.json",
         "CONTENT_PLATFORM_DATA_DIR": SYSTEMD_DATA_ROOT.replace("%h", home),
         "CONTENT_PLATFORM_SECRETS_DIR": SYSTEMD_SECRETS_ROOT.replace("%h", home),
