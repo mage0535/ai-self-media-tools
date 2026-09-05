@@ -383,6 +383,30 @@ def parse_platform_search_evidence(
     return rows
 
 
+def parse_twitter_search_cards(cards: list[dict[str, str]], *, query: str, limit: int = 12) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for card in cards:
+        href = str(card.get("href") or "").strip()
+        match = re.match(r"(https?://(?:www\.)?(?:x|twitter)\.com/[^/]+/status/\d+)", href, re.I)
+        if not match:
+            continue
+        canonical_url = match.group(1)
+        if canonical_url in seen_urls:
+            continue
+        lines = [strip_markup(line) for line in str(card.get("context") or "").splitlines() if strip_markup(line)]
+        title = next((line for line in lines if _looks_like_content_line(line, query)), "")
+        metrics = [line for line in lines if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)]
+        metric = max(metrics, key=_metric_number) if metrics else ""
+        if not title or _metric_number(metric) <= 0:
+            continue
+        seen_urls.add(canonical_url)
+        rows.append(_work("twitter", "twitter_logged_search", query, title, url=canonical_url, engagement=metric, evidence_strength="strong_logged_search_result"))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def _is_shipinhao_content_url(href: str) -> bool:
     parsed = urllib.parse.urlparse(str(href or "").strip())
     host = (parsed.hostname or "").casefold()
@@ -694,7 +718,9 @@ def collect_logged_short_video_search(
             captured_at=captured_at,
             limit=limit,
         )
-    if platform == "xiaohongshu":
+    if platform == "twitter":
+        rows = parse_twitter_search_cards(anchors, query=query, limit=limit)
+    elif platform == "xiaohongshu":
         rows = parse_xiaohongshu_search_text(text, query=query, limit=limit, anchors=anchors)
     else:
         rows = parse_logged_short_video_search_text(text, platform=platform, query=query, limit=limit, anchors=anchors)
