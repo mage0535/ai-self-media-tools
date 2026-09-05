@@ -611,11 +611,16 @@ def classify_logged_search_failure(text: str) -> str:
     if any(token in lowered for token in ("登录", "验证码", "login", "captcha")):
         return "login_required_or_captcha"
     if any(token in lowered for token in (
-        "服务器出错", "刷新重试", "请求过于频繁", "访问验证", "安全验证",
+        "服务器出错", "服务器出现问题", "刷新重试", "请求过于频繁", "访问验证", "安全验证",
         "challenge", "ip存在风险", "300012",
     )):
         return "platform_error_or_rate_limited"
     return "layout_changed_or_no_lane_results"
+
+
+def should_retry_logged_page(text: str) -> bool:
+    lowered = str(text or "").casefold()
+    return any(token in lowered for token in ("服务器出错", "服务器出现问题", "刷新重试", "请重试"))
 
 
 def collect_logged_short_video_search(
@@ -718,6 +723,21 @@ def collect_logged_short_video_search(
             dynamic_wait_ms = min(15000, max(3000, timeout_ms // 2))
             page.wait_for_timeout(dynamic_wait_ms)
             text = body.inner_text(timeout=8000)
+        page_retry_count = 0
+        if should_retry_logged_page(text):
+            page_retry_count = 1
+            page.reload(wait_until="domcontentloaded", timeout=timeout_ms)
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
+            page.wait_for_timeout(3000)
+            text = body.inner_text(timeout=8000)
+            if needs_dynamic_content_wait(text):
+                retry_wait_ms = min(15000, max(3000, timeout_ms // 2))
+                page.wait_for_timeout(retry_wait_ms)
+                dynamic_wait_ms += retry_wait_ms
+                text = body.inner_text(timeout=8000)
         anchors = page.locator("a[href], [data-url]").evaluate_all(
             """els => els.map(a => {
                 const box = a.closest('article, li, [class*="card"], [class*="item"], [class*="video"], [class*="feed"]') || a;
@@ -765,7 +785,7 @@ def collect_logged_short_video_search(
         status.update({"status": "ok", "count": len(rows)})
     else:
         status.update({"status": classify_logged_search_failure(text), "count": 0})
-    status.update({"text_path": str(text_path), "screenshot_path": str(screenshot_path), "dynamic_wait_ms": dynamic_wait_ms})
+    status.update({"text_path": str(text_path), "screenshot_path": str(screenshot_path), "dynamic_wait_ms": dynamic_wait_ms, "page_retry_count": page_retry_count})
     return rows, status
 
 

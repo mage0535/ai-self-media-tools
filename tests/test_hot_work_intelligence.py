@@ -446,6 +446,17 @@ def test_xiaohongshu_ip_risk_is_a_proxy_eligible_platform_error():
     assert should_use_regional_proxy({"status": status}) is True
 
 
+def test_tiktok_server_problem_is_retryable_then_proxy_eligible():
+    from content_platform.hot_work_intelligence import classify_logged_search_failure, should_retry_logged_page
+
+    text = "出错了\n抱歉，服务器出现问题，请重试。\n重试"
+    status = classify_logged_search_failure(text)
+
+    assert should_retry_logged_page(text) is True
+    assert status == "platform_error_or_rate_limited"
+    assert should_use_regional_proxy({"status": status}) is True
+
+
 def test_tiktok_cards_bind_visible_metric_copy_and_video_url():
     from content_platform.hot_work_intelligence import parse_tiktok_search_cards
 
