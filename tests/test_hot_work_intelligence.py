@@ -413,3 +413,25 @@ def test_dynamic_page_wait_only_applies_to_unready_logged_search():
     assert needs_dynamic_content_wait("") is True
     assert needs_dynamic_content_wait("首页 搜索 通知 关注") is True
     assert needs_dynamic_content_wait("AI agent workflow\n12K views\nA complete result with enough visible detail") is False
+
+
+def test_twitter_cards_use_article_context_and_canonical_status_url():
+    from content_platform.hot_work_intelligence import parse_twitter_search_cards
+
+    context = (
+        "Lunar @LunarResearcher · 9月1日\n"
+        "吴恩达发布完整 AI 智能体工作流课程，从提示扩展到多智能体循环\n"
+        "22\n168\n836\n10万"
+    )
+    rows = parse_twitter_search_cards(
+        [
+            {"text": "9月1日", "href": "https://x.com/LunarResearcher/status/2094501861885649354", "context": context},
+            {"text": "10万", "href": "https://x.com/LunarResearcher/status/2094501861885649354/analytics", "context": context},
+        ],
+        query="AI agents workflow",
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["title"].startswith("吴恩达发布完整 AI 智能体工作流课程")
+    assert rows[0]["url"] == "https://x.com/LunarResearcher/status/2094501861885649354"
+    assert rows[0]["engagement"] == "10万"
