@@ -26,6 +26,50 @@ STRONG_EVIDENCE = {
     "strong_public_wechat_search",
 }
 
+PLATFORM_DEFAULT_QUERIES: dict[str, tuple[str, ...]] = {
+    "bilibili": ("AI工具 自动化工作流", "AI Agent 实战"),
+    "douyin": ("AI工具", "AI工作流"),
+    "douyin_ai": ("AI工具", "AI工作流"),
+    "douyin_pet": ("猫咪治愈", "猫狗日常"),
+    "juejin": ("AI 编程 Agent", "AI 自动化工作流"),
+    "kuaishou": ("AI工具", "AI效率 工作流"),
+    "tiktok": ("AI tools workflow", "AI agent productivity"),
+    "twitter": ("AI agents workflow", "AI productivity tools"),
+    "xiaohongshu": ("AI效率 工作流", "AI工具 实测"),
+    "youtube": ("AI productivity workflow", "AI agent tutorial"),
+    "zhihu": ("AI工具 工作流", "AI Agent 实测"),
+}
+
+
+def default_platform_queries(platform: str) -> list[str]:
+    normalized = str(platform or "").casefold().strip()
+    return list(PLATFORM_DEFAULT_QUERIES.get(normalized, ("AI工具 工作流",)))
+
+
+def resolve_logged_search_state(
+    platform: str,
+    output_dir: str | Path,
+    *,
+    cookie_dir: str = "",
+) -> dict[str, Any]:
+    """Resolve a valid private cookie file and materialize Playwright state."""
+    from .auth_registry import cookie_file_status, resolve_cookie_file
+
+    source = resolve_cookie_file(platform, cookie_dir=cookie_dir)
+    status = cookie_file_status(source, platform)
+    if not status.get("valid"):
+        return {"status": "unavailable", "reason": "valid_private_cookie_state_not_found", "state_file": ""}
+    if status.get("format") == "playwright_storage_state":
+        state = source
+    else:
+        state = Path(output_dir) / f"{str(platform).casefold().strip()}_playwright_state.json"
+        write_playwright_state(source, state)
+        try:
+            state.chmod(0o600)
+        except OSError:
+            pass
+    return {"status": "ready", "reason": "", "state_file": str(state), "source_format": str(status.get("format") or "")}
+
 
 def strip_markup(value: str) -> str:
     text = re.sub(r"<script.*?</script>", " ", str(value or ""), flags=re.S | re.I)
