@@ -396,8 +396,10 @@ def test_logged_search_state_is_auto_discovered_and_converted(tmp_path, monkeypa
 
 def test_logged_search_state_reports_missing_without_writing(tmp_path, monkeypatch):
     from content_platform.hot_work_intelligence import resolve_logged_search_state
+    from content_platform import auth_registry
 
     monkeypatch.setenv("CONTENT_PLATFORM_COOKIE_DIRS", str(tmp_path / "missing"))
+    monkeypatch.setattr(auth_registry, "DEFAULT_SEARCH_DIRS", [])
 
     result = resolve_logged_search_state("xiaohongshu", tmp_path / "private-states", cookie_dir=str(tmp_path / "missing"))
 
