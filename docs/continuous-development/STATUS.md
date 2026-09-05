@@ -1,15 +1,15 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally)
+Last updated: 2026-09-05 Asia/Shanghai (signed d79128c production activation and rollback rehearsal verified)
 
 ## Current state
 
 - Phase: P10 real Canaries, deployment, rollback, and controlled activation
-- Production timers observed on 2026-09-02: all related timers disabled; overnight/supervisor inactive.
-- Production release observed on 2026-09-02: `unified-capability-v7-149362f`.
-- GitHub feature branch: `codex/unified-capability-closure@149362f`
+- Production timers observed on 2026-09-05: all 11 related timers disabled/inactive.
+- Production release observed on 2026-09-05: `production-runtime-v8-d79128c-20260905`.
+- Production/GitHub commit: `d79128c93ae6f18c164b38ca1cf980a799d025f2`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1636 passed + 37 subtests.
+- Latest complete regression on this branch: 1639 passed + 37 subtests; JUnit 1676 tests, zero failures/errors.
 
 ## Active work
 
@@ -24,8 +24,8 @@ Last updated: 2026-09-04 Asia/Shanghai (P10 bootstrap hardening verified locally
 | Image checkpoint/provider fallback | Codex primary | MediaBridge/checkpoint/provider evidence and P7 tests | committed `652f5fb` | production image Canary during deployment |
 | Renderer retry/checkpoint | Codex primary | `scripts/film_renderer.py`, runtime adapter, P8 tests | committed `a371b69` | production FFmpeg/Playwright Canary |
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
-| 12-platform Canary and deployment | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, four coordination documents | in_progress | finish rollback-order full regression and Linux fault tests; reconcile forward/rollback unit inventories before activation |
-| Hermes MCP child runtime convergence | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, `tests/test_deploy_release.py`, four coordination documents | in_progress | add atomic MCP env promotion/rollback, then Linux and live MCP verification |
+| 12-platform Canary and deployment | Codex primary | P10 Canary/evidence files and four coordination documents | in_progress | run serial real platform Canaries; verify live publisher/draft/handoff boundaries before timer decision |
+| Hermes MCP child runtime convergence | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, `tests/test_deploy_release.py`, four coordination documents | deployed `d79128c` | complete: live MCP env, tool discovery, byte stability and rollback/forward verified |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -107,7 +107,7 @@ These describe the audited production release, not the current development code.
 - [ ] Full local and Linux suites report zero failures.
 - [ ] Privacy and license audits pass.
 - [ ] 12 serial platform Canaries pass.
-- [ ] Rollback rehearsal passes.
+- [x] Rollback rehearsal passes.
 - [ ] Timers explicitly approved and restored.
 
 ## 2026-09-02 Server Refresh
@@ -200,3 +200,14 @@ These describe the audited production release, not the current development code.
 - Forward rollback was correctly rejected because root-run Python had added three `__pycache__` directories to signed release. Current remains durable rollback.
 - Added `PYTHONDONTWRITEBYTECODE=1` to all project services and gateway, included in exact environment validation and conflict detection. Targeted 115 passed; full JUnit 1673 zero failures/errors/skips, 275.052s.
 - Next: commit/push, Linux no-bytecode tests, build a new clean forward release, verify no post-start cache, then repeat rollback/forward rehearsal before Canaries.
+
+## 2026-09-05 Hermes MCP Runtime Convergence
+
+- Root cause: the gateway environment was correct, but `mcp_servers.content-platform.env` in Hermes private config explicitly replaced the child environment with only two runtime fields. MCP startup could therefore resolve wrong roots and write bytecode into a signed release.
+- Commit `d79128c` atomically updates only that MCP env block with all eight production assignments. It preserves every other MCP entry/server field, uses no new YAML dependency, and restores exact prior bytes/mode before old gateway startup on failure.
+- Local focused regression: 160 passed; final deploy/systemd subset: 75 passed. Full: 1639 passed plus 37 subtests; JUnit 1676 tests, zero failures/errors/skips. Privacy scan: 576 files, zero issues. License audit: 65 capabilities, zero issues.
+- Linux staging at `d79128c`: 161 deployment/systemd/operational tests passed. A read-only transformation of the real Hermes config accepted its structure, produced all eight expected fields, and left source SHA unchanged.
+- Signed production release `production-runtime-v8-d79128c-20260905` activated successfully. A real rollback to `bootstrap-runtime-v8-b16d796-20260905` and forward activation back to `d79128c` both passed systemd and MCP config verification.
+- Final postcheck: gateway active since 17:40:14 CST, MainPID 2074498, zero failed units, zero enabled project timers, NO_PROXY loopback drop-in preserved, journal retained. MCP watchdog/server inherited all eight fields; `hermes mcp test content-platform` connected in 1709ms and discovered 22 tools.
+- Signed release remained at zero `.pyc` files and zero `__pycache__` directories after MCP startup. Shared DB remained inode 1642977, 63,143,936 bytes and 433 jobs.
+- Remaining gate: 12 serial real platform Canaries and live delivery/postcheck evidence are not complete. Do not enable timers or describe unit/MCP verification as completed content production.

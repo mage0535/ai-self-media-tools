@@ -246,3 +246,12 @@
 - Root permissions can bypass read-only mode bits, so mode 0555/0444 alone does not prove runtime immutability.
 - Any untracked `__pycache__` or `.pyc` invalidates release verification. Do not clean and reuse a release built without this policy as final production; build a new signed release.
 - Preserve contaminated releases as evidence until their status is documented. Never weaken the tracked-only attestation check to allow runtime caches.
+
+## D33: Hermes MCP Child Environment Is Part Of The Release Transaction
+
+- The `content-platform` stdio MCP entry explicitly supplies its child environment, so a correct gateway environment does not prove the MCP child has correct runtime roots.
+- Real systemd deploy and rollback automatically target the private Hermes config; offline/no-systemd release construction does not. Operators may override the path, but cannot silently omit it during a CLI systemd switch.
+- Replace only `mcp_servers.content-platform.env` with the eight project-managed production assignments. Preserve all other MCP servers, model settings, startup mode, timeout and enabled state byte-for-byte outside that block.
+- Require a regular non-symlink private config and exactly one top-level MCP mapping, one content-platform entry and one env block. Ambiguity fails closed.
+- Snapshot original bytes and mode before mutation. On activation failure, restore Hermes config together with runtime config before restarting the old gateway.
+- Do not add a deployment dependency on the Hermes CLI or an undeclared YAML package. Validate the surgical transformation and the spawned process environment independently.

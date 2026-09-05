@@ -337,3 +337,19 @@ Observed read-only on 2026-08-31.
 - Added `PYTHONDONTWRITEBYTECODE=1` to all 12 project services and gateway drop-in; exact environment verification and stale-dropin conflict fields include it. Five fixture failures were repaired by updating the minimal release fixture, not weakening production validation.
 - Targeted systemd/operational/deploy suite: 115 passed in 45.25s. Full JUnit `p10-no-bytecode-full.xml`: 1673 tests, zero failures/errors/skips, 275.052s. Privacy 576 files and license 65 capabilities clean.
 - The contaminated `4643ed0` release remains historical evidence and is not the final forward target. Production currently runs the durable `ec08d1c` rollback; timers remain disabled.
+
+## 2026-09-05 Hermes MCP Child Environment And Final Activation
+
+- Fresh server inspection found production on signed `b16d796`, gateway active and release cache-free, but Hermes private MCP config still declared only two child fields. This remained a latent recurrence path despite correct systemd environment.
+- Red tests first failed because deployment exposed no `hermes_config_path`. TDD added atomic target-block promotion, exact-byte rollback before old gateway startup, rollback-path coverage and automatic CLI selection for real systemd switches.
+- The implementation does not parse/rewrite the full private document and adds no dependency. It validates exact structural boundaries, replaces only the target env block, writes mode 0600 via atomic replace and rejects symlinks or ambiguous structure.
+- Local focused deployment/systemd/operational suite: 160 passed. Final deploy/systemd subset after CLI default: 75 passed. Full command `python -m pytest -q --junitxml=artifacts/test-reports/p10-hermes-mcp-final-full.xml`: 1639 passed plus 37 subtests; JUnit 1676 tests, zero failures/errors/skips in 327.583s.
+- Local project/privacy audit: 576 files, zero issues. License audit: 65 capabilities, zero issues. `git diff --check` passed. Commit `d79128c` was pushed before server mutation.
+- Linux staging fetched detached `d79128c`; 161 deployment/systemd/operational tests passed in 7.97s. A read-only transformation against the real Hermes YAML reported eight expected env fields and unchanged source SHA.
+- Pre-activation baseline: current `b16d796`; rollback package `bootstrap-runtime-v8-b16d796-20260905`; config mode 0600; shared DB inode 1642977, size 63,143,936, 433 jobs; zero enabled project timers; zero relevant failed units.
+- Deployment created signed `production-runtime-v8-d79128c-20260905` and returned systemd verified plus Hermes MCP config verified. No timer was restored.
+- Real rollback to the signed b16 bootstrap and forward activation back to d791 both returned verified. Private evidence records operation times and final release; system journal was retained.
+- Final gateway entered active state at 17:40:14 CST with MainPID 2074498. `zz-no-proxy-union.conf` and loopback NO_PROXY remained effective; zero failed units and zero enabled project timers were observed.
+- Exact argv/process inspection found MCP watchdog PID 2075148 and server PID 2075161, both with all eight production fields. `hermes mcp test content-platform` connected in 1709ms and discovered 22 tools.
+- Final release contained zero `.pyc` and zero `__pycache__` after MCP startup. Shared DB inode/size/jobs remained 1642977/63,143,936/433. Hermes config mode remained 0600; 21 unrelated MCP entries and target enabled/timeout fields remained present.
+- This closes runtime/MCP root convergence and byte-stability deployment. It does not close real media quality, live publisher postcheck, 12-platform Canary or timer-authorization gates.
