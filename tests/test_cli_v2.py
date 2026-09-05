@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import tempfile
 import unittest
 from contextlib import chdir
@@ -75,6 +76,40 @@ class CliV2Tests(unittest.TestCase):
         queries = [call.args[1] for call in collect.call_args_list]
         self.assertIn("AI agents workflow", queries)
         self.assertTrue(result["ok"])
+
+    def test_hot_works_collect_loads_private_proxy_for_classified_fallback(self):
+        output = self.root / "hot-works-proxy"
+        calls = []
+
+        def collect(platform, query, **kwargs):
+            calls.append((platform, query, kwargs.get("route_name"), kwargs.get("proxy_url")))
+            if kwargs.get("route_name") == "US_PROXY":
+                return ([{"platform": platform, "title": "AI agent workflow", "url": "https://x.com/a/status/1"}], {
+                    "source": "twitter:logged_search", "status": "ok", "count": 1,
+                })
+            return ([], {"source": "twitter:logged_search", "status": "platform_error_or_rate_limited", "count": 0})
+
+        def load_proxy(*_args, **_kwargs):
+            os.environ["US_PROXY"] = "socks5://127.0.0.1:2080"
+            return "/private/proxy.env"
+
+        with (
+            patch("content_platform.cli._load_env_defaults", side_effect=load_proxy) as load_defaults,
+            patch("content_platform.cli.resolve_logged_search_state", return_value={
+                "status": "ready", "reason": "", "state_file": str(self.root / "twitter-state.json"),
+                "source_format": "cookie_list",
+            }),
+            patch("content_platform.cli.collect_logged_short_video_search", side_effect=collect),
+            patch.dict("os.environ", {}, clear=False),
+        ):
+            os.environ.pop("US_PROXY", None)
+            code, result = self.call("hot-works-collect", "--platform", "twitter", "--query", "twitter=AI agents workflow", "--output-dir", str(output))
+
+        self.assertEqual(code, 0)
+        load_defaults.assert_called_once()
+        self.assertEqual([row[2] for row in calls], ["direct", "US_PROXY"])
+        self.assertEqual(calls[1][3], "socks5://127.0.0.1:2080")
+        self.assertEqual(result["items"], 1)
 
     def test_record_manual_publication_creates_global_topic_receipt(self):
         code, receipt = self.call(

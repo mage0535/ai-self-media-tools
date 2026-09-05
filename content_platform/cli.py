@@ -632,6 +632,7 @@ def execute(args):
     if args.command == "hot-works-collect":
         from collections import defaultdict
 
+        _load_env_defaults()
         data_dir = Path(config.get("data_dir", Path(args.db).parent))
         os.environ.setdefault("CONTENT_PLATFORM_DATA_DIR", str(data_dir))
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -729,7 +730,10 @@ def execute(args):
                 for query in queries:
                     started = datetime.now()
                     try:
-                        rows, status = collect_logged_short_video_search(platform, query, state_file=state_file, output_dir=output_dir / "logged_search")
+                        rows, status = collect_logged_short_video_search(
+                            platform, query, state_file=state_file,
+                            output_dir=output_dir / "logged_search", route_name="direct",
+                        )
                         from .hot_work_intelligence import should_use_regional_proxy
                         proxy_env = "US_PROXY" if platform in {"tiktok", "youtube", "twitter"} else "CN_PROXY"
                         proxy_url = os.environ.get(proxy_env, "")
