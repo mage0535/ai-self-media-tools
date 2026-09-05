@@ -58,6 +58,14 @@ def default_systemd_unit_dir(scope: str = "user") -> Path:
     raise ReleaseAuditError("systemd scope must be 'user' or 'system'")
 
 
+def default_hermes_config_path(systemd_unit_dir: str | None, explicit: str | None = None) -> str | None:
+    if explicit is not None:
+        return explicit
+    if systemd_unit_dir:
+        return str(Path.home() / ".hermes" / "config.yaml")
+    return None
+
+
 @contextlib.contextmanager
 def _exclusive_lock(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -401,6 +409,62 @@ def _promote_private_config(candidate: Path, destination: Path) -> None:
         shutil.copyfile(candidate, temporary)
         temporary.chmod(0o600)
         os.replace(temporary, destination)
+    finally:
+        if temporary.exists() or temporary.is_symlink():
+            temporary.unlink()
+
+
+def _replace_content_platform_mcp_env(payload: str) -> str:
+    """Replace only the content-platform MCP env block, preserving private YAML."""
+    lines = payload.splitlines(keepends=True)
+    mcp_indexes = [index for index, line in enumerate(lines) if line.rstrip("\r\n") == "mcp_servers:"]
+    if len(mcp_indexes) != 1:
+        raise ReleaseAuditError("Hermes config must contain exactly one top-level mcp_servers mapping")
+    mcp_index = mcp_indexes[0]
+    mcp_end = next(
+        (index for index in range(mcp_index + 1, len(lines)) if lines[index].strip() and not lines[index].startswith((" ", "\t", "#"))),
+        len(lines),
+    )
+    entry_indexes = [
+        index for index in range(mcp_index + 1, mcp_end)
+        if lines[index].rstrip("\r\n") == "  content-platform:"
+    ]
+    if len(entry_indexes) != 1:
+        raise ReleaseAuditError("Hermes config must contain exactly one content-platform MCP entry")
+    entry_index = entry_indexes[0]
+    entry_end = next(
+        (index for index in range(entry_index + 1, mcp_end) if lines[index].strip() and not lines[index].startswith("    ")),
+        mcp_end,
+    )
+    env_indexes = [
+        index for index in range(entry_index + 1, entry_end)
+        if lines[index].rstrip("\r\n") == "    env:"
+    ]
+    if len(env_indexes) != 1:
+        raise ReleaseAuditError("content-platform MCP entry must contain exactly one env mapping")
+    env_index = env_indexes[0]
+    env_end = next(
+        (index for index in range(env_index + 1, entry_end) if lines[index].strip() and not lines[index].startswith("      ")),
+        entry_end,
+    )
+    newline = "\r\n" if "\r\n" in payload else "\n"
+    expected = _runtime_environment_expected()
+    replacement = [f"      {key}: {json.dumps(value)}{newline}" for key, value in expected.items()]
+    updated_payload = "".join([*lines[: env_index + 1], *replacement, *lines[env_end:]])
+    if not updated_payload.startswith("".join(lines[: env_index + 1])) or not updated_payload.endswith("".join(lines[env_end:])):
+        raise ReleaseAuditError("Hermes MCP environment update changed unrelated configuration")
+    return updated_payload
+
+
+def _promote_hermes_mcp_runtime_config(config_path: Path) -> None:
+    if not config_path.is_file() or config_path.is_symlink():
+        raise ReleaseAuditError("Hermes config must be a regular file")
+    updated = _replace_content_platform_mcp_env(config_path.read_text(encoding="utf-8"))
+    temporary = config_path.parent / f".{config_path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        temporary.write_text(updated, encoding="utf-8", newline="")
+        temporary.chmod(0o600)
+        os.replace(temporary, config_path)
     finally:
         if temporary.exists() or temporary.is_symlink():
             temporary.unlink()
@@ -1160,6 +1224,7 @@ def deploy_release(
     systemd_runner=None,
     systemd_scope: str = "user",
     active_config_path: Path | str | None = None,
+    hermes_config_path: Path | str | None = None,
 ) -> dict:
     """Deploy one clean source revision while holding the runtime release lock."""
     _validate_raw_path(source_root, "source_root")
@@ -1169,11 +1234,14 @@ def deploy_release(
     _validate_raw_path(data_root, "data_root")
     if active_config_path is not None:
         _validate_raw_path(active_config_path, "active_config_path")
+    if hermes_config_path is not None:
+        _validate_raw_path(hermes_config_path, "hermes_config_path")
     source = Path(source_root).expanduser().resolve()
     releases = Path(releases_root).expanduser().resolve()
     current = _current_path(current_link)
     config = Path(config_path).expanduser().resolve()
     active_config = Path(active_config_path).expanduser().resolve() if active_config_path is not None else config
+    hermes_config = Path(hermes_config_path).expanduser().resolve() if hermes_config_path is not None else None
     rollback = Path(rollback_target).expanduser().resolve()
     data = Path(data_root).expanduser().resolve()
     if signing_key is not None:
@@ -1206,8 +1274,20 @@ def deploy_release(
         staging = source.parent / f"{source.name}-release-staging-{uuid.uuid4().hex}"
         active_config_snapshot = None
         config_promoted = False
+        hermes_config_snapshot = None
+        hermes_config_promoted = False
         owned_release_config = None
         owned_attestation_hash = None
+
+        def restore_runtime_config():
+            nonlocal config_promoted, hermes_config_promoted
+            if config_promoted and active_config_snapshot is not None:
+                _restore_snapshot_path(active_config, active_config_snapshot)
+                config_promoted = False
+            if hermes_config_promoted and hermes_config_snapshot is not None and hermes_config is not None:
+                _restore_snapshot_path(hermes_config, hermes_config_snapshot)
+                hermes_config_promoted = False
+
         try:
             temporary.rmdir()
             _git(source, "worktree", "add", "--detach", str(staging), commit)
@@ -1272,12 +1352,10 @@ def deploy_release(
                 active_config_snapshot = _snapshot_unit_file(active_config)
                 _promote_private_config(release_config, active_config)
                 config_promoted = True
-
-            def restore_runtime_config():
-                nonlocal config_promoted
-                if config_promoted and active_config_snapshot is not None:
-                    _restore_snapshot_path(active_config, active_config_snapshot)
-                    config_promoted = False
+            if hermes_config is not None:
+                hermes_config_snapshot = _snapshot_unit_file(hermes_config)
+                _promote_hermes_mcp_runtime_config(hermes_config)
+                hermes_config_promoted = True
 
             previous_release = current.resolve() if current.is_symlink() else None
             systemd = _systemd_switch(
@@ -1298,14 +1376,14 @@ def deploy_release(
                 "signing_key_path": str(signing_key_path),
                 "commit": commit,
                 "systemd": systemd,
+                "hermes_mcp_config_verified": hermes_config_promoted,
             }
         except Exception as exc:
             config_rollback_error = None
-            if config_promoted and active_config_snapshot is not None:
-                try:
-                    _restore_snapshot_path(active_config, active_config_snapshot)
-                except Exception as rollback_error:
-                    config_rollback_error = rollback_error
+            try:
+                restore_runtime_config()
+            except Exception as rollback_error:
+                config_rollback_error = rollback_error
             if release.exists() and not release.is_symlink():
                 for path in sorted(release.rglob("*"), key=lambda item: len(item.parts), reverse=True):
                     if path.is_file():
@@ -1343,16 +1421,20 @@ def rollback_release(
     systemd_runner=None,
     systemd_scope: str = "user",
     active_config_path: Path | str | None = None,
+    hermes_config_path: Path | str | None = None,
 ) -> dict:
     """Verify an audited frozen release and atomically activate it as current."""
     _validate_raw_path(target_release, "target_release")
     _validate_raw_path(data_root, "data_root")
     if active_config_path is not None:
         _validate_raw_path(active_config_path, "active_config_path")
+    if hermes_config_path is not None:
+        _validate_raw_path(hermes_config_path, "hermes_config_path")
     target = Path(target_release).expanduser().resolve()
     data = Path(data_root).expanduser().resolve()
     current = _current_path(current_link)
     active_config = Path(active_config_path).expanduser().resolve() if active_config_path is not None else None
+    hermes_config = Path(hermes_config_path).expanduser().resolve() if hermes_config_path is not None else None
     if signing_key is not None:
         key = Path(signing_key).expanduser().resolve()
         secrets = Path(secrets_root).expanduser().resolve() if secrets_root is not None else key.parent
@@ -1383,18 +1465,26 @@ def rollback_release(
             except ValueError as exc:
                 raise ReleaseAuditError("rollback release config is outside the durable snapshot root") from exc
         active_snapshot = _snapshot_unit_file(active_config) if active_config is not None else None
+        hermes_config_snapshot = _snapshot_unit_file(hermes_config) if hermes_config is not None else None
         config_promoted = False
+        hermes_config_promoted = False
 
         def restore_runtime_config():
-            nonlocal config_promoted
+            nonlocal config_promoted, hermes_config_promoted
             if config_promoted and active_config is not None and active_snapshot is not None:
                 _restore_snapshot_path(active_config, active_snapshot)
                 config_promoted = False
+            if hermes_config_promoted and hermes_config is not None and hermes_config_snapshot is not None:
+                _restore_snapshot_path(hermes_config, hermes_config_snapshot)
+                hermes_config_promoted = False
 
         try:
             if active_config is not None:
                 _promote_private_config(release_config, active_config)
                 config_promoted = True
+            if hermes_config is not None:
+                _promote_hermes_mcp_runtime_config(hermes_config)
+                hermes_config_promoted = True
             previous_release = current.resolve() if current.is_symlink() else None
             systemd = _systemd_switch(
                 target,
@@ -1417,6 +1507,7 @@ def rollback_release(
             "attestation_path": metadata["attestation_path"],
             "commit": metadata["commit"],
             "systemd": systemd,
+            "hermes_mcp_config_verified": hermes_config_promoted,
         }
 
 
@@ -1428,6 +1519,7 @@ def main() -> int:
     parser.add_argument("--current-link")
     parser.add_argument("--config-path")
     parser.add_argument("--active-config-path")
+    parser.add_argument("--hermes-config-path")
     parser.add_argument("--test-report-path")
     parser.add_argument("--rollback-target")
     parser.add_argument("--target-release")
@@ -1445,6 +1537,7 @@ def main() -> int:
         if args.systemd_unit_dir is not None
         else str(default_systemd_unit_dir(args.systemd_scope))
     )
+    hermes_config_path = default_hermes_config_path(systemd_unit_dir, args.hermes_config_path)
     if args.operation == "init-signing-key":
         if not args.secrets_root:
             parser.error("init-signing-key requires --secrets-root")
@@ -1464,6 +1557,7 @@ def main() -> int:
             signing_key=args.signing_key,
             secrets_root=args.secrets_root,
             active_config_path=args.active_config_path,
+            hermes_config_path=hermes_config_path,
             systemd_unit_dir=systemd_unit_dir or None,
             systemd_scope=args.systemd_scope,
         )
@@ -1506,6 +1600,7 @@ def main() -> int:
             current_link=args.current_link,
             config_path=args.config_path,
             active_config_path=args.active_config_path,
+            hermes_config_path=hermes_config_path,
             test_report_path=None,
             rollback_target=args.rollback_target,
             data_root=args.data_root,
