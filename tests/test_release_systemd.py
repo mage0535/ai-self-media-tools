@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import deploy_release as deploy_release_module
-from scripts.deploy_release import _systemd_run, default_systemd_unit_dir, deploy_release, query_systemd_unit_states, rollback_release
+from scripts.deploy_release import _systemd_run, default_hermes_config_path, default_systemd_unit_dir, deploy_release, query_systemd_unit_states, rollback_release
 
 
 CURRENT = "%h/.ai-self-media-tools-current"
@@ -34,6 +34,13 @@ def test_default_unit_directory_matches_scope():
     assert default_systemd_unit_dir("user") == Path.home() / ".config" / "systemd" / "user"
     with pytest.raises(Exception, match="scope"):
         default_systemd_unit_dir("global")
+
+
+def test_cli_defaults_hermes_config_only_for_real_systemd_switch():
+    expected = str(Path.home() / ".hermes" / "config.yaml")
+    assert default_hermes_config_path("/etc/systemd/system") == expected
+    assert default_hermes_config_path("") is None
+    assert default_hermes_config_path("/units", "/private/hermes.yaml") == "/private/hermes.yaml"
 
 
 def test_invalid_systemd_scope_fails_before_runner():
@@ -215,6 +222,98 @@ def test_deploy_promotes_candidate_config_before_gateway_restart(tmp_path):
         assert active.stat().st_mode & 0o777 == 0o600
 
 
+def _hermes_config(path: Path) -> bytes:
+    content = (
+        "model: active-model\n"
+        "mcp_servers:\n"
+        "  unrelated:\n"
+        "    command: npx\n"
+        "    enabled: false\n"
+        "  content-platform:\n"
+        "    command: /venv/bin/python\n"
+        "    args:\n"
+        "    - -m\n"
+        "    - content_platform.mcp_server\n"
+        "    env:\n"
+        "      CONTENT_PLATFORM_HOME: /old/release\n"
+        "      PYTHONPATH: /old/release\n"
+        "    connect_timeout: 30.0\n"
+        "    startup: lazy\n"
+        "    enabled: true\n"
+        "model_policy:\n"
+        "  manual_switch_only: true\n"
+    ).encode()
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+    path.chmod(0o600)
+    return content
+
+
+def test_deploy_promotes_hermes_mcp_environment_before_gateway_restart(tmp_path):
+    from tests.test_deploy_release import _case, _fixture_evidence_runner
+
+    source, config, report, rollback = _case(tmp_path)
+    hermes_config = tmp_path / ".hermes" / "config.yaml"
+    _hermes_config(hermes_config)
+    systemd_dir = tmp_path / "units"
+    fake = FakeSystemd(systemd_dir)
+    fake.active["hermes-gateway.service"] = True
+
+    def observe(argv):
+        if argv[2:4] == ["restart", "hermes-gateway.service"]:
+            text = hermes_config.read_text(encoding="utf-8")
+            for key, value in deploy_release_module._runtime_environment_expected().items():
+                assert f"      {key}: {json.dumps(value)}\n" in text
+            assert "    startup: lazy\n" in text
+            assert "  unrelated:\n" in text
+        return fake(argv)
+
+    result = deploy_release(
+        source_root=source, releases_root=tmp_path / "releases",
+        current_link=tmp_path / ".ai-self-media-tools-current", config_path=config,
+        test_report_path=report, rollback_target=rollback, data_root=tmp_path / "data",
+        release_name="promote-hermes-mcp", secrets_root=tmp_path / "secrets",
+        evidence_runner=_fixture_evidence_runner, systemd_unit_dir=systemd_dir,
+        systemd_runner=observe, hermes_config_path=hermes_config,
+    )
+
+    assert result["hermes_mcp_config_verified"] is True
+    if os.name != "nt":
+        assert hermes_config.stat().st_mode & 0o777 == 0o600
+
+
+def test_deploy_restores_hermes_mcp_config_before_old_gateway_start(tmp_path):
+    from tests.test_deploy_release import _case, _fixture_evidence_runner
+
+    source, config, report, rollback = _case(tmp_path)
+    hermes_config = tmp_path / ".hermes" / "config.yaml"
+    original = _hermes_config(hermes_config)
+    systemd_dir = tmp_path / "units"
+    fake = FakeSystemd(systemd_dir)
+    fake.active["hermes-gateway.service"] = True
+    observed = []
+
+    def fail_restart(argv):
+        if argv[2:4] == ["restart", "hermes-gateway.service"]:
+            return _systemd_result(1)
+        if argv[2:4] == ["start", "hermes-gateway.service"]:
+            observed.append(hermes_config.read_bytes())
+        return fake(argv)
+
+    with pytest.raises(Exception, match="systemd|gateway"):
+        deploy_release(
+            source_root=source, releases_root=tmp_path / "releases",
+            current_link=tmp_path / ".ai-self-media-tools-current", config_path=config,
+            test_report_path=report, rollback_target=rollback, data_root=tmp_path / "data",
+            release_name="restore-hermes-mcp", secrets_root=tmp_path / "secrets",
+            evidence_runner=_fixture_evidence_runner, systemd_unit_dir=systemd_dir,
+            systemd_runner=fail_restart, hermes_config_path=hermes_config,
+        )
+
+    assert hermes_config.read_bytes() == original
+    assert observed == [original]
+
+
 def test_deploy_restores_active_config_after_gateway_failure(tmp_path):
     from tests.test_deploy_release import _case, _fixture_evidence_runner
 
@@ -299,16 +398,22 @@ def test_rollback_promotes_release_config_before_gateway_start(tmp_path, monkeyp
     fake = FakeSystemd(systemd_dir)
     fake.active["hermes-gateway.service"] = True
     expected = tmp_path / "data" / "release-configs" / "rollback-snapshot.json"
+    hermes_config = tmp_path / ".hermes" / "config.yaml"
+    _hermes_config(hermes_config)
 
     def observe(argv):
         if argv[2:4] in (["restart", "hermes-gateway.service"], ["start", "hermes-gateway.service"]):
             assert active.read_bytes() == expected.read_bytes()
+            text = hermes_config.read_text(encoding="utf-8")
+            for key, value in deploy_release_module._runtime_environment_expected().items():
+                assert f"      {key}: {json.dumps(value)}\n" in text
         return fake(argv)
 
     rollback_release(
         target_release=prepared["release_root"], current_link=current,
         data_root=tmp_path / "data", secrets_root=tmp_path / "secrets",
         active_config_path=active, systemd_unit_dir=systemd_dir, systemd_runner=observe,
+        hermes_config_path=hermes_config,
     )
     assert active.read_bytes() == expected.read_bytes()
 
