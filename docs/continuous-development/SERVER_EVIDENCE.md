@@ -326,3 +326,14 @@ Observed read-only on 2026-08-31.
 - Stale runtime override drop-ins coexist with valid Qwen TTS env, MemoryMax, recovery window and writer fallback settings. New selection removes only overrides of seven managed env variables, WorkingDirectory or ExecStart and restores them on failure.
 - Focused suite: 158 passed in 61.38s. Full suite: 1636 passed plus 37 subtests in 279.00s. Privacy 576 files and license 65 capabilities clean.
 - Production remains old v7. Third activation has not started.
+
+## 2026-09-05 Successful Activation, Rollback, And Runtime Cache Finding
+
+- Third activation from `4643ed0` succeeded after selective stale drop-in removal. Effective gateway had all seven runtime roots; stale codex/luna runtime drop-ins absent while Qwen TTS, writer fallback, memory and recovery-window drop-ins remained.
+- Stable config mode 0600 matched signed snapshot hash. Shared DB remained inode 1642977, 63,143,936 bytes, 433 jobs. Gateway active, zero failed units, zero enabled project timers; MCP processes restarted under gateway.
+- Corrected runtime-path probe (first used wrong field names and made no mutation) confirmed Hermes venv and CLI resolve current code, private config, shared data and the same shared database with production true.
+- Real rollback to `bootstrap-runtime-v8-ec08d1c-durable-20260904` succeeded with systemd verified, active gateway, zero failed units and zero enabled timers.
+- Forward activation of the signed `4643ed0` release was rejected before mutation because 3 `__pycache__` directories containing only `.pyc` files had appeared after root-run imports. Current stayed on durable rollback.
+- Added `PYTHONDONTWRITEBYTECODE=1` to all 12 project services and gateway drop-in; exact environment verification and stale-dropin conflict fields include it. Five fixture failures were repaired by updating the minimal release fixture, not weakening production validation.
+- Targeted systemd/operational/deploy suite: 115 passed in 45.25s. Full JUnit `p10-no-bytecode-full.xml`: 1673 tests, zero failures/errors/skips, 275.052s. Privacy 576 files and license 65 capabilities clean.
+- The contaminated `4643ed0` release remains historical evidence and is not the final forward target. Production currently runs the durable `ec08d1c` rollback; timers remain disabled.

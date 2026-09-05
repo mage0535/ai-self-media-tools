@@ -194,3 +194,8 @@ These describe the audited production release, not the current development code.
 - Second activation persisted its failure: stale supervisor drop-ins overrode CONTENT_PLATFORM_CONFIG. Automatic rollback restored old current/config/gateway/timers and removed owned release artifacts.
 - Selective conflict removal now governs only runtime env, WorkingDirectory and ExecStart; resource/Qwen/recovery/writer drop-ins are preserved. Focused 158 passed; full 1636 plus 37 subtests in 279.00s.
 - Next: Linux selective-dropin tests, third named activation attempt, post-activation MCP/shared-DB checks and rollback rehearsal before Canaries.
+- Third activation at `4643ed0` succeeded after removing only stale runtime drop-ins. Postchecks: signed config/current/gateway roots/shared DB all matched, valid functional drop-ins preserved, zero failed units/timers enabled.
+- CLI and Hermes venv both resolved current/private-config/shared-data/shared-DB in production mode. Real rollback to durable `ec08d1c` succeeded with systemd verified and zero timers.
+- Forward rollback was correctly rejected because root-run Python had added three `__pycache__` directories to signed release. Current remains durable rollback.
+- Added `PYTHONDONTWRITEBYTECODE=1` to all project services and gateway, included in exact environment validation and conflict detection. Targeted 115 passed; full JUnit 1673 zero failures/errors/skips, 275.052s.
+- Next: commit/push, Linux no-bytecode tests, build a new clean forward release, verify no post-start cache, then repeat rollback/forward rehearsal before Canaries.

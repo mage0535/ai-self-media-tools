@@ -7,6 +7,7 @@ Type=oneshot
 Environment=CONTENT_PLATFORM_HOME=%h/.ai-self-media-tools-current
 Environment=CONTENT_PLATFORM_CODE_ROOT=%h/.ai-self-media-tools-current
 Environment=PYTHONPATH=%h/.ai-self-media-tools-current
+Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=CONTENT_PLATFORM_DATA_DIR=%h/.ai-self-media-tools/data
 Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets
 Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json
