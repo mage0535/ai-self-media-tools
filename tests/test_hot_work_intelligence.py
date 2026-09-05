@@ -405,3 +405,11 @@ def test_logged_search_state_reports_missing_without_writing(tmp_path, monkeypat
 
     assert result == {"status": "unavailable", "reason": "valid_private_cookie_state_not_found", "state_file": ""}
     assert not (tmp_path / "private-states").exists()
+
+
+def test_dynamic_page_wait_only_applies_to_unready_logged_search():
+    from content_platform.hot_work_intelligence import needs_dynamic_content_wait
+
+    assert needs_dynamic_content_wait("") is True
+    assert needs_dynamic_content_wait("首页 搜索 通知 关注") is True
+    assert needs_dynamic_content_wait("AI agent workflow\n12K views\nA complete result with enough visible detail") is False

@@ -554,6 +554,11 @@ def logged_search_artifact_stem(platform: str, query: str) -> str:
     return f"{platform}_{readable}_{digest}_search"
 
 
+def needs_dynamic_content_wait(text: str) -> bool:
+    visible = strip_markup(text)
+    return len(visible) < 40
+
+
 def collect_logged_short_video_search(
     platform: str,
     query: str,
@@ -647,7 +652,13 @@ def collect_logged_short_video_search(
                         break
                 except Exception:
                     continue
-        text = page.locator("body").inner_text(timeout=8000)
+        body = page.locator("body")
+        text = body.inner_text(timeout=8000)
+        dynamic_wait_ms = 0
+        if needs_dynamic_content_wait(text):
+            dynamic_wait_ms = min(15000, max(3000, timeout_ms // 2))
+            page.wait_for_timeout(dynamic_wait_ms)
+            text = body.inner_text(timeout=8000)
         anchors = page.locator("a[href], [data-url]").evaluate_all(
             """els => els.map(a => {
                 const box = a.closest('article, li, [class*="card"], [class*="item"], [class*="video"], [class*="feed"]') || a;
@@ -696,7 +707,7 @@ def collect_logged_short_video_search(
         status.update({"status": "platform_error_or_rate_limited", "count": 0})
     else:
         status.update({"status": "layout_changed_or_no_lane_results", "count": 0})
-    status.update({"text_path": str(text_path), "screenshot_path": str(screenshot_path)})
+    status.update({"text_path": str(text_path), "screenshot_path": str(screenshot_path), "dynamic_wait_ms": dynamic_wait_ms})
     return rows, status
 
 
