@@ -407,6 +407,29 @@ def parse_twitter_search_cards(cards: list[dict[str, str]], *, query: str, limit
     return rows
 
 
+def parse_tiktok_search_cards(cards: list[dict[str, str]], *, query: str, limit: int = 12) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for card in cards:
+        href = str(card.get("href") or "").strip()
+        match = re.match(r"(https?://(?:www\.)?tiktok\.com/@[^/]+/video/\d+)", href, re.I)
+        if not match:
+            continue
+        canonical_url = match.group(1)
+        if canonical_url in seen_urls:
+            continue
+        lines = [strip_markup(line) for line in str(card.get("context") or "").splitlines() if strip_markup(line)]
+        metric = next((line for line in lines[:3] if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)), "")
+        title = next((line for line in lines if line != metric and _looks_like_content_line(line, query)), "")
+        if not title or _metric_number(metric) <= 0:
+            continue
+        seen_urls.add(canonical_url)
+        rows.append(_work("tiktok", "tiktok_logged_search", query, title, url=canonical_url, engagement=metric, evidence_strength="strong_logged_search_result"))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def _is_shipinhao_content_url(href: str) -> bool:
     parsed = urllib.parse.urlparse(str(href or "").strip())
     host = (parsed.hostname or "").casefold()
@@ -583,6 +606,18 @@ def needs_dynamic_content_wait(text: str) -> bool:
     return len(visible) < 40
 
 
+def classify_logged_search_failure(text: str) -> str:
+    lowered = str(text or "").casefold()
+    if any(token in lowered for token in ("登录", "验证码", "login", "captcha")):
+        return "login_required_or_captcha"
+    if any(token in lowered for token in (
+        "服务器出错", "刷新重试", "请求过于频繁", "访问验证", "安全验证",
+        "challenge", "ip存在风险", "300012",
+    )):
+        return "platform_error_or_rate_limited"
+    return "layout_changed_or_no_lane_results"
+
+
 def collect_logged_short_video_search(
     platform: str,
     query: str,
@@ -720,19 +755,16 @@ def collect_logged_short_video_search(
         )
     if platform == "twitter":
         rows = parse_twitter_search_cards(anchors, query=query, limit=limit)
+    elif platform == "tiktok":
+        rows = parse_tiktok_search_cards(anchors, query=query, limit=limit)
     elif platform == "xiaohongshu":
         rows = parse_xiaohongshu_search_text(text, query=query, limit=limit, anchors=anchors)
     else:
         rows = parse_logged_short_video_search_text(text, platform=platform, query=query, limit=limit, anchors=anchors)
-    lowered = text.casefold()
     if rows:
         status.update({"status": "ok", "count": len(rows)})
-    elif any(token in lowered for token in ("登录", "验证码", "login", "captcha")):
-        status.update({"status": "login_required_or_captcha", "count": 0})
-    elif any(token in text for token in ("服务器出错", "刷新重试", "请求过于频繁", "访问验证", "安全验证", "challenge")):
-        status.update({"status": "platform_error_or_rate_limited", "count": 0})
     else:
-        status.update({"status": "layout_changed_or_no_lane_results", "count": 0})
+        status.update({"status": classify_logged_search_failure(text), "count": 0})
     status.update({"text_path": str(text_path), "screenshot_path": str(screenshot_path), "dynamic_wait_ms": dynamic_wait_ms})
     return rows, status
 

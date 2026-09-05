@@ -435,3 +435,27 @@ def test_twitter_cards_use_article_context_and_canonical_status_url():
     assert rows[0]["title"].startswith("吴恩达发布完整 AI 智能体工作流课程")
     assert rows[0]["url"] == "https://x.com/LunarResearcher/status/2094501861885649354"
     assert rows[0]["engagement"] == "10万"
+
+
+def test_xiaohongshu_ip_risk_is_a_proxy_eligible_platform_error():
+    from content_platform.hot_work_intelligence import classify_logged_search_failure
+
+    status = classify_logged_search_failure("安全限制\nIP存在风险，请切换可靠网络环境后重试\n300012")
+
+    assert status == "platform_error_or_rate_limited"
+    assert should_use_regional_proxy({"status": status}) is True
+
+
+def test_tiktok_cards_bind_visible_metric_copy_and_video_url():
+    from content_platform.hot_work_intelligence import parse_tiktok_search_cards
+
+    rows = parse_tiktok_search_cards([{
+        "text": "",
+        "href": "https://www.tiktok.com/@elowen.hu/video/7664520654162627862",
+        "context": "14.3K\nYour job just got an AI assistant. Here are the best AI productivity tools you can use today.\nElowen Hu\n7-20",
+    }], query="AI tools workflow")
+
+    assert len(rows) == 1
+    assert rows[0]["engagement"] == "14.3K"
+    assert rows[0]["title"].startswith("Your job just got an AI assistant")
+    assert rows[0]["url"] == "https://www.tiktok.com/@elowen.hu/video/7664520654162627862"
