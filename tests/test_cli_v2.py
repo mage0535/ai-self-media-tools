@@ -57,6 +57,25 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(result["recovered"], 0)
 
+    def test_hot_works_collect_auto_routes_auth_and_platform_query(self):
+        output = self.root / "hot-works"
+        with (
+            patch("content_platform.cli.resolve_logged_search_state", return_value={
+                "status": "ready", "reason": "", "state_file": str(self.root / "twitter-state.json"),
+                "source_format": "cookie_list",
+            }) as resolve_state,
+            patch("content_platform.cli.collect_logged_short_video_search", return_value=([], {
+                "source": "twitter:logged_search", "status": "ok", "count": 0,
+            })) as collect,
+        ):
+            code, result = self.call("hot-works-collect", "--platform", "twitter", "--output-dir", str(output))
+
+        self.assertEqual(code, 0)
+        resolve_state.assert_called_once()
+        queries = [call.args[1] for call in collect.call_args_list]
+        self.assertIn("AI agents workflow", queries)
+        self.assertTrue(result["ok"])
+
     def test_record_manual_publication_creates_global_topic_receipt(self):
         code, receipt = self.call(
             "record-manual-publication",

@@ -27,7 +27,9 @@ from .hot_work_intelligence import (
     collect_douyin_shipin,
     collect_logged_short_video_search,
     collect_wechat,
+    default_platform_queries,
     load_samples,
+    resolve_logged_search_state,
     save_collection,
     write_playwright_state,
 )
@@ -710,10 +712,20 @@ def execute(args):
                 state_file = state_files.get(platform) or state_files.get("douyin" if platform.startswith("douyin") else platform)
                 public_without_state = {"bilibili", "juejin", "youtube"}
                 if not state_file and platform not in public_without_state:
+                    auth_state = resolve_logged_search_state(platform, output_dir / "cookie_states")
+                    state_file = str(auth_state.get("state_file") or "")
+                    statuses.append({
+                        "source": f"{platform}:auth_state",
+                        "status": str(auth_state.get("status") or "unavailable"),
+                        "reason": str(auth_state.get("reason") or ""),
+                        "source_format": str(auth_state.get("source_format") or ""),
+                        "state_file_present": bool(state_file),
+                    })
+                if not state_file and platform not in public_without_state:
                     continue
                 queries = query_map.get(platform) or query_map.get("douyin" if platform.startswith("douyin") else platform) or query_map.get("all")
                 if not queries:
-                    queries = ["AI工具", "Claude Code Codex"] if platform in {"douyin", "douyin_ai", "kuaishou"} else ["猫咪治愈", "猫狗日常"]
+                    queries = default_platform_queries(platform)
                 for query in queries:
                     started = datetime.now()
                     try:

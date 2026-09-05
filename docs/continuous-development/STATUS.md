@@ -26,6 +26,7 @@ Last updated: 2026-09-05 Asia/Shanghai (signed d79128c production activation and
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
 | 12-platform Canary and deployment | Codex primary | P10 Canary/evidence files and four coordination documents | in_progress | run serial real platform Canaries; verify live publisher/draft/handoff boundaries before timer decision |
 | Hermes MCP child runtime convergence | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, `tests/test_deploy_release.py`, four coordination documents | deployed `d79128c` | complete: live MCP env, tool discovery, byte stability and rollback/forward verified |
+| Hot-work collector automatic auth/query routing | Codex primary | `content_platform/cli.py`, `content_platform/hot_work_intelligence.py`, focused tests, four coordination documents | in_progress | auto-resolve valid private state and platform-lane query defaults; rerun input preparation |
 
 ## Server Blockers From The 2026-08-31 Audit
 

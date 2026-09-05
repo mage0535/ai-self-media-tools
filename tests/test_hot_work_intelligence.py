@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from content_platform.hot_work_intelligence import (
     analyze_work,
     build_hot_work_parameter_pack,
@@ -362,3 +365,41 @@ def test_shipinhao_collector_script_is_directly_executable():
 
     assert result.returncode == 0, result.stderr
     assert "--state-file" in result.stdout
+
+
+def test_default_hot_work_queries_follow_platform_lane():
+    from content_platform.hot_work_intelligence import default_platform_queries
+
+    assert any("AI" in query for query in default_platform_queries("bilibili"))
+    assert any("AI" in query for query in default_platform_queries("xiaohongshu"))
+    assert any("AI" in query for query in default_platform_queries("youtube"))
+    assert any("cat" in query.casefold() or "猫" in query for query in default_platform_queries("douyin_pet"))
+    assert all("猫咪治愈" not in query for query in default_platform_queries("twitter"))
+
+
+def test_logged_search_state_is_auto_discovered_and_converted(tmp_path, monkeypatch):
+    from content_platform.hot_work_intelligence import resolve_logged_search_state
+
+    cookie = tmp_path / "twitter_main.json"
+    cookie.write_text('[{"name":"auth_token","value":"secret","domain":".x.com","path":"/"}]', encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_COOKIE_DIRS", str(tmp_path))
+
+    result = resolve_logged_search_state("twitter", tmp_path / "private-states", cookie_dir=str(tmp_path))
+
+    assert result["status"] == "ready"
+    assert result["source_format"] == "cookie_list"
+    state = Path(result["state_file"])
+    assert state.is_file()
+    payload = json.loads(state.read_text(encoding="utf-8"))
+    assert payload["cookies"][0]["name"] == "auth_token"
+
+
+def test_logged_search_state_reports_missing_without_writing(tmp_path, monkeypatch):
+    from content_platform.hot_work_intelligence import resolve_logged_search_state
+
+    monkeypatch.setenv("CONTENT_PLATFORM_COOKIE_DIRS", str(tmp_path / "missing"))
+
+    result = resolve_logged_search_state("xiaohongshu", tmp_path / "private-states", cookie_dir=str(tmp_path / "missing"))
+
+    assert result == {"status": "unavailable", "reason": "valid_private_cookie_state_not_found", "state_file": ""}
+    assert not (tmp_path / "private-states").exists()
