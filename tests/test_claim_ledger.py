@@ -81,6 +81,19 @@ def test_claim_gate_still_rejects_year_trend_tool_volume_and_time_savings() -> N
     assert "unsourced_numeric_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_unsourced_multiplier_and_named_platform_trend_claims() -> None:
+    result = validate_claims(
+        "Agent Skills 让效率翻 5 倍。DeepLearning.AI 上线了专门课程。"
+        "掘金上已经出现多篇深度解析，热度正在攀升。",
+        [],
+    )
+
+    assert result["passed"] is False
+    assert "unsourced_numeric_claim" in result["failures"]
+    assert "unsourced_external_attribution" in result["failures"]
+    assert "unsourced_platform_trend_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 

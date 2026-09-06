@@ -54,9 +54,20 @@ def build_cover_direction(
     title_text = _cover_title(title or topic, normalized)
     subtitle = _cover_subtitle(body, topic, title_text, normalized)
     subject = str((existing or {}).get("visual_subject") or topic or title_text).strip()
+    focal_subjects = list((existing or {}).get("focal_subjects") or [subject, title_text])
+    mascot_names = {"cat", "dog", "kitten", "puppy", "猫", "狗", "小猫", "小狗"}
+    mascot_only = bool(focal_subjects) and all(str(item).casefold() in mascot_names for item in focal_subjects)
+    visual_cue = (
+        "playful cat and dog characters visibly performing and verifying the workflow"
+        if mascot_only
+        else _cover_visual_cue(text, subject)
+    )
+    if not mascot_only and visual_cue not in focal_subjects:
+        focal_subjects.insert(0, visual_cue)
     prompt = (
         f"cinematic advertising key art for {subject}; {treatment.replace('_', ' ')}; "
         f"platform mood {profile['id'].replace('_', ' ')}; layout {layout.replace('_', ' ')}; "
+        f"hero visual: {visual_cue}; "
         "one unmistakable hero subject, dramatic practical lighting, foreground and background depth, "
         "premium commercial color grading, intentional negative space reserved for headline, "
         "high visual tension, editorial art direction, no text, no letters, no logo, no watermark"
@@ -76,7 +87,7 @@ def build_cover_direction(
         "visual_subject": subject,
         "hook": title_text,
         "conflict_or_payoff": subtitle,
-        "focal_subjects": list((existing or {}).get("focal_subjects") or [subject, title_text]),
+        "focal_subjects": focal_subjects,
         "content_match_reason": "platform profile, topic promise, and content payoff compiled into one poster direction",
         "safe_zone_verified": True,
         "degraded": False,
@@ -174,10 +185,17 @@ def _cover_subtitle(body: str, topic: str, title: str, platform: str) -> str:
     combined = f"{topic} {title} {body}".casefold()
     if platform == "youtube" and "agent" in combined and "chatbot" in combined:
         return "Chatbots reply. Agents plan, act, and verify."
-    rows = [part.strip() for part in re.split(r"[。！？!?\n]+", str(body or "")) if part.strip() and title not in part]
+    rows = []
+    for part in re.split(r"[。！？!?\n]+", str(body or "")):
+        raw = part.strip()
+        if not raw or title in raw or re.match(r"^#{1,6}\s+", raw):
+            continue
+        clean = re.sub(r"^(?:[-*+]\s+|\d+[.)]\s+|>\s+)", "", raw).strip()
+        if clean:
+            rows.append(clean)
     declarative = [row for row in rows if not re.match(r"^(?:why|how|what|when|where|who|does|do|can|is|are)\b", row, re.I)]
     value = declarative[0] if declarative else (rows[0] if rows else str(topic or ""))
-    limit = 52 if platform in {"youtube", "twitter", "x"} else 28
+    limit = 52 if platform in {"youtube", "twitter", "x"} else (32 if platform in {"wechat", "zhihu", "juejin"} else 28)
     if re.search(r"[\u3400-\u9fff]", value) and len(value) > limit:
         clauses = [part.strip() for part in re.split(r"[，,；;：:]", value) if part.strip()]
         selected = ""
@@ -193,6 +211,14 @@ def _cover_subtitle(body: str, topic: str, title: str, platform: str) -> str:
     if not re.search(r"[\u3400-\u9fff]", value) and len(value) > limit and " " in clipped:
         clipped = clipped.rsplit(" ", 1)[0]
     return clipped
+
+
+def _cover_visual_cue(text: str, fallback: str) -> str:
+    if any(token in text for token in ("agent skills", "操作手册", "skill 文件", "skill.md", "sop")):
+        return "modular AI workflow playbook with connected skill cards and visible verification nodes"
+    if any(token in text for token in ("工作流", "workflow", "自动化", "automation")):
+        return "connected workflow task nodes with visible inputs, outputs, and verification status"
+    return fallback
 
 
 def _treatment(text: str, profile: str) -> str:
