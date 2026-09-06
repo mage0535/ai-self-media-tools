@@ -61,6 +61,25 @@ def test_claim_gate_allows_non_quantitative_single_item_instructions() -> None:
     assert result["passed"] is True
 
 
+def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
+    text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
+
+    result = validate_claims(text, [])
+
+    assert result["passed"] is False
+    assert "unsourced_external_attribution" in result["failures"]
+    assert [row["type"] for row in result["findings"]] == [
+        "external_attribution",
+        "external_attribution",
+    ]
+
+
+def test_claim_gate_allows_product_named_operational_advice() -> None:
+    result = validate_claims("先为 Claude Code 写一份操作手册，再把成片发布到抖音草稿箱。", [])
+
+    assert result["passed"] is True
+
+
 def test_verified_hotspot_text_compiles_to_claim_ledger_but_incomplete_evidence_does_not() -> None:
     hotspot = {
         "observed_title": "做内容还要在几十个AI工具之间来回切？",

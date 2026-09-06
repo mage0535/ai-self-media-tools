@@ -101,7 +101,8 @@ _EDITORIAL_SIGNALS = (
 
 _VISUAL_CONCEPT_GROUPS = (
     (("ai", "人工智能", "大模型", "hermes", "智能体", "agent"), "AI software agent"),
-    (("工作流", "workflow", "自动化", "automation"), "connected workflow task nodes"),
+    (("工作流", "流程", "标准操作流程", "workflow", "自动化", "automation"), "connected workflow task nodes"),
+    (("agent skills", "skill", "skills", "操作手册", "sop"), "step-by-step operating playbook"),
     (("检索", "搜索", "自己找", "research", "search", "retrieval"), "information retrieval search"),
     (("内容管理", "自媒体", "content management"), "content management dashboard"),
     (("代码", "开发", "code", "developer"), "software development interface"),

@@ -26,6 +26,25 @@ VERIFIED_DOMAIN = re.compile(
     r"(?<![a-z0-9-])(?:[a-z0-9-]+\.)+(?:com|cn|org|net|io|ai|dev)(?![a-z0-9-])",
     re.I,
 )
+NAMED_EXTERNAL_PRODUCT = re.compile(
+    r"(?:Claude\s+Code|Gemini(?:\s+CLI)?|ChatGPT|OpenAI|Anthropic|GitHub|Cursor|DeepSeek|"
+    r"抖音|快手|小红书|知乎|掘金|微信公众号|视频号)",
+    re.I,
+)
+EXTERNAL_ATTRIBUTION_ACTION = re.compile(
+    r"(?:官方|发布(?!到|至|进)|推出|上线|集成|支持|兼容|开放|开源|插件市场|Marketplace|"
+    r"(?:可以|可|能够|能)\s*直接(?:安装|使用|接入)|official(?:ly)?|released?|launched?|"
+    r"integrat(?:e|ed|ion)|support(?:s|ed)?|compatible|open[- ]source)",
+    re.I,
+)
+
+
+def _has_external_attribution(sentence: str) -> bool:
+    for product in NAMED_EXTERNAL_PRODUCT.finditer(sentence):
+        action = EXTERNAL_ATTRIBUTION_ACTION.search(sentence, product.end())
+        if action and action.start() - product.end() <= 40:
+            return True
+    return False
 
 
 def _sentences(text: str) -> list[str]:
@@ -78,6 +97,11 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
             findings.append({"type": "anecdote", "text": sentence, "covered": covered})
             if not covered:
                 failures.append("unsourced_anecdote")
+        if _has_external_attribution(sentence):
+            covered = _covered(sentence, ledger, first_person=False)
+            findings.append({"type": "external_attribution", "text": sentence, "covered": covered})
+            if not covered:
+                failures.append("unsourced_external_attribution")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),

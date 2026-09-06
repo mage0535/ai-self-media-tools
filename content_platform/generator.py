@@ -18,6 +18,7 @@ from .preflight_manifest import build_preflight_manifest
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 from .content_recipe import build_article_recipe, build_image_text_card_recipe, build_knowledge_card_recipe, build_tool_invocation_manifest
 from .content_depth import build_content_depth_plan
+from .content_hygiene import normalize_generated_markdown
 from .tool_selection import build_tool_selection_evidence
 from .growth_recipe import build_growth_recipe
 
@@ -373,7 +374,7 @@ class DraftGenerator:
         if cta and cta not in body:
             body = body.rstrip() + f"\n\n{cta}"
         # 2026-08-17 新增：先清网页残留再 humanize，防止 JS/导航文本混入成稿
-        body = strip_web_residue(body)
+        body = normalize_generated_markdown(strip_web_residue(body))
         rewrite = naturalize_copy(body, context)
         body = self._fit_article_length(rewrite["body"], context)
         strategy = context["strategy"]

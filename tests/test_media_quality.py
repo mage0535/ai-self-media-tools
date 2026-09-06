@@ -2183,6 +2183,13 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     })
     assert feeding["expected_concepts"] == ["human feeding computer"]
 
+    workflow = MediaBridge._semantic_request(job, {
+        "role": "section", "section": "给 AI 一套标准操作流程和 Agent Skills 操作手册", "purpose": "explain SOP"
+    })
+    assert "connected workflow task nodes" in workflow["expected_concepts"]
+    assert "step-by-step operating playbook" in workflow["expected_concepts"]
+    assert "AI software agent" not in workflow["expected_concepts"]
+
 
 def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):
     from content_platform.media import MediaBridge

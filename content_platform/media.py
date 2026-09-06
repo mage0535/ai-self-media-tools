@@ -760,7 +760,7 @@ class MediaBridge:
             section_text = " ".join([str(item.get("section") or ""), str(item.get("purpose") or "")])
             topic_text = " ".join([str(job.get("topic") or ""), str(job.get("title") or "")])
             section_concepts = visual_concepts(section_text)
-            if len(section_concepts) > 2 and "AI software agent" in section_concepts:
+            if len(section_concepts) > 1 and "AI software agent" in section_concepts:
                 section_concepts.remove("AI software agent")
             if "organized memory archive" in section_concepts:
                 section_concepts = ["organized memory archive"]
