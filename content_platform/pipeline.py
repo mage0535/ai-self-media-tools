@@ -469,7 +469,9 @@ class Pipeline:
                     or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
                 )
                 if not claim_gate.get("passed") and strict_claims:
-                    cleaned_body = sanitize_unsupported_claims(draft["body"], claim_gate.get("findings"))
+                    cleaned_body = normalize_generated_markdown(
+                        sanitize_unsupported_claims(draft["body"], claim_gate.get("findings"))
+                    )
                     cleaned_title = sanitize_unsupported_claims(draft["title"], claim_gate.get("findings"))
                     if not cleaned_title:
                         topic_fallback = str(job.get("topic") or "").strip()

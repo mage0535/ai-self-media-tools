@@ -86,3 +86,10 @@ def test_normalize_generated_markdown_repairs_split_technical_filenames() -> Non
     assert "CLAUDE.md" in normalized
     assert "SKILL.md" in normalized
     assert "不要改普通句子" in normalized
+
+
+def test_normalize_generated_markdown_closes_one_unclosed_code_fence() -> None:
+    normalized = normalize_generated_markdown("步骤如下：\n```yaml\nname: my-skill")
+
+    assert normalized.count("```") == 2
+    assert normalized.endswith("```")

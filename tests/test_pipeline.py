@@ -512,6 +512,28 @@ class PipelineTests(unittest.TestCase):
         self.assertNotEqual(cover["subtitle_text"], "旧承诺")
         self.assertIn("workflow playbook", cover["background_prompt"])
 
+    def test_deterministic_claim_cleanup_avoids_second_model_call_for_unclosed_fence(self):
+        safe = (
+            "先明确场景，再拆解输入、步骤、输出和失败恢复条件。"
+            "每一步都保留可复查的来源和结果，完成后核对正文与配图。"
+            "接着运行一项真实任务，记录触发条件和输出契约。"
+            "最后把不符合要求的结果返回对应步骤修正，并保存验收结论。"
+        )
+        body = safe + "\n\n这个方法让效率翻 5 倍。\n\n```yaml\nname: my-skill"
+        job = self.pipeline.create("Agent Skills 操作手册", ["juejin"], {"automated_workflow": True})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "10 分钟写完 Agent Skill",
+            "body": body,
+            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+        }) as generate, patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        self.assertEqual(generate.call_count, 1)
+        self.assertNotIn("5 倍", current["body"])
+        self.assertEqual(current["body"].count("```"), 2)
+        self.assertTrue(current["draft_meta"]["claim_sanitization"]["passed"])
+
     def test_automated_workflow_repairs_unsupported_claims_once_before_media(self):
         from content_platform.content_depth import build_content_depth_plan
         from content_platform.run_contract import build_run_contract
