@@ -374,6 +374,7 @@ def test_default_hot_work_queries_follow_platform_lane():
     assert any("AI" in query for query in default_platform_queries("bilibili"))
     assert any("AI" in query for query in default_platform_queries("xiaohongshu"))
     assert any("AI" in query for query in default_platform_queries("youtube"))
+    assert any("AI" in query for query in default_platform_queries("shipinhao"))
     assert any("cat" in query.casefold() or "猫" in query for query in default_platform_queries("douyin_pet"))
     assert all("猫咪治愈" not in query for query in default_platform_queries("twitter"))
 

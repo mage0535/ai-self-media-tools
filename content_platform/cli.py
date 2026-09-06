@@ -710,7 +710,7 @@ def execute(args):
                         statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
             for platform in sorted(live_platforms.intersection({
                 "douyin", "douyin_ai", "douyin_pet", "kuaishou", "xiaohongshu",
-                "tiktok", "youtube", "bilibili", "zhihu", "juejin", "twitter",
+                "tiktok", "youtube", "bilibili", "zhihu", "juejin", "twitter", "shipinhao",
             })):
                 state_file = state_files.get(platform) or state_files.get("douyin" if platform.startswith("douyin") else platform)
                 public_without_state = {"bilibili", "juejin", "youtube"}

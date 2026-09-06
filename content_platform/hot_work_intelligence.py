@@ -33,6 +33,7 @@ PLATFORM_DEFAULT_QUERIES: dict[str, tuple[str, ...]] = {
     "douyin_pet": ("猫咪治愈", "猫狗日常"),
     "juejin": ("AI 编程 Agent", "AI 自动化工作流"),
     "kuaishou": ("AI工具", "AI效率 工作流"),
+    "shipinhao": ("AI工具 工作流", "AI Agent 实战"),
     "tiktok": ("AI tools workflow", "AI agent productivity"),
     "twitter": ("AI agents workflow", "AI productivity tools"),
     "xiaohongshu": ("AI效率 工作流", "AI工具 实测"),

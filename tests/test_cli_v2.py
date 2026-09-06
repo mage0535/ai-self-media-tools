@@ -187,6 +187,29 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(official["status"], "failed")
         self.assertIn("RuntimeError", official["error"])
 
+    def test_hot_works_collect_routes_shipinhao_to_existing_collector(self):
+        output = self.root / "hot-works-shipinhao"
+        row = {"platform": "shipinhao", "title": "AI工作流实战", "url": "https://channels.weixin.qq.com/post/123"}
+        with (
+            patch("content_platform.cli._load_env_defaults", return_value=""),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={
+                "status": "ready", "reason": "", "state_file": str(self.root / "shipinhao-state.json"),
+                "source_format": "cookie_list",
+            }) as resolve_state,
+            patch("content_platform.cli.collect_logged_short_video_search", return_value=([row], {
+                "source": "shipinhao:official_logged_discovery", "status": "ok", "count": 1,
+            })) as collect,
+        ):
+            code, result = self.call(
+                "hot-works-collect", "--platform", "shipinhao", "--query", "shipinhao=AI工作流",
+                "--output-dir", str(output),
+            )
+
+        self.assertEqual(code, 0)
+        resolve_state.assert_called_once()
+        collect.assert_called_once()
+        self.assertEqual(result["items"], 1)
+
     def test_record_manual_publication_creates_global_topic_receipt(self):
         code, receipt = self.call(
             "record-manual-publication",
