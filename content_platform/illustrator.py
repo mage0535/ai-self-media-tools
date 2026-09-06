@@ -157,12 +157,19 @@ class GuizangIllustrator:
 
     def _extract_labels(self, text: str, structure: str) -> list[str]:
         """从文本中提取适合做图内标签的短词组"""
+        preferred_phrases = (
+            "标准操作流程", "操作手册", "工作流", "输入", "处理", "输出", "反馈",
+            "数据", "指标", "趋势", "洞察", "改造前", "改造后",
+        )
+        ignored = {"第一", "第二", "第三", "第四", "第五", "md", "json", "yaml", "yml", "toml"}
+        candidates = [phrase for phrase in preferred_phrases if phrase.casefold() in text.casefold()]
         # 简单策略: 按标点/换行分段，提取关键词
         parts = re.split(r'[。，；：、\n\r]', text)
-        candidates = []
         for p in parts:
             p = p.strip()
             # 只保留 2-6 字的中文片段
+            if p.casefold() in ignored:
+                continue
             if re.match(r'^[\u4e00-\u9fff]{2,6}$', p):
                 candidates.append(p)
             # 也接受 2-6 字 + 少量英文/数字
@@ -184,7 +191,7 @@ class GuizangIllustrator:
         if not candidates:
             candidates = structure_defaults.get(structure, ["概念1", "概念2"])
 
-        return candidates[:6]
+        return list(dict.fromkeys(candidates))[:6]
 
 
 def generate_illustration_prompt(source_text: str, title: str = "",

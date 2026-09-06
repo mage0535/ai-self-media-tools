@@ -1,4 +1,4 @@
-from content_platform.content_hygiene import validate_generated_text
+from content_platform.content_hygiene import normalize_generated_markdown, validate_generated_text
 
 
 def test_generated_text_rejects_scraped_page_script():
@@ -76,3 +76,13 @@ def test_balanced_quotes_and_terminal_code_block_remain_valid():
     )
 
     assert result["passed"] is True
+
+
+def test_normalize_generated_markdown_repairs_split_technical_filenames() -> None:
+    text = "先检查 CLAUDE.\nmd，再把 SKILL.\n\nmd 放进项目；不要改普通句子。"
+
+    normalized = normalize_generated_markdown(text)
+
+    assert "CLAUDE.md" in normalized
+    assert "SKILL.md" in normalized
+    assert "不要改普通句子" in normalized

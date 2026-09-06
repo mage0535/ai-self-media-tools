@@ -3,6 +3,20 @@ import html
 from collections import Counter
 
 
+_TECHNICAL_FILE_EXTENSION = r"(?:md|json|ya?ml|toml|py|js|ts|tsx|jsx|html|css|sh|ps1)"
+
+
+def normalize_generated_markdown(text):
+    """Repair deterministic model formatting damage without rewriting prose."""
+    value = str(text or "")
+    return re.sub(
+        rf"\b([A-Za-z0-9_-]+)\.\s*\n\s*({_TECHNICAL_FILE_EXTENSION})\b",
+        r"\1.\2",
+        value,
+        flags=re.I,
+    )
+
+
 def _tokens(text):
     return [
         token

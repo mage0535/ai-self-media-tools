@@ -445,6 +445,44 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(claim_step["status"], "BLOCKED")
         media.assert_not_called()
 
+    def test_automated_workflow_removes_unsourced_external_attribution_before_media(self):
+        safe_body = (
+            "先把任务目标写清楚，再拆出输入、步骤和验收标准。"
+            "每一步只保留能够核对的来源和结果，失败时返回当前步骤修正。"
+            "Claude Code 的官方插件市场直接集成了 Skills。"
+            "接着核对每个步骤的输入契约、输出契约和失败恢复条件。"
+            "最后检查正文、配图和交付回执是否对应同一个主题，并保存可复查的证据。"
+        )
+        job = self.pipeline.create("操作手册", ["juejin"], {"automated_workflow": True})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "操作手册",
+            "body": safe_body,
+            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        self.assertNotIn("官方插件市场", current["body"])
+        self.assertTrue(current["draft_meta"]["claim_sanitization"]["passed"])
+        claim_step = [
+            row for row in self.store.workflow_steps(job["id"])
+            if row["step_name"] == "validate_factual_claims"
+        ][-1]
+        self.assertEqual(claim_step["status"], "SUCCEEDED")
+
+    def test_pipeline_repairs_split_technical_filename_before_claim_and_media_steps(self):
+        job = self.pipeline.create("操作手册", ["juejin"], {})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "操作手册",
+            "body": "先创建 SKILL.\nmd，再逐项检查输入、输出和验收结果。" * 5,
+            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        self.assertIn("SKILL.md", current["body"])
+        self.assertNotIn("SKILL.\nmd", current["body"])
+
     def test_automated_workflow_repairs_unsupported_claims_once_before_media(self):
         from content_platform.content_depth import build_content_depth_plan
         from content_platform.run_contract import build_run_contract

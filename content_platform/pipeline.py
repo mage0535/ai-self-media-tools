@@ -11,7 +11,7 @@ from pathlib import Path
 from .compliance import ComplianceChecker
 from .claim_ledger import compile_verified_claim_ledger, restore_verified_domains, sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
-from .content_hygiene import audit_topic, validate_generated_text
+from .content_hygiene import audit_topic, normalize_generated_markdown, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
 from .capability_runtime import execute_delivery_postcheck_capability, execute_generation_capabilities, execute_post_generation_capabilities
 from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
@@ -431,6 +431,7 @@ class Pipeline:
                 # cannot erase evidence required for deterministic repair.
                 claim_ledger = compile_verified_claim_ledger(brief)
                 draft.setdefault("draft_meta", {})["claim_ledger"] = claim_ledger
+                draft["body"] = normalize_generated_markdown(draft.get("body") or "")
                 if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
                     draft["body"] = normalize_feed_paragraphs(draft.get("body") or "")
                     draft["body"] = restore_verified_domains(draft["body"], claim_ledger)
