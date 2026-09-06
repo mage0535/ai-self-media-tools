@@ -319,16 +319,8 @@ class Pipeline:
                     "generate_content": {"status": "ok", "evidence": "workflow_step_succeeded"},
                     "execute_generation_capabilities": {"status": "ok" if capability_execution.get("passed") else "failed", "evidence": capability_execution.get("executed", [])},
                 }
-                capability_planned = [
-                    str(item.get("capability_id") or "")
-                    for item in capability_execution.get("planned") or []
-                    if isinstance(item, dict) and str(item.get("capability_id") or "")
-                ]
-                executed_by_id = {
-                    str(item.get("capability_id")): item
-                    for item in capability_execution.get("executed") or []
-                    if isinstance(item, dict) and item.get("capability_id")
-                }
+                generation_manifest = self._tool_invocation_manifest_from_execution(capability_execution)
+                capability_planned = list(generation_manifest["planned_tools"])
                 draft["draft_meta"]["tool_selection_plan"] = {
                     "version": "tool_selection_plan_v3",
                     "selected_tools": capability_planned,
@@ -336,21 +328,7 @@ class Pipeline:
                     "invocation_order": capability_planned,
                     "not_default_only": True,
                 }
-                draft["draft_meta"]["tool_invocation_manifest"] = {
-                    "version": "tool_invocation_manifest_v3",
-                    "planned_tools": {name: "capability_registry" for name in capability_planned},
-                    "invocations": {
-                        name: {
-                            "status": "ok" if name in executed_by_id else "failed",
-                            "output_hash": (executed_by_id.get(name) or {}).get("output_hash", ""),
-                            "evidence": executed_by_id.get(name) or {},
-                        }
-                        for name in capability_planned
-                    },
-                    "executed_count": len(executed_by_id),
-                    "missing_tools": [name for name in capability_planned if name not in executed_by_id],
-                    "capability_execution": capability_execution,
-                }
+                draft["draft_meta"]["tool_invocation_manifest"] = generation_manifest
                 draft["draft_meta"]["workflow_stage_manifest"] = {
                     "version": "workflow_stage_manifest_v1",
                     "stages": workflow_invocations,
@@ -656,6 +634,10 @@ class Pipeline:
                 draft["draft_meta"]["geo_details"] = geo
                 draft["draft_meta"]["quality_gate"] = gate
                 if self.require_gate_pass and not gate.get("passed", True):
+                    self.store.save_draft(
+                        job_id, draft["title"], draft["body"], risk["level"], risk,
+                        draft.get("prompt_version", ""), draft.get("draft_meta", {}),
+                    )
                     runner.block("run_quality_gate", "quality_gate_failed", "required quality gate failed", gate, depends_on=["run_safety_gate"])
                 if not gate.get("passed", True):
                     risk["level"] = "review"
@@ -2104,7 +2086,7 @@ class Pipeline:
             capability_id = str(item["capability_id"])
             stage = str(item.get("stage") or "")
             required = str(item.get("required_or_optional") or "required") != "optional"
-            if capability_id in executed or required:
+            if capability_id in executed or (required and stage in completed):
                 planned[capability_id] = stage or "runtime"
         for capability_id, item in executed.items():
             planned.setdefault(capability_id, str(item.get("stage") or "runtime"))
@@ -2120,7 +2102,7 @@ class Pipeline:
         }
         return {
             "version": "tool_invocation_manifest_v3",
-            "phase": "rendered",
+            "phase": "rendered" if "gate" in completed else "generation",
             "planned_tools": planned,
             "invocations": invocations,
             "executed_count": len(invocations),
