@@ -483,6 +483,35 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("SKILL.md", current["body"])
         self.assertNotIn("SKILL.\nmd", current["body"])
 
+    def test_claim_sanitization_recompiles_cover_from_clean_copy(self):
+        body = (
+            "先明确工作场景，再拆解输入、步骤、输出和失败恢复条件。"
+            "每一步都要保存能够复查的来源与结果，完成后检查正文和图片是否一致。"
+            "最后记录验收结论，并把不符合要求的结果返回对应步骤修正。"
+        )
+        job = self.pipeline.create("Agent Skills 操作手册", ["juejin"], {"automated_workflow": True})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Agent Skills 让效率翻 5 倍",
+            "body": body,
+            "draft_meta": {
+                "claim_ledger": [],
+                "quality_gate": {"passed": True},
+                "cover_design": {
+                    "title_text": "效率翻 5 倍",
+                    "subtitle_text": "旧承诺",
+                    "visual_subject": "generic face",
+                },
+            },
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        cover = current["draft_meta"]["cover_design"]
+        self.assertNotIn("5 倍", current["title"])
+        self.assertNotIn("5 倍", cover["title_text"])
+        self.assertNotEqual(cover["subtitle_text"], "旧承诺")
+        self.assertIn("workflow playbook", cover["background_prompt"])
+
     def test_automated_workflow_repairs_unsupported_claims_once_before_media(self):
         from content_platform.content_depth import build_content_depth_plan
         from content_platform.run_contract import build_run_contract

@@ -484,6 +484,13 @@ class Pipeline:
                     if len(cleaned_body) >= 80 and cleaned_gate.get("passed"):
                         draft["title"] = cleaned_title
                         draft["body"] = cleaned_body
+                        refreshed_meta = {**draft["draft_meta"], "cover_design": {}}
+                        draft["draft_meta"]["cover_design"] = self.generator._default_cover_design(
+                            job.get("topic") or cleaned_title,
+                            draft,
+                            brief,
+                            refreshed_meta,
+                        )
                         text = cleaned_title + "\n" + cleaned_body
                         draft["draft_meta"]["claim_sanitization"] = {
                             "removed_count": len([row for row in claim_gate.get("findings") or [] if not row.get("covered")]),

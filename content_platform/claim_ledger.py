@@ -7,7 +7,7 @@ from typing import Any
 
 
 NUMERIC_CLAIM = re.compile(
-    r"(?:(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿几半]+)\s*(?:%|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?)|(?:\d+(?:\.\d+)?|[二两三四五六七八九十百千万亿几]+)\s*(?:个|家|种|款|次))",
+    r"(?:(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿几半]+)\s*(?:%|倍|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?)|(?:\d+(?:\.\d+)?|[二两三四五六七八九十百千万亿几]+)\s*(?:个|家|种|款|次))",
     re.I,
 )
 FIRST_PERSON_OPERATION = re.compile(
@@ -27,8 +27,13 @@ VERIFIED_DOMAIN = re.compile(
     re.I,
 )
 NAMED_EXTERNAL_PRODUCT = re.compile(
-    r"(?:Claude\s+Code|Gemini(?:\s+CLI)?|ChatGPT|OpenAI|Anthropic|GitHub|Cursor|DeepSeek|"
+    r"(?:Claude\s+Code|Gemini(?:\s+CLI)?|ChatGPT|OpenAI|Anthropic|GitHub|Cursor|DeepSeek|DeepLearning\.AI|"
     r"抖音|快手|小红书|知乎|掘金|微信公众号|视频号)",
+    re.I,
+)
+PLATFORM_TREND_CLAIM = re.compile(
+    r"(?:抖音|快手|小红书|知乎|掘金|微信公众号|视频号|TikTok|YouTube|X)"
+    r"[^。！？.!?\n]{0,28}(?:已经|已有|出现|热度|增长|攀升|热门|爆款)",
     re.I,
 )
 EXTERNAL_ATTRIBUTION_ACTION = re.compile(
@@ -55,7 +60,11 @@ def _is_structural_count(sentence: str, match: re.Match[str]) -> bool:
 
 
 def _sentences(text: str) -> list[str]:
-    return [item.strip() for item in re.split(r"(?<=[。！？.!?])|\n+", str(text or "")) if item.strip()]
+    return [
+        item.strip()
+        for item in re.split(r"(?<=[。！？])|(?<=[.!?])(?=\s|$)|\n+", str(text or ""))
+        if item.strip()
+    ]
 
 
 def _valid_evidence(row: dict[str, Any], *, first_person: bool) -> bool:
@@ -110,6 +119,11 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
             findings.append({"type": "external_attribution", "text": sentence, "covered": covered})
             if not covered:
                 failures.append("unsourced_external_attribution")
+        if PLATFORM_TREND_CLAIM.search(sentence):
+            covered = _covered(sentence, ledger, first_person=False)
+            findings.append({"type": "platform_trend", "text": sentence, "covered": covered})
+            if not covered:
+                failures.append("unsourced_platform_trend_claim")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),

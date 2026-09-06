@@ -93,3 +93,21 @@ def test_youtube_cover_keeps_complete_question_and_skips_question_subtitle():
 
     assert direction["title_text"] == "Still Think ChatGPT Is an AI Agent"
     assert direction["subtitle_text"] == "Chatbots reply. Agents plan, act, and verify."
+
+
+def test_agent_skills_cover_uses_workflow_playbook_visual_and_clean_subtitle():
+    direction = build_cover_direction(
+        platform="juejin",
+        topic="Agent Skills 傻瓜式教程",
+        title="别再重复写 Prompt 了",
+        body=(
+            "## 一个被严重低估的技术标准\n\n"
+            "Agent Skills 把重复工作流封装成可复用的操作手册，执行后还要验证结果。"
+        ),
+    )
+
+    assert direction["subtitle_text"] == "Agent Skills 把重复工作流封装成可复用的操作手册"
+    assert "#" not in direction["subtitle_text"]
+    assert "modular AI workflow playbook" in direction["background_prompt"]
+    assert "connected skill cards" in direction["background_prompt"]
+    assert any("workflow playbook" in item for item in direction["focal_subjects"])
