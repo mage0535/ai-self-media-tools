@@ -109,6 +109,38 @@ def test_juejin_article_media_can_prepare_local_assets_for_platform_upload(tmp_p
     assert validate_handoff_contract(result["handoff_contract"], require_target_renderer=False)["passed"] is True
 
 
+def test_juejin_article_media_preserves_failed_candidate_and_semantic_evidence(tmp_path):
+    from content_platform.adapters.media import ArticleMediaValidationError, execute_article_media
+
+    def generate(item, output):
+        _write_image(output, (70, 80, 90))
+        evidence = {
+            "version": "image_semantic_evidence_v1",
+            "passed": False,
+            "caption": "Two people looking at code without a visible module comparison.",
+            "expected_concepts": ["side-by-side software module format comparison"],
+            "matched_concepts": [],
+        }
+        raise ArticleMediaValidationError("semantic_mismatch", evidence=evidence)
+
+    with pytest.raises(RuntimeError, match="asset .* failed after 2 attempts"):
+        execute_article_media(
+            {"id": "failed-j1", "title": "Module formats", "sections": ["one", "two", "three"]},
+            tmp_path,
+            generate,
+            max_concurrency=1,
+            max_attempts=2,
+            require_semantic_evidence=True,
+        )
+
+    checkpoint = json.loads((tmp_path / "asset_checkpoints.json").read_text(encoding="utf-8"))
+    attempts = checkpoint["cover"]["failed_attempts"]
+    assert len(attempts) == 2
+    assert all(Path(row["candidate_path"]).is_file() for row in attempts)
+    assert all(row["candidate_sha256"] for row in attempts)
+    assert attempts[-1]["semantic_evidence"]["caption"].startswith("Two people")
+
+
 def test_juejin_content_route_cannot_bypass_production_four_asset_path(tmp_path, monkeypatch):
     from content_platform.media import MediaBridge
 

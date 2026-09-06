@@ -20,6 +20,14 @@ from typing import Any, Callable
 from urllib.parse import quote
 
 
+class ArticleMediaValidationError(RuntimeError):
+    """Carry machine-readable validation evidence across the asset boundary."""
+
+    def __init__(self, message: str, *, evidence: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.evidence = dict(evidence or {})
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -195,6 +203,7 @@ def execute_article_media(
             return dict(previous)
 
         attempts = int(previous.get("attempts") or 0)
+        failed_attempts = list(previous.get("failed_attempts") or [])
         last_error = ""
         for _ in range(max(1, int(max_attempts))):
             attempts += 1
@@ -238,8 +247,30 @@ def execute_article_media(
                 return record
             except Exception as exc:  # keep the retry evidence durable
                 last_error = f"{type(exc).__name__}: {exc}"
+                failed_candidate = ""
+                failed_sha = ""
+                if path.is_file() and path.stat().st_size > 0:
+                    failure_dir = output / "failed_asset_candidates"
+                    failure_dir.mkdir(parents=True, exist_ok=True)
+                    preserved = failure_dir / f"{asset_id}-attempt-{attempts}{path.suffix or '.bin'}"
+                    preserved.write_bytes(path.read_bytes())
+                    failed_candidate = str(preserved)
+                    failed_sha = _sha256(preserved)
+                failed_attempts.append({
+                    "attempt": attempts,
+                    "error": last_error,
+                    "candidate_path": failed_candidate,
+                    "candidate_sha256": failed_sha,
+                    "semantic_evidence": dict(getattr(exc, "evidence", {}) or {}),
+                })
                 with lock:
-                    checkpoints[asset_id] = {"asset_id": asset_id, "attempts": attempts, "status": "retrying", "error": last_error}
+                    checkpoints[asset_id] = {
+                        "asset_id": asset_id,
+                        "attempts": attempts,
+                        "status": "retrying",
+                        "error": last_error,
+                        "failed_attempts": failed_attempts,
+                    }
                     _write_json_atomic(checkpoint_path, checkpoints)
         raise RuntimeError(f"asset {asset_id} failed after {attempts} attempts: {last_error}")
 
