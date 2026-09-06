@@ -75,6 +75,20 @@ class PipelineTests(unittest.TestCase):
             assert self.pipeline.generator.config["checkpoint_dir"] == str(self.pipeline.data_dir / "jobs" / job["id"])
             assert self.pipeline.generator.config["session_id"] == f"content-job:{job['id']}"
 
+    def test_blocked_generation_gate_persists_capability_evidence(self):
+        job = self.pipeline.create("Persist blocked evidence", ["juejin"], {"audience": "developers"})
+        with self.store.connect() as conn:
+            conn.execute("UPDATE jobs SET body=? WHERE id=?", ("Concrete workflow evidence. " * 20, job["id"]))
+        self.pipeline.require_gate_pass = True
+
+        with patch.object(self.pipeline, "_quality_gate", return_value={"passed": False, "gates": {"forced": {"passed": False}}}):
+            result = self.pipeline.run(job["id"])
+
+        persisted = self.store.get_job(job["id"])
+        self.assertEqual(result["state"], "blocked")
+        self.assertIn("capability_execution", persisted["draft_meta"])
+        self.assertIn("tool_invocation_manifest", persisted["draft_meta"])
+
     def test_rendered_gate_recovers_manifest_after_later_optional_media_failure(self):
         import json
 

@@ -38,6 +38,22 @@ class PlatformQualityGateRuntimeTests(unittest.TestCase):
         self.assertEqual(manifest["missing_tools"], [])
         self.assertNotIn("optional_search", manifest["planned_tools"])
 
+    def test_generation_tool_manifest_ignores_required_future_stages(self):
+        execution = {
+            "planned": [
+                {"capability_id": "recipe", "stage": "generation", "required_or_optional": "required"},
+                {"capability_id": "asset_gate", "stage": "assets", "required_or_optional": "required"},
+                {"capability_id": "final_gate", "stage": "gate", "required_or_optional": "required"},
+            ],
+            "executed": [{"capability_id": "recipe", "stage": "generation", "output_hash": "sha256:ok"}],
+            "completed_stages": ["collection", "selection", "blueprint", "generation"],
+        }
+
+        manifest = Pipeline._tool_invocation_manifest_from_execution(execution)
+
+        self.assertEqual(manifest["planned_tools"], {"recipe": "generation"})
+        self.assertEqual(manifest["missing_tools"], [])
+
     def test_image_render_evidence_compiles_provenance_into_platform_packet(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
