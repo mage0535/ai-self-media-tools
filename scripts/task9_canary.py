@@ -679,13 +679,12 @@ def _active_model_from_config_show(executable: str) -> dict[str, str]:
     return {}
 
 
-def _weak_model_from_hermes_cache(provider: str, active_model: str) -> dict[str, str]:
-    home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
-    cache = _load_json(home / "provider_models_cache.json")
-    record = cache.get(provider) if isinstance(cache.get(provider), dict) else {}
-    models = [str(item) for item in record.get("models") or [] if str(item) and str(item) != active_model]
-    weak = next((item for item in models if "free" in item.casefold()), models[0] if models else "")
-    return {"provider": provider, "model": weak, "identity_source": "hermes_provider_models_cache"} if weak else {}
+def _explicit_weak_model(active_provider: str, active_model: str) -> dict[str, str]:
+    model = str(os.environ.get("HERMES_CANARY_WEAK_MODEL") or "").strip()
+    provider = str(os.environ.get("HERMES_CANARY_WEAK_PROVIDER") or active_provider).strip()
+    if not model or not provider or (provider == active_provider and model == active_model):
+        return {}
+    return {"provider": provider, "model": model, "identity_source": "explicit_private_canary_config"}
 
 
 def _hermes_help(executable: str) -> str:
@@ -722,7 +721,7 @@ def discover_hermes_runtime() -> dict[str, Any]:
     model = str(active.get("model") or "")
     active_status = "available" if provider and model else "unavailable"
     result = {"active": {"status": active_status, "provider": provider, "model": model, "executable": executable, "selection": selection, "gate_passed": False, "gate_reason": "model_gate_pending"}}
-    weak = _weak_model_from_hermes_cache(provider, model) if provider and model else {}
+    weak = _explicit_weak_model(provider, model) if provider and model else {}
     if weak:
         result["weak"] = {"status": "available", "provider": weak["provider"], "model": weak["model"], "identity_source": weak["identity_source"], "executable": executable, "selection": selection, "gate_passed": False, "gate_reason": "model_gate_pending"}
     else:

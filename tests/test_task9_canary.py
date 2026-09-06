@@ -403,13 +403,15 @@ def test_runtime_identity_requires_successful_cli_output_not_environment_fallbac
     assert runtime["weak"]["status"] == "dual_model_pending"
 
 
-def test_runtime_identity_uses_hermes_config_and_same_provider_cache(tmp_path: Path, monkeypatch):
+def test_runtime_identity_ignores_stale_provider_cache_without_explicit_weak_model(tmp_path: Path, monkeypatch):
     from scripts import task9_canary
 
     _write(tmp_path / "provider_models_cache.json", json.dumps({
         "opencode-go": {"models": ["mimo-v2.5", "ox-alpha-free", "deepseek-v4-flash"]},
     }))
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.delenv("HERMES_CANARY_WEAK_MODEL", raising=False)
+    monkeypatch.delenv("HERMES_CANARY_WEAK_PROVIDER", raising=False)
     monkeypatch.setattr(task9_canary.shutil, "which", lambda _: "/usr/bin/hermes")
     monkeypatch.setattr(task9_canary, "_hermes_help", lambda _: "--provider PROVIDER --model MODEL")
     monkeypatch.setattr(task9_canary, "_hermes_text", lambda command: (
@@ -421,8 +423,26 @@ def test_runtime_identity_uses_hermes_config_and_same_provider_cache(tmp_path: P
 
     assert runtime["active"]["provider"] == "opencode-go"
     assert runtime["active"]["model"] == "mimo-v2.5"
-    assert runtime["weak"]["provider"] == "opencode-go"
-    assert runtime["weak"]["model"] == "ox-alpha-free"
+    assert runtime["weak"]["status"] == "dual_model_pending"
+    assert runtime["weak"]["reason"] == "no_available_second_model"
+
+
+def test_runtime_identity_uses_only_explicit_private_weak_model(monkeypatch):
+    from scripts import task9_canary
+
+    monkeypatch.setenv("HERMES_CANARY_WEAK_PROVIDER", "verified-provider")
+    monkeypatch.setenv("HERMES_CANARY_WEAK_MODEL", "verified-weak")
+    monkeypatch.setattr(task9_canary.shutil, "which", lambda _: "/usr/bin/hermes")
+    monkeypatch.setattr(task9_canary, "_hermes_help", lambda _: "--provider PROVIDER --model MODEL")
+    monkeypatch.setattr(task9_canary, "_hermes_text", lambda command: (
+        "Model: {'default': 'mimo-v2.5', 'provider': 'opencode-go'}\n"
+        if command[1:] == ["config", "show"] else ""
+    ))
+
+    runtime = task9_canary.discover_hermes_runtime()
+
+    assert runtime["weak"]["provider"] == "verified-provider"
+    assert runtime["weak"]["model"] == "verified-weak"
 
 
 def test_generation_attempt_evidence_requires_matching_provider_model_and_session(tmp_path: Path):
