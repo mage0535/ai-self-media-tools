@@ -210,6 +210,26 @@ class CliV2Tests(unittest.TestCase):
         collect.assert_called_once()
         self.assertEqual(result["items"], 1)
 
+    def test_hot_works_collect_does_not_mark_empty_public_douyin_as_ok(self):
+        output = self.root / "hot-works-douyin-empty"
+        with (
+            patch("content_platform.cli._load_env_defaults", return_value=""),
+            patch("content_platform.cli.DirectTrendSource.collect", return_value=[]),
+            patch("content_platform.cli.collect_douyin_shipin", return_value=[]),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={
+                "status": "unavailable", "reason": "valid_private_cookie_state_not_found", "state_file": "",
+            }),
+        ):
+            code, result = self.call(
+                "hot-works-collect", "--platform", "douyin_ai", "--query", "douyin_ai=AI工具",
+                "--output-dir", str(output),
+            )
+
+        self.assertEqual(code, 0)
+        public = next(item for item in result["collection_status"] if item["source"] == "douyin_ai:public_shipin")
+        self.assertEqual(public["status"], "no_verified_results")
+        self.assertEqual(public["count"], 0)
+
     def test_record_manual_publication_creates_global_topic_receipt(self):
         code, receipt = self.call(
             "record-manual-publication",

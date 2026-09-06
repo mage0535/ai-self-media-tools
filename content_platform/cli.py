@@ -27,6 +27,7 @@ from .hot_work_intelligence import (
     collect_douyin_shipin,
     collect_logged_short_video_search,
     collect_wechat,
+    build_douyin_official_row,
     default_platform_queries,
     load_logged_search_cache,
     load_samples,
@@ -691,21 +692,43 @@ def execute(args):
                     except Exception as exc:
                         statuses.append({"source": "wechat:sogou_weixin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
             if live_platforms.intersection({"douyin", "douyin_ai"}):
+                from .kuaishou_official_signals import upsert_official_signal_matrix
+
+                try:
+                    board = DirectTrendSource("douyin", {"timeout": 15, "limit": 50, "source_fallback_enabled": False}).collect()
+                    official_row = build_douyin_official_row(board, "douyin_ai")
+                    official_status = {"source": "douyin_ai:official_hot_board", "status": "ok" if official_row else "no_lane_results", "count": len((official_row or {}).get("signals") or []), "total_count": len(board)}
+                    if official_row:
+                        official_status["matrix_path"] = str(upsert_official_signal_matrix(data_dir, official_row))
+                    statuses.append(official_status)
+                except Exception as exc:
+                    statuses.append({"source": "douyin_ai:official_hot_board", "status": "failed", "count": 0, "error": f"{type(exc).__name__}: {str(exc)[:180]}"})
                 for query in query_map.get("douyin_ai") or query_map.get("douyin") or query_map.get("all") or ["AI工具", "Claude Code Codex"]:
                     started = datetime.now()
                     try:
                         rows = collect_douyin_shipin(query, "douyin_ai")
                         items.extend(rows)
-                        statuses.append({"source": "douyin_ai:public_shipin", "query": query, "status": "ok", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
+                        statuses.append({"source": "douyin_ai:public_shipin", "query": query, "status": "ok" if rows else "no_verified_results", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
                     except Exception as exc:
                         statuses.append({"source": "douyin_ai:public_shipin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
             if "douyin_pet" in live_platforms:
+                from .kuaishou_official_signals import upsert_official_signal_matrix
+
+                try:
+                    board = DirectTrendSource("douyin", {"timeout": 15, "limit": 50, "source_fallback_enabled": False}).collect()
+                    official_row = build_douyin_official_row(board, "douyin_pet")
+                    official_status = {"source": "douyin_pet:official_hot_board", "status": "ok" if official_row else "no_lane_results", "count": len((official_row or {}).get("signals") or []), "total_count": len(board)}
+                    if official_row:
+                        official_status["matrix_path"] = str(upsert_official_signal_matrix(data_dir, official_row))
+                    statuses.append(official_status)
+                except Exception as exc:
+                    statuses.append({"source": "douyin_pet:official_hot_board", "status": "failed", "count": 0, "error": f"{type(exc).__name__}: {str(exc)[:180]}"})
                 for query in query_map.get("douyin_pet") or ["猫咪治愈", "猫狗日常"]:
                     started = datetime.now()
                     try:
                         rows = collect_douyin_shipin(query, "douyin_pet")
                         items.extend(rows)
-                        statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "ok", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
+                        statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "ok" if rows else "no_verified_results", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
                     except Exception as exc:
                         statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
             for platform in sorted(live_platforms.intersection({

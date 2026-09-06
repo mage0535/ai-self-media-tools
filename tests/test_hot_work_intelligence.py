@@ -313,6 +313,23 @@ def test_shipinhao_evidence_is_fail_closed_for_login_only_page():
     assert status["count"] == 0
 
 
+def test_shipinhao_evidence_detects_login_redirect_from_final_url():
+    from content_platform import hot_work_intelligence as hot_work
+
+    rows, status = hot_work.finalize_shipinhao_hot_work_evidence(
+        "视频号助手",
+        [],
+        query="AI 工作流",
+        page_url="https://channels.weixin.qq.com/login.html",
+        dom_snapshot_path="/private/run/shipinhao_login.html",
+        screenshot_path="/private/run/shipinhao_login.png",
+        captured_at="2026-09-06T04:19:25+00:00",
+    )
+
+    assert rows == []
+    assert status["status"] == "login_required_or_captcha"
+
+
 def test_shipinhao_evidence_attaches_dom_screenshot_and_collection_time():
     from content_platform import hot_work_intelligence as hot_work
 
@@ -531,3 +548,23 @@ def test_zhihu_cards_bind_title_votes_and_canonical_content_url():
     assert len(rows) == 1
     assert rows[0]["engagement"] == "79"
     assert rows[0]["url"] == "https://zhuanlan.zhihu.com/p/2066544914452543247"
+
+
+def test_douyin_official_board_requires_specific_lane_fit():
+    from content_platform.hot_work_intelligence import build_douyin_official_row, filter_douyin_official_board
+
+    rows = [
+        {"title": "AI展现不了安徽的美", "points": 9000000, "rank": 10, "url": "https://www.douyin.com/search/a"},
+        {"title": "AI Agent效率工具实测", "points": 8000000, "rank": 12, "url": "https://www.douyin.com/search/b"},
+        {"title": "小猫拆家现场", "points": 7000000, "rank": 15, "url": "https://www.douyin.com/search/c"},
+    ]
+
+    ai = filter_douyin_official_board(rows, "douyin_ai")
+    pet = filter_douyin_official_board(rows, "douyin_pet")
+
+    assert [row["title"] for row in ai] == ["AI Agent效率工具实测"]
+    assert [row["title"] for row in pet] == ["小猫拆家现场"]
+    contract = build_douyin_official_row(rows, "douyin_ai", captured_at=datetime(2026, 9, 6, tzinfo=timezone.utc))
+    assert contract["signals"] == ["AI Agent效率工具实测"]
+    assert contract["native_verified"] is False
+    assert len(contract["evidence_sha256"]) == 64
