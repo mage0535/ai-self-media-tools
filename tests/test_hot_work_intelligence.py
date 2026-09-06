@@ -516,3 +516,17 @@ def test_verified_logged_search_cache_expires(tmp_path):
 
     assert loaded["status"] == "expired"
     assert loaded["rows"] == []
+
+
+def test_zhihu_cards_bind_title_votes_and_canonical_content_url():
+    from content_platform.hot_work_intelligence import parse_zhihu_search_cards
+
+    rows = parse_zhihu_search_cards([{
+        "text": "2026年Agent工作流开发指南，轻松掌握核心技术",
+        "href": "https://zhuanlan.zhihu.com/p/2066544914452543247?zpf=tracking",
+        "context": "2026年Agent工作流开发指南，轻松掌握核心技术\nAI技能研究所\n赞同 79\n12 条评论\n08-10",
+    }], query="AI工具 工作流")
+
+    assert len(rows) == 1
+    assert rows[0]["engagement"] == "79"
+    assert rows[0]["url"] == "https://zhuanlan.zhihu.com/p/2066544914452543247"

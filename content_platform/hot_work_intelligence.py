@@ -430,6 +430,29 @@ def parse_tiktok_search_cards(cards: list[dict[str, str]], *, query: str, limit:
     return rows
 
 
+def parse_zhihu_search_cards(cards: list[dict[str, str]], *, query: str, limit: int = 12) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for card in cards:
+        href = str(card.get("href") or "").strip()
+        if not _is_content_url("zhihu", href):
+            continue
+        canonical_url = urllib.parse.urlunsplit((*urllib.parse.urlsplit(href)[:3], "", ""))
+        if canonical_url in seen_urls:
+            continue
+        title = strip_markup(str(card.get("text") or ""))
+        context = strip_markup(str(card.get("context") or ""))
+        metric_match = re.search(r"赞同\s*(\d+(?:\.\d+)?(?:K|M|万)?)", context, re.I)
+        metric = metric_match.group(1) if metric_match else ""
+        if not _looks_like_content_line(title, query) or _metric_number(metric) <= 0:
+            continue
+        seen_urls.add(canonical_url)
+        rows.append(_work("zhihu", "zhihu_logged_search", query, title, url=canonical_url, engagement=metric, evidence_strength="strong_logged_search_result"))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def _is_shipinhao_content_url(href: str) -> bool:
     parsed = urllib.parse.urlparse(str(href or "").strip())
     host = (parsed.hostname or "").casefold()
@@ -880,6 +903,8 @@ def collect_logged_short_video_search(
         rows = parse_twitter_search_cards(anchors, query=query, limit=limit)
     elif platform == "tiktok":
         rows = parse_tiktok_search_cards(anchors, query=query, limit=limit)
+    elif platform == "zhihu":
+        rows = parse_zhihu_search_cards(anchors, query=query, limit=limit)
     elif platform == "xiaohongshu":
         rows = parse_xiaohongshu_search_text(text, query=query, limit=limit, anchors=anchors)
     else:
