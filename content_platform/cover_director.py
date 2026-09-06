@@ -62,12 +62,17 @@ def build_cover_direction(
         if mascot_only
         else _cover_visual_cue(text, subject)
     )
+    negative_subjects = (
+        "; no generic humanoid robot, no generic portrait, no unrelated sci-fi collage"
+        if "workflow playbook" in visual_cue
+        else ""
+    )
     if not mascot_only and visual_cue not in focal_subjects:
         focal_subjects.insert(0, visual_cue)
     prompt = (
         f"cinematic advertising key art for {subject}; {treatment.replace('_', ' ')}; "
         f"platform mood {profile['id'].replace('_', ' ')}; layout {layout.replace('_', ' ')}; "
-        f"hero visual: {visual_cue}; "
+        f"hero visual: {visual_cue}{negative_subjects}; "
         "one unmistakable hero subject, dramatic practical lighting, foreground and background depth, "
         "premium commercial color grading, intentional negative space reserved for headline, "
         "high visual tension, editorial art direction, no text, no letters, no logo, no watermark"

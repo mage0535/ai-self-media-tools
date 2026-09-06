@@ -421,7 +421,12 @@ class MediaBridge:
             def generate_article_asset(item, target):
                 prompt_item = next(row for row in prompts if row["role"] == item["role"] and (item["role"] == "cover" or row["section"] == item["section"]))
                 attempt = max(1, int(item.get("_attempt") or 1))
-                prompt = self._image_quality_retry_prompt(prompt_item["prompt"], attempt, ["article_semantic_or_media_gate_failed"])
+                prompt = self._image_quality_retry_prompt(
+                    prompt_item["prompt"],
+                    attempt,
+                    ["article_semantic_or_media_gate_failed"],
+                    intent=prompt_item.get("intent", ""),
+                )
                 provider_result = provider.run(
                     prompt,
                     target,
@@ -676,7 +681,9 @@ class MediaBridge:
         last_failures = []
         max_attempts = recovery["max_attempts"]
         for attempt in range(1, max_attempts + 1):
-            prompt = self._image_quality_retry_prompt(item["prompt"], attempt, last_failures)
+            prompt = self._image_quality_retry_prompt(
+                item["prompt"], attempt, last_failures, intent=item.get("intent", "")
+            )
             provider_args = self._image_provider_args(extra_args, item, attempt=attempt, rotate=True)
             attempted_provider = self._provider_arg_value(provider_args)
             try:
@@ -895,10 +902,17 @@ class MediaBridge:
         )
 
     @staticmethod
-    def _image_quality_retry_prompt(base_prompt, attempt, failures):
+    def _image_quality_retry_prompt(base_prompt, attempt, failures, *, intent=""):
         if attempt <= 1:
             return base_prompt
         failure_text = ", ".join(failures or ["previous candidate failed quality checks"])
+        if str(intent or "").casefold() != "real_scene":
+            return (
+                f"{base_prompt}\n\nQuality recovery attempt {attempt}: preserve every explicit visual subject "
+                "and make their relationship unmistakable; use a materially different composition, but do not "
+                "replace it with a generic portrait, office scene, robot, or unrelated collage. "
+                f"Avoid the previous failure modes: {failure_text}."
+            )
         return (
             f"{base_prompt}\n\nQuality recovery attempt {attempt}: choose a different real-scene candidate, "
             f"with richer foreground/background detail, distinct composition and subject from prior attempts. "

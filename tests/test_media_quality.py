@@ -2197,6 +2197,34 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     })
     assert module_format["expected_concepts"][0] == "side-by-side software module format comparison"
 
+    forgotten_context = MediaBridge._semantic_request(job, {
+        "role": "section",
+        "section": "下一次开新对话，它把之前的上下文全忘了",
+        "purpose": "show lost context",
+    })
+    assert forgotten_context["expected_concepts"] == ["organized memory archive"]
+
+
+def test_image_retry_prompt_preserves_visual_intent_instead_of_forcing_real_scene():
+    from content_platform.media import MediaBridge
+
+    cover = MediaBridge._image_quality_retry_prompt(
+        "hero visual: modular workflow playbook",
+        2,
+        ["semantic_mismatch"],
+        intent="cinematic_cover",
+    )
+    real = MediaBridge._image_quality_retry_prompt(
+        "real office collaboration",
+        2,
+        ["duplicate_visual_hash"],
+        intent="real_scene",
+    )
+
+    assert "do not replace it with a generic portrait" in cover
+    assert "different real-scene candidate" not in cover
+    assert "different real-scene candidate" in real
+
 
 def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):
     from content_platform.media import MediaBridge
