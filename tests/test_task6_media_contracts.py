@@ -109,6 +109,34 @@ def test_juejin_article_media_can_prepare_local_assets_for_platform_upload(tmp_p
     assert validate_handoff_contract(result["handoff_contract"], require_target_renderer=False)["passed"] is True
 
 
+def test_generated_article_assets_share_provider_url_but_use_unique_generation_identity(tmp_path):
+    from content_platform.adapters.media import execute_article_media
+
+    def generate(item, output):
+        _write_image(output, (20 + sum(map(ord, item["asset_id"])) % 180, 60, 100))
+        return {
+            "origin_type": "generated",
+            "source_url": "generated:sense_nova",
+            "generation_evidence": {
+                "provider": "sense_nova",
+                "model": "sensenova-u1.5-lite",
+                "prompt_hash": hashlib.sha256(item["asset_id"].encode()).hexdigest(),
+            },
+            "license": "generated_for_project",
+        }
+
+    result = execute_article_media(
+        {"id": "generated-j1", "title": "Article", "sections": ["one", "two", "three"]},
+        tmp_path,
+        generate,
+        max_concurrency=2,
+    )
+
+    assert len(result["assets"]) == 4
+    assert {row["source_url"] for row in result["assets"]} == {"generated:sense_nova"}
+    assert len({row["generation_evidence"]["prompt_hash"] for row in result["assets"]}) == 4
+
+
 def test_juejin_article_media_preserves_failed_candidate_and_semantic_evidence(tmp_path):
     from content_platform.adapters.media import ArticleMediaValidationError, execute_article_media
 

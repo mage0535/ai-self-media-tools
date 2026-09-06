@@ -282,7 +282,19 @@ def execute_article_media(
             records.append(future.result())
     records.sort(key=lambda row: (0 if row["role"] == "cover" else 1, row["asset_id"]))
     checksums = [row["checksum"] for row in records]
-    sources = [row["source_url"] or f"generated:{row['generation_evidence'].get('prompt_hash')}" for row in records]
+    sources = []
+    for row in records:
+        generation = row.get("generation_evidence") if isinstance(row.get("generation_evidence"), dict) else {}
+        if row.get("origin_type") == "generated":
+            sources.append(
+                "generated:"
+                + ":".join(
+                    str(generation.get(key) or "").strip()
+                    for key in ("provider", "model", "prompt_hash")
+                )
+            )
+        else:
+            sources.append(str(row.get("source_url") or "").strip())
     if len(set(checksums)) != len(checksums):
         raise RuntimeError("article media contains duplicate asset checksums")
     if len(set(sources)) != len(sources):
