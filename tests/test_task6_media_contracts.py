@@ -137,6 +137,24 @@ def test_generated_article_assets_share_provider_url_but_use_unique_generation_i
     assert len({row["generation_evidence"]["prompt_hash"] for row in result["assets"]}) == 4
 
 
+def test_article_sections_parse_heading_and_body_on_same_line_for_weak_models():
+    from content_platform.adapters.media import normalize_article_sections
+
+    body = (
+        "## 为什么会失败 每次新对话都要重新解释项目背景和输出规范。\n\n"
+        "## 一个 Skill 长什么样 核心是一个 SKILL.md 文件，包含描述和具体步骤。\n\n"
+        "## 怎么上手 第一步先明确场景，第二步拆输入输出，第三步验证结果。\n\n"
+        "## 写在最后 把重复经验沉淀成可复用规则，再根据真实结果迭代。"
+    )
+
+    sections = normalize_article_sections({"body": body}, limit=6)
+
+    assert len(sections) >= 3
+    assert sections[0].startswith("为什么会失败")
+    assert any(section.startswith("一个 Skill 长什么样") for section in sections)
+    assert any(section.startswith("怎么上手") for section in sections)
+
+
 def test_juejin_article_media_preserves_failed_candidate_and_semantic_evidence(tmp_path):
     from content_platform.adapters.media import ArticleMediaValidationError, execute_article_media
 

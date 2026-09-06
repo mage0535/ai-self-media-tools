@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import threading
 import urllib.error
@@ -123,6 +124,15 @@ def normalize_article_sections(job: dict[str, Any], limit: int = 6) -> list[str]
         clean = str(value or "").strip().replace("\n", " ")[:80]
         if clean:
             sections.append(clean)
+    if len(sections) < 3:
+        body_without_code = re.sub(r"```.*?```|~~~.*?~~~", "", str(job.get("body") or ""), flags=re.S)
+        seen = {re.sub(r"\s+", "", item).casefold() for item in sections}
+        for match in re.finditer(r"^#{1,6}\s+(.+?)\s*$", body_without_code, flags=re.M):
+            clean = re.sub(r"\s+", " ", match.group(1)).strip()[:160]
+            key = re.sub(r"\s+", "", clean).casefold()
+            if clean and key not in seen:
+                sections.append(clean)
+                seen.add(key)
     merged = []
     pending = ""
     for section in sections:
