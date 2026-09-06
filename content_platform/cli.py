@@ -28,8 +28,10 @@ from .hot_work_intelligence import (
     collect_logged_short_video_search,
     collect_wechat,
     default_platform_queries,
+    load_logged_search_cache,
     load_samples,
     resolve_logged_search_state,
+    save_logged_search_cache,
     save_collection,
     write_playwright_state,
 )
@@ -745,6 +747,15 @@ def execute(args):
                             )
                             status["route_attempts"] = [direct_status, dict(status)]
                             status["fallback_reason"] = direct_status.get("status")
+                        cache_root = data_dir / "intel" / "hot_work_search_cache"
+                        if rows:
+                            status["cache_write"] = save_logged_search_cache(cache_root, platform, query, rows, status)
+                        elif should_use_regional_proxy(status):
+                            cached = load_logged_search_cache(cache_root, platform, query)
+                            status["cache_fallback"] = {key: value for key, value in cached.items() if key != "rows"}
+                            if cached.get("status") == "ready":
+                                rows = list(cached.get("rows") or [])
+                                status.update({"status": "ok", "count": len(rows), "route": "verified_cache"})
                         items.extend(rows)
                         status.setdefault("elapsed_ms", int((datetime.now() - started).total_seconds() * 1000))
                         statuses.append(status)

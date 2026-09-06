@@ -111,6 +111,35 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(calls[1][3], "socks5://127.0.0.1:2080")
         self.assertEqual(result["items"], 1)
 
+    def test_hot_works_collect_uses_verified_cache_after_transient_failure(self):
+        output = self.root / "hot-works-cache"
+        cached_row = {
+            "platform": "tiktok", "title": "AI workflow result", "url": "https://www.tiktok.com/@user/video/123",
+            "engagement": "14K", "captured_at": "2026-09-06T00:00:00+00:00", "evidence_strength": "strong_cached_native_search",
+        }
+        with (
+            patch("content_platform.cli._load_env_defaults", return_value=""),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={
+                "status": "ready", "reason": "", "state_file": str(self.root / "tiktok-state.json"),
+                "source_format": "cookie_list",
+            }),
+            patch("content_platform.cli.collect_logged_short_video_search", return_value=([], {
+                "source": "tiktok:logged_search", "status": "platform_error_or_rate_limited", "count": 0,
+            })),
+            patch("content_platform.cli.load_logged_search_cache", return_value={
+                "status": "ready", "rows": [cached_row], "reason": "", "age_seconds": 120,
+            }) as load_cache,
+            patch.dict("os.environ", {}, clear=False),
+        ):
+            os.environ.pop("US_PROXY", None)
+            code, result = self.call("hot-works-collect", "--platform", "tiktok", "--query", "tiktok=AI tools workflow", "--output-dir", str(output))
+
+        self.assertEqual(code, 0)
+        load_cache.assert_called_once()
+        self.assertEqual(result["items"], 1)
+        search = next(row for row in result["collection_status"] if row["source"] == "tiktok:logged_search")
+        self.assertEqual(search["route"], "verified_cache")
+
     def test_record_manual_publication_creates_global_topic_receipt(self):
         code, receipt = self.call(
             "record-manual-publication",
