@@ -59,5 +59,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Deployment removes only service drop-ins that override project-managed runtime roots, WorkingDirectory or ExecStart. Other resource/provider/function drop-ins remain; conflicts are restored on failure.
 - Every project service and gateway child environment sets `PYTHONDONTWRITEBYTECODE=1`; root-run Python must not create caches inside signed immutable releases.
 - Hermes `content-platform` MCP has its own explicit child environment. Production deploy/rollback atomically converges that private YAML block before gateway restart and restores it before old gateway recovery; systemd inheritance alone is not sufficient.
-- Production currently runs signed `d79128c`; timers remain disabled. The next work is real serial platform Canaries and publisher postchecks, not another runtime-root migration.
+- Production currently runs signed `2f4f612`; timers remain disabled. Runtime convergence and platform trend routing are deployed; the next work is completing missing platform inputs, real serial content Canaries, and publisher postchecks.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
