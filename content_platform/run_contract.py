@@ -42,6 +42,12 @@ BOUNDS = {
     "generation_heartbeat_seconds": 15,
     "generation_max_attempts": 2,
 }
+LONG_FORM_PLATFORMS = {"wechat", "weixin", "wechat_official", "juejin", "zhihu"}
+LONG_FORM_GENERATION_BOUNDS = {
+    "generation_soft_deadline_seconds": 240,
+    "generation_hard_deadline_seconds": 420,
+    "generation_max_attempts": 1,
+}
 
 
 class RunContractError(ValueError):
@@ -85,6 +91,9 @@ def build_run_contract(platform: str, *, rulebook_path: str | Path = DEFAULT_RUL
         "quality_gates": [],
     }
     skills = sorted(REQUIRED_SKILLS_BY_CHANNEL.get(normalized) or REQUIRED_SKILLS_BY_CHANNEL.get(channel_key) or {"meta/content-preflight", "content/content-strategy-workflow"})
+    bounds = dict(BOUNDS)
+    if normalized in LONG_FORM_PLATFORMS:
+        bounds.update(LONG_FORM_GENERATION_BOUNDS)
     return {
         "version": "run_contract_v1",
         "platform": normalized,
@@ -102,7 +111,7 @@ def build_run_contract(platform: str, *, rulebook_path: str | Path = DEFAULT_RUL
         "channel_rules": channel_rules,
         "required_skills": skills,
         "stage_fields": {stage: sorted(fields) for stage, fields in STAGE_FIELDS.items()},
-        "bounds": dict(BOUNDS),
+        "bounds": bounds,
     }
 
 

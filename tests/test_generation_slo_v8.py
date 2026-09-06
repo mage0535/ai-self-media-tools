@@ -5,10 +5,15 @@ from content_platform.run_contract import build_run_contract
 def test_run_contract_carries_bounded_generation_slo():
     bounds = build_run_contract("wechat")["bounds"]
 
-    assert bounds["generation_soft_deadline_seconds"] == 90
-    assert bounds["generation_hard_deadline_seconds"] == 180
+    assert bounds["generation_soft_deadline_seconds"] == 240
+    assert bounds["generation_hard_deadline_seconds"] == 420
     assert bounds["generation_heartbeat_seconds"] == 15
-    assert bounds["generation_max_attempts"] == 2
+    assert bounds["generation_max_attempts"] == 1
+
+    video = build_run_contract("tiktok")["bounds"]
+    assert video["generation_soft_deadline_seconds"] == 90
+    assert video["generation_hard_deadline_seconds"] == 180
+    assert video["generation_max_attempts"] == 2
 
 
 def test_generator_prefers_contract_slo_over_looser_local_defaults():
@@ -18,7 +23,7 @@ def test_generator_prefers_contract_slo_over_looser_local_defaults():
 
     result = generator._generation_slo({"run_contract": build_run_contract("wechat")})
 
-    assert result == {"soft": 90, "hard": 180, "heartbeat": 15, "max_attempts": 2}
+    assert result == {"soft": 240, "hard": 420, "heartbeat": 15, "max_attempts": 1}
 
 
 def test_invalid_local_slo_is_normalized_for_nonproduction_drafts():
