@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from content_platform.hot_work_intelligence import (
@@ -470,3 +471,48 @@ def test_tiktok_cards_bind_visible_metric_copy_and_video_url():
     assert rows[0]["engagement"] == "14.3K"
     assert rows[0]["title"].startswith("Your job just got an AI assistant")
     assert rows[0]["url"] == "https://www.tiktok.com/@elowen.hu/video/7664520654162627862"
+
+
+def test_verified_logged_search_cache_round_trip_and_tamper_rejection(tmp_path):
+    from content_platform.hot_work_intelligence import load_logged_search_cache, save_logged_search_cache
+
+    text = tmp_path / "search.txt"
+    screenshot = tmp_path / "search.png"
+    text.write_text("visible TikTok AI workflow result", encoding="utf-8")
+    screenshot.write_bytes(b"png-evidence")
+    now = datetime(2026, 9, 6, 0, 30, tzinfo=timezone.utc)
+    rows = [{
+        "platform": "tiktok", "title": "AI workflow result", "url": "https://www.tiktok.com/@user/video/123",
+        "engagement": "14.3K", "captured_at": now.isoformat(), "evidence_strength": "strong_logged_search_result",
+    }]
+    status = {"status": "ok", "text_path": str(text), "screenshot_path": str(screenshot), "route": "direct"}
+
+    saved = save_logged_search_cache(tmp_path / "cache", "tiktok", "AI tools workflow", rows, status, now=now)
+    loaded = load_logged_search_cache(tmp_path / "cache", "tiktok", "AI tools workflow", now=now + timedelta(hours=1))
+
+    assert saved["saved"] is True
+    assert loaded["status"] == "ready"
+    assert loaded["rows"][0]["evidence_strength"] == "strong_cached_native_search"
+    text.write_text("tampered", encoding="utf-8")
+    assert load_logged_search_cache(tmp_path / "cache", "tiktok", "AI tools workflow", now=now + timedelta(hours=1))["status"] == "invalid"
+
+
+def test_verified_logged_search_cache_expires(tmp_path):
+    from content_platform.hot_work_intelligence import load_logged_search_cache, save_logged_search_cache
+
+    text = tmp_path / "search.txt"
+    screenshot = tmp_path / "search.png"
+    text.write_text("visible X AI workflow result", encoding="utf-8")
+    screenshot.write_bytes(b"png-evidence")
+    now = datetime(2026, 9, 6, 0, 30, tzinfo=timezone.utc)
+    rows = [{
+        "platform": "twitter", "title": "AI workflow result", "url": "https://x.com/user/status/123",
+        "engagement": "10K", "captured_at": now.isoformat(), "evidence_strength": "strong_logged_search_result",
+    }]
+    status = {"status": "ok", "text_path": str(text), "screenshot_path": str(screenshot), "route": "direct"}
+    save_logged_search_cache(tmp_path / "cache", "twitter", "AI workflow", rows, status, now=now)
+
+    loaded = load_logged_search_cache(tmp_path / "cache", "twitter", "AI workflow", max_age_hours=6, now=now + timedelta(hours=7))
+
+    assert loaded["status"] == "expired"
+    assert loaded["rows"] == []

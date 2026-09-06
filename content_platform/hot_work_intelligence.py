@@ -601,6 +601,109 @@ def logged_search_artifact_stem(platform: str, query: str) -> str:
     return f"{platform}_{readable}_{digest}_search"
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _logged_search_cache_path(cache_dir: str | Path, platform: str, query: str) -> Path:
+    digest = hashlib.sha256(f"{platform.casefold().strip()}\0{query.casefold().strip()}".encode("utf-8")).hexdigest()
+    return Path(cache_dir) / platform.casefold().strip() / f"{digest}.json"
+
+
+def save_logged_search_cache(
+    cache_dir: str | Path,
+    platform: str,
+    query: str,
+    rows: list[dict[str, Any]],
+    status: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    platform = platform.casefold().strip()
+    valid_rows = [
+        dict(row) for row in rows
+        if str(row.get("platform") or "").casefold() == platform
+        and _is_content_url(platform, str(row.get("url") or ""))
+        and _metric_number(row.get("engagement")) > 0
+        and str(row.get("captured_at") or "").strip()
+        and row.get("evidence_strength") in STRONG_EVIDENCE
+    ]
+    if status.get("status") != "ok" or not valid_rows:
+        return {"saved": False, "reason": "successful_contract_complete_rows_required"}
+    artifacts = []
+    for key in ("text_path", "screenshot_path"):
+        path = Path(str(status.get(key) or ""))
+        if not path.is_file() or path.is_symlink() or path.stat().st_size <= 0:
+            return {"saved": False, "reason": f"{key}_missing"}
+        artifacts.append({"kind": key, "path": str(path.resolve()), "sha256": _file_sha256(path)})
+    recorded_at = now or datetime.now(timezone.utc)
+    destination = _logged_search_cache_path(cache_dir, platform, query)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema": "verified_logged_search_cache_v1",
+        "platform": platform,
+        "query": query,
+        "recorded_at": recorded_at.astimezone(timezone.utc).isoformat(),
+        "route": str(status.get("route") or ""),
+        "rows": valid_rows,
+        "artifacts": artifacts,
+    }
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        temporary.chmod(0o600)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {"saved": True, "path": str(destination), "row_count": len(valid_rows)}
+
+
+def load_logged_search_cache(
+    cache_dir: str | Path,
+    platform: str,
+    query: str,
+    *,
+    max_age_hours: float = 6,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    platform = platform.casefold().strip()
+    path = _logged_search_cache_path(cache_dir, platform, query)
+    if not path.is_file() or path.is_symlink():
+        return {"status": "unavailable", "rows": [], "reason": "cache_missing"}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        recorded_at = datetime.fromisoformat(str(payload.get("recorded_at") or "").replace("Z", "+00:00"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {"status": "invalid", "rows": [], "reason": "cache_unreadable"}
+    current = now or datetime.now(timezone.utc)
+    age_seconds = (current.astimezone(timezone.utc) - recorded_at.astimezone(timezone.utc)).total_seconds()
+    if age_seconds < 0 or age_seconds > max_age_hours * 3600:
+        return {"status": "expired", "rows": [], "reason": "cache_outside_ttl"}
+    if payload.get("schema") != "verified_logged_search_cache_v1" or payload.get("platform") != platform or payload.get("query") != query:
+        return {"status": "invalid", "rows": [], "reason": "cache_identity_mismatch"}
+    for artifact in payload.get("artifacts") or []:
+        source = Path(str(artifact.get("path") or ""))
+        if not source.is_file() or source.is_symlink() or _file_sha256(source) != artifact.get("sha256"):
+            return {"status": "invalid", "rows": [], "reason": "cache_artifact_mismatch"}
+    rows = [dict(row) for row in payload.get("rows") or [] if isinstance(row, dict)]
+    if not rows or any(
+        str(row.get("platform") or "").casefold() != platform
+        or not _is_content_url(platform, str(row.get("url") or ""))
+        or _metric_number(row.get("engagement")) <= 0
+        for row in rows
+    ):
+        return {"status": "invalid", "rows": [], "reason": "cache_row_contract_failed"}
+    for row in rows:
+        row["source"] = f"{platform}_cached_logged_search"
+        row["evidence_strength"] = "strong_cached_native_search"
+        row["cache_recorded_at"] = payload["recorded_at"]
+    return {"status": "ready", "rows": rows, "reason": "", "path": str(path), "age_seconds": age_seconds}
+
+
 def needs_dynamic_content_wait(text: str) -> bool:
     visible = strip_markup(text)
     return len(visible) < 40
