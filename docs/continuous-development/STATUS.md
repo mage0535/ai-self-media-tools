@@ -1,15 +1,15 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-05 Asia/Shanghai (signed d79128c production activation and rollback rehearsal verified)
+Last updated: 2026-09-06 Asia/Shanghai (signed 2f4f612 production activation and platform trend Canaries verified)
 
 ## Current state
 
 - Phase: P10 real Canaries, deployment, rollback, and controlled activation
-- Production timers observed on 2026-09-05: all 11 related timers disabled/inactive.
-- Production release observed on 2026-09-05: `production-runtime-v8-d79128c-20260905`.
-- Production/GitHub commit: `d79128c93ae6f18c164b38ca1cf980a799d025f2`.
+- Production timers observed on 2026-09-06: all 11 related timers disabled/inactive.
+- Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
+- Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1639 passed + 37 subtests; JUnit 1676 tests, zero failures/errors.
+- Latest complete regression on this branch: 1661 passed + 37 subtests; JUnit 1698 tests, zero failures/errors.
 
 ## Active work
 
@@ -26,7 +26,7 @@ Last updated: 2026-09-05 Asia/Shanghai (signed d79128c production activation and
 | Delivery postcheck and ledger | Codex primary | trace/DAG/Pipeline/ledger/runtime adapter and P9 tests | local_complete | commit P9; verify real platform postchecks in P10 |
 | 12-platform Canary and deployment | Codex primary | P10 Canary/evidence files and four coordination documents | in_progress | run serial real platform Canaries; verify live publisher/draft/handoff boundaries before timer decision |
 | Hermes MCP child runtime convergence | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, `tests/test_deploy_release.py`, four coordination documents | deployed `d79128c` | complete: live MCP env, tool discovery, byte stability and rollback/forward verified |
-| Hot-work collector automatic auth/query routing | Codex primary | `content_platform/cli.py`, `content_platform/hot_work_intelligence.py`, focused tests, four coordination documents | in_progress | auto-resolve valid private state and platform-lane query defaults; rerun input preparation |
+| Hot-work collector automatic auth/query routing | Codex primary | platform collectors, parsers, cache, focused tests, four coordination documents | deployed `2f4f612` | 6/12 Canary inputs ready; resolve remaining platform evidence without fabrication |
 
 ## Server Blockers From The 2026-08-31 Audit
 

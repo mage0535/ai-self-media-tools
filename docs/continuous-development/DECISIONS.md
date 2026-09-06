@@ -255,3 +255,12 @@
 - Require a regular non-symlink private config and exactly one top-level MCP mapping, one content-platform entry and one env block. Ambiguity fails closed.
 - Snapshot original bytes and mode before mutation. On activation failure, restore Hermes config together with runtime config before restarting the old gateway.
 - Do not add a deployment dependency on the Hermes CLI or an undeclared YAML package. Validate the surgical transformation and the spawned process environment independently.
+
+## D34: Platform Trend Evidence Has Explicit Recovery Levels
+
+- Prefer current same-platform works with canonical content URLs, visible engagement, captured time, collector identity and source artifacts. An HTTP 200 with zero parsed works is `no_verified_results`, never `ok`.
+- First-party creator keywords and activities are a separate `official_keyword`/`official_activity` layer. They may improve topic scoring but never masquerade as a native associated-hotspot identity or a same-lane work.
+- Resolve valid private cookie state and platform-specific default queries deterministically. Try direct first; use CN/US proxy only after a classified platform/network failure and retain every route attempt.
+- A successful logged search may create a mode-600 private cache bound to platform, query, canonical URLs, visible metrics, capture time and source artifact SHA-256. Cache fallback is allowed only for transient platform errors within six hours; login failure, ordinary zero results, tampering, identity mismatch and expiry fail closed.
+- Platform-specific parsers are required when the content title and metrics live in a card context rather than link text. Never weaken canonical URL or positive engagement requirements to make a parser pass.
+- Automatic task admission remains blocked when no current lane-matched evidence exists. Retrying the platform, using a valid official reference, or eventually applying an explicitly allowed evergreen fallback is acceptable; cross-platform hotspot identity reuse is not.
