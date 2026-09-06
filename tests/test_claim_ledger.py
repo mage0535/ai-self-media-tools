@@ -61,6 +61,26 @@ def test_claim_gate_allows_non_quantitative_single_item_instructions() -> None:
     assert result["passed"] is True
 
 
+def test_claim_gate_allows_structural_counts_ordinals_and_step_ranges() -> None:
+    text = (
+        "常见的三个误区：第一个误区是把技能当成提示词。"
+        "第二个误区是堆叠工具。第三个误区是跳过验证。"
+        "把这个工作拆成3到7个步骤，再逐项检查。"
+    )
+
+    assert validate_claims(text, [])["passed"] is True
+
+
+def test_claim_gate_still_rejects_year_trend_tool_volume_and_time_savings() -> None:
+    result = validate_claims(
+        "2026年它会改变行业。很多人堆了几十个技能。这个流程每周节省3小时。",
+        [],
+    )
+
+    assert result["passed"] is False
+    assert "unsourced_numeric_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 
