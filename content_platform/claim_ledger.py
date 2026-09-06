@@ -47,6 +47,13 @@ def _has_external_attribution(sentence: str) -> bool:
     return False
 
 
+def _is_structural_count(sentence: str, match: re.Match[str]) -> bool:
+    if match.start() > 0 and sentence[match.start() - 1] == "第":
+        return True
+    following = sentence[match.end():match.end() + 8]
+    return bool(re.match(r"(?:步骤|误区|要点|方法|原则|阶段|部分|检查项|问题|建议)", following))
+
+
 def _sentences(text: str) -> list[str]:
     return [item.strip() for item in re.split(r"(?<=[。！？.!?])|\n+", str(text or "")) if item.strip()]
 
@@ -77,7 +84,8 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
     if str(text or "").count("```") % 2:
         failures.append("malformed_code_fence")
     for sentence in _sentences(text):
-        if NUMERIC_CLAIM.search(sentence):
+        numeric_matches = list(NUMERIC_CLAIM.finditer(sentence))
+        if any(not _is_structural_count(sentence, match) for match in numeric_matches):
             covered = _covered(sentence, ledger, first_person=False)
             findings.append({"type": "numeric", "text": sentence, "covered": covered})
             if not covered:
