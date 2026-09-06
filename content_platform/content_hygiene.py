@@ -9,12 +9,15 @@ _TECHNICAL_FILE_EXTENSION = r"(?:md|json|ya?ml|toml|py|js|ts|tsx|jsx|html|css|sh
 def normalize_generated_markdown(text):
     """Repair deterministic model formatting damage without rewriting prose."""
     value = str(text or "")
-    return re.sub(
+    value = re.sub(
         rf"\b([A-Za-z0-9_-]+)\.\s*\n\s*({_TECHNICAL_FILE_EXTENSION})\b",
         r"\1.\2",
         value,
         flags=re.I,
     )
+    if value.count("```") % 2:
+        value = value.rstrip() + "\n```"
+    return value
 
 
 def _tokens(text):
