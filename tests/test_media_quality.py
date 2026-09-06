@@ -2190,6 +2190,13 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     assert "step-by-step operating playbook" in workflow["expected_concepts"]
     assert "AI software agent" not in workflow["expected_concepts"]
 
+    module_format = MediaBridge._semantic_request(job, {
+        "role": "section",
+        "section": "CommonJS 导入与 ESM 模块格式不一致，需要配置对比",
+        "purpose": "show module format mismatch",
+    })
+    assert module_format["expected_concepts"][0] == "side-by-side software module format comparison"
+
 
 def test_cover_semantic_derivation_accepts_measured_v2_composite_contract(tmp_path):
     from content_platform.media import MediaBridge

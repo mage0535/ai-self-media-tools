@@ -100,6 +100,7 @@ _EDITORIAL_SIGNALS = (
 )
 
 _VISUAL_CONCEPT_GROUPS = (
+    (("commonjs", "esm", "模块格式", "module format", "import format"), "side-by-side software module format comparison"),
     (("ai", "人工智能", "大模型", "hermes", "智能体", "agent"), "AI software agent"),
     (("工作流", "流程", "标准操作流程", "workflow", "自动化", "automation"), "connected workflow task nodes"),
     (("agent skills", "skill", "skills", "操作手册", "sop"), "step-by-step operating playbook"),

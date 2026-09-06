@@ -13,7 +13,7 @@ from .tool_registry import ToolRegistry
 from .paths import agent_scripts_dir
 from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
-from .adapters.media import execute_article_media, normalize_article_sections
+from .adapters.media import ArticleMediaValidationError, execute_article_media, normalize_article_sections
 from .image_routing import route_image_request, visual_concepts
 
 try:
@@ -446,9 +446,10 @@ class MediaBridge:
                 if self.semantic_validation_required:
                     semantic = self._analyze_image_semantics(target, self._semantic_request(job, prompt_item))
                     if not semantic.get("passed"):
-                        raise RuntimeError(
+                        raise ArticleMediaValidationError(
                             "article image semantic validation failed: "
-                            + str(semantic.get("failure") or "semantic_mismatch")
+                            + str(semantic.get("failure") or "semantic_mismatch"),
+                            evidence=semantic,
                         )
                 selected_provider = str(provider_result.get("provider") or type(provider).__name__)
                 generated = selected_provider not in {"pexels", "pixabay", "stock"}
