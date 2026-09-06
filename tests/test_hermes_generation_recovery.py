@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from content_platform.generator import DraftGenerator, GenerationTimeoutError
+from content_platform.run_contract import build_run_contract
 
 
 class FakeProcess:
@@ -79,6 +80,23 @@ def test_hermes_command_uses_active_model_and_retries_hard_timeout_once(monkeypa
     attempts = json.loads((tmp_path / "generation_attempts.json").read_text(encoding="utf-8"))
     assert [row["status"] for row in attempts] == ["hard_timeout", "success"]
     assert all("prompt" not in row for row in attempts)
+
+
+def test_article_run_contract_does_not_retry_complete_draft_after_hard_timeout(monkeypatch):
+    generator = DraftGenerator({"provider": "hermes-cli"})
+    calls = []
+
+    def timeout(*args, **kwargs):
+        calls.append(kwargs.get("retry"))
+        raise GenerationTimeoutError("hard timeout")
+
+    monkeypatch.setattr(generator, "_hermes_attempt", timeout)
+    brief = {"platform": "juejin", "run_contract": build_run_contract("juejin")}
+
+    with pytest.raises(GenerationTimeoutError):
+        generator._hermes("topic", brief, {"language": "zh", "platform_rules": ""})
+
+    assert calls == [False]
 
 
 def test_canary_command_uses_verified_dynamic_selectors_and_records_identity(monkeypatch, tmp_path):
