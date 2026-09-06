@@ -10,7 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -41,10 +41,43 @@ PLATFORM_DEFAULT_QUERIES: dict[str, tuple[str, ...]] = {
     "zhihu": ("AI工具 工作流", "AI Agent 实测"),
 }
 
+DOUYIN_AI_SPECIFIC = ("ai工具", "ai agent", "智能体", "大模型", "工作流", "自动化", "效率工具", "人工智能工具")
+DOUYIN_PET_SPECIFIC = ("猫", "狗", "宠物", "萌宠", "铲屎官")
+
 
 def default_platform_queries(platform: str) -> list[str]:
     normalized = str(platform or "").casefold().strip()
     return list(PLATFORM_DEFAULT_QUERIES.get(normalized, ("AI工具 工作流",)))
+
+
+def filter_douyin_official_board(rows: list[dict[str, Any]], platform: str) -> list[dict[str, Any]]:
+    normalized = str(platform or "").casefold().strip()
+    tokens = DOUYIN_PET_SPECIFIC if normalized == "douyin_pet" else DOUYIN_AI_SPECIFIC
+    return [dict(row) for row in rows if any(token in str(row.get("title") or "").casefold() for token in tokens)]
+
+
+def build_douyin_official_row(rows: list[dict[str, Any]], platform: str, *, captured_at: datetime | None = None) -> dict[str, Any]:
+    current = captured_at or datetime.now(timezone.utc)
+    selected = filter_douyin_official_board(rows, platform)
+    if not selected:
+        return {}
+    snapshot_hash = hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return {
+        "platform": str(platform).casefold(),
+        "status": "verified",
+        "signal_type": "hot_list",
+        "evidence_type": "official_keyword",
+        "signals": [str(row.get("title") or "") for row in selected],
+        "signal_details": [{"title": row.get("title"), "heat": row.get("points", 0), "rank": row.get("rank", 0)} for row in selected],
+        "official_url": "https://www.douyin.com/aweme/v1/hot/search/list/",
+        "final_url": "https://www.douyin.com/aweme/v1/hot/search/list/",
+        "captured_at": current.astimezone(timezone.utc).isoformat(),
+        "expires_at": (current.astimezone(timezone.utc) + timedelta(hours=6)).isoformat(),
+        "evidence_sha256": snapshot_hash,
+        "raw_snapshot_sha256": snapshot_hash,
+        "collector": "douyin_official_hot_board",
+        "native_verified": False,
+    }
 
 
 def resolve_logged_search_state(
@@ -562,7 +595,7 @@ def finalize_shipinhao_hot_work_evidence(
     lowered = str(text or "").casefold()
     login_markers = ("扫码登录", "微信登录", "登录后", "login", "二维码")
     error_markers = ("服务器出错", "刷新重试", "请求过于频繁", "访问验证", "安全验证", "challenge", "captcha")
-    if any(token in lowered for token in login_markers):
+    if "/login" in urllib.parse.urlsplit(str(page_url or "")).path.casefold() or any(token in lowered for token in login_markers):
         status["status"] = "login_required_or_captcha"
         return [], status
     if any(token in lowered for token in error_markers):
