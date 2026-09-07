@@ -1,4 +1,5 @@
 from content_platform.claim_ledger import (
+    append_verified_sources,
     compile_verified_claim_ledger,
     restore_verified_domains,
     sanitize_unsupported_claims,
@@ -155,6 +156,24 @@ def test_claim_gate_allows_product_named_operational_advice() -> None:
     result = validate_claims("先为 Claude Code 写一份操作手册，再把成片发布到抖音草稿箱。", [])
 
     assert result["passed"] is True
+
+
+def test_verified_source_appendix_is_deduplicated_and_geo_readable() -> None:
+    body = "## 核心结论\n先确认来源，再执行任务。"
+    ledger = [
+        {"claim": "规范事实 A", "source_url": "https://agentskills.io/specification", "verified": True},
+        {"claim": "规范事实 B", "source_url": "https://agentskills.io/specification", "verified": True},
+        {"claim": "热门作品", "source_url": "https://juejin.cn/post/123", "verified": True},
+        {"claim": "无效来源", "source_url": "file:///tmp/private", "verified": True},
+    ]
+
+    result = append_verified_sources(body, ledger)
+
+    assert result.count("https://agentskills.io/specification") == 1
+    assert result.count("https://juejin.cn/post/123") == 1
+    assert "file:///" not in result
+    assert "## 参考来源" in result
+    assert result.count("\n- [") == 2
 
 
 def test_verified_hotspot_text_compiles_to_claim_ledger_but_incomplete_evidence_does_not() -> None:

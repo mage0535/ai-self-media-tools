@@ -530,6 +530,34 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(step["reason_code"], "generated_article_structure_failed")
         media.assert_not_called()
 
+    def test_article_appends_verified_sources_before_geo_and_quality_gate(self):
+        body = (
+            "## 核心结论\n先解释目录约定。\n\n"
+            "## 文件结构\n再说明入口文件。\n\n"
+            "## 执行检查\n最后核对输出。"
+        )
+        source = {
+            "claim": "Agent Skill 是一个目录。",
+            "source_url": "https://agentskills.io/specification",
+            "evidence_path": "sources/specification.md",
+            "provenance_hash": "a" * 64,
+            "verified": True,
+        }
+        job = self.pipeline.create(
+            "Agent Skills", ["juejin"], {"content_form": "article", "claim_ledger": [source]}
+        )
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Agent Skills", "body": body,
+            "draft_meta": {"claim_ledger": [source], "content_form": "article", "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        self.assertIn("## 参考来源", current["body"])
+        self.assertIn("https://agentskills.io/specification", current["body"])
+        self.assertTrue(current["draft_meta"]["geo_details"]["checks"]["claims_with_sources"])
+        self.assertTrue(current["draft_meta"]["geo_details"]["checks"]["structured_list"])
+
     def test_claim_sanitization_recompiles_cover_from_clean_copy(self):
         body = (
             "## 明确场景\n先明确工作场景，再拆解输入、步骤、输出和失败恢复条件。"

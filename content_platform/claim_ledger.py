@@ -223,3 +223,25 @@ def sanitize_unsupported_claims(text: str, findings: list[dict[str, Any]] | None
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def append_verified_sources(text: str, ledger: list[dict[str, Any]] | None) -> str:
+    """Append a compact Markdown source list from verified public URLs."""
+    value = str(text or "").rstrip()
+    if re.search(r"(?m)^##\s+(?:参考来源|References?)\s*$", value, flags=re.I):
+        return value
+    rows = []
+    seen = set()
+    for row in ledger or []:
+        if not isinstance(row, dict) or row.get("verified") is not True:
+            continue
+        url = str(row.get("source_url") or "").strip()
+        if not url.startswith(("https://", "http://")) or url in seen:
+            continue
+        seen.add(url)
+        label = str(row.get("source_title") or row.get("source_type") or row.get("claim") or "来源").strip()
+        label = re.sub(r"[\[\]\n\r]+", " ", label)[:48].strip() or "来源"
+        rows.append(f"- [{label}]({url})")
+    if not rows:
+        return value
+    return value + "\n\n## 参考来源\n\n" + "\n".join(rows)

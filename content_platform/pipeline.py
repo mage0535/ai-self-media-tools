@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .compliance import ComplianceChecker
-from .claim_ledger import compile_verified_claim_ledger, restore_verified_domains, sanitize_unsupported_claims, validate_claims
+from .claim_ledger import append_verified_sources, compile_verified_claim_ledger, restore_verified_domains, sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic, normalize_generated_markdown, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
@@ -600,6 +600,12 @@ class Pipeline:
                     or brief.get("content_form")
                     or ""
                 ).casefold()
+                if (
+                    article_platforms.intersection({str(item).casefold() for item in job.get("platforms") or []})
+                    and "article" in content_form
+                ):
+                    draft["body"] = append_verified_sources(draft.get("body") or "", claim_ledger)
+                    text = str(draft.get("title") or "") + "\n" + str(draft.get("body") or "")
                 if (
                     brief.get("automated_workflow")
                     and article_platforms.intersection({str(item).casefold() for item in job.get("platforms") or []})
