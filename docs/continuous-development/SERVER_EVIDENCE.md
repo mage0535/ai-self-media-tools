@@ -484,3 +484,12 @@ Observed read-only on 2026-08-31.
 - Manual review found joined H2/prose lines and internal source labels. It did not find the v28 Unicode YAML/list defect because the new draft contained no such block.
 - `72f76e5` adds constrained heading/prose splitting and reader-facing source labels. Red/green focused tests passed; related 192 passed. Full `p10-reader-facing-article-copy.xml`: 1722 passed plus 37 subtests in 313.97 seconds; privacy 581/0 and license 65/0.
 - v29 remains a safe local Task9 package, not a real Juejin draft. Linux verification and deterministic offline revalidation are next; production and timers were unchanged.
+
+## 2026-09-08 Juejin v30 Claim-Coverage Evidence
+
+- Linux reader-facing content/Pipeline subset at `2b4de36` passed 117 tests with zero failures/errors in 251.248 seconds.
+- v30 dynamically followed Hermes back to `opencode-go/mimo-v2.5`. Generation succeeded and media began, but cover semantic validation failed three attempts. No delivery occurred.
+- The generated body contained unsupported token counts, an approximate client count/support list, no-fee/no-registration promises and a split `agentskills.io` domain. The stored and freshly recomputed claim gate incorrectly passed because these syntax variants were not recognized.
+- `c16d943` adds exact v30 red/green tests for token/count modifiers, reverse product attribution, Chinese promotional promises and source-URL domain restoration.
+- Related suite: 165 passed. Full `p10-v30-claim-coverage.xml`: 1724 passed plus 37 subtests in 306.58 seconds. Project/privacy audit 581/0; license audit 65/0.
+- v30 is rejected. Linux verification and one final fresh Juejin run are required; production release and timers remain unchanged.

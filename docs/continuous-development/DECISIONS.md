@@ -350,3 +350,10 @@
 - Verified source appendices use stable reader-facing labels for known source types. Internal enum values are implementation evidence, not article copy.
 - Weak-model H2 lines may be split from an attached opening sentence only for explicit sentence openers and only outside fenced code. Ambiguous headings remain unchanged for a gate or manual review.
 - A machine-green candidate is not rerun automatically when deterministic post-processing can be applied and independently revalidated; avoid unnecessary provider cost and variance.
+
+## D48: Claim Detection Covers Units, Modifiers And Reverse Attribution
+
+- Numeric claims include token counts and approximate classifiers such as `20 多个`; exact values require evidence.
+- Product/client support attribution is factual whether the action appears after the product or before a list of products.
+- Chinese no-fee/no-registration/no-specific-plugin promises are promotional claims and require evidence.
+- Verified domains may be recovered from a verified row's source URL as well as its claim text. Do not use unverified URLs for repair.
