@@ -39,6 +39,7 @@ PLATFORM_TREND_CLAIM = re.compile(
 UNSUPPORTED_TECHNICAL_MECHANISM = re.compile(
     r"(?:Agent\s+Skills?[^。！？.!?\n]{0,48}(?:程序性记忆|跨会话(?:自动)?学习|不占上下文|持久化经验)|"
     r"(?:AI|Agent\s+Skills?|Skills?|SKILL\.md|\.agent/)[^。！？\n]{0,120}(?:每次启动|触发条件|自动加载|自动触发|自动注入|跨项目|项目根目录|\.agent/skills)|"
+    r"Agent[^。！？\n]{0,120}(?:知道[^。！？\n]{0,32}调用|先看[^。！？\n]{0,32}(?:名称|描述)|判断[^。！？\n]{0,32}(?:加载|相关)|读取[^。！？\n]{0,32}(?:资源|脚本|参考))|"
     r"(?:系统|Agent|Skills?)[^。！？.!?\n]{0,36}(?:自动提炼(?:新)?\s*Skill|从执行结果中自动(?:学习|提炼)))",
     re.I,
 )

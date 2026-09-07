@@ -53,6 +53,18 @@ def test_article_media_keeps_short_question_headings_and_excludes_source_appendi
     assert sections == ["Skill到底是什么？", "怎么写？", "如何加载？"]
 
 
+def test_article_section_image_is_normalized_to_requested_dimensions(tmp_path):
+    source = tmp_path / "section.png"
+    Image.new("RGB", (1024, 1024), (40, 80, 120)).save(source)
+
+    result = MediaBridge._normalize_article_image(source, (1200, 800))
+
+    with Image.open(source) as image:
+        assert image.size == (1200, 800)
+    assert result["passed"] is True
+    assert result["dimensions"] == [1200, 800]
+
+
 def test_image_checkpoint_contract_is_declared_in_media_bridge_source():
     source = Path(MediaBridge.__module__.replace(".", "/") + ".py")
     project = Path(__file__).resolve().parents[1]
