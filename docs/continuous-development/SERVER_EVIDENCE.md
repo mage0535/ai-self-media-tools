@@ -390,3 +390,11 @@ Observed read-only on 2026-08-31.
 - Focused regression after the ordering correction: 154 passed. Full `p10-final-copy-gate.xml`: 1702 passed plus 37 subtests in 299.65 seconds. Project/privacy audit 581/0; license audit 65/0; diff check clean.
 - v19 was not sent to the real Juejin draft publisher. Commit `3c5de37` still requires Linux staging verification and a clean v20 real generation before any draft upload/readback.
 - Offline staging re-evaluation repaired inline fences, comma-only YAML, `.agent` and `package.json`, and rejected the unverified repository endorsement. It also revealed that `SKILL.md` stopped the mechanism regex at its period; red/green follow-up `fd1e9c0` covers the exact v19 sentence and `.agent/skills` path. Focused 154 passed; full `p10-final-copy-gate-v2.xml` remained 1702 passed plus 37 subtests in 295.34 seconds, with privacy 581/0 and license 65/0.
+
+## 2026-09-07 Juejin v20 Bounded Retry Evidence
+
+- v20 ran on Linux staging `efa54fb` with dynamically discovered `opencode-go/mimo-v2.5`. Attempt one: prompt length 7,617, hard timeout at 420 seconds. Attempt two: prompt length 5,603, hard timeout at 180 seconds. Heartbeat transitions were recorded every 15 seconds; the second attempt began automatically.
+- Final state was failed with `GenerationTimeoutError: Hermes hard deadline exceeded`. No artifact directory content, image generation or publisher invocation occurred. This is truthful timeout containment, not a completed content Canary.
+- A new red test measured the retry at 6,638 characters under large platform/style/rule inputs. `b63547e` implements a retry-only minimal prompt and a 3,072-byte compiled-context cap; the test then passed below 4,000 characters while retaining topic, `claim_ledger` and the 1,200-1,800 character requirement.
+- Focused generation/recovery/Pipeline suite: 139 passed in 44.82 seconds. Full `p10-compact-final-retry.xml`: 1703 passed plus 37 subtests in 298.66 seconds. Project/privacy audit 581 files and zero issues; license audit 65 capabilities and zero issues.
+- Linux verification and a clean v21 are required. Production release, gateway roots, shared database and timers were not changed.

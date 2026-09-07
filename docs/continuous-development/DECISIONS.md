@@ -280,3 +280,10 @@
 - Known model formatting damage may be repaired deterministically without changing prose meaning: fenced-block line boundaries, comma-only YAML corruption, split hidden-directory identifiers and the observed `packageon` corruption.
 - Repository endorsements and Agent Skills loading/trigger mechanisms are factual claims. They require verified ledger evidence; otherwise they are sanitized or the task is blocked.
 - Dotted technical identifiers are content, not sentence boundaries. Claim patterns must handle `SKILL.md` and `.agent/skills` without stopping at the embedded period.
+
+## D37: A Final Retry Uses A Minimal Verified Contract
+
+- The normal generation attempt keeps full platform, hook, style and compiled-skill context. Quality is not globally reduced to improve latency.
+- After a bounded hard timeout, the one final retry includes only the JSON output contract, language, factual boundary, content length, a compact platform-rule summary, one hook reference and a 3,072-byte verified generation context.
+- The retry must retain the selected topic and claim ledger and must not repeat the full methodology/style corpus. Both attempts remain bound by heartbeats, process-group termination and recorded prompt hashes/lengths.
+- A second hard timeout is a real terminal failure. Do not add unbounded retries or silently use fallback copy.

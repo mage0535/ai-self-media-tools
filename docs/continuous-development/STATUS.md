@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v19 final-copy gate locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v20 bounded-retry failure converted to tested recovery)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v19 final-copy gate locally verif
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1702 passed + 37 subtests; JUnit 1739 tests, zero failures/errors.
+- Latest complete regression on this branch: 1703 passed + 37 subtests; JUnit 1740 tests, zero failures/errors.
 
 ## Active work
 
@@ -30,6 +30,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v19 final-copy gate locally verif
 | Deterministic abstract-media fallback | Codex primary | `content_platform/deterministic_visual.py`, `content_platform/media.py`, `tests/test_deterministic_visual.py`, media-focused tests | committed through `7d6f3e6` | rerun real Juejin Canary after staging sync |
 | Article recovery and final-copy truth gate | Codex primary | claim/content policy/Pipeline/Task9 Canary and focused tests | committed `4b141c4` | Linux regression, v18 probe refresh, then clean Juejin Canary |
 | Final generated-copy artifact gate | Codex primary | content hygiene/claim ledger/Pipeline and regression tests | committed `3c5de37`, `fd1e9c0` | Linux regression, v19 offline re-evaluation, then clean Juejin v20 |
+| Minimal final Hermes retry | Codex primary | generator retry prompt and recovery tests | committed `b63547e` | Linux recovery regression and clean Juejin v21 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -232,3 +233,10 @@ These describe the audited production release, not the current development code.
 - Fresh focused regression: 154 passed. Fresh full regression: 1702 passed plus 37 subtests in 299.65 seconds. Privacy audit: 581 files and zero issues. License audit: 65 capabilities and zero issues.
 - v19 is evidence of a caught gate defect, not an accepted publication. Linux verification and a new v20 real generation remain required.
 - Offline v19 re-evaluation after `3c5de37` repaired all four observed formatting corruptions and rejected the repository endorsement. Follow-up `fd1e9c0` is required because a dotted `SKILL.md` token initially evaded the loading-mechanism pattern; full regression remained 1702 passed plus 37 subtests.
+
+## 2026-09-07 Juejin v20 Timeout Finding
+
+- v20 used the current Hermes `opencode-go/mimo-v2.5`. Attempt one reached its 420-second hard limit with regular 15-second heartbeats; attempt two started automatically but its 5,603-character prompt also reached the 180-second hard limit.
+- The task failed explicitly with `GenerationTimeoutError`; it created no media and made no delivery attempt. This proves bounded termination, but not successful recovery.
+- `b63547e` gives only the retry a minimal prompt: output contract, language, factual boundary, article length, 500-byte platform rules, one 240-byte hook reference and at most 3,072 bytes of compiled verified context. The normal first attempt remains unchanged.
+- Red test observed a 6,638-character retry prompt; green test requires under 4,000 characters and retained topic, claim ledger and length contract. Focused generation/Pipeline tests: 139 passed. Full: 1703 passed plus 37 subtests in 298.66 seconds. Privacy 581/0; license 65/0.
