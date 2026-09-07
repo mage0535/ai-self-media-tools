@@ -2156,6 +2156,32 @@ def test_cover_semantic_request_uses_visual_concepts_not_only_full_marketing_tit
     assert any("workflow" in value.casefold() for value in request["expected_concepts"])
 
 
+def test_cover_semantic_request_prefers_explicit_direction_concepts_over_body_side_topics():
+    from content_platform.media import MediaBridge
+
+    job = {
+        "topic": "Agent Skills 教程",
+        "title": "别再重复写 Prompt",
+        "body": "先检索资料，再把工作流写进操作手册。",
+        "platforms": ["juejin"],
+        "draft_meta": {
+            "cover_design": {
+                "semantic_concepts": [
+                    "connected workflow task nodes",
+                    "step-by-step operating playbook",
+                ],
+            },
+        },
+    }
+
+    request = MediaBridge._semantic_request(job, {"role": "cover", "expected_concepts": [job["topic"]]})
+
+    assert request["expected_concepts"] == [
+        "connected workflow task nodes",
+        "step-by-step operating playbook",
+    ]
+
+
 def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     from content_platform.media import MediaBridge
 

@@ -747,6 +747,10 @@ class MediaBridge:
         if role == "cover":
             meta = job.get("draft_meta") if isinstance(job.get("draft_meta"), dict) else {}
             design = meta.get("cover_design") if isinstance(meta.get("cover_design"), dict) else {}
+            design_concepts = [
+                str(value).strip() for value in (design.get("semantic_concepts") or [])
+                if str(value).strip()
+            ]
             concept_text = " ".join([
                 str(job.get("topic") or ""), str(job.get("title") or ""),
                 str(job.get("body") or "")[:800], str(design.get("visual_subject") or ""),
@@ -763,7 +767,7 @@ class MediaBridge:
                     token in value.casefold() for token in ("dashboard", "workflow", "diagram", "office", "agent")
                 )
             ]
-            values = concise_visual or visual_concepts(concept_text) or supplied
+            values = design_concepts or concise_visual or visual_concepts(concept_text) or supplied
         else:
             section_text = " ".join([str(item.get("section") or ""), str(item.get("purpose") or "")])
             topic_text = " ".join([str(job.get("topic") or ""), str(job.get("title") or "")])

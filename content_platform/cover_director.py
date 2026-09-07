@@ -69,6 +69,7 @@ def build_cover_direction(
     )
     if not mascot_only and visual_cue not in focal_subjects:
         focal_subjects.insert(0, visual_cue)
+    semantic_concepts = _cover_semantic_concepts(text, mascot_only)
     prompt = (
         f"cinematic advertising key art for {subject}; {treatment.replace('_', ' ')}; "
         f"platform mood {profile['id'].replace('_', ' ')}; layout {layout.replace('_', ' ')}; "
@@ -93,6 +94,7 @@ def build_cover_direction(
         "hook": title_text,
         "conflict_or_payoff": subtitle,
         "focal_subjects": focal_subjects,
+        "semantic_concepts": semantic_concepts,
         "content_match_reason": "platform profile, topic promise, and content payoff compiled into one poster direction",
         "safe_zone_verified": True,
         "degraded": False,
@@ -224,6 +226,16 @@ def _cover_visual_cue(text: str, fallback: str) -> str:
     if any(token in text for token in ("工作流", "workflow", "自动化", "automation")):
         return "connected workflow task nodes with visible inputs, outputs, and verification status"
     return fallback
+
+
+def _cover_semantic_concepts(text: str, mascot_only: bool) -> list[str]:
+    if mascot_only:
+        return ["cat and dog", "human working"]
+    if any(token in text for token in ("agent skills", "操作手册", "skill 文件", "skill.md", "sop")):
+        return ["connected workflow task nodes", "step-by-step operating playbook"]
+    if any(token in text for token in ("工作流", "workflow", "自动化", "automation")):
+        return ["connected workflow task nodes"]
+    return []
 
 
 def _treatment(text: str, profile: str) -> str:
