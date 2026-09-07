@@ -78,6 +78,28 @@ def test_deterministic_editorial_visual_has_explicit_ai_agent_orchestration_layo
     assert output.is_file()
 
 
+def test_deterministic_editorial_visual_varies_layout_for_document_and_resource_sections(tmp_path):
+    from content_platform.deterministic_visual import render_editorial_visual
+
+    document = tmp_path / "document.png"
+    resources = tmp_path / "resources.png"
+    shared = {
+        "role": "section", "size": (1200, 800),
+        "concepts": ["step-by-step operating playbook"], "accent": "#1E80FF",
+    }
+
+    document_evidence = render_editorial_visual(
+        document, title="SKILL.md 怎么写", subtitle="YAML frontmatter + Markdown", **shared
+    )
+    resource_evidence = render_editorial_visual(
+        resources, title="可选资源目录", subtitle="scripts references assets", **shared
+    )
+
+    assert document_evidence["layout"] == "document_anatomy"
+    assert resource_evidence["layout"] == "resource_stack"
+    assert _sha(document) != _sha(resources)
+
+
 def test_media_bridge_uses_deterministic_fallback_only_for_abstract_final_attempt():
     from content_platform.media import MediaBridge
 

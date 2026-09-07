@@ -109,6 +109,36 @@ def _dashboard(draw, width, height, accent):
             _arrow(draw, (width // 2, y + 52), (width // 2, y + int(height * 0.13)), accent, 5)
 
 
+def _document_anatomy(draw, width, height, accent):
+    margin = int(width * 0.12)
+    top = int(height * 0.14)
+    _panel(draw, (margin, top, width - margin, int(height * 0.86)), outline=accent)
+    draw.text((margin + 38, top + 30), "SKILL.md", font=_font(38, bold=True), fill=(238, 245, 252))
+    sections = (("YAML FRONTMATTER", accent), ("MARKDOWN INSTRUCTIONS", (118, 143, 169)))
+    for index, (label, color) in enumerate(sections):
+        y = top + 120 + index * int(height * 0.25)
+        draw.rounded_rectangle((margin + 38, y, width - margin - 38, y + int(height * 0.18)), radius=18, fill=(8, 18, 31), outline=color, width=3)
+        draw.text((margin + 68, y + 24), label, font=_font(27, bold=True), fill=color)
+        for row in range(2):
+            line_y = y + 78 + row * 28
+            draw.rounded_rectangle((margin + 68, line_y, width - margin - 90 - row * 80, line_y + 12), radius=6, fill=(102, 128, 155))
+
+
+def _resource_stack(draw, width, height, accent):
+    labels = ("SCRIPTS", "REFERENCES", "ASSETS")
+    margin = int(width * 0.09)
+    top = int(height * 0.20)
+    card_h = int(height * 0.17)
+    for index, label in enumerate(labels):
+        x = margin + index * int(width * 0.29)
+        y = top + index * int(height * 0.12)
+        _panel(draw, (x, y, x + int(width * 0.28), y + card_h), fill=(9, 22, 39), outline=accent, radius=22, width=3)
+        draw.rounded_rectangle((x + 24, y + 24, x + 72, y + 72), radius=10, fill=accent)
+        draw.text((x + 92, y + 29), label, font=_font(24, bold=True), fill=(235, 243, 251))
+    _arrow(draw, (margin + int(width * 0.14), int(height * 0.70)), (width - margin - int(width * 0.08), int(height * 0.70)), accent, 7)
+    draw.text((margin, int(height * 0.75)), "LOAD ONLY WHEN NEEDED", font=_font(27, bold=True), fill=accent)
+
+
 def _agent_orchestrator(draw, width, height, accent):
     center_x, center_y = width // 2, height // 2
     center = (center_x - 190, center_y - 105, center_x + 190, center_y + 105)
@@ -162,7 +192,14 @@ def render_editorial_visual(
         draw.line((0, y, width, y), fill=(10, 24, 41), width=1)
 
     joined = " ".join(str(item).casefold() for item in concepts)
-    if "ai software agent" in joined:
+    semantic_text = " ".join((str(title), str(subtitle), joined)).casefold()
+    if any(token in semantic_text for token in ("scripts", "references", "assets", "资源目录")):
+        layout = "resource_stack"
+        _resource_stack(draw, width, height, accent_rgb)
+    elif any(token in semantic_text for token in ("skill.md", "frontmatter", "yaml", "markdown")):
+        layout = "document_anatomy"
+        _document_anatomy(draw, width, height, accent_rgb)
+    elif "ai software agent" in joined:
         layout = "ai_agent_orchestrator"
         _agent_orchestrator(draw, width, height, accent_rgb)
     elif "module format comparison" in joined:
