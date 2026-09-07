@@ -66,4 +66,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin v20 proved the old 5,603-character retry could still time out. Commit `b63547e` retains the full first attempt but uses a minimal verified-context contract for the final bounded retry.
 - Juejin v21 proved that a hot-title snapshot is insufficient evidence for a technical tutorial. Commit `4ce550d` requires a hash-bound technical fact pack and three readable H2 sections before article media.
 - Audit then proved Task9 cases were not setting production runtime mode. Commit `6bcdcaa` makes every real Pipeline Canary exercise production admission and restores the caller environment afterward.
+- Juejin v22 passed production admission and official fact-pack loading but exposed an unmatched prose quote. Commit `a162adb` safely repairs unmatched non-code quotes and persists complete blocked drafts for deterministic recovery.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
