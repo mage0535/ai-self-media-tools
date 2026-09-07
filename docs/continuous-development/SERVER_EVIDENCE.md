@@ -459,3 +459,11 @@ Observed read-only on 2026-08-31.
 - `91adeec` adds `document_anatomy` and `resource_stack` layouts, routes on title/subtitle plus concepts, adds lock-protected per-asset checksum claims/retries, persists duplicate retry evidence, and corrects ASCII boundaries for technical filenames.
 - New red/green tests cover all three defects. Related suite: 263 passed. Full `p10-deterministic-visual-diversity.xml`: 1716 passed plus 37 subtests in 314.67 seconds; project/privacy audit 581/0 and license 65/0.
 - v26 was not delivered. Linux verification and v27 remain required; production release and timers were unchanged.
+
+## 2026-09-07 Juejin v27 Heading-Preservation Evidence
+
+- Linux deterministic-visual/media subset at `f9f3655` passed 126 tests. v27 produced a final body with three content H2 headings plus a verified references appendix.
+- Media normalization returned two sections because it merged all three short/question headings into one and kept `参考来源` as the second. Article media failed before provider calls; no delivery occurred.
+- Red/green `adca5ef` keeps the three content headings distinct and excludes references headings. Existing heading-and-body-on-one-line and metadata fallback tests remain green.
+- Focused article media: 9 passed. Related suite: 264 passed. Full `p10-article-heading-preservation.xml`: 1717 passed plus 37 subtests in 313.14 seconds; project/privacy audit 581/0 and license 65/0.
+- Linux verification and v28 remain required. Production release and timers were unchanged.

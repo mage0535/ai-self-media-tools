@@ -71,4 +71,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin v24 passed facts/structure but failed GEO because verified sources were not rendered. Commit `13c4634` appends a deduplicated public source list from the claim ledger before GEO and media.
 - Juejin v25 exposed a Chinese classifier-ellipsis false positive. Commit `600a011` permits complete verb phrases such as `跑顺一个，再做下一个` while retaining real fragment checks.
 - Juejin v26 reached media but exposed identical deterministic fallback images. Commit `91adeec` adds semantic layout variants, per-asset duplicate retry and Chinese-adjacent filename repair.
+- Juejin v27 exposed short H2 headings being merged and the references appendix being illustrated. Commit `adca5ef` preserves body headings and excludes source sections from media mapping.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v26 deterministic visual diversity locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v27 article heading preservation locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v26 deterministic visual diversit
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1716 passed + 37 subtests; JUnit 1753 tests, zero failures/errors.
+- Latest complete regression on this branch: 1717 passed + 37 subtests; JUnit 1754 tests, zero failures/errors.
 
 ## Active work
 
@@ -38,6 +38,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v26 deterministic visual diversit
 | Verified article source appendix | Codex primary | claim ledger/Pipeline/GEO tests | committed `13c4634` | Linux source/GEO regression and clean Juejin v25 |
 | Chinese fragment precision | Codex primary | content hygiene and tests | committed `600a011` | Linux hygiene regression and clean Juejin v26 |
 | Deterministic visual diversity and per-asset dedupe | Codex primary | deterministic visual/article media/content normalization | committed `91adeec` | Linux media regression and clean Juejin v27 |
+| Article heading preservation | Codex primary | article media section normalization and tests | committed `adca5ef` | Linux regression and clean Juejin v28 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -296,3 +297,10 @@ These describe the audited production release, not the current development code.
 - Root causes: the deterministic renderer mapped every `step-by-step operating playbook` concept to one fixed workflow layout; duplicate SHA was checked only after all four assets; `SKILL.\nmd` next to Chinese evaded filename repair because both sides were Unicode word characters.
 - `91adeec` adds document-anatomy and resource-stack layouts selected from final title/subtitle semantics, claims checksums under a lock per asset and retries duplicates immediately, preserves duplicate failures after eventual success, and repairs ASCII technical extensions adjacent to Chinese.
 - Focused new tests: 3 passed. Related media/text/Pipeline suite: 263 passed. Full: 1716 passed plus 37 subtests in 314.67 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-07 Juejin v27 Section-Normalization Result
+
+- v27 passed production admission and generation, then failed before media with fewer than three mapped sections.
+- Final body contained three valid content H2 headings plus `参考来源`. The media normalizer merged the short question headings as if they were transition prose and then retained the source appendix, producing only two sections.
+- `adca5ef` returns three or more final body headings directly without transition merging and excludes `参考来源`, `参考资料` and `References` headings from illustration mapping. Metadata fallback behavior remains for bodies with fewer than three headings.
+- Focused article media tests: 9 passed. Related suite: 264 passed. Full: 1717 passed plus 37 subtests in 313.14 seconds. Privacy 581/0; license 65/0.
