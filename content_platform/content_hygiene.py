@@ -14,6 +14,18 @@ def normalize_generated_markdown(text):
     value = re.sub(r"(?m)^\s*,\s*$\n?", "", value)
     value = re.sub(r"\.\s*\n\s*([A-Za-z][A-Za-z0-9_-]*/)", r".\1", value)
     value = re.sub(r"\bpackageon\b", "package.json", value, flags=re.I)
+    fenced_parts = re.split(r"(```.*?```|~~~.*?~~~)", value, flags=re.S)
+    for index in range(0, len(fenced_parts), 2):
+        prose = fenced_parts[index]
+        without_contractions = re.sub(r"(?<=\w)'(?=\w)", "", prose)
+        for quote in ('"', "'"):
+            if without_contractions.count(quote) % 2:
+                position = prose.rfind(quote)
+                if position >= 0:
+                    prose = prose[:position] + prose[position + 1:]
+                    without_contractions = re.sub(r"(?<=\w)'(?=\w)", "", prose)
+        fenced_parts[index] = prose
+    value = "".join(fenced_parts)
     value = re.sub(r"!\s*\n?\s*\[\s*\]\(\s*\)", "", value)
     value = re.sub(r"(?m)^\s*!\s*$", "", value)
     value = re.sub(

@@ -577,6 +577,15 @@ class Pipeline:
                 )
                 draft["draft_meta"]["generated_text_hygiene"] = final_text_hygiene
                 if brief.get("automated_workflow") and not final_text_hygiene.get("passed"):
+                    self.store.save_draft(
+                        job_id,
+                        str(draft.get("title") or ""),
+                        str(draft.get("body") or ""),
+                        "review",
+                        {"level": "review", "content_hygiene": final_text_hygiene},
+                        draft.get("prompt_version", ""),
+                        draft.get("draft_meta", {}),
+                    )
                     runner.block(
                         "validate_factual_claims",
                         "generated_text_hygiene_failed",
@@ -598,6 +607,15 @@ class Pipeline:
                 ):
                     heading_count = len(re.findall(r"(?m)^##\s+\S+", str(draft.get("body") or "")))
                     if heading_count < 3:
+                        self.store.save_draft(
+                            job_id,
+                            str(draft.get("title") or ""),
+                            str(draft.get("body") or ""),
+                            "review",
+                            {"level": "review", "article_structure": {"heading_count": heading_count, "minimum": 3}},
+                            draft.get("prompt_version", ""),
+                            draft.get("draft_meta", {}),
+                        )
                         runner.block(
                             "validate_factual_claims",
                             "generated_article_structure_failed",
