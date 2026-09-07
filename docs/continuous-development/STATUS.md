@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v27 article heading preservation locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v28 manual-review defects locally fixed)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v27 article heading preservation 
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1717 passed + 37 subtests; JUnit 1754 tests, zero failures/errors.
+- Latest complete regression on this branch: 1720 passed + 37 subtests; JUnit 1757 tests, zero failures/errors.
 
 ## Active work
 
@@ -39,6 +39,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v27 article heading preservation 
 | Chinese fragment precision | Codex primary | content hygiene and tests | committed `600a011` | Linux hygiene regression and clean Juejin v26 |
 | Deterministic visual diversity and per-asset dedupe | Codex primary | deterministic visual/article media/content normalization | committed `91adeec` | Linux media regression and clean Juejin v27 |
 | Article heading preservation | Codex primary | article media section normalization and tests | committed `adca5ef` | Linux regression and clean Juejin v28 |
+| Final copy and section-media polish | Codex primary | content hygiene/claim ledger/article media and tests | committed `7eac44d` | Linux regression and clean Juejin v29 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -304,3 +305,11 @@ These describe the audited production release, not the current development code.
 - Final body contained three valid content H2 headings plus `参考来源`. The media normalizer merged the short question headings as if they were transition prose and then retained the source appendix, producing only two sections.
 - `adca5ef` returns three or more final body headings directly without transition merging and excludes `参考来源`, `参考资料` and `References` headings from illustration mapping. Metadata fallback behavior remains for bodies with fewer than three headings.
 - Focused article media tests: 9 passed. Related suite: 264 passed. Full: 1717 passed plus 37 subtests in 313.14 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-07 Juejin v28 Machine Pass And Manual Rejection
+
+- v28 reached `review_required`; Pipeline and independent artifact probe passed with zero failures. GEO scored 90, media contract and platform gate passed, four published-role image hashes were unique and no audio was generated.
+- Manual review still rejected the package: the YAML example used Unicode dashes instead of `---`, list numbers were split from their text, and several Agent routing behavior statements exceeded the five official facts. Section images also mixed 2752x1536 and 1024x1024.
+- `7eac44d` repairs Unicode YAML delimiters and split numbered lists, extends technical-mechanism evidence checks to Agent resource/routing behavior, and crops every article section image atomically to the requested 1200x800 before semantic/hash validation.
+- Focused new tests: 3 passed. Related content/media suite: 267 passed. Full: 1720 passed plus 37 subtests in 304.56 seconds. Privacy 581/0; license 65/0.
+- v28 was not sent to the real Juejin publisher despite machine-green status. v29 must pass both machine and manual review.

@@ -467,3 +467,12 @@ Observed read-only on 2026-08-31.
 - Red/green `adca5ef` keeps the three content headings distinct and excludes references headings. Existing heading-and-body-on-one-line and metadata fallback tests remain green.
 - Focused article media: 9 passed. Related suite: 264 passed. Full `p10-article-heading-preservation.xml`: 1717 passed plus 37 subtests in 313.14 seconds; project/privacy audit 581/0 and license 65/0.
 - Linux verification and v28 remain required. Production release and timers were unchanged.
+
+## 2026-09-07 Juejin v28 Machine Pass And Manual Review Evidence
+
+- Linux heading/media subset at `bfb7ca7` passed 39 tests. v28 reached `review_required` with Pipeline passed, artifact probe passed and no probe failures.
+- Verified gates: claims passed with six ledger rows; content hygiene passed; GEO 90; quality 8/8; Juejin platform 13/13; media contract passed. Four role image SHA-256 values were unique and no audio file existed.
+- Machine-green was not accepted for delivery. Manual review found Unicode YAML delimiters, split numbered-list text, unsupported Agent routing descriptions and mixed section-image ratios. The safe Task9 receipt remained a local boundary, not a real draft ID.
+- `7eac44d` converts all findings into red/green tests and minimal implementation: formatting repair, expanded technical mechanism validation and atomic 1200x800 section normalization before semantic evidence.
+- Related suite: 267 passed. Full `p10-final-copy-media-polish.xml`: 1720 passed plus 37 subtests in 304.56 seconds. Project/privacy audit 581/0; license audit 65/0.
+- v29 is required before any real draft upload. Production release and timers remain unchanged.

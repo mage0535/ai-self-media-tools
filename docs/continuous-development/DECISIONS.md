@@ -337,3 +337,10 @@
 - Final Markdown H2 headings remain distinct media sections regardless of their length or question punctuation. Transition-sentence merging applies only to fallback metadata/prose fragments.
 - References/source appendix headings are reader evidence, not illustration subjects, and are excluded from article image mapping.
 - When at least three final content headings exist, media mapping must not supplement or replace them with stale generator metadata.
+
+## D46: Machine Green Does Not Override Final Artifact Review
+
+- Canary probe success is necessary but not sufficient while uncovered defect classes remain. Manual review findings must become deterministic regression tests before any live draft upload.
+- Weak-model Markdown normalization may repair Unicode YAML frontmatter delimiters and numbered-list line breaks without changing prose meaning.
+- Assertions about how an Agent discovers, routes, loads or invokes resources are technical mechanism claims and require verified evidence.
+- Article section images are normalized atomically to their requested platform dimensions before semantic analysis and checksum evidence, so gates measure the actual delivered crop.
