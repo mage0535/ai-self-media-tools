@@ -16,6 +16,21 @@ def test_generated_text_allows_normal_markdown_code_tutorial():
     assert result["passed"] is True
 
 
+def test_markdown_normalizer_repairs_model_damaged_fences_and_identifiers():
+    damaged = (
+        "先看结构： ```yaml\n,\nname: api-review\n,\n``` 接着创建目录：\n"
+        "├── .\nagent/\n└── packageon。\n"
+    )
+
+    repaired = normalize_generated_markdown(damaged)
+
+    assert "：\n```yaml" in repaired
+    assert "\n,\n" not in repaired
+    assert ".agent/" in repaired
+    assert "package.json" in repaired
+    assert validate_generated_text(repaired)["passed"] is True
+
+
 def test_rejects_platform_navigation_contamination():
     result = validate_generated_text("稀土掘金 首页 沸点 课程 APP 搜索历史 清空 创作者中心 写文章 发沸点 写笔记 写代码 草稿\n\n正文")
     assert result["passed"] is False

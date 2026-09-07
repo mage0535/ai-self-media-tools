@@ -38,11 +38,13 @@ PLATFORM_TREND_CLAIM = re.compile(
 )
 UNSUPPORTED_TECHNICAL_MECHANISM = re.compile(
     r"(?:Agent\s+Skills?[^。！？.!?\n]{0,48}(?:程序性记忆|跨会话(?:自动)?学习|不占上下文|持久化经验)|"
+    r"Agent\s+Skills?[^。！？.!?\n]{0,64}(?:每次启动|触发条件|自动加载|自动注入)|"
     r"(?:系统|Agent|Skills?)[^。！？.!?\n]{0,36}(?:自动提炼(?:新)?\s*Skill|从执行结果中自动(?:学习|提炼)))",
     re.I,
 )
 UNSUPPORTED_TOOL_RECOMMENDATION = re.compile(
     r"(?:Skills?\.sh[^。！？.!?\n]{0,40}(?:排行榜|用户验证|热门|推荐)|"
+    r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+[^。！？.!?\n]{0,48}(?:质量(?:都)?不错|推荐|值得|好用)|"
     r"[A-Za-z0-9][A-Za-z0-9_-]{2,}[^。！？.!?\n]{0,36}(?:必装|会自动|自动(?:导航|检查|生成|填表)|一个\s*Skill\s*全搞定|踩坑概率低))",
     re.I,
 )

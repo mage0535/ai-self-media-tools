@@ -9,6 +9,11 @@ _TECHNICAL_FILE_EXTENSION = r"(?:md|json|ya?ml|toml|py|js|ts|tsx|jsx|html|css|sh
 def normalize_generated_markdown(text):
     """Repair deterministic model formatting damage without rewriting prose."""
     value = str(text or "")
+    value = re.sub(r"(?<!\n)[ \t]+(```[A-Za-z0-9_-]*)", r"\n\1", value)
+    value = re.sub(r"```[ \t]+(?=\S)", "```\n", value)
+    value = re.sub(r"(?m)^\s*,\s*$\n?", "", value)
+    value = re.sub(r"\.\s*\n\s*([A-Za-z][A-Za-z0-9_-]*/)", r".\1", value)
+    value = re.sub(r"\bpackageon\b", "package.json", value, flags=re.I)
     value = re.sub(r"!\s*\n?\s*\[\s*\]\(\s*\)", "", value)
     value = re.sub(r"(?m)^\s*!\s*$", "", value)
     value = re.sub(
