@@ -953,6 +953,51 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(plan["primary_background_kind"], "verified_semantic_generated_visual")
         self.assertTrue(plan["per_slide_backgrounds"][0]["verified_generated_fallback"])
 
+    def test_image_render_evidence_reads_article_media_contract_as_primary_source(self):
+        artifact_dir = Path(self.tmp.name) / "artifacts" / "contract-article"
+        artifact_dir.mkdir(parents=True)
+        image = artifact_dir / "section-01.png"
+        image.write_bytes(b"contract-generated-image")
+        digest = __import__("hashlib").sha256(image.read_bytes()).hexdigest()
+        asset = {
+            "path": str(image),
+            "role": "section",
+            "section": "method",
+            "source_url": "generated:deterministic_editorial",
+            "license": "generated_for_project",
+            "generation_evidence": {
+                "provider": "knowledge_card_renderer",
+                "model": "deterministic_editorial_v1",
+                "prompt_hash": "a" * 64,
+            },
+            "semantic_evidence": {
+                "passed": True,
+                "image_sha256": digest,
+                "semantic_match_score": 0.8,
+                "evidence_level": "artifact_verified",
+            },
+            "semantic_match_score": 0.8,
+            "match_reason": "workflow explanation",
+        }
+        mapping = [{
+            "section": "method",
+            "image": str(image),
+            "asset_id": "section-01",
+            "purpose": "workflow explanation",
+            "adjacent_to_text": True,
+        }]
+        (artifact_dir / "article_media_contract.json").write_text(json.dumps({
+            "version": "article_media_contract_v1",
+            "assets": [asset],
+            "section_image_map": mapping,
+        }), encoding="utf-8")
+        draft = {"body": "Method explanation", "draft_meta": {}}
+
+        Pipeline._attach_image_render_evidence(draft, artifact_dir)
+
+        self.assertEqual(draft["draft_meta"]["section_image_map"], mapping)
+        self.assertTrue(draft["draft_meta"]["real_scene_background_plan"]["allow_all_verified_generated"])
+
     def test_delivery_worker_processes_one_item_by_default(self):
         job = self.pipeline.create("Practical automation", ["wechat", "devto"], {"audience": "operators"})
         self.pipeline.run(job["id"])
