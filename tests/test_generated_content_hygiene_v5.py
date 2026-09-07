@@ -66,6 +66,14 @@ def test_youtube_dangling_article_fragment_is_rejected():
     assert "sentence_fragment" in result["reasons"]
 
 
+def test_chinese_classifier_ellipsis_is_not_confused_with_a_fragment():
+    valid = validate_generated_text("先跑顺一个，再做下一个。")
+    invalid = validate_generated_text("这只是一个。")
+
+    assert valid["passed"] is True
+    assert "sentence_fragment" in invalid["reasons"]
+
+
 def test_wechat_malformed_mixed_quotes_are_rejected():
     result = validate_generated_text("团队把这一步称为“最终验收\"，但正文仍然进入了发布队列。")
 
