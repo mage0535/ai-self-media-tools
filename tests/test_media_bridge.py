@@ -40,6 +40,19 @@ def test_article_media_prefers_final_body_headings_over_stale_generated_sections
     assert sections == ["Skill 是什么目录", "SKILL.md 怎么写", "如何按需加载"]
 
 
+def test_article_media_keeps_short_question_headings_and_excludes_source_appendix():
+    body = (
+        "## Skill到底是什么？\n正文。\n\n"
+        "## 怎么写？\n正文。\n\n"
+        "## 如何加载？\n正文。\n\n"
+        "## 参考来源\n- [规范](https://example.test/spec)"
+    )
+
+    sections = normalize_article_sections({"body": body}, limit=6)
+
+    assert sections == ["Skill到底是什么？", "怎么写？", "如何加载？"]
+
+
 def test_image_checkpoint_contract_is_declared_in_media_bridge_source():
     source = Path(MediaBridge.__module__.replace(".", "/") + ".py")
     project = Path(__file__).resolve().parents[1]
