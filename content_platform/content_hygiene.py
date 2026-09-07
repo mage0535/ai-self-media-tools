@@ -254,7 +254,9 @@ def _is_obvious_fragment(sentence):
     value = re.sub(r"[.!?。！？\s]+$", "", str(sentence or "").strip()).casefold()
     if re.search(r"\b(?:a|an|the|this|that|these|those|to|of|for|with|and|or|but)$", value):
         return True
-    return bool(re.search(r"(?:因为|所以|但是|以及|或者|一个|一种|这个|那个)$", value))
+    if re.search(r"(?:因为|所以|但是|以及|或者)$", value):
+        return True
+    return bool(re.search(r"(?:这是|只是|成为|提供|包含|需要|选择|创建)(?:一个|一种|这个|那个)$", value))
 
 
 def _terminal_prose_line(text):
