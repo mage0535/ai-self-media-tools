@@ -119,8 +119,10 @@ def normalize_article_sections(job: dict[str, Any], limit: int = 6) -> list[str]
     body_without_code = re.sub(r"```.*?```|~~~.*?~~~", "", str(job.get("body") or ""), flags=re.S)
     for match in re.finditer(r"^#{1,6}\s+(.+?)\s*$", body_without_code, flags=re.M):
         clean = re.sub(r"\s+", " ", match.group(1)).strip()[:160]
-        if clean:
+        if clean and not re.match(r"^(?:参考来源|参考资料|References?)\b", clean, flags=re.I):
             sections.append(clean)
+    if len(sections) >= 3:
+        return sections[: max(1, int(limit))]
     seen = {re.sub(r"\s+", "", item).casefold() for item in sections}
     if len(sections) < 3:
         for item in raw:
