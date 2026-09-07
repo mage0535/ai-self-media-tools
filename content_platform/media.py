@@ -14,6 +14,7 @@ from .paths import agent_scripts_dir
 from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
 from .adapters.media import ArticleMediaValidationError, execute_article_media, normalize_article_sections
+from .deterministic_visual import render_editorial_visual
 from .image_routing import route_image_request, visual_concepts
 
 try:
@@ -427,11 +428,25 @@ class MediaBridge:
                     ["article_semantic_or_media_gate_failed"],
                     intent=prompt_item.get("intent", ""),
                 )
-                provider_result = provider.run(
-                    prompt,
-                    target,
-                    self._image_provider_args(extra_args, prompt_item, attempt=attempt, rotate=True),
-                )
+                max_attempts = max(1, int(cfg.get("max_attempts", 3)))
+                semantic_request = self._semantic_request(job, prompt_item)
+                if self._use_deterministic_article_visual(prompt_item, attempt=attempt, max_attempts=max_attempts):
+                    design = (job.get("draft_meta") or {}).get("cover_design") or {}
+                    provider_result = render_editorial_visual(
+                        target,
+                        role=item["role"],
+                        size=tuple(prompt_item.get("dimensions") or (1200, 800)),
+                        title=str(design.get("title_text") or item.get("section") or job.get("title") or ""),
+                        subtitle=str(design.get("subtitle_text") or item.get("section") or ""),
+                        concepts=list(semantic_request.get("expected_concepts") or []),
+                        accent=str(design.get("accent") or "#1E80FF"),
+                    )
+                else:
+                    provider_result = provider.run(
+                        prompt,
+                        target,
+                        self._image_provider_args(extra_args, prompt_item, attempt=attempt, rotate=True),
+                    )
                 provider_result = provider_result if isinstance(provider_result, dict) else {}
                 if item["role"] == "cover":
                     generated_target = target.with_name("cover-background" + target.suffix)
@@ -449,7 +464,7 @@ class MediaBridge:
                         raise RuntimeError("adaptive cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
                 semantic = {}
                 if self.semantic_validation_required:
-                    semantic = self._analyze_image_semantics(target, self._semantic_request(job, prompt_item))
+                    semantic = self._analyze_image_semantics(target, semantic_request)
                     if not semantic.get("passed"):
                         raise ArticleMediaValidationError(
                             "article image semantic validation failed: "
@@ -504,6 +519,7 @@ class MediaBridge:
                 "section_image_map": package["section_image_map"],
                 "article_media_contract": str(output_dir / "article_media_contract.json"),
             }
+
         images = []
         recovery = self._image_quality_recovery_plan(job, cfg)
         accepted_checksums: set[str] = set()
@@ -653,6 +669,14 @@ class MediaBridge:
             self._write_image_quality_recovery(output_dir, recovery, passed=True)
             result["quality_recovery"] = self._image_quality_recovery_summary(recovery, passed=True)
         return result
+
+    @staticmethod
+    def _use_deterministic_article_visual(item, *, attempt, max_attempts):
+        return (
+            int(attempt) >= int(max_attempts)
+            and str(item.get("intent") or "").casefold()
+            in {"cinematic_cover", "editorial_illustration", "knowledge_card_background"}
+        )
 
     def _run_image_provider_with_quality_recovery(
         self,
