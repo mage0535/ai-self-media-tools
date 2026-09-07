@@ -129,7 +129,8 @@ def test_claim_gate_rejects_unsourced_tool_recommendations_and_install_commands(
 def test_claim_gate_rejects_unsourced_repo_endorsements_and_skill_loading_mechanisms() -> None:
     result = validate_claims(
         "vercel-labs/agent-skills 和 nextlevelbuilder/ui-ux-pro-max-skill 质量都不错。\n"
-        "Agent Skills 会在每次启动时自动加载，并按触发条件注入工作流。",
+        "Agent Skills 就是把工作流写成一个 SKILL.md 文件，AI 在每次启动时自动加载。\n"
+        "在项目根目录创建 .agent/skills/api-review/SKILL.md。",
         [],
     )
 
