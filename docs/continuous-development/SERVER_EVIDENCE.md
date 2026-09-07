@@ -425,3 +425,12 @@ Observed read-only on 2026-08-31.
 - The block exposed that Pipeline had not saved the full candidate before raising, so the database retained empty title/body and only the workflow's compact 700-character excerpt. `a162adb` persists complete blocked candidates and gate metadata first.
 - Red/green tests also cover safe removal of one unmatched straight quote outside fenced code while preserving `print("keep me")` inside code. Focused suite: 166 passed. Full `p10-blocked-draft-recovery.xml`: 1709 passed plus 37 subtests in 300.50 seconds; privacy 581/0 and license 65/0.
 - v23 must verify full-copy persistence or successful normalization plus production admission, media and artifact probes. Production release and timers remain unchanged.
+
+## 2026-09-07 Juejin v23 Final-Heading Media Evidence
+
+- Linux blocked-draft/Pipeline subset at `c848eba` passed 117 tests in 262.08 seconds. v23 used the live Hermes `opencode-go/muse-spark-1.3-contributor` identity and completed its first 8,035-character generation attempt in about 191 seconds.
+- Production admission, official five-claim fact pack, final copy hygiene, claim gate, content depth and three-H2 structure passed. No independent narration was generated.
+- Cover passed on its first attempt. Section 02 and 03 eventually passed. Section 01 failed three semantic attempts: two generic people/office images and one deterministic interface graphic; all expected `repetitive task loop`, which came from stale opening-fragment metadata rather than the final heading.
+- `6516e55` changes `normalize_article_sections` to parse final body headings before generator metadata. The red test supplied three stale metadata titles plus three final headings and observed stale selection; green returns exactly the final headings.
+- Focused article media tests: 7 passed. Related media/Pipeline set: 241 passed. Full `p10-final-section-mapping.xml`: 1710 passed plus 37 subtests in 306.55 seconds; privacy 581/0 and license 65/0.
+- v23 was not delivered. Linux verification and a clean v24 remain required; production release and timers were unchanged.

@@ -307,3 +307,9 @@
 - Final text-hygiene and article-structure failures persist the complete candidate title/body, draft metadata and gate detail before changing the job to blocked. Compact workflow excerpts are not sufficient for automated diagnosis or repair.
 - Deterministic normalization may remove one unmatched straight quote from prose while preserving complete fenced code blocks and balanced quote pairs. Raw validation continues to detect malformed quotes; normalization is the repair step.
 - Persisting a blocked draft is not approval, review completion or delivery evidence. Media and publishers remain uncalled.
+
+## D41: Article Images Bind To Final Copy
+
+- Article section-image mapping parses headings from the final normalized and fact-checked body first. Generator-time section metadata is stale after sanitization, repair or humanization and may only fill missing headings.
+- A valid final heading is a semantic input to image intent, provider selection and image quality evidence. Opening prose fragments must not displace final section headings.
+- Failed candidates retain file hashes and semantic evidence. Three mismatches still fail closed; changing section identity is not permission to weaken semantic thresholds.
