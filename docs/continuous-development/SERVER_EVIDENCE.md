@@ -442,3 +442,11 @@ Observed read-only on 2026-08-31.
 - `13c4634` deterministically appends `## 参考来源` with one sanitized Markdown bullet per unique verified HTTP(S) URL. It neither adds unsupported facts nor exposes evidence paths.
 - Unit and Pipeline tests prove URL dedupe, private-scheme rejection and GEO recognition of both source and structured-list dimensions. Related suite: 174 passed. Full `p10-verified-source-appendix.xml`: 1712 passed plus 37 subtests in 307.75 seconds; privacy 581/0 and license 65/0.
 - v24 generated no media and was not delivered. Linux verification and v25 remain required; production release and timers were unchanged.
+
+## 2026-09-07 Juejin v25 Fragment-Precision Evidence
+
+- Linux source/GEO/Pipeline subset at `d3e5872` passed 112 tests in 248.47 seconds. v25 completed generation quickly and persisted its full candidate.
+- It blocked before GEO and media only because `跑顺一个，再做下一个。` matched the prior broad classifier-ending fragment rule. No media or delivery occurred.
+- Red/green `600a011` accepts that complete parallel action while continuing to reject `这只是一个。` and the existing English dangling-article example.
+- Focused suite: 158 passed. Full `p10-chinese-fragment-precision.xml`: 1713 passed plus 37 subtests in 307.44 seconds. Project/privacy audit 581/0; license audit 65/0.
+- Linux verification and v26 remain required; production release and timers were unchanged.

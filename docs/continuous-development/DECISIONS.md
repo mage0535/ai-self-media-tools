@@ -319,3 +319,8 @@
 - Article claim-ledger evidence must appear in the final copy as a compact Markdown source list before GEO and media generation. Hidden metadata alone does not help readers verify claims.
 - Only verified HTTP(S) URLs are eligible. URLs are deduplicated, labels are sanitized, file/private paths are excluded and an existing references section is not duplicated.
 - Do not manufacture numeric claims, authority quotations or FAQ text to satisfy GEO. A real source appendix legitimately satisfies source and structured-list dimensions.
+
+## D43: Natural Chinese Ellipsis Is Not Automatically A Fragment
+
+- Chinese sentences ending with a classifier may be complete when parallel verbs supply the omitted noun, for example `跑顺一个，再做下一个。`.
+- Continue blocking conjunction endings and explicit incomplete predicates such as `这只是一个。`. Do not remove English dangling-article checks.
