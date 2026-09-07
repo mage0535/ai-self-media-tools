@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v22 blocked-draft recovery locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v23 final-heading media routing locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v22 blocked-draft recovery locall
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1709 passed + 37 subtests; JUnit 1746 tests, zero failures/errors.
+- Latest complete regression on this branch: 1710 passed + 37 subtests; JUnit 1747 tests, zero failures/errors.
 
 ## Active work
 
@@ -34,6 +34,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v22 blocked-draft recovery locall
 | Technical source fact pack and article structure | Codex primary | pre-generation gate/Task9 source claims/generator/Pipeline | committed `4ce550d` | Linux regression, build official v22 input, run v22 |
 | Canary production admission | Codex primary | Task9 runtime environment and tests | committed `6bcdcaa` | Linux regression, prove old input blocks and official fact-pack input proceeds |
 | Blocked-copy observability and quote repair | Codex primary | content hygiene/Pipeline and tests | committed `a162adb` | Linux regression and clean Juejin v23 |
+| Final article heading to image binding | Codex primary | article media adapter and tests | committed `6516e55` | Linux media regression and clean Juejin v24 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -265,3 +266,10 @@ These describe the audited production release, not the current development code.
 - Final text hygiene correctly blocked the draft for an unmatched straight quote before any image or delivery operation. The failure showed a separate observability defect: blocked candidate copy was not persisted, leaving only a compact workflow excerpt.
 - `a162adb` removes only an unmatched final straight quote from non-code Markdown segments while preserving quoted code. Before final hygiene or article-structure blocking, Pipeline now persists the full candidate copy, metadata and gate evidence for checkpoint repair.
 - Focused related regression: 166 passed. Full: 1709 passed plus 37 subtests in 300.50 seconds. Privacy audit 581/0; license audit 65/0.
+
+## 2026-09-07 Juejin v23 Media Result
+
+- v23 dynamically followed the changed Hermes active model `opencode-go/muse-spark-1.3-contributor`; no model was hard-coded. Production admission, five official facts, copy hygiene, claim and three-H2 gates passed.
+- The final article copy was persisted and materially better, but article media failed because `section-01` expected the stale concept `repetitive task loop`. Three candidates scored 0.0 and were retained; no delivery occurred.
+- Root cause: `normalize_article_sections` preferred early `draft_meta.sections` and parsed final body headings only when metadata had fewer than three items. The final body already had accurate headings for Skill directory, SKILL.md and progressive loading.
+- `6516e55` makes final body headings authoritative and uses metadata only to fill a shortage. Article media focused tests: 7 passed; related media/Pipeline tests: 241 passed. Full: 1710 passed plus 37 subtests in 306.55 seconds. Privacy 581/0; license 65/0.
