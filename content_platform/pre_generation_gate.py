@@ -46,6 +46,27 @@ def validate_pre_generation(job: dict[str, Any], brief: dict[str, Any], config: 
         if not isinstance(brief.get(field), dict) or not brief[field]:
             failures.append(f"{field}.missing")
 
+    blueprint = brief.get("content_blueprint") if isinstance(brief.get("content_blueprint"), dict) else {}
+    profile = brief.get("content_profile") if isinstance(brief.get("content_profile"), dict) else {}
+    content_form = str(blueprint.get("content_form") or brief.get("content_form") or "").casefold()
+    technical_longform = (
+        platform == "juejin"
+        and "article" in content_form
+        and str(profile.get("content_domain") or "").casefold() == "tech"
+    )
+    if technical_longform:
+        verified_facts = [
+            row for row in (brief.get("claim_ledger") or [])
+            if isinstance(row, dict)
+            and row.get("verified") is True
+            and str(row.get("claim") or "").strip()
+            and str(row.get("source_url") or "").startswith(("https://", "http://"))
+            and str(row.get("evidence_path") or "").strip()
+            and len(str(row.get("provenance_hash") or row.get("source_hash") or "")) >= 32
+        ]
+        if len(verified_facts) < 3:
+            failures.append("claim_ledger.technical_fact_pack_insufficient")
+
     required_media = required_artifact_kinds(platforms)
     media = config.get("media") if isinstance(config.get("media"), dict) else {}
     if required_media.intersection({"image", "cover"}) and not (media.get("image") or {}).get("enabled"):

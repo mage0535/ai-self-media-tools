@@ -241,6 +241,43 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
             failures.append(f"external_source_evidence_incomplete:{index}")
             continue
         external_sources.append(dict(row))
+    source_claims = []
+    for index, row in enumerate(record.get("source_claims") or [], 1):
+        if not isinstance(row, dict):
+            failures.append(f"source_claim_invalid:{index}")
+            continue
+        claim = str(row.get("claim") or "").strip()
+        claim_source = str(row.get("source_url") or "").strip()
+        evidence_rel = str(row.get("evidence_path") or "").strip().replace("\\", "/")
+        evidence = (inputs_root / evidence_rel).resolve()
+        declared = str(row.get("evidence_sha256") or "").strip().lower()
+        excerpt = str(row.get("source_excerpt") or "").strip()
+        try:
+            evidence.relative_to(inputs_root)
+        except ValueError:
+            failures.append(f"source_claim_path_outside_inputs:{index}")
+            continue
+        actual = sha256_file(evidence) if evidence.is_file() else ""
+        source_text = evidence.read_text(encoding="utf-8", errors="replace") if evidence.is_file() else ""
+        if (
+            not claim
+            or not claim_source.startswith(("https://", "http://"))
+            or not evidence.is_file()
+            or not re.fullmatch(r"[0-9a-f]{64}", declared)
+            or actual != declared
+            or not excerpt
+            or excerpt not in source_text
+        ):
+            failures.append(f"source_claim_evidence_invalid:{index}")
+            continue
+        source_claims.append({
+            "claim": claim,
+            "source_url": claim_source,
+            "evidence_path": evidence_rel,
+            "verified": True,
+            "provenance_hash": actual,
+            "source_type": "verified_primary_source",
+        })
     if failures:
         raise ValueError(";".join(sorted(set(failures))))
     return {
@@ -262,6 +299,7 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
         "evidence_verified": True,
         "related_sources": related_sources,
         "external_sources": external_sources,
+        "source_claims": source_claims,
     }
 
 
@@ -813,7 +851,7 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
         "dry_run": case.get("dry_run") is True,
         "run_contract": build_run_contract(platform),
         "delivery_policy": case["delivery_policy"],
-        "claim_ledger": [],
+        "claim_ledger": list(hotspot.get("source_claims") or []),
         "content_depth_plan": build_content_depth_plan(
             title,
             "Verify the platform source. Explain the workflow. Inspect the generated artifact.",

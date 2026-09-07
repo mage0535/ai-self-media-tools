@@ -365,7 +365,10 @@ class DraftGenerator:
                 "Use exactly eight short paragraphs separated by blank lines: hook, problem, three concrete steps, "
                 "case or caution, takeaway, and CTA. Do not write an article."
             ), 1800
-        return "Body must be 1200-2200 Chinese characters for Chinese articles or 900-1600 English words for English articles.", 5000
+        return (
+            "Body must be 1200-2200 Chinese characters for Chinese articles or 900-1600 English words for English articles. "
+            "Use at least three H2 headings (`## `), each followed by substantive prose."
+        ), 5000
 
     def _normalize(self, draft, context, provider, topic="", brief=None):
         brief = brief or {}
@@ -972,7 +975,8 @@ class DraftGenerator:
         if retry and platform.casefold() in {"wechat", "weixin", "wechat_official", "juejin", "zhihu"}:
             body_requirement = (
                 "Body must be 1200-1800 Chinese characters for Chinese articles or "
-                "900-1300 English words for English articles. Use concise sections and stop after the final CTA."
+                "900-1300 English words for English articles. Use at least three H2 headings (`## `), "
+                "each followed by substantive prose. Use concise sections and stop after the final CTA."
             )
         if retry:
             prompt_prefix = (

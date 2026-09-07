@@ -447,11 +447,11 @@ class PipelineTests(unittest.TestCase):
 
     def test_automated_workflow_removes_unsourced_external_attribution_before_media(self):
         safe_body = (
-            "先把任务目标写清楚，再拆出输入、步骤和验收标准。"
+            "## 明确目标\n先把任务目标写清楚，再拆出输入、步骤和验收标准。"
             "每一步只保留能够核对的来源和结果，失败时返回当前步骤修正。"
-            "Claude Code 的官方插件市场直接集成了 Skills。"
+            "\n\n## 核对来源\nClaude Code 的官方插件市场直接集成了 Skills。"
             "接着核对每个步骤的输入契约、输出契约和失败恢复条件。"
-            "最后检查正文、配图和交付回执是否对应同一个主题，并保存可复查的证据。"
+            "\n\n## 验收结果\n最后检查正文、配图和交付回执是否对应同一个主题，并保存可复查的证据。"
         )
         job = self.pipeline.create("操作手册", ["juejin"], {"automated_workflow": True})
         with patch.object(self.pipeline.generator, "generate", return_value={
@@ -501,11 +501,34 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(step["reason_code"], "generated_text_hygiene_failed")
         media.assert_not_called()
 
+    def test_automated_article_requires_three_readable_h2_sections_before_media(self):
+        body = (
+            "## 问题\n先确认输入来源，再检查输出契约，最后保存能够复查的证据。\n\n"
+            "## 方法\n把任务拆成收集、生成和验收，并为每一步记录失败原因。"
+        )
+        job = self.pipeline.create(
+            "操作手册", ["juejin"], {"automated_workflow": True, "content_form": "article"}
+        )
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "操作手册", "body": body,
+            "draft_meta": {"claim_ledger": [], "content_form": "article", "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate") as media:
+            result = self.pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        step = [
+            row for row in self.store.workflow_steps(job["id"])
+            if row["step_name"] == "validate_factual_claims"
+        ][-1]
+        self.assertEqual(step["reason_code"], "generated_article_structure_failed")
+        media.assert_not_called()
+
     def test_claim_sanitization_recompiles_cover_from_clean_copy(self):
         body = (
-            "先明确工作场景，再拆解输入、步骤、输出和失败恢复条件。"
+            "## 明确场景\n先明确工作场景，再拆解输入、步骤、输出和失败恢复条件。"
             "每一步都要保存能够复查的来源与结果，完成后检查正文和图片是否一致。"
-            "最后记录验收结论，并把不符合要求的结果返回对应步骤修正。"
+            "\n\n## 执行步骤\n逐项完成输入、处理和输出，并记录异常。"
+            "\n\n## 验收结果\n最后记录验收结论，并把不符合要求的结果返回对应步骤修正。"
         )
         job = self.pipeline.create("Agent Skills 操作手册", ["juejin"], {"automated_workflow": True})
         with patch.object(self.pipeline.generator, "generate", return_value={
@@ -532,10 +555,10 @@ class PipelineTests(unittest.TestCase):
 
     def test_deterministic_claim_cleanup_avoids_second_model_call_for_unclosed_fence(self):
         safe = (
-            "先明确场景，再拆解输入、步骤、输出和失败恢复条件。"
+            "## 明确场景\n先明确场景，再拆解输入、步骤、输出和失败恢复条件。"
             "每一步都保留可复查的来源和结果，完成后核对正文与配图。"
-            "接着运行一项真实任务，记录触发条件和输出契约。"
-            "最后把不符合要求的结果返回对应步骤修正，并保存验收结论。"
+            "\n\n## 执行任务\n接着运行一项真实任务，记录触发条件和输出契约。"
+            "\n\n## 验收结果\n最后把不符合要求的结果返回对应步骤修正，并保存验收结论。"
         )
         body = safe + "\n\n这个方法让效率翻 5 倍。\n\n```yaml\nname: my-skill"
         job = self.pipeline.create("Agent Skills 操作手册", ["juejin"], {"automated_workflow": True})

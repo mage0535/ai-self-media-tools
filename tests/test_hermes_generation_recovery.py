@@ -146,6 +146,7 @@ def test_retry_prompt_uses_minimal_contract_instead_of_repeating_full_methodolog
     assert "Agent Skills" in prompt
     assert "claim_ledger" in prompt
     assert "1200-1800" in prompt
+    assert "three H2" in prompt
     assert "style guidance" not in prompt
 
 
