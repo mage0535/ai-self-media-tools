@@ -82,21 +82,26 @@ def test_hermes_command_uses_active_model_and_retries_hard_timeout_once(monkeypa
     assert all("prompt" not in row for row in attempts)
 
 
-def test_article_run_contract_does_not_retry_complete_draft_after_hard_timeout(monkeypatch):
+def test_article_run_contract_retries_once_with_compact_deadline_after_hard_timeout(monkeypatch):
     generator = DraftGenerator({"provider": "hermes-cli"})
     calls = []
 
     def timeout(*args, **kwargs):
         calls.append(kwargs.get("retry"))
+        if kwargs.get("retry"):
+            return {"title": "T", "body": "safe body " * 140}
         raise GenerationTimeoutError("hard timeout")
 
     monkeypatch.setattr(generator, "_hermes_attempt", timeout)
     brief = {"platform": "juejin", "run_contract": build_run_contract("juejin")}
 
-    with pytest.raises(GenerationTimeoutError):
-        generator._hermes("topic", brief, {"language": "zh", "platform_rules": ""})
+    result = generator._hermes("topic", brief, {"language": "zh", "platform_rules": ""})
 
-    assert calls == [False]
+    assert result["title"] == "T"
+    assert calls == [False, True]
+    assert generator._generation_slo(brief, retry=False)["hard"] == 420
+    assert generator._generation_slo(brief, retry=True)["hard"] == 180
+    assert generator._generation_slo(brief, retry=True)["soft"] == 90
 
 
 def test_canary_command_uses_verified_dynamic_selectors_and_records_identity(monkeypatch, tmp_path):

@@ -41,12 +41,16 @@ BOUNDS = {
     "generation_hard_deadline_seconds": 180,
     "generation_heartbeat_seconds": 15,
     "generation_max_attempts": 2,
+    "generation_retry_soft_deadline_seconds": 60,
+    "generation_retry_hard_deadline_seconds": 120,
 }
 LONG_FORM_PLATFORMS = {"wechat", "weixin", "wechat_official", "juejin", "zhihu"}
 LONG_FORM_GENERATION_BOUNDS = {
     "generation_soft_deadline_seconds": 240,
     "generation_hard_deadline_seconds": 420,
-    "generation_max_attempts": 1,
+    "generation_max_attempts": 2,
+    "generation_retry_soft_deadline_seconds": 90,
+    "generation_retry_hard_deadline_seconds": 180,
 }
 
 

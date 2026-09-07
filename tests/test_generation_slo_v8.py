@@ -8,7 +8,9 @@ def test_run_contract_carries_bounded_generation_slo():
     assert bounds["generation_soft_deadline_seconds"] == 240
     assert bounds["generation_hard_deadline_seconds"] == 420
     assert bounds["generation_heartbeat_seconds"] == 15
-    assert bounds["generation_max_attempts"] == 1
+    assert bounds["generation_max_attempts"] == 2
+    assert bounds["generation_retry_soft_deadline_seconds"] == 90
+    assert bounds["generation_retry_hard_deadline_seconds"] == 180
 
     video = build_run_contract("tiktok")["bounds"]
     assert video["generation_soft_deadline_seconds"] == 90
@@ -23,7 +25,10 @@ def test_generator_prefers_contract_slo_over_looser_local_defaults():
 
     result = generator._generation_slo({"run_contract": build_run_contract("wechat")})
 
-    assert result == {"soft": 240, "hard": 420, "heartbeat": 15, "max_attempts": 1}
+    assert result == {"soft": 240, "hard": 420, "heartbeat": 15, "max_attempts": 2}
+    assert generator._generation_slo(
+        {"run_contract": build_run_contract("wechat")}, retry=True
+    ) == {"soft": 90, "hard": 180, "heartbeat": 15, "max_attempts": 2}
 
 
 def test_invalid_local_slo_is_normalized_for_nonproduction_drafts():
