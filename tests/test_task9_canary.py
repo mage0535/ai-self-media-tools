@@ -189,6 +189,43 @@ def test_canary_brief_uses_the_same_strict_run_contract_as_production():
     assert brief["run_contract"]["platform"] == "kuaishou"
 
 
+def test_verified_source_claims_are_hash_bound_and_enter_canary_claim_ledger(tmp_path: Path):
+    from scripts.task9_canary import _canary_brief, _hotspot_source_hash, _load_verified_hotspot, build_canary_matrix
+
+    inputs = tmp_path / "_inputs"
+    hotspot_snapshot = _write(inputs / "hotspots" / "juejin.txt", "Agent Skills 热门教程")
+    official = _write(inputs / "sources" / "agent-skills.txt", "A skill is a directory containing, at minimum, a SKILL.md file.")
+    snapshot_hash = hashlib.sha256(hotspot_snapshot.read_bytes()).hexdigest()
+    official_hash = hashlib.sha256(official.read_bytes()).hexdigest()
+    source_url = "https://juejin.cn/post/123"
+    fetched_at = "2026-09-07T00:00:00Z"
+    provenance = _hotspot_source_hash(
+        "juejin", source_url, "Agent Skills 热门教程", fetched_at=fetched_at, status=200,
+        snapshot_path="hotspots/juejin.txt", snapshot_sha256=snapshot_hash,
+    )
+    _write(inputs / "hotspots" / "juejin.json", json.dumps({
+        "platform": "juejin", "source_url": source_url, "observed_title": "Agent Skills 热门教程",
+        "fetched_at": fetched_at, "status": 200, "snapshot_path": "hotspots/juejin.txt",
+        "snapshot_sha256": snapshot_hash, "provenance_hash": provenance,
+        "evidence_type": "same_lane_hot_work", "native_verified": False,
+        "association_mode": "manual_handoff", "lane_fit_score": 0.9, "semantic_fit_score": 0.9,
+        "source_claims": [{
+            "claim": "一个 Skill 至少包含 SKILL.md 文件。",
+            "source_url": "https://agentskills.io/specification",
+            "evidence_path": "sources/agent-skills.txt", "evidence_sha256": official_hash,
+            "source_excerpt": "A skill is a directory containing, at minimum, a SKILL.md file.",
+        }],
+    }))
+    case = next(row for row in build_canary_matrix() if row["platform"] == "juejin")
+
+    hotspot = _load_verified_hotspot(tmp_path, case)
+    brief = _canary_brief(case, hotspot)
+
+    assert brief["claim_ledger"][0]["claim"] == "一个 Skill 至少包含 SKILL.md 文件。"
+    assert brief["claim_ledger"][0]["verified"] is True
+    assert brief["claim_ledger"][0]["provenance_hash"] == official_hash
+
+
 def test_canary_brief_compiles_independent_related_sources_into_matrix():
     from scripts.task9_canary import _canary_brief
 

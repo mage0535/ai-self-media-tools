@@ -76,3 +76,58 @@ def test_production_source_gate_rejects_cross_platform_native_identity(tmp_path,
 
     assert result["passed"] is False
     assert "platform_source_matrix.platform_mismatch" in result["failures"]
+
+
+def test_production_juejin_technical_article_requires_verified_fact_pack(monkeypatch):
+    from content_platform.pre_generation_gate import validate_pre_generation
+
+    monkeypatch.setenv("CONTENT_PLATFORM_RUNTIME_MODE", "production")
+    brief = {
+        "automated_workflow": True,
+        "run_contract": build_run_contract("juejin"),
+        "platform_source_matrix": _matrix("juejin"),
+        "content_blueprint": {"topic": "Agent Skills", "content_form": "technical_article"},
+        "content_profile": {"content_domain": "tech"},
+        "capability_plan": {"selected": ["hook_structure_reference"]},
+        "compiled_skill_rules": {"rules": [{"id": "hook-1"}]},
+        "bounded_model_input": {"content_blueprint": {"topic": "Agent Skills"}},
+        "claim_ledger": [{"claim": "Only the trending title", "verified": True, "source_url": "https://example.test/hot"}],
+    }
+    config = {
+        "media": {"image": {"enabled": True}},
+        "publishers": {"platforms": {"juejin": {"type": "juejin-api"}}},
+    }
+
+    result = validate_pre_generation({"platforms": ["juejin"], "brief": brief}, brief, config)
+
+    assert result["passed"] is False
+    assert "claim_ledger.technical_fact_pack_insufficient" in result["failures"]
+
+
+def test_production_juejin_technical_article_accepts_three_verified_facts(monkeypatch):
+    from content_platform.pre_generation_gate import validate_pre_generation
+
+    monkeypatch.setenv("CONTENT_PLATFORM_RUNTIME_MODE", "production")
+    claims = [
+        {"claim": f"Verified fact {index}", "verified": True, "source_url": f"https://example.test/{index}", "evidence_path": f"evidence/{index}.txt", "provenance_hash": "a" * 64}
+        for index in range(3)
+    ]
+    brief = {
+        "automated_workflow": True,
+        "run_contract": build_run_contract("juejin"),
+        "platform_source_matrix": _matrix("juejin"),
+        "content_blueprint": {"topic": "Agent Skills", "content_form": "technical_article"},
+        "content_profile": {"content_domain": "tech"},
+        "capability_plan": {"selected": ["hook_structure_reference"]},
+        "compiled_skill_rules": {"rules": [{"id": "hook-1"}]},
+        "bounded_model_input": {"content_blueprint": {"topic": "Agent Skills"}},
+        "claim_ledger": claims,
+    }
+    config = {
+        "media": {"image": {"enabled": True}},
+        "publishers": {"platforms": {"juejin": {"type": "juejin-api"}}},
+    }
+
+    result = validate_pre_generation({"platforms": ["juejin"], "brief": brief}, brief, config)
+
+    assert result["passed"] is True

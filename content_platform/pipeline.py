@@ -584,6 +584,27 @@ class Pipeline:
                         final_text_hygiene,
                         depends_on=["validate_content_structure"],
                     )
+                article_platforms = {"juejin", "zhihu", "wechat", "weixin", "wechat_official"}
+                content_form = str(
+                    draft["draft_meta"].get("content_form")
+                    or (draft["draft_meta"].get("strategy") or {}).get("content_form")
+                    or brief.get("content_form")
+                    or ""
+                ).casefold()
+                if (
+                    brief.get("automated_workflow")
+                    and article_platforms.intersection({str(item).casefold() for item in job.get("platforms") or []})
+                    and "article" in content_form
+                ):
+                    heading_count = len(re.findall(r"(?m)^##\s+\S+", str(draft.get("body") or "")))
+                    if heading_count < 3:
+                        runner.block(
+                            "validate_factual_claims",
+                            "generated_article_structure_failed",
+                            "automated long-form copy requires at least three readable H2 sections",
+                            {"heading_count": heading_count, "minimum": 3},
+                            depends_on=["validate_content_structure"],
+                        )
                 runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"], message="legacy review-only claim findings" if not claim_gate.get("passed") else "")
                 if (job.get("brief") or {}).get("run_contract"):
                     model_depth_plan = (draft.get("draft_meta") or {}).get("content_depth_plan")
