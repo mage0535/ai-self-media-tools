@@ -331,3 +331,9 @@
 - Each completed article asset atomically claims its checksum. A duplicate produced by another concurrent asset is a retryable per-asset failure with preserved candidate evidence, not a package-level surprise after all work finishes.
 - Stable identical input remains reproducible, while different semantic sections must produce different output hashes. Color-only randomization is not accepted as semantic diversity.
 - Technical filename normalization uses ASCII identifier boundaries so `SKILL.\nmd` is repaired even when adjacent to Chinese text.
+
+## D45: Content Headings Are Not Transition Prose
+
+- Final Markdown H2 headings remain distinct media sections regardless of their length or question punctuation. Transition-sentence merging applies only to fallback metadata/prose fragments.
+- References/source appendix headings are reader evidence, not illustration subjects, and are excluded from article image mapping.
+- When at least three final content headings exist, media mapping must not supplement or replace them with stale generator metadata.
