@@ -21,6 +21,25 @@ def test_normalize_article_sections_merges_short_transition_into_next_substantiv
     assert len(sections) == 3
 
 
+def test_article_media_prefers_final_body_headings_over_stale_generated_sections():
+    body = (
+        "## Skill 是什么目录\n一个 Skill 至少包含 SKILL.md。\n\n"
+        "## SKILL.md 怎么写\n文件包含 frontmatter 和 Markdown 正文。\n\n"
+        "## 如何按需加载\n激活后读取正文，其他资源按需加载。"
+    )
+
+    sections = normalize_article_sections({
+        "body": body,
+        "draft_meta": {"sections": [
+            {"title": "为什么每次都要重复解释需求？"},
+            {"title": "差距不在模型"},
+            {"title": "先统一一个认知"},
+        ]},
+    }, limit=3)
+
+    assert sections == ["Skill 是什么目录", "SKILL.md 怎么写", "如何按需加载"]
+
+
 def test_image_checkpoint_contract_is_declared_in_media_bridge_source():
     source = Path(MediaBridge.__module__.replace(".", "/") + ".py")
     project = Path(__file__).resolve().parents[1]
