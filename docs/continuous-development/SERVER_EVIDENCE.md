@@ -379,3 +379,13 @@ Observed read-only on 2026-08-31.
 - Full command `python -m pytest -q --junitxml=artifacts/test-reports/p10-content-recovery.xml`: 1699 passed plus 37 subtests in 297.08 seconds, exit 0.
 - `python -m content_platform.cli project-audit`: ok true, 581 files, zero issues. License audit: 65 capabilities, zero issues. `git diff --check`: clean.
 - These are local code/test results. Linux staging, refreshed v18 artifact probing, a clean v19 Juejin generation and real platform draft upload/readback remain pending; production release and timers were not changed.
+
+## 2026-09-07 Juejin v19 Final-Copy Gate (Local And Staging Observation)
+
+- Linux staging at `baff40e` passed the 310-test content/media subset in 242.77 seconds; project/privacy audit scanned 581 files with zero issues and license audit checked 65 capabilities with zero issues.
+- Reprobing the existing v18 package with `baff40e` passed all probes; the earlier optional Agnes failure disappeared and 17 capability records passed. This repairs evidence semantics only and does not make the rejected v18 copy publishable.
+- Fresh v19 used the dynamically discovered Hermes active model `opencode-go/mimo-v2.5`. It completed the first 7,617-character generation request in about 258 seconds, reached `review_required`, generated cover plus article images, omitted narration audio, and passed the current Pipeline/artifact probes.
+- Manual copy inspection rejected v19 despite those green probes. It contained inline/malformed fences, comma-only YAML lines, broken `.agent`/`package.json` identifiers, unverified repository endorsements and unverified automatic-loading mechanism claims. Both old text gates had returned passed.
+- Red/green tests reproduce those exact classes. Commit `3c5de37` repairs the deterministic formatting damage, expands claim validation, and applies a final automated prose-hygiene gate after factual repair. An ordering regression was caught: early prose blocking skipped the bounded factual repair, so the final gate was moved after factual repair while source-page contamination remains early.
+- Focused regression after the ordering correction: 154 passed. Full `p10-final-copy-gate.xml`: 1702 passed plus 37 subtests in 299.65 seconds. Project/privacy audit 581/0; license audit 65/0; diff check clean.
+- v19 was not sent to the real Juejin draft publisher. Commit `3c5de37` still requires Linux staging verification and a clean v20 real generation before any draft upload/readback.

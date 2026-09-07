@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin article recovery hardening locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v19 final-copy gate locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin article recovery hardening locall
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1699 passed + 37 subtests; JUnit 1736 tests, zero failures/errors.
+- Latest complete regression on this branch: 1702 passed + 37 subtests; JUnit 1739 tests, zero failures/errors.
 
 ## Active work
 
@@ -29,6 +29,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin article recovery hardening locall
 | Hot-work collector automatic auth/query routing | Codex primary | platform collectors, parsers, cache, focused tests, four coordination documents | deployed `2f4f612` | 6/12 Canary inputs ready; resolve remaining platform evidence without fabrication |
 | Deterministic abstract-media fallback | Codex primary | `content_platform/deterministic_visual.py`, `content_platform/media.py`, `tests/test_deterministic_visual.py`, media-focused tests | committed through `7d6f3e6` | rerun real Juejin Canary after staging sync |
 | Article recovery and final-copy truth gate | Codex primary | claim/content policy/Pipeline/Task9 Canary and focused tests | committed `4b141c4` | Linux regression, v18 probe refresh, then clean Juejin Canary |
+| Final generated-copy artifact gate | Codex primary | content hygiene/claim ledger/Pipeline and regression tests | committed `3c5de37` | Linux regression, v19 offline re-evaluation, then clean Juejin v20 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -222,3 +223,11 @@ These describe the audited production release, not the current development code.
 - `4b141c4` adds post-humanizer claim/hygiene validation, rejects unsupported tool recommendations and install commands, limits independent audio generation to actual audio content forms, and treats optional artifact providers as non-blocking in the Canary probe.
 - Fresh local focused regression: 310 passed. Fresh full regression: 1699 passed plus 37 subtests in 297.08 seconds. Project/privacy audit scanned 581 files with zero issues; license audit checked 65 capabilities with zero issues.
 - Remaining immediate gates: Linux staging verification, recompute v18 artifact evidence, run a clean Juejin Canary, inspect final copy, then use the real Juejin draft publisher only if platform upload/readback evidence can be produced.
+
+## 2026-09-07 Juejin v19 Finding
+
+- Hermes active model `opencode-go/mimo-v2.5` completed generation on its first attempt in about 258 seconds. Pipeline and artifact probes returned passed; cover and article images were generated, and no narration artifact was created.
+- Manual final-copy review still rejected the result: code fences were attached to prose, YAML contained comma-only corruption, `.agent` and `package.json` were split/corrupted, and unverified repository endorsements plus Agent Skills loading mechanisms remained.
+- The existing generated-text and claim gates both incorrectly returned passed. `3c5de37` adds deterministic repairs for those known formatting corruptions, claim patterns for repository endorsements/loading mechanisms, and a final automated prose-hygiene gate after factual repair but before media.
+- Fresh focused regression: 154 passed. Fresh full regression: 1702 passed plus 37 subtests in 299.65 seconds. Privacy audit: 581 files and zero issues. License audit: 65 capabilities and zero issues.
+- v19 is evidence of a caught gate defect, not an accepted publication. Linux verification and a new v20 real generation remain required.
