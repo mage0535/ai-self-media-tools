@@ -908,6 +908,51 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(len([item for item in artifacts if item["kind"] == "cover"]), 1)
         self.assertEqual(len([item for item in artifacts if item["kind"] == "section_image_map"]), 1)
 
+    def test_image_render_evidence_builds_explicit_verified_generated_plan(self):
+        artifact_dir = Path(self.tmp.name) / "artifacts" / "generated-article"
+        artifact_dir.mkdir(parents=True)
+        image = artifact_dir / "section-01.png"
+        image.write_bytes(b"generated-image")
+        digest = __import__("hashlib").sha256(image.read_bytes()).hexdigest()
+        provenance = {
+            "assets": [{
+                "path": str(image),
+                "role": "section",
+                "section": "method",
+                "source_url": "generated:deterministic_editorial",
+                "license": "generated_for_project",
+                "generation_evidence": {
+                    "provider": "knowledge_card_renderer",
+                    "model": "deterministic_editorial_v1",
+                    "prompt_hash": "a" * 64,
+                },
+                "semantic_evidence": {
+                    "passed": True,
+                    "image_sha256": digest,
+                    "semantic_match_score": 0.8,
+                    "evidence_level": "artifact_verified",
+                },
+                "semantic_match_score": 0.8,
+                "match_reason": "workflow explanation",
+            }],
+        }
+        (artifact_dir / "asset_provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
+        (artifact_dir / "section_image_map.json").write_text(json.dumps([{
+            "section": "method",
+            "image": str(image),
+            "asset_id": "section-01",
+            "purpose": "workflow explanation",
+            "adjacent_to_text": True,
+        }]), encoding="utf-8")
+        draft = {"body": "Method explanation", "draft_meta": {}}
+
+        Pipeline._attach_image_render_evidence(draft, artifact_dir)
+
+        plan = draft["draft_meta"]["real_scene_background_plan"]
+        self.assertTrue(plan["allow_all_verified_generated"])
+        self.assertEqual(plan["primary_background_kind"], "verified_semantic_generated_visual")
+        self.assertTrue(plan["per_slide_backgrounds"][0]["verified_generated_fallback"])
+
     def test_delivery_worker_processes_one_item_by_default(self):
         job = self.pipeline.create("Practical automation", ["wechat", "devto"], {"audience": "operators"})
         self.pipeline.run(job["id"])
