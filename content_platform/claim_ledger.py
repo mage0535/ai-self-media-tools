@@ -7,7 +7,7 @@ from typing import Any
 
 
 NUMERIC_CLAIM = re.compile(
-    r"(?:\b20\d{2}\b|(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿几半]+)\s*(?:%|倍|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?)|(?:\d+(?:\.\d+)?|[二两三四五六七八九十百千万亿几]+)\s*(?:个|家|种|款|次))",
+    r"(?:\b20\d{2}\b|(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万亿几半]+)\s*(?:%|倍|小时|分钟|秒|天|周|个月|月|年|元|万|亿|ms|tokens?|seconds?|minutes?|hours?|days?|weeks?|months?|years?)|(?:\d+(?:\.\d+)?|[二两三四五六七八九十百千万亿几]+)\s*(?:多|余|左右|以上|以下)?\s*(?:个|家|种|款|次))",
     re.I,
 )
 FIRST_PERSON_OPERATION = re.compile(
@@ -15,7 +15,7 @@ FIRST_PERSON_OPERATION = re.compile(
     re.I,
 )
 UNSUPPORTED_PROMOTIONAL_CLAIM = re.compile(
-    r"(?:零成本|完全免费|免费(?:的|使用|试用|开放)|不用写代码|无需写代码|零代码|全都有|一个平台全搞定|费用(?:砍掉|降低).{0,8}(?:一大半|一半|大半)|no[- ]cost|completely free|free to use|no code required)",
+    r"(?:零成本|完全免费|免费(?:的|使用|试用|开放)|不收费|无需?注册|不需要特定\s*IDE\s*插件|不用写代码|无需写代码|零代码|全都有|一个平台全搞定|费用(?:砍掉|降低).{0,8}(?:一大半|一半|大半)|no[- ]cost|completely free|free to use|no code required)",
     re.I,
 )
 UNSUPPORTED_ANECDOTE = re.compile(
@@ -66,6 +66,9 @@ def _has_external_attribution(sentence: str) -> bool:
     for product in NAMED_EXTERNAL_PRODUCT.finditer(sentence):
         action = EXTERNAL_ATTRIBUTION_ACTION.search(sentence, product.end())
         if action and action.start() - product.end() <= 40:
+            return True
+        before = sentence[max(0, product.start() - 48):product.start()]
+        if EXTERNAL_ATTRIBUTION_ACTION.search(before):
             return True
     return False
 
@@ -209,6 +212,7 @@ def restore_verified_domains(text: str, ledger: list[dict[str, Any]] | None) -> 
         if not str(row.get("source_url") or "").startswith(("https://", "http://")):
             continue
         domains.update(match.group(0).casefold() for match in VERIFIED_DOMAIN.finditer(str(row.get("claim") or "")))
+        domains.update(match.group(0).casefold() for match in VERIFIED_DOMAIN.finditer(str(row.get("source_url") or "")))
     repaired = str(text or "")
     for domain in sorted(domains, key=len, reverse=True):
         prefix = domain.rsplit(".", 1)[0] + "."
