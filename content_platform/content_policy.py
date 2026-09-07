@@ -177,6 +177,13 @@ def generated_media_kinds_for_job(job, config):
 
     allow_video = bool(policy.get("allow_local_video_generation", False))
     allow_audio = bool(policy.get("allow_local_audio_generation", False))
+    draft_meta = (job or {}).get("draft_meta") if isinstance((job or {}).get("draft_meta"), dict) else {}
+    content_form = str(
+        draft_meta.get("content_form")
+        or ((draft_meta.get("strategy") or {}).get("content_form") if isinstance(draft_meta.get("strategy"), dict) else "")
+        or (job or {}).get("content_form")
+        or ""
+    ).casefold()
     if allow_video and media_cfg.get("video", {}).get("enabled", False):
         for platform in platforms:
             if platform in SHORT_VIDEO_PLATFORMS:
@@ -184,7 +191,12 @@ def generated_media_kinds_for_job(job, config):
                 break
     # The video renderer owns narration, subtitles, BGM, and the final audio
     # stream. A second audio pass would overwrite its measured TTS sidecars.
-    if "video" not in kinds and allow_audio and media_cfg.get("audio", {}).get("enabled", False):
+    if (
+        "video" not in kinds
+        and allow_audio
+        and media_cfg.get("audio", {}).get("enabled", False)
+        and content_form in {"audio", "podcast", "narration_audio", "audio_episode"}
+    ):
         kinds.add("audio")
     return tuple(sorted(kinds))
 

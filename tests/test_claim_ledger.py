@@ -112,6 +112,20 @@ def test_claim_gate_rejects_unsourced_agent_skills_mechanism_claims() -> None:
     assert "unsourced_technical_mechanism_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_unsourced_tool_recommendations_and_install_commands() -> None:
+    result = validate_claims(
+        "Skills.sh 排行榜前几名都经过大量用户验证。"
+        "vercel-react-best-practices 是 React 开发必装。"
+        "agent-browser 会自动导航、填表和截图。"
+        "运行 npx skills add vendor/repository 就能安装。",
+        [],
+    )
+
+    assert result["passed"] is False
+    assert "unsourced_tool_recommendation_claim" in result["failures"]
+    assert "unsourced_install_command_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 
