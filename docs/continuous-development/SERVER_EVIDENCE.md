@@ -368,3 +368,14 @@ Observed read-only on 2026-08-31.
 - Final local suite for `2f4f612`: 1661 passed plus 37 subtests; JUnit 1698 tests, zero failures/errors in 302.060s. Project/privacy audit scanned 578 files with zero issues; license audit covered 65 capabilities with zero issues. Linux focused suite passed 103 tests before live platform checks.
 - Signed release `production-runtime-v8-2f4f612-20260906` is current. Postcheck: gateway active since 12:43:44 CST (MainPID 2580740), MCP connected and discovered 22 tools, NO_PROXY loopback drop-in preserved, zero failed units, zero enabled project timers, zero release pyc, shared DB unchanged at inode/size/jobs 1642977/63,143,936/433.
 - This milestone proves trend collection/routing improvements and truthful failure states. It does not prove 12/12 generated artifacts, real delivery postchecks, performance uplift, or timer readiness.
+
+## 2026-09-07 Juejin Article Recovery Hardening (Local Only)
+
+- Real server Canary v18 generated a title/body, cover and three section images. All four image semantic gates and the article media contract passed; Pipeline reached `review_required`.
+- The safe Task9 publisher did not produce a real Juejin draft and no delivery claim was made. Manual review rejected the body because it contained `Skills.sh` split across lines, unsupported named-tool recommendations/rankings and `npx skills add` without verified evidence.
+- Red/green regression proved the model-based humanizer previously accepted newly introduced unsupported claims. Commit `4b141c4` now normalizes and revalidates the candidate against both claim and hygiene gates, retains the accepted original on failure and records `humanize_rejected`.
+- The same commit adds claim checks for unsupported named-tool recommendations and install commands, prevents article jobs from generating unrelated narration audio, and stops optional Agnes availability from failing a required artifact probe.
+- Focused command covering Pipeline, claim ledger, Task9 Canary, platform policy and image/media behavior: 310 passed in 55.84 seconds.
+- Full command `python -m pytest -q --junitxml=artifacts/test-reports/p10-content-recovery.xml`: 1699 passed plus 37 subtests in 297.08 seconds, exit 0.
+- `python -m content_platform.cli project-audit`: ok true, 581 files, zero issues. License audit: 65 capabilities, zero issues. `git diff --check`: clean.
+- These are local code/test results. Linux staging, refreshed v18 artifact probing, a clean v19 Juejin generation and real platform draft upload/readback remain pending; production release and timers were not changed.

@@ -264,3 +264,11 @@
 - A successful logged search may create a mode-600 private cache bound to platform, query, canonical URLs, visible metrics, capture time and source artifact SHA-256. Cache fallback is allowed only for transient platform errors within six hours; login failure, ordinary zero results, tampering, identity mismatch and expiry fail closed.
 - Platform-specific parsers are required when the content title and metrics live in a card context rather than link text. Never weaken canonical URL or positive engagement requirements to make a parser pass.
 - Automatic task admission remains blocked when no current lane-matched evidence exists. Retrying the platform, using a valid official reference, or eventually applying an explicitly allowed evergreen fallback is acceptable; cross-platform hotspot identity reuse is not.
+
+## D35: Final Copy Must Survive Every Model Rewrite
+
+- Humanization is a second model generation step, not a harmless formatter. Its candidate title/body must pass deterministic Markdown normalization, generated-text hygiene and the verified claim ledger before replacing the already accepted draft.
+- A failed post-humanizer check keeps the previous accepted copy and records `humanize_rejected` with claim and hygiene failures. It does not silently accept the rewrite or discard the valid original.
+- Unsupported named-tool recommendations and install commands require matching verified claim evidence. Structural advice without external factual attribution remains allowed.
+- Article image requirements do not imply an independent narration artifact. Audio generation is limited to explicit audio/podcast content forms; video narration remains owned by the video renderer.
+- Optional providers may remain planned or unavailable without failing an artifact probe. Every required artifact-relevant capability must still reach `artifact_verified`.

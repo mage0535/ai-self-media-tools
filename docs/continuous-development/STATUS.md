@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-06 Asia/Shanghai (signed 2f4f612 production activation and platform trend Canaries verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin article recovery hardening locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-06 Asia/Shanghai (signed 2f4f612 production activation and
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1661 passed + 37 subtests; JUnit 1698 tests, zero failures/errors.
+- Latest complete regression on this branch: 1699 passed + 37 subtests; JUnit 1736 tests, zero failures/errors.
 
 ## Active work
 
@@ -27,6 +27,8 @@ Last updated: 2026-09-06 Asia/Shanghai (signed 2f4f612 production activation and
 | 12-platform Canary and deployment | Codex primary | P10 Canary/evidence files and four coordination documents | in_progress | run serial real platform Canaries; verify live publisher/draft/handoff boundaries before timer decision |
 | Hermes MCP child runtime convergence | Codex primary | `scripts/deploy_release.py`, `tests/test_release_systemd.py`, `tests/test_deploy_release.py`, four coordination documents | deployed `d79128c` | complete: live MCP env, tool discovery, byte stability and rollback/forward verified |
 | Hot-work collector automatic auth/query routing | Codex primary | platform collectors, parsers, cache, focused tests, four coordination documents | deployed `2f4f612` | 6/12 Canary inputs ready; resolve remaining platform evidence without fabrication |
+| Deterministic abstract-media fallback | Codex primary | `content_platform/deterministic_visual.py`, `content_platform/media.py`, `tests/test_deterministic_visual.py`, media-focused tests | committed through `7d6f3e6` | rerun real Juejin Canary after staging sync |
+| Article recovery and final-copy truth gate | Codex primary | claim/content policy/Pipeline/Task9 Canary and focused tests | committed `4b141c4` | Linux regression, v18 probe refresh, then clean Juejin Canary |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -212,3 +214,11 @@ These describe the audited production release, not the current development code.
 - Final postcheck: gateway active since 17:40:14 CST, MainPID 2074498, zero failed units, zero enabled project timers, NO_PROXY loopback drop-in preserved, journal retained. MCP watchdog/server inherited all eight fields; `hermes mcp test content-platform` connected in 1709ms and discovered 22 tools.
 - Signed release remained at zero `.pyc` files and zero `__pycache__` directories after MCP startup. Shared DB remained inode 1642977, 63,143,936 bytes and 433 jobs.
 - Remaining gate: 12 serial real platform Canaries and live delivery/postcheck evidence are not complete. Do not enable timers or describe unit/MCP verification as completed content production.
+
+## 2026-09-07 Juejin Recovery Checkpoint
+
+- Real Juejin v18 reached `review_required`; cover plus three section images passed semantic gates and the formal article media contract passed.
+- It was not published or uploaded as a real draft because final copy contained a split identifier plus unsupported product recommendations and an unsupported install command.
+- `4b141c4` adds post-humanizer claim/hygiene validation, rejects unsupported tool recommendations and install commands, limits independent audio generation to actual audio content forms, and treats optional artifact providers as non-blocking in the Canary probe.
+- Fresh local focused regression: 310 passed. Fresh full regression: 1699 passed plus 37 subtests in 297.08 seconds. Project/privacy audit scanned 581 files with zero issues; license audit checked 65 capabilities with zero issues.
+- Remaining immediate gates: Linux staging verification, recompute v18 artifact evidence, run a clean Juejin Canary, inspect final copy, then use the real Juejin draft publisher only if platform upload/readback evidence can be produced.
