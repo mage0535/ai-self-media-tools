@@ -71,6 +71,29 @@ def test_video_jobs_do_not_run_a_second_audio_generator_over_the_renderer_output
     assert generated_media_kinds_for_job({"platforms": ["kuaishou"]}, config) == ("video",)
 
 
+def test_article_jobs_do_not_generate_optional_audio_without_audio_content_form():
+    config = {
+        "content_policy": {"allow_local_audio_generation": True},
+        "media": {
+            "audio": {"enabled": True},
+            "image": {"enabled": True},
+            "cover": {"enabled": True},
+        },
+    }
+
+    article = generated_media_kinds_for_job(
+        {"platforms": ["juejin"], "draft_meta": {"content_form": "article"}},
+        config,
+    )
+    podcast = generated_media_kinds_for_job(
+        {"platforms": ["juejin"], "draft_meta": {"content_form": "podcast"}},
+        config,
+    )
+
+    assert article == ("cover", "image")
+    assert podcast == ("audio", "cover", "image")
+
+
 def test_effective_publisher_config_rejects_policy_overrides():
     import json
     from pathlib import Path

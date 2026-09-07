@@ -672,6 +672,40 @@ def test_kuaishou_canary_rejects_required_pending_capability(tmp_path: Path):
     assert "required_capability_not_executed:video_toolchain_runner" in probe["failures"]
 
 
+def test_canary_allows_optional_artifact_capability_to_remain_unselected(tmp_path: Path):
+    from scripts.task9_canary import probe_artifacts
+
+    _write(tmp_path / "draft.txt", "verified generated output")
+    _write(tmp_path / "artifact_manifest.json", json.dumps({
+        "artifacts": [{"path": "draft.txt", "sha256": hashlib.sha256((tmp_path / "draft.txt").read_bytes()).hexdigest()}],
+        "capabilities": [
+            {
+                "id": "media_asset_pipeline",
+                "state": "artifact_verified",
+                "required": True,
+                "artifact_relevant": True,
+                "output_hash": "sha256:" + "a" * 64,
+            },
+            {
+                "id": "agnes_image_21_flash",
+                "state": "planned",
+                "required": False,
+                "artifact_relevant": True,
+                "output_hash": "",
+            },
+        ],
+        "delivery_policy": {"state": "dry_run"},
+    }))
+
+    result = probe_artifacts(
+        {"platform": "juejin", "content_form": "article", "delivery_policy": "dry_run", "dry_run": True},
+        tmp_path,
+    )
+
+    assert "artifact_capability_not_verified:agnes_image_21_flash" not in result["failures"]
+    assert result["probes"]["capabilities"]["passed"] is True
+
+
 def test_xiaohongshu_manifest_materializes_carousel_source_license_and_render_evidence(tmp_path: Path):
     from scripts.task9_canary import _PolicySafePublisher, _materialize_artifact_manifest, probe_artifacts
 

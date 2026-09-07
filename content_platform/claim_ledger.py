@@ -41,6 +41,16 @@ UNSUPPORTED_TECHNICAL_MECHANISM = re.compile(
     r"(?:系统|Agent|Skills?)[^。！？.!?\n]{0,36}(?:自动提炼(?:新)?\s*Skill|从执行结果中自动(?:学习|提炼)))",
     re.I,
 )
+UNSUPPORTED_TOOL_RECOMMENDATION = re.compile(
+    r"(?:Skills?\.sh[^。！？.!?\n]{0,40}(?:排行榜|用户验证|热门|推荐)|"
+    r"[A-Za-z0-9][A-Za-z0-9_-]{2,}[^。！？.!?\n]{0,36}(?:必装|会自动|自动(?:导航|检查|生成|填表)|一个\s*Skill\s*全搞定|踩坑概率低))",
+    re.I,
+)
+UNSUPPORTED_INSTALL_COMMAND = re.compile(
+    r"\b(?:npx|npm|pnpm|yarn|pipx?|uvx)\s+[^\n。！？]{0,80}\b(?:add|install)\b|"
+    r"\b(?:npx|npm|pnpm|yarn|pipx?|uvx)\s+(?:add|install)\b",
+    re.I,
+)
 EXTERNAL_ATTRIBUTION_ACTION = re.compile(
     r"(?:官方|发布(?!到|至|进)|推出|上线|集成|支持|兼容|开放|开源|插件市场|Marketplace|"
     r"(?:可以|可|能够|能)\s*直接(?:安装|使用|接入)|official(?:ly)?|released?|launched?|"
@@ -134,6 +144,16 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
             findings.append({"type": "technical_mechanism", "text": sentence, "covered": covered})
             if not covered:
                 failures.append("unsourced_technical_mechanism_claim")
+        if UNSUPPORTED_TOOL_RECOMMENDATION.search(sentence):
+            covered = _covered(sentence, ledger, first_person=False)
+            findings.append({"type": "tool_recommendation", "text": sentence, "covered": covered})
+            if not covered:
+                failures.append("unsourced_tool_recommendation_claim")
+        if UNSUPPORTED_INSTALL_COMMAND.search(sentence):
+            covered = _covered(sentence, ledger, first_person=False)
+            findings.append({"type": "install_command", "text": sentence, "covered": covered})
+            if not covered:
+                failures.append("unsourced_install_command_claim")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),

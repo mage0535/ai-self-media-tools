@@ -1459,11 +1459,26 @@ class Pipeline:
             style_hint = draft.get("draft_meta", {}).get("strategy", {}).get("tone", "")
             h_result = humanize_text(draft["title"], draft["body"], style_hint=style_hint)
             if h_result.get("ok") and h_result.get("patterns_detected"):
-                draft["title"] = h_result["title"]
-                draft["body"] = h_result["body"]
+                candidate_title = str(h_result.get("title") or draft["title"]).strip()
+                candidate_body = normalize_generated_markdown(h_result.get("body") or "")
+                claim_gate = validate_claims(
+                    candidate_title + "\n" + candidate_body,
+                    draft.get("draft_meta", {}).get("claim_ledger") or [],
+                )
+                hygiene_gate = validate_generated_text(candidate_title + "\n" + candidate_body)
+                if not claim_gate.get("passed") or not hygiene_gate.get("passed"):
+                    self.store.record_event(job_id, "humanize_rejected", {
+                        "claim_failures": list(claim_gate.get("failures") or []),
+                        "hygiene_failures": list(hygiene_gate.get("reasons") or []),
+                    })
+                    return
+                draft["title"] = candidate_title
+                draft["body"] = candidate_body
                 self.store.record_event(job_id, "humanized", {
                     "patterns_found": list(h_result["patterns_detected"].keys()),
                     "score": h_result.get("score", 0),
+                    "post_humanize_claim_gate": claim_gate,
+                    "post_humanize_hygiene_gate": hygiene_gate,
                 })
         except ImportError:
             self.store.record_event(job_id, "humanize_skipped", {"reason": "module_not_available"})

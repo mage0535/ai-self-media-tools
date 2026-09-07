@@ -1054,6 +1054,66 @@ class PipelineTests(unittest.TestCase):
         failed_media = [event for event in self.store.events(job["id"]) if event["event"] == "media_failed"]
         self.assertFalse(any('"video"' in event["detail_json"] or '"audio"' in event["detail_json"] for event in failed_media))
 
+    def test_article_platform_does_not_generate_optional_narration_audio(self):
+        root = Path(self.tmp.name)
+        self.pipeline = Pipeline(
+            self.store,
+            {
+                "data_dir": str(root),
+                "generator": {"allow_fallback": True, "api_key_env": "__TEST_MISSING_KEY__"},
+                "content_policy": {"allow_local_audio_generation": True},
+                "media": {"audio": {"enabled": True}},
+                "publishers": {"default": {"type": "file"}},
+                "notifications": {"log_path": str(root / "notifications.jsonl")},
+            },
+        )
+        job = self.pipeline.create("Article workflow", ["juejin"], {"content_form": "article"})
+
+        with patch.object(self.pipeline.media, "generate", wraps=self.pipeline.media.generate) as generate:
+            self.pipeline.run(job["id"])
+
+        assert not any(call.args and call.args[0] == "audio" for call in generate.call_args_list)
+        assert not any(item["kind"] == "audio" for item in self.store.artifacts(job["id"]))
+
+    def test_humanized_copy_is_normalized_before_persistence(self):
+        job = self.pipeline.create("Skill guide", ["juejin"], {})
+        draft = {"title": "Skill guide", "body": "Original body", "draft_meta": {}}
+        with patch("content_platform.humanizer.humanize_text", return_value={
+            "ok": True,
+            "title": "Skill guide",
+            "body": "从 Skills.\nsh 找工具，再调用 skill_registry.\nfind(request)。",
+            "patterns_detected": {"rhythm": True},
+            "score": 0.8,
+        }):
+            self.pipeline._humanize_draft(job["id"], draft)
+
+        self.assertIn("Skills.sh", draft["body"])
+        self.assertIn("skill_registry.find(request)", draft["body"])
+
+    def test_humanizer_rejects_new_unsupported_claims_and_keeps_verified_copy(self):
+        job = self.pipeline.create("Skill guide", ["juejin"], {})
+        original = "先按任务类型筛选能力，再检查输出证据。"
+        draft = {
+            "title": "Skill guide",
+            "body": original,
+            "draft_meta": {"claim_ledger": []},
+        }
+        with patch("content_platform.humanizer.humanize_text", return_value={
+            "ok": True,
+            "title": "Skill guide",
+            "body": "vercel-react-best-practices 是必装工具。运行 npx skills add 即可。",
+            "patterns_detected": {"rhythm": True},
+            "score": 0.9,
+        }):
+            self.pipeline._humanize_draft(job["id"], draft)
+
+        self.assertEqual(draft["body"], original)
+        rejected = [event for event in self.store.events(job["id"]) if event["event"] == "humanize_rejected"]
+        self.assertEqual(len(rejected), 1)
+        detail = json.loads(rejected[0]["detail_json"])
+        self.assertIn("unsourced_tool_recommendation_claim", detail["claim_failures"])
+        self.assertIn("unsourced_install_command_claim", detail["claim_failures"])
+
     def test_run_blocks_near_duplicate_topic_before_generation(self):
         original = self.pipeline.create("Automation visuals", ["wechat"], {"audience": "operators"})
         self.pipeline.run(original["id"])
