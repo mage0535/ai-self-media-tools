@@ -324,3 +324,10 @@
 
 - Chinese sentences ending with a classifier may be complete when parallel verbs supply the omitted noun, for example `跑顺一个，再做下一个。`.
 - Continue blocking conjunction endings and explicit incomplete predicates such as `这只是一个。`. Do not remove English dangling-article checks.
+
+## D44: Deterministic Fallback Must Preserve Semantic Diversity
+
+- A deterministic fallback is not permission to reuse one visual. Final article headings and subtitles select semantic layouts such as workflow, document anatomy and resource stack.
+- Each completed article asset atomically claims its checksum. A duplicate produced by another concurrent asset is a retryable per-asset failure with preserved candidate evidence, not a package-level surprise after all work finishes.
+- Stable identical input remains reproducible, while different semantic sections must produce different output hashes. Color-only randomization is not accepted as semantic diversity.
+- Technical filename normalization uses ASCII identifier boundaries so `SKILL.\nmd` is repaired even when adjacent to Chinese text.

@@ -450,3 +450,12 @@ Observed read-only on 2026-08-31.
 - Red/green `600a011` accepts that complete parallel action while continuing to reject `这只是一个。` and the existing English dangling-article example.
 - Focused suite: 158 passed. Full `p10-chinese-fragment-precision.xml`: 1713 passed plus 37 subtests in 307.44 seconds. Project/privacy audit 581/0; license audit 65/0.
 - Linux verification and v26 remain required; production release and timers were unchanged.
+
+## 2026-09-07 Juejin v26 Deterministic Visual Diversity Evidence
+
+- Linux hygiene/Pipeline subset at `1155431` passed 80 tests in 253.58 seconds. v26 passed copy, source, GEO and platform gates and entered article media.
+- It failed with `article media contains duplicate asset checksums`. Checkpoint evidence showed section 02 and 03 both SHA `a12b2590...`; cover background had the same SHA. All were `deterministic_editorial_v1` workflow layouts despite distinct final headings.
+- The final body also retained `SKILL.\nmd` because the old `\b` extension boundary failed between ASCII and Chinese word characters.
+- `91adeec` adds `document_anatomy` and `resource_stack` layouts, routes on title/subtitle plus concepts, adds lock-protected per-asset checksum claims/retries, persists duplicate retry evidence, and corrects ASCII boundaries for technical filenames.
+- New red/green tests cover all three defects. Related suite: 263 passed. Full `p10-deterministic-visual-diversity.xml`: 1716 passed plus 37 subtests in 314.67 seconds; project/privacy audit 581/0 and license 65/0.
+- v26 was not delivered. Linux verification and v27 remain required; production release and timers were unchanged.

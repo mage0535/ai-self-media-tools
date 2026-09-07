@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v25 Chinese fragment precision locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v26 deterministic visual diversity locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v25 Chinese fragment precision lo
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1713 passed + 37 subtests; JUnit 1750 tests, zero failures/errors.
+- Latest complete regression on this branch: 1716 passed + 37 subtests; JUnit 1753 tests, zero failures/errors.
 
 ## Active work
 
@@ -37,6 +37,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v25 Chinese fragment precision lo
 | Final article heading to image binding | Codex primary | article media adapter and tests | committed `6516e55` | Linux media regression and clean Juejin v24 |
 | Verified article source appendix | Codex primary | claim ledger/Pipeline/GEO tests | committed `13c4634` | Linux source/GEO regression and clean Juejin v25 |
 | Chinese fragment precision | Codex primary | content hygiene and tests | committed `600a011` | Linux hygiene regression and clean Juejin v26 |
+| Deterministic visual diversity and per-asset dedupe | Codex primary | deterministic visual/article media/content normalization | committed `91adeec` | Linux media regression and clean Juejin v27 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -288,3 +289,10 @@ These describe the audited production release, not the current development code.
 - v25 generated a complete fact-grounded article but blocked before GEO/media because `跑顺一个，再做下一个。` was classified as `sentence_fragment` solely for ending in `一个`.
 - `600a011` keeps conjunction-ending fragments and explicit incomplete classifier phrases such as `这只是一个。`, while allowing complete action pairs that use classifier ellipsis.
 - Focused hygiene/Workflow suite: 158 passed. Full: 1713 passed plus 37 subtests in 307.44 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-07 Juejin v26 Media Result
+
+- v26 passed production admission, generation, fact/structure/hygiene, verified-source rendering, GEO and platform gates. Article media then failed because cover background, section 02 and section 03 used identical deterministic fallback pixels.
+- Root causes: the deterministic renderer mapped every `step-by-step operating playbook` concept to one fixed workflow layout; duplicate SHA was checked only after all four assets; `SKILL.\nmd` next to Chinese evaded filename repair because both sides were Unicode word characters.
+- `91adeec` adds document-anatomy and resource-stack layouts selected from final title/subtitle semantics, claims checksums under a lock per asset and retries duplicates immediately, preserves duplicate failures after eventual success, and repairs ASCII technical extensions adjacent to Chinese.
+- Focused new tests: 3 passed. Related media/text/Pipeline suite: 263 passed. Full: 1716 passed plus 37 subtests in 314.67 seconds. Privacy 581/0; license 65/0.
