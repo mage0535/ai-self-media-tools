@@ -94,6 +94,17 @@ def test_claim_gate_rejects_unsourced_multiplier_and_named_platform_trend_claims
     assert "unsourced_platform_trend_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_unsourced_agent_skills_mechanism_claims() -> None:
+    result = validate_claims(
+        "Agent Skills 让 AI 拥有程序性记忆，跨会话自动学习，而且不占上下文。"
+        "系统会从每次执行结果中自动提炼新 Skill。",
+        [],
+    )
+
+    assert result["passed"] is False
+    assert "unsourced_technical_mechanism_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 

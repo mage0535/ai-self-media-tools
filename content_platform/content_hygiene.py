@@ -9,12 +9,28 @@ _TECHNICAL_FILE_EXTENSION = r"(?:md|json|ya?ml|toml|py|js|ts|tsx|jsx|html|css|sh
 def normalize_generated_markdown(text):
     """Repair deterministic model formatting damage without rewriting prose."""
     value = str(text or "")
+    value = re.sub(r"!\s*\n?\s*\[\s*\]\(\s*\)", "", value)
+    value = re.sub(r"(?m)^\s*!\s*$", "", value)
     value = re.sub(
         rf"\b([A-Za-z0-9_-]+)\.\s*\n\s*({_TECHNICAL_FILE_EXTENSION})\b",
         r"\1.\2",
         value,
         flags=re.I,
     )
+    value = re.sub(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\.\s*\n\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        r"\1.\2(",
+        value,
+    )
+    repaired_lines = []
+    for line in value.splitlines():
+        cells = line.strip().strip("|").split("|")
+        if len(cells) >= 2 and all(re.fullmatch(r"[\s,:-]*", cell) for cell in cells):
+            repaired_lines.append("|" + "|".join("---" for _ in cells) + "|")
+        else:
+            repaired_lines.append(line)
+    value = "\n".join(repaired_lines)
+    value = re.sub(r"\n{3,}", "\n\n", value)
     if value.count("```") % 2:
         value = value.rstrip() + "\n```"
     return value

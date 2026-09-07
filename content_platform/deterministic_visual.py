@@ -109,6 +109,33 @@ def _dashboard(draw, width, height, accent):
             _arrow(draw, (width // 2, y + 52), (width // 2, y + int(height * 0.13)), accent, 5)
 
 
+def _agent_orchestrator(draw, width, height, accent):
+    center_x, center_y = width // 2, height // 2
+    center = (center_x - 190, center_y - 105, center_x + 190, center_y + 105)
+    _panel(draw, center, fill=(13, 30, 52), outline=accent, radius=34, width=4)
+    draw.text((center_x - 100, center_y - 46), "AI AGENT", font=_font(40, bold=True), fill=(238, 245, 252))
+    draw.text((center_x - 124, center_y + 18), "PLAN  ACT  VERIFY", font=_font(22, bold=True), fill=accent)
+    nodes = (
+        ("INPUT", (80, center_y - 60, 300, center_y + 60)),
+        ("OUTPUT", (width - 300, center_y - 60, width - 80, center_y + 60)),
+        ("TOOLS", (center_x - 120, 70, center_x + 120, 170)),
+        ("MEMORY", (center_x - 120, height - 170, center_x + 120, height - 70)),
+    )
+    for label, box in nodes:
+        _panel(draw, box, fill=(8, 20, 35), outline=(80, 113, 146), radius=20, width=3)
+        bbox = draw.textbbox((0, 0), label, font=_font(26, bold=True))
+        draw.text(
+            ((box[0] + box[2] - (bbox[2] - bbox[0])) / 2, (box[1] + box[3] - (bbox[3] - bbox[1])) / 2 - bbox[1]),
+            label,
+            font=_font(26, bold=True),
+            fill=(226, 237, 248),
+        )
+    _arrow(draw, (300, center_y), (center[0] - 18, center_y), accent, 7)
+    _arrow(draw, (center[2] + 18, center_y), (width - 300, center_y), accent, 7)
+    draw.line((center_x, 170, center_x, center[1] - 16), fill=accent, width=6)
+    draw.line((center_x, center[3] + 16, center_x, height - 170), fill=accent, width=6)
+
+
 def render_editorial_visual(
     output: str | Path,
     *,
@@ -135,7 +162,10 @@ def render_editorial_visual(
         draw.line((0, y, width, y), fill=(10, 24, 41), width=1)
 
     joined = " ".join(str(item).casefold() for item in concepts)
-    if "module format comparison" in joined:
+    if "ai software agent" in joined:
+        layout = "ai_agent_orchestrator"
+        _agent_orchestrator(draw, width, height, accent_rgb)
+    elif "module format comparison" in joined:
         layout = "module_comparison"
         _module_comparison(draw, width, height, accent_rgb)
     elif "memory archive" in joined:

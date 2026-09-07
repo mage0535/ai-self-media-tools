@@ -36,6 +36,11 @@ PLATFORM_TREND_CLAIM = re.compile(
     r"[^。！？.!?\n]{0,28}(?:已经|已有|出现|热度|增长|攀升|热门|爆款)",
     re.I,
 )
+UNSUPPORTED_TECHNICAL_MECHANISM = re.compile(
+    r"(?:Agent\s+Skills?[^。！？.!?\n]{0,48}(?:程序性记忆|跨会话(?:自动)?学习|不占上下文|持久化经验)|"
+    r"(?:系统|Agent|Skills?)[^。！？.!?\n]{0,36}(?:自动提炼(?:新)?\s*Skill|从执行结果中自动(?:学习|提炼)))",
+    re.I,
+)
 EXTERNAL_ATTRIBUTION_ACTION = re.compile(
     r"(?:官方|发布(?!到|至|进)|推出|上线|集成|支持|兼容|开放|开源|插件市场|Marketplace|"
     r"(?:可以|可|能够|能)\s*直接(?:安装|使用|接入)|official(?:ly)?|released?|launched?|"
@@ -124,6 +129,11 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
             findings.append({"type": "platform_trend", "text": sentence, "covered": covered})
             if not covered:
                 failures.append("unsourced_platform_trend_claim")
+        if UNSUPPORTED_TECHNICAL_MECHANISM.search(sentence):
+            covered = _covered(sentence, ledger, first_person=False)
+            findings.append({"type": "technical_mechanism", "text": sentence, "covered": covered})
+            if not covered:
+                failures.append("unsourced_technical_mechanism_claim")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),

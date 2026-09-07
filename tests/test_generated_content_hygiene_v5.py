@@ -93,3 +93,19 @@ def test_normalize_generated_markdown_closes_one_unclosed_code_fence() -> None:
 
     assert normalized.count("```") == 2
     assert normalized.endswith("```")
+
+
+def test_normalize_generated_markdown_removes_empty_media_and_repairs_common_damage() -> None:
+    text = (
+        "!\n[]()\n\n![]()\n\n"
+        "| 维度 | Prompt | Skill |\n|:, |:, |:, |\n"
+        "skill_registry.\nfind(user_request)"
+    )
+
+    normalized = normalize_generated_markdown(text)
+
+    assert "![]()" not in normalized
+    assert "[]()" not in normalized
+    assert "\n!\n" not in f"\n{normalized}\n"
+    assert "|---|---|---|" in normalized.replace(" ", "")
+    assert "skill_registry.find(user_request)" in normalized

@@ -59,6 +59,25 @@ def test_deterministic_editorial_visual_routes_section_capability(tmp_path):
     assert evidence["output_sha256"] == _sha(output)
 
 
+def test_deterministic_editorial_visual_has_explicit_ai_agent_orchestration_layout(tmp_path):
+    from content_platform.deterministic_visual import render_editorial_visual
+
+    output = tmp_path / "agent.png"
+    evidence = render_editorial_visual(
+        output,
+        role="section",
+        size=(1200, 800),
+        title="AI Agent",
+        subtitle="plan, act, and verify",
+        concepts=["AI software agent"],
+        accent="#1E80FF",
+    )
+
+    assert evidence["layout"] == "ai_agent_orchestrator"
+    assert evidence["semantic_concepts"] == ["AI software agent"]
+    assert output.is_file()
+
+
 def test_media_bridge_uses_deterministic_fallback_only_for_abstract_final_attempt():
     from content_platform.media import MediaBridge
 
