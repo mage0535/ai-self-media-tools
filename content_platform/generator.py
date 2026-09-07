@@ -974,32 +974,44 @@ class DraftGenerator:
                 "Body must be 1200-1800 Chinese characters for Chinese articles or "
                 "900-1300 English words for English articles. Use concise sections and stop after the final CTA."
             )
-        prompt_prefix = (
-            "Return only JSON. Do not use markdown fences. "
-            "Required keys: title, body. Optional keys: hook, cta, hashtags. "
-            f"Target language: {language}. {language_instruction} "
-            "Write a factual, high-retention draft. First learn from same-track references, then generate. "
-            "Open with a concrete hook in the first 2 sentences: a striking number, a rhetorical question "
-            "(为什么/难道/是不是/有没有, or for English: 'Why do...', 'What if...', 'Still using...?'), "
-            "a direct pain point (坑/误区/翻车/浪费, or for English: mistake, trap, waste, broken, no one tells you), "
-            "or a first-person conflict. Example English hook: 'Most teams still trust AI agents blindly — until one silently deletes production data.' "
-            "The hook must read like a real person grabbing attention, not like a headline. "
-            "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
-            "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting. "
-            f"{factual_boundary}"
-            f"{body_requirement}\n"
-            f"Platform rules (must follow for this channel):\n{self._truncate_utf8(context.get('platform_rules', ''), 1600)}\n\n"
-            f"Viral hook templates (pick one and adapt for your title/opening):\n{self._truncate_utf8(context.get('hook_samples', ''), 1200)}\n\n"
-            f"Style guide:\n{self._truncate_utf8(self._style_guide(style_limit), 1600)}\n\n"
-            "Generation context (compiled, bounded):\n"
-        )
+        if retry:
+            prompt_prefix = (
+                "Return only valid JSON with title and body; optional hook, cta, hashtags. No markdown fence around the JSON. "
+                f"Target language: {language}. {language_instruction} "
+                "This is the final bounded retry. Write concise, factual, scannable copy with a direct opening hook. "
+                "Use only facts present in claim_ledger; do not invent products, mechanisms, commands, numbers, sources, anecdotes, or results. "
+                f"{factual_boundary}{body_requirement}\n"
+                f"Platform hard rules:\n{self._truncate_utf8(context.get('platform_rules', ''), 500)}\n\n"
+                f"One hook reference:\n{self._truncate_utf8(context.get('hook_samples', ''), 240)}\n\n"
+                "Verified generation context (compact):\n"
+            )
+        else:
+            prompt_prefix = (
+                "Return only JSON. Do not use markdown fences. "
+                "Required keys: title, body. Optional keys: hook, cta, hashtags. "
+                f"Target language: {language}. {language_instruction} "
+                "Write a factual, high-retention draft. First learn from same-track references, then generate. "
+                "Open with a concrete hook in the first 2 sentences: a striking number, a rhetorical question "
+                "(为什么/难道/是不是/有没有, or for English: 'Why do...', 'What if...', 'Still using...?'), "
+                "a direct pain point (坑/误区/翻车/浪费, or for English: mistake, trap, waste, broken, no one tells you), "
+                "or a first-person conflict. Example English hook: 'Most teams still trust AI agents blindly — until one silently deletes production data.' "
+                "The hook must read like a real person grabbing attention, not like a headline. "
+                "If content_hygiene recommends a cornerstone refresh or merge, update the canonical asset angle instead of creating a redundant near-duplicate article. "
+                "Do not invent statistics or sources. Prefer scannable structure, strong opening hook, visual rhythm, and platform-friendly formatting. "
+                f"{factual_boundary}"
+                f"{body_requirement}\n"
+                f"Platform rules (must follow for this channel):\n{self._truncate_utf8(context.get('platform_rules', ''), 1600)}\n\n"
+                f"Viral hook templates (pick one and adapt for your title/opening):\n{self._truncate_utf8(context.get('hook_samples', ''), 1200)}\n\n"
+                f"Style guide:\n{self._truncate_utf8(self._style_guide(style_limit), 1600)}\n\n"
+                "Generation context (compiled, bounded):\n"
+            )
         stage_payload_bytes = max(4096, int(self.config.get("stage_payload_bytes", 16384)))
         available_context_bytes = stage_payload_bytes - len(prompt_prefix.encode("utf-8"))
         compiled = compile_generation_context(
             platform=platform,
             content_format=str(brief.get("content_form") or (brief.get("content_blueprint") or {}).get("content_form") or "article"),
             stage="generate", brief=brief, context=context, retry=retry,
-            byte_limit=max(512, available_context_bytes),
+            byte_limit=max(512, min(3072, available_context_bytes) if retry else available_context_bytes),
         )
         prompt = prompt_prefix + compiled["text"]
         if len(prompt.encode("utf-8")) > stage_payload_bytes:
