@@ -295,3 +295,9 @@
 - Task9 source claims are accepted only when their evidence file remains inside `_inputs`, its SHA-256 matches, and the declared source excerpt occurs in that file. The translated or editorial claim remains separate from the source excerpt.
 - A popular article may inform hook, structure and display style; technical facts should prefer primary/official documentation. Do not treat popularity as authority.
 - Automated long-form copy requires at least three substantive H2 sections before article media. Missing structure blocks; media code must not manufacture headings to make an invalid draft pass.
+
+## D39: Real Canary Means Production Admission Is Active
+
+- A Pipeline Canary must set `CONTENT_PLATFORM_RUNTIME_MODE=production` for create, run, media, gate and safe delivery-boundary execution. Loading a production config alone is insufficient because pre-generation admission reads the runtime mode.
+- The Canary restores the caller's prior runtime-mode environment on every success or failure path.
+- Historical Canary artifacts generated while the production admission gate was skipped may prove individual providers, media contracts or artifact probes. They do not prove production admission and cannot satisfy the 12-platform release gate.

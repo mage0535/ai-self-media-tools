@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v21 fact-pack and article-structure defects converted to tested gates)
+Last updated: 2026-09-07 Asia/Shanghai (Task9 production-admission bypass closed)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v21 fact-pack and article-structu
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1707 passed + 37 subtests; JUnit 1744 tests, zero failures/errors.
+- Latest complete regression on this branch: 1708 passed + 37 subtests; JUnit 1745 tests, zero failures/errors.
 
 ## Active work
 
@@ -32,6 +32,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v21 fact-pack and article-structu
 | Final generated-copy artifact gate | Codex primary | content hygiene/claim ledger/Pipeline and regression tests | committed `3c5de37`, `fd1e9c0` | Linux regression, v19 offline re-evaluation, then clean Juejin v20 |
 | Minimal final Hermes retry | Codex primary | generator retry prompt and recovery tests | committed `b63547e` | Linux recovery regression and clean Juejin v21 |
 | Technical source fact pack and article structure | Codex primary | pre-generation gate/Task9 source claims/generator/Pipeline | committed `4ce550d` | Linux regression, build official v22 input, run v22 |
+| Canary production admission | Codex primary | Task9 runtime environment and tests | committed `6bcdcaa` | Linux regression, prove old input blocks and official fact-pack input proceeds |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -249,3 +250,10 @@ These describe the audited production release, not the current development code.
 - A logged Playwright probe successfully extracted the 8,657-character Juejin source article. It is useful for trend, style and structure analysis, but it is not automatically authoritative technical evidence.
 - `4ce550d` requires at least three verified, URL-backed, evidence-path and provenance-hash claims before a production automated Juejin technical article can call the model. Task9 source claims additionally bind a source excerpt to an input-local file and SHA-256.
 - Article generation now requests at least three substantive H2 sections; the Pipeline blocks automated article copy below that threshold before media. Focused related suite: 184 passed. Full: 1707 passed plus 37 subtests in 297.13 seconds; privacy 581/0 and license 65/0.
+
+## 2026-09-07 Task9 Admission Correction
+
+- Direct preflight inspection showed `_run_pipeline_case` did not set `CONTENT_PLATFORM_RUNTIME_MODE=production`; therefore earlier Task9 Pipeline runs skipped `validate_pre_generation` even when using production configuration.
+- `6bcdcaa` sets production mode for the full case execution and restores the prior environment in `finally`, including failures. A red environment-probe test observed `None`; green observes `production` and confirms cleanup.
+- Related Task9/Pipeline suite: 139 passed. Full: 1708 passed plus 37 subtests in 303.40 seconds. Project/privacy audit 581/0; license audit 65/0.
+- Prior real media artifacts remain useful provider/render evidence, but they cannot count as production-admission Canary passes. v22 is the first Juejin rerun intended to exercise both production admission and real generation.
