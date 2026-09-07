@@ -2218,10 +2218,10 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
 
     module_format = MediaBridge._semantic_request(job, {
         "role": "section",
-        "section": "CommonJS 导入与 ESM 模块格式不一致，需要配置对比",
+        "section": "代码界面里的 CommonJS 导入与 ESM 模块格式不一致，需要配置对比",
         "purpose": "show module format mismatch",
     })
-    assert module_format["expected_concepts"][0] == "side-by-side software module format comparison"
+    assert module_format["expected_concepts"] == ["side-by-side software module format comparison"]
 
     forgotten_context = MediaBridge._semantic_request(job, {
         "role": "section",
