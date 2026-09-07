@@ -116,19 +116,19 @@ def verify_public_staging(
 def normalize_article_sections(job: dict[str, Any], limit: int = 6) -> list[str]:
     raw = job.get("sections") or (job.get("draft_meta") or {}).get("sections") or []
     sections = []
-    for item in raw:
-        if isinstance(item, dict):
-            value = item.get("title") or item.get("heading") or item.get("text") or item.get("purpose") or ""
-        else:
-            value = item
-        clean = str(value or "").strip().replace("\n", " ")[:80]
+    body_without_code = re.sub(r"```.*?```|~~~.*?~~~", "", str(job.get("body") or ""), flags=re.S)
+    for match in re.finditer(r"^#{1,6}\s+(.+?)\s*$", body_without_code, flags=re.M):
+        clean = re.sub(r"\s+", " ", match.group(1)).strip()[:160]
         if clean:
             sections.append(clean)
+    seen = {re.sub(r"\s+", "", item).casefold() for item in sections}
     if len(sections) < 3:
-        body_without_code = re.sub(r"```.*?```|~~~.*?~~~", "", str(job.get("body") or ""), flags=re.S)
-        seen = {re.sub(r"\s+", "", item).casefold() for item in sections}
-        for match in re.finditer(r"^#{1,6}\s+(.+?)\s*$", body_without_code, flags=re.M):
-            clean = re.sub(r"\s+", " ", match.group(1)).strip()[:160]
+        for item in raw:
+            if isinstance(item, dict):
+                value = item.get("title") or item.get("heading") or item.get("text") or item.get("purpose") or ""
+            else:
+                value = item
+            clean = str(value or "").strip().replace("\n", " ")[:80]
             key = re.sub(r"\s+", "", clean).casefold()
             if clean and key not in seen:
                 sections.append(clean)
