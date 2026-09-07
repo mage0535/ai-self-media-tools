@@ -272,3 +272,10 @@
 - Unsupported named-tool recommendations and install commands require matching verified claim evidence. Structural advice without external factual attribution remains allowed.
 - Article image requirements do not imply an independent narration artifact. Audio generation is limited to explicit audio/podcast content forms; video narration remains owned by the video renderer.
 - Optional providers may remain planned or unavailable without failing an artifact probe. Every required artifact-relevant capability must still reach `artifact_verified`.
+
+## D36: Aggregate Quality Scores Never Replace Final Text Inspection
+
+- A passing platform score, content-depth score or artifact probe does not prove the final title/body is publishable. Automated work must pass deterministic final-text hygiene after all factual sanitization and bounded repairs, before media generation.
+- Source-page code/navigation contamination still blocks immediately. Other prose defects are evaluated after factual repair so a repeated unsupported claim can be removed or repaired before the final hygiene decision.
+- Known model formatting damage may be repaired deterministically without changing prose meaning: fenced-block line boundaries, comma-only YAML corruption, split hidden-directory identifiers and the observed `packageon` corruption.
+- Repository endorsements and Agent Skills loading/trigger mechanisms are factual claims. They require verified ledger evidence; otherwise they are sanitized or the task is blocked.
