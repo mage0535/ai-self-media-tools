@@ -186,6 +186,17 @@ def test_verified_source_appendix_is_deduplicated_and_geo_readable() -> None:
     assert result.count("\n- [") == 2
 
 
+def test_verified_source_appendix_uses_reader_facing_labels_for_known_sources() -> None:
+    result = append_verified_sources("正文。", [
+        {"claim": "规范", "source_url": "https://agentskills.io/specification", "source_type": "verified_primary_source", "verified": True},
+        {"claim": "热门作品", "source_url": "https://juejin.cn/post/123", "source_type": "same_lane_hot_work", "verified": True},
+    ])
+
+    assert "[官方技术规范]" in result
+    assert "[本平台同赛道参考作品]" in result
+    assert "verified_primary_source" not in result
+
+
 def test_verified_hotspot_text_compiles_to_claim_ledger_but_incomplete_evidence_does_not() -> None:
     hotspot = {
         "observed_title": "做内容还要在几十个AI工具之间来回切？",

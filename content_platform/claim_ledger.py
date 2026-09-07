@@ -233,6 +233,13 @@ def append_verified_sources(text: str, ledger: list[dict[str, Any]] | None) -> s
         return value
     rows = []
     seen = set()
+    source_labels = {
+        "verified_primary_source": "官方技术规范",
+        "same_lane_hot_work": "本平台同赛道参考作品",
+        "official_activity": "平台官方活动",
+        "official_keyword": "平台官方关键词",
+        "native": "平台原生热点",
+    }
     for row in ledger or []:
         if not isinstance(row, dict) or row.get("verified") is not True:
             continue
@@ -240,7 +247,8 @@ def append_verified_sources(text: str, ledger: list[dict[str, Any]] | None) -> s
         if not url.startswith(("https://", "http://")) or url in seen:
             continue
         seen.add(url)
-        label = str(row.get("source_title") or row.get("source_type") or row.get("claim") or "来源").strip()
+        source_type = str(row.get("source_type") or "").strip()
+        label = str(row.get("source_title") or source_labels.get(source_type) or row.get("claim") or "来源").strip()
         label = re.sub(r"[\[\]\n\r]+", " ", label)[:48].strip() or "来源"
         rows.append(f"- [{label}]({url})")
     if not rows:
