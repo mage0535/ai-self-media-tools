@@ -1290,11 +1290,13 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
         return {"passed": False, "pipeline_evidence": {"create_called": False, "run_called": False, "serial_index": case["order"], "job_id": ""}, "job": {}, "manifest": {}, "error": str(exc)}
     store = (store_factory or Store)(root / "state.db")
     config = _canary_config(root, runtime_config_path)
-    pipeline = (pipeline_factory or Pipeline)(store, config)
-    brief = _canary_brief(case, verified_hotspot)
-    topic = brief["content_blueprint"]["topic"]
-    evidence = {"create_called": False, "run_called": False, "stage_drafts_called": False, "serial_index": case["order"], "job_id": ""}
+    previous_runtime_mode = os.environ.get("CONTENT_PLATFORM_RUNTIME_MODE")
+    os.environ["CONTENT_PLATFORM_RUNTIME_MODE"] = "production"
     try:
+        pipeline = (pipeline_factory or Pipeline)(store, config)
+        brief = _canary_brief(case, verified_hotspot)
+        topic = brief["content_blueprint"]["topic"]
+        evidence = {"create_called": False, "run_called": False, "stage_drafts_called": False, "serial_index": case["order"], "job_id": ""}
         created = pipeline.create(topic, [case["platform"]], brief, profile="task9", topic_fingerprint=_json_hash(brief))
         evidence["create_called"] = True
         job_id = str(created.get("id") or "")
@@ -1326,9 +1328,15 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
         manifest = _materialize_artifact_manifest(case, store, result, root, verified_hotspot)
         return {"passed": True, "pipeline_evidence": evidence, "job": result, "manifest": manifest}
     except Exception as exc:
+        evidence = locals().get("evidence") or {"create_called": False, "run_called": False, "stage_drafts_called": False, "serial_index": case["order"], "job_id": ""}
         job = store.get_job(evidence["job_id"]) if evidence["job_id"] and hasattr(store, "get_job") else {}
         manifest = _materialize_artifact_manifest(case, store, job, root, verified_hotspot) if job else {}
         return {"passed": False, "pipeline_evidence": evidence, "job": job, "manifest": manifest, "error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        if previous_runtime_mode is None:
+            os.environ.pop("CONTENT_PLATFORM_RUNTIME_MODE", None)
+        else:
+            os.environ["CONTENT_PLATFORM_RUNTIME_MODE"] = previous_runtime_mode
 
 
 def _generation_attempt_evidence(root: Path, expected: dict[str, Any]) -> dict[str, Any]:
