@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v28 manual-review defects locally fixed)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v29 reader-facing defects locally fixed)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v28 manual-review defects locally
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1720 passed + 37 subtests; JUnit 1757 tests, zero failures/errors.
+- Latest complete regression on this branch: 1722 passed + 37 subtests; JUnit 1759 tests, zero failures/errors.
 
 ## Active work
 
@@ -40,6 +40,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v28 manual-review defects locally
 | Deterministic visual diversity and per-asset dedupe | Codex primary | deterministic visual/article media/content normalization | committed `91adeec` | Linux media regression and clean Juejin v27 |
 | Article heading preservation | Codex primary | article media section normalization and tests | committed `adca5ef` | Linux regression and clean Juejin v28 |
 | Final copy and section-media polish | Codex primary | content hygiene/claim ledger/article media and tests | committed `7eac44d` | Linux regression and clean Juejin v29 |
+| Reader-facing article formatting | Codex primary | content normalization/source labels and tests | committed `72f76e5` | Linux regression and offline v29 rebuild; decide final v30 vs draft proof |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -313,3 +314,11 @@ These describe the audited production release, not the current development code.
 - `7eac44d` repairs Unicode YAML delimiters and split numbered lists, extends technical-mechanism evidence checks to Agent resource/routing behavior, and crops every article section image atomically to the requested 1200x800 before semantic/hash validation.
 - Focused new tests: 3 passed. Related content/media suite: 267 passed. Full: 1720 passed plus 37 subtests in 304.56 seconds. Privacy 581/0; license 65/0.
 - v28 was not sent to the real Juejin publisher despite machine-green status. v29 must pass both machine and manual review.
+
+## 2026-09-07 Juejin v29 Result
+
+- v29 reached `review_required`; Pipeline and artifact probes passed with zero failures. Claims/hygiene/depth/quality passed, GEO scored 80, three sections were mapped to unique 1200x800 images, cover passed and no audio was generated.
+- Manual review confirmed v28's YAML/list and ratio defects were gone, but H2 titles still contained their first prose sentence on the same line and source labels exposed internal names such as `verified_primary_source`.
+- `72f76e5` safely splits H2 lines only when a recognized Chinese sentence opener follows, outside code fences. Verified source types map to reader labels such as `官方技术规范` and `本平台同赛道参考作品`.
+- Focused tests: 2 passed. Related suite: 192 passed. Full: 1722 passed plus 37 subtests in 313.97 seconds. Privacy 581/0; license 65/0.
+- v29 was not uploaded. The next step is Linux verification plus offline reconstruction; only run v30 if the output cannot be proven from the existing candidate.
