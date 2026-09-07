@@ -14,6 +14,9 @@ def normalize_generated_markdown(text):
     value = re.sub(r"(?m)^\s*,\s*$\n?", "", value)
     value = re.sub(r"\.\s*\n\s*([A-Za-z][A-Za-z0-9_-]*/)", r".\1", value)
     value = re.sub(r"\bpackageon\b", "package.json", value, flags=re.I)
+    value = re.sub(r"(?m)^(\d+)\.\s*\n\s*(\S.+)$", r"\1. \2", value)
+    value = re.sub(r"(?m)^—\s*$", "---", value)
+    value = re.sub(r"(?m)^—\s*#\s*(.+)$", r"---\n# \1", value)
     fenced_parts = re.split(r"(```.*?```|~~~.*?~~~)", value, flags=re.S)
     for index in range(0, len(fenced_parts), 2):
         prose = fenced_parts[index]

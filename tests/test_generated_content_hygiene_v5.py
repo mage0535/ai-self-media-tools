@@ -38,6 +38,16 @@ def test_markdown_normalizer_repairs_filename_after_chinese_text():
     assert "SKILL.\nmd" not in repaired
 
 
+def test_markdown_normalizer_repairs_unicode_yaml_delimiters_and_split_list_numbers():
+    damaged = "```yaml\n—\nname: demo\n— # 说明\n1.\n查看文件\n2.\n核对结果\n```"
+
+    repaired = normalize_generated_markdown(damaged)
+
+    assert "```yaml\n---\nname: demo\n---\n# 说明" in repaired
+    assert "1. 查看文件" in repaired
+    assert "2. 核对结果" in repaired
+
+
 def test_markdown_normalizer_removes_only_unmatched_straight_quote_from_prose():
     damaged = '## 原理\n先读取 description"，再按需加载正文。\n\n```python\nprint("keep me")\n```'
 

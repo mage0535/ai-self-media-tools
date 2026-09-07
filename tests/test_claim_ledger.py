@@ -139,6 +139,16 @@ def test_claim_gate_rejects_unsourced_repo_endorsements_and_skill_loading_mechan
     assert "unsourced_technical_mechanism_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_unsourced_agent_routing_behavior() -> None:
+    result = validate_claims(
+        "Agent 读到 SKILL.md，就知道后续该调用哪些资源。"
+        "任务开始时，Agent 会先看所有 Skill 的名称和描述，再判断是否加载。",
+        [],
+    )
+
+    assert "unsourced_technical_mechanism_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 

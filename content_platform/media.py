@@ -18,7 +18,7 @@ from .deterministic_visual import render_editorial_visual
 from .image_routing import route_image_request, visual_concepts
 
 try:
-    from PIL import Image, ImageStat, UnidentifiedImageError
+    from PIL import Image, ImageOps, ImageStat, UnidentifiedImageError
 except ImportError:  # pragma: no cover - image generation already depends on Pillow in production/test paths.
     Image = None
     ImageStat = None
@@ -448,6 +448,7 @@ class MediaBridge:
                         self._image_provider_args(extra_args, prompt_item, attempt=attempt, rotate=True),
                     )
                 provider_result = provider_result if isinstance(provider_result, dict) else {}
+                target_dimensions = tuple(prompt_item.get("dimensions") or (1200, 800))
                 if item["role"] == "cover":
                     generated_target = target.with_name("cover-background" + target.suffix)
                     target.replace(generated_target)
@@ -462,6 +463,8 @@ class MediaBridge:
                     cover_gate = normalize_cover_resolution(target)
                     if not cover_gate.get("passed"):
                         raise RuntimeError("adaptive cover normalization failed: " + str(cover_gate.get("error") or "unknown"))
+                else:
+                    self._normalize_article_image(target, target_dimensions)
                 semantic = {}
                 if self.semantic_validation_required:
                     semantic = self._analyze_image_semantics(target, semantic_request)
@@ -677,6 +680,19 @@ class MediaBridge:
             and str(item.get("intent") or "").casefold()
             in {"cinematic_cover", "editorial_illustration", "knowledge_card_background"}
         )
+
+    @staticmethod
+    def _normalize_article_image(path, dimensions):
+        if Image is None:
+            raise RuntimeError("Pillow is required for article image normalization")
+        target = Path(path)
+        width, height = int(dimensions[0]), int(dimensions[1])
+        temporary = target.with_name(f".{target.stem}.normalized{target.suffix}")
+        with Image.open(target) as raw:
+            image = ImageOps.fit(raw.convert("RGB"), (width, height), method=Image.Resampling.LANCZOS)
+            image.save(temporary, format="PNG")
+        os.replace(temporary, target)
+        return {"passed": True, "dimensions": [width, height]}
 
     def _run_image_provider_with_quality_recovery(
         self,
