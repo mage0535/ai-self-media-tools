@@ -2301,3 +2301,44 @@ def test_real_scene_gate_accepts_generated_assets_only_after_verified_stock_fail
     no_proof = {**fallback, "stock_fallback_evidence": []}
     invalid = {"real_scene_background_plan": {**packet["real_scene_background_plan"], "per_slide_backgrounds": [real, no_proof, no_proof]}}
     assert _real_scene_background_gate(invalid, minimum=3)["passed"] is False
+
+
+def test_abstract_article_gate_accepts_all_verified_generated_visuals_only_when_explicit():
+    from content_platform.media_quality import _real_scene_background_gate
+
+    generated = {
+        "asset_type": "generated_image",
+        "source_url": "generated:deterministic_editorial",
+        "rights_cleared": True,
+        "verified_generated_fallback": True,
+        "match_reason": "artifact-bound semantic explanation",
+        "section": "method",
+        "generation_evidence": {
+            "provider": "knowledge_card_renderer",
+            "model": "deterministic_editorial_v1",
+            "prompt_hash": "a" * 64,
+        },
+        "semantic_evidence": {
+            "passed": True,
+            "image_sha256": "b" * 64,
+            "semantic_match_score": 0.8,
+            "evidence_level": "artifact_verified",
+        },
+    }
+    plan = {
+        "required": True,
+        "source_policy": "licensed_or_verified_runtime_assets",
+        "primary_background_kind": "verified_semantic_generated_visual",
+        "allow_all_verified_generated": True,
+        "no_css_gradient_primary": True,
+        "per_slide_backgrounds": [
+            generated,
+            {**generated, "section": "comparison"},
+            {**generated, "section": "checklist"},
+        ],
+    }
+
+    assert _real_scene_background_gate({"real_scene_background_plan": plan}, minimum=3)["passed"] is True
+    assert _real_scene_background_gate({"real_scene_background_plan": {**plan, "allow_all_verified_generated": False}}, minimum=3)["passed"] is False
+    invalid = {**generated, "semantic_evidence": {**generated["semantic_evidence"], "passed": False}}
+    assert _real_scene_background_gate({"real_scene_background_plan": {**plan, "per_slide_backgrounds": [invalid] * 3}}, minimum=3)["passed"] is False

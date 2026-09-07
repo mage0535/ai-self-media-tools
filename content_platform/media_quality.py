@@ -1437,12 +1437,16 @@ def _real_scene_background_gate(packet: dict[str, Any], minimum: int = 3) -> dic
     forbidden = {str(item).casefold() for item in plan.get("forbidden_backgrounds") or []}
     valid_backgrounds = [item for item in backgrounds if isinstance(item, dict) and _valid_real_scene_background(item)]
     fallback_backgrounds = [item for item in backgrounds if isinstance(item, dict) and _valid_generated_fallback(item)]
+    enough_real_or_explicit_generated = bool(valid_backgrounds) or (
+        plan.get("allow_all_verified_generated") is True
+        and len(fallback_backgrounds) >= int(minimum)
+    )
     return {
         "passed": bool(plan.get("required"))
         and source_policy in REAL_SCENE_BACKGROUND_SOURCE_POLICY
         and (bool(plan.get("no_css_gradient_primary")) or "css_gradient" in forbidden)
         and primary_kind not in FORBIDDEN_PRIMARY_BACKGROUNDS
-        and len(valid_backgrounds) >= 1
+        and enough_real_or_explicit_generated
         and len(valid_backgrounds) + len(fallback_backgrounds) >= int(minimum)
         and len(valid_backgrounds) + len(fallback_backgrounds) == len(backgrounds),
         "count": len(valid_backgrounds),
@@ -1581,13 +1585,23 @@ def _valid_generated_fallback(item: dict[str, Any]) -> bool:
     if item.get("verified_generated_fallback") is not True or not item.get("rights_cleared"):
         return False
     evidence = item.get("stock_fallback_evidence") or []
-    return bool(evidence) and all(
+    stock_failed = bool(evidence) and all(
         isinstance(row, dict)
         and str(row.get("provider") or "") in {"stock", "pexels", "pixabay"}
         and row.get("passed") is not True
         and bool(row.get("failures") or row.get("error"))
         for row in evidence
     )
+    generation = item.get("generation_evidence") if isinstance(item.get("generation_evidence"), dict) else {}
+    semantic = item.get("semantic_evidence") if isinstance(item.get("semantic_evidence"), dict) else {}
+    semantic_generated = (
+        all(str(generation.get(key) or "").strip() for key in ("provider", "model", "prompt_hash"))
+        and semantic.get("passed") is True
+        and semantic.get("evidence_level") == "artifact_verified"
+        and len(str(semantic.get("image_sha256") or "")) == 64
+        and float(semantic.get("semantic_match_score") or 0) >= 0.6
+    )
+    return stock_failed or semantic_generated
 
 
 def _failure(code: str, rule_ref: str, message: str, remediation: str) -> GateFailure:

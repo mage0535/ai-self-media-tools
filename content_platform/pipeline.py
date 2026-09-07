@@ -2030,6 +2030,19 @@ class Pipeline:
             source_url = str(item.get("source_url") or "")
             license_name = str(item.get("license") or "")
             real_scene = source_url.startswith(("https://www.pexels.com/", "https://pixabay.com/"))
+            source_path = Path(str(item.get("path") or ""))
+            actual_sha = hashlib.sha256(source_path.read_bytes()).hexdigest() if source_path.is_file() else ""
+            generation = item.get("generation_evidence") if isinstance(item.get("generation_evidence"), dict) else {}
+            semantic = item.get("semantic_evidence") if isinstance(item.get("semantic_evidence"), dict) else {}
+            verified_generated = (
+                not real_scene
+                and bool(actual_sha)
+                and str(semantic.get("image_sha256") or "") == actual_sha
+                and semantic.get("passed") is True
+                and semantic.get("evidence_level") == "artifact_verified"
+                and float(semantic.get("semantic_match_score") or 0) >= 0.6
+                and all(str(generation.get(key) or "").strip() for key in ("provider", "model", "prompt_hash"))
+            )
             row = {
                 **item,
                 "asset_type": "real_scene_photo" if real_scene else "generated_image",
@@ -2038,6 +2051,7 @@ class Pipeline:
                 "rights_cleared": bool(license_name),
                 "source": source_url,
                 "match_reason": item.get("match_reason") or "content-bound image provider result",
+                "verified_generated_fallback": verified_generated,
             }
             assets.append(row)
             if real_scene:
@@ -2046,10 +2060,10 @@ class Pipeline:
                     "background_kind": "licensed_real_scene_photo",
                     "purpose": row.get("match_reason"),
                 })
-            elif row.get("verified_generated_fallback") is True and row.get("stock_fallback_evidence"):
+            elif verified_generated:
                 backgrounds.append({
                     **row,
-                    "background_kind": "verified_generated_fallback",
+                    "background_kind": "verified_semantic_generated_visual",
                     "purpose": row.get("match_reason"),
                 })
         if assets:
@@ -2069,12 +2083,14 @@ class Pipeline:
             }
         if backgrounds:
             real_count = len([item for item in backgrounds if item.get("real_scene") is True])
+            generated_count = len(backgrounds) - real_count
             meta["real_scene_background_plan"] = {
                 "required": True,
                 "source_policy": "licensed_or_verified_runtime_assets",
-                "primary_background_kind": "licensed_real_scene_photo",
+                "primary_background_kind": "licensed_real_scene_photo" if real_count else "verified_semantic_generated_visual",
                 "real_scene_count": real_count,
-                "verified_generated_fallback_count": len(backgrounds) - real_count,
+                "verified_generated_fallback_count": generated_count,
+                "allow_all_verified_generated": real_count == 0 and generated_count == len(backgrounds),
                 "no_css_gradient_primary": True,
                 "forbidden_backgrounds": ["abstract_shape", "css_gradient", "solid_color"],
                 "per_slide_backgrounds": backgrounds,
