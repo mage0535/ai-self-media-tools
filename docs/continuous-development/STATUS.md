@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v24 verified-source rendering locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v25 Chinese fragment precision locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v24 verified-source rendering loc
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1712 passed + 37 subtests; JUnit 1749 tests, zero failures/errors.
+- Latest complete regression on this branch: 1713 passed + 37 subtests; JUnit 1750 tests, zero failures/errors.
 
 ## Active work
 
@@ -36,6 +36,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v24 verified-source rendering loc
 | Blocked-copy observability and quote repair | Codex primary | content hygiene/Pipeline and tests | committed `a162adb` | Linux regression and clean Juejin v23 |
 | Final article heading to image binding | Codex primary | article media adapter and tests | committed `6516e55` | Linux media regression and clean Juejin v24 |
 | Verified article source appendix | Codex primary | claim ledger/Pipeline/GEO tests | committed `13c4634` | Linux source/GEO regression and clean Juejin v25 |
+| Chinese fragment precision | Codex primary | content hygiene and tests | committed `600a011` | Linux hygiene regression and clean Juejin v26 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -281,3 +282,9 @@ These describe the audited production release, not the current development code.
 - Fresh GEO decomposition: direct answer and short paragraphs passed; sources, structured list, authority quote, numeric claims and FAQ failed. Adding fake numbers or fabricated quotes was rejected as a solution.
 - `13c4634` appends a deduplicated Markdown source list from verified public claim-ledger URLs for article platforms. It excludes non-HTTP/private paths and does not duplicate an existing references section.
 - The source list raises v24-equivalent GEO by satisfying real source and structured-list checks. Related source/GEO/media tests: 174 passed. Full: 1712 passed plus 37 subtests in 307.75 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-07 Juejin v25 Result
+
+- v25 generated a complete fact-grounded article but blocked before GEO/media because `跑顺一个，再做下一个。` was classified as `sentence_fragment` solely for ending in `一个`.
+- `600a011` keeps conjunction-ending fragments and explicit incomplete classifier phrases such as `这只是一个。`, while allowing complete action pairs that use classifier ellipsis.
+- Focused hygiene/Workflow suite: 158 passed. Full: 1713 passed plus 37 subtests in 307.44 seconds. Privacy 581/0; license 65/0.

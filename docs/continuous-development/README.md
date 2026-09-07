@@ -69,4 +69,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin v22 passed production admission and official fact-pack loading but exposed an unmatched prose quote. Commit `a162adb` safely repairs unmatched non-code quotes and persists complete blocked drafts for deterministic recovery.
 - Juejin v23 passed copy gates but exposed stale image-section routing. Commit `6516e55` binds article images to final H2 headings before falling back to generator metadata.
 - Juejin v24 passed facts/structure but failed GEO because verified sources were not rendered. Commit `13c4634` appends a deduplicated public source list from the claim ledger before GEO and media.
+- Juejin v25 exposed a Chinese classifier-ellipsis false positive. Commit `600a011` permits complete verb phrases such as `跑顺一个，再做下一个` while retaining real fragment checks.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
