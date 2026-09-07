@@ -104,6 +104,51 @@ def test_article_run_contract_retries_once_with_compact_deadline_after_hard_time
     assert generator._generation_slo(brief, retry=True)["soft"] == 90
 
 
+def test_retry_prompt_uses_minimal_contract_instead_of_repeating_full_methodology(monkeypatch, tmp_path):
+    process = FakeProcess([(0, '{"title":"T","body":"safe body"}')])
+    commands = []
+    monkeypatch.setattr(
+        "content_platform.generator.subprocess.Popen",
+        lambda command, **kwargs: (commands.append(command) or process),
+    )
+    generator = DraftGenerator({
+        "provider": "hermes-cli",
+        "checkpoint_dir": str(tmp_path),
+        "clock": lambda: 0,
+        "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+    generator._style_guide = lambda limit=5000: "style guidance " * 1000
+    brief = {
+        "platform": "juejin",
+        "automated_workflow": True,
+        "content_form": "article",
+        "content_blueprint": {"topic": "Agent Skills", "content_form": "article"},
+        "claim_ledger": [{"claim": "verified title", "source_url": "https://example.test/source", "verified": True}],
+        "compiled_skill_rules": {"rules": [{"id": f"r{i}", "text": "method " * 100} for i in range(20)]},
+    }
+    context = {
+        "language": "zh",
+        "platform_rules": "platform rule " * 1000,
+        "hook_samples": "hook template " * 1000,
+    }
+
+    generator._hermes_attempt(
+        "Agent Skills", brief, context, retry=True,
+        language_instruction="Write in Simplified Chinese.",
+        factual_boundary="Use only claims in claim_ledger.",
+        body_requirement="Body must be 1200-1800 Chinese characters.",
+        style_limit=5000,
+    )
+
+    prompt = commands[0][2]
+    assert len(prompt) < 4000
+    assert "Agent Skills" in prompt
+    assert "claim_ledger" in prompt
+    assert "1200-1800" in prompt
+    assert "style guidance" not in prompt
+
+
 def test_canary_command_uses_verified_dynamic_selectors_and_records_identity(monkeypatch, tmp_path):
     process = FakeProcess([(0, '{"title":"T","body":"body " * 80}')])
     commands = []
