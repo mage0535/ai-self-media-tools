@@ -2014,6 +2014,13 @@ class Pipeline:
         meta = draft.setdefault("draft_meta", {})
         provenance_path = artifact_dir / "asset_provenance.json"
         mapping_path = artifact_dir / "section_image_map.json"
+        contract_path = artifact_dir / "article_media_contract.json"
+        try:
+            contract = json.loads(contract_path.read_text(encoding="utf-8")) if contract_path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            contract = {}
+        if not isinstance(contract, dict) or contract.get("version") != "article_media_contract_v1":
+            contract = {}
         try:
             provenance = json.loads(provenance_path.read_text(encoding="utf-8")) if provenance_path.is_file() else {}
         except (OSError, json.JSONDecodeError):
@@ -2022,9 +2029,14 @@ class Pipeline:
             mappings = json.loads(mapping_path.read_text(encoding="utf-8")) if mapping_path.is_file() else []
         except (OSError, json.JSONDecodeError):
             mappings = []
+        contract_assets = contract.get("assets") if isinstance(contract.get("assets"), list) else []
+        contract_mappings = contract.get("section_image_map") if isinstance(contract.get("section_image_map"), list) else []
+        source_asset_rows = contract_assets or (provenance.get("assets") or [])
+        if not mappings and contract_mappings:
+            mappings = contract_mappings
         assets = []
         backgrounds = []
-        for item in provenance.get("assets") or []:
+        for item in source_asset_rows:
             if not isinstance(item, dict):
                 continue
             source_url = str(item.get("source_url") or "")
