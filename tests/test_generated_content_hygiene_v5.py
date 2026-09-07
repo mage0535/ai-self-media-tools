@@ -31,6 +31,16 @@ def test_markdown_normalizer_repairs_model_damaged_fences_and_identifiers():
     assert validate_generated_text(repaired)["passed"] is True
 
 
+def test_markdown_normalizer_removes_only_unmatched_straight_quote_from_prose():
+    damaged = '## 原理\n先读取 description"，再按需加载正文。\n\n```python\nprint("keep me")\n```'
+
+    repaired = normalize_generated_markdown(damaged)
+
+    assert 'description"' not in repaired
+    assert 'print("keep me")' in repaired
+    assert validate_generated_text(repaired)["passed"] is True
+
+
 def test_rejects_platform_navigation_contamination():
     result = validate_generated_text("稀土掘金 首页 沸点 课程 APP 搜索历史 清空 创作者中心 写文章 发沸点 写笔记 写代码 草稿\n\n正文")
     assert result["passed"] is False

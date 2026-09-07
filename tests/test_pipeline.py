@@ -500,6 +500,13 @@ class PipelineTests(unittest.TestCase):
         ][-1]
         self.assertEqual(step["reason_code"], "generated_text_hygiene_failed")
         media.assert_not_called()
+        persisted = self.store.get_job(job["id"])
+        self.assertEqual(persisted["body"], f"{paragraph}\n\n{paragraph}\n\n最后核对交付结果。")
+        self.assertTrue(
+            {"repeated_paragraph", "repeated_sentence"}.intersection(
+                persisted["draft_meta"]["generated_text_hygiene"]["reasons"]
+            )
+        )
 
     def test_automated_article_requires_three_readable_h2_sections_before_media(self):
         body = (
