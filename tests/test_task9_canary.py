@@ -1,5 +1,6 @@
 import json
 import hashlib
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -169,6 +170,36 @@ def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Pat
     assert result["passed"] is False
     assert calls == []
     assert "hotspot" in result["error"]
+
+
+def test_pipeline_canary_runs_with_production_admission_enabled(tmp_path: Path, monkeypatch):
+    from scripts import task9_canary
+
+    monkeypatch.delenv("CONTENT_PLATFORM_RUNTIME_MODE", raising=False)
+    monkeypatch.setattr(task9_canary, "_load_verified_hotspot", lambda root, case: {
+        "platform": case["platform"], "observed_title": "Verified topic",
+        "fetched_at": "2026-09-07T00:00:00Z", "source_url": "https://example.test/work",
+        "provenance_hash": "a" * 64, "evidence_verified": True, "source_claims": [],
+    })
+    observed = []
+
+    class EnvironmentProbePipeline:
+        def __init__(self, store, config):
+            pass
+
+        def create(self, *args, **kwargs):
+            observed.append(os.environ.get("CONTENT_PLATFORM_RUNTIME_MODE"))
+            raise RuntimeError("stop after environment probe")
+
+    result = task9_canary._run_pipeline_case(
+        {"platform": "twitter", "content_form": "short_post", "language": "en", "delivery_policy": "dry_run", "dry_run": True, "order": 1},
+        tmp_path,
+        pipeline_factory=EnvironmentProbePipeline,
+    )
+
+    assert result["passed"] is False
+    assert observed == ["production"]
+    assert "CONTENT_PLATFORM_RUNTIME_MODE" not in os.environ
 
 
 def test_canary_brief_uses_the_same_strict_run_contract_as_production():
