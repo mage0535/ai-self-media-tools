@@ -195,6 +195,7 @@ def execute_article_media(
         checkpoints = {}
     if not isinstance(checkpoints, dict):
         checkpoints = {}
+    claimed_checksums: dict[str, str] = {}
 
     def run_one(item: dict[str, str]) -> dict[str, Any]:
         asset_id = item["asset_id"]
@@ -210,7 +211,12 @@ def execute_article_media(
             and previous.get("license")
             and (not require_semantic_evidence or _verified_semantic_evidence(previous, Path(str(previous.get("path") or path))))
         ):
-            return dict(previous)
+            with lock:
+                checksum = str(previous.get("checksum") or "")
+                owner = claimed_checksums.get(checksum)
+                if not owner or owner == asset_id:
+                    claimed_checksums[checksum] = asset_id
+                    return dict(previous)
 
         attempts = int(previous.get("attempts") or 0)
         failed_attempts = list(previous.get("failed_attempts") or [])
@@ -247,11 +253,16 @@ def execute_article_media(
                     "semantic_required": evidence.get("semantic_required") is True,
                     "semantic_evidence": dict(evidence.get("semantic_evidence") or {}),
                     "attempts": attempts,
+                    "failed_attempts": failed_attempts,
                     "status": "complete",
                 }
                 if require_semantic_evidence and not _verified_semantic_evidence(record, path):
                     raise RuntimeError("verified semantic evidence is missing or invalid")
                 with lock:
+                    owner = claimed_checksums.get(checksum)
+                    if owner and owner != asset_id:
+                        raise RuntimeError(f"duplicate asset checksum already claimed by {owner}")
+                    claimed_checksums[checksum] = asset_id
                     checkpoints[asset_id] = record
                     _write_json_atomic(checkpoint_path, checkpoints)
                 return record

@@ -29,7 +29,7 @@ def normalize_generated_markdown(text):
     value = re.sub(r"!\s*\n?\s*\[\s*\]\(\s*\)", "", value)
     value = re.sub(r"(?m)^\s*!\s*$", "", value)
     value = re.sub(
-        rf"\b([A-Za-z0-9_-]+)\.\s*\n\s*({_TECHNICAL_FILE_EXTENSION})\b",
+        rf"(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.\s*\n\s*({_TECHNICAL_FILE_EXTENSION})(?![A-Za-z0-9_-])",
         r"\1.\2",
         value,
         flags=re.I,

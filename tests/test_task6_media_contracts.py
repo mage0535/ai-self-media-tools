@@ -187,6 +187,33 @@ def test_juejin_article_media_preserves_failed_candidate_and_semantic_evidence(t
     assert attempts[-1]["semantic_evidence"]["caption"].startswith("Two people")
 
 
+def test_juejin_article_media_retries_duplicate_checksum_per_asset(tmp_path):
+    from content_platform.adapters.media import execute_article_media
+
+    def generate(item, output):
+        if item["asset_id"] == "cover" or (item["asset_id"] == "section-01" and item["_attempt"] == 1):
+            output.write_bytes(b"cover")
+        else:
+            output.write_bytes(f"{item['asset_id']}:{item['_attempt']}".encode())
+        return {
+            "origin_type": "generated", "source_url": "generated:test", "license": "generated_for_project",
+            "generation_evidence": {"provider": "test", "model": "test", "prompt_hash": item["asset_id"] + str(item["_attempt"])},
+        }
+
+    result = execute_article_media(
+        {"id": "dedupe", "title": "Article", "sections": ["one", "two", "three"]},
+        tmp_path,
+        generate,
+        max_concurrency=1,
+        max_attempts=2,
+    )
+
+    assert len({row["checksum"] for row in result["assets"]}) == 4
+    checkpoint = json.loads((tmp_path / "asset_checkpoints.json").read_text(encoding="utf-8"))
+    assert checkpoint["section-01"]["attempts"] == 2
+    assert "duplicate" in checkpoint["section-01"]["failed_attempts"][0]["error"]
+
+
 def test_juejin_content_route_cannot_bypass_production_four_asset_path(tmp_path, monkeypatch):
     from content_platform.media import MediaBridge
 

@@ -31,6 +31,13 @@ def test_markdown_normalizer_repairs_model_damaged_fences_and_identifiers():
     assert validate_generated_text(repaired)["passed"] is True
 
 
+def test_markdown_normalizer_repairs_filename_after_chinese_text():
+    repaired = normalize_generated_markdown("目录里至少包含一个SKILL.\nmd文件。")
+
+    assert "SKILL.md文件" in repaired
+    assert "SKILL.\nmd" not in repaired
+
+
 def test_markdown_normalizer_removes_only_unmatched_straight_quote_from_prose():
     damaged = '## 原理\n先读取 description"，再按需加载正文。\n\n```python\nprint("keep me")\n```'
 
