@@ -408,3 +408,11 @@ Observed read-only on 2026-08-31.
 - `4ce550d` adds the technical fact-pack pre-generation gate, Task9 hash-bound source-claim contract, a three-H2 generation requirement and a final three-H2 Pipeline gate. Red/green tests cover insufficient/valid fact packs, source-claim SHA/excerpt binding and missing article sections.
 - Focused suite: 184 passed in 48.92 seconds. Full `p10-technical-fact-pack.xml`: 1707 passed plus 37 subtests in 297.13 seconds. Project/privacy audit 581/0; license audit 65/0; diff check clean.
 - Next: Linux verification, build a new private v22 input with Agent Skills primary-source snapshots and at least three verified claims, then run a fresh Juejin Canary. Production and timers remain unchanged.
+
+## 2026-09-07 Task9 Production-Admission Bypass Closure
+
+- A direct production-mode preflight comparison exposed that standalone Task9 runs inherited no `CONTENT_PLATFORM_RUNTIME_MODE`; `validate_pre_generation` therefore returned `skipped=true`. Production config paths do not activate that environment gate.
+- Red test instrumented Pipeline creation and observed no runtime mode. Commit `6bcdcaa` sets `production` around the complete `_run_pipeline_case` transaction and restores the previous value in `finally`; green test observes production and no leaked variable afterward.
+- Related Task9/pre-generation/Pipeline suite passed 139 tests. Full `p10-canary-production-admission.xml`: 1708 passed plus 37 subtests in 303.40 seconds. Project/privacy audit 581 files with zero issues; license audit 65 capabilities with zero issues.
+- A private v22 input root was prepared from the prior Juejin hotspot evidence. It adds the official `agentskills.io/specification.md` snapshot, mode 0600, SHA-256 `2b1dbb4fd80c31748d15812c4ebd3e66c09383d0c792801f617718684489e40d`, and five Chinese claims each bound to an exact official English excerpt. No credentials or source body entered Git.
+- The v22 generation has not yet run under `6bcdcaa`. Production release, gateway, shared database and timers remain unchanged.
