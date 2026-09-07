@@ -798,7 +798,9 @@ class MediaBridge:
             section_concepts = visual_concepts(section_text)
             if len(section_concepts) > 1 and "AI software agent" in section_concepts:
                 section_concepts.remove("AI software agent")
-            if "organized memory archive" in section_concepts:
+            if "side-by-side software module format comparison" in section_concepts:
+                section_concepts = ["side-by-side software module format comparison"]
+            elif "organized memory archive" in section_concepts:
                 section_concepts = ["organized memory archive"]
             elif "human feeding computer" in section_concepts:
                 section_concepts = ["human feeding computer"]
