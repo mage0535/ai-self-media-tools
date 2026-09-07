@@ -113,3 +113,7 @@ def test_agent_skills_cover_uses_workflow_playbook_visual_and_clean_subtitle():
     assert "no generic humanoid robot" in direction["background_prompt"]
     assert "no generic portrait" in direction["background_prompt"]
     assert any("workflow playbook" in item for item in direction["focal_subjects"])
+    assert direction["semantic_concepts"] == [
+        "connected workflow task nodes",
+        "step-by-step operating playbook",
+    ]
