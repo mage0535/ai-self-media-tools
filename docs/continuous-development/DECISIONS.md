@@ -287,3 +287,11 @@
 - After a bounded hard timeout, the one final retry includes only the JSON output contract, language, factual boundary, content length, a compact platform-rule summary, one hook reference and a 3,072-byte verified generation context.
 - The retry must retain the selected topic and claim ledger and must not repeat the full methodology/style corpus. Both attempts remain bound by heartbeats, process-group termination and recorded prompt hashes/lengths.
 - A second hard timeout is a real terminal failure. Do not add unbounded retries or silently use fallback copy.
+
+## D38: Trend Evidence And Factual Evidence Are Separate Contracts
+
+- A platform search card proves that a topic or work was observed with a URL and visible engagement. It does not prove the technical claims inside a new article.
+- Production automated Juejin technical articles require at least three verified facts with claim text, source URL, evidence path and provenance hash before the model call.
+- Task9 source claims are accepted only when their evidence file remains inside `_inputs`, its SHA-256 matches, and the declared source excerpt occurs in that file. The translated or editorial claim remains separate from the source excerpt.
+- A popular article may inform hook, structure and display style; technical facts should prefer primary/official documentation. Do not treat popularity as authority.
+- Automated long-form copy requires at least three substantive H2 sections before article media. Missing structure blocks; media code must not manufacture headings to make an invalid draft pass.

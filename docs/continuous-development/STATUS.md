@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v20 bounded-retry failure converted to tested recovery)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v21 fact-pack and article-structure defects converted to tested gates)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v20 bounded-retry failure convert
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1703 passed + 37 subtests; JUnit 1740 tests, zero failures/errors.
+- Latest complete regression on this branch: 1707 passed + 37 subtests; JUnit 1744 tests, zero failures/errors.
 
 ## Active work
 
@@ -31,6 +31,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v20 bounded-retry failure convert
 | Article recovery and final-copy truth gate | Codex primary | claim/content policy/Pipeline/Task9 Canary and focused tests | committed `4b141c4` | Linux regression, v18 probe refresh, then clean Juejin Canary |
 | Final generated-copy artifact gate | Codex primary | content hygiene/claim ledger/Pipeline and regression tests | committed `3c5de37`, `fd1e9c0` | Linux regression, v19 offline re-evaluation, then clean Juejin v20 |
 | Minimal final Hermes retry | Codex primary | generator retry prompt and recovery tests | committed `b63547e` | Linux recovery regression and clean Juejin v21 |
+| Technical source fact pack and article structure | Codex primary | pre-generation gate/Task9 source claims/generator/Pipeline | committed `4ce550d` | Linux regression, build official v22 input, run v22 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -240,3 +241,11 @@ These describe the audited production release, not the current development code.
 - The task failed explicitly with `GenerationTimeoutError`; it created no media and made no delivery attempt. This proves bounded termination, but not successful recovery.
 - `b63547e` gives only the retry a minimal prompt: output contract, language, factual boundary, article length, 500-byte platform rules, one 240-byte hook reference and at most 3,072 bytes of compiled verified context. The normal first attempt remains unchanged.
 - Red test observed a 6,638-character retry prompt; green test requires under 4,000 characters and retained topic, claim ledger and length contract. Focused generation/Pipeline tests: 139 passed. Full: 1703 passed plus 37 subtests in 298.66 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-07 Juejin v21 Fact-Evidence Finding
+
+- v21 completed the full first Hermes request in about 236 seconds; retry compression was not exercised. It then failed before image generation because the article had fewer than three mapped sections.
+- The more important defect was factual: the only evidence was a 600-byte search-card snapshot containing title, URL and engagement. The generated tutorial invented or copied unverified Claude Code paths, precedence, commands, dynamic injection and loading behavior while the claim gate passed.
+- A logged Playwright probe successfully extracted the 8,657-character Juejin source article. It is useful for trend, style and structure analysis, but it is not automatically authoritative technical evidence.
+- `4ce550d` requires at least three verified, URL-backed, evidence-path and provenance-hash claims before a production automated Juejin technical article can call the model. Task9 source claims additionally bind a source excerpt to an input-local file and SHA-256.
+- Article generation now requests at least three substantive H2 sections; the Pipeline blocks automated article copy below that threshold before media. Focused related suite: 184 passed. Full: 1707 passed plus 37 subtests in 297.13 seconds; privacy 581/0 and license 65/0.

@@ -398,3 +398,13 @@ Observed read-only on 2026-08-31.
 - A new red test measured the retry at 6,638 characters under large platform/style/rule inputs. `b63547e` implements a retry-only minimal prompt and a 3,072-byte compiled-context cap; the test then passed below 4,000 characters while retaining topic, `claim_ledger` and the 1,200-1,800 character requirement.
 - Focused generation/recovery/Pipeline suite: 139 passed in 44.82 seconds. Full `p10-compact-final-retry.xml`: 1703 passed plus 37 subtests in 298.66 seconds. Project/privacy audit 581 files and zero issues; license audit 65 capabilities and zero issues.
 - Linux verification and a clean v21 are required. Production release, gateway roots, shared database and timers were not changed.
+
+## 2026-09-07 Juejin v21 Source-Evidence And Structure Evidence
+
+- Linux staging `6fa2d56` generation-recovery suite passed 49 tests. v21 dynamically used `opencode-go/mimo-v2.5`; the first 7,617-character attempt succeeded in about 236 seconds.
+- v21 failed at article media with `article media requires at least three mapped sections`. No cover, section image or publisher call occurred. The body had only two readable H2 headings.
+- The prior hotspot snapshot was only 600 bytes and contained a search-card title, URL, visible engagement and classification. It did not contain the technical facts needed for a tutorial.
+- A read-only logged Playwright probe using the existing private Juejin state opened the source URL and extracted 8,657 visible characters. This confirmed source access but also confirmed that hot-work content must remain a structure/style reference unless technical facts are independently verified.
+- `4ce550d` adds the technical fact-pack pre-generation gate, Task9 hash-bound source-claim contract, a three-H2 generation requirement and a final three-H2 Pipeline gate. Red/green tests cover insufficient/valid fact packs, source-claim SHA/excerpt binding and missing article sections.
+- Focused suite: 184 passed in 48.92 seconds. Full `p10-technical-fact-pack.xml`: 1707 passed plus 37 subtests in 297.13 seconds. Project/privacy audit 581/0; license audit 65/0; diff check clean.
+- Next: Linux verification, build a new private v22 input with Agent Skills primary-source snapshots and at least three verified claims, then run a fresh Juejin Canary. Production and timers remain unchanged.

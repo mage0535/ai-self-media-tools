@@ -64,4 +64,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin Canary v19 passed its Pipeline and artifact probes but exposed malformed fenced content and additional unsupported technical claims. Commit `3c5de37` normalizes known model formatting damage and enforces final post-factual-repair prose hygiene before media generation.
 - Follow-up `fd1e9c0` closes the dotted-identifier gap so claims containing `SKILL.md` or `.agent/skills` cannot evade mechanism validation.
 - Juejin v20 proved the old 5,603-character retry could still time out. Commit `b63547e` retains the full first attempt but uses a minimal verified-context contract for the final bounded retry.
+- Juejin v21 proved that a hot-title snapshot is insufficient evidence for a technical tutorial. Commit `4ce550d` requires a hash-bound technical fact pack and three readable H2 sections before article media.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
