@@ -149,6 +149,19 @@ def test_claim_gate_rejects_unsourced_agent_routing_behavior() -> None:
     assert "unsourced_technical_mechanism_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_v30_token_counts_client_lists_and_free_promises() -> None:
+    result = validate_claims(
+        "metadata 只占约 100 tokens，正文控制在 5000 tokens 以内。"
+        "官方客户端列表已经包括 Cursor、Claude Code、Hermes Agent 等 20 多个工具。"
+        "Agent Skills 不收费、不注册、不需要特定 IDE 插件。",
+        [],
+    )
+
+    assert "unsourced_numeric_claim" in result["failures"]
+    assert "unsourced_external_attribution" in result["failures"]
+    assert "unsourced_promotional_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 
@@ -230,3 +243,16 @@ def test_verified_domain_is_restored_when_model_drops_only_the_tld() -> None:
     repaired = restore_verified_domains("第一步，打开 ai.kuaishou.\n\n第二步，检查接口。", ledger)
 
     assert "ai.kuaishou.com" in repaired
+
+
+def test_verified_domain_can_be_restored_from_source_url() -> None:
+    ledger = [{
+        "claim": "查看官方规范。",
+        "source_url": "https://agentskills.io/specification",
+        "evidence_path": "sources/specification.md",
+        "verified": True,
+    }]
+
+    repaired = restore_verified_domains("下一步打开 agentskills.\nio 查看规范。", ledger)
+
+    assert "agentskills.io" in repaired
