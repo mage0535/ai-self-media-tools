@@ -476,3 +476,11 @@ Observed read-only on 2026-08-31.
 - `7eac44d` converts all findings into red/green tests and minimal implementation: formatting repair, expanded technical mechanism validation and atomic 1200x800 section normalization before semantic evidence.
 - Related suite: 267 passed. Full `p10-final-copy-media-polish.xml`: 1720 passed plus 37 subtests in 304.56 seconds. Project/privacy audit 581/0; license audit 65/0.
 - v29 is required before any real draft upload. Production release and timers remain unchanged.
+
+## 2026-09-07 Juejin v29 Reader-Facing Review Evidence
+
+- Linux final-copy/media subset at `212c9bf` passed 79 tests. v29 reached `review_required`; Pipeline and artifact probe passed with no failures.
+- Three section images are all 1200x800 and have unique SHA-256 values; cover is 1800x1200; no MP3/WAV exists. Capability probe passed 17 records and media asset pipeline reached artifact verified.
+- Manual review found joined H2/prose lines and internal source labels. It did not find the v28 Unicode YAML/list defect because the new draft contained no such block.
+- `72f76e5` adds constrained heading/prose splitting and reader-facing source labels. Red/green focused tests passed; related 192 passed. Full `p10-reader-facing-article-copy.xml`: 1722 passed plus 37 subtests in 313.97 seconds; privacy 581/0 and license 65/0.
+- v29 remains a safe local Task9 package, not a real Juejin draft. Linux verification and deterministic offline revalidation are next; production and timers were unchanged.

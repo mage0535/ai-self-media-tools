@@ -344,3 +344,9 @@
 - Weak-model Markdown normalization may repair Unicode YAML frontmatter delimiters and numbered-list line breaks without changing prose meaning.
 - Assertions about how an Agent discovers, routes, loads or invokes resources are technical mechanism claims and require verified evidence.
 - Article section images are normalized atomically to their requested platform dimensions before semantic analysis and checksum evidence, so gates measure the actual delivered crop.
+
+## D47: Reader-Facing Evidence Must Not Leak Internal Labels
+
+- Verified source appendices use stable reader-facing labels for known source types. Internal enum values are implementation evidence, not article copy.
+- Weak-model H2 lines may be split from an attached opening sentence only for explicit sentence openers and only outside fenced code. Ambiguous headings remain unchanged for a gate or manual review.
+- A machine-green candidate is not rerun automatically when deterministic post-processing can be applied and independently revalidated; avoid unnecessary provider cost and variance.
