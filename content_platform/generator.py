@@ -969,6 +969,11 @@ class DraftGenerator:
     def _hermes_attempt(self, topic, brief, context, *, retry, language_instruction, factual_boundary, body_requirement, style_limit):
         platform = str(brief.get("platform") or context.get("platform") or "wechat")
         language = context.get("language") or "zh"
+        if retry and platform.casefold() in {"wechat", "weixin", "wechat_official", "juejin", "zhihu"}:
+            body_requirement = (
+                "Body must be 1200-1800 Chinese characters for Chinese articles or "
+                "900-1300 English words for English articles. Use concise sections and stop after the final CTA."
+            )
         prompt_prefix = (
             "Return only JSON. Do not use markdown fences. "
             "Required keys: title, body. Optional keys: hook, cta, hashtags. "
@@ -1022,7 +1027,7 @@ class DraftGenerator:
             stdout_file.close()
             stderr_file.close()
             raise
-        slo = self._generation_slo(brief)
+        slo = self._generation_slo(brief, retry=retry)
         soft = slo["soft"]
         hard = slo["hard"]
         heartbeat_interval = slo["heartbeat"]
@@ -1213,13 +1218,16 @@ class DraftGenerator:
         contract = brief.get("run_contract") if isinstance(brief, dict) else None
         return max(1024, int(((contract or {}).get("bounds") or {}).get("provider_response_bytes") or 1_048_576))
 
-    def _generation_slo(self, brief):
+    def _generation_slo(self, brief, *, retry=False):
         contract = brief.get("run_contract") if isinstance(brief, dict) else None
         bounds = (contract or {}).get("bounds") if isinstance(contract, dict) else {}
         bounds = bounds if isinstance(bounds, dict) else {}
         heartbeat = max(1, int(bounds.get("generation_heartbeat_seconds") or self.config.get("heartbeat_interval", 30)))
         hard = int(bounds.get("generation_hard_deadline_seconds") or self.config.get("hard_deadline", 420))
         soft = int(bounds.get("generation_soft_deadline_seconds") or self.config.get("soft_deadline", 240))
+        if retry:
+            hard = int(bounds.get("generation_retry_hard_deadline_seconds") or hard)
+            soft = int(bounds.get("generation_retry_soft_deadline_seconds") or soft)
         if hard <= 0:
             hard = 0
             soft = 0
