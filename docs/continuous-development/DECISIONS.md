@@ -279,3 +279,4 @@
 - Source-page code/navigation contamination still blocks immediately. Other prose defects are evaluated after factual repair so a repeated unsupported claim can be removed or repaired before the final hygiene decision.
 - Known model formatting damage may be repaired deterministically without changing prose meaning: fenced-block line boundaries, comma-only YAML corruption, split hidden-directory identifiers and the observed `packageon` corruption.
 - Repository endorsements and Agent Skills loading/trigger mechanisms are factual claims. They require verified ledger evidence; otherwise they are sanitized or the task is blocked.
+- Dotted technical identifiers are content, not sentence boundaries. Claim patterns must handle `SKILL.md` and `.agent/skills` without stopping at the embedded period.
