@@ -94,6 +94,13 @@ def test_claim_gate_rejects_unsourced_multiplier_and_named_platform_trend_claims
     assert "unsourced_platform_trend_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_unsourced_bare_year_in_clickbait_title() -> None:
+    result = validate_claims("2026 最火的 Agent Skills，从零搞懂只需这篇", [])
+
+    assert result["passed"] is False
+    assert "unsourced_numeric_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_agent_skills_mechanism_claims() -> None:
     result = validate_claims(
         "Agent Skills 让 AI 拥有程序性记忆，跨会话自动学习，而且不占上下文。"
