@@ -301,3 +301,9 @@
 - A Pipeline Canary must set `CONTENT_PLATFORM_RUNTIME_MODE=production` for create, run, media, gate and safe delivery-boundary execution. Loading a production config alone is insufficient because pre-generation admission reads the runtime mode.
 - The Canary restores the caller's prior runtime-mode environment on every success or failure path.
 - Historical Canary artifacts generated while the production admission gate was skipped may prove individual providers, media contracts or artifact probes. They do not prove production admission and cannot satisfy the 12-platform release gate.
+
+## D40: A Blocked Draft Is Recovery Evidence
+
+- Final text-hygiene and article-structure failures persist the complete candidate title/body, draft metadata and gate detail before changing the job to blocked. Compact workflow excerpts are not sufficient for automated diagnosis or repair.
+- Deterministic normalization may remove one unmatched straight quote from prose while preserving complete fenced code blocks and balanced quote pairs. Raw validation continues to detect malformed quotes; normalization is the repair step.
+- Persisting a blocked draft is not approval, review completion or delivery evidence. Media and publishers remain uncalled.

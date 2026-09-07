@@ -416,3 +416,12 @@ Observed read-only on 2026-08-31.
 - Related Task9/pre-generation/Pipeline suite passed 139 tests. Full `p10-canary-production-admission.xml`: 1708 passed plus 37 subtests in 303.40 seconds. Project/privacy audit 581 files with zero issues; license audit 65 capabilities with zero issues.
 - A private v22 input root was prepared from the prior Juejin hotspot evidence. It adds the official `agentskills.io/specification.md` snapshot, mode 0600, SHA-256 `2b1dbb4fd80c31748d15812c4ebd3e66c09383d0c792801f617718684489e40d`, and five Chinese claims each bound to an exact official English excerpt. No credentials or source body entered Git.
 - The v22 generation has not yet run under `6bcdcaa`. Production release, gateway, shared database and timers remain unchanged.
+
+## 2026-09-07 Juejin v22 Production-Admission Result
+
+- Linux Task9/admission suite at `f178071` passed 74 tests. v22 then loaded five hash-bound official Agent Skills facts and the `validate_pre_generation_contract` step succeeded under production runtime mode.
+- Hermes dynamically selected `opencode-go/mimo-v2.5`. Attempt one used an 8,035-character prompt and succeeded in about 188 seconds. No retry was needed.
+- The final text-hygiene gate blocked `malformed_quotes` before media. No cover, section image, audio or publisher call occurred. This is correct fail-closed behavior.
+- The block exposed that Pipeline had not saved the full candidate before raising, so the database retained empty title/body and only the workflow's compact 700-character excerpt. `a162adb` persists complete blocked candidates and gate metadata first.
+- Red/green tests also cover safe removal of one unmatched straight quote outside fenced code while preserving `print("keep me")` inside code. Focused suite: 166 passed. Full `p10-blocked-draft-recovery.xml`: 1709 passed plus 37 subtests in 300.50 seconds; privacy 581/0 and license 65/0.
+- v23 must verify full-copy persistence or successful normalization plus production admission, media and artifact probes. Production release and timers remain unchanged.

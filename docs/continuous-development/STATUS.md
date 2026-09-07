@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Task9 production-admission bypass closed)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v22 blocked-draft recovery locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Task9 production-admission bypass closed
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1708 passed + 37 subtests; JUnit 1745 tests, zero failures/errors.
+- Latest complete regression on this branch: 1709 passed + 37 subtests; JUnit 1746 tests, zero failures/errors.
 
 ## Active work
 
@@ -33,6 +33,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Task9 production-admission bypass closed
 | Minimal final Hermes retry | Codex primary | generator retry prompt and recovery tests | committed `b63547e` | Linux recovery regression and clean Juejin v21 |
 | Technical source fact pack and article structure | Codex primary | pre-generation gate/Task9 source claims/generator/Pipeline | committed `4ce550d` | Linux regression, build official v22 input, run v22 |
 | Canary production admission | Codex primary | Task9 runtime environment and tests | committed `6bcdcaa` | Linux regression, prove old input blocks and official fact-pack input proceeds |
+| Blocked-copy observability and quote repair | Codex primary | content hygiene/Pipeline and tests | committed `a162adb` | Linux regression and clean Juejin v23 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -257,3 +258,10 @@ These describe the audited production release, not the current development code.
 - `6bcdcaa` sets production mode for the full case execution and restores the prior environment in `finally`, including failures. A red environment-probe test observed `None`; green observes `production` and confirms cleanup.
 - Related Task9/Pipeline suite: 139 passed. Full: 1708 passed plus 37 subtests in 303.40 seconds. Project/privacy audit 581/0; license audit 65/0.
 - Prior real media artifacts remain useful provider/render evidence, but they cannot count as production-admission Canary passes. v22 is the first Juejin rerun intended to exercise both production admission and real generation.
+
+## 2026-09-07 Juejin v22 Result
+
+- v22 was the first Juejin case to pass Task9 production admission with five SHA-bound claims from the official Agent Skills specification. Hermes `mimo-v2.5` completed the first 8,035-character request in about 188 seconds.
+- Final text hygiene correctly blocked the draft for an unmatched straight quote before any image or delivery operation. The failure showed a separate observability defect: blocked candidate copy was not persisted, leaving only a compact workflow excerpt.
+- `a162adb` removes only an unmatched final straight quote from non-code Markdown segments while preserving quoted code. Before final hygiene or article-structure blocking, Pipeline now persists the full candidate copy, metadata and gate evidence for checkpoint repair.
+- Focused related regression: 166 passed. Full: 1709 passed plus 37 subtests in 300.50 seconds. Privacy audit 581/0; license audit 65/0.
