@@ -20,6 +20,11 @@ def normalize_generated_markdown(text):
     fenced_parts = re.split(r"(```.*?```|~~~.*?~~~)", value, flags=re.S)
     for index in range(0, len(fenced_parts), 2):
         prose = fenced_parts[index]
+        prose = re.sub(
+            r"(?m)^(##\s+.{4,80}?)[ \t]+((?:先|很多人|目录结构|一句话|具体|以下|这种|这个|当|如果|对于|除了|关键|推荐).{6,}。)$",
+            r"\1\n\2",
+            prose,
+        )
         without_contractions = re.sub(r"(?<=\w)'(?=\w)", "", prose)
         for quote in ('"', "'"):
             if without_contractions.count(quote) % 2:

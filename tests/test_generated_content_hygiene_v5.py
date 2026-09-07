@@ -48,6 +48,18 @@ def test_markdown_normalizer_repairs_unicode_yaml_delimiters_and_split_list_numb
     assert "2. 核对结果" in repaired
 
 
+def test_markdown_normalizer_splits_h2_heading_from_attached_opening_sentence():
+    damaged = (
+        "## 什么是 Agent Skill：一个目录，一份说明 先建立一个最朴素的认知。\n"
+        "## 为什么要渐进式加载：需要时才展开细节 很多人担心能力写多了会让 Agent 变笨。"
+    )
+
+    repaired = normalize_generated_markdown(damaged)
+
+    assert "## 什么是 Agent Skill：一个目录，一份说明\n先建立一个最朴素的认知。" in repaired
+    assert "## 为什么要渐进式加载：需要时才展开细节\n很多人担心能力写多了会让 Agent 变笨。" in repaired
+
+
 def test_markdown_normalizer_removes_only_unmatched_straight_quote_from_prose():
     damaged = '## 原理\n先读取 description"，再按需加载正文。\n\n```python\nprint("keep me")\n```'
 
