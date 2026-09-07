@@ -313,3 +313,9 @@
 - Article section-image mapping parses headings from the final normalized and fact-checked body first. Generator-time section metadata is stale after sanitization, repair or humanization and may only fill missing headings.
 - A valid final heading is a semantic input to image intent, provider selection and image quality evidence. Opening prose fragments must not displace final section headings.
 - Failed candidates retain file hashes and semantic evidence. Three mismatches still fail closed; changing section identity is not permission to weaken semantic thresholds.
+
+## D42: Verified Sources Are Rendered, Not Merely Stored
+
+- Article claim-ledger evidence must appear in the final copy as a compact Markdown source list before GEO and media generation. Hidden metadata alone does not help readers verify claims.
+- Only verified HTTP(S) URLs are eligible. URLs are deduplicated, labels are sanitized, file/private paths are excluded and an existing references section is not duplicated.
+- Do not manufacture numeric claims, authority quotations or FAQ text to satisfy GEO. A real source appendix legitimately satisfies source and structured-list dimensions.
