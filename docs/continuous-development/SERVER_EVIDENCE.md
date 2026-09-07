@@ -434,3 +434,11 @@ Observed read-only on 2026-08-31.
 - `6516e55` changes `normalize_article_sections` to parse final body headings before generator metadata. The red test supplied three stale metadata titles plus three final headings and observed stale selection; green returns exactly the final headings.
 - Focused article media tests: 7 passed. Related media/Pipeline set: 241 passed. Full `p10-final-section-mapping.xml`: 1710 passed plus 37 subtests in 306.55 seconds; privacy 581/0 and license 65/0.
 - v23 was not delivered. Linux verification and a clean v24 remain required; production release and timers were unchanged.
+
+## 2026-09-07 Juejin v24 Verified-Source Rendering Evidence
+
+- Linux article-media regression at `2fb8f2c` passed 104 tests. v24 passed production admission, official fact pack, final text/claim/depth/three-H2 and platform gates, then blocked at required quality because GEO was 30.
+- Independent GEO recomputation reported: direct answer true, short paragraphs true, source false, structured list false, authority quote false, numeric false, FAQ false. The claim ledger nevertheless contained six verified rows and two unique public source URLs.
+- `13c4634` deterministically appends `## 参考来源` with one sanitized Markdown bullet per unique verified HTTP(S) URL. It neither adds unsupported facts nor exposes evidence paths.
+- Unit and Pipeline tests prove URL dedupe, private-scheme rejection and GEO recognition of both source and structured-list dimensions. Related suite: 174 passed. Full `p10-verified-source-appendix.xml`: 1712 passed plus 37 subtests in 307.75 seconds; privacy 581/0 and license 65/0.
+- v24 generated no media and was not delivered. Linux verification and v25 remain required; production release and timers were unchanged.

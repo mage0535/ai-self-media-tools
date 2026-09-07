@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-07 Asia/Shanghai (Juejin v23 final-heading media routing locally verified)
+Last updated: 2026-09-07 Asia/Shanghai (Juejin v24 verified-source rendering locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v23 final-heading media routing l
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1710 passed + 37 subtests; JUnit 1747 tests, zero failures/errors.
+- Latest complete regression on this branch: 1712 passed + 37 subtests; JUnit 1749 tests, zero failures/errors.
 
 ## Active work
 
@@ -35,6 +35,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v23 final-heading media routing l
 | Canary production admission | Codex primary | Task9 runtime environment and tests | committed `6bcdcaa` | Linux regression, prove old input blocks and official fact-pack input proceeds |
 | Blocked-copy observability and quote repair | Codex primary | content hygiene/Pipeline and tests | committed `a162adb` | Linux regression and clean Juejin v23 |
 | Final article heading to image binding | Codex primary | article media adapter and tests | committed `6516e55` | Linux media regression and clean Juejin v24 |
+| Verified article source appendix | Codex primary | claim ledger/Pipeline/GEO tests | committed `13c4634` | Linux source/GEO regression and clean Juejin v25 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -273,3 +274,10 @@ These describe the audited production release, not the current development code.
 - The final article copy was persisted and materially better, but article media failed because `section-01` expected the stale concept `repetitive task loop`. Three candidates scored 0.0 and were retained; no delivery occurred.
 - Root cause: `normalize_article_sections` preferred early `draft_meta.sections` and parsed final body headings only when metadata had fewer than three items. The final body already had accurate headings for Skill directory, SKILL.md and progressive loading.
 - `6516e55` makes final body headings authoritative and uses metadata only to fill a shortage. Article media focused tests: 7 passed; related media/Pipeline tests: 241 passed. Full: 1710 passed plus 37 subtests in 306.55 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-07 Juejin v24 GEO Result
+
+- v24 passed production admission, five official facts, final-copy hygiene, claim validation, content depth, three-H2 structure and the full platform gate. It blocked before media because the aggregate quality gate's GEO score was 30, below 40.
+- Fresh GEO decomposition: direct answer and short paragraphs passed; sources, structured list, authority quote, numeric claims and FAQ failed. Adding fake numbers or fabricated quotes was rejected as a solution.
+- `13c4634` appends a deduplicated Markdown source list from verified public claim-ledger URLs for article platforms. It excludes non-HTTP/private paths and does not duplicate an existing references section.
+- The source list raises v24-equivalent GEO by satisfying real source and structured-list checks. Related source/GEO/media tests: 174 passed. Full: 1712 passed plus 37 subtests in 307.75 seconds. Privacy 581/0; license 65/0.
