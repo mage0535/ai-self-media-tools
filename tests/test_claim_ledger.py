@@ -126,6 +126,17 @@ def test_claim_gate_rejects_unsourced_tool_recommendations_and_install_commands(
     assert "unsourced_install_command_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_unsourced_repo_endorsements_and_skill_loading_mechanisms() -> None:
+    result = validate_claims(
+        "vercel-labs/agent-skills 和 nextlevelbuilder/ui-ux-pro-max-skill 质量都不错。\n"
+        "Agent Skills 会在每次启动时自动加载，并按触发条件注入工作流。",
+        [],
+    )
+
+    assert "unsourced_tool_recommendation_claim" in result["failures"]
+    assert "unsourced_technical_mechanism_claim" in result["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 

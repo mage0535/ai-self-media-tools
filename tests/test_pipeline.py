@@ -483,6 +483,24 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("SKILL.md", current["body"])
         self.assertNotIn("SKILL.\nmd", current["body"])
 
+    def test_automated_workflow_blocks_unrepairable_prose_hygiene_before_media(self):
+        paragraph = "先确认输入来源，再检查输出契约，最后保存能够复查的证据。"
+        job = self.pipeline.create("操作手册", ["juejin"], {"automated_workflow": True})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "操作手册",
+            "body": f"{paragraph}\n\n{paragraph}\n\n最后核对交付结果。",
+            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate") as media:
+            result = self.pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        step = [
+            row for row in self.store.workflow_steps(job["id"])
+            if row["step_name"] == "validate_factual_claims"
+        ][-1]
+        self.assertEqual(step["reason_code"], "generated_text_hygiene_failed")
+        media.assert_not_called()
+
     def test_claim_sanitization_recompiles_cover_from_clean_copy(self):
         body = (
             "先明确工作场景，再拆解输入、步骤、输出和失败恢复条件。"

@@ -333,6 +333,7 @@ class Pipeline:
                     "version": "workflow_stage_manifest_v1",
                     "stages": workflow_invocations,
                 }
+                draft["body"] = normalize_generated_markdown(draft.get("body") or "")
                 generated_hygiene = validate_generated_text(str(draft.get("title") or "") + "\n" + str(draft.get("body") or ""))
                 draft.setdefault("draft_meta", {})["generated_text_hygiene"] = generated_hygiene
                 rule_consumption = draft["draft_meta"].get("skill_rule_consumption")
@@ -353,14 +354,14 @@ class Pipeline:
                     "source_page_code_contamination",
                     "source_page_navigation_contamination",
                 }.intersection(generated_hygiene.get("reasons") or [])
-                # Always fail scraped code/navigation. Prose-quality findings
-                # are production gates only for automated workflows; ordinary
-                # drafts continue to the existing review boundary.
+                # Scraped code/navigation must fail before any repair prompt.
+                # General prose hygiene is checked again after factual repair,
+                # so unsupported claims get their existing bounded recovery.
                 if contamination_reasons:
                     runner.block(
                         "validate_content_structure",
                         "source_page_code_contamination",
-                        "generated text contains scraped page code or script payload",
+                        "generated text failed the deterministic content-hygiene gate",
                         generated_hygiene,
                         depends_on=["generate_content", "execute_generation_capabilities"],
                     )
@@ -571,6 +572,18 @@ class Pipeline:
                     claim_gate = repaired_gate
                     draft["draft_meta"]["claim_gate"] = repaired_gate
                     draft["draft_meta"]["factual_budget_repair"] = {"attempted": True, "passed": True, "before": post_claim_budget, "after": repaired_budget}
+                final_text_hygiene = validate_generated_text(
+                    str(draft.get("title") or "") + "\n" + str(draft.get("body") or "")
+                )
+                draft["draft_meta"]["generated_text_hygiene"] = final_text_hygiene
+                if brief.get("automated_workflow") and not final_text_hygiene.get("passed"):
+                    runner.block(
+                        "validate_factual_claims",
+                        "generated_text_hygiene_failed",
+                        "fact-safe generated text still failed deterministic content hygiene",
+                        final_text_hygiene,
+                        depends_on=["validate_content_structure"],
+                    )
                 runner.succeeded("validate_factual_claims", claim_gate, depends_on=["validate_content_structure"], message="legacy review-only claim findings" if not claim_gate.get("passed") else "")
                 if (job.get("brief") or {}).get("run_contract"):
                     model_depth_plan = (draft.get("draft_meta") or {}).get("content_depth_plan")
