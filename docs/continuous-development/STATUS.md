@@ -29,7 +29,7 @@ Last updated: 2026-09-07 Asia/Shanghai (Juejin v19 final-copy gate locally verif
 | Hot-work collector automatic auth/query routing | Codex primary | platform collectors, parsers, cache, focused tests, four coordination documents | deployed `2f4f612` | 6/12 Canary inputs ready; resolve remaining platform evidence without fabrication |
 | Deterministic abstract-media fallback | Codex primary | `content_platform/deterministic_visual.py`, `content_platform/media.py`, `tests/test_deterministic_visual.py`, media-focused tests | committed through `7d6f3e6` | rerun real Juejin Canary after staging sync |
 | Article recovery and final-copy truth gate | Codex primary | claim/content policy/Pipeline/Task9 Canary and focused tests | committed `4b141c4` | Linux regression, v18 probe refresh, then clean Juejin Canary |
-| Final generated-copy artifact gate | Codex primary | content hygiene/claim ledger/Pipeline and regression tests | committed `3c5de37` | Linux regression, v19 offline re-evaluation, then clean Juejin v20 |
+| Final generated-copy artifact gate | Codex primary | content hygiene/claim ledger/Pipeline and regression tests | committed `3c5de37`, `fd1e9c0` | Linux regression, v19 offline re-evaluation, then clean Juejin v20 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -231,3 +231,4 @@ These describe the audited production release, not the current development code.
 - The existing generated-text and claim gates both incorrectly returned passed. `3c5de37` adds deterministic repairs for those known formatting corruptions, claim patterns for repository endorsements/loading mechanisms, and a final automated prose-hygiene gate after factual repair but before media.
 - Fresh focused regression: 154 passed. Fresh full regression: 1702 passed plus 37 subtests in 299.65 seconds. Privacy audit: 581 files and zero issues. License audit: 65 capabilities and zero issues.
 - v19 is evidence of a caught gate defect, not an accepted publication. Linux verification and a new v20 real generation remain required.
+- Offline v19 re-evaluation after `3c5de37` repaired all four observed formatting corruptions and rejected the repository endorsement. Follow-up `fd1e9c0` is required because a dotted `SKILL.md` token initially evaded the loading-mechanism pattern; full regression remained 1702 passed plus 37 subtests.
