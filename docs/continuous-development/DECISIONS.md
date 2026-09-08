@@ -413,3 +413,10 @@
 - Low-model grounded fallback titles are derived from verified-primary claim subjects, not from unverified hot-title modifiers. Trend wording may guide topic selection but cannot re-enter factual copy through the title.
 - The fallback provides its own fact-relevant question hook. Generic hook repair must not create a repeated `为什么{标题}` opening when the grounded body already has a valid hook.
 - Task9 `review_required` plus artifact-probe success remains insufficient without manual copy and image review. A manual false positive becomes a permanent regression fixture.
+
+## D57: Accepted Recovery Canary Is Not Live Publication Proof
+
+- A deterministic recovery Canary may be accepted when production admission, all copy/platform/media gates, capability evidence, artifact probes and manual review pass in a fresh isolated directory.
+- The evidence must state that the model call was replaced with a recorded rejected draft and that the real publisher was not invoked. It proves bounded recovery, not current provider health or platform delivery.
+- Preserve a private manual-review record with title/body review, image roles, dimensions, SHA-256 uniqueness, audio inventory and publisher status.
+- Continue with current-model generation and separate platform/publisher Canaries. Do not use one accepted article package to restore timers or claim 12-platform completion.

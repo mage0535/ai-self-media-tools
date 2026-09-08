@@ -397,3 +397,10 @@ These describe the audited production release, not the current development code.
 - Copy defects: the selected hot title retained unsupported `26 年最火`, and the generic hook repair prepended a repetitive `为什么{标题}` line. Visual defect: section 03 was an ordinary office conversation; its caption said there were no papers, but token scoring treated the negated word as document evidence and gave the loading concept 0.775.
 - `522e13d` builds a conservative title from the first verified-primary claim subject, supplies a fact-relevant question hook, and adds required observable anchors for directory and loading concepts. Negated/static document nouns cannot satisfy loading without a loading action token.
 - Related regression: 135 passed. Full regression: 1732 passed plus 37 subtests. Privacy 581/0; license 65/0. Next: Linux focused tests and fresh v34g, followed by manual copy and four-image review.
+
+## 2026-09-08 Juejin v34g Accepted Recovery Canary
+
+- Linux title/semantic/Pipeline regression at `cc71400` passed 3/3. v34g reached `review_required`; Pipeline and artifact probes passed with no failures, all 17 required capability records were at `output_verified` or `artifact_verified`, and no real publisher was invoked.
+- Final title is `Agent Skill 入门：一份来源核对清单`; the 1,700-character body begins with a fact-relevant question, contains verified source facts plus clearly marked advice, and has no unsupported hot-title modifier or repeated title hook.
+- Manual image review passed: topic-matched modular cover, directory/playbook section, categorized resource-box section and explicit on-demand resource-loading sequence. Cover is 1800x1200; three sections are 1200x800; four SHA-256 values are unique; no audio exists.
+- The private `manual-review.json` records copy/image decisions, dimensions, hashes, empty audio list and `publisher_called=false`. Juejin recovery Canary is accepted. Next work is a fresh active-model generation check and the next platform Canary; production deployment and timers remain gated.

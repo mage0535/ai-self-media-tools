@@ -566,3 +566,11 @@ Observed read-only on 2026-08-31.
 - Full section-03 caption explicitly said there were no papers on the table. The bag-of-words scorer canonicalized `papers` as a document/archive token and matched `selective document loading sequence` despite no loading anchor. The title and first body line also retained unsupported hot-title language and mechanical repetition.
 - `522e13d` adds exact red/green fixtures for the negated-paper caption and grounded fallback title/hook. Related tests: 135 passed. Full `artifacts/test-reports/p10-v34f-manual-review.xml`: 1732 passed plus 37 subtests in 308.32 seconds. Privacy 581/0; license 65/0.
 - v34f is rejected and was never sent to the real Juejin publisher. Production and timers remain unchanged. A fresh v34g is required.
+
+## 2026-09-08 Juejin v34g Accepted Recovery Evidence
+
+- Staging fast-forwarded to `cc71400`; Linux false-positive/title/Pipeline tests passed 3/3 in 7.71 seconds. v34g used a fresh private directory, the recorded rejected v31 draft and the five SHA-bound primary claims. It did not call Hermes or any real publisher.
+- Pipeline state is `review_required`; Pipeline probe and artifact probe both passed with zero failures. The title is `Agent Skill 入门：一份来源核对清单`, body length is 1,700, machine quality and platform gates pass, and all required capability records are complete.
+- Artifact-bound semantic scores: cover 0.8375, section 01 0.7875, section 02 0.8 and section 03 0.775. Manual review verified their distinct purposes: modular workflow cover, directory/playbook, categorized resources and explicit on-demand sequence.
+- Pillow decode/dimension review: cover 1800x1200; each section 1200x800. Four SHA-256 values are unique. Audio inventory is empty. Private `manual-review.json` records `passed=true` and `publisher_called=false`.
+- v34g is accepted only as the Juejin deterministic-recovery Canary. Production remains signed `2f4f612`, the gateway configuration is unchanged and both overnight timers remain disabled. Current-model and remaining platform Canaries are still pending.
