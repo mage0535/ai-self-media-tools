@@ -280,3 +280,33 @@ def test_hermes_writer_region_error_retries_once_through_us_proxy(tmp_path, monk
     assert calls[1][1]["HTTPS_PROXY"] == "socks5h://proxy.internal:2080"
     assert "proxy.internal" not in json.dumps(result)
     assert [row["route"] for row in result["commands"]] == ["direct", "us_proxy"]
+
+
+def test_hermes_writer_retries_one_transient_429_on_the_same_route(tmp_path, monkeypatch):
+    brief = tmp_path / "brief.md"
+    article = tmp_path / "article.md"
+    brief.write_text("# brief", encoding="utf-8")
+    completed = [
+        subprocess.CompletedProcess([], 0, "HTTP 429: rate_limit_exceeded", ""),
+        subprocess.CompletedProcess([], 0, "# Title\n\n" + "Useful article body. " * 80, ""),
+    ]
+    calls = []
+    sleeps = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs.get("env")))
+        return completed.pop(0)
+
+    monkeypatch.setattr("content_platform.wechat_toolchain.subprocess.run", run)
+
+    result = _invoke_hermes_writer(
+        {"hermes_bin": "hermes", "timeout": 30, "sleep": sleeps.append, "hermes_retry_delay_seconds": 2},
+        brief,
+        article,
+    )
+
+    assert result["status"] == "used"
+    assert len(calls) == 2
+    assert calls[0][1] is None and calls[1][1] is None
+    assert sleeps == [2]
+    assert [row["route"] for row in result["commands"]] == ["direct", "direct_retry"]
