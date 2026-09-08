@@ -815,7 +815,11 @@ class MediaBridge:
             section_concepts = visual_concepts(section_text)
             if len(section_concepts) > 1 and "AI software agent" in section_concepts:
                 section_concepts.remove("AI software agent")
-            if "side-by-side software module format comparison" in section_concepts:
+            if "structured skill directory documents" in section_concepts:
+                section_concepts = ["structured skill directory documents"]
+            elif "selective document loading sequence" in section_concepts:
+                section_concepts = ["selective document loading sequence"]
+            elif "side-by-side software module format comparison" in section_concepts:
                 section_concepts = ["side-by-side software module format comparison"]
             elif "organized memory archive" in section_concepts:
                 section_concepts = ["organized memory archive"]

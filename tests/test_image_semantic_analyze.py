@@ -180,6 +180,14 @@ def test_directory_and_loading_concepts_use_visible_evidence_only():
     assert office_score < analyzer.DEFAULT_THRESHOLD
     assert office_matches == []
 
+    anatomy_score, anatomy_matches = analyzer.score_semantics(
+        ["structured skill directory documents"],
+        "A document panel is labelled SKILL.md, YAML FRONTMATTER, and MARKDOWN INSTRUCTIONS.",
+        ["skill.md", "yaml frontmatter", "markdown instructions"],
+    )
+    assert anatomy_score >= analyzer.DEFAULT_THRESHOLD
+    assert anatomy_matches == ["structured skill directory documents"]
+
 
 def test_bookshelf_documents_and_robot_assistant_ground_memory_archive():
     score, matched = analyzer.score_semantics(

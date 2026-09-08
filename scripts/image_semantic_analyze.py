@@ -47,7 +47,7 @@ _SYNONYM_GROUPS = (
     ("dashboard", "control panel", "digital display", "digital displays", "digital interface", "digital interfaces", "display", "screen", "仪表盘", "控制面板"),
     ("workflow", "process", "connected devices", "connected device", "connect", "wires", "wire", "流程", "工作流"),
     ("node", "nodes", "task node", "task nodes", "workflow card", "workflow cards", "skill card", "skill cards", "rectangle", "rectangles", "box", "boxes", "panel", "panels", "节点", "卡片", "模块"),
-    ("directory", "directories", "file tree", "folder tree", "files", "folders", "documents", "document structure", "resource folders", "scripts", "references", "assets", "目录", "文件结构", "资源结构"),
+    ("directory", "directories", "file tree", "folder tree", "files", "folders", "documents", "document structure", "resource folders", "skill.md", "yaml frontmatter", "markdown instructions", "scripts", "references", "assets", "目录", "文件结构", "资源结构"),
     ("loading", "load", "loaded", "on demand", "selective loading", "progressive loading", "resource loading", "按需加载", "渐进式加载"),
     ("person", "people", "human", "人物", "人", "用户"),
     ("text", "words", "typography", "文字", "文本"),
