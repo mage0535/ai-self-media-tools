@@ -454,3 +454,10 @@ These describe the audited production release, not the current development code.
 - `9c819aa` makes editorial mode require account analysis, topic/article plan, workflow inputs, growth playbook, three recaptures and a one-item batch. Same-lane/trend and GitHub gates become not-applicable only for a fully evidenced editorial fallback. The toolchain writes those inputs and actual writer identity into the packet.
 - `df736e6` adds a single intelligence registry covering 12 publishing targets and 11 reference sources across CN/intl regions. Default hot-work collection and parameter-pack coverage are registry-driven; cross-platform references are separately scored and cannot make a target ready.
 - Related regression: 204 passed plus 4 subtests. Full: 1749 passed plus 37 subtests. Privacy 586/0; license 65/0. Next: Linux registry/collection smoke and WeChat v3 content/media Canary.
+
+## 2026-09-08 Intelligence Reference Integrity
+
+- Initial Linux smoke executed WeWrite aggregate, CSDN and Dev.to adapters. Aggregate returned 20 real rows, while CSDN/Dev.to returned synthetic `source_fallback` hypotheses. The ad hoc smoke incorrectly labeled every non-empty result `ok`, and the parameter pack expanded from 12 targets to 17 because it unioned observed reference platforms.
+- `8e36bb7` keeps default pack keys equal to the 12 publishing targets, adds platform plus `identity_role=unavailable` to synthetic fallbacks, and excludes them from `cross_platform_references` because they lack real URL/provenance.
+- Reference-integrity tests: 62 passed plus 4 subtests. Full: 1750 passed plus 37 subtests. Privacy 586/0; license 65/0.
+- Next: Linux official `TrendCollector.collect_with_report` smoke, then WeChat v3 under the safe publisher boundary. Production and timers remain unchanged.
