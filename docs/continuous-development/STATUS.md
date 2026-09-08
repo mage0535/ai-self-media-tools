@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-08 Asia/Shanghai (Juejin v31 technical fact coverage locally verified)
+Last updated: 2026-09-08 Asia/Shanghai (grounded technical fallback locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-08 Asia/Shanghai (Juejin v31 technical fact coverage local
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1725 passed + 37 subtests; JUnit 1762 tests, zero failures/errors.
+- Latest complete regression on this branch: 1727 passed + 37 subtests; JUnit 1764 tests, zero failures/errors.
 
 ## Active work
 
@@ -43,6 +43,7 @@ Last updated: 2026-09-08 Asia/Shanghai (Juejin v31 technical fact coverage local
 | Reader-facing article formatting | Codex primary | content normalization/source labels and tests | committed `72f76e5` | Linux regression and offline v29 rebuild; decide final v30 vs draft proof |
 | Technical claim variant coverage | Codex primary | claim ledger and tests | committed `c16d943` | Linux regression and final fresh Juejin validation |
 | Technical anchor coverage | Codex primary | claim ledger and tests | committed `9b0a75c` | Linux regression and v31 offline re-evaluation; do not accept v31 |
+| Grounded technical rebuild | Codex primary | claim ledger/Pipeline and tests | committed `6e6bb36` | Linux regression and deterministic v31 recovery package |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -340,3 +341,10 @@ These describe the audited production release, not the current development code.
 - `9b0a75c` extracts technical anchors such as Agent Skill, SKILL.md, directory, loading, routing, workflow, execution, quality and commands. Declarative technical sentences require at least two aligned verified claim anchors; questions and explicit recommendations/hypotheticals remain allowed.
 - Focused related suite: 154 passed. Full: 1725 passed plus 37 subtests in 301.43 seconds. Privacy 581/0; license 65/0.
 - v31 was not delivered. It is retained as the negative sample for Linux/offline verification.
+
+## 2026-09-08 Grounded Technical Rebuild
+
+- Simulating sentence deletion on v31 left a blank title, broken numbered list, empty code blocks and unsupported Chrome/Google/repository claims. It was rejected as an automatic recovery strategy.
+- `6e6bb36` builds a conservative four-section article only from verified primary-source claims when an automated Juejin technical draft fails `unsourced_technical_fact_claim`.
+- The fallback preserves the original selected topic as title, includes explicit evidence/advice boundaries, a practical checklist and reader CTA, then reruns claim, hygiene, GEO, cover and media planning.
+- Related suite: 191 passed. Full: 1727 passed plus 37 subtests in 315.88 seconds. Privacy 581/0; license 65/0.
