@@ -162,6 +162,26 @@ def test_claim_gate_rejects_v30_token_counts_client_lists_and_free_promises() ->
     assert "unsourced_promotional_claim" in result["failures"]
 
 
+def test_claim_gate_rejects_unsourced_technical_assertions_but_allows_grounded_paraphrase_and_advice() -> None:
+    ledger = [{
+        "claim": "Agent Skill 是一个目录，至少包含一个 SKILL.md 文件。",
+        "source_url": "https://agentskills.io/specification",
+        "evidence_path": "sources/specification.md",
+        "verified": True,
+    }]
+    grounded = validate_claims("Agent Skill 本质上是一个目录，里面至少有一个 SKILL.md 文件。", ledger)
+    advice = validate_claims("建议先给 Skill 写清输入和输出，再检查目录结构。", ledger)
+    unsupported = validate_claims(
+        "Agent Skills 把高级工程师的工作流塞进代码助手，输出质量直接跨一个档次。"
+        "spec-driven-development Skill 会自动执行六阶段工程流程。",
+        ledger,
+    )
+
+    assert grounded["passed"] is True
+    assert advice["passed"] is True
+    assert "unsourced_technical_fact_claim" in unsupported["failures"]
+
+
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
     text = "Claude Code 的官方插件市场直接集成了 Skills。Gemini CLI 用户也可以直接安装。"
 
