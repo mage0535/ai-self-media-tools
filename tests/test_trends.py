@@ -104,7 +104,8 @@ class TrendTests(unittest.TestCase):
         with patch("content_platform.trends.DirectTrendSource.collect", side_effect=RuntimeError("source unavailable")):
             report = TrendCollector({"direct_sources": {"hackernews": {"enabled": True}}, "fallback_enabled": True}).collect_with_report()
 
-        self.assertEqual(report["summary"]["failed_sources"], 5)
+        self.assertGreaterEqual(report["summary"]["failed_sources"], 5)
+        self.assertEqual(report["summary"]["failed_sources"], sum(row["status"] == "failed" for row in report["sources"]))
         self.assertTrue(report["summary"]["fallback_used"])
         self.assertGreaterEqual(len(report["items"]), 1)
         self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:5]))
@@ -194,7 +195,8 @@ class TrendTests(unittest.TestCase):
             report = TrendCollector({"direct_sources": {"zhihu": {"enabled": True}}}).collect_with_report()
 
         self.assertEqual(report["sources"][0]["status"], "degraded")
-        self.assertEqual(report["summary"]["degraded_sources"], 5)
+        self.assertGreaterEqual(report["summary"]["degraded_sources"], 5)
+        self.assertEqual(report["summary"]["degraded_sources"], len(report["sources"]))
 
     def test_wewrite_hotspots_source_normalizes_cli_output(self):
         payload = [{
@@ -224,6 +226,27 @@ class TrendTests(unittest.TestCase):
 
         self.assertEqual(items[0]["source"], "wewrite_hotspots:wechat")
         self.assertEqual(items[0]["upstream_source"], "wechat")
+
+    def test_wewrite_aggregate_preserves_cross_platform_identity(self):
+        payload = {
+            "timestamp": "2026-09-08T13:35:30+08:00",
+            "items": [
+                {"title": "AI 工作流讨论", "source": "微博", "hot": 600000, "url": "https://s.weibo.com/weibo?q=ai"},
+                {"title": "AI 产品趋势", "source": "今日头条", "hot": 300000, "url": "https://www.toutiao.com/trending/1"},
+            ],
+        }
+        completed = type("Completed", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""})()
+
+        with patch("content_platform.trends.Path.is_file", return_value=True), patch(
+            "content_platform.trends.subprocess.run", return_value=completed
+        ):
+            items = DirectTrendSource(
+                "wewrite_aggregate", {"wewrite_bin": "/tmp/wewrite", "sources": ["weibo", "toutiao"]}
+            ).collect()
+
+        self.assertEqual({row["platform"] for row in items}, {"weibo", "toutiao"})
+        self.assertTrue(all(row["identity_role"] == "cross_platform_reference" for row in items))
+        self.assertTrue(all(row["collector"] == "wewrite_aggregate" for row in items))
 
 
     def test_agent_reach_source_records_real_command_output(self):

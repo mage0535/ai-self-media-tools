@@ -26,28 +26,16 @@ STRONG_EVIDENCE = {
     "strong_public_wechat_search",
 }
 
-PLATFORM_DEFAULT_QUERIES: dict[str, tuple[str, ...]] = {
-    "bilibili": ("AI工具 自动化工作流", "AI Agent 实战"),
-    "douyin": ("AI工具", "AI工作流"),
-    "douyin_ai": ("AI工具", "AI工作流"),
-    "douyin_pet": ("猫咪治愈", "猫狗日常"),
-    "juejin": ("AI 编程 Agent", "AI 自动化工作流"),
-    "kuaishou": ("AI工具", "AI效率 工作流"),
-    "shipinhao": ("AI工具 工作流", "AI Agent 实战"),
-    "tiktok": ("AI tools workflow", "AI agent productivity"),
-    "twitter": ("AI agents workflow", "AI productivity tools"),
-    "xiaohongshu": ("AI效率 工作流", "AI工具 实测"),
-    "youtube": ("AI productivity workflow", "AI agent tutorial"),
-    "zhihu": ("AI工具 工作流", "AI Agent 实测"),
-}
-
 DOUYIN_AI_SPECIFIC = ("ai工具", "ai agent", "智能体", "大模型", "工作流", "自动化", "效率工具", "人工智能工具")
 DOUYIN_PET_SPECIFIC = ("猫", "狗", "宠物", "萌宠", "铲屎官")
 
 
 def default_platform_queries(platform: str) -> list[str]:
+    from .platform_intelligence_registry import platform_queries
+
     normalized = str(platform or "").casefold().strip()
-    return list(PLATFORM_DEFAULT_QUERIES.get(normalized, ("AI工具 工作流",)))
+    aliases = {"douyin": "douyin_ai", "x": "twitter", "rednote": "xiaohongshu"}
+    return platform_queries(normalized) or platform_queries(aliases.get(normalized, "")) or ["AI工具 工作流"]
 
 
 def filter_douyin_official_board(rows: list[dict[str, Any]], platform: str) -> list[dict[str, Any]]:
@@ -1034,13 +1022,12 @@ def _metric_number(value: Any) -> float:
 
 
 def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: list[str] | None = None, min_strong_samples: int = 3) -> dict[str, Any]:
+    from .platform_intelligence_registry import publishing_platforms
+
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sample in samples:
         grouped[str(sample.get("platform") or "unknown")].append(sample)
-    default_platforms = [
-        "wechat", "xiaohongshu", "douyin_ai", "douyin_pet", "kuaishou", "bilibili",
-        "shipinhao", "zhihu", "juejin", "youtube", "tiktok", "twitter",
-    ]
+    default_platforms = publishing_platforms()
     selected_platforms = platforms or sorted(set(grouped).union(default_platforms))
     output: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "platforms": {}}
     for platform in selected_platforms:
@@ -1067,10 +1054,43 @@ def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: l
             "strong_sample_count": len(strong),
             "sample_count": len(rows),
             "top_samples": strong[:10],
+            "cross_platform_references": _cross_platform_references(platform, samples),
             "recommended_patterns": [name for name, _count in patterns.most_common(10)],
             "generation_requirements": _generation_requirements(platform, patterns),
         }
     return output
+
+
+def _cross_platform_references(platform: str, samples: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
+    from .intelligence_scoring import evaluate_intelligence_pool
+    from .platform_intelligence_registry import platform_queries
+
+    rows = []
+    for row in samples:
+        if not isinstance(row, dict) or str(row.get("platform") or "").casefold() == str(platform).casefold():
+            continue
+        if str(row.get("identity_role") or "") != "cross_platform_reference":
+            continue
+        title = str(row.get("title") or "").strip()
+        url = str(row.get("url") or "").strip()
+        if not title or not url.startswith(("https://", "http://")):
+            continue
+        rows.append({
+            "title": title[:160],
+            "platform": str(row.get("platform") or ""),
+            "source": str(row.get("source") or ""),
+            "url": url,
+            "metric": row.get("heat") or row.get("points") or row.get("engagement") or 0,
+            "captured_at": str(row.get("captured_at") or ""),
+            "identity_role": "cross_platform_reference",
+            "analysis": row.get("analysis") or analyze_work(title),
+        })
+    keywords = re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]{2,}", " ".join(platform_queries(platform)).casefold())
+    ranked = evaluate_intelligence_pool(rows, target_platform=platform, lane_keywords=keywords)
+    return [
+        row for row in ranked
+        if float((row.get("intelligence_score") or {}).get("dimensions", {}).get("lane_fit") or 0) > 0
+    ][: max(0, int(limit))]
 
 
 def _generation_requirements(platform: str, patterns: Counter[str]) -> list[str]:

@@ -233,6 +233,31 @@ class TrendCollector:
             # disabled until an operator explicitly configures the command.
             "agent_reach": {"enabled": False, "limit": 20, "timeout": 20},
         }
+        from .platform_intelligence_registry import reference_source_configs
+
+        aggregate_sources = []
+        for name, row in reference_source_configs().items():
+            adapter = str(row.get("adapter") or "")
+            if adapter == "wewrite_aggregate":
+                aggregate_sources.append(name)
+            elif adapter == "web_search":
+                defaults[name] = {
+                    "enabled": True,
+                    "limit": 10,
+                    "timeout": 8,
+                    "adapter": adapter,
+                    "query": str(row.get("query") or "AI workflow"),
+                    "domain": str(row.get("domain") or ""),
+                    "identity_role": "cross_platform_reference",
+                }
+        if aggregate_sources:
+            defaults["wewrite_aggregate"] = {
+                "enabled": True,
+                "limit": 30,
+                "timeout": 15,
+                "adapter": "wewrite_aggregate",
+                "sources": aggregate_sources,
+            }
         if isinstance(configured, dict):
             for name, value in configured.items():
                 if isinstance(value, dict):
@@ -358,8 +383,16 @@ class DirectTrendSource:
             return self._douyin_hot_board()
         if self.name == "wewrite_hotspots":
             return self._wewrite_hotspots()
+        if self.name == "wewrite_aggregate":
+            return self._wewrite_aggregate()
         if self.name == "agent_reach":
             return self._agent_reach()
+        if self.config.get("adapter") == "web_search":
+            query = str(self.config.get("query") or "AI workflow")
+            domain = str(self.config.get("domain") or "").strip()
+            if domain and "site:" not in query.casefold():
+                query = f"{query} site:{domain}"
+            return self._web_search_source(self.name, query)
         raise ValueError(f"unknown direct trend source: {self.name}")
 
     def _native_query(self, query: str) -> str:
@@ -450,6 +483,45 @@ class DirectTrendSource:
                 "official_signal_contract": contract,
             })
         return items
+
+    def _wewrite_aggregate(self):
+        binary = os.path.expanduser(str(self.config.get("wewrite_bin") or shutil.which("wewrite") or "~/.local/bin/wewrite"))
+        if not Path(binary).is_file():
+            raise RuntimeError(f"wewrite CLI not found: {binary}")
+        proc = subprocess.run(
+            [binary, "hotspots", "--limit", str(self.limit)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=self.timeout, check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stderr or proc.stdout or "wewrite aggregate hotspots failed")[:240])
+        payload = json.loads(proc.stdout or "{}")
+        captured_at = str(payload.get("timestamp") or datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        source_names = {"微博": "weibo", "百度": "baidu", "今日头条": "toutiao", "头条": "toutiao"}
+        allowed = {str(item) for item in self.config.get("sources") or []}
+        rows = []
+        for item in payload.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            platform = source_names.get(str(item.get("source") or "").strip(), str(item.get("source") or "").casefold())
+            title = str(item.get("title") or "").strip()
+            url = str(item.get("url") or "").strip()
+            if not title or not url.startswith(("https://", "http://")) or (allowed and platform not in allowed):
+                continue
+            rows.append({
+                "title": title,
+                "platform": platform,
+                "source": f"wewrite_aggregate:{platform}",
+                "url": url,
+                "points": item.get("hot") or item.get("hot_normalized") or 0,
+                "heat": item.get("hot") or item.get("hot_normalized") or 0,
+                "rank": len(rows) + 1,
+                "captured_at": captured_at,
+                "collector": "wewrite_aggregate",
+                "identity_role": "cross_platform_reference",
+                "evidence_strength": "cross_platform_hot_board",
+            })
+        return rows[: self.limit]
 
     def _agent_reach(self):
         """Read Agent-Reach trend output through an explicit local command.
@@ -738,9 +810,13 @@ class DirectTrendSource:
             items.append({
                 "title": title,
                 "source": f"{source}:web_search",
+                "platform": source,
                 "url": row.get("url", ""),
                 "points": int(row.get("score") or row.get("points") or 1),
                 "fallback_source": True,
+                "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "collector": f"{source}_web_search",
+                **({"identity_role": "cross_platform_reference"} if self.config.get("identity_role") == "cross_platform_reference" else {}),
             })
         return items
 
