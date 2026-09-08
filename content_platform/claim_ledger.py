@@ -333,7 +333,7 @@ def build_grounded_technical_article(topic: str, ledger: list[dict[str, Any]] | 
             continue
         blocks.append(f"## {heading}")
         blocks.extend(facts)
-        blocks.append("建议先核对这部分事实，再决定它是否适合当前任务；不要把未验证的实现细节补进结论。")
+    blocks.append("以上是当前证据包能够支持的事实边界；没有来源的实现细节、命令和效果承诺不进入正文。")
     blocks.extend([
         "## 用检查清单落地",
         "建议按下面的顺序处理自己的任务：",
