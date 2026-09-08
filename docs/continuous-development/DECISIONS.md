@@ -462,3 +462,16 @@
 - Evergreen topics live in the versioned WeChat recovery playbook, use advice/Q&A framing without factual performance claims, and rotate through 14-day topic fingerprints.
 - The selected candidate is `editorial_calendar`, not native, official or associated-hotspot content. It records strategy source, calendar column, planned date and dedupe result.
 - Missing requery capability, missing strategy status, or an exhausted topic pool blocks the platform. Do not silently invent a new topic with the model.
+
+## D64: WeChat Quality Gates Follow Content Mode
+
+- GitHub project evidence and dual GitHub channels are required only for a GitHub-directed article. A fully evidenced Q&A/editorial fallback is not blocked by irrelevant GitHub fields.
+- Editorial fallback still requires account positioning, selected-topic rationale, article plan, workflow inputs, growth playbook, one-item batch contract, strategy evidence and three completed empty recaptures.
+- The professional writer gate accepts successful WeWrite or successful explicit Hermes writer evidence while retaining their identities. It never relabels fallback output as WeWrite.
+
+## D65: Platform Intelligence Uses One Registry And Two Evidence Pools
+
+- The registry must cover every canonical publishing target before adding reference sources. Current scope is 12 targets plus domestic and international reference platforms.
+- Target-native/official/same-lane evidence and cross-platform reference evidence are stored separately. Reference evidence cannot satisfy target readiness, native identity or associated-hotspot gates.
+- Comprehensive ranking exposes identity, heat, freshness, lane fit, content value, saturation penalty and source quality. High heat on another platform cannot outweigh a qualified target-platform sample.
+- A registered source without a working adapter reports unavailable. Registry presence is not execution evidence.

@@ -446,3 +446,11 @@ These describe the audited production release, not the current development code.
 - `6b336ec` adds four advice/Q&A evergreen directions to the WeChat recovery playbook and compiles one only after a real requery adapter completes all configured rounds with zero candidates. It skips every reserved 14-day fingerprint and blocks if the pool is exhausted.
 - The selected row is labeled `editorial_calendar`, carries strategy source/calendar column/date/dedupe evidence, has no `associated_hotspot`, and receives no hotspot score. No requery adapter means no fallback.
 - Related strategy/overnight tests: 78 passed. Full: 1739 passed plus 37 subtests. Privacy 581/0; license 65/0. Next: Linux prepare-only verification, then a fresh WeChat content/media Canary under the safe draft boundary.
+
+## 2026-09-08 WeChat v2 And Expanded Intelligence Registry
+
+- Linux prepare-only v2 selected `先加工具还是先拆任务？一张边界清单帮你判断` after three empty recaptures. It carried strategy source, calendar column, date and dedupe, no hotspot identity, and a compiled strategy with six pillars and six structures in bounded input.
+- WeChat content v2 preserved WeWrite HTTP 400 evidence, then used the explicit Hermes writer with direct regional failure and US proxy success. Writer gate passed as `hermes_writer`; the 1,953-character article was blocked only by old platform gates that unconditionally required GitHub dual channels and unavailable hot-account metadata.
+- `9c819aa` makes editorial mode require account analysis, topic/article plan, workflow inputs, growth playbook, three recaptures and a one-item batch. Same-lane/trend and GitHub gates become not-applicable only for a fully evidenced editorial fallback. The toolchain writes those inputs and actual writer identity into the packet.
+- `df736e6` adds a single intelligence registry covering 12 publishing targets and 11 reference sources across CN/intl regions. Default hot-work collection and parameter-pack coverage are registry-driven; cross-platform references are separately scored and cannot make a target ready.
+- Related regression: 204 passed plus 4 subtests. Full: 1749 passed plus 37 subtests. Privacy 586/0; license 65/0. Next: Linux registry/collection smoke and WeChat v3 content/media Canary.
