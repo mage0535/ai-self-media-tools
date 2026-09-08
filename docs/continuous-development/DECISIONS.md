@@ -475,3 +475,9 @@
 - Target-native/official/same-lane evidence and cross-platform reference evidence are stored separately. Reference evidence cannot satisfy target readiness, native identity or associated-hotspot gates.
 - Comprehensive ranking exposes identity, heat, freshness, lane fit, content value, saturation penalty and source quality. High heat on another platform cannot outweigh a qualified target-platform sample.
 - A registered source without a working adapter reports unavailable. Registry presence is not execution evidence.
+
+## D66: Synthetic Search Fallback Is Not Reference Evidence
+
+- A generated operating hypothesis with no real URL is `unavailable`, even when a collector returns several rows. It must not be counted as an `ok` source or enter cross-platform references.
+- Observing a reference platform never adds it to the publishing-target parameter-pack keys. The default pack remains exactly the registry's canonical publishing targets.
+- Live smoke reports use the same `ok/degraded/failed` classification as `TrendCollector`, not ad hoc non-empty checks.

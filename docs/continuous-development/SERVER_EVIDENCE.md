@@ -631,3 +631,11 @@ Observed read-only on 2026-08-31.
 - `9c819aa` adds mode-aware gates and packet fields. `df736e6` adds `platform_intelligence_registry_v1`, registry loaders, aggregate/reference adapters and deterministic multi-factor scoring. Tests prove all 12 delivery targets have collectors/queries and 11 reference sources remain cross-platform only.
 - Full `artifacts/test-reports/p10-expanded-intelligence-registry.xml` returned 1749 passed plus 37 subtests in 357.30 seconds. Project/privacy audit scanned 586 files with zero issues; license audit checked 65 capabilities with zero issues.
 - Linux live registry/aggregate smoke and WeChat v3 remain pending. Production stays signed `2f4f612`; timers remain disabled.
+
+## 2026-09-08 Intelligence Reference-Integrity Evidence
+
+- Linux registry tests at `fc5da22` passed 5/5. An initial adapter smoke returned WeWrite aggregate 20, CSDN 5 and Dev.to 3, but direct inspection showed the latter two were synthetic `source_fallback` rows with empty URLs, not real collection.
+- The same smoke showed 17 parameter-pack platform keys because observed reference platforms were unioned with publishing targets. WeChat correctly remained not ready, but target/reference storage was not clean enough.
+- `8e36bb7` adds platform and unavailable identity to synthetic fallbacks and fixes the default pack to 12 publishing targets. Tests prove reference observations cannot create new target keys or readiness.
+- Full `artifacts/test-reports/p10-intelligence-reference-integrity.xml` returned 1750 passed plus 37 subtests in 357.97 seconds. Project/privacy audit 586/0; license audit 65/0.
+- A corrected Linux smoke using the official collector report remains pending. Production and timers were not changed.
