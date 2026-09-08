@@ -1,0 +1,30 @@
+{
+  "version": "platform_intelligence_registry_v1",
+  "publish_targets": {
+    "wechat": {"region": "cn", "aliases": ["weixin", "wechat_official"], "collectors": ["sogou_weixin", "wechat_creator_backend", "wewrite_hotspots"], "default_queries": ["AI效率 工作流", "AI工具 任务管理"]},
+    "kuaishou": {"region": "cn", "collectors": ["logged_search", "kuaishou_creator_backend"], "default_queries": ["AI工具", "AI效率 工作流"]},
+    "juejin": {"region": "cn", "collectors": ["logged_search", "public_search"], "default_queries": ["AI 编程 Agent", "AI 自动化工作流"]},
+    "twitter": {"region": "intl", "aliases": ["x"], "collectors": ["logged_search", "public_search"], "default_queries": ["AI agents workflow", "AI productivity tools"]},
+    "douyin_ai": {"region": "cn", "aliases": ["douyin"], "collectors": ["douyin_hot_board", "douyin_shipin", "logged_search"], "default_queries": ["AI工具", "AI工作流"]},
+    "douyin_pet": {"region": "cn", "aliases": ["douyin"], "collectors": ["douyin_hot_board", "douyin_shipin", "logged_search"], "default_queries": ["猫咪治愈", "猫狗日常"]},
+    "shipinhao": {"region": "cn", "collectors": ["shipinhao_creator_search", "logged_search"], "default_queries": ["AI工具 工作流", "AI Agent 实战"]},
+    "xiaohongshu": {"region": "cn", "aliases": ["rednote"], "collectors": ["logged_search"], "default_queries": ["AI效率 工作流", "AI工具 实测"]},
+    "bilibili": {"region": "cn", "collectors": ["bilibili_public_api", "logged_search"], "default_queries": ["AI工具 自动化工作流", "AI Agent 实战"]},
+    "zhihu": {"region": "cn", "collectors": ["zhihu_cli_hot", "logged_search"], "default_queries": ["AI工具 工作流", "AI Agent 实测"]},
+    "youtube": {"region": "intl", "collectors": ["logged_search", "public_search"], "default_queries": ["AI productivity workflow", "AI agent tutorial"]},
+    "tiktok": {"region": "intl", "collectors": ["logged_search", "public_search"], "default_queries": ["AI tools workflow", "AI agent productivity"]}
+  },
+  "reference_sources": {
+    "weibo": {"region": "cn", "adapter": "wewrite_aggregate", "identity_role": "cross_platform_reference", "metric_fields": ["heat", "rank"], "proxy_policy": "direct_then_cn", "enabled": true},
+    "baidu": {"region": "cn", "adapter": "wewrite_aggregate", "identity_role": "cross_platform_reference", "metric_fields": ["heat", "rank"], "proxy_policy": "direct_then_cn", "enabled": true},
+    "toutiao": {"region": "cn", "adapter": "wewrite_aggregate", "identity_role": "cross_platform_reference", "metric_fields": ["heat", "rank"], "proxy_policy": "direct_then_cn", "enabled": true},
+    "csdn": {"region": "cn", "adapter": "web_search", "domain": "csdn.net", "query": "AI Agent 工作流 实战", "identity_role": "cross_platform_reference", "metric_fields": [], "proxy_policy": "direct_then_cn", "enabled": true},
+    "36kr": {"region": "cn", "adapter": "web_search", "domain": "36kr.com", "query": "AI 工具 产品 工作流", "identity_role": "cross_platform_reference", "metric_fields": [], "proxy_policy": "direct_then_cn", "enabled": true},
+    "github": {"region": "intl", "adapter": "github_api", "identity_role": "cross_platform_reference", "metric_fields": ["stars"], "proxy_policy": "direct_then_us", "enabled": true},
+    "hackernews": {"region": "intl", "adapter": "hackernews_api", "identity_role": "cross_platform_reference", "metric_fields": ["points", "comments"], "proxy_policy": "direct_then_us", "enabled": true},
+    "reddit": {"region": "intl", "adapter": "web_search", "domain": "reddit.com", "query": "AI agents workflow productivity", "identity_role": "cross_platform_reference", "metric_fields": [], "proxy_policy": "direct_then_us", "enabled": true},
+    "producthunt": {"region": "intl", "adapter": "web_search", "domain": "producthunt.com", "query": "AI productivity automation tools", "identity_role": "cross_platform_reference", "metric_fields": [], "proxy_policy": "direct_then_us", "enabled": true},
+    "devto": {"region": "intl", "adapter": "web_search", "domain": "dev.to", "query": "AI agent workflow automation", "identity_role": "cross_platform_reference", "metric_fields": [], "proxy_policy": "direct_then_us", "enabled": true},
+    "medium": {"region": "intl", "adapter": "web_search", "domain": "medium.com", "query": "AI agent workflow productivity", "identity_role": "cross_platform_reference", "metric_fields": [], "proxy_policy": "direct_then_us", "enabled": true}
+  }
+}

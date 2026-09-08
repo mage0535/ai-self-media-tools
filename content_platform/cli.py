@@ -681,7 +681,8 @@ def execute(args):
         live_platforms = {str(platform).casefold().strip() for platform in (args.platform or []) if str(platform).strip()}
         if not args.skip_live:
             if not live_platforms:
-                live_platforms = {"wechat", "douyin_ai", "douyin_pet"}
+                from .platform_intelligence_registry import publishing_platforms
+                live_platforms = set(publishing_platforms())
             if "wechat" in live_platforms:
                 for query in query_map.get("wechat") or query_map.get("all") or ["Claude Code Skills MCP AI效率 工作流", "AI工具 自动化 工作流 效率 公众号"]:
                     started = datetime.now()
@@ -731,10 +732,8 @@ def execute(args):
                         statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "ok" if rows else "no_verified_results", "count": len(rows), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
                     except Exception as exc:
                         statuses.append({"source": "douyin_pet:public_shipin", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
-            for platform in sorted(live_platforms.intersection({
-                "douyin", "douyin_ai", "douyin_pet", "kuaishou", "xiaohongshu",
-                "tiktok", "youtube", "bilibili", "zhihu", "juejin", "twitter", "shipinhao",
-            })):
+            from .platform_intelligence_registry import publishing_platforms
+            for platform in sorted(live_platforms.intersection(set(publishing_platforms()))):
                 state_file = state_files.get(platform) or state_files.get("douyin" if platform.startswith("douyin") else platform)
                 public_without_state = {"bilibili", "juejin", "youtube"}
                 if not state_file and platform not in public_without_state:

@@ -81,6 +81,7 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
         "recommended_patterns": data.get("recommended_patterns") or [],
         "generation_requirements": data.get("generation_requirements") or [],
         "top_samples": samples,
+        "cross_platform_references": list(data.get("cross_platform_references") or [])[:5],
     }
 
 

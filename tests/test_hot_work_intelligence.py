@@ -142,6 +142,35 @@ def test_build_hot_work_parameter_pack_requires_strong_platform_samples():
     assert pack["platforms"]["xiaohongshu"]["recommended_patterns"]
 
 
+def test_default_parameter_pack_covers_every_publishing_platform_from_registry():
+    from content_platform.platform_intelligence_registry import publishing_platforms
+
+    pack = build_hot_work_parameter_pack([])
+
+    assert set(pack["platforms"]) == set(publishing_platforms())
+
+
+def test_cross_platform_references_inform_but_never_make_target_ready():
+    samples = [{
+        "platform": "weibo",
+        "title": "AI 工作流进入团队协作讨论",
+        "source": "wewrite_aggregate:weibo",
+        "url": "https://s.weibo.com/weibo?q=ai",
+        "heat": 900000,
+        "captured_at": "2026-09-08T00:00:00+00:00",
+        "identity_role": "cross_platform_reference",
+    }]
+
+    pack = build_hot_work_parameter_pack(samples, platforms=["wechat"])
+
+    assert pack["platforms"]["wechat"]["ready"] is False
+    assert pack["platforms"]["wechat"]["strong_sample_count"] == 0
+    assert pack["platforms"]["wechat"]["cross_platform_references"][0]["platform"] == "weibo"
+    score = pack["platforms"]["wechat"]["cross_platform_references"][0]["intelligence_score"]
+    assert score["target_ready_eligible"] is False
+    assert score["dimensions"]["lane_fit"] > 0
+
+
 def test_parameter_pack_does_not_mark_incomplete_labeled_rows_ready():
     samples = [
         {"platform": "zhihu", "title": f"AI 工作流 {index}", "evidence_strength": "strong_logged_search_result", "analysis": analyze_work("AI 工作流")}
