@@ -559,6 +559,10 @@ def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
         changes.append({"pattern": "reference_boundary_contrast", "match": match.group(0)[:80]})
         return "这组条件用于参考判断，不代表标准答案。"
 
+    def replace_false_profound_checklist(match):
+        changes.append({"pattern": "false_profound_checklist", "match": match.group(0)[:80]})
+        return "这些断点组成下一轮改进清单。"
+
     def replace_double(match):
         left = match.group(1).strip("，, ")
         right = match.group(2).strip("，, ")
@@ -585,6 +589,7 @@ def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
         return f"关键在{point}，而非{surface}。"
 
     text = re.sub(r"这不是标准答案[，,]?(?:它)?只是一组可参考的假设判断条件[。.]?", replace_reference_boundary, text)
+    text = re.sub(r"这就是真正的改进清单[。.]?", replace_false_profound_checklist, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?也不是([^，,。！？\n]{2,60})[，,]?(?:它读的)?是([^。！？\n]{2,100})", replace_triple, text)
     text = re.sub(r"不是([^。！？\n]{2,60})[，,]?也不是([^。！？\n]{2,60})[。！？]", replace_double, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?而是([^。！？\n]{2,100})[。！？]", replace_contrast, text)

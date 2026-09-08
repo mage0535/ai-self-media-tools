@@ -96,6 +96,13 @@ def test_wechat_postwriter_repairs_only_reference_binary_contrast():
     assert evidence["changes"][0]["pattern"] == "reference_boundary_contrast"
 
 
+def test_wechat_postwriter_repairs_false_profound_checklist_ending():
+    repaired, evidence = _repair_ai_slop("把这些断点记下来，这就是真正的改进清单。")
+
+    assert repaired == "把这些断点记下来，这些断点组成下一轮改进清单。"
+    assert evidence["changes"][0]["pattern"] == "false_profound_checklist"
+
+
 def test_wewrite_retries_transient_timeout_then_succeeds(tmp_path, monkeypatch):
     brief = tmp_path / "brief.md"
     article = tmp_path / "article.md"
