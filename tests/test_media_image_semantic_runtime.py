@@ -310,3 +310,9 @@ def test_deterministic_visual_semantics_require_vision_structure_and_hash_bound_
         "labels": ["two rectangles", "eight numbered options", "任务清单", "checkboxes"],
     }
     assert MediaBridge._derive_deterministic_semantic_evidence(mistranscribed, image, renderer)["passed"] is True
+    geometry_only = {
+        **parent,
+        "caption": "Two dark blue rectangles are shown. The left rectangle contains eight lines and outlined boxes. The right rectangle contains three lines and outlined boxes.",
+        "labels": ["two rectangles", "eight lines", "three lines", "outlined boxes"],
+    }
+    assert MediaBridge._derive_deterministic_semantic_evidence(geometry_only, image, renderer)["passed"] is True
