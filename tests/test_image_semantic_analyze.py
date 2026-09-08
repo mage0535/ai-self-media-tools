@@ -159,8 +159,8 @@ def test_modular_playbook_rectangles_ground_workflow_nodes_without_accepting_rob
 def test_directory_and_loading_concepts_use_visible_evidence_only():
     directory_score, directory_matches = analyzer.score_semantics(
         ["structured skill directory documents"],
-        "A folder tree shows SKILL.md beside scripts, references, and assets files.",
-        ["folder tree", "files", "documents"],
+        "Three staggered cards are labelled SCRIPTS, REFERENCES, and ASSETS with an arrow below.",
+        ["scripts", "references", "assets", "cards"],
     )
     loading_score, loading_matches = analyzer.score_semantics(
         ["selective document loading sequence"],

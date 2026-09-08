@@ -253,3 +253,20 @@ def test_grounded_article_headings_compile_to_visible_section_concepts():
     assert resources["expected_concepts"] == ["structured skill directory documents"]
     assert loading["expected_concepts"] == ["selective document loading sequence"]
     assert all("核心定义" not in value for value in directory["expected_concepts"])
+
+
+def test_deterministic_section_visual_copy_does_not_reuse_cover_headline():
+    job = {
+        "title": "cover title",
+        "topic": "cover topic",
+        "draft_meta": {"cover_design": {"title_text": "COVER", "subtitle_text": "COVER SUBTITLE"}},
+    }
+
+    title, subtitle = MediaBridge._deterministic_visual_copy(
+        job,
+        {"role": "section", "section": "scripts、references 与 assets 资源结构", "purpose": "explain files"},
+    )
+
+    assert title == "scripts、references 与 assets 资源结构"
+    assert subtitle == "explain files"
+    assert "COVER" not in title + subtitle
