@@ -622,3 +622,12 @@ Observed read-only on 2026-08-31.
 - Red/green tests prove three empty recapture rounds produce one `ready_for_plan` editorial row; strategy source is preserved in bounded model input; no hotspot identity exists; all-reserved topics block; and absence of a requery adapter cannot bypass collection.
 - Related tests returned 78 passed. Full `artifacts/test-reports/p10-wechat-evergreen-fallback.xml` returned 1739 passed plus 37 subtests in 341.78 seconds. Project/privacy audit 581/0; license audit 65/0.
 - Linux prepare-only verification and a WeChat content/media/draft-safe Canary remain pending. Production and timers remain unchanged.
+
+## 2026-09-08 WeChat v2 And Intelligence Expansion Evidence
+
+- Linux prepare-only v2 used the real compiled WeChat strategy SHA and produced `ready_for_plan`, three zero-candidate research rounds, editorial evidence and no associated hotspot. Bounded input contained six content pillars and six structures.
+- WeChat content v2 used the active Hermes model for its initial draft. WeWrite `llm-write` returned HTTP 400; explicit Hermes writer then recorded direct and US-proxy routes with return code zero and produced 2,074 characters. Final writer gate recorded `passed=true, writer=hermes_writer`.
+- The 1,953-character article was readable and growth gate passed, but old WeChat quality logic required GitHub project/dual-channel fields plus unavailable same-lane/cross-platform samples for every article. No media or publisher call occurred.
+- `9c819aa` adds mode-aware gates and packet fields. `df736e6` adds `platform_intelligence_registry_v1`, registry loaders, aggregate/reference adapters and deterministic multi-factor scoring. Tests prove all 12 delivery targets have collectors/queries and 11 reference sources remain cross-platform only.
+- Full `artifacts/test-reports/p10-expanded-intelligence-registry.xml` returned 1749 passed plus 37 subtests in 357.30 seconds. Project/privacy audit scanned 586 files with zero issues; license audit checked 65 capabilities with zero issues.
+- Linux live registry/aggregate smoke and WeChat v3 remain pending. Production stays signed `2f4f612`; timers remain disabled.
