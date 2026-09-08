@@ -476,3 +476,10 @@ These describe the audited production release, not the current development code.
 - The only failure was external `no_ai_slop_check`: line 69 contained `这就是真正的改进清单`, classified as a false-profound ending. No media or publisher ran.
 - `f76a3c2` rewrites the observed phrase to `这些断点组成下一轮改进清单` and retains the external checker as final authority.
 - Related tests: 175 passed. Full: 1753 passed plus 37 subtests. Privacy 586/0; license 65/0. Next: Linux v6 content/media Canary.
+
+## 2026-09-08 WeChat v6 Short Binary Contrast
+
+- v6 completed active-model and Hermes-writer generation with a 2,270-character body. All operational/content-mode gates passed; only external no-AI-slop failed.
+- The exact sentence was `卡住的根本不是写，而是等确认、缺口径`. The prior contrast regex required at least two characters after `不是`, so the single character `写` escaped.
+- `15e3a3c` accepts one-character contrast subjects and consumes optional `根本` to avoid producing `根本真正关键`. Related tests: 75 passed. Full: 1754 passed plus 37 subtests. Privacy 586/0; license 65/0.
+- Next: Linux v7; media and publisher remain unopened until copy passes.
