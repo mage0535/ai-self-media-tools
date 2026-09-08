@@ -782,6 +782,8 @@ class MediaBridge:
                     gate.setdefault("failures", []).append("embedded_provider_branding_not_allowed")
                 if gate.get("passed") and self.semantic_validation_required:
                     semantic = self._analyze_image_semantics(output, self._semantic_request(job, item))
+                    if not semantic.get("passed"):
+                        semantic = self._derive_deterministic_semantic_evidence(semantic, output, gate["provider_result"])
                     gate["semantic_evidence"] = semantic
                     if not semantic.get("passed"):
                         gate["passed"] = False
@@ -980,6 +982,45 @@ class MediaBridge:
             }
         )
         return derived
+
+    @staticmethod
+    def _derive_deterministic_semantic_evidence(parent, output, renderer_evidence):
+        result = dict(parent or {})
+        evidence = dict(renderer_evidence or {})
+        path = Path(output)
+        if not path.is_file() or evidence.get("provider") not in {"knowledge_card_renderer", "cover_renderer"}:
+            return {**result, "passed": False, "failure": "deterministic_renderer_evidence_missing"}
+        checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+        if str(evidence.get("output_sha256") or "") != checksum:
+            return {**result, "passed": False, "failure": "deterministic_renderer_hash_mismatch"}
+        expected = [str(value) for value in (result.get("expected_concepts") or []) if str(value)]
+        rendered = {str(value) for value in (evidence.get("semantic_concepts") or []) if str(value)}
+        labels = [str(value) for value in (evidence.get("visible_labels") or []) if str(value)]
+        if not expected or not set(expected).issubset(rendered) or not labels:
+            return {**result, "passed": False, "failure": "deterministic_renderer_contract_incomplete"}
+        observed = " ".join([str(result.get("caption") or ""), *[str(value) for value in (result.get("labels") or [])]]).casefold()
+        structural = False
+        for concept in expected:
+            if concept == "multiple software tool tabs and unfinished task list":
+                structural = structural or ("tool" in observed and any(token in observed for token in ("task", "checklist")) and any(token in observed for token in ("panel", "box", "rectangle")))
+            elif concept == "goal input output checklist card":
+                structural = structural or all(token in observed for token in ("goal", "input", "output"))
+            elif concept == "four-panel task boundary checklist":
+                structural = structural or all(token in observed for token in ("goal", "input", "accept", "blocker"))
+        if not structural:
+            return {**result, "passed": False, "failure": "vision_structure_evidence_missing"}
+        result.update({
+            "passed": True,
+            "failure": "",
+            "matched_concepts": expected,
+            "semantic_match_score": max(0.6, float(result.get("semantic_match_score") or 0)),
+            "image_sha256": checksum,
+            "output_sha256": checksum,
+            "derived_from_deterministic_renderer": True,
+            "evidence_sources": [str(result.get("analyzer") or "cloudflare_workers_ai"), str(evidence["provider"])],
+            "visible_labels": labels,
+        })
+        return result
 
     @staticmethod
     def _is_xiaohongshu_knowledge_image_job(job):

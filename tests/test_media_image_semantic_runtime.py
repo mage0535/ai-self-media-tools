@@ -270,3 +270,37 @@ def test_deterministic_section_visual_copy_does_not_reuse_cover_headline():
     assert title == "scripts、references 与 assets 资源结构"
     assert subtitle == "explain files"
     assert "COVER" not in title + subtitle
+
+
+def test_deterministic_visual_semantics_require_vision_structure_and_hash_bound_labels(tmp_path):
+    import hashlib
+    from content_platform.media import MediaBridge
+
+    image = tmp_path / "card.png"
+    image.write_bytes(b"deterministic-card")
+    sha = hashlib.sha256(image.read_bytes()).hexdigest()
+    parent = {
+        "ok": True,
+        "passed": False,
+        "caption": "Two panels show eight tool items and a task checklist.",
+        "labels": ["two panels", "tool items", "task checklist"],
+        "semantic_match_score": 0.12,
+        "expected_concepts": ["multiple software tool tabs and unfinished task list"],
+        "image_sha256": sha,
+        "output_sha256": sha,
+    }
+    renderer = {
+        "provider": "knowledge_card_renderer",
+        "output_sha256": sha,
+        "semantic_concepts": ["multiple software tool tabs and unfinished task list"],
+        "visible_labels": ["8个工具标签页", "任务清单", "待处理", "未完成", "未开始"],
+    }
+
+    derived = MediaBridge._derive_deterministic_semantic_evidence(parent, image, renderer)
+
+    assert derived["passed"] is True
+    assert derived["evidence_sources"] == ["cloudflare_workers_ai", "knowledge_card_renderer"]
+    assert derived["image_sha256"] == sha
+    assert MediaBridge._derive_deterministic_semantic_evidence(parent, image, {**renderer, "output_sha256": "bad"})["passed"] is False
+    assert MediaBridge._derive_deterministic_semantic_evidence(parent, image, {**renderer, "provider": "sense_nova"})["passed"] is False
+    assert MediaBridge._derive_deterministic_semantic_evidence({**parent, "caption": "office portrait", "labels": ["office"]}, image, renderer)["passed"] is False
