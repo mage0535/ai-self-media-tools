@@ -2325,6 +2325,32 @@ def test_article_image_prompts_use_explicit_section_visual_plans():
     ]
 
 
+def test_article_image_prompts_reuse_persisted_visual_plans_after_body_cleanup():
+    from content_platform.media import MediaBridge
+
+    job = {
+        "topic": "先加工具还是先拆任务",
+        "title": "先加工具还是先拆任务",
+        "body": "## 先加工具的人，容易掉进同一个误区\n正文。\n\n## 先拆任务，到底在拆什么\n正文。\n\n## 一张边界清单，帮你判断先做哪一步\n正文。",
+        "platforms": ["wechat"],
+        "draft_meta": {
+            "section_image_map": [
+                {"section": "先加工具的人，容易掉进同一个误区", "purpose": "多个工具标签页与一行未完成待办"},
+                {"section": "先拆任务，到底在拆什么", "purpose": "目标、输入、输出三行清单卡"},
+                {"section": "一张边界清单，帮你判断先做哪一步", "purpose": "四格边界检查卡"},
+            ]
+        },
+    }
+
+    prompts = MediaBridge._image_prompts(job, 4)
+
+    assert [item["purpose"] for item in prompts[1:]] == [
+        "多个工具标签页与一行未完成待办",
+        "目标、输入、输出三行清单卡",
+        "四格边界检查卡",
+    ]
+
+
 def test_image_retry_prompt_preserves_visual_intent_instead_of_forcing_real_scene():
     from content_platform.media import MediaBridge
 

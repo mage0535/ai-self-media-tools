@@ -656,6 +656,7 @@ def test_sensenova_edit_sends_source_image_and_aspect_tier(tmp_path, monkeypatch
     assert result["provider"] == "sense_nova"
     assert result["mode"] == "edit"
     assert result["model"] == "sensemirage-edit-test"
+    assert result["embedded_branding_possible"] is True
     assert result["provenance"]["input_image_sha256"]
 
 

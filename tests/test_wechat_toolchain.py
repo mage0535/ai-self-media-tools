@@ -3,6 +3,7 @@ from pathlib import Path
 import subprocess
 
 from content_platform.wechat_toolchain import (
+    _build_packet_fields,
     _invoke_hermes_writer,
     _invoke_wewrite,
     _repair_ai_slop,
@@ -164,6 +165,35 @@ def test_prepare_wechat_professional_draft_records_wewrite_evidence(tmp_path):
     assert meta["wechat_image_post_plan"]["publish_target"] == "wechat_newspic_draft"
     assert meta["visual_content_policy"]["wechat_requirements"]["theme_count_required"] == 109
     assert Path(meta["wechat_toolchain_evidence_path"]).is_file()
+
+
+def test_wechat_packet_persists_explicit_section_visual_plans(tmp_path):
+    body = """## 先加工具的人，容易掉进同一个误区
+正文。
+> 📷 配图计划1：深夜书桌，多个工具标签页与一行未完成待办。对应本节。
+
+## 先拆任务，到底在拆什么
+正文。
+> 📷 配图计划2：目标、输入、输出三行清单卡。对应本节。
+
+## 一张边界清单，帮你判断先做哪一步
+正文。
+> 📷 配图计划3：四格边界检查卡。对应本节。
+"""
+
+    packet = _build_packet_fields(
+        {"topic": "先加工具还是先拆任务", "platforms": ["wechat"], "brief": {}},
+        {"title": "先加工具还是先拆任务", "draft_meta": {}},
+        body,
+        {"tool": "hermes_writer", "status": "used"},
+        tmp_path,
+    )
+
+    assert [item["purpose"] for item in packet["section_image_map"]] == [
+        "深夜书桌，多个工具标签页与一行未完成待办。对应本节。",
+        "目标、输入、输出三行清单卡。对应本节。",
+        "四格边界检查卡。对应本节。",
+    ]
 
 
 def test_prepare_wechat_professional_draft_records_failure_when_required(tmp_path):

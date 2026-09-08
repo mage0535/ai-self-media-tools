@@ -124,6 +124,37 @@ def test_compiled_directory_and_loading_concepts_select_distinct_layouts(tmp_pat
     assert loading["layout"] == "selective_loading_sequence"
 
 
+def test_task_boundary_concepts_render_distinct_watermark_free_layouts(tmp_path):
+    from content_platform.deterministic_visual import render_editorial_visual
+
+    concepts = [
+        "multiple software tool tabs and unfinished task list",
+        "goal input output checklist card",
+        "four-panel task boundary checklist",
+    ]
+    results = []
+    hashes = []
+    for index, concept in enumerate(concepts):
+        target = tmp_path / f"boundary-{index}.png"
+        results.append(render_editorial_visual(
+            target,
+            role="section",
+            size=(1200, 800),
+            title="任务边界",
+            subtitle="按当前卡点选择下一步",
+            concepts=[concept],
+        ))
+        hashes.append(_sha(target))
+
+    assert [item["layout"] for item in results] == [
+        "tool_tab_overload",
+        "goal_input_output_card",
+        "four_panel_boundary_check",
+    ]
+    assert len(set(hashes)) == 3
+    assert all(item["provider"] == "knowledge_card_renderer" for item in results)
+
+
 def test_skill_md_heading_takes_document_layout_over_directory_concept(tmp_path):
     from content_platform.deterministic_visual import render_editorial_visual
 

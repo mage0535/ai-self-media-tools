@@ -31,6 +31,9 @@ ANALYZER_NAME = "cloudflare_workers_ai"
 _REQUIRED_CONCEPT_ANCHORS = {
     "structured skill directory documents": {"directory"},
     "selective document loading sequence": {"loading"},
+    "multiple software tool tabs and unfinished task list": {"tab", "unfinished"},
+    "goal input output checklist card": {"goal", "input", "output"},
+    "four panel task boundary checklist": {"quadrant", "checklist"},
 }
 
 
@@ -59,6 +62,13 @@ _SYNONYM_GROUPS = (
     ("time", "clock", "calendar", "deadline", "watch", "hourglass", "时间", "日历", "时钟", "沙漏"),
     ("feeding", "feed", "spoon", "holding a spoon", "喂", "勺子"),
     ("office", "workspace", "办公室", "办公空间"),
+    ("tab", "tabs", "browser tab", "browser tabs", "tool tab", "tool tabs", "标签页"),
+    ("unfinished", "incomplete", "pending", "unfinished task", "unfinished task list", "未完成", "待办"),
+    ("goal", "target", "objective", "目标"),
+    ("input", "inputs", "输入"),
+    ("output", "outputs", "输出"),
+    ("quadrant", "quadrants", "four panel", "four panels", "four-panel", "四格", "象限"),
+    ("checklist", "check list", "task list", "清单", "检查卡"),
 )
 
 

@@ -13,7 +13,7 @@ from .tool_registry import ToolRegistry
 from .paths import agent_scripts_dir
 from .cover_director import render_cover_poster
 from .cover_quality import normalize_cover_resolution
-from .adapters.media import ArticleMediaValidationError, execute_article_media, normalize_article_sections
+from .adapters.media import ArticleMediaValidationError, execute_article_media, extract_section_visual_plans, normalize_article_sections
 from .deterministic_visual import render_editorial_visual
 from .image_routing import route_image_request, visual_concepts
 
@@ -683,6 +683,28 @@ class MediaBridge:
         )
 
     @staticmethod
+    def _use_deterministic_boundary_visual(item, *, attempt, max_attempts):
+        if int(attempt) < int(max_attempts) or str(item.get("role") or "").casefold() != "section":
+            return False
+        text = " ".join([
+            str(item.get("section") or ""),
+            str(item.get("purpose") or ""),
+            " ".join(str(value) for value in (item.get("expected_concepts") or [])),
+        ])
+        concepts = set(visual_concepts(text))
+        return bool(concepts.intersection({
+            "multiple software tool tabs and unfinished task list",
+            "goal input output checklist card",
+            "four-panel task boundary checklist",
+        }))
+
+    @staticmethod
+    def _provider_branding_allowed(item, provider_result):
+        if str(item.get("role") or "").casefold() == "cover":
+            return True
+        return not bool((provider_result or {}).get("embedded_branding_possible"))
+
+    @staticmethod
     def _normalize_article_image(path, dimensions):
         if Image is None:
             raise RuntimeError("Pillow is required for article image normalization")
@@ -730,13 +752,29 @@ class MediaBridge:
             try:
                 if output.exists():
                     output.unlink()
-                provider_result = provider.run(
-                    prompt,
-                    output,
-                    provider_args,
-                )
+                if self._use_deterministic_boundary_visual(item, attempt=attempt, max_attempts=max_attempts):
+                    design = (job.get("draft_meta") or {}).get("cover_design") or {}
+                    visual_title, visual_subtitle = self._deterministic_visual_copy(job, item)
+                    provider_result = render_editorial_visual(
+                        output,
+                        role=str(item.get("role") or "section"),
+                        size=tuple(item.get("dimensions") or (1200, 800)),
+                        title=visual_title,
+                        subtitle=visual_subtitle,
+                        concepts=list(self._semantic_request(job, item).get("expected_concepts") or []),
+                        accent=str(design.get("accent") or "#1E80FF"),
+                    )
+                else:
+                    provider_result = provider.run(
+                        prompt,
+                        output,
+                        provider_args,
+                    )
                 gate = self._validate_image_quality_candidate(output, accepted_checksums, accepted_hashes)
                 gate["provider_result"] = provider_result if isinstance(provider_result, dict) else {}
+                if gate.get("passed") and not self._provider_branding_allowed(item, gate["provider_result"]):
+                    gate["passed"] = False
+                    gate.setdefault("failures", []).append("embedded_provider_branding_not_allowed")
                 if gate.get("passed") and self.semantic_validation_required:
                     semantic = self._analyze_image_semantics(output, self._semantic_request(job, item))
                     gate["semantic_evidence"] = semantic
@@ -1285,22 +1323,16 @@ class MediaBridge:
 
     @staticmethod
     def _section_visual_plans(job):
-        body = str(job.get("body") or "")
-        headings = list(re.finditer(r"(?m)^#{2,6}\s+(.+?)\s*$", body))
         plans = {}
-        for index, match in enumerate(headings):
-            end = headings[index + 1].start() if index + 1 < len(headings) else len(body)
-            section_body = body[match.end():end]
-            plan = re.search(
-                r"(?m)^\s*>?\s*(?:📷\s*)?配图计划\s*\d*\s*[:：]\s*(.+?)\s*$",
-                section_body,
-            )
-            if not plan:
+        mapping = (job.get("draft_meta") or {}).get("section_image_map") or []
+        for item in mapping:
+            if not isinstance(item, dict):
                 continue
-            heading = " ".join(match.group(1).split()).casefold()
-            purpose = " ".join(plan.group(1).split()).strip()
+            heading = " ".join(str(item.get("section") or "").split()).casefold()
+            purpose = " ".join(str(item.get("purpose") or item.get("visual_subject") or "").split()).strip()
             if heading and purpose:
                 plans[heading] = purpose[:500]
+        plans.update(extract_section_visual_plans(str(job.get("body") or "")))
         return plans
 
     @staticmethod

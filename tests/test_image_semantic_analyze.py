@@ -189,6 +189,38 @@ def test_directory_and_loading_concepts_use_visible_evidence_only():
     assert anatomy_matches == ["structured skill directory documents"]
 
 
+def test_task_boundary_visuals_require_their_observable_anchors():
+    office_score, office_matches = analyzer.score_semantics(
+        ["multiple software tool tabs and unfinished task list"],
+        "A man sits at a desk with two monitors. One monitor has a completed checklist and the other has a camera.",
+        ["man", "desk", "monitors", "checklist", "camera"],
+    )
+    tabs_score, tabs_matches = analyzer.score_semantics(
+        ["multiple software tool tabs and unfinished task list"],
+        "A browser shows eight software tool tabs beside a paper task list with one unfinished item.",
+        ["browser tabs", "software tools", "unfinished task list"],
+    )
+    io_score, io_matches = analyzer.score_semantics(
+        ["goal input output checklist card"],
+        "A checklist card has three labelled rows: GOAL, INPUT, and OUTPUT.",
+        ["goal", "input", "output", "checklist card"],
+    )
+    quadrants_score, quadrants_matches = analyzer.score_semantics(
+        ["four-panel task boundary checklist"],
+        "A four-quadrant checklist shows target, input, acceptance and bottleneck panels.",
+        ["four quadrants", "checklist", "task boundary"],
+    )
+
+    assert office_score < analyzer.DEFAULT_THRESHOLD
+    assert office_matches == []
+    assert tabs_score >= analyzer.DEFAULT_THRESHOLD
+    assert tabs_matches == ["multiple software tool tabs and unfinished task list"]
+    assert io_score >= analyzer.DEFAULT_THRESHOLD
+    assert io_matches == ["goal input output checklist card"]
+    assert quadrants_score >= analyzer.DEFAULT_THRESHOLD
+    assert quadrants_matches == ["four-panel task boundary checklist"]
+
+
 def test_bookshelf_documents_and_robot_assistant_ground_memory_archive():
     score, matched = analyzer.score_semantics(
         ["organized memory archive"],

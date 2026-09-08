@@ -389,3 +389,29 @@ def test_xiaohongshu_cover_normalization_preserves_platform_target_size():
 
 def test_wechat_article_requires_cover_plus_three_inline_images():
     assert MediaBridge._required_image_count({"platforms": ["wechat"], "body": "article"}, {}) == 4
+
+
+def test_section_image_rejects_provider_that_declares_embedded_branding():
+    assert MediaBridge._provider_branding_allowed(
+        {"role": "section"}, {"provider": "sense_nova", "embedded_branding_possible": True}
+    ) is False
+    assert MediaBridge._provider_branding_allowed(
+        {"role": "cover"}, {"provider": "sense_nova", "embedded_branding_possible": True}
+    ) is True
+    assert MediaBridge._provider_branding_allowed(
+        {"role": "section"}, {"provider": "pixazo"}
+    ) is True
+
+
+def test_boundary_visual_uses_deterministic_final_recovery_only():
+    item = {
+        "role": "section",
+        "intent": "editorial_illustration",
+        "expected_concepts": ["goal input output checklist card"],
+    }
+
+    assert MediaBridge._use_deterministic_boundary_visual(item, attempt=1, max_attempts=3) is False
+    assert MediaBridge._use_deterministic_boundary_visual(item, attempt=3, max_attempts=3) is True
+    assert MediaBridge._use_deterministic_boundary_visual(
+        {**item, "expected_concepts": ["generic office"]}, attempt=3, max_attempts=3
+    ) is False
