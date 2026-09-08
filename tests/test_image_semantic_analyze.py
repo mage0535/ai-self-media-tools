@@ -136,6 +136,26 @@ def test_visual_equivalents_ground_agent_search_and_dashboard_concepts():
     assert "data analytics dashboard" in matched
 
 
+def test_modular_playbook_rectangles_ground_workflow_nodes_without_accepting_robot_office():
+    expected = ["connected workflow task nodes", "step-by-step operating playbook"]
+    positive_score, positive_matches = analyzer.score_semantics(
+        expected,
+        "A dark blue grid contains staggered rounded rectangles numbered 01 to 03 with INPUT, SKILL, and VERIFY. "
+        "The bottom panel says MODULAR PLAYBOOK and PASS.",
+        ["modular playbook", "rectangles", "input", "skill", "verify"],
+    )
+    negative_score, negative_matches = analyzer.score_semantics(
+        expected,
+        "A silver robot sits at an office desk holding a tablet in front of a city skyline.",
+        ["robot", "office", "desk", "tablet"],
+    )
+
+    assert positive_score >= analyzer.DEFAULT_THRESHOLD
+    assert positive_matches == expected
+    assert negative_score < analyzer.DEFAULT_THRESHOLD
+    assert negative_matches == []
+
+
 def test_bookshelf_documents_and_robot_assistant_ground_memory_archive():
     score, matched = analyzer.score_semantics(
         ["organized memory archive"],
