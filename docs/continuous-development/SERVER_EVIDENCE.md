@@ -525,3 +525,11 @@ Observed read-only on 2026-08-31.
 - v33 discovered live `opencode-go/muse-spark-1.3-contributor` and ended with `ProviderAuthError: provider_auth_failed` before draft generation. Artifact probe reported missing cover/capability evidence because no artifact stage ran.
 - Fresh server check confirms current production is still signed `production-runtime-v8-2f4f612-20260906`, staging is `9fadd9e`, gateway is active and both overnight timers are inactive.
 - No model setting, production release, shared database, timer or publisher was changed. Next work is deterministic end-to-end recovery/media validation independent of live model availability.
+
+## 2026-09-08 Juejin v34b Grounded-Depth Evidence
+
+- A deterministic recovery run reused the complete v31 draft metadata and the private five-claim Agent Skills specification pack. It did not call Hermes, change its active model or touch production.
+- The rebuilt draft passed claim validation, final text hygiene, GEO, growth and all Juejin platform dimensions except `base_article_quality.body_length`. The old builder produced only 513 effective characters in the unit fixture, below the production range of 1,200 to 3,000, so media and delivery correctly remained closed.
+- Red test added the actual `validate_article_packet` body-length assertion. Commit `46b1616` expands only the deterministic fallback with clearly marked task-framing, resource-planning, execution-review and verification advice; verified primary claims remain the only factual assertions.
+- Local related command covering claim, Pipeline and media/platform quality returned 175 passed. Full `artifacts/test-reports/p10-grounded-rebuild-depth.xml` returned 1727 passed plus 37 subtests in 300.59 seconds. `python -m content_platform project-audit` scanned 581 files with zero issues; `python scripts/license_audit.py` checked 65 capabilities with zero issues; `git diff --check` passed.
+- Linux staging validation and v34c remain pending. Production stays on signed `2f4f612`; timers remain disabled and no real Juejin publisher call has been made.
