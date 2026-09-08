@@ -2267,6 +2267,63 @@ def test_section_semantic_request_compiles_adjacent_paragraph_visual_metaphor():
     })
     assert forgotten_context["expected_concepts"] == ["organized memory archive"]
 
+    tool_boundary = MediaBridge._semantic_request({
+        "topic": "先加工具还是先拆任务？一张边界清单帮你判断",
+        "title": "先加工具还是先拆任务？一张清单帮你判断",
+        "platforms": ["wechat"],
+        "draft_meta": {},
+    }, {
+        "role": "section",
+        "section": "先加工具的人，容易掉进同一个误区",
+        "purpose": "explain the tool-first mistake",
+    })
+    assert tool_boundary["expected_concepts"] == [
+        "split-screen task boundary checklist and software tools"
+    ]
+    assert all("先加工具" not in value for value in tool_boundary["expected_concepts"])
+
+
+def test_article_image_prompts_use_explicit_section_visual_plans():
+    from content_platform.media import MediaBridge
+
+    body = """## 先加工具的人，容易掉进同一个误区
+
+正文。
+> 📷 配图计划1：深夜书桌场景卡，屏幕上开着七八个工具标签页，纸上待办只写了一行。对应本节。
+
+## 先拆任务，到底在拆什么
+
+正文。
+> 📷 配图计划2：知识卡片，纸面手写感的三行填空：目标是__ / 输入缺__ / 输出算__。对应本节。
+
+## 一张边界清单，帮你判断先做哪一步
+
+正文。
+> 📷 配图计划3：四格对照卡：目标具体吗 / 输入齐了吗 / 能验收吗 / 卡点明确吗。对应本节。
+"""
+    job = {
+        "topic": "先加工具还是先拆任务？一张边界清单帮你判断",
+        "title": "先加工具还是先拆任务",
+        "body": body,
+        "platforms": ["wechat"],
+        "draft_meta": {},
+    }
+
+    prompts = MediaBridge._image_prompts(job, 4)
+
+    assert prompts[1]["purpose"].startswith("深夜书桌场景卡")
+    assert prompts[2]["purpose"].startswith("知识卡片")
+    assert prompts[3]["purpose"].startswith("四格对照卡")
+    assert MediaBridge._semantic_request(job, prompts[1])["expected_concepts"] == [
+        "multiple software tool tabs and unfinished task list"
+    ]
+    assert MediaBridge._semantic_request(job, prompts[2])["expected_concepts"] == [
+        "goal input output checklist card"
+    ]
+    assert MediaBridge._semantic_request(job, prompts[3])["expected_concepts"] == [
+        "four-panel task boundary checklist"
+    ]
+
 
 def test_image_retry_prompt_preserves_visual_intent_instead_of_forcing_real_scene():
     from content_platform.media import MediaBridge

@@ -101,6 +101,10 @@ _EDITORIAL_SIGNALS = (
 
 _VISUAL_CONCEPT_GROUPS = (
     (("commonjs", "esm", "模块格式", "module format", "import format"), "side-by-side software module format comparison"),
+    (("工具标签页", "待办只写", "multiple software tool tabs", "unfinished task list"), "multiple software tool tabs and unfinished task list"),
+    (("目标是", "输入缺", "输出算", "goal input output"), "goal input output checklist card"),
+    (("四格对照卡", "目标具体吗", "卡点明确吗", "four-panel"), "four-panel task boundary checklist"),
+    (("先加工具", "先拆任务", "任务边界", "工具选择", "边界清单", "tool-first", "task boundary", "tool choice"), "split-screen task boundary checklist and software tools"),
     (("ai", "人工智能", "大模型", "hermes", "智能体", "agent"), "AI software agent"),
     (("工作流", "流程", "标准操作流程", "workflow", "自动化", "automation"), "connected workflow task nodes"),
     (("agent skills", "skill", "skills", "操作手册", "sop"), "step-by-step operating playbook"),
