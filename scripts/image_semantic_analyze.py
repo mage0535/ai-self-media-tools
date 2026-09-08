@@ -33,7 +33,7 @@ _REQUIRED_CONCEPT_ANCHORS = {
     "selective document loading sequence": {"loading"},
     "multiple software tool tabs and unfinished task list": {"tab", "unfinished"},
     "goal input output checklist card": {"goal", "input", "output"},
-    "four panel task boundary checklist": {"quadrant", "checklist"},
+    "four panel task boundary checklist": {"goal", "input", "accept", "blocker"},
 }
 
 
@@ -67,6 +67,8 @@ _SYNONYM_GROUPS = (
     ("goal", "target", "objective", "目标"),
     ("input", "inputs", "输入"),
     ("output", "outputs", "输出"),
+    ("accept", "acceptance", "acceptance criteria", "testable", "验收"),
+    ("blocker", "blockers", "bottleneck", "bottlenecks", "卡点", "阻塞"),
     ("quadrant", "quadrants", "four panel", "four panels", "four-panel", "four boxes", "two rows of two", "四格", "象限"),
     ("checklist", "check list", "task list", "清单", "检查卡"),
 )
