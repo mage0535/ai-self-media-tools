@@ -1008,9 +1008,21 @@ class MediaBridge:
                     and any(token in observed for token in ("task", "checklist", "任务清单", "three items", "three lines", "three checkboxes"))
                 )
             elif concept == "goal input output checklist card":
-                structural = structural or all(token in observed for token in ("goal", "input", "output"))
+                structural = structural or (
+                    all(token in observed for token in ("goal", "input", "output"))
+                    or (
+                        any(token in observed for token in ("box", "rectangle", "card"))
+                        and any(token in observed for token in ("vertical column", "vertical stack", "stacked vertically"))
+                    )
+                )
             elif concept == "four-panel task boundary checklist":
-                structural = structural or all(token in observed for token in ("goal", "input", "accept", "blocker"))
+                structural = structural or (
+                    all(token in observed for token in ("goal", "input", "accept", "blocker"))
+                    or (
+                        any(token in observed for token in ("four panel", "four rectangular", "four box"))
+                        and any(token in observed for token in ("two rows", "two columns", "two by two"))
+                    )
+                )
         if not structural:
             return {**result, "passed": False, "failure": "vision_structure_evidence_missing"}
         result.update({
