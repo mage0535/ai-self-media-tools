@@ -441,3 +441,10 @@
 - Semantic acceptance evaluates the visible purpose of that section, not every term in the article title.
 - SKILL.md, YAML frontmatter and Markdown instructions are observable document-anatomy evidence for a structured skill directory. Plain office documents without structural labels remain insufficient.
 - Keep content-specific negative controls and the global threshold; this decision narrows expectations rather than lowering quality.
+
+## D61: Real-Model Canary Requires Network Recovery And Manual Artifact Proof
+
+- A current-model Canary is accepted only when model identity is discovered dynamically, any permitted region retry is evidenced, generation and all downstream gates complete, and final artifacts pass manual review.
+- Deterministic factual rebuild after a weak-model draft is an accepted recovery path when its trigger and primary-claim count are recorded. It does not hide the model's original quality failure.
+- A safe Task9 delivery boundary proves generation and media, not a live draft. Live publisher/readback remains a separate Canary.
+- After one platform passes, continue the fixed serial matrix. Do not generate the next platform when its own source pack says it is not ready.

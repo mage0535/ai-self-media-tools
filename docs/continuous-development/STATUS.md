@@ -425,3 +425,10 @@ These describe the audited production release, not the current development code.
 - Distinct deterministic layouts removed the prior duplicate checksum failure. Sections 02 and 03 completed independently. Section 01 failed because routing required both generic playbook and specific directory-document concepts; real directory imagery matched only the latter, while the deterministic SKILL.md anatomy matched only the former.
 - `8f9770a` keeps only the most specific directory/loading concept when present and recognizes visible SKILL.md/YAML-frontmatter/Markdown labels as directory-document evidence. Related regression: 136 passed. Full: 1735 passed plus 37 subtests. Privacy 581/0; license 65/0.
 - Next: Linux verification and fresh real-model v35c. No publisher call and no production switch before manual review.
+
+## 2026-09-08 Juejin v35c Accepted Real-Model Canary
+
+- Linux specific-concept tests at `5545dc7` passed 2/2. v35c dynamically used the active Hermes model, recorded direct `provider_region_failed`, retried through private US proxy and completed the same 8,035-character prompt in about 65 seconds.
+- Unsupported model claims triggered verified-primary rebuild. Pipeline reached `review_required`; artifact probe passed with zero failures; all 17 required capabilities were complete.
+- Manual copy review passed the fact-safe title, non-repeated opening, readable 1,700-character body and source appendix. Manual image review passed four distinct roles; cover 1800x1200 and sections 1200x800 with four unique SHA-256 values. No audio and no publisher call.
+- Juejin real-model Canary is accepted. Next serial target is WeChat, but its latest public-search pack reports `ready=false` and zero strong samples; source collection/admission must be repaired before generation. Production and timers remain unchanged.
