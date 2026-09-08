@@ -500,3 +500,10 @@
 - A one-character Chinese contrast subject is valid input to the slop repair; minimum-length assumptions must not let it bypass the external checker.
 - Consume optional emphasis such as `根本` as part of the matched construction so deterministic output does not create doubled emphasis.
 - Keep the rewrite local to the matched sentence and rerun the unchanged external checker.
+
+## D70: Explicit Article Visual Plans Override Generic Heading Semantics
+
+- When a final article contains an explicit visual-plan line adjacent to an H2, bind that plan to the section image before provider routing. Do not discard it and replace it with a generic adjacent-point purpose.
+- Semantic expectations must describe observable visual objects or layouts, not full marketing titles or abstract H2 prose. Tool overload, input/output boundaries and checklist decisions use separate concrete concepts.
+- A more specific plan-derived concept supersedes a generic topic concept so one section image is not required to depict several conflicting ideas.
+- Preserve the global semantic threshold, provider retries and duplicate checks. This corrects intent compilation; it does not relax acceptance.

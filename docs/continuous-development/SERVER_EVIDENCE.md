@@ -662,3 +662,11 @@ Observed read-only on 2026-08-31.
 - External no-AI-slop found one binary contrast on line 71: `卡住的根本不是写，而是等确认、缺口径`. No media or publisher ran.
 - `15e3a3c` adds the exact red/green case and generalizes the existing binary pattern from two characters to one while absorbing optional `根本`.
 - Full `artifacts/test-reports/p10-wechat-single-char-contrast.xml` returned 1754 passed plus 37 subtests in 357.35 seconds. Privacy 586/0; license 65/0. v7 remains required.
+
+## 2026-09-08 WeChat v7 Image-Intent Evidence
+
+- Isolated v7 job `4ca34f998dda4d48` reached image generation after all copy and platform gates passed. The cover semantic score was 0.8. Section 01 then failed three providers with generic desk/library/office captions and no matching concrete section concept.
+- `image_quality_recovery.json` showed the expected concepts were the full article title, abstract H2 and shortened title. The persisted article contained explicit visual plans for a multi-tool desk, a goal/input/output card and a four-panel boundary checklist, proving the loss occurred in media-plan compilation rather than content generation.
+- Local red/green tests reproduce that loss and verify plan-to-H2 binding plus three distinct observable concepts. Related image/media/WeChat regression returned 154 passed.
+- Full `artifacts/test-reports/p10-wechat-explicit-visual-plans.xml` returned 1755 passed plus 37 subtests in 347.35 seconds. Project/privacy audit scanned 586 files with zero issues; license audit checked 65 capabilities with zero issues; `git diff --check` passed.
+- Production remains signed `2f4f612`; timers and real publishers remain disabled. Linux staging and a fresh v8 run are pending.

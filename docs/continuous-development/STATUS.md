@@ -483,3 +483,11 @@ These describe the audited production release, not the current development code.
 - The exact sentence was `卡住的根本不是写，而是等确认、缺口径`. The prior contrast regex required at least two characters after `不是`, so the single character `写` escaped.
 - `15e3a3c` accepts one-character contrast subjects and consumes optional `根本` to avoid producing `根本真正关键`. Related tests: 75 passed. Full: 1754 passed plus 37 subtests. Privacy 586/0; license 65/0.
 - Next: Linux v7; media and publisher remain unopened until copy passes.
+
+## 2026-09-08 WeChat v7 Explicit Visual-Plan Recovery
+
+- v7 produced a 2,084-character article and passed the writer, content-mode, platform and no-AI-slop gates. Its cover passed semantic validation, but section 01 exhausted SenseNova, Pixazo and Cloudflare retries with `semantic_match_below_threshold`.
+- The article already contained three concrete `配图计划` lines. The media bridge ignored them, used the H2 plus a generic purpose, and therefore requested raw Chinese marketing text while providers returned generic office scenes.
+- `73de8ea` extracts the visual plan adjacent to each final H2, feeds it into prompts and semantic requests, and compiles three observable concepts for tool-tab overload, goal/input/output and four-panel boundary checks. The 0.6 semantic threshold and duplicate gates remain unchanged.
+- Related regression: 154 passed. Full regression: 1755 passed plus 37 subtests. Privacy audit: 586 files, zero issues. License audit: 65 capabilities, zero issues.
+- Next: advance isolated staging, run Linux focused tests and a fresh v8 WeChat content/media Canary. The real draft publisher remains disabled pending manual article, cover and all-section review.
