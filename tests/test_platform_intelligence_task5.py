@@ -333,3 +333,63 @@ def test_due_tasks_fallback_is_labeled_and_keeps_scheduled_platform():
     assert task["state"] == "ready_for_plan"
     assert task["selection_mode"] == "editorial_calendar"
     assert task["brief"]["editorial_evidence"]["strategy_source"]
+
+
+def test_wechat_compiles_strategy_evergreen_after_bounded_recapture_without_hotspot_identity():
+    result = build_due_tasks(
+        [{"platform": "wechat", "stage": "article"}],
+        items=[],
+        source_report=[],
+        rank_for_platform=lambda *_: [],
+        requery_for_platform=lambda *_: [],
+        max_research_rounds=3,
+        growth_strategy_status={"wechat": {"status": "ok", "key": "growth_strategy:wechat:latest"}},
+        reserved_topic_fingerprints=set(),
+        strict_trend_evidence=True,
+        weekday=1,
+    )
+
+    task = result["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["selection_mode"] == "editorial_calendar"
+    assert task["research_attempts"] == [
+        {"round": 1, "candidate_count": 0},
+        {"round": 2, "candidate_count": 0},
+        {"round": 3, "candidate_count": 0},
+    ]
+    assert task["brief"]["editorial_evidence"]["strategy_source"] == "growth_strategy:wechat:latest"
+    assert task["brief"].get("associated_hotspot") is None
+    assert task["trend_evidence_gate"] == {"mode": "editorial_calendar", "passed": True}
+
+
+def test_wechat_strategy_evergreen_skips_reserved_topics_and_blocks_when_pool_exhausted():
+    from content_platform.growth_policy import WECHAT_RECOVERY_PLAYBOOK
+    from content_platform.trends import normalize_topic
+
+    reserved = {normalize_topic(row["topic"]) for row in WECHAT_RECOVERY_PLAYBOOK["evergreen_topic_pool"]}
+    result = build_due_tasks(
+        [{"platform": "wechat", "stage": "article"}],
+        items=[], source_report=[], rank_for_platform=lambda *_: [],
+        requery_for_platform=lambda *_: [], max_research_rounds=1,
+        growth_strategy_status={"wechat": {"status": "ok", "key": "growth_strategy:wechat:latest"}},
+        reserved_topic_fingerprints=reserved,
+        strict_trend_evidence=True,
+        weekday=1,
+    )
+
+    assert result["tasks"][0]["state"] == "blocked"
+    assert result["tasks"][0]["reason"] == "no independently evidenced same-platform topic candidate"
+
+
+def test_wechat_strategy_evergreen_does_not_bypass_missing_recapture_adapter():
+    result = build_due_tasks(
+        [{"platform": "wechat", "stage": "article"}],
+        items=[], source_report=[], rank_for_platform=lambda *_: [],
+        requery_for_platform=None, max_research_rounds=3,
+        growth_strategy_status={"wechat": {"status": "ok", "key": "growth_strategy:wechat:latest"}},
+        strict_trend_evidence=True,
+        weekday=1,
+    )
+
+    assert result["tasks"][0]["state"] == "blocked"
+    assert result["tasks"][0].get("selection_mode") is None

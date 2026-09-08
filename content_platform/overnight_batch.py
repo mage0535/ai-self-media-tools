@@ -252,6 +252,18 @@ def build_due_tasks(
                     candidates = researched
                     break
         editorial = _editorial_fallback_candidate(raw)
+        if (
+            editorial is None
+            and requery_for_platform is not None
+            and len(research_attempts) >= max(0, int(max_research_rounds))
+        ):
+            editorial = _strategy_editorial_fallback_candidate(
+                raw,
+                strategy,
+                platform=platform,
+                reserved_topic_fingerprints=reserved_topic_fingerprints,
+                selected_topic_fingerprints=set(selected_topics),
+            )
         editorial_evidence = dict(raw.get("editorial_fallback") or {})
         selection_mode = "native_trend"
         selected_matrix: dict[str, Any] | None = None
@@ -295,6 +307,7 @@ def build_due_tasks(
                 else:
                     selected = editorial
                     selection_mode = "editorial_calendar"
+                    editorial_evidence = dict(selected.get("editorial_evidence") or {})
             adaptation = str(raw.get("platform_adaptation_reason") or f"adapt {selected['title']} to {platform} with a platform-specific format and CTA")
             signal = str(raw.get("platform_signal") or f"{platform} source matrix contains current platform and cross-platform evidence")
             reservation = None
@@ -533,6 +546,45 @@ def _editorial_fallback_candidate(slot: dict[str, Any]) -> dict[str, Any] | None
             "dedupe_passed": True,
         },
     }
+
+
+def _strategy_editorial_fallback_candidate(
+    slot: dict[str, Any],
+    strategy: dict[str, Any],
+    *,
+    platform: str,
+    reserved_topic_fingerprints: set[str],
+    selected_topic_fingerprints: set[str],
+) -> dict[str, Any] | None:
+    """Compile an explicitly policy-backed evergreen after platform recapture is exhausted."""
+    if str(platform or "").casefold() != "wechat" or str(strategy.get("status") or "").casefold() != "ok":
+        return None
+    from .growth_policy import WECHAT_RECOVERY_PLAYBOOK
+
+    pool = WECHAT_RECOVERY_PLAYBOOK.get("evergreen_topic_pool") or []
+    strategy_source = str(strategy.get("key") or "growth_quality_policy_v1:wechat")
+    planned_for = str(slot.get("planned_for") or datetime.now(timezone.utc).date().isoformat())
+    unavailable = set(reserved_topic_fingerprints) | set(selected_topic_fingerprints)
+    for row in pool:
+        if not isinstance(row, dict):
+            continue
+        topic = str(row.get("topic") or "").strip()
+        fingerprint = normalize_topic(topic)
+        if not topic or not fingerprint or fingerprint in unavailable:
+            continue
+        return _editorial_fallback_candidate({
+            **slot,
+            "editorial_fallback": {
+                "topic": topic,
+                "strategy_source": strategy_source,
+                "calendar_column": str(row.get("calendar_column") or "evergreen"),
+                "planned_for": planned_for,
+                "dedupe_passed": True,
+                "fingerprint": fingerprint,
+                "direction": str(row.get("direction") or fingerprint),
+            },
+        })
+    return None
 
 
 def _allows_evidenced_overlap(
