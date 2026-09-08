@@ -533,3 +533,12 @@ Observed read-only on 2026-08-31.
 - Red test added the actual `validate_article_packet` body-length assertion. Commit `46b1616` expands only the deterministic fallback with clearly marked task-framing, resource-planning, execution-review and verification advice; verified primary claims remain the only factual assertions.
 - Local related command covering claim, Pipeline and media/platform quality returned 175 passed. Full `artifacts/test-reports/p10-grounded-rebuild-depth.xml` returned 1727 passed plus 37 subtests in 300.59 seconds. `python -m content_platform project-audit` scanned 581 files with zero issues; `python scripts/license_audit.py` checked 65 capabilities with zero issues; `git diff --check` passed.
 - Linux staging validation and v34c remain pending. Production stays on signed `2f4f612`; timers remain disabled and no real Juejin publisher call has been made.
+
+## 2026-09-08 Juejin v34c Image-Semantic Evidence
+
+- Staging fast-forwarded cleanly to `9245ccd`. Linux grounded builder/Pipeline tests passed 2/2 in 7.23 seconds and `python3 -m content_platform project-audit` scanned 581 files with zero issues.
+- v34c used a new private directory and the recorded v31 draft plus verified five-claim pack. It made no model call. The rebuilt copy passed every pre-media content and platform gate, proving the 1,200-character depth correction in the real Pipeline.
+- The run failed closed at cover semantics after three attempts. Attempt one was a robot at a desk, attempt two was a game-like screenshot collage, and attempt three was a dark-blue numbered INPUT/SKILL/VERIFY modular playbook. Vision evidence was hash-bound; the third candidate matched the playbook concept but not the workflow-node phrase and scored 0.425 against 0.6.
+- Section flowchart candidates showed the same deterministic vocabulary gap; one matched two requested concepts but scored 0.591667. Failed candidates, captions, scores and SHA-256 values remain under the private v34c evidence directory.
+- Red/green `8ec883d` models node/card/rectangle as one visible module concept. The exact modular-playbook fixture now passes and a generic robot-office fixture remains below threshold with no matches. Related tests: 39 passed. Full `artifacts/test-reports/p10-visible-workflow-semantics.xml`: 1728 passed plus 37 subtests in 307.96 seconds. Project/privacy 581/0 and license 65/0.
+- Production remains signed `2f4f612`; gateway and timer state were not changed. A fresh v34d is required before copy/media acceptance.
