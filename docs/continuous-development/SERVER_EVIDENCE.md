@@ -598,3 +598,11 @@ Observed read-only on 2026-08-31.
 - Section 01 failed after three semantic attempts. The first two visibly contained notebook/files and matched only `structured skill directory documents`; the third visibly contained SKILL.md, YAML FRONTMATTER and MARKDOWN INSTRUCTIONS but matched only generic playbook. Requiring both concepts made all valid candidates fail.
 - `8f9770a` selects the specific directory concept and extends observable directory synonyms to the document-anatomy labels. Related tests: 136 passed. Full `artifacts/test-reports/p10-specific-section-concepts.xml`: 1735 passed plus 37 subtests in 292.13 seconds. Privacy 581/0; license 65/0.
 - v35b was not delivered. Production and timers remain unchanged; a fresh v35c is required.
+
+## 2026-09-08 Juejin v35c Accepted Real-Model Evidence
+
+- Staging specific-concept tests at `5545dc7` passed 2/2. v35c used the dynamically active `opencode-go/muse-spark-1.3-contributor`: direct attempt recorded `provider_region_failed`, proxy-scoped retry retained prompt hash `c7bc5b...` and succeeded in about 65 seconds.
+- The generated draft contained unsupported technical mechanism claims, so the five-primary-claim rebuild activated. Final title/body were the safe 1,700-character grounded version. Pipeline and artifact probe passed with zero failures and all 17 required capability records complete.
+- Artifact semantic scores: cover 0.825, section 01 0.8, section 02 0.8, section 03 0.85. Manual review verified a modular cover, directory graph, resource stack and separate on-demand loading sequence.
+- Pillow decode/dimension review recorded cover 1800x1200 and three 1200x800 sections. Four SHA-256 values are unique. Private `manual-review.json` records `passed=true`, `model_call=real_active_model`, empty audio and `publisher_called=false`.
+- Juejin v35c is accepted as the real-model content/media Canary, not live draft proof. Production remains signed `2f4f612`; gateway config and timers are unchanged. WeChat source readiness is the next blocker.
