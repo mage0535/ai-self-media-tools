@@ -518,3 +518,10 @@ Observed read-only on 2026-08-31.
 - `1b3d6a9` consolidates the evidence-boundary sentence and requires the deterministic rebuild to pass `validate_generated_text` in addition to `validate_claims`.
 - Related suite: 156 passed. Full `p10-grounded-rebuild-hygiene.xml`: 1727 passed plus 37 subtests in 297.63 seconds. Project/privacy audit 581/0; license audit 65/0.
 - Linux deterministic recovery validation remains pending; production and timers were unchanged.
+
+## 2026-09-08 Juejin v33 Provider Authentication Evidence
+
+- Staging advanced cleanly to `9fadd9e`; grounded builder/Pipeline focused tests passed 2 tests with zero failures.
+- v33 discovered live `opencode-go/muse-spark-1.3-contributor` and ended with `ProviderAuthError: provider_auth_failed` before draft generation. Artifact probe reported missing cover/capability evidence because no artifact stage ran.
+- Fresh server check confirms current production is still signed `production-runtime-v8-2f4f612-20260906`, staging is `9fadd9e`, gateway is active and both overnight timers are inactive.
+- No model setting, production release, shared database, timer or publisher was changed. Next work is deterministic end-to-end recovery/media validation independent of live model availability.

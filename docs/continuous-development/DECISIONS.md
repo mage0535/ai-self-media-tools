@@ -372,3 +372,9 @@
 - Advice is explicitly framed as advice, and the final copy still passes claim, hygiene, structure, GEO, cover and media gates. Insufficient primary claims remain a hard block.
 - This is a safety fallback for low-capability model variance, not the preferred creative path. Its use is recorded in `grounded_technical_rebuild`.
 - Rebuild templates must also pass the same repeated-paragraph/sentence gate. Evidence-boundary language appears once, not as section boilerplate.
+
+## D51: Model Authentication Failure Is Not Content Recovery
+
+- A live provider authentication failure occurs before content exists and must not trigger grounded copy rebuilding, media generation or a silent model substitution.
+- Record the discovered provider/model and stop the Canary. Model selection continues to follow Hermes live configuration unless an operator explicitly changes that configuration.
+- Deterministic recovery and media behavior may still be validated with a recorded negative draft and verified fact pack while live model availability is blocked.

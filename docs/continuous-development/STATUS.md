@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-08 Asia/Shanghai (Juejin v32 grounded rebuild hygiene locally verified)
+Last updated: 2026-09-08 Asia/Shanghai (v33 live model auth failure recorded; deterministic recovery validation next)
 
 ## Current state
 
@@ -45,6 +45,7 @@ Last updated: 2026-09-08 Asia/Shanghai (Juejin v32 grounded rebuild hygiene loca
 | Technical anchor coverage | Codex primary | claim ledger and tests | committed `9b0a75c` | Linux regression and v31 offline re-evaluation; do not accept v31 |
 | Grounded technical rebuild | Codex primary | claim ledger/Pipeline and tests | committed `6e6bb36` | Linux regression and deterministic v31 recovery package |
 | Grounded rebuild prose hygiene | Codex primary | grounded builder and tests | committed `1b3d6a9` | Linux regression and deterministic recovery validation |
+| Hermes active-model availability | Codex primary | server-only runtime evidence | v33 blocked | keep production unchanged; validate recovery without model, retry live model only after provider health returns |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -356,3 +357,9 @@ These describe the audited production release, not the current development code.
 - Claim validation passed, but text hygiene blocked because the same evidence-boundary sentence appeared after each of three factual sections.
 - `1b3d6a9` emits that boundary once after all factual sections and extends the builder test to require both claim and full generated-text hygiene passes.
 - Focused related suite: 156 passed. Full remained 1727 passed plus 37 subtests in 297.63 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-08 Juejin v33 Result
+
+- Linux grounded rebuild focused tests passed 2/2 after staging advanced to `9fadd9e`.
+- Task9 dynamically discovered `opencode-go/muse-spark-1.3-contributor`, then Hermes returned `provider_auth_failed` before any draft, media or delivery work.
+- The failure was not retried as a content error and no fallback model was silently selected. Production remains `2f4f612`; gateway is active and overnight timers remain inactive.
