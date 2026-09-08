@@ -430,6 +430,7 @@ def build_due_tasks(
                     "content_blueprint_gate": blueprint_gate,
                     "content_quality_reference_gate": quality_reference_gate,
                     "selection_mode": selection_mode,
+                    "research_attempts": research_attempts,
                     **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
                 },
                 "trend_candidate": trend_candidate,

@@ -537,6 +537,10 @@ def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
     text = str(body or "")
     changes = []
 
+    def replace_reference_boundary(match):
+        changes.append({"pattern": "reference_boundary_contrast", "match": match.group(0)[:80]})
+        return "这组条件用于参考判断，不代表标准答案。"
+
     def replace_double(match):
         left = match.group(1).strip("，, ")
         right = match.group(2).strip("，, ")
@@ -562,6 +566,7 @@ def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
         changes.append({"pattern": "simple_contrast", "surface": surface[:40], "point": point[:40]})
         return f"关键在{point}，而非{surface}。"
 
+    text = re.sub(r"这不是标准答案[，,]?(?:它)?只是一组可参考的假设判断条件[。.]?", replace_reference_boundary, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?也不是([^，,。！？\n]{2,60})[，,]?(?:它读的)?是([^。！？\n]{2,100})", replace_triple, text)
     text = re.sub(r"不是([^。！？\n]{2,60})[，,]?也不是([^。！？\n]{2,60})[。！？]", replace_double, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?而是([^。！？\n]{2,100})[。！？]", replace_contrast, text)
