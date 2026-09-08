@@ -103,6 +103,13 @@ def test_wechat_postwriter_repairs_false_profound_checklist_ending():
     assert evidence["changes"][0]["pattern"] == "false_profound_checklist"
 
 
+def test_wechat_postwriter_repairs_single_character_binary_contrast():
+    repaired, evidence = _repair_ai_slop("卡住的根本不是写，而是等确认、缺口径。")
+
+    assert repaired == "卡住的真正关键的是等确认、缺口径；写只是表面现象。"
+    assert evidence["changes"][0]["pattern"] == "binary_contrast"
+
+
 def test_wewrite_retries_transient_timeout_then_succeeds(tmp_path, monkeypatch):
     brief = tmp_path / "brief.md"
     article = tmp_path / "article.md"
