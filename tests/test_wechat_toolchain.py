@@ -89,6 +89,13 @@ def test_wechat_postwriter_repairs_triple_and_simple_contrasts():
     assert {item["pattern"] for item in evidence["changes"]} == {"triple_contrast", "simple_contrast"}
 
 
+def test_wechat_postwriter_repairs_only_reference_binary_contrast():
+    repaired, evidence = _repair_ai_slop("这不是标准答案，只是一组可参考的假设判断条件。")
+
+    assert repaired == "这组条件用于参考判断，不代表标准答案。"
+    assert evidence["changes"][0]["pattern"] == "reference_boundary_contrast"
+
+
 def test_wewrite_retries_transient_timeout_then_succeeds(tmp_path, monkeypatch):
     brief = tmp_path / "brief.md"
     article = tmp_path / "article.md"

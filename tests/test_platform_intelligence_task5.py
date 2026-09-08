@@ -358,6 +358,7 @@ def test_wechat_compiles_strategy_evergreen_after_bounded_recapture_without_hots
         {"round": 3, "candidate_count": 0},
     ]
     assert task["brief"]["editorial_evidence"]["strategy_source"] == "growth_strategy:wechat:latest"
+    assert task["brief"]["research_attempts"] == task["research_attempts"]
     assert task["brief"].get("associated_hotspot") is None
     assert task["trend_evidence_gate"] == {"mode": "editorial_calendar", "passed": True}
 
