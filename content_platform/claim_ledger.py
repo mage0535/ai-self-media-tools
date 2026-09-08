@@ -320,9 +320,9 @@ def build_grounded_technical_article(topic: str, ledger: list[dict[str, Any]] | 
         raise ValueError("grounded technical article requires at least three primary claims")
     groups = [claims[:2], claims[2:3], claims[3:]]
     sections = (
-        ("先确认核心定义", groups[0]),
-        ("再核对文件结构", groups[1]),
-        ("理解按需加载", groups[2]),
+        ("Agent Skill 目录与 SKILL.md", groups[0]),
+        ("scripts、references 与 assets 资源结构", groups[1]),
+        ("按需加载正文与其他资源", groups[2]),
     )
     blocks = [
         "想弄清这个主题，先别从未经核对的命令、案例或效果承诺开始。",

@@ -227,3 +227,29 @@ def test_cover_derivative_rebinds_parent_semantics_to_final_artifact(tmp_path):
     assert result["derivative_of_sha256"] == "a" * 64
     assert result["image_sha256"] == __import__("hashlib").sha256(output.read_bytes()).hexdigest()
     assert result["derivative_transform"] == "cover_title_and_layout_overlay"
+
+
+def test_grounded_article_headings_compile_to_visible_section_concepts():
+    job = {
+        "platforms": ["juejin"],
+        "topic": "Agent Skills 入门",
+        "title": "Agent Skills 入门",
+    }
+
+    directory = MediaBridge._semantic_request(
+        job,
+        {"role": "section", "section": "Agent Skill 目录与 SKILL.md", "purpose": "explain the adjacent point"},
+    )
+    resources = MediaBridge._semantic_request(
+        job,
+        {"role": "section", "section": "scripts、references 与 assets 资源结构", "purpose": "explain the adjacent point"},
+    )
+    loading = MediaBridge._semantic_request(
+        job,
+        {"role": "section", "section": "按需加载正文与其他资源", "purpose": "explain the adjacent point"},
+    )
+
+    assert "structured skill directory documents" in directory["expected_concepts"]
+    assert resources["expected_concepts"] == ["structured skill directory documents"]
+    assert loading["expected_concepts"] == ["selective document loading sequence"]
+    assert all("核心定义" not in value for value in directory["expected_concepts"])

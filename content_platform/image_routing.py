@@ -104,6 +104,8 @@ _VISUAL_CONCEPT_GROUPS = (
     (("ai", "人工智能", "大模型", "hermes", "智能体", "agent"), "AI software agent"),
     (("工作流", "流程", "标准操作流程", "workflow", "自动化", "automation"), "connected workflow task nodes"),
     (("agent skills", "skill", "skills", "操作手册", "sop"), "step-by-step operating playbook"),
+    (("skill.md", "frontmatter", "markdown", "scripts", "references", "assets", "目录", "文件结构", "资源结构"), "structured skill directory documents"),
+    (("按需加载", "渐进式加载", "加载顺序", "on demand", "progressive loading", "selective loading"), "selective document loading sequence"),
     (("检索", "搜索", "自己找", "research", "search", "retrieval"), "information retrieval search"),
     (("内容管理", "自媒体", "content management"), "content management dashboard"),
     (("代码", "开发", "code", "developer"), "software development interface"),
