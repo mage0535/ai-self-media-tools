@@ -363,3 +363,9 @@ These describe the audited production release, not the current development code.
 - Linux grounded rebuild focused tests passed 2/2 after staging advanced to `9fadd9e`.
 - Task9 dynamically discovered `opencode-go/muse-spark-1.3-contributor`, then Hermes returned `provider_auth_failed` before any draft, media or delivery work.
 - The failure was not retried as a content error and no fallback model was silently selected. Production remains `2f4f612`; gateway is active and overnight timers remain inactive.
+
+## 2026-09-08 Juejin v34b Grounded Depth
+
+- v34b reused the persisted v31 contract and verified primary-source pack without a model call. The grounded rebuild passed factual, hygiene, GEO, growth and all Juejin dimensions except `base_article_quality.body_length`; media and delivery correctly did not start.
+- `46b1616` adds a direct regression against `validate_article_packet().gates.body_length` and expands the evidence-safe fallback above the 1,200-character production minimum. Related regression: 175 passed. Full regression: 1727 passed plus 37 subtests. Project/privacy audit: 581 files, zero issues. License audit: 65 capabilities, zero issues.
+- Next: advance Linux staging, run focused grounded/Pipeline tests, then run deterministic v34c with the private five-claim input and inspect copy plus every generated image before any real publisher call.

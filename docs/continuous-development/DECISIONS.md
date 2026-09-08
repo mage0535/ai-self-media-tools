@@ -378,3 +378,10 @@
 - A live provider authentication failure occurs before content exists and must not trigger grounded copy rebuilding, media generation or a silent model substitution.
 - Record the discovered provider/model and stop the Canary. Model selection continues to follow Hermes live configuration unless an operator explicitly changes that configuration.
 - Deterministic recovery and media behavior may still be validated with a recorded negative draft and verified fact pack while live model availability is blocked.
+
+## D52: Grounded Recovery Must Meet The Real Platform Depth Gate
+
+- Do not lower Juejin's 1,200-character article minimum to make a conservative fallback pass.
+- A grounded technical rebuild may quote only verified primary claims as facts. Additional depth must be explicit advice, review procedure, evidence boundary or reader action; it must not invent mechanisms, commands, compatibility, performance or outcome claims.
+- The builder regression calls the same `validate_article_packet` body-length gate used by production, in addition to claim and generated-text hygiene validation.
+- Passing length is not delivery approval. A fresh Linux recovery package still requires media generation, semantic image probes, complete capability evidence and manual final-copy review before a real draft publisher is allowed.
