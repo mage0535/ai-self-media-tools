@@ -304,3 +304,9 @@ def test_deterministic_visual_semantics_require_vision_structure_and_hash_bound_
     assert MediaBridge._derive_deterministic_semantic_evidence(parent, image, {**renderer, "output_sha256": "bad"})["passed"] is False
     assert MediaBridge._derive_deterministic_semantic_evidence(parent, image, {**renderer, "provider": "sense_nova"})["passed"] is False
     assert MediaBridge._derive_deterministic_semantic_evidence({**parent, "caption": "office portrait", "labels": ["office"]}, image, renderer)["passed"] is False
+    mistranscribed = {
+        **parent,
+        "caption": "Two dark blue rectangles are shown. The left rectangle contains eight numbered options. The right rectangle is titled 任务清单 and contains three checkboxes.",
+        "labels": ["two rectangles", "eight numbered options", "任务清单", "checkboxes"],
+    }
+    assert MediaBridge._derive_deterministic_semantic_evidence(mistranscribed, image, renderer)["passed"] is True
