@@ -815,7 +815,13 @@ class MediaBridge:
             section_concepts = visual_concepts(section_text)
             if len(section_concepts) > 1 and "AI software agent" in section_concepts:
                 section_concepts.remove("AI software agent")
-            if "structured skill directory documents" in section_concepts:
+            if "multiple software tool tabs and unfinished task list" in section_concepts:
+                section_concepts = ["multiple software tool tabs and unfinished task list"]
+            elif "goal input output checklist card" in section_concepts:
+                section_concepts = ["goal input output checklist card"]
+            elif "four-panel task boundary checklist" in section_concepts:
+                section_concepts = ["four-panel task boundary checklist"]
+            elif "structured skill directory documents" in section_concepts:
                 section_concepts = ["structured skill directory documents"]
             elif "selective document loading sequence" in section_concepts:
                 section_concepts = ["selective document loading sequence"]
@@ -1221,9 +1227,10 @@ class MediaBridge:
         if minimum <= 1:
             return prompts
         sections = cls._article_sections(job)
+        visual_plans = cls._section_visual_plans(job)
         for idx in range(1, minimum):
             section = sections[idx - 1] if idx - 1 < len(sections) else "summary checklist workflow diagram"
-            purpose = "explain or prove the adjacent article point"
+            purpose = visual_plans.get(" ".join(section.split()).casefold()) or "explain or prove the adjacent article point"
             prompt = (
                 f"Section illustration for: {section}. Topic context: {job.get('topic') or job.get('title') or 'article'}. "
                 "Concrete visual metaphor or workspace scene that explains the adjacent paragraph, "
@@ -1275,6 +1282,26 @@ class MediaBridge:
     @staticmethod
     def _article_sections(job):
         return normalize_article_sections(job, limit=6)
+
+    @staticmethod
+    def _section_visual_plans(job):
+        body = str(job.get("body") or "")
+        headings = list(re.finditer(r"(?m)^#{2,6}\s+(.+?)\s*$", body))
+        plans = {}
+        for index, match in enumerate(headings):
+            end = headings[index + 1].start() if index + 1 < len(headings) else len(body)
+            section_body = body[match.end():end]
+            plan = re.search(
+                r"(?m)^\s*>?\s*(?:📷\s*)?配图计划\s*\d*\s*[:：]\s*(.+?)\s*$",
+                section_body,
+            )
+            if not plan:
+                continue
+            heading = " ".join(match.group(1).split()).casefold()
+            purpose = " ".join(plan.group(1).split()).strip()
+            if heading and purpose:
+                plans[heading] = purpose[:500]
+        return plans
 
     @staticmethod
     def _video_duration(path):
