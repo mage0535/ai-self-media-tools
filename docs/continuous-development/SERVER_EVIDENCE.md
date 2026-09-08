@@ -542,3 +542,11 @@ Observed read-only on 2026-08-31.
 - Section flowchart candidates showed the same deterministic vocabulary gap; one matched two requested concepts but scored 0.591667. Failed candidates, captions, scores and SHA-256 values remain under the private v34c evidence directory.
 - Red/green `8ec883d` models node/card/rectangle as one visible module concept. The exact modular-playbook fixture now passes and a generic robot-office fixture remains below threshold with no matches. Related tests: 39 passed. Full `artifacts/test-reports/p10-visible-workflow-semantics.xml`: 1728 passed plus 37 subtests in 307.96 seconds. Project/privacy 581/0 and license 65/0.
 - Production remains signed `2f4f612`; gateway and timer state were not changed. A fresh v34d is required before copy/media acceptance.
+
+## 2026-09-08 Juejin v34d Section-Routing Evidence
+
+- Linux positive/negative workflow-semantic tests at `06057a6` passed 2/2. v34d then completed its cover after the intended retries, so the prior cover false negative no longer terminated the run.
+- All three sections still received abstract H2 text as a third expected concept. Relevant AI-agent/playbook flowcharts matched two concepts but scored 0.591667 against 0.6; generic robot and office attempts scored lower or zero and remained rejected.
+- `f5e5cd7` makes the grounded H2 subjects visibly testable and adds route/score tests for directory trees, resource documents and on-demand loading. Ordinary office imagery is an explicit negative control.
+- Related tests returned 128 passed. Full `artifacts/test-reports/p10-grounded-section-visuals.xml` returned 1730 passed plus 37 subtests in 301.85 seconds. Project/privacy audit scanned 581 files with zero issues; license audit checked 65 capabilities with zero issues.
+- v34d was not delivered. Production, gateway configuration, shared state and timer state were unchanged. Linux staging and a new v34e remain required.
