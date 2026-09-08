@@ -80,6 +80,27 @@ def test_sogou_search_cannot_be_relabelled_official_or_hotspot():
     assert result["rejected"][0]["failures"] == ["sogou_source_forbidden"]
 
 
+def test_wewrite_cross_platform_hot_board_cannot_be_relabelled_wechat_official():
+    payload = {"hotspots": [{
+        "keyword": "微博综合热榜",
+        "source": "微博",
+        "url": "https://s.weibo.com/weibo?q=test",
+        "captured_at": CAPTURED_AT,
+        "heat": 1110246,
+        "rank": 1,
+    }]}
+
+    result = build_wechat_official_contracts(
+        payload,
+        raw_snapshot=_snapshot(payload),
+        source_kind="wewrite_hotspots",
+    )
+
+    assert result["passed"] is False
+    assert result["contracts"] == []
+    assert result["rejected"][0]["failures"] == ["wechat_first_party_url_required"]
+
+
 def test_missing_url_time_or_heat_rank_fails_closed():
     payload = {"hotspots": [
         {"keyword": "missing URL", "captured_at": CAPTURED_AT, "heat": 1},
