@@ -1028,7 +1028,7 @@ def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: l
     for sample in samples:
         grouped[str(sample.get("platform") or "unknown")].append(sample)
     default_platforms = publishing_platforms()
-    selected_platforms = platforms or sorted(set(grouped).union(default_platforms))
+    selected_platforms = list(platforms) if platforms is not None else default_platforms
     output: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "platforms": {}}
     for platform in selected_platforms:
         rows = sorted(

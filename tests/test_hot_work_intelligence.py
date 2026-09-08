@@ -149,6 +149,13 @@ def test_default_parameter_pack_covers_every_publishing_platform_from_registry()
 
     assert set(pack["platforms"]) == set(publishing_platforms())
 
+    with_reference = build_hot_work_parameter_pack([{
+        "platform": "weibo", "title": "AI 工作流", "identity_role": "cross_platform_reference",
+        "url": "https://s.weibo.com/weibo?q=ai", "heat": 1000,
+        "captured_at": "2026-09-08T00:00:00+00:00", "collector": "wewrite_aggregate",
+    }])
+    assert set(with_reference["platforms"]) == set(publishing_platforms())
+
 
 def test_cross_platform_references_inform_but_never_make_target_ready():
     samples = [{
