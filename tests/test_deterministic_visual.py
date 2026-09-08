@@ -100,6 +100,30 @@ def test_deterministic_editorial_visual_varies_layout_for_document_and_resource_
     assert _sha(document) != _sha(resources)
 
 
+def test_compiled_directory_and_loading_concepts_select_resource_stack(tmp_path):
+    from content_platform.deterministic_visual import render_editorial_visual
+
+    directory = render_editorial_visual(
+        tmp_path / "directory.png",
+        role="section",
+        size=(1200, 800),
+        title="资源结构",
+        subtitle="目录内容",
+        concepts=["structured skill directory documents"],
+    )
+    loading = render_editorial_visual(
+        tmp_path / "loading.png",
+        role="section",
+        size=(1200, 800),
+        title="按需加载",
+        subtitle="资源顺序",
+        concepts=["selective document loading sequence"],
+    )
+
+    assert directory["layout"] == "resource_stack"
+    assert loading["layout"] == "resource_stack"
+
+
 def test_media_bridge_uses_deterministic_fallback_only_for_abstract_final_attempt():
     from content_platform.media import MediaBridge
 

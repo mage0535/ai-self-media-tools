@@ -432,12 +432,13 @@ class MediaBridge:
                 semantic_request = self._semantic_request(job, prompt_item)
                 if self._use_deterministic_article_visual(prompt_item, attempt=attempt, max_attempts=max_attempts):
                     design = (job.get("draft_meta") or {}).get("cover_design") or {}
+                    visual_title, visual_subtitle = self._deterministic_visual_copy(job, item)
                     provider_result = render_editorial_visual(
                         target,
                         role=item["role"],
                         size=tuple(prompt_item.get("dimensions") or (1200, 800)),
-                        title=str(design.get("title_text") or item.get("section") or job.get("title") or ""),
-                        subtitle=str(design.get("subtitle_text") or item.get("section") or ""),
+                        title=visual_title,
+                        subtitle=visual_subtitle,
                         concepts=list(semantic_request.get("expected_concepts") or []),
                         accent=str(design.get("accent") or "#1E80FF"),
                     )
@@ -1252,6 +1253,20 @@ class MediaBridge:
         meta = job.get("draft_meta") or {}
         design = meta.get("cover_design") if isinstance(meta.get("cover_design"), dict) else {}
         return str(design.get("background_prompt") or cls._image_prompt(job))
+
+    @staticmethod
+    def _deterministic_visual_copy(job, item):
+        role = str(item.get("role") or "").casefold()
+        if role == "cover":
+            design = (job.get("draft_meta") or {}).get("cover_design") or {}
+            return (
+                str(design.get("title_text") or job.get("title") or job.get("topic") or ""),
+                str(design.get("subtitle_text") or job.get("topic") or ""),
+            )
+        return (
+            str(item.get("section") or job.get("title") or job.get("topic") or ""),
+            str(item.get("purpose") or item.get("section") or ""),
+        )
 
     @staticmethod
     def _article_sections(job):

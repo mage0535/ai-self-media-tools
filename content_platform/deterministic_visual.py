@@ -193,7 +193,10 @@ def render_editorial_visual(
 
     joined = " ".join(str(item).casefold() for item in concepts)
     semantic_text = " ".join((str(title), str(subtitle), joined)).casefold()
-    if any(token in semantic_text for token in ("scripts", "references", "assets", "资源目录")):
+    if any(token in semantic_text for token in (
+        "scripts", "references", "assets", "资源目录",
+        "structured skill directory documents", "selective document loading sequence",
+    )):
         layout = "resource_stack"
         _resource_stack(draw, width, height, accent_rgb)
     elif any(token in semantic_text for token in ("skill.md", "frontmatter", "yaml", "markdown")):
