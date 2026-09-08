@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-08 Asia/Shanghai (Juejin v30 technical claim variants locally fixed)
+Last updated: 2026-09-08 Asia/Shanghai (Juejin v31 technical fact coverage locally verified)
 
 ## Current state
 
@@ -9,7 +9,7 @@ Last updated: 2026-09-08 Asia/Shanghai (Juejin v30 technical claim variants loca
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1724 passed + 37 subtests; JUnit 1761 tests, zero failures/errors.
+- Latest complete regression on this branch: 1725 passed + 37 subtests; JUnit 1762 tests, zero failures/errors.
 
 ## Active work
 
@@ -42,6 +42,7 @@ Last updated: 2026-09-08 Asia/Shanghai (Juejin v30 technical claim variants loca
 | Final copy and section-media polish | Codex primary | content hygiene/claim ledger/article media and tests | committed `7eac44d` | Linux regression and clean Juejin v29 |
 | Reader-facing article formatting | Codex primary | content normalization/source labels and tests | committed `72f76e5` | Linux regression and offline v29 rebuild; decide final v30 vs draft proof |
 | Technical claim variant coverage | Codex primary | claim ledger and tests | committed `c16d943` | Linux regression and final fresh Juejin validation |
+| Technical anchor coverage | Codex primary | claim ledger and tests | committed `9b0a75c` | Linux regression and v31 offline re-evaluation; do not accept v31 |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -331,3 +332,11 @@ These describe the audited production release, not the current development code.
 - `c16d943` expands numeric units/modifiers, catches support actions before named products, recognizes Chinese no-fee/no-registration promises, and derives verified domains from source URLs for line-break restoration.
 - Focused claim/Workflow suite: 165 passed. Full: 1724 passed plus 37 subtests in 306.58 seconds. Privacy 581/0; license 65/0.
 - v30 remains rejected regardless of its cover result. One fresh validation is required after Linux verification.
+
+## 2026-09-08 Juejin v31 Result
+
+- v31 reached `review_required`; Pipeline/artifact probes passed and media artifacts were structurally valid. Manual review rejected the entire copy because it invented an advanced-engineer workflow, named workflow phases, Chrome/Google provenance, commands, repository/license and quality claims outside the six-row ledger.
+- Fresh `c16d943` recomputation still passed because those new syntactic variants contained no previously enumerated trigger. This established that regex enumeration cannot be the primary factual gate.
+- `9b0a75c` extracts technical anchors such as Agent Skill, SKILL.md, directory, loading, routing, workflow, execution, quality and commands. Declarative technical sentences require at least two aligned verified claim anchors; questions and explicit recommendations/hypotheticals remain allowed.
+- Focused related suite: 154 passed. Full: 1725 passed plus 37 subtests in 301.43 seconds. Privacy 581/0; license 65/0.
+- v31 was not delivered. It is retained as the negative sample for Linux/offline verification.
