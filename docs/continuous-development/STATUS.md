@@ -469,3 +469,10 @@ These describe the audited production release, not the current development code.
 - `ff66fa3` copies recapture evidence into brief and deterministically rewrites that sentence. WeChat v4 then completed initial generation but its Hermes writer fallback ended with a real HTTP 429 after the route retry.
 - `6b64239` performs one delayed retry on the same direct/US route for transient writer errors, then fails closed. Related tests: 191 passed. Full: 1752 passed plus 37 subtests. Privacy 586/0; license 65/0.
 - Next: Linux v5 content/media Canary. Production and timers remain unchanged.
+
+## 2026-09-08 WeChat v5 Final Slop Gate
+
+- v5 completed active-model generation and explicit Hermes writer fallback, producing a 1,861-character article. Writer, account, recapture, editorial, topic, workflow, growth and batch gates passed.
+- The only failure was external `no_ai_slop_check`: line 69 contained `这就是真正的改进清单`, classified as a false-profound ending. No media or publisher ran.
+- `f76a3c2` rewrites the observed phrase to `这些断点组成下一轮改进清单` and retains the external checker as final authority.
+- Related tests: 175 passed. Full: 1753 passed plus 37 subtests. Privacy 586/0; license 65/0. Next: Linux v6 content/media Canary.
