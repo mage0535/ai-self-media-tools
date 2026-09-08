@@ -249,7 +249,7 @@ def test_grounded_article_headings_compile_to_visible_section_concepts():
         {"role": "section", "section": "按需加载正文与其他资源", "purpose": "explain the adjacent point"},
     )
 
-    assert "structured skill directory documents" in directory["expected_concepts"]
+    assert directory["expected_concepts"] == ["structured skill directory documents"]
     assert resources["expected_concepts"] == ["structured skill directory documents"]
     assert loading["expected_concepts"] == ["selective document loading sequence"]
     assert all("核心定义" not in value for value in directory["expected_concepts"])
