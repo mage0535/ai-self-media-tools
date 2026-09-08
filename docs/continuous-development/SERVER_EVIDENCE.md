@@ -590,3 +590,11 @@ Observed read-only on 2026-08-31.
 - Generated unsupported numeric and technical mechanism claims triggered the five-primary-claim deterministic rebuild. Media failed because section 02 claimed deterministic resource-stack SHA first; section 01 and section 03 independently reached the same SHA on their third attempts and were rejected as duplicates.
 - `0f104b6` adds a separate selective-loading layout and correct document-vs-resource precedence. Related tests: 36 passed. Full `artifacts/test-reports/p10-distinct-fallback-layouts.xml`: 1735 passed plus 37 subtests in 297.15 seconds. Project/privacy audit 581/0; license audit 65/0.
 - v35 was not delivered. Production remains signed `2f4f612`, timers remain disabled and a fresh real-model v35b is required.
+
+## 2026-09-08 Juejin v35b Specific-Concept Evidence
+
+- Linux distinct-layout tests at `94768c7` passed 2/2. v35b recorded the same active-model regional recovery and completed the proxied 8,035-character generation in about 83 seconds.
+- Verified-primary rebuild activated. Cover completed; section 02 completed with the resource layout and section 03 completed with a distinct selective-loading SHA. No duplicate checksum failure occurred.
+- Section 01 failed after three semantic attempts. The first two visibly contained notebook/files and matched only `structured skill directory documents`; the third visibly contained SKILL.md, YAML FRONTMATTER and MARKDOWN INSTRUCTIONS but matched only generic playbook. Requiring both concepts made all valid candidates fail.
+- `8f9770a` selects the specific directory concept and extends observable directory synonyms to the document-anatomy labels. Related tests: 136 passed. Full `artifacts/test-reports/p10-specific-section-concepts.xml`: 1735 passed plus 37 subtests in 292.13 seconds. Privacy 581/0; license 65/0.
+- v35b was not delivered. Production and timers remain unchanged; a fresh v35c is required.

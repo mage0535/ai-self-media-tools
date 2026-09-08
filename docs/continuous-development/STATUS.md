@@ -418,3 +418,10 @@ These describe the audited production release, not the current development code.
 - v35 generation succeeded in about 82 seconds. Its unsupported numeric/mechanism claims correctly triggered the verified-primary rebuild. Media then failed closed because sections 01, 02 and 03 all selected the same deterministic resource-stack fallback; one completed and the other two were rejected as duplicate SHA.
 - `0f104b6` makes SKILL.md headings prefer `document_anatomy`, resource headings use `resource_stack`, and loading headings use a new `selective_loading_sequence`. Related media tests: 36 passed. Full regression: 1735 passed plus 37 subtests. Privacy 581/0; license 65/0.
 - Next: push, advance Linux staging and run v35b with the real active model. Manual copy/image review remains mandatory and the publisher stays disabled.
+
+## 2026-09-08 Juejin v35b Specific-Concept Recovery
+
+- v35b used the real active model through direct-first proxy recovery and completed generation in about 83 seconds. Unsupported mechanism claims again triggered the verified-primary rebuild.
+- Distinct deterministic layouts removed the prior duplicate checksum failure. Sections 02 and 03 completed independently. Section 01 failed because routing required both generic playbook and specific directory-document concepts; real directory imagery matched only the latter, while the deterministic SKILL.md anatomy matched only the former.
+- `8f9770a` keeps only the most specific directory/loading concept when present and recognizes visible SKILL.md/YAML-frontmatter/Markdown labels as directory-document evidence. Related regression: 136 passed. Full: 1735 passed plus 37 subtests. Privacy 581/0; license 65/0.
+- Next: Linux verification and fresh real-model v35c. No publisher call and no production switch before manual review.

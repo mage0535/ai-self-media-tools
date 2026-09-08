@@ -434,3 +434,10 @@
 - Document anatomy, resource categories and selective loading use separate layouts with visibly different structures and labels.
 - Layout precedence considers the final section heading as well as compiled concepts: a SKILL.md heading uses document anatomy even when it also carries a directory concept.
 - Concurrency may decide which duplicate claims a checksum first; correctness cannot depend on completion order. Deterministic inputs must produce distinct outputs before checksum claiming.
+
+## D60: Specific Visual Concepts Supersede Generic Topic Concepts
+
+- When a section compiles to a concrete directory, loading, module-comparison or other specialized concept, do not require a second generic playbook/AI concept merely because the topic contains those words.
+- Semantic acceptance evaluates the visible purpose of that section, not every term in the article title.
+- SKILL.md, YAML frontmatter and Markdown instructions are observable document-anatomy evidence for a structured skill directory. Plain office documents without structural labels remain insufficient.
+- Keep content-specific negative controls and the global threshold; this decision narrows expectations rather than lowering quality.
