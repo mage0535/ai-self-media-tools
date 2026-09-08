@@ -645,6 +645,32 @@ class PipelineTests(unittest.TestCase):
         claim_step = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "validate_factual_claims"][-1]
         self.assertEqual(claim_step["status"], "SUCCEEDED")
 
+    def test_automated_juejin_technical_article_rebuilds_from_primary_fact_pack(self):
+        claims = [
+            {"claim": claim, "source_url": "https://agentskills.io/specification", "evidence_path": "sources/spec.md", "provenance_hash": "a" * 64, "verified": True, "source_type": "verified_primary_source"}
+            for claim in (
+                "Agent Skill 是一个目录，至少包含一个 SKILL.md 文件。",
+                "SKILL.md 必须包含 YAML frontmatter，后面接 Markdown 正文。",
+                "Skill 目录可以包含 scripts、references 和 assets 等可选资源目录。",
+                "Agent 会渐进式加载 Skill，只在任务需要时拉取更多细节。",
+            )
+        ]
+        job = self.pipeline.create("Agent Skills 入门", ["juejin"], {
+            "automated_workflow": True, "content_form": "article", "claim_ledger": claims,
+        })
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "一行命令让 AI 质量翻倍",
+            "body": "Agent Skills 会自动执行高级工程师的完整工作流，输出质量直接翻倍。" * 20,
+            "draft_meta": {"claim_ledger": claims, "content_form": "article", "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        current = self.store.get_job(job["id"])
+        self.assertEqual(current["title"], "Agent Skills 入门")
+        self.assertNotIn("质量翻倍", current["body"])
+        self.assertIn("Agent Skill 是一个目录", current["body"])
+        self.assertEqual(current["draft_meta"]["grounded_technical_rebuild"]["version"], "verified_primary_claims_v1")
+
     def test_short_video_normalizes_spaced_domain_before_factual_and_media_steps(self):
         job = self.pipeline.create("Domain workflow", ["kuaishou"], {"automated_workflow": True})
         with patch.object(self.pipeline.generator, "generate", return_value={

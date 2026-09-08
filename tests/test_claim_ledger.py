@@ -1,5 +1,6 @@
 from content_platform.claim_ledger import (
     append_verified_sources,
+    build_grounded_technical_article,
     compile_verified_claim_ledger,
     restore_verified_domains,
     sanitize_unsupported_claims,
@@ -180,6 +181,28 @@ def test_claim_gate_rejects_unsourced_technical_assertions_but_allows_grounded_p
     assert grounded["passed"] is True
     assert advice["passed"] is True
     assert "unsourced_technical_fact_claim" in unsupported["failures"]
+
+
+def test_grounded_technical_article_uses_only_primary_claims_and_passes_claim_gate() -> None:
+    ledger = [
+        {"claim": claim, "source_url": "https://agentskills.io/specification", "evidence_path": "sources/spec.md", "verified": True, "source_type": "verified_primary_source"}
+        for claim in (
+            "Agent Skill 是一个目录，至少包含一个 SKILL.md 文件。",
+            "SKILL.md 必须包含 YAML frontmatter，后面接 Markdown 正文。",
+            "Skill 目录可以包含 scripts、references 和 assets 等可选资源目录。",
+            "Agent 会渐进式加载 Skill，只在任务需要时拉取更多细节。",
+            "Skill 激活后会加载完整的 SKILL.md 正文，其他资源按需加载。",
+        )
+    ]
+    ledger.append({"claim": "未经验证的热门标题", "source_url": "https://example.test/hot", "evidence_path": "hot.txt", "verified": True, "source_type": "same_lane_hot_work"})
+
+    draft = build_grounded_technical_article("Agent Skills 入门", ledger)
+    gate = validate_claims(draft["title"] + "\n" + draft["body"], ledger)
+
+    assert gate["passed"] is True
+    assert draft["body"].count("\n## ") >= 4
+    assert "未经验证的热门标题" not in draft["body"]
+    assert "安装命令" not in draft["body"]
 
 
 def test_claim_gate_rejects_unsourced_named_product_attributions() -> None:
