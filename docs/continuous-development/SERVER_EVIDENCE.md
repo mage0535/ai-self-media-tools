@@ -493,3 +493,11 @@ Observed read-only on 2026-08-31.
 - `c16d943` adds exact v30 red/green tests for token/count modifiers, reverse product attribution, Chinese promotional promises and source-URL domain restoration.
 - Related suite: 165 passed. Full `p10-v30-claim-coverage.xml`: 1724 passed plus 37 subtests in 306.58 seconds. Project/privacy audit 581/0; license audit 65/0.
 - v30 is rejected. Linux verification and one final fresh Juejin run are required; production release and timers remain unchanged.
+
+## 2026-09-08 Juejin v31 Technical-Fact Coverage Evidence
+
+- Linux v30 claim/Pipeline subset at `4cafb41` passed 102 tests in 238.76 seconds. v31 dynamically used `opencode-go/mimo-v2.5` and produced a machine-green package.
+- Manual review rejected v31: advanced-engineer workflow and quality uplift claims, spec-driven-development phases, Chrome/Google derivation, slash commands, repository/license and instant-install claims were outside the official fact pack. Existing claim recomputation still returned passed.
+- `9b0a75c` adds deterministic technical-anchor coverage and red/green examples for a grounded directory/SKILL.md paraphrase, explicit advice and unsupported engineering-workflow assertions. Initial related regression exposed imperative-advice false positives; the exemption was narrowed to explicit instruction starters while declarative claims remain checked.
+- Related suite: 154 passed. Full `p10-technical-fact-coverage.xml`: 1725 passed plus 37 subtests in 301.43 seconds. Project/privacy audit 581/0; license audit 65/0.
+- v31 remains rejected and was not sent to the Juejin publisher. Linux/offline re-evaluation is next; production and timers were unchanged.

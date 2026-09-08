@@ -357,3 +357,10 @@
 - Product/client support attribution is factual whether the action appears after the product or before a list of products.
 - Chinese no-fee/no-registration/no-specific-plugin promises are promotional claims and require evidence.
 - Verified domains may be recovered from a verified row's source URL as well as its claim text. Do not use unverified URLs for repair.
+
+## D49: Technical Assertions Require Anchor Coverage
+
+- Production technical content does not rely solely on an expanding blacklist of phrases. Declarative sentences with at least two technical anchors must align with at least two anchors in one verified claim and cover at least half of the sentence anchors.
+- Questions and explicit advice/hypothetical instructions are not asserted external facts. Existing numeric, promotional, attribution and install-command gates still apply to them independently.
+- Operational imperatives such as run, inspect, verify and save remain allowed. Claims that a product, Skill or Agent automatically performs or improves something require evidence.
+- Pattern matching is a deterministic safety layer, not proof that all prose is correct. Fresh real artifacts and final review remain release gates.

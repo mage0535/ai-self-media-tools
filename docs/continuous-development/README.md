@@ -75,4 +75,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin v28 achieved machine-green output but failed manual copy/media review. Commit `7eac44d` repairs weak-model YAML/list formatting, validates Agent routing claims and normalizes section images before semantic gates.
 - Juejin v29 achieved machine-green media with uniform ratios but retained heading/body joins and internal source labels. Commit `72f76e5` repairs those reader-facing defects.
 - Juejin v30 exposed unsupported token counts, client support lists and free promises that escaped claim detection. Commit `c16d943` closes those variants and restores domains from verified source URLs.
+- Juejin v31 proved enumerating claim regexes is insufficient. Commit `9b0a75c` adds technical-anchor coverage so declarative technical assertions must match verified claim anchors.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
