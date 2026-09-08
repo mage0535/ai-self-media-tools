@@ -71,6 +71,7 @@ _SYNONYM_GROUPS = (
     ("blocker", "blockers", "bottleneck", "bottlenecks", "卡点", "阻塞"),
     ("quadrant", "quadrants", "four panel", "four panels", "four-panel", "four boxes", "two rows of two", "四格", "象限"),
     ("checklist", "check list", "task list", "清单", "检查卡"),
+    ("tool", "tools", "software tool", "software tools", "工具"),
 )
 
 
@@ -245,7 +246,8 @@ def analyze_image(
     context = ", ".join(part for part in (f"role={role}" if role else "", f"platform={platform}" if platform else "") if part)
     prompt = (
         "Analyze this image. Return only a JSON object with a non-empty caption string and a labels array of "
-        "concise visible concepts. Do not return confidence or match scores."
+        "concise visible concepts. Transcribe every visible text label exactly in its original language and include "
+        "those labels in the caption. Do not return confidence or match scores."
     )
     if context:
         prompt += f" Content context: {context}."

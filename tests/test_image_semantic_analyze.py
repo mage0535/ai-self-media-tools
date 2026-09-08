@@ -79,6 +79,8 @@ def test_analyze_calls_cloudflare_vision_and_returns_strict_contract(tmp_path, m
     assert body["messages"][0]["role"] == "user"
     prompt = body["messages"][0]["content"][1]["text"]
     assert "cover" in prompt and "wechat" in prompt
+    assert "transcribe every visible text label" in prompt.casefold()
+    assert "original language" in prompt.casefold()
     assert body["response_format"]["type"] == "json_schema"
 
 

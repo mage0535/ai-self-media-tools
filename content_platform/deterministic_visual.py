@@ -121,7 +121,7 @@ def _tool_tab_overload(draw, width, height, accent, language):
     for row in range(4):
         y = top + 105 + row * 78
         draw.rounded_rectangle((margin + 30, y, margin + panel_w - 30, y + 48), radius=12, fill=(8, 18, 31), outline=accent, width=2)
-        tool = "工具" if language == "zh" else "TOOL"
+        tool = "标签页" if language == "zh" else "TOOL"
         draw.text((margin + 50, y + 10), f"{tool} {row * 2 + 1}   {tool} {row * 2 + 2}", font=_font(22), fill=(195, 215, 235))
     right = margin + panel_w + gap
     draw.text((right + 30, top + 28), labels[1], font=_font(32, bold=True), fill=(238, 245, 252))
