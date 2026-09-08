@@ -43,6 +43,28 @@ WECHAT_RECOVERY_PLAYBOOK: dict[str, Any] = {
         {"name": "AI 说人话", "role": "opinion_or_trend_interpretation", "recommended_day": "alternate_tuesday"},
         {"name": "你问我答 / 工具箱回访", "role": "interactive_qa_or_weekly_recap", "recommended_day": "alternate_friday"},
     ],
+    "evergreen_topic_pool": [
+        {
+            "topic": "先加工具还是先拆任务？一张边界清单帮你判断",
+            "calendar_column": "你问我答 / 工具箱回访",
+            "direction": "task_boundary_before_tool_choice",
+        },
+        {
+            "topic": "任务总在工具之间来回切换？先画清输入和输出",
+            "calendar_column": "我的 AI 工作台",
+            "direction": "input_output_boundary",
+        },
+        {
+            "topic": "工作流越堆越复杂？先删掉没有明确产出的步骤",
+            "calendar_column": "AI 说人话",
+            "direction": "workflow_simplification",
+        },
+        {
+            "topic": "每次都从头解释需求？先整理一份可复核任务说明",
+            "calendar_column": "你问我答 / 工具箱回访",
+            "direction": "reviewable_task_brief",
+        },
+    ],
     "recovery_topic_policy": {
         "duration_days": 14,
         "topic_dedup_window_days": 14,
