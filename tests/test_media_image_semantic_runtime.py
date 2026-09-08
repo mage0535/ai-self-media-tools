@@ -322,3 +322,29 @@ def test_deterministic_visual_semantics_require_vision_structure_and_hash_bound_
         "labels": ["two sections", "eight items", "rectangular boxes", "three items"],
     }
     assert MediaBridge._derive_deterministic_semantic_evidence(counted_sections, image, renderer)["passed"] is True
+
+    goal_renderer = {
+        **renderer,
+        "semantic_concepts": ["goal input output checklist card"],
+        "visible_labels": ["目标", "明确结果", "输入", "核对材料", "输出", "设定验收"],
+    }
+    vertical_cards = {
+        **parent,
+        "expected_concepts": ["goal input output checklist card"],
+        "caption": "Four rectangular boxes with rounded corners are arranged in a vertical column as an infographic.",
+        "labels": ["rectangular boxes", "vertical column", "infographic"],
+    }
+    assert MediaBridge._derive_deterministic_semantic_evidence(vertical_cards, image, goal_renderer)["passed"] is True
+
+    boundary_renderer = {
+        **renderer,
+        "semantic_concepts": ["four-panel task boundary checklist"],
+        "visible_labels": ["目标", "明确吗？", "输入", "齐全吗？", "验收", "可检查吗？", "卡点", "明确吗？"],
+    }
+    four_grid = {
+        **parent,
+        "expected_concepts": ["four-panel task boundary checklist"],
+        "caption": "Four rectangular panels are arranged in two rows of two, each with a checkbox and question.",
+        "labels": ["four panels", "two rows of two", "checkboxes"],
+    }
+    assert MediaBridge._derive_deterministic_semantic_evidence(four_grid, image, boundary_renderer)["passed"] is True
