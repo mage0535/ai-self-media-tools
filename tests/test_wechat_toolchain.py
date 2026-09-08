@@ -2,7 +2,15 @@
 from pathlib import Path
 import subprocess
 
-from content_platform.wechat_toolchain import _invoke_wewrite, _repair_ai_slop, _wechat_digest, prepare_wechat_professional_draft, requires_wechat_toolchain
+from content_platform.wechat_toolchain import (
+    _invoke_hermes_writer,
+    _invoke_wewrite,
+    _repair_ai_slop,
+    _wechat_digest,
+    prepare_wechat_professional_draft,
+    requires_wechat_toolchain,
+    successful_wechat_writer,
+)
 
 
 def _fake_wewrite(path: Path) -> Path:
@@ -202,3 +210,42 @@ def test_wechat_writer_failure_cooldown_skips_known_failed_primary(tmp_path):
     assert wewrite["status"] == "skipped"
     assert wewrite["reason"] == "recent_writer_provider_failure"
     assert second["draft_meta"]["tool_invocations"]["hermes_writer"]["status"] == "used"
+
+
+def test_successful_wechat_writer_preserves_primary_or_fallback_identity():
+    primary = successful_wechat_writer({"wewrite": {"status": "used"}})
+    fallback = successful_wechat_writer({
+        "wewrite": {"status": "failed"},
+        "hermes_writer": {"status": "used"},
+    })
+
+    assert primary == {"passed": True, "writer": "wewrite"}
+    assert fallback == {"passed": True, "writer": "hermes_writer"}
+    assert successful_wechat_writer({"wewrite": {"status": "failed"}})["passed"] is False
+
+
+def test_hermes_writer_region_error_retries_once_through_us_proxy(tmp_path, monkeypatch):
+    brief = tmp_path / "brief.md"
+    article = tmp_path / "article.md"
+    brief.write_text("# brief", encoding="utf-8")
+    completed = [
+        subprocess.CompletedProcess([], 0, "HTTP 403: This model is not available in your country.", ""),
+        subprocess.CompletedProcess([], 0, "# Title\n\n" + "Useful article body. " * 80, ""),
+    ]
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs.get("env")))
+        return completed.pop(0)
+
+    monkeypatch.setattr("content_platform.wechat_toolchain.subprocess.run", run)
+    monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")
+
+    result = _invoke_hermes_writer({"hermes_bin": "hermes", "timeout": 30}, brief, article)
+
+    assert result["status"] == "used"
+    assert len(calls) == 2
+    assert calls[0][1] is None
+    assert calls[1][1]["HTTPS_PROXY"] == "socks5h://proxy.internal:2080"
+    assert "proxy.internal" not in json.dumps(result)
+    assert [row["route"] for row in result["commands"]] == ["direct", "us_proxy"]

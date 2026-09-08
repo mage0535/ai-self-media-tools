@@ -235,16 +235,26 @@ def _invoke_hermes_writer(cfg: dict[str, Any], brief_path: Path, article_path: P
     )
     try:
         command_prefix = [sys.executable, hermes_bin] if hermes_bin.endswith(".py") else [hermes_bin]
-        completed = subprocess.run(
-            [*command_prefix, "--cli", "-z", prompt],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            check=False,
-        )
-        base["commands"].append({"name": "hermes --cli", "returncode": completed.returncode})
+        command = [*command_prefix, "--cli", "-z", prompt]
+        run_options = {
+            "capture_output": True,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "timeout": timeout,
+            "check": False,
+        }
+        completed = subprocess.run(command, **run_options)
+        base["commands"].append({"name": "hermes --cli", "route": "direct", "returncode": completed.returncode})
+        output = (completed.stdout or completed.stderr or "").strip()
+        proxy_url = str(os.environ.get("US_PROXY") or "").strip()
+        if _is_region_error(output) and proxy_url:
+            completed = subprocess.run(
+                command,
+                **run_options,
+                env={**os.environ, "HTTPS_PROXY": proxy_url, "ALL_PROXY": proxy_url},
+            )
+            base["commands"].append({"name": "hermes --cli", "route": "us_proxy", "returncode": completed.returncode})
         article = (completed.stdout or "").strip()
         if completed.returncode == 0 and len(article) > 1000:
             article_path.write_text(article + "\n", encoding="utf-8")
@@ -262,6 +272,19 @@ def _hermes_writer_fallback_enabled(cfg: dict[str, Any]) -> bool:
     if value is None:
         value = os.environ.get("HERMES_WECHAT_WRITER_FALLBACK", "")
     return str(value).strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _is_region_error(value: str) -> bool:
+    return bool(re.search(r"HTTP\s+403.*(?:not available in your country|RegionError|country or region)", str(value or ""), re.I | re.S))
+
+
+def successful_wechat_writer(invocations: dict[str, Any] | None) -> dict[str, Any]:
+    rows = invocations if isinstance(invocations, dict) else {}
+    if (rows.get("wewrite") or {}).get("status") == "used":
+        return {"passed": True, "writer": "wewrite"}
+    if (rows.get("hermes_writer") or {}).get("status") == "used":
+        return {"passed": True, "writer": "hermes_writer"}
+    return {"passed": False, "writer": ""}
 
 
 def _load_env_file(env: dict[str, str], env_file: str) -> None:
