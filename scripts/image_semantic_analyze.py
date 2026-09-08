@@ -41,6 +41,7 @@ _SYNONYM_GROUPS = (
     ("computer", "laptop", "notebook", "电脑", "笔记本电脑"),
     ("dashboard", "control panel", "digital display", "digital displays", "digital interface", "digital interfaces", "display", "screen", "仪表盘", "控制面板"),
     ("workflow", "process", "connected devices", "connected device", "connect", "wires", "wire", "流程", "工作流"),
+    ("node", "nodes", "task node", "task nodes", "workflow card", "workflow cards", "skill card", "skill cards", "rectangle", "rectangles", "box", "boxes", "panel", "panels", "节点", "卡片", "模块"),
     ("person", "people", "human", "人物", "人", "用户"),
     ("text", "words", "typography", "文字", "文本"),
     ("agent", "software agent", "ai agent", "robot", "assistant", "机器人", "智能体"),
