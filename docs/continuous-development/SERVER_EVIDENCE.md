@@ -550,3 +550,11 @@ Observed read-only on 2026-08-31.
 - `f5e5cd7` makes the grounded H2 subjects visibly testable and adds route/score tests for directory trees, resource documents and on-demand loading. Ordinary office imagery is an explicit negative control.
 - Related tests returned 128 passed. Full `artifacts/test-reports/p10-grounded-section-visuals.xml` returned 1730 passed plus 37 subtests in 301.85 seconds. Project/privacy audit scanned 581 files with zero issues; license audit checked 65 capabilities with zero issues.
 - v34d was not delivered. Production, gateway configuration, shared state and timer state were unchanged. Linux staging and a new v34e remain required.
+
+## 2026-09-08 Juejin v34e Final-Layout Evidence
+
+- Linux grounded heading/routing/score tests at `29103f4` passed 3/3. v34e then completed three of four required assets: cover score 0.7875, section 01 score 0.7875 and section 03 score 0.775.
+- Section 02 expected only `structured skill directory documents`. Provider attempts produced generic cards and an office; the deterministic third attempt produced three unlabeled-looking bars because the renderer reused cover copy and selected `verification_dashboard`. All three correctly remained below the semantic gate.
+- `0f3ee1c` adds one renderer-copy selector and aligns deterministic layout/analyzer vocabulary with compiled directory/loading concepts. Tests cover layout selection, section-vs-cover copy, visible SCRIPTS/REFERENCES/ASSETS scoring and an office negative.
+- Focused regression returned 117 passed. Full `artifacts/test-reports/p10-section-render-routing.xml` returned 1732 passed plus 37 subtests in 295.08 seconds. Project/privacy audit 581/0 and license audit 65/0.
+- v34e was not delivered. Production remains signed `2f4f612`; gateway configuration, shared data and timers were unchanged. A fresh v34f remains required.

@@ -383,3 +383,10 @@ These describe the audited production release, not the current development code.
 - `f5e5cd7` changes only grounded fallback H2 headings to concrete directory, file-resource and on-demand-loading subjects. `image_routing` compiles those subjects to `structured skill directory documents` and `selective document loading sequence`; the analyzer recognizes visible folder-tree/document/loading evidence while a plain office remains negative.
 - Focused regressions: 14, 1 and 128 tests passed. Full regression: 1730 passed plus 37 subtests. Project/privacy audit: 581/0. License audit: 65/0.
 - Next: push and advance staging, run Linux focused tests, then start a fresh v34e. Inspect all final artifacts before any publisher call.
+
+## 2026-09-08 Juejin v34e Final-Layout Routing
+
+- v34e completed cover at 0.7875, section 01 at 0.7875 and section 03 at 0.775. Section 02 failed because its deterministic final attempt rendered a generic verification dashboard rather than the requested scripts/references/assets stack.
+- Root cause: the deterministic renderer received `cover_design.title_text/subtitle_text` for every role, and its layout dispatch did not recognize compiled directory/loading concept IDs. Analyzer vocabulary also did not map visible SCRIPTS/REFERENCES/ASSETS labels to a directory.
+- `0f3ee1c` selects cover copy only for covers, section/purpose copy for sections, routes both compiled concepts to `resource_stack` and normalizes the three visible resource labels. Focused tests: 117 passed. Full regression: 1732 passed plus 37 subtests. Privacy 581/0; license 65/0.
+- Next: push and advance staging, run focused Linux tests and a fresh v34f. No real publisher call is allowed before manual artifact review.

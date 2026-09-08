@@ -399,3 +399,10 @@
 - Deterministic fallback headings should name concrete objects or transformations while remaining readable: directory and SKILL.md, scripts/references/assets structure, and on-demand loading.
 - Section routing converts those headings into a small set of visible concepts. It must not fall back to the same topic-level AI-agent concept for every section when a section-specific concept exists.
 - Acceptance still requires independent image hashes and artifact-bound captions. Concrete headings improve generation and verification; they do not waive semantic evidence.
+
+## D55: Section Renderers Consume Section Copy And Compiled Concepts
+
+- A section fallback must not reuse cover headline/subtitle fields. It renders the final mapped H2 and its section purpose so layout selection and visible labels remain content-specific.
+- Deterministic layout dispatch accepts the same compiled concept IDs emitted by image routing; renderer and analyzer cannot maintain unrelated vocabularies.
+- SCRIPTS, REFERENCES and ASSETS are observable directory-resource labels. They may ground the directory concept, but generic cards or boxes without those labels do not.
+- Keep cover and section output evidence separate. One completed cover cannot satisfy any section capability or semantic gate.
