@@ -78,4 +78,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin v31 proved enumerating claim regexes is insufficient. Commit `9b0a75c` adds technical-anchor coverage so declarative technical assertions must match verified claim anchors.
 - Commit `6e6bb36` adds a verified-primary-claim rebuild for unsafe automated Juejin technical drafts, avoiding both blind model retries and destructive sentence deletion.
 - Juejin v32 exercised that rebuild and exposed repeated boilerplate; `1b3d6a9` consolidates the evidence boundary so rebuilt copy passes hygiene.
+- Juejin v33 stopped before generation because the live Hermes `muse-spark-1.3-contributor` returned `provider_auth_failed`; no media or delivery work was started.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
