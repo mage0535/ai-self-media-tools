@@ -432,3 +432,10 @@ These describe the audited production release, not the current development code.
 - Unsupported model claims triggered verified-primary rebuild. Pipeline reached `review_required`; artifact probe passed with zero failures; all 17 required capabilities were complete.
 - Manual copy review passed the fact-safe title, non-repeated opening, readable 1,700-character body and source appendix. Manual image review passed four distinct roles; cover 1800x1200 and sections 1200x800 with four unique SHA-256 values. No audio and no publisher call.
 - Juejin real-model Canary is accepted. Next serial target is WeChat, but its latest public-search pack reports `ready=false` and zero strong samples; source collection/admission must be repaired before generation. Production and timers remain unchanged.
+
+## 2026-09-08 WeChat Source Admission
+
+- Stored WeChat browser state returned `login_required` with zero records in a bounded read-only seven-day backend collection. The prior Sogou pack contains 20 same-lane search results but zero metric-bearing strong samples, so `ready=false` remains correct.
+- The absolute WeWrite CLI exists outside the non-interactive PATH. Its live `hotspots --limit 20` returned Weibo, Baidu and Toutiao aggregate boards, not WeChat first-party keywords or activities.
+- `77ea76f` requires WeChat-hosted URLs for both creator-backend and WeWrite official contracts, while retaining a specific Sogou rejection. Cross-platform rows remain usable only as general trend references.
+- Focused source tests: 24 passed plus 4 subtests. Full: 1736 passed plus 37 subtests. Privacy 581/0; license 65/0. WeChat generation remains blocked until a fresh first-party backend/WeChat URL signal exists.

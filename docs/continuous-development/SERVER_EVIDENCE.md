@@ -606,3 +606,11 @@ Observed read-only on 2026-08-31.
 - Artifact semantic scores: cover 0.825, section 01 0.8, section 02 0.8, section 03 0.85. Manual review verified a modular cover, directory graph, resource stack and separate on-demand loading sequence.
 - Pillow decode/dimension review recorded cover 1800x1200 and three 1200x800 sections. Four SHA-256 values are unique. Private `manual-review.json` records `passed=true`, `model_call=real_active_model`, empty audio and `publisher_called=false`.
 - Juejin v35c is accepted as the real-model content/media Canary, not live draft proof. Production remains signed `2f4f612`; gateway config and timers are unchanged. WeChat source readiness is the next blocker.
+
+## 2026-09-08 WeChat Source-Provenance Evidence
+
+- A bounded read-only backend collection used the existing private Playwright state and returned `status=login_required`, reason that the backend requires scan login, and zero records. No account setting or publication state changed.
+- The latest Sogou WeChat search pack contained 20 rows but `strong_sample_count=0` and `ready=false` because no row carried a qualifying view/like/favorite/engagement metric.
+- Absolute WeWrite 4.2.1 was present despite not appearing in non-interactive PATH. Live `hotspots --limit 20` completed successfully but declared sources Weibo, Baidu and Toutiao; examples used those hosts and therefore are not WeChat official signals.
+- Red test proved such a Weibo row was previously accepted. `77ea76f` now rejects it with `wechat_first_party_url_required`; valid `mp.weixin.qq.com` rows still pass. Focused suite returned 24 passed plus 4 subtests.
+- Full `artifacts/test-reports/p10-wechat-first-party-source.xml` returned 1736 passed plus 37 subtests in 307.11 seconds. Project/privacy audit 581/0; license audit 65/0. WeChat Canary remains source-blocked and was not generated or published.

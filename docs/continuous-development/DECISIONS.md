@@ -448,3 +448,10 @@
 - Deterministic factual rebuild after a weak-model draft is an accepted recovery path when its trigger and primary-claim count are recorded. It does not hide the model's original quality failure.
 - A safe Task9 delivery boundary proves generation and media, not a live draft. Live publisher/readback remains a separate Canary.
 - After one platform passes, continue the fixed serial matrix. Do not generate the next platform when its own source pack says it is not ready.
+
+## D62: Aggregate Hot Boards Are Not WeChat Official Signals
+
+- WeWrite `hotspots` may return cross-platform aggregate boards. A transport named WeWrite does not establish WeChat provenance.
+- WeChat official keyword/activity contracts require an HTTP(S) URL on a WeChat first-party host, valid capture time, rank or heat, and a hash-bound raw snapshot. Sogou and other platform hosts are rejected.
+- Cross-platform trends may inform background analysis but cannot satisfy WeChat same-platform hot-work or official-signal admission.
+- Expired creator-backend login remains an external source blocker. Do not generate or relabel evidence merely to keep the platform count moving.
