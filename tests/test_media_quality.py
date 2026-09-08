@@ -1563,6 +1563,43 @@ def test_wechat_generation_defers_render_and_delivery_evidence_only():
     assert result["gates"]["topic_and_article_plan"]["passed"] is True
 
 
+def test_wechat_editorial_calendar_requires_research_evidence_not_github_channels():
+    packet = complete_wechat_auto_packet()
+    packet.update({
+        "selection_mode": "editorial_calendar",
+        "editorial_evidence": {
+            "strategy_source": "growth_strategy:wechat:latest",
+            "calendar_column": "你问我答 / 工具箱回访",
+            "planned_for": "2026-09-08",
+            "dedupe_passed": True,
+        },
+        "research_attempts": [
+            {"round": 1, "candidate_count": 0},
+            {"round": 2, "candidate_count": 0},
+            {"round": 3, "candidate_count": 0},
+        ],
+        "same_lane_account_analysis": {},
+        "cross_platform_trend_analysis": {},
+        "content_channels": {},
+        "source_data": {},
+        "selected_project": {},
+        "batch_plan": {"expected_count": 1, "item_index": 1},
+    })
+    packet["strategy_brief"]["content_direction"] = "reader_question_answer"
+    packet["content_generation_brief"]["source_inputs"] = [
+        "account_analysis", "topic_selection", "growth_strategy", "editorial_evidence",
+    ]
+
+    result = validate_wechat_auto_packet(packet, phase="generation")
+
+    assert result["passed"] is True
+    assert result["gates"]["same_lane_account_benchmark"]["not_applicable"] is True
+    assert result["gates"]["cross_platform_trend_analysis"]["not_applicable"] is True
+    assert result["gates"]["github_project_source"]["not_applicable"] is True
+    assert result["gates"]["dual_content_channels"]["not_applicable"] is True
+    assert result["gates"]["batch_quantity_contract"]["passed"] is True
+
+
 def test_wechat_rendered_phase_accepts_local_artifacts_before_cdn_upload():
     packet = complete_wechat_auto_packet()
     packet["cover_design"] = {

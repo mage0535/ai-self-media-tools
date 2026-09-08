@@ -717,6 +717,26 @@ def validate_wechat_auto_packet(packet: dict[str, Any], phase: str = "rendered")
     seo_geo = wechat_playbook.get("seo_geo") if isinstance(wechat_playbook, dict) else {}
     generation_phase = str(phase or "rendered").casefold() in {"generation", "pre_generation", "pre-generation"}
     rendered_phase = str(phase or "rendered").casefold() in {"rendered", "post_generation", "post-generation", "pre_delivery", "pre-delivery"}
+    selection_mode = str(packet.get("selection_mode") or "").casefold()
+    editorial_evidence = packet.get("editorial_evidence") if isinstance(packet.get("editorial_evidence"), dict) else {}
+    research_attempts = packet.get("research_attempts") if isinstance(packet.get("research_attempts"), list) else []
+    editorial_mode = selection_mode == "editorial_calendar"
+    editorial_evidence_valid = editorial_mode and all(
+        editorial_evidence.get(key)
+        for key in ("strategy_source", "calendar_column", "planned_for")
+    ) and editorial_evidence.get("dedupe_passed") is True
+    recapture_exhausted = len(research_attempts) >= 3 and all(
+        _safe_int(row.get("candidate_count")) == 0
+        for row in research_attempts
+        if isinstance(row, dict)
+    )
+    editorial_source_fallback = editorial_evidence_valid and recapture_exhausted
+    github_required = "github" in direction or github_channel_enabled
+    workflow_sources_required = (
+        {"account_analysis", "topic_selection", "growth_strategy", "editorial_evidence"}
+        if editorial_source_fallback
+        else {"account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection"}
+    )
     gates = {
         "base_article_quality": {"passed": bool(article.get("passed")), "failed": article.get("failed_dimensions", [])},
         "account_data_analysis": {
@@ -724,18 +744,20 @@ def validate_wechat_auto_packet(packet: dict[str, Any], phase: str = "rendered")
             "required": ["account_lane", "current_content_data", "audience_profile"],
         },
         "same_lane_account_benchmark": {
-            "passed": bool(same_lane_accounts.get("source"))
+            "passed": editorial_source_fallback or (bool(same_lane_accounts.get("source"))
             and len(same_lane_account_samples) >= 3
-            and bool(same_lane_accounts.get("borrowable_patterns") or same_lane_accounts.get("learnings")),
+            and bool(same_lane_accounts.get("borrowable_patterns") or same_lane_accounts.get("learnings"))),
             "sample_count": len(same_lane_account_samples),
+            "not_applicable": editorial_source_fallback,
         },
         "cross_platform_trend_analysis": {
-            "passed": bool(trend_analysis.get("source"))
+            "passed": editorial_source_fallback or (bool(trend_analysis.get("source"))
             and len(wechat_trend_samples) >= 3
             and len(external_trend_samples) >= 3
-            and bool(trend_analysis.get("hot_topics") or trend_analysis.get("hot_trends")),
+            and bool(trend_analysis.get("hot_topics") or trend_analysis.get("hot_trends"))),
             "wechat_sample_count": len(wechat_trend_samples),
             "external_sample_count": len(external_trend_samples),
+            "not_applicable": editorial_source_fallback,
         },
         "topic_and_article_plan": {
             "passed": all(topic_selection.get(key) for key in ["selected_topic", "selection_reason", "article_angle"])
@@ -745,28 +767,30 @@ def validate_wechat_auto_packet(packet: dict[str, Any], phase: str = "rendered")
         },
         "content_workflow_inputs": {
             "passed": bool(content_brief.get("provided_to_content_workflow"))
-            and {"account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection"}.issubset(content_brief_sources),
+            and workflow_sources_required.issubset(content_brief_sources),
             "source_inputs": sorted(content_brief_sources),
         },
         "github_project_source": {
-            "passed": ("github" in direction or github_channel_enabled)
+            "passed": not github_required or (github_required
             and len(github_projects) >= 1
             and bool(selected_project.get("repo"))
             and selected_project_url.startswith("http")
-            and bool(selected_project_visual),
+            and bool(selected_project_visual)),
             "project_count": len(github_projects),
             "project_url_present": selected_project_url.startswith("http"),
             "project_visual_present": bool(selected_project_visual),
+            "not_applicable": not github_required,
         },
         "dual_content_channels": {
-            "passed": github_channel_enabled
+            "passed": not github_channel_enabled or (github_channel_enabled
             and bool(content_channels.get("hot_content_generation"))
             and len(ai_github_projects) >= 1
             and len(non_ai_github_projects) >= 1
-            and len(hot_content_items) >= 3,
+            and len(hot_content_items) >= 3),
             "ai_github_count": len(ai_github_projects),
             "non_ai_github_count": len(non_ai_github_projects),
             "hot_content_count": len(hot_content_items),
+            "not_applicable": not github_channel_enabled,
         },
         "wechat_growth_playbook": {
             "passed": bool(wechat_playbook)
@@ -800,7 +824,7 @@ def validate_wechat_auto_packet(packet: dict[str, Any], phase: str = "rendered")
             ],
         },
         "batch_quantity_contract": {
-            "passed": expected_count >= 2
+            "passed": expected_count >= (1 if editorial_source_fallback else 2)
             and item_index >= 1
             and item_index <= expected_count,
             "expected_count": expected_count,

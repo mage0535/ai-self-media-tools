@@ -164,7 +164,23 @@ def test_prepare_wechat_professional_draft_records_failure_when_required(tmp_pat
 
 def test_prepare_wechat_draft_uses_explicit_hermes_writer_fallback(tmp_path):
     draft = {"title": "Old", "body": "short seed", "draft_meta": {}}
-    job = {"id": "j1", "topic": "AI tool overload", "platforms": ["wechat"], "brief": {}}
+    job = {
+        "id": "j1", "topic": "AI tool overload", "platforms": ["wechat"],
+        "brief": {
+            "selection_mode": "editorial_calendar",
+            "editorial_evidence": {
+                "strategy_source": "growth_strategy:wechat:latest",
+                "calendar_column": "你问我答 / 工具箱回访",
+                "planned_for": "2026-09-08",
+                "dedupe_passed": True,
+            },
+            "research_attempts": [
+                {"round": 1, "candidate_count": 0},
+                {"round": 2, "candidate_count": 0},
+                {"round": 3, "candidate_count": 0},
+            ],
+        },
+    }
 
     result = prepare_wechat_professional_draft(
         "j1",
@@ -188,6 +204,14 @@ def test_prepare_wechat_draft_uses_explicit_hermes_writer_fallback(tmp_path):
     assert meta["tool_invocations"]["hermes_writer"]["commands"][0]["name"] == "hermes --cli"
     assert result["title"] == "Hermes Writer Title"
     assert "Concrete operational guidance" in result["body"]
+    assert meta["selection_mode"] == "editorial_calendar"
+    assert meta["editorial_evidence"]["strategy_source"] == "growth_strategy:wechat:latest"
+    assert len(meta["research_attempts"]) == 3
+    assert meta["account_analysis"]["account_lane"]
+    assert meta["topic_selection"]["selected_topic"] == "AI tool overload"
+    assert meta["content_generation_brief"]["provided_to_content_workflow"] is True
+    assert meta["batch_plan"] == {"expected_count": 1, "item_index": 1}
+    assert meta["preflight_manifest"]["strategy"]["source"] == "hermes_writer"
 
 
 def test_wechat_writer_failure_cooldown_skips_known_failed_primary(tmp_path):

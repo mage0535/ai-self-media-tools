@@ -44,6 +44,15 @@ TOOLCHAIN_META_KEYS = {
     "image_text_card_recipe",
     "digest",
     "no_ai_slop_repair",
+    "selection_mode",
+    "editorial_evidence",
+    "research_attempts",
+    "account_analysis",
+    "topic_selection",
+    "content_generation_brief",
+    "batch_plan",
+    "content_channels",
+    "source_data",
 }
 
 
@@ -78,6 +87,7 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
     _write_brief(brief_path, topic, draft, job)
     circuit_path = run_dir.parent / "wewrite_failure_circuit.json"
     invocation = _invoke_wewrite(cfg, brief_path, article_path, topic, circuit_path)
+    writer_invocation = invocation
     invocation["evidence_path"] = str(evidence_path)
     meta.setdefault("tool_invocations", {})["wewrite"] = invocation
     if invocation.get("status") == "used" and article_path.is_file():
@@ -93,6 +103,7 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
         fallback["evidence_path"] = str(evidence_path)
         meta["tool_invocations"]["hermes_writer"] = fallback
         if fallback.get("status") == "used" and article_path.is_file():
+            writer_invocation = fallback
             title, article_body = _split_article(article_path.read_text(encoding="utf-8", errors="ignore"))
             if title:
                 draft["title"] = title[:80]
@@ -106,7 +117,7 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
     elif required:
         evidence_path.write_text(json.dumps({"tool_invocations": meta.get("tool_invocations", {})}, ensure_ascii=False, indent=2), encoding="utf-8")
         return draft
-    packet = _build_packet_fields(job, draft, body, invocation, run_dir)
+    packet = _build_packet_fields(job, draft, body, writer_invocation, run_dir)
     packet["digest"] = _wechat_digest(topic, body)
     packet["tool_invocations"] = meta["tool_invocations"]
     for key, value in packet.items():
@@ -371,6 +382,10 @@ def _split_article(text: str) -> tuple[str, str]:
 
 def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, invocation: dict[str, Any], run_dir: Path) -> dict[str, Any]:
     title = str(draft.get("title") or job.get("topic") or "WeChat article")
+    brief = job.get("brief") if isinstance(job.get("brief"), dict) else {}
+    selection_mode = str(brief.get("selection_mode") or "")
+    editorial_evidence = brief.get("editorial_evidence") if isinstance(brief.get("editorial_evidence"), dict) else {}
+    research_attempts = brief.get("research_attempts") if isinstance(brief.get("research_attempts"), list) else []
     sections = _sections(body)
     policy = visual_content_policy(["wechat"], "long_article")
     policy.setdefault("wechat_requirements", {})["theme_count_required"] = 109
@@ -387,13 +402,30 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         {"asset_id": f"wewrite-bg-{i+1}", "asset_type": "photo", "background_kind": "real_scene_photo", "source": "wewrite_visual_prompt", "rights_cleared": True, "real_scene": True, "match_reason": "planned by WeWrite brief for adjacent article section", "section": item["section"], "sections": [item["section"]], "image": item["image"]}
         for i, item in enumerate(section_map)
     ]
-    strategy_reason = "WeWrite long-form article with theme and inline image planning"
+    writer_name = str(invocation.get("tool") or "wechat_writer")
+    strategy_reason = f"{writer_name} long-form article with theme and inline image planning"
     growth_strategy = build_growth_strategy(["wechat"], "long_article", (job.get("historical_feedback") or {}))
+    account_analysis = brief.get("account_analysis") if isinstance(brief.get("account_analysis"), dict) else {
+        "account_lane": "AI efficiency, workflows, and practical task design",
+        "current_content_data": {"status": "metrics_unavailable", "policy": "wechat_14_day_recovery"},
+        "audience_profile": "operators and knowledge workers who need reviewable practical guidance",
+    }
+    topic_selection = brief.get("topic_selection") if isinstance(brief.get("topic_selection"), dict) else {
+        "selected_topic": str(job.get("topic") or title),
+        "selection_reason": str(editorial_evidence.get("calendar_column") or "platform strategy editorial fallback"),
+        "article_angle": "reader question answered with boundaries, signals, and an actionable checklist",
+    }
+    content_generation_brief = brief.get("content_generation_brief") if isinstance(brief.get("content_generation_brief"), dict) else {
+        "provided_to_content_workflow": True,
+        "source_inputs": ["account_analysis", "topic_selection", "growth_strategy", "editorial_evidence"],
+        "headline_hook": _opening_hook(body),
+        "article_plan": sections[:5],
+    }
     return {
         "preflight_manifest": build_preflight_manifest(
             channel="wechat",
             content_type="long_article",
-            strategy_source="wewrite_llm_write",
+            strategy_source=writer_name,
             strategy_result_path=str(run_dir / "brief.md"),
             strategy_summary=strategy_reason,
             selected_topic=str(job.get("topic") or title),
@@ -410,7 +442,7 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         "hook_type": "case_conflict_reader_payoff",
         "sections": sections[:5] if len(sections) >= 5 else sections + [f"section_{i}" for i in range(len(sections) + 1, 6)],
         "visual_template_selection": {"selected": "wewrite_case_feature_109_theme", "ranked_scores": [{"template": "wewrite_case_feature_109_theme", "score": 92}], "recent_same_platform_templates": [], "penalties": {}},
-        "strategy_brief": {"target_user": "AI operators", "channel_lane": "AI operations", "topic_basis": str(job.get("topic") or title), "click_reason": "specific mistake and repair path", "reader_payoff": "a reusable operational checklist", "chosen_structure": "case-breakdown-method", "content_form": "longform article", "seo_geo_intent": "WeChat search and recommendation intent for AI operations", "selected_theme_reason": strategy_reason, "growth_goal": growth_strategy.get("wechat_growth_playbook", {}).get("primary_goal", "")},
+        "strategy_brief": {"target_user": "AI operators", "channel_lane": "AI operations", "topic_basis": str(job.get("topic") or title), "click_reason": "specific mistake and repair path", "reader_payoff": "a reusable operational checklist", "chosen_structure": "case-breakdown-method", "content_form": "longform article", "content_direction": "reader_question_answer" if selection_mode == "editorial_calendar" else "case_led_article", "seo_geo_intent": "WeChat search and recommendation intent for AI operations", "selected_theme_reason": strategy_reason, "growth_goal": growth_strategy.get("wechat_growth_playbook", {}).get("primary_goal", "")},
         "growth_strategy": growth_strategy,
         "section_image_map": section_map,
         "real_scene_background_plan": {"required": True, "source_policy": "licensed_or_verified_real_scene_assets", "primary_background_kind": "real_scene_photo", "no_css_gradient_primary": True, "per_slide_backgrounds": backgrounds},
@@ -440,6 +472,15 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         "actionable_checklist": ["remove duplicate tools", "assign a unique tool role", "set admission rules"],
         "tool_invocations": {"wewrite": invocation},
         "wechat_image_post_plan": _wechat_image_post_plan(title, sections),
+        "selection_mode": selection_mode,
+        "editorial_evidence": editorial_evidence,
+        "research_attempts": research_attempts,
+        "account_analysis": account_analysis,
+        "topic_selection": topic_selection,
+        "content_generation_brief": content_generation_brief,
+        "batch_plan": brief.get("batch_plan") or {"expected_count": 1, "item_index": 1},
+        "content_channels": brief.get("content_channels") or {},
+        "source_data": brief.get("source_data") or {},
     }
 
 
