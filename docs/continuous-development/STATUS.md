@@ -404,3 +404,10 @@ These describe the audited production release, not the current development code.
 - Final title is `Agent Skill 入门：一份来源核对清单`; the 1,700-character body begins with a fact-relevant question, contains verified source facts plus clearly marked advice, and has no unsupported hot-title modifier or repeated title hook.
 - Manual image review passed: topic-matched modular cover, directory/playbook section, categorized resource-box section and explicit on-demand resource-loading sequence. Cover is 1800x1200; three sections are 1200x800; four SHA-256 values are unique; no audio exists.
 - The private `manual-review.json` records copy/image decisions, dimensions, hashes, empty audio list and `publisher_called=false`. Juejin recovery Canary is accepted. Next work is a fresh active-model generation check and the next platform Canary; production deployment and timers remain gated.
+
+## 2026-09-08 Hermes Region-Proxy Recovery
+
+- Active model remains dynamic at `opencode-go/muse-spark-1.3-contributor`. A direct minimal CLI probe returned `HTTP 403: This model is not available in your country` with exit code zero. The same probe with an explicit US proxy returned `HERMES_MODEL_OK`.
+- Gateway has HTTPS proxy in its process environment, but standalone SSH/Task9 workers do not inherit it. The overnight unit loads private `proxy.env`, which exposes `US_PROXY`/`CN_PROXY` names but intentionally does not force all traffic through either route.
+- `4403eb8` keeps direct-first behavior and retries exactly once only when response content proves a country/region restriction and `US_PROXY` is available. Generic 401/403 remains fail-fast. It never writes the proxy URL to attempts or pins provider/model.
+- Generation/overnight focused regression: 88 passed. Full regression: 1734 passed plus 37 subtests. Privacy 581/0; license 65/0. Next: Linux real attempt evidence, then current-model Juejin or WeChat Canary when source evidence is valid.

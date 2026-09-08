@@ -574,3 +574,11 @@ Observed read-only on 2026-08-31.
 - Artifact-bound semantic scores: cover 0.8375, section 01 0.7875, section 02 0.8 and section 03 0.775. Manual review verified their distinct purposes: modular workflow cover, directory/playbook, categorized resources and explicit on-demand sequence.
 - Pillow decode/dimension review: cover 1800x1200; each section 1200x800. Four SHA-256 values are unique. Audio inventory is empty. Private `manual-review.json` records `passed=true` and `publisher_called=false`.
 - v34g is accepted only as the Juejin deterministic-recovery Canary. Production remains signed `2f4f612`, the gateway configuration is unchanged and both overnight timers remain disabled. Current-model and remaining platform Canaries are still pending.
+
+## 2026-09-08 Hermes Region-Proxy Evidence
+
+- Read-only active config reported `default: muse-spark-1.3-contributor`, provider `opencode-go`; no project code hardcodes it. `hermes -z 'Return exactly: HERMES_MODEL_OK' --cli` returned a country HTTP 403 yet exited zero.
+- `hermes-proxy-toggle status` showed the gateway process using the US SOCKS route. The standalone SSH environment had no proxy variables. Repeating the minimal CLI probe with explicit HTTPS/ALL proxy returned exactly `HERMES_MODEL_OK`.
+- The actual overnight service loads `/root/.ai-self-media-tools/secrets/proxy.env`; only key names `CN_PROXY` and `US_PROXY` were inspected, not values. Therefore code can perform direct-first fallback without making all platform traffic proxied.
+- `4403eb8` adds RegionError classification and one proxy-scoped retry. Tests prove the second process receives proxy variables, neither command contains model/provider overrides, attempt evidence records `provider_region_failed` without the proxy value, and generic key rejection is not retried.
+- Focused generator/batch tests returned 88 passed. Full `artifacts/test-reports/p10-hermes-region-fallback.xml` returned 1734 passed plus 37 subtests in 313.69 seconds. Project/privacy audit 581/0; license audit 65/0. Linux real DraftGenerator validation remains pending.
