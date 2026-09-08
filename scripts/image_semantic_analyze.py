@@ -67,7 +67,7 @@ _SYNONYM_GROUPS = (
     ("goal", "target", "objective", "目标"),
     ("input", "inputs", "输入"),
     ("output", "outputs", "输出"),
-    ("quadrant", "quadrants", "four panel", "four panels", "four-panel", "四格", "象限"),
+    ("quadrant", "quadrants", "four panel", "four panels", "four-panel", "four boxes", "two rows of two", "四格", "象限"),
     ("checklist", "check list", "task list", "清单", "检查卡"),
 )
 
