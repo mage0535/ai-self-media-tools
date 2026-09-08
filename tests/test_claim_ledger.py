@@ -198,13 +198,17 @@ def test_grounded_technical_article_uses_only_primary_claims_and_passes_claim_ga
     ]
     ledger.append({"claim": "未经验证的热门标题", "source_url": "https://example.test/hot", "evidence_path": "hot.txt", "verified": True, "source_type": "same_lane_hot_work"})
 
-    draft = build_grounded_technical_article("Agent Skills 入门", ledger)
+    draft = build_grounded_technical_article("Agent Skills 傻瓜式教程，26 年最火 AI 技术就这？", ledger)
     gate = validate_claims(draft["title"] + "\n" + draft["body"], ledger)
 
     assert gate["passed"] is True
     assert validate_generated_text(draft["title"] + "\n" + draft["body"])["passed"] is True
     assert validate_article_packet({"body": draft["body"]})["gates"]["body_length"]["passed"] is True
     assert draft["body"].count("\n## ") >= 4
+    assert draft["title"] == "Agent Skill 入门：一份来源核对清单"
+    assert draft["body"].startswith("为什么要先核对 Agent Skill 的目录、文件和资源？")
+    assert "最火" not in draft["title"] + draft["body"]
+    assert "26 年" not in draft["title"] + draft["body"]
     assert "## Agent Skill 目录与 SKILL.md" in draft["body"]
     assert "## scripts、references 与 assets 资源结构" in draft["body"]
     assert "## 按需加载正文与其他资源" in draft["body"]

@@ -169,8 +169,8 @@ def test_directory_and_loading_concepts_use_visible_evidence_only():
     )
     office_score, office_matches = analyzer.score_semantics(
         ["structured skill directory documents", "selective document loading sequence"],
-        "Two people talk beside a computer in a bright office.",
-        ["people", "computer", "office"],
+        "Two people talk beside a computer in a bright office. There are no papers on the table.",
+        ["people", "computer", "office", "papers"],
     )
 
     assert directory_score >= analyzer.DEFAULT_THRESHOLD

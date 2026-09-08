@@ -318,6 +318,10 @@ def build_grounded_technical_article(topic: str, ledger: list[dict[str, Any]] | 
     claims = list(dict.fromkeys(claims))
     if len(claims) < 3:
         raise ValueError("grounded technical article requires at least three primary claims")
+    subject = re.split(r"(?:是|为|包含|必须|可以|会)", claims[0], maxsplit=1)[0].strip(" ：:，,。")
+    if not subject or len(subject) > 40:
+        subject = "技术主题"
+    safe_title = f"{subject} 入门：一份来源核对清单"
     groups = [claims[:2], claims[2:3], claims[3:]]
     sections = (
         ("Agent Skill 目录与 SKILL.md", groups[0]),
@@ -325,6 +329,7 @@ def build_grounded_technical_article(topic: str, ledger: list[dict[str, Any]] | 
         ("按需加载正文与其他资源", groups[2]),
     )
     blocks = [
+        f"为什么要先核对 {subject} 的目录、文件和资源？",
         "想弄清这个主题，先别从未经核对的命令、案例或效果承诺开始。",
         "下面只使用已经绑定来源的事实，再给出明确标注的操作建议，便于读者自行核对。",
     ]
@@ -359,4 +364,4 @@ def build_grounded_technical_article(topic: str, ledger: list[dict[str, Any]] | 
         "这套做法不会替你证明某个工具一定有效，但可以把事实、建议和待验证内容分开，也能让后续修改保留清楚的证据边界。",
         "你最想先整理哪一类重复任务？可以从一个输入明确、输出可检查的小任务开始。",
     ])
-    return {"title": str(topic or "技术主题入门").strip(), "body": "\n\n".join(blocks)}
+    return {"title": safe_title, "body": "\n\n".join(blocks)}

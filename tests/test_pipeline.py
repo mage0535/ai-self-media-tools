@@ -666,7 +666,9 @@ class PipelineTests(unittest.TestCase):
             self.pipeline.run(job["id"])
 
         current = self.store.get_job(job["id"])
-        self.assertEqual(current["title"], "Agent Skills 入门")
+        self.assertEqual(current["title"], "Agent Skill 入门：一份来源核对清单")
+        self.assertTrue(current["body"].startswith("为什么要先核对 Agent Skill 的目录、文件和资源？"))
+        self.assertNotIn("为什么Agent Skill 入门", current["body"])
         self.assertNotIn("质量翻倍", current["body"])
         self.assertIn("Agent Skill 是一个目录", current["body"])
         self.assertEqual(current["draft_meta"]["grounded_technical_rebuild"]["version"], "verified_primary_claims_v1")
