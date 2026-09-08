@@ -100,7 +100,7 @@ def test_deterministic_editorial_visual_varies_layout_for_document_and_resource_
     assert _sha(document) != _sha(resources)
 
 
-def test_compiled_directory_and_loading_concepts_select_resource_stack(tmp_path):
+def test_compiled_directory_and_loading_concepts_select_distinct_layouts(tmp_path):
     from content_platform.deterministic_visual import render_editorial_visual
 
     directory = render_editorial_visual(
@@ -121,7 +121,22 @@ def test_compiled_directory_and_loading_concepts_select_resource_stack(tmp_path)
     )
 
     assert directory["layout"] == "resource_stack"
-    assert loading["layout"] == "resource_stack"
+    assert loading["layout"] == "selective_loading_sequence"
+
+
+def test_skill_md_heading_takes_document_layout_over_directory_concept(tmp_path):
+    from content_platform.deterministic_visual import render_editorial_visual
+
+    evidence = render_editorial_visual(
+        tmp_path / "skill-document.png",
+        role="section",
+        size=(1200, 800),
+        title="Agent Skill 目录与 SKILL.md",
+        subtitle="explain the document anatomy",
+        concepts=["step-by-step operating playbook", "structured skill directory documents"],
+    )
+
+    assert evidence["layout"] == "document_anatomy"
 
 
 def test_media_bridge_uses_deterministic_fallback_only_for_abstract_final_attempt():
