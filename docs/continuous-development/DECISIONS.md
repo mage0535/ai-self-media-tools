@@ -420,3 +420,10 @@
 - The evidence must state that the model call was replaced with a recorded rejected draft and that the real publisher was not invoked. It proves bounded recovery, not current provider health or platform delivery.
 - Preserve a private manual-review record with title/body review, image roles, dimensions, SHA-256 uniqueness, audio inventory and publisher status.
 - Continue with current-model generation and separate platform/publisher Canaries. Do not use one accepted article package to restore timers or claim 12-platform completion.
+
+## D58: Hermes Generation Is Direct-First With Region-Only Proxy Recovery
+
+- Do not force domestic or international generation through a proxy by default. The first Hermes model attempt inherits the worker's normal environment.
+- If and only if Hermes output contains an explicit country/region availability failure, retry the same active model and same prompt once using private `US_PROXY` for `HTTPS_PROXY` and `ALL_PROXY`.
+- Generic authentication failures do not use proxy recovery. Model/provider selectors remain absent unless an independently verified Canary selector was explicitly configured.
+- Hermes CLI may print HTTP failures with exit code zero, so response-content classification is mandatory. Checkpoints record only `provider_region_failed`, never proxy credentials or endpoints.
