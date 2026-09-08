@@ -461,3 +461,11 @@ These describe the audited production release, not the current development code.
 - `8e36bb7` keeps default pack keys equal to the 12 publishing targets, adds platform plus `identity_role=unavailable` to synthetic fallbacks, and excludes them from `cross_platform_references` because they lack real URL/provenance.
 - Reference-integrity tests: 62 passed plus 4 subtests. Full: 1750 passed plus 37 subtests. Privacy 586/0; license 65/0.
 - Next: Linux official `TrendCollector.collect_with_report` smoke, then WeChat v3 under the safe publisher boundary. Production and timers remain unchanged.
+
+## 2026-09-08 WeChat v3-v4 And Live Intelligence Smoke
+
+- Official Linux TrendCollector smoke ran 12 sources in about 15 seconds: 7 ok, 5 degraded, 0 failed, 135 rows. WeWrite aggregate and CSDN returned real URL rows; search-only unavailable sources stayed degraded. The parameter pack had exactly 12 targets; WeChat stayed not-ready and its eight references were all `target_ready_eligible=false`.
+- WeChat v3 writer fallback succeeded and produced 2,009 characters. It remained blocked because `research_attempts` was on the task row but absent from brief, preventing editorial mode recognition; no-AI-slop found one binary reference-boundary sentence.
+- `ff66fa3` copies recapture evidence into brief and deterministically rewrites that sentence. WeChat v4 then completed initial generation but its Hermes writer fallback ended with a real HTTP 429 after the route retry.
+- `6b64239` performs one delayed retry on the same direct/US route for transient writer errors, then fails closed. Related tests: 191 passed. Full: 1752 passed plus 37 subtests. Privacy 586/0; license 65/0.
+- Next: Linux v5 content/media Canary. Production and timers remain unchanged.

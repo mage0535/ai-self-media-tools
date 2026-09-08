@@ -481,3 +481,10 @@
 - A generated operating hypothesis with no real URL is `unavailable`, even when a collector returns several rows. It must not be counted as an `ok` source or enter cross-platform references.
 - Observing a reference platform never adds it to the publishing-target parameter-pack keys. The default pack remains exactly the registry's canonical publishing targets.
 - Live smoke reports use the same `ok/degraded/failed` classification as `TrendCollector`, not ad hoc non-empty checks.
+
+## D67: WeChat Writer Transient Recovery Is Bounded
+
+- Preserve primary WeWrite failure and explicit Hermes writer identity. A transient 429/5xx/timeout in Hermes writer may retry once after a bounded delay on the same selected route.
+- Region recovery selects the route; transient recovery does not switch models, providers or routes. A second failure stops the platform.
+- Recapture evidence must travel from task row to generation brief and final packet. Keeping it only in scheduler state cannot activate content-mode gates.
+- Deterministic no-AI-slop repair handles observed wording, then the external checker still validates the final body.
