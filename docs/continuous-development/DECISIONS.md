@@ -406,3 +406,10 @@
 - Deterministic layout dispatch accepts the same compiled concept IDs emitted by image routing; renderer and analyzer cannot maintain unrelated vocabularies.
 - SCRIPTS, REFERENCES and ASSETS are observable directory-resource labels. They may ground the directory concept, but generic cards or boxes without those labels do not.
 - Keep cover and section output evidence separate. One completed cover cannot satisfy any section capability or semantic gate.
+
+## D56: Machine-Green Media Still Requires Semantic Negation And Copy Review
+
+- A process concept such as selective loading requires an observable action anchor. A caption containing `no papers` or another static/negated document noun cannot satisfy it.
+- Low-model grounded fallback titles are derived from verified-primary claim subjects, not from unverified hot-title modifiers. Trend wording may guide topic selection but cannot re-enter factual copy through the title.
+- The fallback provides its own fact-relevant question hook. Generic hook repair must not create a repeated `为什么{标题}` opening when the grounded body already has a valid hook.
+- Task9 `review_required` plus artifact-probe success remains insufficient without manual copy and image review. A manual false positive becomes a permanent regression fixture.
