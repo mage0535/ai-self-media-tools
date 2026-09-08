@@ -834,10 +834,12 @@ class DirectTrendSource:
             {
                 "title": template.format(source=source, topic=topic),
                 "source": f"{source}:source_fallback",
+                "platform": source,
                 "url": "",
                 "points": max(1, len(templates) - index),
                 "fallback_source": True,
                 "source_unavailable": True,
+                "identity_role": "unavailable",
                 "provenance_kind": "synthetic_fallback",
                 "query": query,
                 "warning": "live platform/search source unavailable; use only as a temporary operating hypothesis",

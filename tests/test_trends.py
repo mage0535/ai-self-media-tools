@@ -198,6 +198,16 @@ class TrendTests(unittest.TestCase):
         self.assertGreaterEqual(report["summary"]["degraded_sources"], 5)
         self.assertEqual(report["summary"]["degraded_sources"], len(report["sources"]))
 
+    def test_reference_source_fallback_is_unavailable_not_cross_platform_evidence(self):
+        rows = DirectTrendSource("devto", {
+            "adapter": "web_search", "query": "AI workflow", "domain": "dev.to",
+            "identity_role": "cross_platform_reference", "source_fallback_enabled": True,
+        })._source_fallback_items("devto", "AI workflow")
+
+        self.assertTrue(all(row["platform"] == "devto" for row in rows))
+        self.assertTrue(all(row["identity_role"] == "unavailable" for row in rows))
+        self.assertTrue(all(row["source_unavailable"] is True for row in rows))
+
     def test_wewrite_hotspots_source_normalizes_cli_output(self):
         payload = [{
             "title": "公众号热点选题", "heat": 42, "rank": 2,
