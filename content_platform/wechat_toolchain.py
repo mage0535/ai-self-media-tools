@@ -18,6 +18,7 @@ from typing import Any
 from .growth_policy import build_growth_strategy
 from .preflight_manifest import build_preflight_manifest
 from .content_recipe import build_image_text_card_recipe
+from .adapters.media import extract_section_visual_plans
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, visual_content_policy
 
 WECHAT_ALIASES = {"wechat", "weixin", "wechat_official"}
@@ -405,6 +406,7 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
     editorial_evidence = brief.get("editorial_evidence") if isinstance(brief.get("editorial_evidence"), dict) else {}
     research_attempts = brief.get("research_attempts") if isinstance(brief.get("research_attempts"), list) else []
     sections = _sections(body)
+    visual_plans = extract_section_visual_plans(body)
     policy = visual_content_policy(["wechat"], "long_article")
     policy.setdefault("wechat_requirements", {})["theme_count_required"] = 109
     policy.setdefault("tool_refs", {}).update({
@@ -413,7 +415,12 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         "wechat_publisher": "hermes_tool:wechat_publisher",
     })
     section_map = [
-        {"section": sections[i] if i < len(sections) else f"section_{i+1}", "image": f"wechat-inline-{i+1}.png", "purpose": purpose, "adjacent_to_text": True}
+        {
+            "section": sections[i] if i < len(sections) else f"section_{i+1}",
+            "image": f"wechat-inline-{i+1}.png",
+            "purpose": visual_plans.get(" ".join((sections[i] if i < len(sections) else "").split()).casefold()) or purpose,
+            "adjacent_to_text": True,
+        }
         for i, purpose in enumerate(["open the pain point", "explain the case", "summarize the method"])
     ]
     backgrounds = [

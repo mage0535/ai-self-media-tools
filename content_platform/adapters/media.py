@@ -157,6 +157,25 @@ def normalize_article_sections(job: dict[str, Any], limit: int = 6) -> list[str]
     return sections[: max(1, int(limit))]
 
 
+def extract_section_visual_plans(body: str) -> dict[str, str]:
+    headings = list(re.finditer(r"(?m)^#{2,6}\s+(.+?)\s*$", str(body or "")))
+    plans: dict[str, str] = {}
+    for index, match in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(str(body or ""))
+        section_body = str(body or "")[match.end():end]
+        plan = re.search(
+            r"(?m)^\s*>?\s*(?:📷\s*)?配图计划\s*\d*\s*[:：]\s*(.+?)\s*$",
+            section_body,
+        )
+        if not plan:
+            continue
+        heading = " ".join(match.group(1).split()).casefold()
+        purpose = " ".join(plan.group(1).split()).strip()
+        if heading and purpose:
+            plans[heading] = purpose[:500]
+    return plans
+
+
 def _article_assets(job: dict[str, Any]) -> list[dict[str, str]]:
     sections = normalize_article_sections(job, limit=3)
     if len(sections) < 3:

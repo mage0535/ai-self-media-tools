@@ -611,6 +611,7 @@ def _sensenova_image(
                 "mode": "edit" if input_image else "generate",
                 "source_url": "generated:sense_nova",
                 "license": "generated_for_project",
+                "embedded_branding_possible": True,
                 "size": selected_size,
                 "requested_size": size,
             }
