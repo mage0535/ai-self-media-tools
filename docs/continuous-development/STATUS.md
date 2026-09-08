@@ -369,3 +369,10 @@ These describe the audited production release, not the current development code.
 - v34b reused the persisted v31 contract and verified primary-source pack without a model call. The grounded rebuild passed factual, hygiene, GEO, growth and all Juejin dimensions except `base_article_quality.body_length`; media and delivery correctly did not start.
 - `46b1616` adds a direct regression against `validate_article_packet().gates.body_length` and expands the evidence-safe fallback above the 1,200-character production minimum. Related regression: 175 passed. Full regression: 1727 passed plus 37 subtests. Project/privacy audit: 581 files, zero issues. License audit: 65 capabilities, zero issues.
 - Next: advance Linux staging, run focused grounded/Pipeline tests, then run deterministic v34c with the private five-claim input and inspect copy plus every generated image before any real publisher call.
+
+## 2026-09-08 Juejin v34c Visible-Workflow Semantics
+
+- Linux staging at `9245ccd` passed the grounded builder and Pipeline tests 2/2 and project audit 581/0. v34c then passed content depth, factual, safety, growth and platform gates and entered real article media.
+- Cover attempts one and two were correctly rejected as a generic robot-office visual and an unrelated game-like screenshot collage. Attempt three visibly rendered numbered INPUT/SKILL/VERIFY rectangles and a modular playbook, but scored 0.425 because `rectangle/cards` were not normalized to the expected workflow-node concept.
+- `8ec883d` adds a narrow node/card/rectangle visual synonym group. Its regression requires the observed modular layout to pass while the robot-office negative remains rejected. Semantic/media related tests: 39 passed. Full regression: 1728 passed plus 37 subtests. Privacy 581/0; license 65/0.
+- Next: push the commit and docs, advance clean Linux staging and run a fresh v34d directory. Do not resume the failed v34c checkpoint and do not call a real publisher.

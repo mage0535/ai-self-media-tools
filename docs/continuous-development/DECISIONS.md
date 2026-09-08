@@ -385,3 +385,10 @@
 - A grounded technical rebuild may quote only verified primary claims as facts. Additional depth must be explicit advice, review procedure, evidence boundary or reader action; it must not invent mechanisms, commands, compatibility, performance or outcome claims.
 - The builder regression calls the same `validate_article_packet` body-length gate used by production, in addition to claim and generated-text hygiene validation.
 - Passing length is not delivery approval. A fresh Linux recovery package still requires media generation, semantic image probes, complete capability evidence and manual final-copy review before a real draft publisher is allowed.
+
+## D53: Semantic Evidence Scores Visible Concepts, Not Prompt Wording
+
+- Keep the image semantic threshold at 0.6. Do not lower it to admit a visually relevant candidate.
+- Normalize narrow, observable visual equivalents such as node, card and rectangle before scoring workflow-node concepts. Do not map generic robots, desks or offices to workflow evidence.
+- Every added synonym requires a positive artifact-derived example and a nearby negative control. One broad synonym must not satisfy multiple independent expected concepts by itself.
+- Preserve all failed candidates and their hash-bound vision captions so future changes can be evaluated against real false positives and false negatives.
