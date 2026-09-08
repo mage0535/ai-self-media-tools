@@ -397,7 +397,7 @@ def test_section_image_rejects_provider_that_declares_embedded_branding():
     ) is False
     assert MediaBridge._provider_branding_allowed(
         {"role": "cover"}, {"provider": "sense_nova", "embedded_branding_possible": True}
-    ) is True
+    ) is False
     assert MediaBridge._provider_branding_allowed(
         {"role": "section"}, {"provider": "pixazo"}
     ) is True
@@ -415,3 +415,6 @@ def test_boundary_visual_uses_deterministic_final_recovery_only():
     assert MediaBridge._use_deterministic_boundary_visual(
         {**item, "expected_concepts": ["generic office"]}, attempt=3, max_attempts=3
     ) is False
+    assert MediaBridge._use_deterministic_article_visual(
+        {"role": "cover", "intent": "cinematic_cover"}, attempt=3, max_attempts=3
+    ) is True

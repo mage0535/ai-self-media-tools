@@ -200,6 +200,11 @@ def test_task_boundary_visuals_require_their_observable_anchors():
         "A browser shows eight software tool tabs beside a paper task list with one unfinished item.",
         ["browser tabs", "software tools", "unfinished task list"],
     )
+    chinese_tabs_score, chinese_tabs_matches = analyzer.score_semantics(
+        ["multiple software tool tabs and unfinished task list"],
+        "左侧标题为8个工具标签页，列出工具1至工具8；右侧是任务清单，包括待处理、未完成、未开始。",
+        ["工具标签页", "任务清单", "未完成"],
+    )
     io_score, io_matches = analyzer.score_semantics(
         ["goal input output checklist card"],
         "A checklist card has three labelled rows: GOAL, INPUT, and OUTPUT.",
@@ -220,6 +225,8 @@ def test_task_boundary_visuals_require_their_observable_anchors():
     assert office_matches == []
     assert tabs_score >= analyzer.DEFAULT_THRESHOLD
     assert tabs_matches == ["multiple software tool tabs and unfinished task list"]
+    assert chinese_tabs_score >= analyzer.DEFAULT_THRESHOLD
+    assert chinese_tabs_matches == ["multiple software tool tabs and unfinished task list"]
     assert io_score >= analyzer.DEFAULT_THRESHOLD
     assert io_matches == ["goal input output checklist card"]
     assert quadrants_score >= analyzer.DEFAULT_THRESHOLD

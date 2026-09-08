@@ -700,8 +700,6 @@ class MediaBridge:
 
     @staticmethod
     def _provider_branding_allowed(item, provider_result):
-        if str(item.get("role") or "").casefold() == "cover":
-            return True
         return not bool((provider_result or {}).get("embedded_branding_possible"))
 
     @staticmethod
@@ -752,7 +750,14 @@ class MediaBridge:
             try:
                 if output.exists():
                     output.unlink()
-                if self._use_deterministic_boundary_visual(item, attempt=attempt, max_attempts=max_attempts):
+                if (
+                    self._use_deterministic_boundary_visual(item, attempt=attempt, max_attempts=max_attempts)
+                    or (
+                        "wechat" in {str(value).casefold() for value in (job.get("platforms") or [])}
+                        and str(item.get("role") or "").casefold() == "cover"
+                        and self._use_deterministic_article_visual(item, attempt=attempt, max_attempts=max_attempts)
+                    )
+                ):
                     design = (job.get("draft_meta") or {}).get("cover_design") or {}
                     visual_title, visual_subtitle = self._deterministic_visual_copy(job, item)
                     provider_result = render_editorial_visual(
