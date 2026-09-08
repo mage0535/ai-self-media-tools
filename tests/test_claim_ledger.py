@@ -185,6 +185,7 @@ def test_claim_gate_rejects_unsourced_technical_assertions_but_allows_grounded_p
 
 def test_grounded_technical_article_uses_only_primary_claims_and_passes_claim_gate() -> None:
     from content_platform.content_hygiene import validate_generated_text
+    from content_platform.media_quality import validate_article_packet
     ledger = [
         {"claim": claim, "source_url": "https://agentskills.io/specification", "evidence_path": "sources/spec.md", "verified": True, "source_type": "verified_primary_source"}
         for claim in (
@@ -202,6 +203,7 @@ def test_grounded_technical_article_uses_only_primary_claims_and_passes_claim_ga
 
     assert gate["passed"] is True
     assert validate_generated_text(draft["title"] + "\n" + draft["body"])["passed"] is True
+    assert validate_article_packet({"body": draft["body"]})["gates"]["body_length"]["passed"] is True
     assert draft["body"].count("\n## ") >= 4
     assert "未经验证的热门标题" not in draft["body"]
     assert "安装命令" not in draft["body"]
