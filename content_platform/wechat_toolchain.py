@@ -592,7 +592,7 @@ def _repair_ai_slop(body: str) -> tuple[str, dict[str, Any]]:
     text = re.sub(r"这就是真正的改进清单[。.]?", replace_false_profound_checklist, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?也不是([^，,。！？\n]{2,60})[，,]?(?:它读的)?是([^。！？\n]{2,100})", replace_triple, text)
     text = re.sub(r"不是([^。！？\n]{2,60})[，,]?也不是([^。！？\n]{2,60})[。！？]", replace_double, text)
-    text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?而是([^。！？\n]{2,100})[。！？]", replace_contrast, text)
+    text = re.sub(r"(?:根本)?不是([^，,。！？\n]{1,60})[，,]?而是([^。！？\n]{1,100})[。！？]", replace_contrast, text)
     text = re.sub(r"不是([^，,。！？\n]{2,60})[，,]?是([^。！？\n]{2,100})[。！？]", replace_simple, text)
     for source, replacement in (("赋能", "提供支持"), ("闭环", "完整流程")):
         count = text.count(source)
