@@ -660,6 +660,20 @@ def test_sensenova_edit_sends_source_image_and_aspect_tier(tmp_path, monkeypatch
     assert result["provenance"]["input_image_sha256"]
 
 
+def test_sensenova_cached_result_recovers_branding_policy_during_finalize():
+    from content_platform.image_provider import _finalize_image_result
+
+    result = _finalize_image_result(
+        {"provider": "sense_nova", "model": "cached-old-record"},
+        prompt="section card",
+        input_image=None,
+        intent="editorial_illustration",
+        route="explicit_provider",
+    )
+
+    assert result["embedded_branding_possible"] is True
+
+
 def test_pixazo_generation_sends_requested_dimensions_and_records_provenance(tmp_path, monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
     monkeypatch.setenv("PIXAZO_API_KEY", "pixazo-key")

@@ -210,6 +210,11 @@ def test_task_boundary_visuals_require_their_observable_anchors():
         "A four-quadrant checklist shows target, input, acceptance and bottleneck panels.",
         ["four quadrants", "checklist", "task boundary"],
     )
+    boxes_score, boxes_matches = analyzer.score_semantics(
+        ["four-panel task boundary checklist"],
+        "A flowchart has four boxes arranged in two rows of two. Each box contains a question and a checkbox.",
+        ["four boxes", "two rows of two", "checklist"],
+    )
 
     assert office_score < analyzer.DEFAULT_THRESHOLD
     assert office_matches == []
@@ -219,6 +224,8 @@ def test_task_boundary_visuals_require_their_observable_anchors():
     assert io_matches == ["goal input output checklist card"]
     assert quadrants_score >= analyzer.DEFAULT_THRESHOLD
     assert quadrants_matches == ["four-panel task boundary checklist"]
+    assert boxes_score >= analyzer.DEFAULT_THRESHOLD
+    assert boxes_matches == ["four-panel task boundary checklist"]
 
 
 def test_bookshelf_documents_and_robot_assistant_ground_memory_archive():

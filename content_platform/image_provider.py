@@ -855,6 +855,8 @@ def _normalize_provider_name(provider: str) -> str:
 def _finalize_image_result(result: dict, *, prompt: str, input_image: str | Path | None, intent: str, route: str) -> dict:
     payload = dict(result or {})
     payload["provider"] = _normalize_provider_name(payload.get("provider") or "")
+    if payload["provider"] == "sense_nova":
+        payload.setdefault("embedded_branding_possible", True)
     input_hash = ""
     if input_image:
         try:
