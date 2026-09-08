@@ -655,3 +655,10 @@ Observed read-only on 2026-08-31.
 - Only `no_ai_slop_check` failed. Running the server checker against the persisted body found one `假深刻收尾` on line 69: `这就是真正的改进清单`.
 - `f76a3c2` adds an exact post-writer rewrite and test. Related suite returned 175 passed. Full `artifacts/test-reports/p10-wechat-v5-slop-repair.xml` returned 1753 passed plus 37 subtests in 357.19 seconds. Privacy 586/0; license 65/0.
 - v5 was not delivered and generated no media. Production and timers remain unchanged; v6 is required.
+
+## 2026-09-08 WeChat v6 Short-Contrast Evidence
+
+- v6 used the safe boundary and produced a 2,270-character Hermes-writer article. Writer and every operational/content-mode gate passed.
+- External no-AI-slop found one binary contrast on line 71: `卡住的根本不是写，而是等确认、缺口径`. No media or publisher ran.
+- `15e3a3c` adds the exact red/green case and generalizes the existing binary pattern from two characters to one while absorbing optional `根本`.
+- Full `artifacts/test-reports/p10-wechat-single-char-contrast.xml` returned 1754 passed plus 37 subtests in 357.35 seconds. Privacy 586/0; license 65/0. v7 remains required.

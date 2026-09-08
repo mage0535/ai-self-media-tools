@@ -494,3 +494,9 @@
 - Do not disable or bypass the external no-AI-slop checker after all structural gates pass.
 - Convert each observed false-profound/binary phrase into a narrow deterministic rewrite with a regression test; leave unrelated prose unchanged.
 - A clean writer status does not imply clean copy. Media remains closed until the final post-writer body passes.
+
+## D69: Binary-Contrast Repair Covers Short Subjects Without Awkward Duplication
+
+- A one-character Chinese contrast subject is valid input to the slop repair; minimum-length assumptions must not let it bypass the external checker.
+- Consume optional emphasis such as `根本` as part of the matched construction so deterministic output does not create doubled emphasis.
+- Keep the rewrite local to the matched sentence and rerun the unchanged external checker.
