@@ -439,3 +439,10 @@ These describe the audited production release, not the current development code.
 - The absolute WeWrite CLI exists outside the non-interactive PATH. Its live `hotspots --limit 20` returned Weibo, Baidu and Toutiao aggregate boards, not WeChat first-party keywords or activities.
 - `77ea76f` requires WeChat-hosted URLs for both creator-backend and WeWrite official contracts, while retaining a specific Sogou rejection. Cross-platform rows remain usable only as general trend references.
 - Focused source tests: 24 passed plus 4 subtests. Full: 1736 passed plus 37 subtests. Privacy 581/0; license 65/0. WeChat generation remains blocked until a fresh first-party backend/WeChat URL signal exists.
+
+## 2026-09-08 WeChat Bounded Evergreen Fallback
+
+- Private WeChat slots specify only platform, format, estimate and weekdays; they contain no executable editorial fallback. The growth playbook had columns and dedupe rules but no versioned evergreen topics, so exhausted recapture could only block forever.
+- `6b336ec` adds four advice/Q&A evergreen directions to the WeChat recovery playbook and compiles one only after a real requery adapter completes all configured rounds with zero candidates. It skips every reserved 14-day fingerprint and blocks if the pool is exhausted.
+- The selected row is labeled `editorial_calendar`, carries strategy source/calendar column/date/dedupe evidence, has no `associated_hotspot`, and receives no hotspot score. No requery adapter means no fallback.
+- Related strategy/overnight tests: 78 passed. Full: 1739 passed plus 37 subtests. Privacy 581/0; license 65/0. Next: Linux prepare-only verification, then a fresh WeChat content/media Canary under the safe draft boundary.

@@ -614,3 +614,11 @@ Observed read-only on 2026-08-31.
 - Absolute WeWrite 4.2.1 was present despite not appearing in non-interactive PATH. Live `hotspots --limit 20` completed successfully but declared sources Weibo, Baidu and Toutiao; examples used those hosts and therefore are not WeChat official signals.
 - Red test proved such a Weibo row was previously accepted. `77ea76f` now rejects it with `wechat_first_party_url_required`; valid `mp.weixin.qq.com` rows still pass. Focused suite returned 24 passed plus 4 subtests.
 - Full `artifacts/test-reports/p10-wechat-first-party-source.xml` returned 1736 passed plus 37 subtests in 307.11 seconds. Project/privacy audit 581/0; license audit 65/0. WeChat Canary remains source-blocked and was not generated or published.
+
+## 2026-09-08 WeChat Evergreen-Compiler Evidence
+
+- Read-only inspection of the private overnight slots found two WeChat schedule rows with stage/estimate/weekdays only and no `editorial_fallback`. No private configuration was changed.
+- The checked-in WeChat recovery playbook already requires a 14-day topic and title-frame dedupe, column rotation, low frequency and explicit factual boundaries. `6b336ec` adds four advice-only fallback topics with stable directions and columns.
+- Red/green tests prove three empty recapture rounds produce one `ready_for_plan` editorial row; strategy source is preserved in bounded model input; no hotspot identity exists; all-reserved topics block; and absence of a requery adapter cannot bypass collection.
+- Related tests returned 78 passed. Full `artifacts/test-reports/p10-wechat-evergreen-fallback.xml` returned 1739 passed plus 37 subtests in 341.78 seconds. Project/privacy audit 581/0; license audit 65/0.
+- Linux prepare-only verification and a WeChat content/media/draft-safe Canary remain pending. Production and timers remain unchanged.

@@ -455,3 +455,10 @@
 - WeChat official keyword/activity contracts require an HTTP(S) URL on a WeChat first-party host, valid capture time, rank or heat, and a hash-bound raw snapshot. Sogou and other platform hosts are rejected.
 - Cross-platform trends may inform background analysis but cannot satisfy WeChat same-platform hot-work or official-signal admission.
 - Expired creator-backend login remains an external source blocker. Do not generate or relabel evidence merely to keep the platform count moving.
+
+## D63: WeChat Evergreen Is A Bounded Strategy Fallback
+
+- Platform official signals and metric-bearing same-lane works remain first priority. Strategy evergreen is considered only after the configured same-platform requery rounds all complete empty.
+- Evergreen topics live in the versioned WeChat recovery playbook, use advice/Q&A framing without factual performance claims, and rotate through 14-day topic fingerprints.
+- The selected candidate is `editorial_calendar`, not native, official or associated-hotspot content. It records strategy source, calendar column, planned date and dedupe result.
+- Missing requery capability, missing strategy status, or an exhausted topic pool blocks the platform. Do not silently invent a new topic with the model.
