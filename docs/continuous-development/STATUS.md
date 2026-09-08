@@ -376,3 +376,10 @@ These describe the audited production release, not the current development code.
 - Cover attempts one and two were correctly rejected as a generic robot-office visual and an unrelated game-like screenshot collage. Attempt three visibly rendered numbered INPUT/SKILL/VERIFY rectangles and a modular playbook, but scored 0.425 because `rectangle/cards` were not normalized to the expected workflow-node concept.
 - `8ec883d` adds a narrow node/card/rectangle visual synonym group. Its regression requires the observed modular layout to pass while the robot-office negative remains rejected. Semantic/media related tests: 39 passed. Full regression: 1728 passed plus 37 subtests. Privacy 581/0; license 65/0.
 - Next: push the commit and docs, advance clean Linux staging and run a fresh v34d directory. Do not resume the failed v34c checkpoint and do not call a real publisher.
+
+## 2026-09-08 Juejin v34d Section-Concept Routing
+
+- v34d completed the cover path, proving `8ec883d` fixed the modular workflow false negative. It failed closed on section 01 after three attempts; relevant flowcharts matched the AI-agent and playbook concepts but scored 0.591667 because abstract heading text remained a third, non-visible expectation.
+- `f5e5cd7` changes only grounded fallback H2 headings to concrete directory, file-resource and on-demand-loading subjects. `image_routing` compiles those subjects to `structured skill directory documents` and `selective document loading sequence`; the analyzer recognizes visible folder-tree/document/loading evidence while a plain office remains negative.
+- Focused regressions: 14, 1 and 128 tests passed. Full regression: 1730 passed plus 37 subtests. Project/privacy audit: 581/0. License audit: 65/0.
+- Next: push and advance staging, run Linux focused tests, then start a fresh v34e. Inspect all final artifacts before any publisher call.

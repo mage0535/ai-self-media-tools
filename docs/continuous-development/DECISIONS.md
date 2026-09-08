@@ -392,3 +392,10 @@
 - Normalize narrow, observable visual equivalents such as node, card and rectangle before scoring workflow-node concepts. Do not map generic robots, desks or offices to workflow evidence.
 - Every added synonym requires a positive artifact-derived example and a nearby negative control. One broad synonym must not satisfy multiple independent expected concepts by itself.
 - Preserve all failed candidates and their hash-bound vision captions so future changes can be evaluated against real false positives and false negatives.
+
+## D54: Article Headings Must Compile To Observable Visual Subjects
+
+- Do not append an abstract reader-facing H2 such as `核心定义` to semantic expectations when it cannot be observed in pixels.
+- Deterministic fallback headings should name concrete objects or transformations while remaining readable: directory and SKILL.md, scripts/references/assets structure, and on-demand loading.
+- Section routing converts those headings into a small set of visible concepts. It must not fall back to the same topic-level AI-agent concept for every section when a section-specific concept exists.
+- Acceptance still requires independent image hashes and artifact-bound captions. Concrete headings improve generation and verification; they do not waive semantic evidence.
