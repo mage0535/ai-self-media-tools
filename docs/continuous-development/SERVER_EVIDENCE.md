@@ -510,3 +510,11 @@ Observed read-only on 2026-08-31.
 - Red/green tests prove non-primary hot-work text is excluded, the result has four H2 sections and passes claim validation; Pipeline test proves the unsupported generated title/body are replaced.
 - Related suite: 191 passed. Full `p10-grounded-technical-rebuild.xml`: 1727 passed plus 37 subtests in 315.88 seconds. Project/privacy audit 581/0; license audit 65/0.
 - Linux verification and a deterministic recovery package remain pending. Production release and timers were unchanged.
+
+## 2026-09-08 Juejin v32 Grounded-Rebuild Hygiene Evidence
+
+- Linux grounded-rebuild/Pipeline subset at `5e8337a` passed 105 tests in 251.24 seconds. v32 used live `mimo-v2.5`; the initial draft failed multiple factual codes and Pipeline invoked the five-claim `verified_primary_claims_v1` rebuild.
+- Rebuilt title/body and claim gate were correct, but repeated section boilerplate triggered both repeated paragraph and repeated sentence. No media or delivery occurred.
+- `1b3d6a9` consolidates the evidence-boundary sentence and requires the deterministic rebuild to pass `validate_generated_text` in addition to `validate_claims`.
+- Related suite: 156 passed. Full `p10-grounded-rebuild-hygiene.xml`: 1727 passed plus 37 subtests in 297.63 seconds. Project/privacy audit 581/0; license audit 65/0.
+- Linux deterministic recovery validation remains pending; production and timers were unchanged.

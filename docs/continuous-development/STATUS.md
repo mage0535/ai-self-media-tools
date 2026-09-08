@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-08 Asia/Shanghai (grounded technical fallback locally verified)
+Last updated: 2026-09-08 Asia/Shanghai (Juejin v32 grounded rebuild hygiene locally verified)
 
 ## Current state
 
@@ -44,6 +44,7 @@ Last updated: 2026-09-08 Asia/Shanghai (grounded technical fallback locally veri
 | Technical claim variant coverage | Codex primary | claim ledger and tests | committed `c16d943` | Linux regression and final fresh Juejin validation |
 | Technical anchor coverage | Codex primary | claim ledger and tests | committed `9b0a75c` | Linux regression and v31 offline re-evaluation; do not accept v31 |
 | Grounded technical rebuild | Codex primary | claim ledger/Pipeline and tests | committed `6e6bb36` | Linux regression and deterministic v31 recovery package |
+| Grounded rebuild prose hygiene | Codex primary | grounded builder and tests | committed `1b3d6a9` | Linux regression and deterministic recovery validation |
 
 ## Server Blockers From The 2026-08-31 Audit
 
@@ -348,3 +349,10 @@ These describe the audited production release, not the current development code.
 - `6e6bb36` builds a conservative four-section article only from verified primary-source claims when an automated Juejin technical draft fails `unsourced_technical_fact_claim`.
 - The fallback preserves the original selected topic as title, includes explicit evidence/advice boundaries, a practical checklist and reader CTA, then reruns claim, hygiene, GEO, cover and media planning.
 - Related suite: 191 passed. Full: 1727 passed plus 37 subtests in 315.88 seconds. Privacy 581/0; license 65/0.
+
+## 2026-09-08 Juejin v32 Result
+
+- v32 triggered `grounded_technical_rebuild` from five verified primary claims, replacing the model's unsupported facts and preserving the selected topic.
+- Claim validation passed, but text hygiene blocked because the same evidence-boundary sentence appeared after each of three factual sections.
+- `1b3d6a9` emits that boundary once after all factual sections and extends the builder test to require both claim and full generated-text hygiene passes.
+- Focused related suite: 156 passed. Full remained 1727 passed plus 37 subtests in 297.63 seconds. Privacy 581/0; license 65/0.
