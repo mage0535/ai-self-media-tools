@@ -154,7 +154,7 @@ def test_task_boundary_concepts_render_distinct_watermark_free_layouts(tmp_path)
     assert len(set(hashes)) == 3
     assert all(item["provider"] == "knowledge_card_renderer" for item in results)
     assert all(item["language"] == "zh" for item in results)
-    assert results[0]["visible_labels"] == ["8个工具标签", "任务清单", "待处理", "未完成", "未开始"]
+    assert results[0]["visible_labels"] == ["8个工具标签页", "任务清单", "待处理", "未完成", "未开始"]
     assert results[1]["visible_labels"] == ["目标", "明确结果", "输入", "核对材料", "输出", "设定验收"]
     assert results[2]["visible_labels"] == ["目标", "明确吗？", "输入", "齐全吗？", "验收", "可检查吗？", "卡点", "明确吗？"]
 

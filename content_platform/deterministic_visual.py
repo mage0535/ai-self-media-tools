@@ -116,7 +116,7 @@ def _tool_tab_overload(draw, width, height, accent, language):
     top, bottom = int(height * 0.15), int(height * 0.85)
     _panel(draw, (margin, top, margin + panel_w, bottom), outline=accent)
     _panel(draw, (margin + panel_w + gap, top, width - margin, bottom), outline=(232, 95, 66))
-    labels = ["8个工具标签", "任务清单", "待处理", "未完成", "未开始"] if language == "zh" else ["8 TOOL TABS", "TASK LIST", "PENDING", "UNFINISHED", "NOT STARTED"]
+    labels = ["8个工具标签页", "任务清单", "待处理", "未完成", "未开始"] if language == "zh" else ["8 TOOL TABS", "TASK LIST", "PENDING", "UNFINISHED", "NOT STARTED"]
     draw.text((margin + 30, top + 28), labels[0], font=_font(32, bold=True), fill=(238, 245, 252))
     for row in range(4):
         y = top + 105 + row * 78
