@@ -390,3 +390,10 @@ These describe the audited production release, not the current development code.
 - Root cause: the deterministic renderer received `cover_design.title_text/subtitle_text` for every role, and its layout dispatch did not recognize compiled directory/loading concept IDs. Analyzer vocabulary also did not map visible SCRIPTS/REFERENCES/ASSETS labels to a directory.
 - `0f3ee1c` selects cover copy only for covers, section/purpose copy for sections, routes both compiled concepts to `resource_stack` and normalizes the three visible resource labels. Focused tests: 117 passed. Full regression: 1732 passed plus 37 subtests. Privacy 581/0; license 65/0.
 - Next: push and advance staging, run focused Linux tests and a fresh v34f. No real publisher call is allowed before manual artifact review.
+
+## 2026-09-08 Juejin v34f Manual-Rejection Closure
+
+- v34f reached `review_required`; Pipeline and artifact probe both passed. Four assets were unique and structurally complete. Manual review nevertheless rejected the package.
+- Copy defects: the selected hot title retained unsupported `26 年最火`, and the generic hook repair prepended a repetitive `为什么{标题}` line. Visual defect: section 03 was an ordinary office conversation; its caption said there were no papers, but token scoring treated the negated word as document evidence and gave the loading concept 0.775.
+- `522e13d` builds a conservative title from the first verified-primary claim subject, supplies a fact-relevant question hook, and adds required observable anchors for directory and loading concepts. Negated/static document nouns cannot satisfy loading without a loading action token.
+- Related regression: 135 passed. Full regression: 1732 passed plus 37 subtests. Privacy 581/0; license 65/0. Next: Linux focused tests and fresh v34g, followed by manual copy and four-image review.

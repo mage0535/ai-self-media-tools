@@ -558,3 +558,11 @@ Observed read-only on 2026-08-31.
 - `0f3ee1c` adds one renderer-copy selector and aligns deterministic layout/analyzer vocabulary with compiled directory/loading concepts. Tests cover layout selection, section-vs-cover copy, visible SCRIPTS/REFERENCES/ASSETS scoring and an office negative.
 - Focused regression returned 117 passed. Full `artifacts/test-reports/p10-section-render-routing.xml` returned 1732 passed plus 37 subtests in 295.08 seconds. Project/privacy audit 581/0 and license audit 65/0.
 - v34e was not delivered. Production remains signed `2f4f612`; gateway configuration, shared data and timers were unchanged. A fresh v34f remains required.
+
+## 2026-09-08 Juejin v34f Manual-Review Evidence
+
+- Linux final-layout tests at `e68e3c3` passed 3/3. v34f reached `review_required` with Pipeline and artifact probes passing and no reported failures. Body length was 1,706 characters and machine quality/platform gates passed.
+- Asset evidence: cover 0.825, section 01 0.7875, section 02 0.8 and section 03 0.775; all four SHA-256 values were unique. Manual inspection accepted the first three semantics but rejected section 03, which showed three people talking in an office and no loading action.
+- Full section-03 caption explicitly said there were no papers on the table. The bag-of-words scorer canonicalized `papers` as a document/archive token and matched `selective document loading sequence` despite no loading anchor. The title and first body line also retained unsupported hot-title language and mechanical repetition.
+- `522e13d` adds exact red/green fixtures for the negated-paper caption and grounded fallback title/hook. Related tests: 135 passed. Full `artifacts/test-reports/p10-v34f-manual-review.xml`: 1732 passed plus 37 subtests in 308.32 seconds. Privacy 581/0; license 65/0.
+- v34f is rejected and was never sent to the real Juejin publisher. Production and timers remain unchanged. A fresh v34g is required.
