@@ -132,7 +132,7 @@ def build_wechat_official_contracts(
             failures.append("source_url_missing")
         elif _is_host(host, SOGOU_HOSTS) or "sogou" in source_label or "搜狗" in source_label:
             failures.append("sogou_source_forbidden")
-        elif normalized_kind == "creator_backend" and not _is_host(host, WECHAT_HOSTS):
+        elif not _is_host(host, WECHAT_HOSTS):
             failures.append("wechat_first_party_url_required")
         if normalized_kind == "creator_backend" and not backend_visible:
             failures.append("backend_visibility_unverified")
