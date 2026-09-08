@@ -82,6 +82,57 @@ def test_hermes_command_uses_active_model_and_retries_hard_timeout_once(monkeypa
     assert all("prompt" not in row for row in attempts)
 
 
+def test_region_error_retries_once_with_configured_us_proxy_without_model_override(monkeypatch, tmp_path):
+    processes = [
+        FakeProcess([(0, "HTTP 403: This model is not available in your country.")]),
+        FakeProcess([(0, '{"title":"T","body":"' + 'safe body ' * 140 + '"}')]),
+    ]
+    calls = []
+
+    def popen(command, **kwargs):
+        calls.append((command, kwargs.get("env")))
+        return processes.pop(0)
+
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", popen)
+    monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")
+    generator = DraftGenerator({
+        "provider": "hermes-cli",
+        "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(tmp_path / "generation_attempts.json"),
+        "clock": lambda: 0,
+        "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    result = generator._hermes("topic", {"platform": "juejin"}, {"language": "zh", "platform_rules": ""})
+
+    assert result["title"] == "T"
+    assert len(calls) == 2
+    assert calls[0][1] is None
+    assert calls[1][1]["HTTPS_PROXY"] == "socks5h://proxy.internal:2080"
+    assert calls[1][1]["ALL_PROXY"] == "socks5h://proxy.internal:2080"
+    assert all("--provider" not in command and "--model" not in command for command, _env in calls)
+    attempts = json.loads((tmp_path / "generation_attempts.json").read_text(encoding="utf-8"))
+    assert attempts[0]["error_class"] == "provider_region_failed"
+    assert "proxy.internal" not in json.dumps(attempts)
+
+
+def test_generic_auth_error_does_not_retry_through_proxy(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")
+    monkeypatch.setattr(
+        "content_platform.generator.subprocess.Popen",
+        lambda command, **kwargs: (calls.append((command, kwargs.get("env"))) or FakeProcess([(0, "HTTP 403: API key rejected")]))
+    )
+    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path), "clock": lambda: 0, "sleep": lambda _: None})
+
+    with pytest.raises(Exception, match="provider_auth_failed"):
+        generator._hermes("topic", {"platform": "juejin"}, {"language": "zh", "platform_rules": ""})
+
+    assert len(calls) == 1
+    assert calls[0][1] is None
+
+
 def test_article_run_contract_retries_once_with_compact_deadline_after_hard_timeout(monkeypatch):
     generator = DraftGenerator({"provider": "hermes-cli"})
     calls = []

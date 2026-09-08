@@ -343,6 +343,8 @@ class DraftGenerator:
             return ""
         code = match.group(1)
         if code in {"401", "403"}:
+            if re.search(r"(?:not available in your country|regionerror|country or region)", text, flags=re.IGNORECASE):
+                return "provider_region_failed"
             return "provider_auth_failed"
         if code == "429":
             return "provider_429"
@@ -956,6 +958,15 @@ class DraftGenerator:
             )
         try:
             return self._hermes_attempt(topic, brief, context, retry=False, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+        except ProviderAuthError as exc:
+            proxy_url = str(os.environ.get("US_PROXY") or "").strip()
+            if str(exc) != "provider_region_failed" or not proxy_url:
+                raise
+            return self._hermes_attempt(
+                topic, brief, context, retry=False, language_instruction=language_instruction,
+                factual_boundary=factual_boundary, body_requirement=body_requirement,
+                style_limit=style_limit, proxy_url=proxy_url,
+            )
         except GenerationTimeoutError:
             if self._generation_slo(brief)["max_attempts"] < 2:
                 raise
@@ -969,7 +980,7 @@ class DraftGenerator:
                 raise
             return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
 
-    def _hermes_attempt(self, topic, brief, context, *, retry, language_instruction, factual_boundary, body_requirement, style_limit):
+    def _hermes_attempt(self, topic, brief, context, *, retry, language_instruction, factual_boundary, body_requirement, style_limit, proxy_url=""):
         platform = str(brief.get("platform") or context.get("platform") or "wechat")
         language = context.get("language") or "zh"
         if retry and platform.casefold() in {"wechat", "weixin", "wechat_official", "juejin", "zhihu"}:
@@ -1034,10 +1045,17 @@ class DraftGenerator:
         started = clock()
         stdout_file = tempfile.TemporaryFile(mode="w+b")
         stderr_file = tempfile.TemporaryFile(mode="w+b")
+        process_options = self._generation_process_group_options()
+        if proxy_url:
+            process_options["env"] = {
+                **os.environ,
+                "HTTPS_PROXY": proxy_url,
+                "ALL_PROXY": proxy_url,
+            }
         try:
             proc = subprocess.Popen(
                 command, stdout=stdout_file, stderr=stderr_file,
-                **self._generation_process_group_options(),
+                **process_options,
             )
         except BaseException:
             stdout_file.close()
