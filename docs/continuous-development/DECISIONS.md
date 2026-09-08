@@ -371,3 +371,4 @@
 - The rebuild uses only primary claims as facts. Platform hot-work titles may select the topic and hook but do not enter factual body copy.
 - Advice is explicitly framed as advice, and the final copy still passes claim, hygiene, structure, GEO, cover and media gates. Insufficient primary claims remain a hard block.
 - This is a safety fallback for low-capability model variance, not the preferred creative path. Its use is recorded in `grounded_technical_rebuild`.
+- Rebuild templates must also pass the same repeated-paragraph/sentence gate. Evidence-boundary language appears once, not as section boilerplate.

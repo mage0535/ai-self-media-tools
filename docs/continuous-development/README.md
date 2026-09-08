@@ -77,4 +77,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin v30 exposed unsupported token counts, client support lists and free promises that escaped claim detection. Commit `c16d943` closes those variants and restores domains from verified source URLs.
 - Juejin v31 proved enumerating claim regexes is insufficient. Commit `9b0a75c` adds technical-anchor coverage so declarative technical assertions must match verified claim anchors.
 - Commit `6e6bb36` adds a verified-primary-claim rebuild for unsafe automated Juejin technical drafts, avoiding both blind model retries and destructive sentence deletion.
+- Juejin v32 exercised that rebuild and exposed repeated boilerplate; `1b3d6a9` consolidates the evidence boundary so rebuilt copy passes hygiene.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
