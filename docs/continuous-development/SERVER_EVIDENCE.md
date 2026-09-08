@@ -648,3 +648,10 @@ Observed read-only on 2026-08-31.
 - `ff66fa3` fixed both. WeChat v4 then recorded WeWrite HTTP 400 and Hermes writer direct plus US-proxy attempts, but the provider returned HTTP 429 after its internal retries. No media or publisher ran.
 - `6b64239` adds one same-route transient retry with bounded delay. Related suite returned 191 passed. Full `artifacts/test-reports/p10-wechat-writer-rate-limit.xml` returned 1752 passed plus 37 subtests in 374.31 seconds. Privacy 586/0; license 65/0.
 - WeChat v5 remains pending. Production stays signed `2f4f612`; timers remain disabled.
+
+## 2026-09-08 WeChat v5 Slop-Gate Evidence
+
+- v5 used the same safe publisher boundary and reached the mode-aware WeChat gate with a 1,861-character Hermes-writer article. Every failed v3 operational dimension was resolved.
+- Only `no_ai_slop_check` failed. Running the server checker against the persisted body found one `假深刻收尾` on line 69: `这就是真正的改进清单`.
+- `f76a3c2` adds an exact post-writer rewrite and test. Related suite returned 175 passed. Full `artifacts/test-reports/p10-wechat-v5-slop-repair.xml` returned 1753 passed plus 37 subtests in 357.19 seconds. Privacy 586/0; license 65/0.
+- v5 was not delivered and generated no media. Production and timers remain unchanged; v6 is required.

@@ -488,3 +488,9 @@
 - Region recovery selects the route; transient recovery does not switch models, providers or routes. A second failure stops the platform.
 - Recapture evidence must travel from task row to generation brief and final packet. Keeping it only in scheduler state cannot activate content-mode gates.
 - Deterministic no-AI-slop repair handles observed wording, then the external checker still validates the final body.
+
+## D68: External Slop Findings Become Exact Rewrite Fixtures
+
+- Do not disable or bypass the external no-AI-slop checker after all structural gates pass.
+- Convert each observed false-profound/binary phrase into a narrow deterministic rewrite with a regression test; leave unrelated prose unchanged.
+- A clean writer status does not imply clean copy. Media remains closed until the final post-writer body passes.
