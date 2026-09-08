@@ -266,6 +266,24 @@ def _invoke_hermes_writer(cfg: dict[str, Any], brief_path: Path, article_path: P
                 env={**os.environ, "HTTPS_PROXY": proxy_url, "ALL_PROXY": proxy_url},
             )
             base["commands"].append({"name": "hermes --cli", "route": "us_proxy", "returncode": completed.returncode})
+            output = (completed.stdout or completed.stderr or "").strip()
+            route = "us_proxy"
+            route_env = {**os.environ, "HTTPS_PROXY": proxy_url, "ALL_PROXY": proxy_url}
+        else:
+            route = "direct"
+            route_env = None
+        if _transient_writer_failure(output):
+            delay = max(0, min(int(cfg.get("hermes_retry_delay_seconds", 15)), 60))
+            cfg.get("sleep", time.sleep)(delay)
+            retry_options = dict(run_options)
+            if route_env is not None:
+                retry_options["env"] = route_env
+            completed = subprocess.run(command, **retry_options)
+            base["commands"].append({
+                "name": "hermes --cli",
+                "route": route + "_retry",
+                "returncode": completed.returncode,
+            })
         article = (completed.stdout or "").strip()
         if completed.returncode == 0 and len(article) > 1000:
             article_path.write_text(article + "\n", encoding="utf-8")
