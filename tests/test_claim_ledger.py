@@ -205,6 +205,9 @@ def test_grounded_technical_article_uses_only_primary_claims_and_passes_claim_ga
     assert validate_generated_text(draft["title"] + "\n" + draft["body"])["passed"] is True
     assert validate_article_packet({"body": draft["body"]})["gates"]["body_length"]["passed"] is True
     assert draft["body"].count("\n## ") >= 4
+    assert "## Agent Skill 目录与 SKILL.md" in draft["body"]
+    assert "## scripts、references 与 assets 资源结构" in draft["body"]
+    assert "## 按需加载正文与其他资源" in draft["body"]
     assert "未经验证的热门标题" not in draft["body"]
     assert "安装命令" not in draft["body"]
 

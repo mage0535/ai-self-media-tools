@@ -156,6 +156,31 @@ def test_modular_playbook_rectangles_ground_workflow_nodes_without_accepting_rob
     assert negative_matches == []
 
 
+def test_directory_and_loading_concepts_use_visible_evidence_only():
+    directory_score, directory_matches = analyzer.score_semantics(
+        ["structured skill directory documents"],
+        "A folder tree shows SKILL.md beside scripts, references, and assets files.",
+        ["folder tree", "files", "documents"],
+    )
+    loading_score, loading_matches = analyzer.score_semantics(
+        ["selective document loading sequence"],
+        "Documents load on demand in a numbered sequence from the main guide to optional resources.",
+        ["on demand", "loading", "documents", "sequence"],
+    )
+    office_score, office_matches = analyzer.score_semantics(
+        ["structured skill directory documents", "selective document loading sequence"],
+        "Two people talk beside a computer in a bright office.",
+        ["people", "computer", "office"],
+    )
+
+    assert directory_score >= analyzer.DEFAULT_THRESHOLD
+    assert directory_matches == ["structured skill directory documents"]
+    assert loading_score >= analyzer.DEFAULT_THRESHOLD
+    assert loading_matches == ["selective document loading sequence"]
+    assert office_score < analyzer.DEFAULT_THRESHOLD
+    assert office_matches == []
+
+
 def test_bookshelf_documents_and_robot_assistant_ground_memory_archive():
     score, matched = analyzer.score_semantics(
         ["organized memory archive"],
