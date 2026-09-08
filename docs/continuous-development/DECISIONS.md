@@ -364,3 +364,10 @@
 - Questions and explicit advice/hypothetical instructions are not asserted external facts. Existing numeric, promotional, attribution and install-command gates still apply to them independently.
 - Operational imperatives such as run, inspect, verify and save remain allowed. Claims that a product, Skill or Agent automatically performs or improves something require evidence.
 - Pattern matching is a deterministic safety layer, not proof that all prose is correct. Fresh real artifacts and final review remain release gates.
+
+## D50: Unsafe Technical Drafts Rebuild From Primary Claims
+
+- When an automated Juejin technical draft contains unsupported technical assertions and at least three verified primary-source claims exist, rebuild the article deterministically instead of deleting isolated sentences or invoking an unbounded model repair.
+- The rebuild uses only primary claims as facts. Platform hot-work titles may select the topic and hook but do not enter factual body copy.
+- Advice is explicitly framed as advice, and the final copy still passes claim, hygiene, structure, GEO, cover and media gates. Insufficient primary claims remain a hard block.
+- This is a safety fallback for low-capability model variance, not the preferred creative path. Its use is recorded in `grounded_technical_rebuild`.

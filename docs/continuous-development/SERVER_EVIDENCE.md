@@ -501,3 +501,12 @@ Observed read-only on 2026-08-31.
 - `9b0a75c` adds deterministic technical-anchor coverage and red/green examples for a grounded directory/SKILL.md paraphrase, explicit advice and unsupported engineering-workflow assertions. Initial related regression exposed imperative-advice false positives; the exemption was narrowed to explicit instruction starters while declarative claims remain checked.
 - Related suite: 154 passed. Full `p10-technical-fact-coverage.xml`: 1725 passed plus 37 subtests in 301.43 seconds. Project/privacy audit 581/0; license audit 65/0.
 - v31 remains rejected and was not sent to the Juejin publisher. Linux/offline re-evaluation is next; production and timers were unchanged.
+
+## 2026-09-08 Grounded Technical Rebuild Evidence
+
+- Linux technical fact/Pipeline subset at `744aaa7` passed 103 tests in 245.26 seconds. Re-evaluating v31 produced eight unsupported technical facts, including its title, workflow/quality assertions, phases, slash commands and repository/license claim.
+- Deterministic sentence deletion yielded an empty title and a 1,509-character body with broken numbering, empty code blocks and unsupported residual claims. It was not accepted.
+- `6e6bb36` adds `build_grounded_technical_article` and a Pipeline branch that rebuilds from verified primary claims, records the trigger/count, recompiles cover direction and reruns claim gates.
+- Red/green tests prove non-primary hot-work text is excluded, the result has four H2 sections and passes claim validation; Pipeline test proves the unsupported generated title/body are replaced.
+- Related suite: 191 passed. Full `p10-grounded-technical-rebuild.xml`: 1727 passed plus 37 subtests in 315.88 seconds. Project/privacy audit 581/0; license audit 65/0.
+- Linux verification and a deterministic recovery package remain pending. Production release and timers were unchanged.
