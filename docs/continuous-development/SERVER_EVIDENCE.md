@@ -639,3 +639,12 @@ Observed read-only on 2026-08-31.
 - `8e36bb7` adds platform and unavailable identity to synthetic fallbacks and fixes the default pack to 12 publishing targets. Tests prove reference observations cannot create new target keys or readiness.
 - Full `artifacts/test-reports/p10-intelligence-reference-integrity.xml` returned 1750 passed plus 37 subtests in 357.97 seconds. Project/privacy audit 586/0; license audit 65/0.
 - A corrected Linux smoke using the official collector report remains pending. Production and timers were not changed.
+
+## 2026-09-08 WeChat v3-v4 And Live Collector Evidence
+
+- Official Linux `TrendCollector.collect_with_report` returned 12 sources: 7 ok, 5 degraded, 0 failed, 135 deduplicated rows. WeWrite aggregate returned 30; CSDN returned eight real URL rows; 36Kr/Reddit/Product Hunt/Dev.to/Medium synthetic fallbacks were correctly degraded.
+- Resulting parameter pack contained exactly 12 publishing targets. WeChat was not ready; eight cross-platform references were ranked with explicit dimensions and all had `target_ready_eligible=false`.
+- WeChat v3 produced a 2,009-character Hermes-writer article but blocked before media. Missing brief-level `research_attempts` caused same-lane/trend and batch gates to miss editorial mode; the external slop checker found one exact binary contrast.
+- `ff66fa3` fixed both. WeChat v4 then recorded WeWrite HTTP 400 and Hermes writer direct plus US-proxy attempts, but the provider returned HTTP 429 after its internal retries. No media or publisher ran.
+- `6b64239` adds one same-route transient retry with bounded delay. Related suite returned 191 passed. Full `artifacts/test-reports/p10-wechat-writer-rate-limit.xml` returned 1752 passed plus 37 subtests in 374.31 seconds. Privacy 586/0; license 65/0.
+- WeChat v5 remains pending. Production stays signed `2f4f612`; timers remain disabled.
