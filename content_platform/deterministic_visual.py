@@ -109,29 +109,32 @@ def _dashboard(draw, width, height, accent):
             _arrow(draw, (width // 2, y + 52), (width // 2, y + int(height * 0.13)), accent, 5)
 
 
-def _tool_tab_overload(draw, width, height, accent):
+def _tool_tab_overload(draw, width, height, accent, language):
     margin = int(width * 0.07)
     gap = int(width * 0.04)
     panel_w = int((width - margin * 2 - gap) / 2)
     top, bottom = int(height * 0.15), int(height * 0.85)
     _panel(draw, (margin, top, margin + panel_w, bottom), outline=accent)
     _panel(draw, (margin + panel_w + gap, top, width - margin, bottom), outline=(232, 95, 66))
-    draw.text((margin + 30, top + 28), "8 TOOL TABS", font=_font(32, bold=True), fill=(238, 245, 252))
+    labels = ["8个工具标签", "任务清单", "待处理", "未完成", "未开始"] if language == "zh" else ["8 TOOL TABS", "TASK LIST", "PENDING", "UNFINISHED", "NOT STARTED"]
+    draw.text((margin + 30, top + 28), labels[0], font=_font(32, bold=True), fill=(238, 245, 252))
     for row in range(4):
         y = top + 105 + row * 78
         draw.rounded_rectangle((margin + 30, y, margin + panel_w - 30, y + 48), radius=12, fill=(8, 18, 31), outline=accent, width=2)
-        draw.text((margin + 50, y + 10), f"TOOL {row * 2 + 1}   TOOL {row * 2 + 2}", font=_font(22), fill=(195, 215, 235))
+        tool = "工具" if language == "zh" else "TOOL"
+        draw.text((margin + 50, y + 10), f"{tool} {row * 2 + 1}   {tool} {row * 2 + 2}", font=_font(22), fill=(195, 215, 235))
     right = margin + panel_w + gap
-    draw.text((right + 30, top + 28), "TASK LIST", font=_font(32, bold=True), fill=(238, 245, 252))
-    for row, label in enumerate(("PENDING", "UNFINISHED", "NOT STARTED")):
+    draw.text((right + 30, top + 28), labels[1], font=_font(32, bold=True), fill=(238, 245, 252))
+    for row, label in enumerate(labels[2:]):
         y = top + 125 + row * 105
         draw.rectangle((right + 35, y, right + 70, y + 35), outline=(232, 95, 66), width=4)
         draw.text((right + 95, y), label, font=_font(25, bold=True), fill=(232, 152, 132))
+    return labels
 
 
-def _goal_input_output(draw, width, height, accent):
+def _goal_input_output(draw, width, height, accent, language):
     margin = int(width * 0.08)
-    labels = (("GOAL", "DEFINE RESULT"), ("INPUT", "CHECK MATERIAL"), ("OUTPUT", "SET ACCEPTANCE"))
+    labels = (("目标", "明确结果"), ("输入", "核对材料"), ("输出", "设定验收")) if language == "zh" else (("GOAL", "DEFINE RESULT"), ("INPUT", "CHECK MATERIAL"), ("OUTPUT", "SET ACCEPTANCE"))
     top = int(height * 0.17)
     card_h = int(height * 0.18)
     for index, (label, detail) in enumerate(labels):
@@ -140,15 +143,16 @@ def _goal_input_output(draw, width, height, accent):
         draw.rounded_rectangle((margin + 28, y + 28, margin + 190, y + card_h - 28), radius=15, fill=accent)
         draw.text((margin + 52, y + 43), label, font=_font(29, bold=True), fill=(5, 15, 28))
         draw.text((margin + 235, y + 44), detail, font=_font(27, bold=True), fill=(231, 239, 248))
+    return [value for pair in labels for value in pair]
 
 
-def _four_panel_boundary(draw, width, height, accent):
+def _four_panel_boundary(draw, width, height, accent, language):
     margin = int(width * 0.07)
     gap = int(width * 0.035)
     top = int(height * 0.14)
     panel_w = int((width - margin * 2 - gap) / 2)
     panel_h = int((height - top - int(height * 0.12) - gap) / 2)
-    labels = (("GOAL", "CLEAR?"), ("INPUT", "READY?"), ("ACCEPT", "TESTABLE?"), ("BLOCKER", "KNOWN?"))
+    labels = (("目标", "明确吗？"), ("输入", "齐全吗？"), ("验收", "可检查吗？"), ("卡点", "明确吗？")) if language == "zh" else (("GOAL", "CLEAR?"), ("INPUT", "READY?"), ("ACCEPT", "TESTABLE?"), ("BLOCKER", "KNOWN?"))
     for index, (label, question) in enumerate(labels):
         row, column = divmod(index, 2)
         x = margin + column * (panel_w + gap)
@@ -157,6 +161,7 @@ def _four_panel_boundary(draw, width, height, accent):
         draw.rectangle((x + 30, y + 32, x + 68, y + 70), outline=accent, width=4)
         draw.text((x + 94, y + 28), label, font=_font(30, bold=True), fill=(238, 245, 252))
         draw.text((x + 94, y + 92), question, font=_font(24, bold=True), fill=accent)
+    return [value for pair in labels for value in pair]
 
 
 def _document_anatomy(draw, width, height, accent):
@@ -263,15 +268,17 @@ def render_editorial_visual(
 
     joined = " ".join(str(item).casefold() for item in concepts)
     semantic_text = " ".join((str(title), str(subtitle), joined)).casefold()
+    language = "zh" if any("\u4e00" <= char <= "\u9fff" for char in f"{title}{subtitle}") else "en"
+    visible_labels = []
     if "multiple software tool tabs and unfinished task list" in semantic_text:
         layout = "tool_tab_overload"
-        _tool_tab_overload(draw, width, height, accent_rgb)
+        visible_labels = _tool_tab_overload(draw, width, height, accent_rgb, language)
     elif "goal input output checklist card" in semantic_text:
         layout = "goal_input_output_card"
-        _goal_input_output(draw, width, height, accent_rgb)
+        visible_labels = _goal_input_output(draw, width, height, accent_rgb, language)
     elif "four-panel task boundary checklist" in semantic_text:
         layout = "four_panel_boundary_check"
-        _four_panel_boundary(draw, width, height, accent_rgb)
+        visible_labels = _four_panel_boundary(draw, width, height, accent_rgb, language)
     elif any(token in semantic_text for token in ("skill.md", "frontmatter", "yaml", "markdown")):
         layout = "document_anatomy"
         _document_anatomy(draw, width, height, accent_rgb)
@@ -309,6 +316,8 @@ def render_editorial_visual(
         "subtitle": str(subtitle),
         "concepts": list(concepts),
         "layout": layout,
+        "language": language,
+        "visible_labels": visible_labels,
         "accent": str(accent),
     }
     prompt_hash = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
@@ -322,6 +331,8 @@ def render_editorial_visual(
         "output_sha256": output_sha,
         "semantic_concepts": list(concepts),
         "layout": layout,
+        "language": language,
+        "visible_labels": visible_labels,
     }
 
 
