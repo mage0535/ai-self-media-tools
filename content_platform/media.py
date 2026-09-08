@@ -1002,7 +1002,11 @@ class MediaBridge:
         structural = False
         for concept in expected:
             if concept == "multiple software tool tabs and unfinished task list":
-                structural = structural or ("tool" in observed and any(token in observed for token in ("task", "checklist")) and any(token in observed for token in ("panel", "box", "rectangle")))
+                structural = structural or (
+                    any(token in observed for token in ("task", "checklist", "任务清单"))
+                    and any(token in observed for token in ("panel", "box", "rectangle"))
+                    and any(token in observed for token in ("eight", "8", "numbered options"))
+                )
             elif concept == "goal input output checklist card":
                 structural = structural or all(token in observed for token in ("goal", "input", "output"))
             elif concept == "four-panel task boundary checklist":
