@@ -139,6 +139,26 @@ def _resource_stack(draw, width, height, accent):
     draw.text((margin, int(height * 0.75)), "LOAD ONLY WHEN NEEDED", font=_font(27, bold=True), fill=accent)
 
 
+def _selective_loading_sequence(draw, width, height, accent):
+    margin = int(width * 0.08)
+    center_y = height // 2
+    main = (margin, int(height * 0.24), int(width * 0.38), int(height * 0.76))
+    _panel(draw, main, fill=(10, 24, 42), outline=accent, radius=28, width=4)
+    draw.text((main[0] + 34, main[1] + 34), "SKILL.md", font=_font(36, bold=True), fill=(238, 245, 252))
+    for row in range(4):
+        y = main[1] + 120 + row * 54
+        draw.rounded_rectangle((main[0] + 36, y, main[2] - 36 - row * 18, y + 16), radius=7, fill=(105, 132, 160))
+    _arrow(draw, (main[2] + 28, center_y), (int(width * 0.57), center_y), accent, 8)
+    draw.text((int(width * 0.405), center_y - 62), "ON DEMAND", font=_font(23, bold=True), fill=accent)
+    labels = ("SCRIPT", "REFERENCE", "ASSET")
+    for index, label in enumerate(labels):
+        y = int(height * 0.18) + index * int(height * 0.23)
+        box = (int(width * 0.59), y, width - margin, y + int(height * 0.16))
+        _panel(draw, box, fill=(8, 20, 35), outline=(80, 113, 146), radius=20, width=3)
+        draw.rounded_rectangle((box[0] + 24, box[1] + 25, box[0] + 68, box[1] + 69), radius=10, fill=accent)
+        draw.text((box[0] + 94, box[1] + 28), label, font=_font(26, bold=True), fill=(226, 237, 248))
+
+
 def _agent_orchestrator(draw, width, height, accent):
     center_x, center_y = width // 2, height // 2
     center = (center_x - 190, center_y - 105, center_x + 190, center_y + 105)
@@ -193,15 +213,18 @@ def render_editorial_visual(
 
     joined = " ".join(str(item).casefold() for item in concepts)
     semantic_text = " ".join((str(title), str(subtitle), joined)).casefold()
-    if any(token in semantic_text for token in (
+    if any(token in semantic_text for token in ("skill.md", "frontmatter", "yaml", "markdown")):
+        layout = "document_anatomy"
+        _document_anatomy(draw, width, height, accent_rgb)
+    elif "selective document loading sequence" in semantic_text:
+        layout = "selective_loading_sequence"
+        _selective_loading_sequence(draw, width, height, accent_rgb)
+    elif any(token in semantic_text for token in (
         "scripts", "references", "assets", "资源目录",
-        "structured skill directory documents", "selective document loading sequence",
+        "structured skill directory documents",
     )):
         layout = "resource_stack"
         _resource_stack(draw, width, height, accent_rgb)
-    elif any(token in semantic_text for token in ("skill.md", "frontmatter", "yaml", "markdown")):
-        layout = "document_anatomy"
-        _document_anatomy(draw, width, height, accent_rgb)
     elif "ai software agent" in joined:
         layout = "ai_agent_orchestrator"
         _agent_orchestrator(draw, width, height, accent_rgb)
