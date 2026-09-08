@@ -427,3 +427,10 @@
 - If and only if Hermes output contains an explicit country/region availability failure, retry the same active model and same prompt once using private `US_PROXY` for `HTTPS_PROXY` and `ALL_PROXY`.
 - Generic authentication failures do not use proxy recovery. Model/provider selectors remain absent unless an independently verified Canary selector was explicitly configured.
 - Hermes CLI may print HTTP failures with exit code zero, so response-content classification is mandatory. Checkpoints record only `provider_region_failed`, never proxy credentials or endpoints.
+
+## D59: Deterministic Media Fallbacks Preserve Section Identity
+
+- Distinct semantic sections must not converge on one deterministic image. Duplicate-SHA rejection remains fail-closed and must not be weakened.
+- Document anatomy, resource categories and selective loading use separate layouts with visibly different structures and labels.
+- Layout precedence considers the final section heading as well as compiled concepts: a SKILL.md heading uses document anatomy even when it also carries a directory concept.
+- Concurrency may decide which duplicate claims a checksum first; correctness cannot depend on completion order. Deterministic inputs must produce distinct outputs before checksum claiming.

@@ -579,6 +579,14 @@ Observed read-only on 2026-08-31.
 
 - Read-only active config reported `default: muse-spark-1.3-contributor`, provider `opencode-go`; no project code hardcodes it. `hermes -z 'Return exactly: HERMES_MODEL_OK' --cli` returned a country HTTP 403 yet exited zero.
 - `hermes-proxy-toggle status` showed the gateway process using the US SOCKS route. The standalone SSH environment had no proxy variables. Repeating the minimal CLI probe with explicit HTTPS/ALL proxy returned exactly `HERMES_MODEL_OK`.
-- The actual overnight service loads `/root/.ai-self-media-tools/secrets/proxy.env`; only key names `CN_PROXY` and `US_PROXY` were inspected, not values. Therefore code can perform direct-first fallback without making all platform traffic proxied.
+- The actual overnight service loads its private `proxy.env`; only key names `CN_PROXY` and `US_PROXY` were inspected, not values. Therefore code can perform direct-first fallback without making all platform traffic proxied.
 - `4403eb8` adds RegionError classification and one proxy-scoped retry. Tests prove the second process receives proxy variables, neither command contains model/provider overrides, attempt evidence records `provider_region_failed` without the proxy value, and generic key rejection is not retried.
 - Focused generator/batch tests returned 88 passed. Full `artifacts/test-reports/p10-hermes-region-fallback.xml` returned 1734 passed plus 37 subtests in 313.69 seconds. Project/privacy audit 581/0; license audit 65/0. Linux real DraftGenerator validation remains pending.
+
+## 2026-09-08 Juejin v35 Real-Model Evidence
+
+- Linux proxy tests at `4ae1952` passed 2/2. A complete real `DraftGenerator.generate` probe, with HTTPS/ALL proxy unset and only private `US_PROXY` exported, returned a normalized 227-character result. Attempts were exactly `provider_region_failed` then `success`; prompt hash remained unchanged.
+- v35 then used the active `opencode-go/muse-spark-1.3-contributor` via the same direct-first recovery. The first regional failure took about 13 seconds; the proxied 8,035-character generation succeeded in about 82 seconds with regular 15-second heartbeats.
+- Generated unsupported numeric and technical mechanism claims triggered the five-primary-claim deterministic rebuild. Media failed because section 02 claimed deterministic resource-stack SHA first; section 01 and section 03 independently reached the same SHA on their third attempts and were rejected as duplicates.
+- `0f104b6` adds a separate selective-loading layout and correct document-vs-resource precedence. Related tests: 36 passed. Full `artifacts/test-reports/p10-distinct-fallback-layouts.xml`: 1735 passed plus 37 subtests in 297.15 seconds. Project/privacy audit 581/0; license audit 65/0.
+- v35 was not delivered. Production remains signed `2f4f612`, timers remain disabled and a fresh real-model v35b is required.
