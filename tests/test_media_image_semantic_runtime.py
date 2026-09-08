@@ -316,3 +316,9 @@ def test_deterministic_visual_semantics_require_vision_structure_and_hash_bound_
         "labels": ["two rectangles", "eight lines", "three lines", "outlined boxes"],
     }
     assert MediaBridge._derive_deterministic_semantic_evidence(geometry_only, image, renderer)["passed"] is True
+    counted_sections = {
+        **parent,
+        "caption": "The graphic is divided into two sections. The left section has a list of eight items in rectangular boxes. The right section has a list of three items.",
+        "labels": ["two sections", "eight items", "rectangular boxes", "three items"],
+    }
+    assert MediaBridge._derive_deterministic_semantic_evidence(counted_sections, image, renderer)["passed"] is True

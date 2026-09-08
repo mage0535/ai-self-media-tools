@@ -1005,7 +1005,7 @@ class MediaBridge:
                 structural = structural or (
                     any(token in observed for token in ("panel", "box", "rectangle"))
                     and any(token in observed for token in ("eight", "8", "numbered options"))
-                    and any(token in observed for token in ("task", "checklist", "任务清单", "three lines", "three checkboxes"))
+                    and any(token in observed for token in ("task", "checklist", "任务清单", "three items", "three lines", "three checkboxes"))
                 )
             elif concept == "goal input output checklist card":
                 structural = structural or all(token in observed for token in ("goal", "input", "output"))
