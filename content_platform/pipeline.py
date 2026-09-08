@@ -49,7 +49,7 @@ from .review import ReviewTokens
 from .risk import RiskFilter, redact_secrets
 from .growth_recipe import validate_growth_recipe
 from .seo import geo_check
-from .wechat_toolchain import prepare_wechat_professional_draft, requires_wechat_toolchain
+from .wechat_toolchain import prepare_wechat_professional_draft, requires_wechat_toolchain, successful_wechat_writer
 from .workflow_runtime import (
     WorkflowBlocked,
     WorkflowStepRunner,
@@ -380,13 +380,16 @@ class Pipeline:
                         depends_on=["generate_content"],
                         require_output=True,
                     )
-                    wewrite_status = ((draft.get("draft_meta") or {}).get("tool_invocations") or {}).get("wewrite", {}).get("status")
-                    if wewrite_status != "used":
+                    writer_gate = successful_wechat_writer(
+                        ((draft.get("draft_meta") or {}).get("tool_invocations") or {})
+                    )
+                    draft.setdefault("draft_meta", {})["wechat_writer_gate"] = writer_gate
+                    if not writer_gate["passed"]:
                         runner.block(
                             "prepare_wechat_professional_toolchain",
                             "wechat_toolchain_unavailable",
-                            "WeChat production workflow requires successful WeWrite llm-write evidence",
-                            ((draft.get("draft_meta") or {}).get("tool_invocations") or {}).get("wewrite", {}),
+                            "WeChat production workflow requires successful WeWrite or explicit Hermes writer evidence",
+                            (draft.get("draft_meta") or {}).get("tool_invocations") or {},
                             depends_on=["generate_content"],
                         )
                 self._validate_draft_structure(draft)
