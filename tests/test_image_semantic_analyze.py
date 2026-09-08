@@ -212,8 +212,8 @@ def test_task_boundary_visuals_require_their_observable_anchors():
     )
     boxes_score, boxes_matches = analyzer.score_semantics(
         ["four-panel task boundary checklist"],
-        "A flowchart has four boxes arranged in two rows of two. Each box contains a question and a checkbox.",
-        ["four boxes", "two rows of two", "checklist"],
+        "A flowchart has four boxes arranged in two rows. The boxes are labelled GOAL, INPUT, ACCEPT, and BLOCKER.",
+        ["four boxes", "goal", "input", "accept", "blocker"],
     )
 
     assert office_score < analyzer.DEFAULT_THRESHOLD
