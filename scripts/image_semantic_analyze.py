@@ -28,6 +28,11 @@ DEFAULT_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 DEFAULT_THRESHOLD = 0.6
 ANALYZER_NAME = "cloudflare_workers_ai"
 
+_REQUIRED_CONCEPT_ANCHORS = {
+    "structured skill directory documents": {"directory"},
+    "selective document loading sequence": {"loading"},
+}
+
 
 class AnalyzerError(RuntimeError):
     """Raised when the configured analyzer cannot return trustworthy output."""
@@ -105,7 +110,9 @@ def score_semantics(expected_concepts: Sequence[str], caption: str, labels: Sequ
         overlap = concept_tokens & observed_tokens
         coverage = len(overlap) / len(concept_tokens)
         coverages.append(coverage)
-        if coverage >= 0.25:
+        required_anchors = _REQUIRED_CONCEPT_ANCHORS.get(_normalized_text(concept), set())
+        anchors_present = not required_anchors or required_anchors.issubset(observed_tokens)
+        if coverage >= 0.25 and anchors_present:
             matched_concepts.append(concept)
     if not coverages:
         return 0.0, []
