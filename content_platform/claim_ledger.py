@@ -302,3 +302,46 @@ def append_verified_sources(text: str, ledger: list[dict[str, Any]] | None) -> s
     if not rows:
         return value
     return value + "\n\n## 参考来源\n\n" + "\n".join(rows)
+
+
+def build_grounded_technical_article(topic: str, ledger: list[dict[str, Any]] | None) -> dict[str, str]:
+    """Build a conservative long-form fallback from verified primary claims."""
+    claims = [
+        str(row.get("claim") or "").strip()
+        for row in ledger or []
+        if isinstance(row, dict)
+        and row.get("verified") is True
+        and str(row.get("source_type") or "") == "verified_primary_source"
+        and str(row.get("claim") or "").strip()
+        and str(row.get("source_url") or "").startswith(("https://", "http://"))
+    ]
+    claims = list(dict.fromkeys(claims))
+    if len(claims) < 3:
+        raise ValueError("grounded technical article requires at least three primary claims")
+    groups = [claims[:2], claims[2:3], claims[3:]]
+    sections = (
+        ("先确认核心定义", groups[0]),
+        ("再核对文件结构", groups[1]),
+        ("理解按需加载", groups[2]),
+    )
+    blocks = [
+        "想弄清这个主题，先别从未经核对的命令、案例或效果承诺开始。",
+        "下面只使用已经绑定来源的事实，再给出明确标注的操作建议，便于读者自行核对。",
+    ]
+    for heading, facts in sections:
+        if not facts:
+            continue
+        blocks.append(f"## {heading}")
+        blocks.extend(facts)
+        blocks.append("建议先核对这部分事实，再决定它是否适合当前任务；不要把未验证的实现细节补进结论。")
+    blocks.extend([
+        "## 用检查清单落地",
+        "建议按下面的顺序处理自己的任务：",
+        "- 先写清楚要解决的问题、输入和预期输出。",
+        "- 再对照已验证资料，区分固定规范与个人建议。",
+        "- 然后只保留当前任务真正需要的文件、脚本或参考资料。",
+        "- 最后检查每条事实是否能回到公开来源，无法核对的内容先删除或标为待验证。",
+        "这套做法不会替你证明某个工具一定有效，但可以把事实、建议和待验证内容分开。",
+        "你最想先整理哪一类重复任务？可以从一个边界清楚的小任务开始。",
+    ])
+    return {"title": str(topic or "技术主题入门").strip(), "body": "\n\n".join(blocks)}

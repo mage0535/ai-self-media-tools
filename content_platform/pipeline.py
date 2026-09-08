@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .compliance import ComplianceChecker
-from .claim_ledger import append_verified_sources, compile_verified_claim_ledger, restore_verified_domains, sanitize_unsupported_claims, validate_claims
+from .claim_ledger import append_verified_sources, build_grounded_technical_article, compile_verified_claim_ledger, restore_verified_domains, sanitize_unsupported_claims, validate_claims
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic, normalize_generated_markdown, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
@@ -469,6 +469,32 @@ class Pipeline:
                     or (job.get("brief") or {}).get("automated_workflow") is True
                     or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
                 )
+                if (
+                    strict_claims
+                    and "unsourced_technical_fact_claim" in (claim_gate.get("failures") or [])
+                    and "juejin" in {str(item).casefold() for item in job.get("platforms") or []}
+                ):
+                    try:
+                        grounded = build_grounded_technical_article(job.get("topic") or draft.get("title") or "", claim_ledger)
+                    except ValueError:
+                        grounded = None
+                    if grounded:
+                        draft["title"] = grounded["title"]
+                        draft["body"] = grounded["body"]
+                        draft["draft_meta"]["grounded_technical_rebuild"] = {
+                            "version": "verified_primary_claims_v1",
+                            "trigger_failures": list(claim_gate.get("failures") or []),
+                            "primary_claim_count": len([
+                                row for row in claim_ledger
+                                if isinstance(row, dict) and row.get("source_type") == "verified_primary_source"
+                            ]),
+                        }
+                        draft["draft_meta"]["cover_design"] = self.generator._default_cover_design(
+                            job.get("topic") or draft["title"], draft, brief, {**draft["draft_meta"], "cover_design": {}}
+                        )
+                        text = draft["title"] + "\n" + draft["body"]
+                        claim_gate = validate_claims(text, claim_ledger)
+                        draft["draft_meta"]["claim_gate"] = claim_gate
                 if not claim_gate.get("passed") and strict_claims:
                     cleaned_body = normalize_generated_markdown(
                         sanitize_unsupported_claims(draft["body"], claim_gate.get("findings"))
