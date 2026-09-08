@@ -60,6 +60,22 @@ EXTERNAL_ATTRIBUTION_ACTION = re.compile(
     r"integrat(?:e|ed|ion)|support(?:s|ed)?|compatible|open[- ]source)",
     re.I,
 )
+TECHNICAL_ANCHORS = {
+    "agent_skill": re.compile(r"Agent\s+Skills?|\bSkills?\b", re.I),
+    "skill_md": re.compile(r"SKILL\.md", re.I),
+    "directory": re.compile(r"目录|文件夹|directory", re.I),
+    "frontmatter": re.compile(r"frontmatter|YAML\s+元数据", re.I),
+    "resources": re.compile(r"scripts?|references?|assets?|资源目录", re.I),
+    "loading": re.compile(r"加载|读取|load(?:ing|ed)?|read", re.I),
+    "routing": re.compile(r"路由|匹配|触发|判断.*相关|route|match|trigger", re.I),
+    "workflow": re.compile(r"工作流|流程|workflow|playbook", re.I),
+    "execution": re.compile(r"执行|调用|execute|invoke", re.I),
+    "quality": re.compile(r"质量门禁|输出质量|最佳实践|quality gate|best practice", re.I),
+    "command": re.compile(r"/(?:plan|build|test|review|webperf)\b|命令", re.I),
+}
+ADVICE_OR_HYPOTHETICAL = re.compile(
+    r"^(?:#{1,6}\s*)?(?:建议|可以|可先|不妨|如果|假设|例如|比如|先|再|最后|以下|从|打开|运行|执行|检查|核对|确认|保存|复查|完成|使用|调用|写|把)"
+)
 
 
 def _has_external_attribution(sentence: str) -> bool:
@@ -103,6 +119,22 @@ def _covered(sentence: str, ledger: list[dict[str, Any]], *, first_person: bool)
     for row in ledger:
         claim = re.sub(r"\s+", "", str(row.get("claim") or "")).casefold()
         if claim and (claim in normalized or normalized in claim) and _valid_evidence(row, first_person=first_person):
+            return True
+    return False
+
+
+def _technical_anchors(text: str) -> set[str]:
+    return {name for name, pattern in TECHNICAL_ANCHORS.items() if pattern.search(str(text or ""))}
+
+
+def _covered_technical_fact(sentence: str, ledger: list[dict[str, Any]]) -> bool:
+    anchors = _technical_anchors(sentence)
+    for row in ledger:
+        if not _valid_evidence(row, first_person=False):
+            continue
+        claim_anchors = _technical_anchors(str(row.get("claim") or ""))
+        overlap = anchors.intersection(claim_anchors)
+        if len(overlap) >= 2 and len(overlap) / max(1, len(anchors)) >= 0.5:
             return True
     return False
 
@@ -160,6 +192,18 @@ def validate_claims(text: str, ledger: list[dict[str, Any]] | None) -> dict[str,
             findings.append({"type": "install_command", "text": sentence, "covered": covered})
             if not covered:
                 failures.append("unsourced_install_command_claim")
+        anchors = _technical_anchors(sentence)
+        technical_assertion = (
+            len(anchors) >= 2
+            and not sentence.lstrip().startswith(("- [", "http://", "https://"))
+            and not sentence.rstrip().endswith(("?", "？"))
+            and not ADVICE_OR_HYPOTHETICAL.search(sentence.strip())
+        )
+        if technical_assertion:
+            covered = _covered_technical_fact(sentence, ledger)
+            findings.append({"type": "technical_fact", "text": sentence, "covered": covered, "anchors": sorted(anchors)})
+            if not covered:
+                failures.append("unsourced_technical_fact_claim")
     return {
         "passed": not failures,
         "failures": sorted(set(failures)),
