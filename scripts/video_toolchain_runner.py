@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1013,12 +1014,24 @@ def _analyze_background_semantics(path: Path, expected: list[str], platform: str
 def _verified_semantic_contract(evidence: dict, path: Path) -> bool:
     if not isinstance(evidence, dict) or evidence.get("passed") is not True:
         return False
-    return (
+    artifact_verified = (
         evidence.get("version") == "image_semantic_evidence_v1"
         and evidence.get("score_source") == "deterministic_caption_label_recall"
         and evidence.get("evidence_level") == "artifact_verified"
         and str(evidence.get("image_sha256") or "") == hashlib.sha256(path.read_bytes()).hexdigest()
     )
+    source_host = (urllib.parse.urlparse(str(evidence.get("source_url") or "")).hostname or "").casefold()
+    source_verified = (
+        evidence.get("version") == "image_semantic_evidence_v1"
+        and evidence.get("analyzer") == "pexels_alt_metadata"
+        and evidence.get("provider") == "pexels"
+        and evidence.get("score_source") == "provider_caption_label_recall"
+        and evidence.get("evidence_level") == "source_verified"
+        and bool(str(evidence.get("asset_id") or "").strip())
+        and source_host in {"pexels.com", "www.pexels.com"}
+        and str(evidence.get("image_sha256") or "") == hashlib.sha256(path.read_bytes()).hexdigest()
+    )
+    return bool(evidence.get("passed") is True and (artifact_verified or source_verified))
 
 
 def _verify_materialized_semantics(

@@ -14,6 +14,7 @@ import hashlib, json, os, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+_VISION_CIRCUIT_REASON = ""
 
 # Pexels key 多源读取
 def _pexels_key() -> str:
@@ -123,6 +124,7 @@ def _download_pexels(
             return {
                 "content": content,
                 "source_url": str(photo.get("url") or ""),
+                "alt": str(photo.get("alt") or ""),
                 "artist": str(photo.get("photographer") or ""),
                 "artist_url": str(photo.get("photographer_url") or ""),
                 "asset_id": asset_id,
@@ -185,7 +187,7 @@ def auto_fetch_backgrounds(
             i = len(base_existing) + len(assignments) + 1
             fp = bg_dir / f"bg_{i:02d}.jpg"
             fp.write_bytes(bytes(content))
-            semantic = _semantic_evidence(fp, [q], platform) if semantic_required else {}
+            semantic = _semantic_evidence(fp, [q], platform, source=photo) if semantic_required else {}
             if semantic_required and not semantic.get("passed"):
                 attempt_evidence.append({"provider": "pexels", "query": q, "status": "semantic_rejected"})
                 fp.unlink(missing_ok=True)
@@ -272,21 +274,74 @@ def auto_fetch_backgrounds(
     return assignments
 
 
-def _semantic_evidence(path: Path, expected: list[str], platform: str) -> dict:
+def _semantic_evidence(path: Path, expected: list[str], platform: str, source: dict | None = None) -> dict:
+    global _VISION_CIRCUIT_REASON
     try:
         from scripts.image_semantic_analyze import analyze_image
     except ImportError:
         from image_semantic_analyze import analyze_image
-    try:
-        return analyze_image(path, [item for item in expected if str(item).strip()], role="video_scene", platform=platform)
-    except Exception as exc:
-        return {
+    result = None
+    if not _VISION_CIRCUIT_REASON:
+        try:
+            result = analyze_image(path, [item for item in expected if str(item).strip()], role="video_scene", platform=platform)
+        except Exception as exc:
+            result = {
+                "version": "image_semantic_evidence_v1",
+                "passed": False,
+                "failure": "semantic_analyzer_failed",
+                "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                "semantic_match_score": 0.0,
+            }
+        error = str(result.get("error") or "").casefold()
+        if "http 429" in error or "daily free allocation" in error:
+            _VISION_CIRCUIT_REASON = "provider_quota_exhausted"
+    if isinstance(result, dict) and result.get("passed") is True:
+        return result
+    unavailable = not isinstance(result, dict) or result.get("failure") in {"semantic_analyzer_failed", "semantic_analyzer_unavailable"}
+    if unavailable and isinstance(source, dict):
+        fallback = _source_metadata_semantic_evidence(path, expected, source)
+        if fallback.get("passed") is True:
+            fallback["vision_fallback_reason"] = _VISION_CIRCUIT_REASON or str((result or {}).get("failure") or "unavailable")
+            return fallback
+    return result or {
             "version": "image_semantic_evidence_v1",
             "passed": False,
             "failure": "semantic_analyzer_failed",
-            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+            "error": _VISION_CIRCUIT_REASON or "semantic analyzer unavailable",
             "semantic_match_score": 0.0,
         }
+
+
+def _source_metadata_semantic_evidence(path: Path, expected: list[str], source: dict) -> dict:
+    """Build truthful stock-source evidence from Pexels' asset metadata."""
+    from scripts.image_semantic_analyze import score_semantics
+
+    caption = str(source.get("alt") or "").strip()
+    source_url = str(source.get("source_url") or "").strip()
+    asset_id = str(source.get("asset_id") or "").strip()
+    host = (urllib.parse.urlparse(source_url).hostname or "").casefold()
+    if not caption or not asset_id or host not in {"pexels.com", "www.pexels.com"}:
+        return {"version": "image_semantic_evidence_v1", "passed": False, "failure": "source_metadata_incomplete", "semantic_match_score": 0.0}
+    labels = list(dict.fromkeys(__import__("re").findall(r"[a-z0-9]+", caption.casefold())))[:32]
+    score, matched = score_semantics(expected, caption, labels)
+    threshold = 0.6
+    return {
+        "version": "image_semantic_evidence_v1",
+        "analyzer": "pexels_alt_metadata",
+        "provider": "pexels",
+        "caption": caption,
+        "labels": labels,
+        "expected_concepts": list(expected),
+        "matched_concepts": matched,
+        "semantic_match_score": score,
+        "threshold": threshold,
+        "passed": score >= threshold,
+        "image_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+        "score_source": "provider_caption_label_recall",
+        "evidence_level": "source_verified",
+        "source_url": source_url,
+        "asset_id": asset_id,
+    }
 
 
 def _ai_prompt(query: str, platform: str = "") -> str:

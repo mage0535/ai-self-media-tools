@@ -82,6 +82,37 @@ def test_video_assets_reject_visible_unrequested_commercial_brand(tmp_path, monk
     assert rejected[0]["brand_conflicts"]
 
 
+def test_video_assets_accept_hash_bound_pexels_source_metadata(tmp_path, monkeypatch):
+    image = _image(tmp_path / "bg.png")
+    digest = hashlib.sha256(image.read_bytes()).hexdigest()
+    source_evidence = {
+        "version": "image_semantic_evidence_v1",
+        "analyzer": "pexels_alt_metadata",
+        "provider": "pexels",
+        "caption": "Person working with multiple computer screens.",
+        "labels": ["person", "multiple", "computer", "screens"],
+        "expected_concepts": ["overwhelmed creator multiple computer screens"],
+        "matched_concepts": ["overwhelmed creator multiple computer screens"],
+        "semantic_match_score": 0.82,
+        "threshold": 0.6,
+        "passed": True,
+        "image_sha256": digest,
+        "score_source": "provider_caption_label_recall",
+        "evidence_level": "source_verified",
+        "source_url": "https://www.pexels.com/photo/example-1/",
+        "asset_id": "1",
+    }
+    row = {"path": str(image), "semantic_evidence": source_evidence, "semantic_match_score": 0.82}
+    monkeypatch.setattr(runner, "_analyze_background_semantics", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not run")))
+
+    passed, rejected = runner._verify_materialized_semantics(
+        [row], title="AI workflow", script_body="reduce tool switching", platform="kuaishou"
+    )
+
+    assert len(passed) == 1
+    assert rejected == []
+
+
 def test_video_provenance_json_is_written_atomically(tmp_path):
     target = tmp_path / "asset_provenance.json"
     runner._write_json_atomic(target, {"version": "v1", "assets": [{"id": 1}]})

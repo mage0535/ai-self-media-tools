@@ -70,3 +70,22 @@ def test_asset_gate_registers_unique_assets_only_after_pass(tmp_path: Path) -> N
     result = validate_asset_set([_record(first), _record(second)], "tiktok", "work-1", ledger, register=True)
     assert result["passed"] is True
     assert len(ledger.uses()) == 2
+
+
+def test_asset_gate_accepts_hash_bound_pexels_source_metadata(tmp_path: Path) -> None:
+    asset = _image(tmp_path / "pexels.png", (30, 60, 90))
+    record = _record(asset, score=0.82)
+    record["source_url"] = "https://www.pexels.com/photo/example-123/"
+    record["license"] = "Pexels Content License"
+    record["semantic_evidence"].update(
+        analyzer="pexels_alt_metadata",
+        provider="pexels",
+        score_source="provider_caption_label_recall",
+        evidence_level="source_verified",
+        source_url=record["source_url"],
+        asset_id="123",
+    )
+
+    result = validate_asset_set([record], "kuaishou", "work-1", AssetLedger(tmp_path / "ledger.db"))
+
+    assert result["passed"] is True
