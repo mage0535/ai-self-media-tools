@@ -1708,7 +1708,7 @@ def main() -> int:
                         if mp4:
                             return {"name": name, "renderer": "still-motion", "fallback": True, "reused": False}
                     return None
-                motion_recovery = ensure_cinematic_shot_motion(Path(mp4))
+                motion_recovery = ensure_cinematic_shot_motion(target)
                 if not motion_recovery["passed"]:
                     return None
                 return {"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False, "motion_recovery": motion_recovery}
