@@ -298,8 +298,12 @@ def _semantic_evidence(path: Path, expected: list[str], platform: str, source: d
                 "semantic_match_score": 0.0,
             }
         error = str(result.get("error") or "").casefold()
-        if "http 429" in error or "daily free allocation" in error:
-            _VISION_CIRCUIT_REASON = "provider_quota_exhausted"
+        if result.get("failure") in {"semantic_analyzer_failed", "semantic_analyzer_unavailable"}:
+            _VISION_CIRCUIT_REASON = (
+                "provider_quota_exhausted"
+                if "http 429" in error or "daily free allocation" in error
+                else "semantic_analyzer_unavailable"
+            )
     if isinstance(result, dict) and result.get("passed") is True:
         return result
     unavailable = not isinstance(result, dict) or result.get("failure") in {"semantic_analyzer_failed", "semantic_analyzer_unavailable"}

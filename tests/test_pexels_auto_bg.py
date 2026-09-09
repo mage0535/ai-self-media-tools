@@ -216,6 +216,29 @@ def test_vision_quota_opens_circuit_and_reuses_pexels_source_evidence(tmp_path):
         pexels._VISION_CIRCUIT_REASON = ""
 
 
+def test_vision_transport_failure_opens_task_local_circuit(tmp_path):
+    import scripts.pexels_auto_bg as pexels
+
+    image = tmp_path / "asset.jpg"
+    image.write_bytes(b"pexels-image")
+    source = {
+        "alt": "Person working with multiple computer screens.",
+        "source_url": "https://www.pexels.com/photo/example-1/",
+        "asset_id": "1",
+    }
+    pexels._VISION_CIRCUIT_REASON = ""
+    try:
+        with patch("scripts.image_semantic_analyze.analyze_image", side_effect=RuntimeError("network timeout")) as analyze:
+            first = pexels._semantic_evidence(image, ["multiple computer screens"], "kuaishou", source=source)
+            second = pexels._semantic_evidence(image, ["multiple computer screens"], "kuaishou", source=source)
+        assert first["passed"] is True
+        assert second["passed"] is True
+        assert first["vision_fallback_reason"] == "semantic_analyzer_unavailable"
+        assert analyze.call_count == 1
+    finally:
+        pexels._VISION_CIRCUIT_REASON = ""
+
+
 def test_ai_fallback_continues_after_one_provider_failure(tmp_path: Path):
     from scripts.pexels_auto_bg import auto_fetch_backgrounds
 
