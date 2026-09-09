@@ -171,18 +171,26 @@ def collect_kuaishou_public_hot_rank(output_dir: str | Path, *, timeout: int = 3
     html_path = output / "brilliant.html"
     captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     request = urllib.request.Request(source_url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read()
-        html_path.write_bytes(body)
-    except Exception as exc:
-        return {}, {"source": "kuaishou:official_public_hot_rank", "status": "failed", "count": 0, "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+    body = b""
+    last_error = None
+    attempts = 0
+    for attempts in range(1, 3):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read()
+            break
+        except Exception as exc:
+            last_error = exc
+    if not body:
+        return {}, {"source": "kuaishou:official_public_hot_rank", "status": "failed", "count": 0, "attempts": attempts, "error": f"{type(last_error).__name__}: {str(last_error)[:180]}"}
+    html_path.write_bytes(body)
     snapshot_sha = hashlib.sha256(body).hexdigest()
     parsed = parse_kuaishou_public_hot_rank(body.decode("utf-8", errors="ignore"), captured_at=captured_at, source_url=source_url, snapshot_sha256=snapshot_sha)
     status = {
         "source": "kuaishou:official_public_hot_rank",
         "status": "ok" if parsed["passed"] else "contract_failed",
         "count": len((parsed.get("matrix_row") or {}).get("signals") or []),
+        "attempts": attempts,
         "captured_at": captured_at,
         "final_url": source_url,
         "html_path": str(html_path),

@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from content_platform.kuaishou_official_signals import creator_page_requires_login, parse_kuaishou_creator_text, parse_kuaishou_public_hot_rank, upsert_official_signal_matrix
+from content_platform.kuaishou_official_signals import collect_kuaishou_public_hot_rank, creator_page_requires_login, parse_kuaishou_creator_text, parse_kuaishou_public_hot_rank, upsert_official_signal_matrix
 
 
 def test_parse_kuaishou_creator_text_extracts_ranked_inspiration_and_activity():
@@ -75,3 +75,33 @@ def test_parse_kuaishou_public_hot_rank_keeps_official_reference_separate_from_n
     assert row["signal_details"][0]["photo_ids"] == ["photo-1", "photo-2"]
     assert row["evidence_type"] == "official_public_hot_rank"
     assert row["native_verified"] is False
+
+
+def test_kuaishou_public_hot_rank_retries_one_transient_network_failure(tmp_path, monkeypatch):
+    html = '"VisionHotRankItem:AI":{"rank":1,"id":"AI","name":"AI","hotValue":"10万","photoIds":{"type":"json","json":["p1"]},"__typename":"VisionHotRankItem"}'.encode("utf-8")
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return html
+
+    def urlopen(_request, timeout):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise OSError("handshake timeout")
+        return Response()
+
+    monkeypatch.setattr("content_platform.kuaishou_official_signals.urllib.request.urlopen", urlopen)
+
+    row, status = collect_kuaishou_public_hot_rank(tmp_path, timeout=7)
+
+    assert row["signals"] == ["AI"]
+    assert status["status"] == "ok"
+    assert status["attempts"] == 2
+    assert calls == [7, 7]
