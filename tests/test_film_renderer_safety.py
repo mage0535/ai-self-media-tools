@@ -43,6 +43,16 @@ def test_scene_static_ratio_uses_sustained_motion_not_strong_activity():
     assert film_renderer.scene_static_ratio(motion) == 0.45
 
 
+def test_cinematic_finalize_filter_keeps_continuous_camera_motion():
+    value = film_renderer.cinematic_finalize_filter()
+
+    assert "pzoom" in value
+    assert "+0.003" in value
+    assert "\\," in value
+    assert "1.18" in value
+    assert "fps=25" in value
+
+
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
     assert film_renderer.RENDERER_VERSION == "cinematic-v10"
