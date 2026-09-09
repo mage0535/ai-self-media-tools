@@ -1719,6 +1719,16 @@ class MediaBridge:
     @staticmethod
     def _existing_image_paths(job, output_dir):
         paths = []
+        provenance_path = Path(output_dir) / "asset_provenance.json"
+        if provenance_path.is_file():
+            try:
+                provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                provenance = {}
+            for item in provenance.get("assets") or []:
+                path = Path(str(item.get("path") or "")) if isinstance(item, dict) else Path()
+                if path.is_file():
+                    paths.append(str(path))
         for item in job.get("artifacts") or []:
             if item.get("kind") == "image" and Path(item.get("path", "")).is_file():
                 paths.append(str(Path(item["path"])))
