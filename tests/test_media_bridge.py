@@ -117,6 +117,24 @@ def test_video_visual_assets_never_cycle_missing_images(tmp_path):
     assert all(item["reused"] is False for item in packet["assignments"])
 
 
+def test_video_asset_preparation_defers_failed_generic_images_to_runner_recovery(tmp_path, monkeypatch):
+    bridge = MediaBridge({"image": {"enabled": True}, "video": {"visual_image_count": 8}}, tmp_path)
+    output = tmp_path / "output"
+    monkeypatch.setattr(bridge, "_generate_image", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("provider quota secret-detail")))
+
+    packet = bridge._prepare_video_visual_assets(
+        {"id": "job-1", "platforms": ["kuaishou"], "artifacts": []},
+        output,
+        {"selected_pipeline": "knowledge_card_video"},
+    )
+
+    assert packet == {}
+    evidence = json.loads((output / "video_asset_preparation.json").read_text(encoding="utf-8"))
+    assert evidence["status"] == "runner_recovery_required"
+    assert evidence["error_type"] == "RuntimeError"
+    assert "secret-detail" not in json.dumps(evidence)
+
+
 def test_xiaohongshu_knowledge_image_recovers_failed_quality_candidates(tmp_path, monkeypatch):
     script = tmp_path / "image_gen.py"
     script.write_text("# fixture", encoding="utf-8")
