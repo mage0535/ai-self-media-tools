@@ -394,3 +394,38 @@ def test_wechat_strategy_evergreen_does_not_bypass_missing_recapture_adapter():
 
     assert result["tasks"][0]["state"] == "blocked"
     assert result["tasks"][0].get("selection_mode") is None
+
+
+def test_kuaishou_compiles_strategy_evergreen_only_after_bounded_recapture():
+    result = build_due_tasks(
+        [{"platform": "kuaishou", "stage": "video"}],
+        items=[], source_report=[], rank_for_platform=lambda *_: [],
+        requery_for_platform=lambda *_: [], max_research_rounds=3,
+        growth_strategy_status={"kuaishou": {"status": "ok", "key": "growth_strategy:kuaishou:latest"}},
+        reserved_topic_fingerprints=set(), strict_trend_evidence=True, weekday=1,
+    )
+
+    task = result["tasks"][0]
+    assert task["state"] == "ready_for_plan"
+    assert task["selection_mode"] == "editorial_calendar"
+    assert task["research_attempts"] == [
+        {"round": 1, "candidate_count": 0},
+        {"round": 2, "candidate_count": 0},
+        {"round": 3, "candidate_count": 0},
+    ]
+    assert task["brief"]["editorial_evidence"]["strategy_source"] == "growth_strategy:kuaishou:latest"
+    assert task["brief"].get("associated_hotspot") is None
+    assert task["trend_evidence_gate"] == {"mode": "editorial_calendar", "passed": True}
+
+
+def test_kuaishou_strategy_evergreen_does_not_bypass_missing_recapture_adapter():
+    result = build_due_tasks(
+        [{"platform": "kuaishou", "stage": "video"}],
+        items=[], source_report=[], rank_for_platform=lambda *_: [],
+        requery_for_platform=None, max_research_rounds=3,
+        growth_strategy_status={"kuaishou": {"status": "ok", "key": "growth_strategy:kuaishou:latest"}},
+        strict_trend_evidence=True, weekday=1,
+    )
+
+    assert result["tasks"][0]["state"] == "blocked"
+    assert result["tasks"][0].get("selection_mode") is None

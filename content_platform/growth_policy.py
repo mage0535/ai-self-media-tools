@@ -145,6 +145,23 @@ WECHAT_RECOVERY_PLAYBOOK: dict[str, Any] = {
 }
 
 
+KUAISHOU_RECOVERY_PLAYBOOK: dict[str, Any] = {
+    "mode": "kuaishou_evidence_gap_recovery",
+    "evergreen_topic_pool": [
+        {"topic": "AI工具越装越多，效率为什么反而下降？", "calendar_column": "AI效率避坑", "direction": "tool_overload"},
+        {"topic": "一个重复任务值不值得自动化？先看这4个信号", "calendar_column": "工作流判断清单", "direction": "automation_value_signals"},
+        {"topic": "AI工作流总返工？先把输入、输出和验收写清楚", "calendar_column": "工作流避坑", "direction": "workflow_boundaries"},
+        {"topic": "每天重复整理资料？这张三步清单先帮你判断", "calendar_column": "效率清单", "direction": "information_work_triage"},
+    ],
+    "policy": {
+        "requires_exhausted_same_platform_recapture": True,
+        "topic_dedup_window_days": 14,
+        "associated_hotspot_forbidden": True,
+        "trend_score": 0,
+    },
+}
+
+
 XIAOHONGSHU_RECOVERY_PLAYBOOK: dict[str, Any] = {
     "diagnosis_date": "2026-08-14",
     "mode": "xiaohongshu_manual_recovery",

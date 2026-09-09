@@ -559,12 +559,14 @@ def _strategy_editorial_fallback_candidate(
     selected_topic_fingerprints: set[str],
 ) -> dict[str, Any] | None:
     """Compile an explicitly policy-backed evergreen after platform recapture is exhausted."""
-    if str(platform or "").casefold() != "wechat" or str(strategy.get("status") or "").casefold() != "ok":
+    normalized_platform = str(platform or "").casefold()
+    if normalized_platform not in {"wechat", "kuaishou"} or str(strategy.get("status") or "").casefold() != "ok":
         return None
-    from .growth_policy import WECHAT_RECOVERY_PLAYBOOK
+    from .growth_policy import KUAISHOU_RECOVERY_PLAYBOOK, WECHAT_RECOVERY_PLAYBOOK
 
-    pool = WECHAT_RECOVERY_PLAYBOOK.get("evergreen_topic_pool") or []
-    strategy_source = str(strategy.get("key") or "growth_quality_policy_v1:wechat")
+    playbook = WECHAT_RECOVERY_PLAYBOOK if normalized_platform == "wechat" else KUAISHOU_RECOVERY_PLAYBOOK
+    pool = playbook.get("evergreen_topic_pool") or []
+    strategy_source = str(strategy.get("key") or f"growth_quality_policy_v1:{normalized_platform}")
     planned_for = str(slot.get("planned_for") or datetime.now(timezone.utc).date().isoformat())
     unavailable = set(reserved_topic_fingerprints) | set(selected_topic_fingerprints)
     for row in pool:
