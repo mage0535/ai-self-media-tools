@@ -132,10 +132,12 @@ def test_ai_fallback_continues_after_one_provider_failure(tmp_path: Path):
         Path(output).write_bytes(b"x" * 6000)
         return {"provider": "cloudflare", "model": "test"}
 
-    attempts = {"count": 0}
+    attempts = {"count": 0, "prompts": [], "intents": []}
 
     def generate_after_retry(prompt, output, **kwargs):
         attempts["count"] += 1
+        attempts["prompts"].append(prompt)
+        attempts["intents"].append(kwargs.get("intent"))
         if attempts["count"] == 1:
             raise ImageProviderError("transient")
         return generated(prompt, output, **kwargs)
@@ -148,5 +150,7 @@ def test_ai_fallback_continues_after_one_provider_failure(tmp_path: Path):
 
     assert len(rows) == 1
     assert Path(rows[0]["background_image"]).is_file()
+    assert attempts["prompts"][0] != attempts["prompts"][1]
+    assert attempts["intents"] == ["fast_fallback", "fast_fallback"]
     report = json.loads((tmp_path / "asset_selection_attempts.json").read_text(encoding="utf-8"))
     assert [row["status"] for row in report["attempts"]] == ["failed", "accepted"]
