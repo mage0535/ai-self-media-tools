@@ -233,6 +233,32 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         generic = re.compile(r"^(?:关键数字|关键点\s*\d+|按顺序跑通)$")
         self.assertTrue(all(not generic.match(str(card.get("t") or "")) for card in cards))
         self.assertTrue(all(not generic.match(str(card.get("txt") or "")) for card in cards))
+        self.assertTrue(all(" · " not in str(card.get("t") or "") for card in cards))
+
+    def test_chinese_tool_reduction_beats_compile_to_complete_visual_phrases(self):
+        from scripts.video_toolchain_runner import _visual_label
+
+        inputs = [
+            "入口太多，流程太散。",
+            "真正做事的时间被挤掉了。",
+            "第一步，只留下高频常用的工具。",
+            "把偶尔用一次的先收起来。",
+            "第二步，把功能重叠的工具合并。",
+            "找东西不用到处翻，资料放在一个地方。",
+            "第三步，给每个留下的工具定好分工。",
+        ]
+        labels = [_visual_label(value) for value in inputs]
+
+        assert labels == [
+            "入口太多，流程太散",
+            "真正做事时间被挤掉",
+            "只留高频常用工具",
+            "低频工具先收起来",
+            "合并功能重叠工具",
+            "资料集中一个入口",
+            "给工具固定分工",
+        ]
+        assert all(" · " not in label for label in labels)
 
     def test_cover_background_rejects_foreign_platform_ui_from_ocr(self):
         from scripts.video_toolchain_runner import _select_cover_background

@@ -569,7 +569,7 @@ def main(argv: list[str] | None = None) -> int:
             return 6
         try:
             cover = _generate_video_cover(
-                output_dir, title, _summary(script_body), plan, Path(str(bg_for_cover)),
+                output_dir, title, script_body, plan, Path(str(bg_for_cover)),
                 background_selection=background_selection,
             )
         except Exception as exc:
@@ -703,6 +703,24 @@ def _card_visual_label(text: str, presentation: str, index: int) -> str:
 
 def _visual_label(text: str) -> str:
     clean = re.sub(r"\s+", " ", str(text or "")).strip(" ，。！？!?;；")
+    if re.search(r"[\u3400-\u9fff]", clean):
+        rules = [
+            (("工具装得越多", "工具越来越多", "工具越多"), "工具越多，切换越频繁"),
+            (("入口太多", "流程太散"), "入口太多，流程太散"),
+            (("真正做事的时间", "时间被挤"), "真正做事时间被挤掉"),
+            (("高频常用", "真正会用"), "只留高频常用工具"),
+            (("偶尔用一次", "先收起来"), "低频工具先收起来"),
+            (("功能重叠", "工具合并"), "合并功能重叠工具"),
+            (("找东西", "一个地方"), "资料集中一个入口"),
+            (("定好分工", "固定搭配"), "给工具固定分工"),
+            (("固定流程", "流程跑顺"), "固定流程减少切换"),
+            (("评论区", "说说"), "说出你的主力工具"),
+        ]
+        for tokens, label in rules:
+            if any(token in clean for token in tokens):
+                return label
+        clause = next((part.strip() for part in re.split(r"[，。；！？]", clean) if len(part.strip()) >= 4), clean)
+        return clause if len(clause) <= 16 else clause[:16].rstrip("的了和与")
     tokens = re.findall(r"[A-Za-z][A-Za-z0-9.+#-]{1,18}|[\u3400-\u9fff]{2,6}", clean)
     stop = {"为什么", "这是", "一个", "第一步", "第二步", "第三步", "直接", "根据", "不要", "可以"}
     selected = []
