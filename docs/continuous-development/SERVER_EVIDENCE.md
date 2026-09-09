@@ -670,3 +670,13 @@ Observed read-only on 2026-08-31.
 - Local red/green tests reproduce that loss and verify plan-to-H2 binding plus three distinct observable concepts. Related image/media/WeChat regression returned 154 passed.
 - Full `artifacts/test-reports/p10-wechat-explicit-visual-plans.xml` returned 1755 passed plus 37 subtests in 347.35 seconds. Project/privacy audit scanned 586 files with zero issues; license audit checked 65 capabilities with zero issues; `git diff --check` passed.
 - Production remains signed `2f4f612`; timers and real publishers remain disabled. Linux staging and a fresh v8 run are pending.
+
+## 2026-09-09 WeChat v8-v21 Media Closure Evidence
+
+- v8 completed four images at 1.0/0.8125/0.82/0.82, proving plan-derived prompts, but manual review rejected a generic first section and visible SenseNova/other marks. v9-v20 failed closed on increasingly precise structure and bilingual OCR evidence; no rejected run called a publisher.
+- Root fixes: persist explicit visual plans before body cleanup; compile concrete concepts; declare SenseNova embedded-branding risk during cache finalization; reject branded cover and section images; render three distinct Chinese knowledge-card layouts; retain the original 0.6 third-party semantic threshold.
+- Deterministic final images require independent vision structure plus renderer concepts/visible labels bound to the exact output SHA. Only `cover_renderer` and `knowledge_card_renderer` are eligible. Pixazo/SenseNova failures retain their original semantic/branding reasons.
+- v21 root: `/root/.ai-self-media-tools/data/canary/runtime-v8-a89e184-wechat-media-v21`. It completed one cover and three section images with unique SHA prefixes `8b53be19f00b`, `3376413ae894`, `9eda71f62752`, `38781d99a07e`; scores were 0.8/0.88/0.88/0.82.
+- Manual review verified a complete title cover, tool-overload/task-list card, goal/input/output card and four-part boundary checklist. All section labels are Chinese; no garbled text, service logo or watermark was visible. Private `manual-review.json` records four full hashes/dimensions and `publisher_called=false`.
+- Final local `artifacts/test-reports/p10-wechat-v21-final-media.xml` returned 1764 passed plus 37 subtests in 368.24 seconds. Project/privacy audit scanned 586 files with zero issues; license audit checked 65 capabilities with zero issues.
+- v21 is accepted only as WeChat content/media proof using recorded accepted copy. It is not a live WeChat draft, a fresh full Pipeline generation, production activation or 12-platform acceptance. Production remains signed `2f4f612`; timers remain disabled.

@@ -491,3 +491,12 @@ These describe the audited production release, not the current development code.
 - `73de8ea` extracts the visual plan adjacent to each final H2, feeds it into prompts and semantic requests, and compiles three observable concepts for tool-tab overload, goal/input/output and four-panel boundary checks. The 0.6 semantic threshold and duplicate gates remain unchanged.
 - Related regression: 154 passed. Full regression: 1755 passed plus 37 subtests. Privacy audit: 586 files, zero issues. License audit: 65 capabilities, zero issues.
 - Next: advance isolated staging, run Linux focused tests and a fresh v8 WeChat content/media Canary. The real draft publisher remains disabled pending manual article, cover and all-section review.
+
+## 2026-09-09 WeChat v21 Accepted Content/Media Canary
+
+- v8 proved the explicit visual plans entered provider prompts, but manual review rejected generic tool imagery and visible provider marks. v9-v20 retained every failed candidate while closing plan persistence, provider branding, multilingual labels and image-semantic evidence gaps.
+- The WeChat toolchain now persists each `配图计划` in `draft_meta.section_image_map`; the media bridge consumes that mapping after reader-facing body cleanup. Three concrete concepts route to distinct Chinese knowledge-card layouts.
+- SenseNova declares possible embedded branding during both new calls and old-cache finalization. Branded cover or section candidates fail and rotate. The final deterministic fallback is limited to the WeChat article path; other platform recovery behavior is unchanged.
+- v21 completed four unique images. Scores were 0.8/0.88/0.88/0.82; final providers were one `cover_renderer` plus three `knowledge_card_renderer` outputs. Manual review passed title completeness, Chinese labels, semantic roles, watermark absence and SHA uniqueness.
+- Final regression: 1764 passed plus 37 subtests. Project/privacy audit: 586/0. License audit: 65/0. Private `manual-review.json` records `publisher_called=false` and explicitly excludes live draft or 12-platform proof.
+- Next: fast-forward staging to the final evidence-isolation commit, then continue the serial platform Canary matrix. Production and timers remain unchanged.
