@@ -342,6 +342,13 @@ def test_deterministic_visual_semantics_require_vision_structure_and_hash_bound_
         "labels": ["rectangular boxes", "input", "output", "settings"],
     }
     assert MediaBridge._derive_deterministic_semantic_evidence(partial_ocr_cards, image, goal_renderer)["passed"] is True
+    chinese_partial_ocr = {
+        **parent,
+        "expected_concepts": ["goal input output checklist card"],
+        "caption": "四个矩形文本框排列成两行，可见中文标签目标、输入、输出和设定验收。",
+        "labels": ["矩形文本框", "目标", "输入", "输出", "设定验收"],
+    }
+    assert MediaBridge._derive_deterministic_semantic_evidence(chinese_partial_ocr, image, goal_renderer)["passed"] is True
 
     boundary_renderer = {
         **renderer,
