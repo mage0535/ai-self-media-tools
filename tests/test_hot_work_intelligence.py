@@ -512,6 +512,15 @@ def test_tiktok_server_problem_is_retryable_then_proxy_eligible():
     assert should_use_regional_proxy({"status": status}) is True
 
 
+def test_kuaishou_result_two_is_classified_as_expired_auth_not_empty_layout():
+    from content_platform.hot_work_intelligence import classify_logged_search_failure
+
+    status = classify_logged_search_failure('{"result":2,"error_msg":null,"request_id":"123"}')
+
+    assert status == "login_required_or_captcha"
+    assert should_use_regional_proxy({"status": status}) is False
+
+
 def test_tiktok_cards_bind_visible_metric_copy_and_video_url():
     from content_platform.hot_work_intelligence import parse_tiktok_search_cards
 

@@ -756,6 +756,12 @@ def needs_dynamic_content_wait(text: str) -> bool:
 
 def classify_logged_search_failure(text: str) -> str:
     lowered = str(text or "").casefold()
+    try:
+        payload = json.loads(str(text or ""))
+    except json.JSONDecodeError:
+        payload = {}
+    if isinstance(payload, dict) and payload.get("result") in {2, 3}:
+        return "login_required_or_captcha"
     if any(token in lowered for token in ("登录", "验证码", "login", "captcha")):
         return "login_required_or_captcha"
     if any(token in lowered for token in (
