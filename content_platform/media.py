@@ -1626,6 +1626,8 @@ class MediaBridge:
         return value if isinstance(value, dict) else {}
 
     def _prepare_video_visual_assets(self, job, output_dir, plan):
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
         selected_pipeline = str((plan or {}).get("selected_pipeline") or "")
         if selected_pipeline == "localized_repost_video":
             return {}
@@ -1636,7 +1638,20 @@ class MediaBridge:
             image_cfg["min_count"] = max(required_count, int(image_cfg.get("min_count") or 1))
             job["_video_asset_generation"] = True
             try:
-                image_artifact = self._generate_image(job, output_dir, image_cfg)
+                try:
+                    image_artifact = self._generate_image(job, output_dir, image_cfg)
+                except Exception as exc:
+                    evidence = {
+                        "version": "video_asset_preparation_v1",
+                        "status": "runner_recovery_required",
+                        "error_type": type(exc).__name__,
+                        "recovery": "video_toolchain_runner_semantic_asset_recovery",
+                    }
+                    evidence_path = output_dir / "video_asset_preparation.json"
+                    temporary = evidence_path.with_suffix(".json.tmp")
+                    temporary.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+                    os.replace(temporary, evidence_path)
+                    image_artifact = {}
             finally:
                 job.pop("_video_asset_generation", None)
             image_paths = [item["path"] for item in image_artifact.get("images", []) if Path(item.get("path", "")).is_file()]
