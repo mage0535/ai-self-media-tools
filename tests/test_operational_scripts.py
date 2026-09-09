@@ -273,6 +273,7 @@ shared_trend_only: false
             self.assertIn("Environment=CONTENT_PLATFORM_SECRETS_DIR=%h/.ai-self-media-tools/secrets", text, path)
             self.assertIn("Environment=CONTENT_PLATFORM_CONFIG=%h/.ai-self-media-tools/config.json", text, path)
             self.assertIn("Environment=CONTENT_PLATFORM_RUNTIME_MODE=production", text, path)
+            self.assertIn("Environment=CONTENT_PLATFORM_AGENT_SCRIPTS_DIR=%h/.hermes/scripts", text, path)
             self.assertNotIn("%h/.local/bin/content-platform", text, path)
 
     def test_overnight_entrypoints_require_private_runtime_roots(self):
