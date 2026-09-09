@@ -1076,7 +1076,7 @@ def execute(args):
             rank_for_platform=rank_for_platform,
             candidate_filter=candidate_filter,
             requery_for_platform=requery_for_platform,
-            max_research_rounds=2,
+            max_research_rounds=3,
             growth_strategy_status=strategy_status,
             weekday=weekday,
             strict_trend_evidence=(
