@@ -187,6 +187,28 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(official["status"], "failed")
         self.assertIn("RuntimeError", official["error"])
 
+    def test_hot_works_collect_falls_back_to_kuaishou_public_official_rank(self):
+        output = self.root / "hot-works-kuaishou-public"
+        public_row = {"platform": "kuaishou", "status": "public_hot_rank_loaded", "signals": ["AI工作流"]}
+        public_status = {"source": "kuaishou:official_public_hot_rank", "status": "ok", "count": 1}
+        matrix_path = self.root / "overnight" / "today" / "official-platform-signal-matrix-v3.json"
+        with (
+            patch("content_platform.cli._load_env_defaults", return_value=""),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={"status": "missing", "state_file": ""}),
+            patch("content_platform.kuaishou_official_signals.collect_kuaishou_public_hot_rank", return_value=(public_row, public_status)) as collect_public,
+            patch("content_platform.kuaishou_official_signals.upsert_official_signal_matrix", return_value=matrix_path) as upsert,
+            patch("content_platform.cli.collect_logged_short_video_search", return_value=([], {
+                "source": "kuaishou:logged_search", "status": "login_required_or_captcha", "count": 0,
+            })),
+        ):
+            code, result = self.call("hot-works-collect", "--platform", "kuaishou", "--query", "kuaishou=AI工具", "--output-dir", str(output))
+
+        self.assertEqual(code, 0)
+        collect_public.assert_called_once()
+        upsert.assert_called_once()
+        official = next(item for item in result["collection_status"] if item["source"] == "kuaishou:official_public_hot_rank")
+        self.assertEqual(official["matrix_path"], str(matrix_path))
+
     def test_hot_works_collect_routes_shipinhao_to_existing_collector(self):
         output = self.root / "hot-works-shipinhao"
         row = {"platform": "shipinhao", "title": "AI工作流实战", "url": "https://channels.weixin.qq.com/post/123"}

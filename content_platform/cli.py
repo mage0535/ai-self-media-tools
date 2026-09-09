@@ -746,23 +746,39 @@ def execute(args):
                         "source_format": str(auth_state.get("source_format") or ""),
                         "state_file_present": bool(state_file),
                     })
+                if platform == "kuaishou":
+                    from .kuaishou_official_signals import (
+                        collect_kuaishou_creator_signals,
+                        collect_kuaishou_public_hot_rank,
+                        upsert_official_signal_matrix,
+                    )
+
+                    official_row = {}
+                    official_status = {}
+                    if state_file:
+                        try:
+                            official_row, official_status = collect_kuaishou_creator_signals(
+                                state_file, output_dir / "kuaishou_official_creator",
+                            )
+                        except Exception as exc:
+                            official_status = {
+                                "source": "kuaishou:official_creator", "status": "failed", "count": 0,
+                                "error": f"{type(exc).__name__}: {str(exc)[:180]}",
+                            }
+                        statuses.append(official_status)
+                    if not official_row and (
+                        not state_file
+                        or official_status.get("status") in {"login_required_or_captcha", "contract_failed"}
+                    ):
+                        public_row, public_status = collect_kuaishou_public_hot_rank(
+                            output_dir / "kuaishou_official_public_hot_rank"
+                        )
+                        statuses.append(public_status)
+                        official_row, official_status = public_row, public_status
+                    if official_row:
+                        official_status["matrix_path"] = str(upsert_official_signal_matrix(data_dir, official_row))
                 if not state_file and platform not in public_without_state:
                     continue
-                if platform == "kuaishou" and state_file:
-                    from .kuaishou_official_signals import collect_kuaishou_creator_signals, upsert_official_signal_matrix
-
-                    try:
-                        official_row, official_status = collect_kuaishou_creator_signals(
-                            state_file, output_dir / "kuaishou_official_creator",
-                        )
-                        if official_row:
-                            official_status["matrix_path"] = str(upsert_official_signal_matrix(data_dir, official_row))
-                    except Exception as exc:
-                        official_status = {
-                            "source": "kuaishou:official_creator", "status": "failed", "count": 0,
-                            "error": f"{type(exc).__name__}: {str(exc)[:180]}",
-                        }
-                    statuses.append(official_status)
                 queries = query_map.get(platform) or query_map.get("douyin" if platform.startswith("douyin") else platform) or query_map.get("all")
                 if not queries:
                     queries = default_platform_queries(platform)

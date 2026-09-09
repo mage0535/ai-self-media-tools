@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from content_platform.kuaishou_official_signals import creator_page_requires_login, parse_kuaishou_creator_text, upsert_official_signal_matrix
+from content_platform.kuaishou_official_signals import creator_page_requires_login, parse_kuaishou_creator_text, parse_kuaishou_public_hot_rank, upsert_official_signal_matrix
 
 
 def test_parse_kuaishou_creator_text_extracts_ranked_inspiration_and_activity():
@@ -56,3 +56,22 @@ def test_upsert_official_signal_matrix_preserves_other_platforms(tmp_path):
 def test_kuaishou_public_creator_landing_page_is_login_required():
     assert creator_page_requires_login("快手创作者服务平台\n立即登录\n平台热点") is True
     assert creator_page_requires_login("创作灵感\nai工具\n15.6万人参与\n激励活动") is False
+
+
+def test_parse_kuaishou_public_hot_rank_keeps_official_reference_separate_from_native_association():
+    html = r'''"VisionHotRankItem:AI工作流":{"rank":3,"id":"AI工作流","name":"AI工作流","viewCount":null,"hotValue":"123.4万","iconUrl":null,"poster":"https:\u002F\u002Fexample.test\u002Fposter.jpg","tagType":"新","photoIds":{"type":"json","json":["photo-1","photo-2"]},"__typename":"VisionHotRankItem"}'''
+
+    result = parse_kuaishou_public_hot_rank(
+        html,
+        captured_at="2026-09-09T01:00:00+00:00",
+        source_url="https://www.kuaishou.com/brilliant",
+        snapshot_sha256="b" * 64,
+    )
+
+    assert result["passed"] is True
+    row = result["matrix_row"]
+    assert row["signals"] == ["AI工作流"]
+    assert row["signal_details"][0]["hot_value"] == 1234000
+    assert row["signal_details"][0]["photo_ids"] == ["photo-1", "photo-2"]
+    assert row["evidence_type"] == "official_public_hot_rank"
+    assert row["native_verified"] is False

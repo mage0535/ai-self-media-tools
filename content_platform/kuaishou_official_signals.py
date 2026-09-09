@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -96,6 +97,99 @@ def parse_kuaishou_creator_text(
 def creator_page_requires_login(text: str) -> bool:
     lowered = str(text or "").casefold()
     return any(token in lowered for token in ("扫码登录", "请登录", "立即登录", "验证码", "captcha"))
+
+
+def parse_kuaishou_public_hot_rank(
+    html: str,
+    *,
+    captured_at: str,
+    source_url: str,
+    snapshot_sha256: str,
+) -> dict[str, Any]:
+    failures = []
+    parsed_url = urlparse(source_url)
+    if parsed_url.hostname != "www.kuaishou.com" or parsed_url.path != "/brilliant":
+        failures.append("kuaishou_public_rank_url_required")
+    if len(snapshot_sha256) != 64:
+        failures.append("snapshot_sha256_missing")
+    try:
+        captured = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+        if captured.tzinfo is None:
+            captured = captured.replace(tzinfo=timezone.utc)
+    except ValueError:
+        captured = datetime.now(timezone.utc)
+        failures.append("captured_at_invalid")
+    details = []
+    pattern = re.compile(r'"VisionHotRankItem:[^"]+":\{(.*?),"__typename":"VisionHotRankItem"\}', re.S)
+    for match in pattern.finditer(str(html or "")):
+        try:
+            item = json.loads("{" + match.group(1) + "}")
+        except json.JSONDecodeError:
+            continue
+        title = str(item.get("name") or item.get("id") or "").strip()
+        if not title or not isinstance(item.get("rank"), int):
+            continue
+        photo_ids = (item.get("photoIds") or {}).get("json") if isinstance(item.get("photoIds"), dict) else []
+        details.append({
+            "title": title,
+            "rank": int(item["rank"]),
+            "hot_value": _metric_number(str(item.get("hotValue") or "")),
+            "hot_value_text": str(item.get("hotValue") or ""),
+            "tag_type": str(item.get("tagType") or ""),
+            "photo_ids": [str(value) for value in (photo_ids or []) if str(value)],
+        })
+    deduped = {item["title"]: item for item in sorted(details, key=lambda value: value["rank"])}
+    details = list(deduped.values())[:50]
+    if not details:
+        failures.append("public_hot_rank_missing")
+    row = {
+        "platform": "kuaishou",
+        "status": "public_hot_rank_loaded",
+        "signal_type": "official_public_hot_rank",
+        "evidence_type": "official_public_hot_rank",
+        "signals": [item["title"] for item in details],
+        "signal_details": details,
+        "activities": [],
+        "official_url": source_url,
+        "final_url": source_url,
+        "captured_at": captured.astimezone(timezone.utc).isoformat(),
+        "expires_at": (captured.astimezone(timezone.utc) + timedelta(hours=6)).isoformat(),
+        "evidence_sha256": snapshot_sha256,
+        "raw_snapshot_sha256": snapshot_sha256,
+        "collector": "kuaishou_public_hot_rank",
+        "official_reference_only": True,
+        "native_verified": False,
+        "associated_hotspot": {},
+    }
+    return {"passed": not failures, "failures": failures, "matrix_row": row if not failures else {}}
+
+
+def collect_kuaishou_public_hot_rank(output_dir: str | Path, *, timeout: int = 30) -> tuple[dict[str, Any], dict[str, Any]]:
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    source_url = "https://www.kuaishou.com/brilliant"
+    html_path = output / "brilliant.html"
+    captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    request = urllib.request.Request(source_url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read()
+        html_path.write_bytes(body)
+    except Exception as exc:
+        return {}, {"source": "kuaishou:official_public_hot_rank", "status": "failed", "count": 0, "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+    snapshot_sha = hashlib.sha256(body).hexdigest()
+    parsed = parse_kuaishou_public_hot_rank(body.decode("utf-8", errors="ignore"), captured_at=captured_at, source_url=source_url, snapshot_sha256=snapshot_sha)
+    status = {
+        "source": "kuaishou:official_public_hot_rank",
+        "status": "ok" if parsed["passed"] else "contract_failed",
+        "count": len((parsed.get("matrix_row") or {}).get("signals") or []),
+        "captured_at": captured_at,
+        "final_url": source_url,
+        "html_path": str(html_path),
+        "snapshot_sha256": snapshot_sha,
+        "failures": parsed["failures"],
+    }
+    return parsed.get("matrix_row") or {}, status
 
 
 def collect_kuaishou_creator_signals(
