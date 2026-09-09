@@ -77,6 +77,13 @@ def test_failed_detail_shot_motion_is_recovered_before_grouping(tmp_path, monkey
     assert target.read_bytes() == b"recovered-pass"
 
 
+def test_element_motion_recovery_uses_the_target_path_not_boolean_result():
+    source = (ROOT / "scripts" / "film_renderer.py").read_text(encoding="utf-8")
+
+    assert "ensure_cinematic_shot_motion(Path(mp4))" not in source
+    assert "motion_recovery = ensure_cinematic_shot_motion(target)" in source
+
+
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
     assert film_renderer.RENDERER_VERSION == "cinematic-v10"
