@@ -84,6 +84,17 @@ def test_chinese_cover_subtitle_stops_at_a_complete_clause():
     assert not direction["subtitle_text"].endswith("语音")
 
 
+def test_three_step_tool_reduction_cover_uses_complete_payoff_subtitle():
+    direction = build_cover_direction(
+        platform="kuaishou",
+        topic="AI工具越装越多，效率反而下降",
+        title="AI工具越装越多，效率反而下降？三步精简回来",
+        body="第一步只留高频工具。第二步合并重复功能。第三步固定工具分工。",
+    )
+
+    assert direction["subtitle_text"] == "只留主力入口，固定分工和流程"
+
+
 def test_youtube_cover_keeps_complete_question_and_skips_question_subtitle():
     direction = build_cover_direction(
         platform="youtube", topic="AI agents",

@@ -166,9 +166,12 @@ def auto_fetch_backgrounds(
     seen_hashes = set(excluded_hashes or set())
     seen_hashes.update(hashlib.sha256(path.read_bytes()).hexdigest() for path in base_existing if path.is_file())
     seen_ids: set[str] = set()
+    accepted_queries: set[str] = set()
     if key:
         for _round in range(3):
             for q in queries:
+                if q in accepted_queries:
+                    continue
                 if len(assignments) >= needed:
                     break
                 photo = _download_pexels(q, key, exclude_ids=seen_ids, exclude_hashes=seen_hashes)
@@ -201,6 +204,7 @@ def auto_fetch_backgrounds(
                     "generation_evidence": {}, "artist": photo["artist"], "artist_url": photo["artist_url"],
                     "asset_id": photo["asset_id"],
                 })
+                accepted_queries.add(q)
                 attempt_evidence.append({"provider": "pexels", "query": q, "status": "accepted"})
                 time.sleep(1.0)
             if len(assignments) >= needed:

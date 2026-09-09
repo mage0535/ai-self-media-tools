@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from content_platform.scene_manifest import validate_scene_manifest
 
 
-_PLACEHOLDER = re.compile(r"(?:\bstep\s+\d+\b|\bscene\s+\d+\b|keep the visual rhythm|match visual to narration)", re.IGNORECASE)
+_PLACEHOLDER = re.compile(r"(?:\bstep\s+\d+\b|\bscene\s+\d+\b|keep the visual rhythm|match visual to narration|关键数字|关键点\s*\d+|按顺序跑通)", re.IGNORECASE)
 _PATH_LIKE = re.compile(r"(?:[A-Za-z]:[\\/]|/(?:tmp|root|home|data)/|\.\.?[\\/])")
 
 

@@ -190,6 +190,8 @@ def _cover_title(value: str, platform: str) -> str:
 
 def _cover_subtitle(body: str, topic: str, title: str, platform: str) -> str:
     combined = f"{topic} {title} {body}".casefold()
+    if "工具" in combined and all(token in combined for token in ("第一步", "第二步", "第三步")):
+        return "只留主力入口，固定分工和流程"
     if platform == "youtube" and "agent" in combined and "chatbot" in combined:
         return "Chatbots reply. Agents plan, act, and verify."
     rows = []

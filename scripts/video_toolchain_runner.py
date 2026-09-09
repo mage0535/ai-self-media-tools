@@ -558,7 +558,11 @@ def main(argv: list[str] | None = None) -> int:
                 register=True,
             )
         _register_visual_recipe_use(visual_recipe, plan, str(generated[0]))
-        bg_for_cover, background_selection = _select_cover_background(materialized_backgrounds, _primary_platform(plan))
+        bg_for_cover, background_selection = _select_cover_background(
+            materialized_backgrounds,
+            _primary_platform(plan),
+            context=f"{title} {script_body}",
+        )
         if not bg_for_cover or not Path(str(bg_for_cover)).is_file():
             manifest.update({"ok": False, "status": "cover_failed", "error": "topic-matched cover background missing"})
             _write_manifest(output_dir, manifest)
@@ -651,11 +655,12 @@ def build_cards(
         if index == 0:
             layout = "cover"
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
-        headline = _visual_headline(beat, presentation, index)
+        headline = title if index == 0 else _visual_headline(beat, presentation, index)
+        visual_label = _card_visual_label(beat, presentation, index)
         card = {
             "layout": layout,
             "t": headline,
-            "txt": _presentation_label(presentation, index),
+            "txt": visual_label,
             "tts": beat,
             "f": str(plan.get("template_family") or "video_toolchain"),
             "label": str(plan.get("selected_pipeline") or "auto_video"),
@@ -675,11 +680,25 @@ def build_cards(
         if layout == "card_stack":
             card["items"] = _supporting_labels(presentation, index)
         if layout == "big_number":
-            card.update({"num": f"0{index + 1}", "ext": _presentation_label(presentation, index)})
+            card.update({"num": f"0{index + 1}", "ext": visual_label})
         if layout == "timeline":
             card["items"] = _supporting_labels(presentation, index)
         cards.append(card)
     return cards
+
+
+def _card_visual_label(text: str, presentation: str, index: int) -> str:
+    label = _visual_label(text)
+    spoken = re.sub(r"\s+", "", str(text or "")).casefold()
+    displayed = re.sub(r"\s+", "", label).casefold()
+    if spoken and displayed and spoken != displayed:
+        return label
+    chinese = bool(re.search(r"[\u3400-\u9fff]", str(text or "")))
+    if chinese:
+        fallbacks = ["核心冲突", "切换成本", "减少入口", "只留高频", "合并重叠", "固定分工", "流程回报", "你的选择"]
+    else:
+        fallbacks = ["Core conflict", "Switching cost", "Fewer entry points", "Keep the essentials", "Merge overlap", "Fixed roles", "Workflow payoff", "Your choice"]
+    return fallbacks[index % len(fallbacks)]
 
 
 def _visual_label(text: str) -> str:
@@ -705,12 +724,11 @@ def _visual_headline(text: str, presentation: str, index: int) -> str:
         (("一个入口", "统一", "整合", "后台管理"), "统一入口管理"),
         (("api", "接口", "接入"), "把能力接进流程"),
         (("效率", "时间", "省下"), "把时间还给内容"),
-        (("第一步", "第二步", "第三步", "步骤"), "按顺序跑通"),
     ]
     for tokens, label in rules:
         if any(token in lowered for token in tokens):
             return label
-    return _presentation_label(presentation, index)
+    return _card_visual_label(text, presentation, index)
 
 
 def _presentation_label(presentation: str, index: int) -> str:
@@ -1235,7 +1253,7 @@ _FOREIGN_PLATFORM_MARKERS = {
 }
 
 
-def _select_cover_background(assignments: list[dict], platform: str) -> tuple[str | None, dict]:
+def _select_cover_background(assignments: list[dict], platform: str, context: str = "") -> tuple[str | None, dict]:
     candidates = []
     forbidden = _FOREIGN_PLATFORM_MARKERS.get(str(platform or "").casefold(), set())
     for index, item in enumerate(assignments or []):
@@ -1258,6 +1276,9 @@ def _select_cover_background(assignments: list[dict], platform: str) -> tuple[st
         purpose = str(item.get("purpose") or item.get("match_reason") or "").casefold()
         stock_ui = "pexels.com" in str(item.get("source_url") or "").casefold() and any(token in purpose for token in ("interface", "dashboard", "screen"))
         score = sum(token in purpose for token in ("api", "workflow", "developer", "dashboard", "tool")) - 10 * len(conflicts) - (10 if text_heavy else 0) - (4 if stock_ui else 0)
+        if any(token in str(context).casefold() for token in ("工具", "tool", "切换", "switch")):
+            score += 3 * sum(token in purpose for token in ("multiple", "screens", "software", "laptop", "workflow", "overwhelmed"))
+            score -= 5 * sum(token in purpose for token in ("camera", "coffee", "food", "drink"))
         candidates.append({"path": str(path), "score": score, "ocr_conflicts": conflicts, "ocr_token_count": len(ocr_tokens), "text_heavy": text_heavy, "assignment_index": index, "purpose": purpose})
     usable = [row for row in candidates if not row["ocr_conflicts"] and not row["text_heavy"]]
     selected = max(usable or candidates, key=lambda row: (row["score"], -row["assignment_index"]), default=None)

@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertEqual(cards[0]["layout"], "cover")
         self.assertEqual(cards[0]["presentation_mode"], "hero_number")
         self.assertEqual(cards[0]["hook"], "Title")
+        self.assertEqual(cards[0]["t"], "Title")
 
     def test_video_cover_uses_shared_platform_director(self):
         from PIL import Image
@@ -227,7 +229,10 @@ class VideoToolchainRunnerTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["failures"])
         self.assertTrue(all(card["txt"] != card["tts"] for card in cards))
-        self.assertNotEqual(cards[0]["t"], "AI 工具越多，效率为什么反而更低？")
+        self.assertEqual(cards[0]["t"], "AI 工具越多，效率为什么反而更低？")
+        generic = re.compile(r"^(?:关键数字|关键点\s*\d+|按顺序跑通)$")
+        self.assertTrue(all(not generic.match(str(card.get("t") or "")) for card in cards))
+        self.assertTrue(all(not generic.match(str(card.get("txt") or "")) for card in cards))
 
     def test_cover_background_rejects_foreign_platform_ui_from_ocr(self):
         from scripts.video_toolchain_runner import _select_cover_background
@@ -246,6 +251,21 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertTrue(evidence["passed"])
         self.assertEqual(evidence["ocr_conflicts"], [])
         self.assertFalse(evidence["text_heavy"])
+
+    def test_cover_background_prefers_tool_conflict_over_unrelated_still_life(self):
+        from scripts.video_toolchain_runner import _select_cover_background
+
+        with tempfile.TemporaryDirectory() as tmp:
+            camera = Path(tmp) / "camera.jpg"; camera.write_bytes(b"camera")
+            screens = Path(tmp) / "screens.jpg"; screens.write_bytes(b"screens")
+            with patch("scripts.video_toolchain_runner.subprocess.run", return_value=Mock(stdout="", returncode=0)):
+                selected, evidence = _select_cover_background([
+                    {"background_image": str(camera), "purpose": "minimalist workspace with digital camera and coffee"},
+                    {"background_image": str(screens), "purpose": "overwhelmed creator using multiple computer screens"},
+                ], "kuaishou", context="AI 工具越装越多，切换入口导致效率下降")
+
+        self.assertEqual(selected, str(screens))
+        self.assertGreater(evidence["score"], 0)
 
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]
