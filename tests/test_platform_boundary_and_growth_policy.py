@@ -71,6 +71,19 @@ def test_video_jobs_do_not_run_a_second_audio_generator_over_the_renderer_output
     assert generated_media_kinds_for_job({"platforms": ["kuaishou"]}, config) == ("video",)
 
 
+def test_video_renderer_owns_the_final_cover_instead_of_running_cover_first():
+    config = {
+        "content_policy": {"allow_local_video_generation": True},
+        "media": {
+            "video": {"enabled": True},
+            "image": {"enabled": True},
+            "cover": {"enabled": True},
+        },
+    }
+
+    assert generated_media_kinds_for_job({"platforms": ["kuaishou"]}, config) == ("image", "video")
+
+
 def test_article_jobs_do_not_generate_optional_audio_without_audio_content_form():
     config = {
         "content_policy": {"allow_local_audio_generation": True},

@@ -189,6 +189,10 @@ def generated_media_kinds_for_job(job, config):
             if platform in SHORT_VIDEO_PLATFORMS:
                 kinds.add("video")
                 break
+    if "video" in kinds:
+        # The video renderer selects its cover from the final verified scene
+        # assets and writes the cover gate into the render manifest.
+        kinds.discard("cover")
     # The video renderer owns narration, subtitles, BGM, and the final audio
     # stream. A second audio pass would overwrite its measured TTS sidecars.
     if (

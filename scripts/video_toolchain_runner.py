@@ -574,6 +574,7 @@ def main(argv: list[str] | None = None) -> int:
             return 6
         manifest["cover"] = cover["path"]
         manifest["cover_quality_evidence"] = cover["evidence"]
+        manifest["cover_quality_gate"] = cover["gate"]
         # Archive only after the cover and its measured evidence exist, so the
         # handoff package cannot omit the click-facing asset.
         try:

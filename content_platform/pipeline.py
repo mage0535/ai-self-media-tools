@@ -1623,6 +1623,12 @@ class Pipeline:
                 self.store.add_artifact(job_id, "article_media_contract", contract_path, "")
             return artifact
         self.store.add_artifact(job_id, artifact["kind"], artifact["path"], artifact.get("checksum", ""))
+        if kind == "video":
+            render_manifest = artifact.get("render_manifest") if isinstance(artifact.get("render_manifest"), dict) else {}
+            cover_gate = render_manifest.get("cover_quality_gate") if isinstance(render_manifest.get("cover_quality_gate"), dict) else {}
+            cover_path = Path(str(render_manifest.get("cover") or ""))
+            if render_manifest.get("status") == "rendered" and render_manifest.get("ok") is True and cover_gate.get("passed") is True and cover_path.is_file():
+                self.store.add_artifact(job_id, "cover", cover_path, hashlib.sha256(cover_path.read_bytes()).hexdigest())
         return artifact
 
 
