@@ -31,6 +31,18 @@ def test_load_secret_reads_named_env_file_without_exposing_value(tmp_path, monke
     assert load_secret("OPENAI_API_KEY", [env_file]) == "secret-value"
 
 
+def test_load_secret_reads_configured_private_secrets_root(tmp_path, monkeypatch):
+    secrets = tmp_path / "private-secrets"
+    secrets.mkdir()
+    (secrets / "provider.env").write_text("PEXELS_API_KEY=private-value\n", encoding="utf-8")
+    monkeypatch.setenv("CONTENT_PLATFORM_SECRETS_DIR", str(secrets))
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path / "release"))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+
+    assert load_secret("PEXELS_API_KEY") == "private-value"
+
+
 def test_generate_image_fails_closed_when_provider_has_no_key(tmp_path, monkeypatch):
     monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "missing-hermes"))
