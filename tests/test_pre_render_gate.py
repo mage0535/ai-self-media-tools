@@ -33,6 +33,15 @@ class PreRenderGateTests(unittest.TestCase):
             self.assertFalse(result["passed"])
             self.assertTrue(any("placeholder" in item for item in result["failures"]))
 
+    def test_gate_blocks_generic_chinese_card_labels(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        cards = [{"layout": "cover", "t": "关键数字", "txt": "关键点 2", "tts": "真实讲解内容", "items": []}]
+        result = validate_render_inputs(Path("."), cards, require_backgrounds=False, require_cover_contract=True)
+
+        self.assertFalse(result["passed"])
+        self.assertTrue(any("placeholder" in item for item in result["failures"]))
+
     def test_gate_accepts_low_bgm_as_auto_gain_candidate_not_failure(self):
         from scripts.pre_render_gate import validate_render_inputs
 
