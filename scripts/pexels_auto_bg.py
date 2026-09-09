@@ -167,43 +167,44 @@ def auto_fetch_backgrounds(
     seen_hashes.update(hashlib.sha256(path.read_bytes()).hexdigest() for path in base_existing if path.is_file())
     seen_ids: set[str] = set()
     if key:
-        for q in queries:
+        for _round in range(3):
+            for q in queries:
+                if len(assignments) >= needed:
+                    break
+                photo = _download_pexels(q, key, exclude_ids=seen_ids, exclude_hashes=seen_hashes)
+                if not photo:
+                    attempt_evidence.append({"provider": "pexels", "query": q, "status": "no_candidate"})
+                    time.sleep(1)
+                    continue
+                content = bytes(photo["content"])
+                h = hashlib.sha256(content).hexdigest()
+                seen_ids.add(photo["asset_id"])
+                if h in seen_hashes:
+                    time.sleep(0.5)
+                    continue
+                seen_hashes.add(h)
+                i = len(base_existing) + len(assignments) + 1
+                fp = bg_dir / f"bg_{i:02d}.jpg"
+                fp.write_bytes(content)
+                semantic = _semantic_evidence(fp, [q], platform, source=photo) if semantic_required else {}
+                if semantic_required and not semantic.get("passed"):
+                    attempt_evidence.append({"provider": "pexels", "query": q, "status": "semantic_rejected"})
+                    fp.unlink(missing_ok=True)
+                    continue
+                assignments.append({
+                    "background_image": str(fp), "rights_cleared": True, "real_scene": True, "source_query": q,
+                    "source_url": photo["source_url"], "license": "Pexels Content License",
+                    "semantic_match_score": float(semantic.get("semantic_match_score") or (0.8 if not semantic_required else 0)),
+                    "match_reason": str(semantic.get("caption") or f"Pexels portrait search matched: {q}"),
+                    "semantic_tags": list(semantic.get("labels") or [q, "photo", "portrait"]),
+                    "semantic_required": semantic_required, "semantic_evidence": semantic,
+                    "generation_evidence": {}, "artist": photo["artist"], "artist_url": photo["artist_url"],
+                    "asset_id": photo["asset_id"],
+                })
+                attempt_evidence.append({"provider": "pexels", "query": q, "status": "accepted"})
+                time.sleep(1.0)
             if len(assignments) >= needed:
                 break
-            photo = _download_pexels(q, key, exclude_ids=seen_ids, exclude_hashes=seen_hashes)
-            if not photo:
-                attempt_evidence.append({"provider": "pexels", "query": q, "status": "no_candidate"})
-                time.sleep(1)
-                continue
-            content = bytes(photo["content"])
-            # md5 去重：已下载过的图跳过
-            h = hashlib.sha256(bytes(content)).hexdigest()
-            if h in seen_hashes:
-                seen_ids.add(photo["asset_id"])
-                time.sleep(0.5)
-                continue
-            seen_hashes.add(h)
-            seen_ids.add(photo["asset_id"])
-            i = len(base_existing) + len(assignments) + 1
-            fp = bg_dir / f"bg_{i:02d}.jpg"
-            fp.write_bytes(bytes(content))
-            semantic = _semantic_evidence(fp, [q], platform, source=photo) if semantic_required else {}
-            if semantic_required and not semantic.get("passed"):
-                attempt_evidence.append({"provider": "pexels", "query": q, "status": "semantic_rejected"})
-                fp.unlink(missing_ok=True)
-                continue
-            assignments.append({
-                "background_image": str(fp), "rights_cleared": True, "real_scene": True, "source_query": q,
-                "source_url": photo["source_url"], "license": "Pexels Content License",
-                "semantic_match_score": float(semantic.get("semantic_match_score") or (0.8 if not semantic_required else 0)),
-                "match_reason": str(semantic.get("caption") or f"Pexels portrait search matched: {q}"),
-                "semantic_tags": list(semantic.get("labels") or [q, "photo", "portrait"]),
-                "semantic_required": semantic_required, "semantic_evidence": semantic,
-                "generation_evidence": {}, "artist": photo["artist"], "artist_url": photo["artist_url"],
-                "asset_id": photo["asset_id"],
-            })
-            attempt_evidence.append({"provider": "pexels", "query": q, "status": "accepted"})
-            time.sleep(1.0)
 
     # Pexels 不足 8 张 → AI 生图兜底（Pollinations FLUX 免费）
     if len(assignments) < needed:

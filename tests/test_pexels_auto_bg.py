@@ -65,6 +65,56 @@ def test_auto_fetch_counts_existing_files_and_adds_only_missing_unique_assets(tm
     assert (backgrounds / "bg_08.jpg").is_file()
 
 
+def test_pexels_retries_next_candidates_until_scene_pool_is_full(tmp_path: Path):
+    from scripts.pexels_auto_bg import auto_fetch_backgrounds
+
+    calls = []
+
+    def download(query, _key, **_kwargs):
+        calls.append(query)
+        index = len(calls)
+        return {
+            "content": f"photo-{index}".encode(),
+            "source_url": f"https://www.pexels.com/photo/{index}/",
+            "alt": f"Person using computer workflow scene {index}",
+            "artist": "A",
+            "artist_url": "",
+            "asset_id": str(index),
+        }
+
+    semantic_results = iter([False, False, *([True] * 8)])
+
+    def semantic(path, expected, platform, source=None):
+        passed = next(semantic_results)
+        return {
+            "version": "image_semantic_evidence_v1",
+            "passed": passed,
+            "semantic_match_score": 0.8 if passed else 0.0,
+            "caption": source["alt"],
+            "labels": ["workflow"],
+            "expected_concepts": expected,
+            "matched_concepts": expected if passed else [],
+            "threshold": 0.6,
+            "image_sha256": __import__("hashlib").sha256(Path(path).read_bytes()).hexdigest(),
+            "score_source": "provider_caption_label_recall",
+            "evidence_level": "source_verified",
+        }
+
+    with (
+        patch("scripts.pexels_auto_bg._pexels_key", return_value="key"),
+        patch("scripts.pexels_auto_bg._semantic_queries", return_value=[f"scene query {i}" for i in range(8)]),
+        patch("scripts.pexels_auto_bg._download_pexels", side_effect=download),
+        patch("scripts.pexels_auto_bg._semantic_evidence", side_effect=semantic),
+        patch("content_platform.image_provider.generate_image", side_effect=ImageProviderError("must not need generated fallback")),
+        patch("scripts.pexels_auto_bg.time.sleep"),
+    ):
+        rows = auto_fetch_backgrounds("AI", "Title", tmp_path, "kuaishou", semantic_required=True)
+
+    assert len(rows) == 8
+    assert len(calls) == 10
+    assert calls[8:] == ["scene query 0", "scene query 1"]
+
+
 def test_force_fetch_excludes_historical_hashes(tmp_path: Path):
     from scripts.pexels_auto_bg import auto_fetch_backgrounds
     import hashlib
