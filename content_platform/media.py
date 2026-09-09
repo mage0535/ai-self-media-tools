@@ -1504,6 +1504,15 @@ class MediaBridge:
                 return index
         return limit
 
+    @staticmethod
+    def _video_pythonpath(runtime_root, current, agent_scripts):
+        paths = []
+        for value in (runtime_root, agent_scripts, *str(current or "").split(os.pathsep)):
+            text = str(value or "").strip()
+            if text and text not in paths:
+                paths.append(text)
+        return os.pathsep.join(paths)
+
     def _generate_video(self, job, output_dir):
         output_dir.mkdir(parents=True, exist_ok=True)
         script_contract = self.compile_video_script(job)
@@ -1543,7 +1552,7 @@ class MediaBridge:
         env = os.environ.copy()
         runtime_root = str(Path(__file__).resolve().parents[1])
         env["CONTENT_PLATFORM_HOME"] = runtime_root
-        env["PYTHONPATH"] = runtime_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        env["PYTHONPATH"] = self._video_pythonpath(runtime_root, env.get("PYTHONPATH", ""), agent_scripts_dir())
         env["FILM_QUALITY_PROFILE"] = str(plan.get("quality_profile") or "high")
         env["FILM_MOTION_MODE"] = str(plan.get("motion_mode") or "cinematic")
         env["FILM_ALLOW_DEGRADED"] = "1" if plan.get("allow_degraded") is True else "0"

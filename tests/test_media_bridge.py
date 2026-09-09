@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -418,3 +419,12 @@ def test_boundary_visual_uses_deterministic_final_recovery_only():
     assert MediaBridge._use_deterministic_article_visual(
         {"role": "cover", "intent": "cinematic_cover"}, attempt=3, max_attempts=3
     ) is True
+
+
+def test_video_pythonpath_includes_release_and_agent_script_roots(tmp_path):
+    release = tmp_path / "release"
+    agents = tmp_path / "hermes-scripts"
+
+    result = MediaBridge._video_pythonpath(release, str(release), agents)
+
+    assert result.split(os.pathsep) == [str(release), str(agents)]
