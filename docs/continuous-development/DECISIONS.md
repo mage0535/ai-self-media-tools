@@ -507,3 +507,21 @@
 - Semantic expectations must describe observable visual objects or layouts, not full marketing titles or abstract H2 prose. Tool overload, input/output boundaries and checklist decisions use separate concrete concepts.
 - A more specific plan-derived concept supersedes a generic topic concept so one section image is not required to depict several conflicting ideas.
 - Preserve the global semantic threshold, provider retries and duplicate checks. This corrects intent compilation; it does not relax acceptance.
+
+## D71: Article Visual Plans Survive Reader-Facing Cleanup
+
+- Extract explicit per-section visual plans in the professional writer toolchain and persist them in `section_image_map` before body cleanup.
+- Media generation first consumes the persisted mapping, then allows body-local plans to override it. A cleaned article must not lose its visual intent.
+- Generic adjacent-point purposes are fallback only; they cannot replace an available concrete plan.
+
+## D72: Embedded Provider Branding Fails Every Final Image Role
+
+- A provider known to embed a logo or attribution mark declares that property in fresh and cached result contracts.
+- Covers and inline images follow the same rule: embedded provider branding fails the candidate and rotates to the next provider or project-owned renderer.
+- Do not crop or conceal a provider mark. Preserve the rejected candidate and reason in quality-recovery evidence.
+
+## D73: Deterministic Visual Semantics Require Two Hash-Bound Sources
+
+- Third-party generated images pass only on independent vision evidence. They cannot use renderer metadata to repair a failed score.
+- Project-owned deterministic visuals may combine independent vision structure evidence with renderer-declared concepts and visible labels only when the renderer output SHA equals the inspected artifact SHA.
+- Each supported deterministic layout has its own observable geometry contract. Missing structure, missing labels, wrong provider or hash mismatch fails closed.
