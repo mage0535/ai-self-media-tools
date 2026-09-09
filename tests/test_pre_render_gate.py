@@ -42,6 +42,14 @@ class PreRenderGateTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertTrue(any("placeholder" in item for item in result["failures"]))
 
+    def test_gate_blocks_duplicate_card_title_and_supporting_label(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        cards = [{"layout": "cover", "t": "合并功能重叠工具", "txt": "合并功能重叠工具", "tts": "第二步把功能重叠的工具合并。", "items": []}]
+        result = validate_render_inputs(Path("."), cards, require_backgrounds=False, require_cover_contract=True)
+
+        self.assertIn("card_1_title_text_duplicate", result["failures"])
+
     def test_gate_accepts_low_bgm_as_auto_gain_candidate_not_failure(self):
         from scripts.pre_render_gate import validate_render_inputs
 

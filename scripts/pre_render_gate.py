@@ -68,6 +68,10 @@ def validate_render_inputs(
             if _PATH_LIKE.search(value):
                 failures.append(f"card_{card_index}_{field}_path_like_value")
         narration = re.sub(r"\s+", "", str(card.get("tts") or ""))
+        title = re.sub(r"\s+", "", str(card.get("t") or ""))
+        support = re.sub(r"\s+", "", str(card.get("txt") or ""))
+        if title and support and (title == support or SequenceMatcher(None, title, support).ratio() >= 0.88):
+            failures.append(f"card_{card_index}_title_text_duplicate")
         displayed = "".join(
             re.sub(r"\s+", "", str(card.get(key) or ""))
             for key in ("t", "txt", "sub", "ext")

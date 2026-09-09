@@ -234,6 +234,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertTrue(all(not generic.match(str(card.get("t") or "")) for card in cards))
         self.assertTrue(all(not generic.match(str(card.get("txt") or "")) for card in cards))
         self.assertTrue(all(" · " not in str(card.get("t") or "") for card in cards))
+        self.assertTrue(all(card["t"] != card["txt"] for card in cards))
 
     def test_chinese_tool_reduction_beats_compile_to_complete_visual_phrases(self):
         from scripts.video_toolchain_runner import _visual_label

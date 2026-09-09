@@ -657,10 +657,11 @@ def build_cards(
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
         headline = title if index == 0 else _visual_headline(beat, presentation, index)
         visual_label = _card_visual_label(beat, presentation, index)
+        supporting_label = visual_label if index == 0 else _card_supporting_label(beat, presentation, index)
         card = {
             "layout": layout,
             "t": headline,
-            "txt": visual_label,
+            "txt": supporting_label,
             "tts": beat,
             "f": str(plan.get("template_family") or "video_toolchain"),
             "label": str(plan.get("selected_pipeline") or "auto_video"),
@@ -699,6 +700,17 @@ def _card_visual_label(text: str, presentation: str, index: int) -> str:
     else:
         fallbacks = ["Core conflict", "Switching cost", "Fewer entry points", "Keep the essentials", "Merge overlap", "Fixed roles", "Workflow payoff", "Your choice"]
     return fallbacks[index % len(fallbacks)]
+
+
+def _card_supporting_label(text: str, presentation: str, index: int) -> str:
+    mapped = _presentation_label(presentation, index)
+    if not re.fullmatch(r"关键点\s*\d+", mapped):
+        return mapped
+    if re.search(r"[\u3400-\u9fff]", str(text or "")):
+        roles = ["核心冲突", "问题背景", "成本来源", "执行步骤", "取舍标准", "核对依据", "行动收益", "评论互动"]
+    else:
+        roles = ["Core conflict", "Problem context", "Cost source", "Action step", "Decision rule", "Evidence check", "Practical payoff", "Open question"]
+    return roles[index % len(roles)]
 
 
 def _visual_label(text: str) -> str:
@@ -754,6 +766,8 @@ def _presentation_label(presentation: str, index: int) -> str:
         "hero_poster": "核心问题", "hero_conflict": "先看冲突", "hero_number": "关键数字",
         "establishing": "真实场景", "detail_closeup": "问题细节", "process_flow": "执行路径",
         "split_screen": "两种做法", "evidence_zoom": "核对证据", "payoff_reveal": "可执行结果",
+        "chart_build": "切换成本", "metric_focus": "时间损耗", "comparison": "两种做法",
+        "evidence_source": "核对依据", "takeaway_grid": "一页总结",
         "list_reveal": "关键清单", "timeline": "步骤顺序", "diagram": "关系结构",
         "real_asset_overlay": "真实素材", "card_stack": "重点归纳", "summary_grid": "一页总结",
         "cta": "下一步行动", "cta_footage": "下一步行动", "interaction": "评论互动",
