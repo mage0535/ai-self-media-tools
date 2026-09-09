@@ -117,6 +117,27 @@ def test_video_visual_assets_never_cycle_missing_images(tmp_path):
     assert all(item["reused"] is False for item in packet["assignments"])
 
 
+def test_video_resume_reuses_local_provenance_assets_before_upstream_paths(tmp_path):
+    output = tmp_path / "output"
+    backgrounds = output / "backgrounds"
+    backgrounds.mkdir(parents=True)
+    local = backgrounds / "bg_01.jpg"
+    local.write_bytes(b"verified-local")
+    (output / "asset_provenance.json").write_text(
+        json.dumps({"version": "asset_provenance_v1", "assets": [{"path": str(local), "semantic_match_score": 0.8}]}),
+        encoding="utf-8",
+    )
+    stale = tmp_path / "upstream.jpg"
+    stale.write_bytes(b"upstream")
+
+    paths = MediaBridge._existing_image_paths(
+        {"artifacts": [{"kind": "image", "path": str(stale)}]}, output
+    )
+
+    assert paths[0] == str(local)
+    assert str(stale) in paths
+
+
 def test_video_asset_preparation_defers_failed_generic_images_to_runner_recovery(tmp_path, monkeypatch):
     bridge = MediaBridge({"image": {"enabled": True}, "video": {"visual_image_count": 8}}, tmp_path)
     output = tmp_path / "output"
