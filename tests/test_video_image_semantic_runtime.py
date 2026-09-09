@@ -61,6 +61,27 @@ def test_video_assets_reanalyze_declared_scores_and_reject_mismatch(tmp_path, mo
     assert rejected[0]["match_reason"] == "cat in park"
 
 
+def test_video_assets_reject_visible_unrequested_commercial_brand(tmp_path, monkeypatch):
+    image = _image(tmp_path / "bg.png")
+    branded = _evidence(image)
+    branded.update(
+        caption='A can with Coca-Cola lettering beside a keyboard; the brand name "Coca-Cola" is visible.',
+        labels=["keyboard", "workspace", "Coca-Cola"],
+        expected_concepts=["focused productive workspace"],
+        matched_concepts=["focused productive workspace"],
+        semantic_match_score=1.0,
+    )
+    row = {"path": str(image), "semantic_evidence": branded, "semantic_match_score": 1.0}
+
+    passed, rejected = runner._verify_materialized_semantics(
+        [row], title="AI tools workflow", script_body="reduce tool switching", platform="kuaishou"
+    )
+
+    assert passed == []
+    assert rejected[0]["failure"] == "unrequested_visible_brand"
+    assert rejected[0]["brand_conflicts"]
+
+
 def test_video_provenance_json_is_written_atomically(tmp_path):
     target = tmp_path / "asset_provenance.json"
     runner._write_json_atomic(target, {"version": "v1", "assets": [{"id": 1}]})

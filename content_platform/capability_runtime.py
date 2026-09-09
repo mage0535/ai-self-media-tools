@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import os
+
 from .adapter_executor import execute_capability
 from .capability_router import load_registry, match_capabilities
 from .content_profile import classify_content_profile
 from .execution_dag import execute_capability_dag
 from .execution_trace import merge_execution_manifests, record_execution_stage
+
+
+def execution_evidence_required(brief: dict | None) -> bool:
+    """Compiled production runs and explicit automation both fail closed."""
+    brief = brief if isinstance(brief, dict) else {}
+    production = os.environ.get("CONTENT_PLATFORM_RUNTIME_MODE", "").casefold() == "production"
+    return brief.get("automated_workflow") is True or (
+        production and isinstance(brief.get("run_contract"), dict)
+    )
 
 
 def validate_generation_execution(result: dict, *, required: bool = True) -> dict:
@@ -102,7 +113,7 @@ def execute_generation_capabilities(draft: dict, brief: dict | None = None) -> d
         executor=executor,
         stages={"collection", "selection", "blueprint", "generation"},
     )
-    result = validate_generation_execution(result, required=bool(brief.get("automated_workflow")))
+    result = validate_generation_execution(result, required=execution_evidence_required(brief))
     result["profile"] = profile
     result["skipped"] = matched.get("skipped", [])
     result["inventory"] = matched.get("inventory", [])
@@ -166,7 +177,7 @@ def execute_post_generation_capabilities(
         item for item in late.get("pending") or []
         if str(item.get("stage") or "") not in set(merged["completed_stages"])
     ]
-    merged = validate_generation_execution(merged, required=bool(brief.get("automated_workflow")))
+    merged = validate_generation_execution(merged, required=execution_evidence_required(brief))
     merged["profile"] = prior.get("profile") or brief.get("content_profile") or {}
     return merged
 

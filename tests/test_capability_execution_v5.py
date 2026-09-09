@@ -1,6 +1,6 @@
 import hashlib
 
-from content_platform.capability_runtime import execute_generation_capabilities, validate_generation_execution
+from content_platform.capability_runtime import execution_evidence_required, execute_generation_capabilities, validate_generation_execution
 from content_platform.execution_dag import execute_capability_dag
 
 
@@ -8,6 +8,15 @@ def test_automated_generation_rejects_planned_but_unexecuted_capabilities():
     result = validate_generation_execution({"selected": [{"capability_id": "video_toolchain_runner"}], "executed": []}, required=True)
     assert result["passed"] is False
     assert result["failures"] == ["required_capability_not_executed"]
+
+
+def test_compiled_run_contract_requires_complete_capability_evidence(monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_RUNTIME_MODE", "production")
+    assert execution_evidence_required({"run_contract": {"version": "run_contract_v2"}}) is True
+    assert execution_evidence_required({"automated_workflow": True}) is True
+    monkeypatch.delenv("CONTENT_PLATFORM_RUNTIME_MODE")
+    assert execution_evidence_required({"run_contract": {"version": "run_contract_v2"}}) is False
+    assert execution_evidence_required({}) is False
 
 
 def test_generation_execution_accepts_artifact_backed_execution():

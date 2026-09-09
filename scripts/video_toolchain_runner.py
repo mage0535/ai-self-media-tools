@@ -1047,11 +1047,33 @@ def _verify_materialized_semantics(
             "match_reason": str(semantic.get("caption") or semantic.get("failure") or ""),
             "semantic_tags": list(semantic.get("labels") or semantic.get("matched_concepts") or []),
         }
-        if _verified_semantic_contract(semantic, path):
+        brand_conflicts = _visible_brand_conflicts(semantic, title=title, script_body=script_body)
+        if brand_conflicts:
+            candidate.update(failure="unrequested_visible_brand", brand_conflicts=brand_conflicts)
+            rejected.append(candidate)
+        elif _verified_semantic_contract(semantic, path):
             passed.append(candidate)
         else:
             rejected.append(candidate)
     return passed, rejected
+
+
+def _visible_brand_conflicts(semantic: dict, *, title: str, script_body: str) -> list[str]:
+    """Reject explicit commercial branding unless the content requested it."""
+    observed = " ".join([
+        str(semantic.get("caption") or ""),
+        *[str(item) for item in semantic.get("labels") or []],
+    ])
+    context = f"{title} {script_body}".casefold()
+    conflicts = []
+    for marker, pattern in (
+        ("visible_logo", r"\b(?:logo|trademark)\b"),
+        ("visible_brand_name", r"\bbrand\s+name\b"),
+        ("branded_product_lettering", r"\b(?:lettering|label)\s+(?:that\s+)?reads\b"),
+    ):
+        if re.search(pattern, observed, flags=re.IGNORECASE) and not re.search(pattern, context, flags=re.IGNORECASE):
+            conflicts.append(marker)
+    return conflicts
 
 
 def _quarantine_rejected_backgrounds(output_dir: Path, rejected: list[dict]) -> list[dict]:
@@ -1365,7 +1387,28 @@ def _write_measured_scene_execution(output_dir: Path, final: Path, scene_manifes
             "sample_offsets": [round(start + (end - start) * 0.25, 3), round(start + (end - start) * 0.75, 3)],
             "artifact_verified": True,
         })
-    evidence = {"version": "scene_execution_evidence_v3", "video": str(final), "scenes": rows}
+    digest = hashlib.sha256(final.read_bytes()).hexdigest()
+    passed = bool(rows) and len(rows) == min(8, len(scenes)) and all(
+        row["frame_difference"] > 0.002
+        and row["static_ratio"] < 1.0
+        and bool(row["move_id"])
+        and bool(row["profile"])
+        for row in rows
+    )
+    evidence = {
+        "version": "scene_execution_evidence_v3",
+        "video": str(final),
+        "artifact_sha256": digest,
+        "passed": passed,
+        "effect_evidence": {
+            "passed": passed,
+            "artifact_sha256": digest,
+            "probe": "per_scene_frame_difference_and_shotcraft_mapping",
+            "measured_scene_count": len(rows),
+            "distinct_move_count": len({row["move_id"] for row in rows}),
+        },
+        "scenes": rows,
+    }
     (output_dir / "scene_execution_evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
     return evidence
 

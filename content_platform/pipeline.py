@@ -13,7 +13,7 @@ from .claim_ledger import append_verified_sources, build_grounded_technical_arti
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic, normalize_generated_markdown, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
-from .capability_runtime import execute_delivery_postcheck_capability, execute_generation_capabilities, execute_post_generation_capabilities
+from .capability_runtime import execution_evidence_required, execute_delivery_postcheck_capability, execute_generation_capabilities, execute_post_generation_capabilities
 from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
 from .delivery_health import delivery_health_decision
 from .formatters import format_for_platform
@@ -365,7 +365,7 @@ class Pipeline:
                         generated_hygiene,
                         depends_on=["generate_content", "execute_generation_capabilities"],
                     )
-                if brief.get("automated_workflow") and not capability_execution.get("passed"):
+                if execution_evidence_required(brief) and not capability_execution.get("passed"):
                     runner.block(
                         "execute_generation_capabilities",
                         "required_capability_not_executed",
@@ -805,7 +805,7 @@ class Pipeline:
                 )
                 draft["draft_meta"]["capability_execution"] = capability_execution
                 draft["draft_meta"]["tool_invocation_manifest"] = self._tool_invocation_manifest_from_execution(capability_execution)
-                if brief.get("automated_workflow") and not capability_execution.get("passed"):
+                if execution_evidence_required(brief) and not capability_execution.get("passed"):
                     runner.block(
                         "execute_post_generation_capabilities",
                         "required_capability_not_executed",
@@ -837,7 +837,7 @@ class Pipeline:
                     render_required=bool(video_required),
                     quality_gate=final_gate,
                 )
-                if brief.get("automated_workflow") and draft["draft_meta"]["execution_trace"].get("passed") is False:
+                if execution_evidence_required(brief) and draft["draft_meta"]["execution_trace"].get("passed") is False:
                     runner.block(
                         "run_final_platform_quality_gate",
                         "canonical_execution_trace_failed",
