@@ -338,6 +338,27 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(task["state"], "blocked")
         self.assertEqual(task["reason"], "growth strategy snapshot missing")
 
+    def test_overnight_prepare_uses_three_bounded_same_platform_research_rounds(self):
+        slots = self.root / "slots.json"
+        output = self.root / "prepared.json"
+        slots.write_text(json.dumps([{"platform": "kuaishou", "estimate_minutes": 15}]), encoding="utf-8")
+        Store(self.db).save_tool_inventory("growth_strategy:kuaishou:latest", {"policy_id": "growth_quality_policy_v1"})
+        report = {"items": [], "sources": [], "summary": {"items": 0}}
+        captured = {}
+
+        def build(slots_value, **kwargs):
+            captured.update(kwargs)
+            return {"version": "test", "tasks": [{"platform": "kuaishou", "state": "blocked"}]}
+
+        with (
+            patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report),
+            patch("content_platform.overnight_batch.build_due_tasks", side_effect=build),
+        ):
+            code, _ = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(captured["max_research_rounds"], 3)
+
     def test_overnight_prepare_shadows_missing_real_platform_evidence_before_enforcement(self):
         slots = self.root / "slots.json"
         output = self.root / "prepared.json"
