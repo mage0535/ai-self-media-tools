@@ -1200,6 +1200,7 @@ def _finalize_recorded_shot(webm_path: str, target: Path, duration: float) -> bo
     try:
         result = subprocess.run(
             ["ffmpeg", "-y", "-v", "error", "-i", webm_path, "-t", f"{duration:.3f}",
+             "-vf", cinematic_finalize_filter(),
              "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "baseline",
              "-pix_fmt", "yuv420p", "-an", str(target)],
             capture_output=True,
@@ -1209,6 +1210,11 @@ def _finalize_recorded_shot(webm_path: str, target: Path, duration: float) -> bo
     except subprocess.TimeoutExpired:
         return False
     return result.returncode == 0 and target.is_file() and target.stat().st_size > 50_000
+
+
+def cinematic_finalize_filter() -> str:
+    """Preserve CSS motion while adding a sustained cinematic camera push."""
+    return "zoompan=z='min(max(zoom,pzoom)+0.003\\,1.18)':d=1:s=1080x1920:fps=25,format=yuv420p"
 
 
 def _wrap(text: str, max_chars: int = 20):
