@@ -1011,9 +1011,9 @@ class MediaBridge:
                 structural = structural or (
                     all(token in observed for token in ("goal", "input", "output"))
                     or (
-                        "input" in observed
-                        and "output" in observed
-                        and any(token in observed for token in ("box", "rectangle", "card"))
+                        ("input" in observed or "输入" in observed)
+                        and ("output" in observed or "输出" in observed)
+                        and any(token in observed for token in ("box", "rectangle", "card", "框", "卡"))
                     )
                     or (
                         any(token in observed for token in ("box", "rectangle", "card"))
