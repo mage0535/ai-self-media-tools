@@ -53,6 +53,30 @@ def test_cinematic_finalize_filter_keeps_continuous_camera_motion():
     assert "fps=25" in value
 
 
+def test_failed_detail_shot_motion_is_recovered_before_grouping(tmp_path, monkeypatch):
+    target = tmp_path / "shot_08B.mp4"
+    target.write_bytes(b"first-pass")
+    measurements = iter([
+        {"passed": False, "mean_delta": 0.0132},
+        {"passed": True, "mean_delta": 0.02136},
+    ])
+
+    def run(command, **_kwargs):
+        Path(command[-1]).write_bytes(b"recovered-pass")
+        return type("Result", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(film_renderer, "measure_motion_evidence", lambda _path: next(measurements))
+    monkeypatch.setattr(film_renderer.subprocess, "run", run)
+
+    result = film_renderer.ensure_cinematic_shot_motion(target)
+
+    assert result["passed"] is True
+    assert result["recovered"] is True
+    assert result["initial"]["passed"] is False
+    assert result["final"]["passed"] is True
+    assert target.read_bytes() == b"recovered-pass"
+
+
 def test_element_frame_render_timeout_covers_high_resolution_long_scenes():
     assert film_renderer.element_render_timeout_seconds(10.82) >= 90
     assert film_renderer.RENDERER_VERSION == "cinematic-v10"

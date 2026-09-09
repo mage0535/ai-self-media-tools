@@ -1217,6 +1217,33 @@ def cinematic_finalize_filter() -> str:
     return "zoompan=z='min(max(zoom,pzoom)+0.003\\,1.18)':d=1:s=1080x1920:fps=25,format=yuv420p"
 
 
+def ensure_cinematic_shot_motion(target: Path) -> dict:
+    """Recover only a measured-low-motion detail shot before group assembly."""
+    target = Path(target)
+    initial = measure_motion_evidence(target)
+    if initial.get("passed") is True:
+        return {"passed": True, "recovered": False, "initial": initial, "final": initial}
+    temporary = target.with_suffix(".motion-recovery.mp4")
+    result = subprocess.run(
+        ["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(target),
+         "-vf", cinematic_finalize_filter(), "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+         "-profile:v", "baseline", "-pix_fmt", "yuv420p", str(temporary)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if result.returncode != 0 or not temporary.is_file():
+        temporary.unlink(missing_ok=True)
+        return {"passed": False, "recovered": False, "initial": initial, "error": "motion_recovery_encode_failed"}
+    final = measure_motion_evidence(temporary)
+    if final.get("passed") is not True:
+        temporary.unlink(missing_ok=True)
+        return {"passed": False, "recovered": False, "initial": initial, "final": final, "error": "motion_recovery_gate_failed"}
+    os.replace(temporary, target)
+    return {"passed": True, "recovered": True, "initial": initial, "final": final}
+
+
 def _wrap(text: str, max_chars: int = 20):
     """按自然边界换行；英文优先在空格处断行，禁止拆开单词。"""
     if len(text) <= max_chars:
@@ -1656,8 +1683,16 @@ def main() -> int:
             if attempt == 1 and target.is_file() and target.stat().st_size > 50_000:
                 existing_dur = _duration(str(target))
                 if existing_dur >= sd - 0.35:
-                    print(f"{name}: 复用已有镜头 ({existing_dur:.2f}s)")
-                    return {"name": name, "renderer": "cinematic-cache", "fallback": False, "reused": True}
+                    if name.endswith("B") and render_policy["motion_mode"] == "cinematic":
+                        motion_recovery = ensure_cinematic_shot_motion(target)
+                        if not motion_recovery["passed"]:
+                            target.unlink(missing_ok=True)
+                        else:
+                            print(f"{name}: 复用已有镜头 ({existing_dur:.2f}s)")
+                            return {"name": name, "renderer": "cinematic-cache", "fallback": False, "reused": True, "motion_recovery": motion_recovery}
+                    else:
+                        print(f"{name}: 复用已有镜头 ({existing_dur:.2f}s)")
+                        return {"name": name, "renderer": "cinematic-cache", "fallback": False, "reused": True}
                 print(f"{name}: 已有镜头时长异常 ({existing_dur:.2f}s vs 目标 {sd:.2f}s)，重渲染", file=sys.stderr)
             if target.is_file():
                 target.unlink()
@@ -1673,12 +1708,21 @@ def main() -> int:
                         if mp4:
                             return {"name": name, "renderer": "still-motion", "fallback": True, "reused": False}
                     return None
-                return {"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False}
+                motion_recovery = ensure_cinematic_shot_motion(Path(mp4))
+                if not motion_recovery["passed"]:
+                    return None
+                return {"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False, "motion_recovery": motion_recovery}
             if render_policy["motion_mode"] == "cinematic":
                 webm = await record_bounded(name, str(hp), sd + 0.5)
                 mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
                 if mp4:
-                    return {"name": name, "renderer": "playwright-video", "fallback": False, "reused": False}
+                    if name.endswith("B"):
+                        motion_recovery = ensure_cinematic_shot_motion(target)
+                        if not motion_recovery["passed"]:
+                            return None
+                    else:
+                        motion_recovery = {"passed": True, "recovered": False, "not_required": True}
+                    return {"name": name, "renderer": "playwright-video", "fallback": False, "reused": False, "motion_recovery": motion_recovery}
                 return None
             else:
                 mp4 = await render_still(name, str(hp), sd)
