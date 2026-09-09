@@ -65,6 +65,38 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(meta["observed_scene_evidence"]["s01"]["frame_difference"], 0.02)
         self.assertEqual(meta["scene_execution_evidence"]["scenes"][0]["scene_id"], "s01")
 
+    def test_video_generation_registers_renderer_verified_cover_artifact(self):
+        self.pipeline.config.setdefault("media", {})["video"] = {"enabled": True}
+        job = self.pipeline.create("Video cover", ["kuaishou"], {})
+        artifact_dir = self.pipeline.data_dir / "artifacts" / job["id"]
+        artifact_dir.mkdir(parents=True)
+        video = artifact_dir / "final.mp4"
+        cover = artifact_dir / "cover_1080x1440.jpg"
+        video.write_bytes(b"video")
+        cover.write_bytes(b"cover")
+        artifact = {
+            "kind": "video",
+            "path": str(video),
+            "checksum": __import__("hashlib").sha256(video.read_bytes()).hexdigest(),
+            "render_manifest": {
+                "ok": True,
+                "status": "rendered",
+                "cover": str(cover),
+                "cover_quality_evidence": {"passed": True},
+                "cover_quality_gate": {"passed": True},
+            },
+        }
+        runner = Mock()
+        runner.run.side_effect = lambda _step, func, **_kwargs: func()
+
+        with patch.object(self.pipeline.media, "generate", return_value=artifact):
+            self.pipeline._generate_optional_media(job["id"], "video", runner, [])
+
+        stored = self.store.artifacts(job["id"])
+        assert {row["kind"] for row in stored} == {"video", "cover"}
+        saved_cover = next(row for row in stored if row["kind"] == "cover")
+        assert saved_cover["checksum"] == __import__("hashlib").sha256(cover.read_bytes()).hexdigest()
+
     def test_each_job_overwrites_generator_checkpoint_dir(self):
         first = self.pipeline.create("First topic", ["wechat"], {"audience": "operators"})
         second = self.pipeline.create("Second topic", ["wechat"], {"audience": "operators"})
