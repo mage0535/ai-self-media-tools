@@ -11,6 +11,19 @@ from unittest.mock import Mock, patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
+    def test_first_directed_scene_remains_a_cover_card(self):
+        from scripts.video_toolchain_runner import build_cards
+
+        cards = build_cards(
+            "Hook.\n\nProblem.\n\nMethod.\n\nProof.\n\nStep.\n\nBoundary.\n\nResult.\n\nQuestion.",
+            "Title",
+            {"video_route": {"scene_presentations": ["hero_number", "establishing"]}},
+        )
+
+        self.assertEqual(cards[0]["layout"], "cover")
+        self.assertEqual(cards[0]["presentation_mode"], "hero_number")
+        self.assertEqual(cards[0]["hook"], "Title")
+
     def test_video_cover_uses_shared_platform_director(self):
         from PIL import Image
         from scripts.video_toolchain_runner import _generate_video_cover
