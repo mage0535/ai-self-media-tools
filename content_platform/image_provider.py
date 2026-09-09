@@ -32,9 +32,14 @@ def load_secret(name: str, extra_files: Iterable[str | Path] = ()) -> str:
         return value
 
     content_home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+    secrets_home = Path(os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", str(content_home / "secrets")))
     hermes_home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
     candidates = [
         *[Path(p) for p in extra_files if p],
+        secrets_home / "provider.env",
+        secrets_home / "image.env",
+        secrets_home / "agnes.env",
+        secrets_home / "channel_matrix.env",
         content_home / "secrets" / "provider.env",
         content_home / "secrets" / "image.env",
         content_home / "secrets" / "agnes.env",

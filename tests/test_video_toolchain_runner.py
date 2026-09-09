@@ -1192,6 +1192,27 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertEqual(packet["assignments"][0]["background_image"], "/tmp/bg-1.jpg")
         self.assertEqual(packet["assignments"][0]["source_url"], "https://pexels.test/1")
 
+    def test_rejected_backgrounds_are_quarantined_before_recovery(self):
+        from scripts.video_toolchain_runner import _quarantine_rejected_backgrounds
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            backgrounds = root / "backgrounds"
+            backgrounds.mkdir()
+            rejected_path = backgrounds / "bg_01.png"
+            rejected_path.write_bytes(b"rejected-image")
+            external = root / "source.png"
+            external.write_bytes(b"source-image")
+            rejected = [{"path": str(rejected_path)}, {"path": str(external)}]
+
+            result = _quarantine_rejected_backgrounds(root, rejected)
+
+            self.assertFalse(rejected_path.exists())
+            self.assertTrue(external.exists())
+            self.assertTrue(Path(result[0]["quarantined_path"]).is_file())
+            self.assertTrue(result[0]["removed_from_background_pool"])
+            self.assertNotIn("quarantined_path", result[1])
+
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm
 

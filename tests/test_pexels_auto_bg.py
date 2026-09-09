@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from content_platform.image_provider import ImageProviderError
+
 
 class _Response:
     def __init__(self, payload: bytes): self.payload = payload
@@ -80,3 +82,44 @@ def test_force_fetch_excludes_historical_hashes(tmp_path: Path):
 
     assert len(rows) == 8
     assert all(hashlib.sha256(Path(row["background_image"]).read_bytes()).hexdigest() != hashlib.sha256(old).hexdigest() for row in rows)
+
+
+def test_pexels_key_uses_unified_private_secret_loader():
+    from scripts.pexels_auto_bg import _pexels_key
+
+    with patch("content_platform.image_provider.load_secret", return_value="shared-key") as loader:
+        assert _pexels_key() == "shared-key"
+
+    loader.assert_called_once_with("PEXELS_API_KEY")
+
+
+def test_ai_fallback_continues_after_one_provider_failure(tmp_path: Path):
+    from scripts.pexels_auto_bg import auto_fetch_backgrounds
+
+    backgrounds = tmp_path / "backgrounds"
+    backgrounds.mkdir()
+    for index in range(1, 8):
+        (backgrounds / f"bg_{index:02d}.jpg").write_bytes(f"existing-{index}".encode())
+
+    def generated(_prompt, output, **_kwargs):
+        Path(output).write_bytes(b"x" * 6000)
+        return {"provider": "cloudflare", "model": "test"}
+
+    attempts = {"count": 0}
+
+    def generate_after_retry(prompt, output, **kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise ImageProviderError("transient")
+        return generated(prompt, output, **kwargs)
+
+    with (
+        patch("scripts.pexels_auto_bg._pexels_key", return_value=""),
+        patch("content_platform.image_provider.generate_image", side_effect=generate_after_retry),
+    ):
+        rows = auto_fetch_backgrounds("AI workflow", "Title", tmp_path, "kuaishou")
+
+    assert len(rows) == 1
+    assert Path(rows[0]["background_image"]).is_file()
+    report = json.loads((tmp_path / "asset_selection_attempts.json").read_text(encoding="utf-8"))
+    assert [row["status"] for row in report["attempts"]] == ["failed", "accepted"]

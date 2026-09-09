@@ -17,19 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Pexels key 多源读取
 def _pexels_key() -> str:
-    for p in [
-        ROOT / "secrets" / "channel_matrix.env",
-        ROOT / "secrets" / "image.env",
-        Path.home() / ".hermes" / ".env",
-    ]:
-        try:
-            for line in open(p):
-                line = line.strip()
-                if line.startswith("PEXELS_API_KEY="):
-                    return line.split("=", 1)[1].strip().strip('"').strip("'")
-        except Exception:
-            continue
-    return os.environ.get("PEXELS_API_KEY", "")
+    from content_platform.image_provider import load_secret
+
+    return load_secret("PEXELS_API_KEY")
 
 
 def _semantic_queries(text: str, count: int = 8) -> list[str]:
@@ -160,6 +150,7 @@ def auto_fetch_backgrounds(
     key = _pexels_key()
     queries = _semantic_queries(f"{script_body} {title}", 8)
     assignments = []
+    attempt_evidence = []
     base_existing = [] if force else existing
     needed = max(0, 8 - len(base_existing))
 
@@ -173,6 +164,7 @@ def auto_fetch_backgrounds(
                 break
             photo = _download_pexels(q, key, exclude_ids=seen_ids, exclude_hashes=seen_hashes)
             if not photo:
+                attempt_evidence.append({"provider": "pexels", "query": q, "status": "no_candidate"})
                 time.sleep(1)
                 continue
             content = bytes(photo["content"])
@@ -187,8 +179,9 @@ def auto_fetch_backgrounds(
             i = len(base_existing) + len(assignments) + 1
             fp = bg_dir / f"bg_{i:02d}.jpg"
             fp.write_bytes(bytes(content))
-            semantic = _semantic_evidence(fp, [q, title], platform) if semantic_required else {}
+            semantic = _semantic_evidence(fp, [q], platform) if semantic_required else {}
             if semantic_required and not semantic.get("passed"):
+                attempt_evidence.append({"provider": "pexels", "query": q, "status": "semantic_rejected"})
                 fp.unlink(missing_ok=True)
                 continue
             assignments.append({
@@ -201,6 +194,7 @@ def auto_fetch_backgrounds(
                 "generation_evidence": {}, "artist": photo["artist"], "artist_url": photo["artist_url"],
                 "asset_id": photo["asset_id"],
             })
+            attempt_evidence.append({"provider": "pexels", "query": q, "status": "accepted"})
             time.sleep(1.0)
 
     # Pexels 不足 8 张 → AI 生图兜底（Pollinations FLUX 免费）
@@ -228,8 +222,9 @@ def auto_fetch_backgrounds(
                         if image_hash in seen_hashes:
                             fp.unlink(missing_ok=True)
                             continue
-                        semantic = _semantic_evidence(fp, [query, title], platform) if semantic_required else {}
+                        semantic = _semantic_evidence(fp, [query], platform) if semantic_required else {}
                         if semantic_required and not semantic.get("passed"):
+                            attempt_evidence.append({"provider": str(generated.get("provider") or "auto"), "query": query, "status": "semantic_rejected"})
                             fp.unlink(missing_ok=True)
                             continue
                         seen_hashes.add(image_hash)
@@ -249,12 +244,19 @@ def auto_fetch_backgrounds(
                                 "provenance": dict(generated.get("provenance") or {}),
                             },
                         })
-                except Exception:
-                    break
+                        attempt_evidence.append({"provider": str(generated.get("provider") or "auto"), "query": query, "status": "accepted"})
+                except Exception as exc:
+                    attempt_evidence.append({"provider": "auto", "query": query, "status": "failed", "error_type": type(exc).__name__})
+                    fp.unlink(missing_ok=True)
+                    continue
                 time.sleep(0.5)
-        except Exception:
-            pass
+        except Exception as exc:
+            attempt_evidence.append({"provider": "auto", "query": "", "status": "setup_failed", "error_type": type(exc).__name__})
 
+    evidence_path = output_dir / "asset_selection_attempts.json"
+    temporary = evidence_path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps({"version": "asset_selection_attempts_v1", "attempts": attempt_evidence}, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, evidence_path)
     if not assignments:
         return []
     return assignments

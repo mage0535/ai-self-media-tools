@@ -169,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
             script_body=script_body,
             platform=_primary_platform(plan),
         )
+        rejected_semantics = _quarantine_rejected_backgrounds(output_dir, rejected_semantics)
         _write_json_atomic(
             output_dir / "rejected_visual_semantics.json",
             {"version": "rejected_visual_semantics_v1", "assets": rejected_semantics},
@@ -1051,6 +1052,33 @@ def _verify_materialized_semantics(
         else:
             rejected.append(candidate)
     return passed, rejected
+
+
+def _quarantine_rejected_backgrounds(output_dir: Path, rejected: list[dict]) -> list[dict]:
+    """Remove rejected copies from the recovery pool without touching source assets."""
+    backgrounds = (Path(output_dir) / "backgrounds").resolve()
+    quarantine = Path(output_dir) / "rejected_backgrounds"
+    updated = []
+    for item in rejected:
+        record = dict(item)
+        path = Path(str(record.get("path") or ""))
+        try:
+            resolved = path.resolve()
+        except OSError:
+            updated.append(record)
+            continue
+        if path.is_file() and resolved.parent == backgrounds:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            quarantine.mkdir(parents=True, exist_ok=True)
+            target = quarantine / f"{path.stem}-{digest[:12]}{path.suffix}"
+            os.replace(path, target)
+            record.update({
+                "rejected_sha256": digest,
+                "quarantined_path": str(target),
+                "removed_from_background_pool": True,
+            })
+        updated.append(record)
+    return updated
 
 
 def _asset_provenance_records(materialized: list[dict]) -> list[dict]:
