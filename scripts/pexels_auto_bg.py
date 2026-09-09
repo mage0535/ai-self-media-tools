@@ -212,7 +212,9 @@ def auto_fetch_backgrounds(
             while len(assignments) < needed and attempts < max(3, needed * 3):
                 attempts += 1
                 i = len(base_existing) + len(assignments) + 1
-                query = queries[(i - 1) % len(queries)]
+                # Advance on every attempt, not only after acceptance. A rejected
+                # first candidate must not consume the entire recovery budget.
+                query = queries[(attempts - 1) % len(queries)]
                 prompt = _ai_prompt(query, platform) + f", distinct scene {i}, composition variant {i}, candidate attempt {attempts}"
                 fp = bg_dir / f"bg_{i:02d}.jpg"
                 try:
@@ -221,7 +223,9 @@ def auto_fetch_backgrounds(
                         fp,
                         provider="auto",
                         size="1080x1920",
-                        intent="real_scene",
+                        # Stock was already exhausted above. Start with the fast
+                        # generated chain rather than repeating the same search.
+                        intent="fast_fallback",
                     )
                     if fp.is_file() and fp.stat().st_size > 5000:
                         image_hash = hashlib.sha256(fp.read_bytes()).hexdigest()
