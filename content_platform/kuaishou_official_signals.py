@@ -93,6 +93,11 @@ def parse_kuaishou_creator_text(
     return {"passed": not failures, "failures": failures, "matrix_row": row if not failures else {}}
 
 
+def creator_page_requires_login(text: str) -> bool:
+    lowered = str(text or "").casefold()
+    return any(token in lowered for token in ("扫码登录", "请登录", "立即登录", "验证码", "captcha"))
+
+
 def collect_kuaishou_creator_signals(
     state_file: str | Path,
     output_dir: str | Path,
@@ -126,7 +131,7 @@ def collect_kuaishou_creator_signals(
         context.close()
         browser.close()
     lowered = body.casefold()
-    if any(token in lowered for token in ("扫码登录", "请登录", "验证码", "captcha")):
+    if creator_page_requires_login(body):
         return {}, {"source": "kuaishou:official_creator", "status": "login_required_or_captcha", "count": 0, "final_url": final_url}
     snapshot_sha = hashlib.sha256(text_path.read_bytes()).hexdigest()
     parsed = parse_kuaishou_creator_text(body, captured_at=captured_at, source_url=final_url, snapshot_sha256=snapshot_sha)

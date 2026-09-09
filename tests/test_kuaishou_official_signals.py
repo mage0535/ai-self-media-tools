@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from content_platform.kuaishou_official_signals import parse_kuaishou_creator_text, upsert_official_signal_matrix
+from content_platform.kuaishou_official_signals import creator_page_requires_login, parse_kuaishou_creator_text, upsert_official_signal_matrix
 
 
 def test_parse_kuaishou_creator_text_extracts_ranked_inspiration_and_activity():
@@ -51,3 +51,8 @@ def test_upsert_official_signal_matrix_preserves_other_platforms(tmp_path):
     assert [item["platform"] for item in payload["platforms"]] == ["zhihu", "kuaishou"]
     assert payload["platforms"][1]["status"] == "backend_loaded"
     assert payload["updated_at"] == now.isoformat()
+
+
+def test_kuaishou_public_creator_landing_page_is_login_required():
+    assert creator_page_requires_login("快手创作者服务平台\n立即登录\n平台热点") is True
+    assert creator_page_requires_login("创作灵感\nai工具\n15.6万人参与\n激励活动") is False
