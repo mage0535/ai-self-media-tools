@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -1212,6 +1213,37 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertTrue(Path(result[0]["quarantined_path"]).is_file())
             self.assertTrue(result[0]["removed_from_background_pool"])
             self.assertNotIn("quarantined_path", result[1])
+
+    def test_measured_scene_execution_binds_effect_to_final_video(self):
+        from PIL import Image
+        from scripts.video_toolchain_runner import _write_measured_scene_execution
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            final = root / "final.mp4"
+            final.write_bytes(b"final-video")
+            manifest = {"scenes": [{"scene_id": f"s{index:02d}"} for index in range(1, 9)]}
+            motion = {
+                "segments": [
+                    {"scene_id": f"s{index:02d}", "move_id": f"move-{index}", "profile": "cinematic"}
+                    for index in range(1, 9)
+                ]
+            }
+            frames = []
+            for _index in range(8):
+                frames.extend([Image.new("L", (16, 16), 0), Image.new("L", (16, 16), 255)])
+
+            with patch("scripts.video_toolchain_runner._video_duration", return_value=40.0), patch(
+                "scripts.video_toolchain_runner._sample_video_frame", side_effect=frames
+            ):
+                result = _write_measured_scene_execution(root, final, manifest, motion)
+
+            digest = hashlib.sha256(final.read_bytes()).hexdigest()
+            self.assertTrue(result["passed"])
+            self.assertEqual(result["artifact_sha256"], digest)
+            self.assertEqual(result["effect_evidence"]["artifact_sha256"], digest)
+            self.assertEqual(result["effect_evidence"]["probe"], "per_scene_frame_difference_and_shotcraft_mapping")
+            self.assertEqual(result["effect_evidence"]["measured_scene_count"], 8)
 
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm

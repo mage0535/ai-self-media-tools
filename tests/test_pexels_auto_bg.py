@@ -93,6 +93,33 @@ def test_pexels_key_uses_unified_private_secret_loader():
     loader.assert_called_once_with("PEXELS_API_KEY")
 
 
+def test_semantic_queries_are_scene_specific_not_generic_single_words():
+    from scripts.pexels_auto_bg import _semantic_queries
+
+    script = """手机里装的AI工具越来越多，每个工具都带来一套新操作。
+
+资料散得到处都是，注意力被切得稀碎。
+
+第一步做减法，重复工具只留一个。
+
+第二步明确分工，写稿、查资料、做图各用一个入口。
+
+第三步固定工作流，把每一步写下来。
+
+最近先别装新工具，把手头这套反复用熟。
+
+只用一个主力入口完成今天的任务。
+
+复盘实际产出，再决定保留哪个工具。"""
+    queries = _semantic_queries(script, 8)
+
+    assert len(queries) == 8
+    assert len(set(queries)) == 8
+    assert all(len(query.split()) >= 3 for query in queries)
+    assert not {"technology", "computer", "productivity", "workspace"}.intersection(queries)
+    assert any("multiple" in query or "overwhelmed" in query for query in queries)
+
+
 def test_ai_fallback_continues_after_one_provider_failure(tmp_path: Path):
     from scripts.pexels_auto_bg import auto_fetch_backgrounds
 

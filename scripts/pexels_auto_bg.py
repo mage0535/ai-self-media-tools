@@ -36,17 +36,16 @@ def _semantic_queries(text: str, count: int = 8) -> list[str]:
     base_queries = list(beat_queries)
     # 平台/领域关键词映射
     domain_map = {
-        "ai": ["artificial intelligence", "technology", "computer"],
-        "automation": ["automation", "robot", "efficiency"],
-        "邮件": ["email", "communication", "office"],
-        "邮件": ["email"],
-        "表格": ["spreadsheet", "data", "excel"],
-        "编程": ["programming", "code", "developer"],
-        "效率": ["productivity", "workspace", "desk"],
-        "猫咪": ["cat", "kitten", "pet"],
-        "猫": ["cat", "kitten"],
-        "工作流": ["workflow", "process", "diagram"],
-        "视频": ["video", "camera", "content creation"],
+        "ai": ["artificial intelligence creative workstation", "person using AI software laptop", "human reviewing AI assistant output"],
+        "automation": ["digital workflow automation team", "human checking automated process", "connected task workflow screen"],
+        "邮件": ["professional email communication laptop", "person sorting email inbox"],
+        "表格": ["analyst reviewing spreadsheet data", "organized data table workstation"],
+        "编程": ["software developer coding laptop", "programmer reviewing code screen"],
+        "效率": ["focused productive creative workspace", "organized desk single laptop", "person completing task checklist"],
+        "猫咪": ["playful kitten home office", "curious cat beside laptop"],
+        "猫": ["playful cat home office", "curious cat beside laptop"],
+        "工作流": ["digital workflow process diagram", "team following task process", "connected workflow steps screen"],
+        "视频": ["video editor camera workstation", "content creator editing footage"],
     }
     for key, qs in domain_map.items():
         if key in lowered:
@@ -71,9 +70,16 @@ def _semantic_queries(text: str, count: int = 8) -> list[str]:
 
 def _query_for_beat(beat: str) -> str:
     rules = [
+        (("工具越来越多", "装得越多", "工具太多", "too many tools"), "overwhelmed creator multiple computer screens"),
+        (("资料散", "注意力", "切得稀碎", "来回切换", "switching"), "overwhelmed worker switching multiple screens"),
+        (("做减法", "重复的工具", "只留一个"), "person organizing apps single laptop"),
+        (("明确分工", "写初稿", "查资料", "做图"), "content creator planning tasks workstation"),
+        (("固定的工作流", "固定工作流", "每一步对应"), "team following documented workflow steps"),
+        (("别再装", "别装新工具", "反复用熟"), "focused worker using single laptop"),
+        (("主力入口", "一个入口"), "organized workspace one central computer"),
+        (("复盘", "实际产出", "决定保留"), "person reviewing completed task checklist"),
         (("api", "接口", "控制台", "dashboard", "developer"), "software developer API dashboard laptop"),
         (("文案", "文本", "图片", "图像", "语音", "content creator"), "content creator editing workstation"),
-        (("切换", "工具太多", "too many tools", "switching"), "overwhelmed creator multiple computer screens"),
         (("工作流", "workflow", "automation", "自动化"), "digital workflow automation team"),
         (("视频", "剪辑", "camera"), "video editor camera workstation"),
         (("效率", "productivity", "省时间"), "focused productive creative workspace"),
