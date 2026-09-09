@@ -7,6 +7,7 @@ import json
 import sqlite3
 import subprocess
 import tempfile
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -162,10 +163,23 @@ def validate_asset_set(
             failures.append("verified_semantic_evidence_missing")
         elif require_verified_semantics:
             actual_sha256 = _sha256(path)
+            artifact_verified = (
+                semantic.get("score_source") == "deterministic_caption_label_recall"
+                and semantic.get("evidence_level") == "artifact_verified"
+            )
+            semantic_host = (urllib.parse.urlparse(str(semantic.get("source_url") or "")).hostname or "").casefold()
+            source_verified = (
+                semantic.get("analyzer") == "pexels_alt_metadata"
+                and semantic.get("provider") == "pexels"
+                and semantic.get("score_source") == "provider_caption_label_recall"
+                and semantic.get("evidence_level") == "source_verified"
+                and semantic_host in {"pexels.com", "www.pexels.com"}
+                and str(semantic.get("source_url") or "") == source_url
+                and bool(str(semantic.get("asset_id") or "").strip())
+            )
             if (
                 semantic.get("version") != "image_semantic_evidence_v1"
-                or semantic.get("score_source") != "deterministic_caption_label_recall"
-                or semantic.get("evidence_level") != "artifact_verified"
+                or not (artifact_verified or source_verified)
                 or semantic.get("passed") is not True
                 or str(semantic.get("image_sha256") or "") != actual_sha256
                 or abs(float(semantic.get("semantic_match_score") or 0) - float(record.get("semantic_match_score") or 0)) > 1e-6

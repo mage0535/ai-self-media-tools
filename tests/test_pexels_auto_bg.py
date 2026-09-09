@@ -17,7 +17,7 @@ def test_pexels_candidate_pool_skips_excluded_photo_id():
 
     api = json.dumps({"photos": [
         {"id": 1, "url": "https://pexels.test/1", "photographer": "A", "photographer_url": "https://pexels.test/a", "src": {"large2x": "https://cdn.test/1.jpg"}},
-        {"id": 2, "url": "https://pexels.test/2", "photographer": "B", "photographer_url": "https://pexels.test/b", "src": {"large2x": "https://cdn.test/2.jpg"}},
+        {"id": 2, "url": "https://pexels.test/2", "photographer": "B", "photographer_url": "https://pexels.test/b", "alt": "Person using multiple computer screens", "src": {"large2x": "https://cdn.test/2.jpg"}},
     ]}).encode()
 
     with patch("scripts.pexels_auto_bg.urllib.request.urlopen", side_effect=[_Response(api), _Response(b"photo-two")]):
@@ -25,6 +25,7 @@ def test_pexels_candidate_pool_skips_excluded_photo_id():
 
     assert result["asset_id"] == "2"
     assert result["content"] == b"photo-two"
+    assert result["alt"] == "Person using multiple computer screens"
 
 
 def test_pexels_candidate_pool_skips_historical_content_hash():
@@ -118,6 +119,51 @@ def test_semantic_queries_are_scene_specific_not_generic_single_words():
     assert all(len(query.split()) >= 3 for query in queries)
     assert not {"technology", "computer", "productivity", "workspace"}.intersection(queries)
     assert any("multiple" in query or "overwhelmed" in query for query in queries)
+
+
+def test_pexels_alt_metadata_is_hash_bound_source_semantic_evidence(tmp_path):
+    from scripts.pexels_auto_bg import _source_metadata_semantic_evidence
+
+    image = tmp_path / "asset.jpg"
+    image.write_bytes(b"pexels-image")
+    result = _source_metadata_semantic_evidence(
+        image,
+        ["overwhelmed creator multiple computer screens"],
+        {
+            "alt": "Person typing at a modern workspace with multiple computer screens.",
+            "source_url": "https://www.pexels.com/photo/man-hands-on-keyboard-15601232/",
+            "asset_id": "15601232",
+        },
+    )
+
+    assert result["passed"] is True
+    assert result["evidence_level"] == "source_verified"
+    assert result["score_source"] == "provider_caption_label_recall"
+    assert result["image_sha256"] == __import__("hashlib").sha256(image.read_bytes()).hexdigest()
+    assert result["asset_id"] == "15601232"
+
+
+def test_vision_quota_opens_circuit_and_reuses_pexels_source_evidence(tmp_path):
+    import scripts.pexels_auto_bg as pexels
+
+    image = tmp_path / "asset.jpg"
+    image.write_bytes(b"pexels-image")
+    source = {
+        "alt": "Person typing at a modern workspace with multiple computer screens.",
+        "source_url": "https://www.pexels.com/photo/man-hands-on-keyboard-15601232/",
+        "asset_id": "15601232",
+    }
+    pexels._VISION_CIRCUIT_REASON = ""
+    try:
+        with patch("scripts.image_semantic_analyze.analyze_image", side_effect=RuntimeError("Cloudflare vision HTTP 429 daily free allocation")) as analyze:
+            first = pexels._semantic_evidence(image, ["multiple computer screens"], "kuaishou", source=source)
+            second = pexels._semantic_evidence(image, ["multiple computer screens"], "kuaishou", source=source)
+        assert first["passed"] is True
+        assert second["passed"] is True
+        assert first["vision_fallback_reason"] == "provider_quota_exhausted"
+        assert analyze.call_count == 1
+    finally:
+        pexels._VISION_CIRCUIT_REASON = ""
 
 
 def test_ai_fallback_continues_after_one_provider_failure(tmp_path: Path):
