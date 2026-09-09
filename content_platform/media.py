@@ -782,7 +782,7 @@ class MediaBridge:
                     gate.setdefault("failures", []).append("embedded_provider_branding_not_allowed")
                 if gate.get("passed") and self.semantic_validation_required:
                     semantic = self._analyze_image_semantics(output, self._semantic_request(job, item))
-                    if not semantic.get("passed"):
+                    if not semantic.get("passed") and self._is_deterministic_renderer_result(gate["provider_result"]):
                         semantic = self._derive_deterministic_semantic_evidence(semantic, output, gate["provider_result"])
                     gate["semantic_evidence"] = semantic
                     if not semantic.get("passed"):
@@ -1042,6 +1042,13 @@ class MediaBridge:
             "visible_labels": labels,
         })
         return result
+
+    @staticmethod
+    def _is_deterministic_renderer_result(provider_result):
+        return str((provider_result or {}).get("provider") or "") in {
+            "knowledge_card_renderer",
+            "cover_renderer",
+        }
 
     @staticmethod
     def _is_xiaohongshu_knowledge_image_job(job):

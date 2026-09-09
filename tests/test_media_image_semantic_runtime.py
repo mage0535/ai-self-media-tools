@@ -362,3 +362,12 @@ def test_deterministic_visual_semantics_require_vision_structure_and_hash_bound_
         "labels": ["four panels", "two rows of two", "checkboxes"],
     }
     assert MediaBridge._derive_deterministic_semantic_evidence(four_grid, image, boundary_renderer)["passed"] is True
+
+
+def test_only_project_renderers_are_eligible_for_dual_semantic_evidence():
+    from content_platform.media import MediaBridge
+
+    assert MediaBridge._is_deterministic_renderer_result({"provider": "knowledge_card_renderer"}) is True
+    assert MediaBridge._is_deterministic_renderer_result({"provider": "cover_renderer"}) is True
+    assert MediaBridge._is_deterministic_renderer_result({"provider": "pixazo"}) is False
+    assert MediaBridge._is_deterministic_renderer_result({"provider": "sense_nova"}) is False
