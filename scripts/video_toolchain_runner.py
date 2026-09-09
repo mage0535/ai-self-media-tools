@@ -648,6 +648,8 @@ def build_cards(
         beat = beats[index % len(beats)]
         presentation = directed_presentations[index] if index < len(directed_presentations) else ""
         layout = presentation_layouts.get(presentation, LAYOUTS[index % len(LAYOUTS)])
+        if index == 0:
+            layout = "cover"
         scene = (cinema_scenes or [])[index] if index < len(cinema_scenes or []) else {}
         headline = _visual_headline(beat, presentation, index)
         card = {
