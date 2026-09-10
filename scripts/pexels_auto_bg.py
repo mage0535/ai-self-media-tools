@@ -187,7 +187,7 @@ def auto_fetch_backgrounds(
                     continue
                 seen_hashes.add(h)
                 i = len(base_existing) + len(assignments) + 1
-                fp = bg_dir / f"bg_{i:02d}.jpg"
+                fp = _next_background_path(bg_dir)
                 fp.write_bytes(content)
                 semantic = _semantic_evidence(fp, [q], platform, source=photo) if semantic_required else {}
                 if semantic_required and not semantic.get("passed"):
@@ -223,7 +223,7 @@ def auto_fetch_backgrounds(
                 # first candidate must not consume the entire recovery budget.
                 query = queries[(attempts - 1) % len(queries)]
                 prompt = _ai_prompt(query, platform) + f", distinct scene {i}, composition variant {i}, candidate attempt {attempts}"
-                fp = bg_dir / f"bg_{i:02d}.jpg"
+                fp = _next_background_path(bg_dir)
                 try:
                     generated = generate_image(
                         prompt,
@@ -362,6 +362,15 @@ def _ai_prompt(query: str, platform: str = "") -> str:
     else:
         style = "cinematic, high quality, clean composition, no text, suitable for text overlay"
     return f"{query}, {style}"
+
+
+def _next_background_path(directory: Path, suffix: str = ".jpg") -> Path:
+    """Return an unused numbered path without overwriting sparse recovery files."""
+    for index in range(1, 1000):
+        candidate = Path(directory) / f"bg_{index:02d}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError("background filename space exhausted")
 
 
 def write_auto_assets(assignments: list[dict], output_dir: Path) -> Path | None:
