@@ -117,6 +117,50 @@ def test_region_error_retries_once_with_configured_us_proxy_without_model_overri
     assert "proxy.internal" not in json.dumps(attempts)
 
 
+def test_compact_retry_timeout_uses_one_proxy_route_with_same_active_model(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")
+    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path)})
+
+    def attempt(*args, **kwargs):
+        calls.append((kwargs["retry"], kwargs.get("proxy_url", "")))
+        if len(calls) == 1:
+            raise ValueError("provider returned non-JSON content")
+        if len(calls) == 2:
+            raise GenerationTimeoutError("hard timeout")
+        return {"title": "T", "body": "safe body"}
+
+    monkeypatch.setattr(generator, "_hermes_attempt", attempt)
+
+    result = generator._hermes("topic", {"platform": "kuaishou"}, {"language": "zh", "platform_rules": ""})
+
+    assert result["title"] == "T"
+    assert calls == [
+        (False, ""),
+        (True, ""),
+        (True, "socks5h://proxy.internal:2080"),
+    ]
+
+
+def test_initial_hard_timeout_uses_proxy_for_compact_retry(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")
+    generator = DraftGenerator({"provider": "hermes-cli", "checkpoint_dir": str(tmp_path)})
+
+    def attempt(*args, **kwargs):
+        calls.append((kwargs["retry"], kwargs.get("proxy_url", "")))
+        if len(calls) == 1:
+            raise GenerationTimeoutError("hard timeout")
+        return {"title": "T", "body": "safe body"}
+
+    monkeypatch.setattr(generator, "_hermes_attempt", attempt)
+
+    result = generator._hermes("topic", {"platform": "kuaishou"}, {"language": "zh", "platform_rules": ""})
+
+    assert result["title"] == "T"
+    assert calls == [(False, ""), (True, "socks5h://proxy.internal:2080")]
+
+
 def test_generic_auth_error_does_not_retry_through_proxy(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")
