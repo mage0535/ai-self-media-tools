@@ -19,6 +19,19 @@ def remove_unplanned_continuation(body: str) -> str:
     return "\n".join(kept).strip()
 
 
+def replace_unplanned_video_continuations(body: str) -> str:
+    """Replace unsupported sequel promises while preserving video beat count."""
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", str(body or "")) if part.strip()]
+    matched = [index for index, part in enumerate(paragraphs) if CONTINUATION.search(part)]
+    for offset, index in enumerate(matched):
+        paragraphs[index] = (
+            "你准备先从哪一步开始？评论区说说。"
+            if offset == len(matched) - 1
+            else "先收藏这份步骤，实际执行一次再决定是否扩展。"
+        )
+    return "\n\n".join(paragraphs).strip()
+
+
 def build_content_depth_plan(
     title: str,
     body: str,

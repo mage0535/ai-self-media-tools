@@ -1,4 +1,4 @@
-from content_platform.content_depth import build_content_depth_plan, remove_unplanned_continuation, validate_content_depth_plan
+from content_platform.content_depth import build_content_depth_plan, remove_unplanned_continuation, replace_unplanned_video_continuations, validate_content_depth_plan
 
 
 def test_depth_plan_rejects_empty_continuation_promise():
@@ -44,3 +44,18 @@ def test_remove_unplanned_continuation_covers_short_next_and_later_promises():
     cleaned = remove_unplanned_continuation(body)
 
     assert cleaned == "先把一个工具用熟。"
+
+
+def test_replace_unplanned_video_continuations_preserves_eight_beat_structure():
+    body = "\n\n".join([
+        "开头", "问题", "步骤一", "步骤二", "步骤三", "边界",
+        "想学更多技巧，点个关注，后面持续分享。",
+        "关注我，下期教你选对工具",
+    ])
+
+    cleaned = replace_unplanned_video_continuations(body)
+
+    assert len(cleaned.split("\n\n")) == 8
+    assert "后面" not in cleaned
+    assert "下期" not in cleaned
+    assert cleaned.endswith("你准备先从哪一步开始？评论区说说。")
