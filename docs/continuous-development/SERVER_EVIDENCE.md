@@ -763,3 +763,11 @@ Observed read-only on 2026-08-31.
 - A positive fixture at five days is accepted; a three-month fixture is rejected. Publication age above 30 days is a hard boundary and is not rescued by engagement.
 - Related tests returned 57 passed. Fresh full regression returned 1831 passed plus 37 subtests in 348.55 seconds; JUnit `artifacts/test-reports/sol-b2-juejin-visible-card-20260910.xml` has zero failures/errors.
 - This is local contract proof only. Linux staging collection and strict pack acceptance remain pending; production and publishers are unchanged.
+
+## 2026-09-10 Juejin First Live Contract Result
+
+- Staging `99f99f7` ran two direct Juejin queries. One query returned one complete recent article; the second returned zero and was initially mislabeled login-required because normal navigation contains `登录`.
+- The first contract report incorrectly called the platform ready with one sample. TDD now requires three complete rows for Top3 readiness and labels one or two as `insufficient_sample_count`.
+- Juejin normal-search markers now prevent the same navigation false positive seen on Bilibili, while CAPTCHA remains blocking.
+- Related tests returned 59 passed. Fresh full regression returned 1833 passed plus 37 subtests in 346.96 seconds; JUnit `artifacts/test-reports/sol-b2-top3-contract-20260910.xml` has zero failures/errors.
+- Juejin currently has one real recent sample, not a completed Top3 pool. Query expansion remains required. Production is unchanged.

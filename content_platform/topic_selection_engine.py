@@ -266,6 +266,7 @@ def build_contract_gap_report(
     parameter_pack: dict[str, Any] | None,
     *,
     platforms: list[str],
+    required_sample_count: int = 3,
 ) -> dict[str, Any]:
     """Audit collector output against the strict work-evidence contract."""
     source_platforms = (parameter_pack or {}).get("platforms") or {}
@@ -273,6 +274,7 @@ def build_contract_gap_report(
     legacy_incomplete = 0
     missing_count = 0
     ready_count = 0
+    minimum = max(1, int(required_sample_count))
     for raw_platform in platforms:
         platform = str(raw_platform or "").casefold().strip()
         source = source_platforms.get(platform)
@@ -282,6 +284,7 @@ def build_contract_gap_report(
                 "legacy_ready": False,
                 "sample_count": 0,
                 "contract_ready_sample_count": 0,
+                "required_sample_count": minimum,
                 "missing_fields": list(_WORK_REQUIRED_FIELDS),
             }
             missing_count += 1
@@ -293,6 +296,7 @@ def build_contract_gap_report(
                 "legacy_ready": bool(source.get("ready")),
                 "sample_count": 0,
                 "contract_ready_sample_count": 0,
+                "required_sample_count": minimum,
                 "missing_fields": [],
             }
             continue
@@ -306,8 +310,12 @@ def build_contract_gap_report(
                 missing_fields.update(missing)
             else:
                 accepted.append(item)
-        status = "contract_ready" if accepted else "contract_incomplete"
-        if accepted:
+        status = (
+            "contract_ready" if len(accepted) >= minimum
+            else "insufficient_sample_count" if accepted
+            else "contract_incomplete"
+        )
+        if len(accepted) >= minimum:
             ready_count += 1
         if bool(source.get("ready")) and not accepted:
             legacy_incomplete += 1
@@ -316,6 +324,7 @@ def build_contract_gap_report(
             "legacy_ready": bool(source.get("ready")),
             "sample_count": len(samples),
             "contract_ready_sample_count": len(accepted),
+            "required_sample_count": minimum,
             "missing_fields": sorted(missing_fields),
         }
     return {
