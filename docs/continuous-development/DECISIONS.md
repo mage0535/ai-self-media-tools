@@ -525,3 +525,10 @@
 - Third-party generated images pass only on independent vision evidence. They cannot use renderer metadata to repair a failed score.
 - Project-owned deterministic visuals may combine independent vision structure evidence with renderer-declared concepts and visible labels only when the renderer output SHA equals the inspected artifact SHA.
 - Each supported deterministic layout has its own observable geometry contract. Missing structure, missing labels, wrong provider or hash mismatch fails closed.
+
+## D74: Three-Layer Topic Decisions Have One Auditable Identity Boundary
+
+- Same-platform same-lane works, same-platform official activities/keywords and cross-platform references remain separate evidence classes. A cross-platform reference never receives target-platform or native-hotspot identity.
+- Same-platform viral works require a real URL, capture time, collector and at least one non-zero platform metric. Official activities may lack public interaction metrics, but remain `native_verified=false` unless a separately verified native hotspot identity exists.
+- Official support boosts a work only when at least two configured lane terms overlap; one generic term such as `AI` is insufficient unless it is the account's only configured term.
+- The first rollout is compatibility observation in overnight preparation. It records the unified decision and coverage before generation without silently changing legacy ranking. CLI, MCP and Pipeline become authoritative only after their collectors satisfy the same contract and shadow differences are accepted.

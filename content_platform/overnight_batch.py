@@ -252,6 +252,21 @@ def build_due_tasks(
                 if researched:
                     candidates = researched
                     break
+        from .topic_selection_engine import decide_topic
+
+        decision_keywords = raw.get("topic_keywords")
+        if not isinstance(decision_keywords, list) or not decision_keywords:
+            decision_keywords = list(PLATFORM_TOPIC_KEYWORDS.get(platform) or DEFAULT_AI_TOPIC_KEYWORDS)
+        decision_inputs = list(candidates)
+        decision_inputs.extend(
+            item for item in items
+            if isinstance(item, dict) and str(item.get("identity_role") or "").casefold() == "cross_platform_reference"
+        )
+        unified_topic_decision = decide_topic(
+            platform,
+            decision_inputs,
+            lane_keywords=[str(value) for value in decision_keywords],
+        )
         editorial = _editorial_fallback_candidate(raw)
         if (
             editorial is None
@@ -414,6 +429,7 @@ def build_due_tasks(
             row.update({
                 "topic": selected["title"],
                 "topic_fingerprint": selected.get("fingerprint") or normalize_topic(selected["title"]),
+                "topic_decision": unified_topic_decision,
                 "brief": {
                     "source": selected.get("source"),
                     "sources": [selected["url"]] if selected.get("url") else [],
@@ -422,6 +438,14 @@ def build_due_tasks(
                     "topic_decision": {
                         "score": selected.get("score", 0),
                         "growth_signals": ["timeliness", "user_benefit"],
+                        "decision_version": unified_topic_decision.get("version"),
+                        "decision_status": unified_topic_decision.get("status"),
+                        "selection_layer": (
+                            (unified_topic_decision.get("selected") or {}).get("selection_layer")
+                            if str((unified_topic_decision.get("selected") or {}).get("title") or "") == str(selected.get("title") or "")
+                            else "editorial_calendar" if selection_mode == "editorial_calendar" else "legacy_compatibility"
+                        ),
+                        "coverage": unified_topic_decision.get("coverage") or {},
                     },
                     "trend_candidate": trend_candidate,
                     "run_contract": run_contract,
