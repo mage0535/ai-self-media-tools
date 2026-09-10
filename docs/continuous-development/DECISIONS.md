@@ -605,3 +605,9 @@
 - One or two complete rows remain valid evidence but produce `insufficient_sample_count`; they do not make a platform contract-ready.
 - The contract-gap report records accepted and required counts separately. Current Top3 readiness defaults to three complete samples.
 - Normal Juejin search pages contain login navigation. Login blocking requires CAPTCHA or absence of normal search structure; navigation text alone cannot turn a no-result query into an authentication failure.
+
+## D86: Juejin Current-Month Discovery Uses Latest-Published Search
+
+- Juejin's comprehensive search returned mostly month/year-old works. The 30-day pool uses the observed public `type=0&sort=1` route, which returned minute/hour-old articles in the same server environment.
+- Latest sorting supplies the time window; engagement still determines relative interest among accepted recent works. Sorting does not waive lane, metric, identity or Top3 gates.
+- Default platform queries must exercise this route so production does not depend on manually supplied query overrides.

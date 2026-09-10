@@ -771,3 +771,10 @@ Observed read-only on 2026-08-31.
 - Juejin normal-search markers now prevent the same navigation false positive seen on Bilibili, while CAPTCHA remains blocking.
 - Related tests returned 59 passed. Fresh full regression returned 1833 passed plus 37 subtests in 346.96 seconds; JUnit `artifacts/test-reports/sol-b2-top3-contract-20260910.xml` has zero failures/errors.
 - Juejin currently has one real recent sample, not a completed Top3 pool. Query expansion remains required. Production is unchanged.
+
+## 2026-09-10 Juejin Latest-Sort Evidence
+
+- Four expanded comprehensive-sort queries still retained only one recent strict row. An isolated browser probe compared public sort parameters: `sort=1` returned results from 8 minutes to 6 hours old, while `sort=2` and comprehensive results were dominated by month/year-old works.
+- TDD extracts logged-search URL construction and fixes Juejin to `type=0&sort=1`. The 30-day parser and Top3 minimum remain unchanged.
+- Related tests returned 60 passed. Fresh full regression returned 1834 passed plus 37 subtests in 368.76 seconds; JUnit `artifacts/test-reports/sol-b2-juejin-latest-sort-20260910.xml` has zero failures/errors.
+- Default-query Linux staging acceptance is next. Production remains unchanged.
