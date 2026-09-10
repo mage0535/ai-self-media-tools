@@ -6,7 +6,10 @@ import re
 from typing import Any
 
 
-CONTINUATION = re.compile(r"(?:next (?:episode|part|post)|to be continued|下一[期集篇]|后续.*(?:讲|看|分享))", re.I)
+CONTINUATION = re.compile(
+    r"(?:next (?:episode|part|post)|to be continued|(?:下|下一)[期集篇]|(?:后续|后面).*(?:讲|看|分享))",
+    re.I,
+)
 
 
 def remove_unplanned_continuation(body: str) -> str:
