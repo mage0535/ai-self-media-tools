@@ -255,6 +255,29 @@ def subtitle_layout(platform: str) -> dict[str, int]:
     return {"max_chars": 36, "wrap_chars": 18, "font_size": 46, "max_lines": 2}
 
 
+def write_subtitle_file(path: Path, cues: list[dict[str, object]]) -> None:
+    """Write the same scene-timed copy used by the burned subtitle layer."""
+    def timestamp(seconds: object) -> str:
+        millis = max(0, round(float(seconds or 0) * 1000))
+        hours, millis = divmod(millis, 3_600_000)
+        minutes, millis = divmod(millis, 60_000)
+        secs, millis = divmod(millis, 1_000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+    rows = []
+    for index, cue in enumerate(cues, 1):
+        text = str(cue.get("text") or "").strip()
+        if not text:
+            continue
+        rows.extend([
+            str(index),
+            f"{timestamp(cue.get('start'))} --> {timestamp(cue.get('end'))}",
+            text,
+            "",
+        ])
+    path.write_text("\n".join(rows).rstrip() + "\n", encoding="utf-8")
+
+
 def compile_shotcraft_css(card: dict[str, object]) -> str:
     shotcraft = card.get("shotcraft") if isinstance(card.get("shotcraft"), dict) else {}
     rules = []
@@ -1886,6 +1909,7 @@ def main() -> int:
             sub = sub[:subtitle_max_chars].rstrip(" ，。,.!?;；") + ("..." if international else "…")
         script_texts.append(sub)
     filters = []
+    subtitle_cues = []
     for i, text in enumerate(script_texts, 1):
         st = starts_global[2 * (i - 1)] + 0.4
         en = starts_global[2 * (i - 1) + 1] + durs_map[shot_names[2 * (i - 1) + 1]] - 0.2
@@ -1893,11 +1917,14 @@ def main() -> int:
         tf1 = out / "sub" / f"l1_{i:02d}.txt"
         tf2 = out / "sub" / f"l2_{i:02d}.txt"
         tf1.write_text(l1, encoding="utf-8")
+        subtitle_cues.append({"start": st, "end": en, "text": "\n".join(part for part in (l1, l2) if part)})
         en1 = f"between(t,{st:.3f},{en:.3f})"
         filters.append(f"drawtext=fontfile={FONT}:textfile={tf1}:fontsize={subtitle_font_size}:fontcolor=white:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-350:enable='{en1}'")
         if l2:
             tf2.write_text(l2, encoding="utf-8")
             filters.append(f"drawtext=fontfile={FONT}:textfile={tf2}:fontsize={subtitle_font_size}:fontcolor=white:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-290:enable='{en1}'")
+
+    write_subtitle_file(out / "subtitles.srt", subtitle_cues)
 
     fc2 = f"[0:v]{','.join(filters)}[v]"
     final = out / "final.mp4"
