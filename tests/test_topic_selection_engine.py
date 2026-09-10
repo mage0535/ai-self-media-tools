@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 
-from content_platform.topic_selection_engine import decide_topic
+from content_platform.topic_selection_engine import build_contract_gap_report, decide_topic
 from content_platform.overnight_batch import build_due_tasks, build_same_lane_selection_items
 
 
@@ -223,3 +223,38 @@ def test_hot_work_compact_loader_preserves_strict_decision_evidence(tmp_path):
         "metric_observed_at", "raw_snapshot_sha256",
     ):
         assert items[0][field] == sample[field]
+
+
+def test_contract_gap_report_covers_requested_platforms_and_never_trusts_legacy_ready():
+    complete = _item("kuaishou", "AI工作流三步实测", "same_lane_hot_work", metric=1500)
+    legacy = {
+        "title": "AI工具清单",
+        "url": "https://mp.weixin.qq.com/s/example",
+        "query": "AI 工具",
+        "source": "sogou_weixin",
+        "evidence_strength": "strong",
+    }
+    report = build_contract_gap_report(
+        {
+            "platforms": {
+                "kuaishou": {"ready": True, "top_samples": [complete]},
+                "wechat": {"ready": True, "top_samples": [legacy]},
+                "youtube": {"ready": False, "top_samples": []},
+            }
+        },
+        platforms=["kuaishou", "wechat", "youtube", "twitter"],
+    )
+
+    assert report["version"] == "platform_intelligence_contract_report_v1"
+    assert report["summary"] == {
+        "platform_count": 4,
+        "contract_ready_count": 1,
+        "legacy_ready_but_contract_incomplete_count": 1,
+        "missing_platform_count": 1,
+    }
+    assert report["platforms"]["kuaishou"]["status"] == "contract_ready"
+    assert report["platforms"]["wechat"]["status"] == "contract_incomplete"
+    assert "content_id" in report["platforms"]["wechat"]["missing_fields"]
+    assert report["platforms"]["youtube"]["status"] == "no_samples"
+    assert report["platforms"]["youtube"]["missing_fields"] == []
+    assert report["platforms"]["twitter"]["status"] == "platform_missing"

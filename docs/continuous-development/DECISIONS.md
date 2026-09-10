@@ -546,3 +546,10 @@
 - At least one metric must be non-zero. Metrics may use the normalized nested object or backward-compatible flat fields, but missing metrics remain `insufficient`, not zero-performance evidence.
 - The compact hot-work handoff preserves every strict contract field. Dropping evidence between collector and selection is a pipeline defect, not grounds to relax selection.
 - Compatibility paths record a shadow comparison of legacy and unified selected titles. A legacy selection rejected by the strict contract may continue only while shadow mode is explicit; it is evidence of a collector gap, not an accepted unified candidate.
+
+## D77: Contract Gaps Distinguish Missing Platforms, Missing Samples And Incomplete Rows
+
+- `platform_missing` means the parameter pack omitted a configured publishing target; repair pack construction or target aliasing.
+- `no_samples` means the platform exists but produced no candidate rows; repair collection/auth/query routing rather than field normalization.
+- `contract_incomplete` means rows exist but required identity, metric or snapshot evidence is absent; repair the collector-to-pack contract. A legacy `ready=true` does not override this status.
+- Contract-gap reports contain counts, statuses and missing field names. They do not need public titles, account identifiers or raw credentials and can be retained as deployment evidence.

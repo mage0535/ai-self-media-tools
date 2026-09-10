@@ -262,4 +262,72 @@ def add_shadow_comparison(decision: dict[str, Any], legacy_selected_title: str) 
     return result
 
 
-__all__ = ["add_shadow_comparison", "decide_topic", "ensure_topic_decision"]
+def build_contract_gap_report(
+    parameter_pack: dict[str, Any] | None,
+    *,
+    platforms: list[str],
+) -> dict[str, Any]:
+    """Audit collector output against the strict work-evidence contract."""
+    source_platforms = (parameter_pack or {}).get("platforms") or {}
+    rows: dict[str, dict[str, Any]] = {}
+    legacy_incomplete = 0
+    missing_count = 0
+    ready_count = 0
+    for raw_platform in platforms:
+        platform = str(raw_platform or "").casefold().strip()
+        source = source_platforms.get(platform)
+        if not isinstance(source, dict):
+            rows[platform] = {
+                "status": "platform_missing",
+                "legacy_ready": False,
+                "sample_count": 0,
+                "contract_ready_sample_count": 0,
+                "missing_fields": list(_WORK_REQUIRED_FIELDS),
+            }
+            missing_count += 1
+            continue
+        samples = [item for item in source.get("top_samples") or [] if isinstance(item, dict)]
+        if not samples:
+            rows[platform] = {
+                "status": "no_samples",
+                "legacy_ready": bool(source.get("ready")),
+                "sample_count": 0,
+                "contract_ready_sample_count": 0,
+                "missing_fields": [],
+            }
+            continue
+        accepted = []
+        missing_fields: set[str] = set()
+        for item in samples:
+            missing = _missing_work_contract_fields(item)
+            if _metric(item) <= 0:
+                missing.append("nonzero_metric")
+            if missing:
+                missing_fields.update(missing)
+            else:
+                accepted.append(item)
+        status = "contract_ready" if accepted else "contract_incomplete"
+        if accepted:
+            ready_count += 1
+        if bool(source.get("ready")) and not accepted:
+            legacy_incomplete += 1
+        rows[platform] = {
+            "status": status,
+            "legacy_ready": bool(source.get("ready")),
+            "sample_count": len(samples),
+            "contract_ready_sample_count": len(accepted),
+            "missing_fields": sorted(missing_fields),
+        }
+    return {
+        "version": "platform_intelligence_contract_report_v1",
+        "summary": {
+            "platform_count": len(rows),
+            "contract_ready_count": ready_count,
+            "legacy_ready_but_contract_incomplete_count": legacy_incomplete,
+            "missing_platform_count": missing_count,
+        },
+        "platforms": rows,
+    }
+
+
+__all__ = ["add_shadow_comparison", "build_contract_gap_report", "decide_topic", "ensure_topic_decision"]
