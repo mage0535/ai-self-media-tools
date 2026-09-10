@@ -630,7 +630,7 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
             capability_failures.append(f"required_capability_not_executed:{item.get('id', '')}")
         elif item.get("state") in {"executed", "output_verified", "artifact_verified", "effect_verified"} and not item.get("output_hash"):
             capability_failures.append(f"capability_output_hash_missing:{item.get('id', '')}")
-        elif item.get("required", True) and item.get("artifact_relevant") and item.get("state") != "artifact_verified":
+        elif item.get("required", True) and item.get("artifact_relevant") and item.get("state") not in {"artifact_verified", "effect_verified"}:
             capability_failures.append(f"artifact_capability_not_verified:{item.get('id', '')}")
     if not capabilities:
         capability_failures.append("capability_evidence_missing")
@@ -1217,7 +1217,7 @@ def _materialize_artifact_manifest(case: dict[str, Any], store: Any, result: dic
                 "id": item.get("capability_id"),
                 "state": state,
                 "output_hash": (verified or item).get("output_hash", ""),
-                "artifact_verified": state == "artifact_verified",
+                "artifact_verified": state in {"artifact_verified", "effect_verified"},
                 "required": item.get("required", True) is not False,
                 "artifact_relevant": str(item.get("stage") or "") in {"assets", "render"},
                 "evidence": item,

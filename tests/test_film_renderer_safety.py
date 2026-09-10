@@ -294,3 +294,17 @@ def test_film_renderer_retries_edge_tts_and_rejects_empty_audio(tmp_path, monkey
     assert attempts == 2
     assert len(calls) == 2
     assert output.stat().st_size > 10_000
+
+
+def test_write_subtitle_file_preserves_scene_timeline_and_text(tmp_path):
+    target = tmp_path / "subtitles.srt"
+
+    film_renderer.write_subtitle_file(target, [
+        {"start": 0.4, "end": 2.75, "text": "工具越多，切换越频繁"},
+        {"start": 3.0, "end": 5.125, "text": "只留高频常用工具"},
+    ])
+
+    assert target.read_text(encoding="utf-8") == (
+        "1\n00:00:00,400 --> 00:00:02,750\n工具越多，切换越频繁\n\n"
+        "2\n00:00:03,000 --> 00:00:05,125\n只留高频常用工具\n"
+    )
