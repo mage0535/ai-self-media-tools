@@ -950,6 +950,25 @@ class DraftGenerator:
             "Write recommendations and clearly labelled hypothetical steps only; do not imply they happened. "
             if editorial_facts_only else ""
         )
+        def bounded_retry(*, prefer_proxy=False):
+            proxy_url = str(os.environ.get("US_PROXY") or "").strip() if prefer_proxy else ""
+            try:
+                return self._hermes_attempt(
+                    topic, brief, context, retry=True, language_instruction=language_instruction,
+                    factual_boundary=factual_boundary, body_requirement=body_requirement,
+                    style_limit=style_limit, proxy_url=proxy_url,
+                )
+            except GenerationTimeoutError:
+                if proxy_url:
+                    raise
+                proxy_url = str(os.environ.get("US_PROXY") or "").strip()
+                if not proxy_url:
+                    raise
+                return self._hermes_attempt(
+                    topic, brief, context, retry=True, language_instruction=language_instruction,
+                    factual_boundary=factual_boundary, body_requirement=body_requirement,
+                    style_limit=style_limit, proxy_url=proxy_url,
+                )
         if isinstance(brief.get("factual_repair"), dict):
             factual_boundary += (
                 "This is the single factual-repair attempt after a failed evidence gate. Rewrite the complete draft from scratch. "
@@ -970,15 +989,15 @@ class DraftGenerator:
         except GenerationTimeoutError:
             if self._generation_slo(brief)["max_attempts"] < 2:
                 raise
-            return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+            return bounded_retry(prefer_proxy=True)
         except ValueError as exc:
             if str(exc) not in {"provider returned non-JSON content", "Hermes returned an incomplete draft"}:
                 raise
-            return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+            return bounded_retry()
         except RuntimeError as exc:
             if str(exc) != "transient provider error":
                 raise
-            return self._hermes_attempt(topic, brief, context, retry=True, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
+            return bounded_retry()
 
     def _hermes_attempt(self, topic, brief, context, *, retry, language_instruction, factual_boundary, body_requirement, style_limit, proxy_url=""):
         platform = str(brief.get("platform") or context.get("platform") or "wechat")
