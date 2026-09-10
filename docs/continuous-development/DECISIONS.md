@@ -634,3 +634,9 @@
 - The live this-month card order is title, views, relative age and channel. The parser accepts channel metadata either before or after age but never uses description text when a nearer channel field is available.
 - Normal public YouTube pages contain login prompts. A page with Shorts/filter controls and visible view metrics is public search context; login text alone is not authentication failure. CAPTCHA remains blocking.
 - The parser still rejects duration/chapters, missing view labels, absent age and rows outside 30 days.
+
+## D91: YouTube Anchors Use The Full Video Renderer Container
+
+- Generic nearest card/item/video class selection resolves to title or thumbnail subtrees on YouTube and omits channel/views/age metadata.
+- YouTube extraction first selects `ytd-video-renderer` or `ytd-rich-item-renderer`, then falls back to common containers. This platform-specific selector does not alter Bilibili, Juejin or other collectors.
+- Parser acceptance still requires the strict card fields; a larger DOM context does not make every anchor eligible.

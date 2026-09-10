@@ -9,13 +9,14 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1838 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-youtube-real-dom-20260911.xml`.
+- Latest complete regression on this branch: 1839 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-youtube-card-container-20260911.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 YouTube real-DOM ordering/login classification | Codex primary | YouTube card parser, failure classifier, tests and four coordination documents | local_complete | commit, staging sync and repeat default-query Linux strict acceptance |
+| Sol B2 YouTube full-card DOM container | Codex primary | platform card selector, tests and four coordination documents | local_complete | commit, staging sync and third Linux strict-contract run |
+| Sol B2 YouTube real-DOM ordering/login classification | Codex primary | YouTube card parser, failure classifier, tests and four coordination documents | committed `997d6d9` | second Linux retry exposed too-small anchor context |
 | Sol B2 YouTube this-month visible-card contract | Codex primary | YouTube URL/card parser, tests and four coordination documents | committed `2ea53a6` | first Linux retry exposed real-DOM ordering and login-navigation false positive |
 | Sol B2 Juejin Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to YouTube detail contract |
 | Sol B2 Juejin verified default queries | Codex primary | platform intelligence registry, query tests and four coordination documents | committed `13f98f9` | Linux default path passed 8/8 strict pack samples |

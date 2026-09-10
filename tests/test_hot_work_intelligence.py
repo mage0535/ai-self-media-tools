@@ -6,6 +6,7 @@ from content_platform.hot_work_intelligence import (
     analyze_work,
     build_hot_work_parameter_pack,
     classify_logged_search_failure,
+    logged_search_card_selector,
     enrich_bilibili_work,
     load_samples,
     normalize_browser_cookies,
@@ -163,6 +164,13 @@ def test_youtube_search_uses_verified_this_month_filter():
     url = logged_search_url("youtube", "AI agent workflow")
 
     assert "sp=EgIIBA%253D%253D" in url
+
+
+def test_youtube_dom_uses_full_video_renderer_as_card_container():
+    selector = logged_search_card_selector("youtube")
+
+    assert "ytd-video-renderer" in selector
+    assert "ytd-rich-item-renderer" in selector
 
 
 def test_youtube_visible_card_builds_strict_month_work_evidence():
