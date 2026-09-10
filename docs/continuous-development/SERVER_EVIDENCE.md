@@ -680,3 +680,11 @@ Observed read-only on 2026-08-31.
 - Manual review verified a complete title cover, tool-overload/task-list card, goal/input/output card and four-part boundary checklist. All section labels are Chinese; no garbled text, service logo or watermark was visible. Private `manual-review.json` records four full hashes/dimensions and `publisher_called=false`.
 - Final local `artifacts/test-reports/p10-wechat-v21-final-media.xml` returned 1764 passed plus 37 subtests in 368.24 seconds. Project/privacy audit scanned 586 files with zero issues; license audit checked 65 capabilities with zero issues.
 - v21 is accepted only as WeChat content/media proof using recorded accepted copy. It is not a live WeChat draft, a fresh full Pipeline generation, production activation or 12-platform acceptance. Production remains signed `2f4f612`; timers remain disabled.
+
+## 2026-09-10 Sol B0 Baseline And B1 Topic Decision Evidence
+
+- Read-only server verification found `/root/.ai-self-media-tools-current` still points to signed `production-runtime-v8-2f4f612-20260906`. The mutable server main repository is at `6f4c88a` with 30 dirty paths; those paths were not modified. Hermes gateway is active, both inspected project timers are inactive, failed systemd units are zero, and root filesystem use was 81%.
+- Local candidate HEAD before this milestone was `ce036a7`. Pre-change full regression returned 1812 passed plus 37 subtests in 386.24 seconds; JUnit is `artifacts/test-reports/sol-prechange-20260910.xml`.
+- TDD added `topic_selection_engine.py`. The RED test failed because the module did not exist. Five pure decision tests and one overnight integration test now prove same-platform priority, official non-native identity, missing-metric rejection and cross-platform reference isolation.
+- Focused selection regression returned 85 passed. Full post-change regression returned 1818 passed plus 37 subtests in 376.67 seconds; JUnit is `artifacts/test-reports/sol-b1-topic-engine-20260910.xml`.
+- Overnight preparation now persists the unified decision at task level and compiles its version, status, selected layer and evidence coverage into the pre-generation brief. This is a compatibility-observation milestone; production remains unchanged and CLI/MCP/Pipeline authority is still pending.

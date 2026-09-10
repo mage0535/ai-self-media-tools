@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-08 Asia/Shanghai (v33 live model auth failure recorded; deterministic recovery validation next)
+Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline and B1 unified topic decision in progress)
 
 ## Current state
 
@@ -9,12 +9,13 @@ Last updated: 2026-09-08 Asia/Shanghai (v33 live model auth failure recorded; de
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1727 passed + 37 subtests; JUnit 1764 tests, zero failures/errors.
+- Latest complete regression on this branch: 1818 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b1-topic-engine-20260910.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
+| Sol B0/B1 runtime convergence and unified three-layer topic decision | Codex primary | `content_platform/topic_selection_engine.py`, selection integration points, `tests/test_topic_selection_engine.py`, four coordination documents | local_complete | commit milestone; then extend the shared decision entry to CLI/MCP/Pipeline and run Linux staging smoke |
 | Runtime code/config/data convergence | Codex primary | `content_platform/runtime_paths.py`, `content_platform/mcp_server.py`, systemd/deploy/runtime tests | committed `c9babbd` | verify gateway drop-in and shared DB during deployment |
 | Automated admission contract | Codex primary | `content_platform/task_admission.py`, `content_platform/pipeline.py`, `content_platform/mcp_server.py`, admission tests | committed `4d9c567` | server verification during deployment |
 | Platform artifact completion contract | Codex primary | `content_platform/artifact_contract.py`, pipeline/store recovery, P3 tests | committed `277f1e3` | server fault injection during deployment |
