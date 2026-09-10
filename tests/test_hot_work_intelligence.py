@@ -5,10 +5,12 @@ from pathlib import Path
 from content_platform.hot_work_intelligence import (
     analyze_work,
     build_hot_work_parameter_pack,
+    classify_logged_search_failure,
     enrich_bilibili_work,
     load_samples,
     normalize_browser_cookies,
     parse_douyin_shipin_html,
+    parse_bilibili_search_cards,
     parse_logged_short_video_search_text,
     parse_platform_search_evidence,
     parse_sogou_wechat_html,
@@ -50,6 +52,51 @@ def test_bilibili_detail_enrichment_builds_strict_work_evidence():
     assert enriched["metrics"]["views"] == 5221
     assert enriched["metrics"]["favorites"] == 99
     assert len(enriched["raw_snapshot_sha256"]) == 64
+
+
+def test_bilibili_visible_card_builds_strict_evidence_without_detail_api():
+    rows = parse_bilibili_search_cards(
+        [{
+            "text": "AI自动化工作流实测",
+            "href": "https://www.bilibili.com/video/BV17p3M6SEuo/?spm_id_from=333",
+            "context": "AI自动化工作流实测\n示例作者\n· 5小时前\n5221\n12\n12:43",
+        }],
+        query="AI 自动化 工作流",
+        captured_at="2026-09-10T12:22:12+00:00",
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["content_id"] == "BV17p3M6SEuo"
+    assert row["published_at"] == "2026-09-10T07:22:12+00:00"
+    assert row["metrics"] == {"views": 5221, "danmaku": 12}
+    assert row["detail_enrichment_status"] == "search_card_verified"
+    assert len(row["author_id_hash"]) == 64
+    assert len(row["raw_snapshot_sha256"]) == 64
+
+
+def test_bilibili_detail_failure_preserves_complete_card_evidence():
+    row = parse_bilibili_search_cards(
+        [{
+            "text": "AI自动化工作流实测",
+            "href": "https://www.bilibili.com/video/BV17p3M6SEuo/",
+            "context": "AI自动化工作流实测\n示例作者\n· 2026-09-10\n5221\n12\n12:43",
+        }],
+        query="AI 自动化 工作流",
+        captured_at="2026-09-10T12:22:12+00:00",
+    )[0]
+
+    enriched = enrich_bilibili_work(row, fetch_json=lambda _url: (_ for _ in ()).throw(OSError("blocked")))
+
+    assert enriched["content_id"] == "BV17p3M6SEuo"
+    assert enriched["detail_enrichment_status"] == "search_card_verified_detail_unavailable"
+
+
+def test_bilibili_login_navigation_does_not_turn_normal_search_into_login_wall():
+    text = "登录\n登录后你可以\n综合排序\n最多播放\n最新发布\nAI工作流实测\n示例作者\n5小时前\n5221"
+
+    assert classify_logged_search_failure(text, platform="bilibili") == "layout_changed_or_no_lane_results"
+    assert classify_logged_search_failure("验证码 CAPTCHA", platform="bilibili") == "login_required_or_captcha"
 
 
 def test_logged_search_artifact_stem_keeps_distinct_chinese_queries_unique():

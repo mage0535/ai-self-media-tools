@@ -106,4 +106,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - The contract-gap reporter now distinguishes `platform_missing`, `no_samples` and `contract_incomplete`; its final regression is 1824 tests plus 37 subtests with zero failures.
 - Hot-work collection now defaults to every registry publishing target, labels explicit subsets and rejects unknown platform names. Full regression is 1825 tests plus 37 subtests; live collector smokes remain next.
 - Isolated public smokes found 49 Bilibili/Juejin/YouTube discovery rows but zero strict-ready rows. Bilibili now has a tested public-detail enrichment contract; Linux live confirmation remains pending before Juejin and YouTube adapters.
+- Bilibili's public detail API returned HTTP 412, so complete visible search cards now form an independent strict evidence route; normal login navigation no longer causes a false login-wall status. Full regression is 1829 tests plus 37 subtests; Linux confirmation remains pending.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
