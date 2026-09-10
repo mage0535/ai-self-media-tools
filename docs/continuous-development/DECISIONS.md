@@ -580,3 +580,9 @@
 - Bilibili highlights query terms in separate title spans. The rendered card sequence is metrics, duration, title fragments, author and publication date; exact one-line title equality is not a valid parser assumption.
 - Reconstruct the title only from fragments between duration and author. Read at most the two visible numeric metrics before duration. Do not absorb page-level feedback, navigation or neighboring-card text.
 - A simplified title-first card remains supported for deterministic fixtures, but live acceptance is based on the saved DOM and screenshot from the same captured page.
+
+## D82: Platform Collector Acceptance Requires Strict Pack Evidence
+
+- A successful search status and non-zero raw row count are discovery evidence only. Platform acceptance requires the generated parameter pack to pass the strict contract report.
+- Bilibili acceptance is 24 direct discovery rows and 10/10 retained top samples with complete identity, time, metric and snapshot fields. This acceptance applies only to Bilibili on staging commit `3e0eed1`.
+- Other platforms remain independently unverified. Bilibili success cannot satisfy Juejin, YouTube or any missing platform.
