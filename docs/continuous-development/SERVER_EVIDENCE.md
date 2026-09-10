@@ -713,3 +713,11 @@ Observed read-only on 2026-08-31.
 - Statuses are WeChat `contract_incomplete`; Twitter and Shipinhao `platform_missing`; Kuaishou, Juejin, Douyin AI, Douyin Pet, Xiaohongshu, Bilibili, Zhihu, YouTube and TikTok `no_samples`.
 - The generated report is `artifacts/research/2026-09-10-external-capabilities/platform_intelligence_contract_report.json`. It contains aggregate statuses and missing field names, not credentials. This is a collector repair queue, not proof that platform collection succeeded.
 - Fresh full regression after the report status refinement returned 1824 passed plus 37 subtests in 353.07 seconds. JUnit `artifacts/test-reports/sol-b2-contract-gap-report-20260910.xml` reports zero failures and errors.
+
+## 2026-09-10 Hot-Work Collection Scope Evidence
+
+- The server raw report contained six attempt rows only: two successful WeChat Sogou queries and four zero-result Douyin AI/Pet public-video queries. No attempt rows existed for the other nine publishing targets. This proves the observed run was an explicit three-target subset, not a full-platform collection followed by filtering.
+- Local CLI help still described that historical three-target default even though candidate code resolves an empty platform list through the publishing registry. The help and runtime scope are now aligned.
+- TDD verifies omission defaults to all 12 publishing targets, explicit subsets record omitted targets, and unknown names fail before collection. Results persist `collection_scope` so downstream reports cannot mislabel a subset.
+- Related CLI/hot-work tests returned 102 passed. Fresh full regression returned 1825 passed plus 37 subtests in 349.80 seconds; JUnit `artifacts/test-reports/sol-b2-collection-scope-20260910.xml` has zero failures/errors.
+- Production remains signed `2f4f612`; no server code, collector state, publisher or timer was changed.

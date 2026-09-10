@@ -8,7 +8,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from content_platform.cli import main
+from content_platform.cli import main, resolve_hot_work_platform_scope
+from content_platform.platform_intelligence_registry import publishing_platforms
 from content_platform.store import Store
 
 
@@ -28,6 +29,20 @@ class CliV2Tests(unittest.TestCase):
             code = main(["--db", self.db, "--config", self.config, *args])
         payload = json.loads(output.getvalue() or error.getvalue())
         return code, payload
+
+    def test_hot_work_scope_defaults_to_every_publish_target_and_labels_subsets(self):
+        complete = resolve_hot_work_platform_scope([])
+        self.assertEqual(set(complete["platforms"]), set(publishing_platforms()))
+        self.assertEqual(complete["mode"], "all_publish_targets")
+        self.assertEqual(complete["omitted_platforms"], [])
+
+        subset = resolve_hot_work_platform_scope(["wechat", "douyin_ai"])
+        self.assertEqual(subset["platforms"], ["wechat", "douyin_ai"])
+        self.assertEqual(subset["mode"], "explicit_subset")
+        self.assertIn("kuaishou", subset["omitted_platforms"])
+
+        with self.assertRaisesRegex(ValueError, "unknown hot-work platforms"):
+            resolve_hot_work_platform_scope(["douyin-ai-typo"])
 
     def test_signed_review_action_approves_reviewed_job(self):
         _, created = self.call("create", "--topic", "topic", "--platform", "wechat", "--profile", "default")

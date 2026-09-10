@@ -38,6 +38,27 @@ from .hot_work_intelligence import (
 )
 
 
+def resolve_hot_work_platform_scope(requested: list[str] | None) -> dict:
+    """Resolve and label the exact platform scope for a hot-work run."""
+    from .platform_intelligence_registry import publishing_platforms
+
+    targets = publishing_platforms()
+    requested_rows = list(dict.fromkeys(
+        str(platform).casefold().strip()
+        for platform in (requested or [])
+        if str(platform).strip()
+    ))
+    unknown = [platform for platform in requested_rows if platform not in targets]
+    if unknown:
+        raise ValueError("unknown hot-work platforms: " + ",".join(unknown))
+    platforms = requested_rows or targets
+    return {
+        "mode": "explicit_subset" if requested_rows else "all_publish_targets",
+        "platforms": platforms,
+        "omitted_platforms": [platform for platform in targets if platform not in platforms],
+    }
+
+
 def _load_env_defaults(path: str | Path | None = None) -> str:
     """Load private KEY=VALUE defaults without overriding the process env."""
     candidates: list[Path] = []
@@ -371,7 +392,7 @@ def parser():
     same_lane.add_argument("--readiness-file", default="", help="Optional metrics-readiness JSON used only for claim boundaries")
     same_lane.add_argument("--output", default="", help="Optional JSON report path")
     hot_works = sub.add_parser("hot-works-collect", help="Collect same-lane hot works and build a generation parameter pack")
-    hot_works.add_argument("--platform", action="append", default=[], help="Live platform collector to run; defaults to wechat,douyin_ai,douyin_pet")
+    hot_works.add_argument("--platform", action="append", default=[], help="Live platform collector to run; omit to run every configured publishing target")
     hot_works.add_argument("--query", action="append", default=[], help="Query or platform=query")
     hot_works.add_argument("--sample-file", action="append", default=[], help="JSON sample file from logged browser collectors")
     hot_works.add_argument("--output-dir", default="", help="Output directory for raw data, parameter pack, and report")
@@ -684,11 +705,9 @@ def execute(args):
             else:
                 query_map["all"].append(str(entry).strip())
 
-        live_platforms = {str(platform).casefold().strip() for platform in (args.platform or []) if str(platform).strip()}
+        collection_scope = resolve_hot_work_platform_scope(args.platform)
+        live_platforms = set(collection_scope["platforms"])
         if not args.skip_live:
-            if not live_platforms:
-                from .platform_intelligence_registry import publishing_platforms
-                live_platforms = set(publishing_platforms())
             if "wechat" in live_platforms:
                 for query in query_map.get("wechat") or query_map.get("all") or ["Claude Code Skills MCP AI效率 工作流", "AI工具 自动化 工作流 效率 公众号"]:
                     started = datetime.now()
@@ -831,7 +850,13 @@ def execute(args):
                 })
 
         paths = save_collection(items, statuses, output_dir, publish_latest=not bool(args.output_dir))
-        result = {"ok": True, "items": len(items), "collection_status": statuses, "paths": paths}
+        result = {
+            "ok": True,
+            "items": len(items),
+            "collection_scope": collection_scope,
+            "collection_status": statuses,
+            "paths": paths,
+        }
         store.save_tool_inventory("hot_work_parameter_pack:latest", result)
         return result
     if args.command == "analyze-topic":
