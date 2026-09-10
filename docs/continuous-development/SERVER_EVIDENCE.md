@@ -778,3 +778,10 @@ Observed read-only on 2026-08-31.
 - TDD extracts logged-search URL construction and fixes Juejin to `type=0&sort=1`. The 30-day parser and Top3 minimum remain unchanged.
 - Related tests returned 60 passed. Fresh full regression returned 1834 passed plus 37 subtests in 368.76 seconds; JUnit `artifacts/test-reports/sol-b2-juejin-latest-sort-20260910.xml` has zero failures/errors.
 - Default-query Linux staging acceptance is next. Production remains unchanged.
+
+## 2026-09-11 Juejin Query-Set Evidence
+
+- On staging `f4007b8`, four explicit latest-sort probes returned ten recent strict rows: Claude Code 3, large-model application development 2, RAG Agent 2 and MCP development 3. The generated pack retained ten complete samples and passed the strict Top3 contract.
+- To bound routine latency while retaining coverage, the registry now defaults to Claude Code, large-model application development and MCP development. RAG Agent remains available for recapture expansion.
+- TDD fixes the exact default query list. Related tests returned 63 passed. Fresh full regression returned 1835 passed plus 37 subtests in 351.16 seconds; JUnit `artifacts/test-reports/sol-b2-juejin-default-queries-20260911.xml` has zero failures/errors.
+- A fresh Linux run without explicit query overrides remains the acceptance gate. Production is unchanged.
