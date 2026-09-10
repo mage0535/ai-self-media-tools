@@ -736,3 +736,9 @@ Observed read-only on 2026-08-31.
 - TDD adds strict visible-card evidence, relative/absolute date normalization, author hashing, nested views/danmaku metrics and card snapshot SHA. A complete card survives detail API failure with an explicit degraded detail status; incomplete cards do not.
 - Bilibili failure classification now recognizes normal public-search structure and reserves login blocking for CAPTCHA or a real login-wall context.
 - Related tests returned 55 passed. Fresh full regression returned 1829 passed plus 37 subtests in 376.44 seconds; JUnit `artifacts/test-reports/sol-b2-bilibili-visible-card-20260910.xml` has zero failures/errors. Linux live strict-contract smoke is next.
+
+## 2026-09-10 Bilibili Real-DOM Follow-up
+
+- Staging advanced to `4c98dc1` and production current remained signed `2f4f612`. The repeated isolated Bilibili smoke no longer mislabeled the page as login-required, but still returned zero rows.
+- Saved DOM inspection showed title text split across multiple highlighted spans. Thumbnail anchors contained metrics and duration; title/author/date lived in the surrounding card. The first parser expected a complete title followed by author/date and therefore rejected every real card.
+- The parser now follows the observed card order and reconstructs only the bounded title fragments. Related tests returned 54 passed; fresh full regression returned 1829 passed plus 37 subtests in 352.67 seconds. Linux live rerun on the follow-up commit remains required.

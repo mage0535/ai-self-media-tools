@@ -574,3 +574,9 @@
 - The detail API remains an optional enhancement. HTTP 412 or another detail failure records `search_card_verified_detail_unavailable` and preserves complete card evidence; incomplete cards are still rejected.
 - Relative dates are anchored to captured time. Ads, courses and rows without a real publication date are excluded.
 - A normal Bilibili public page may contain login navigation and prompts. Login failure requires CAPTCHA or absence of public-search structure; the word `登录` alone is not a blocking signal.
+
+## D81: Bilibili Card Parsing Follows Observed DOM Order
+
+- Bilibili highlights query terms in separate title spans. The rendered card sequence is metrics, duration, title fragments, author and publication date; exact one-line title equality is not a valid parser assumption.
+- Reconstruct the title only from fragments between duration and author. Read at most the two visible numeric metrics before duration. Do not absorb page-level feedback, navigation or neighboring-card text.
+- A simplified title-first card remains supported for deterministic fixtures, but live acceptance is based on the saved DOM and screenshot from the same captured page.
