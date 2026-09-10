@@ -1208,6 +1208,13 @@ def logged_search_url(platform: str, query: str) -> str:
     return urls[normalized]
 
 
+def logged_search_card_selector(platform: str) -> str:
+    common = 'article, li, [class*="card"], [class*="item"], [class*="video"], [class*="feed"]'
+    if str(platform or "").casefold().strip() == "youtube":
+        return "ytd-video-renderer, ytd-rich-item-renderer, " + common
+    return common
+
+
 def should_retry_logged_page(text: str) -> bool:
     lowered = str(text or "").casefold()
     return any(token in lowered for token in ("服务器出错", "服务器出现问题", "刷新重试", "请重试"))
@@ -1313,15 +1320,16 @@ def collect_logged_short_video_search(
                 dynamic_wait_ms += retry_wait_ms
                 text = body.inner_text(timeout=8000)
         anchors = page.locator("a[href], [data-url]").evaluate_all(
-            """els => els.map(a => {
-                const box = a.closest('article, li, [class*="card"], [class*="item"], [class*="video"], [class*="feed"]') || a;
+            """(els, cardSelector) => els.map(a => {
+                const box = a.closest(cardSelector) || a;
                 const heading = box.querySelector('h1, h2, h3, h4, [class*="title"]');
                 return {
                     text: ((heading && heading.innerText) || a.innerText || a.getAttribute('aria-label') || a.title || '').trim(),
                     href: a.href || a.getAttribute('data-url') || '',
                     context: (box.innerText || '').trim()
                 };
-            })"""
+            })""",
+            logged_search_card_selector(platform),
         )
         final_url = page.url
         text_path.write_text(text, encoding="utf-8")

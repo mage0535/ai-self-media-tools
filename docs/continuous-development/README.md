@@ -117,4 +117,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin override-free Linux acceptance now passes on `13f98f9`: eight deduplicated recent rows and 8/8 strict contract-ready pack samples. This is collector evidence only; content and draft Canaries remain separate.
 - YouTube now uses the browser-verified This month filter and strict visible-card evidence for IDs, channels, ages and views. Full regression is 1837 tests plus 37 subtests; Linux acceptance remains pending.
 - The first YouTube Linux retry exposed live metadata ordering and login-navigation false positives. The parser and classifier now match saved real DOM while retaining age/view/CAPTCHA gates; full regression is 1838 tests plus 37 subtests.
+- The second retry exposed undersized YouTube anchor contexts. Extraction now uses full `ytd-video-renderer` containers without changing other platforms; full regression is 1839 tests plus 37 subtests.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

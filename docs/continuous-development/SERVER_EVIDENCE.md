@@ -807,3 +807,10 @@ Observed read-only on 2026-08-31.
 - The original parser fixture placed channel before views/age; live YouTube places channel after age. TDD adds the observed order and public-search structure negative control while preserving CAPTCHA and 30-day gates.
 - Related tests returned 63 passed. Fresh full regression returned 1838 passed plus 37 subtests in 348.42 seconds; JUnit `artifacts/test-reports/sol-b2-youtube-real-dom-20260911.xml` has zero failures/errors.
 - A repeated Linux strict-contract run remains required. Production is unchanged.
+
+## 2026-09-11 YouTube Anchor-Container Evidence
+
+- The second staging run correctly changed status from login-required to layout/no-results but still returned zero rows. A direct dump of the collector's `anchors` objects showed title anchors had context containing only the title, while channel/views/age existed in outer `ytd-video-renderer` elements.
+- TDD adds a platform-specific card selector for full YouTube video/rendered-item containers and keeps the common selector for every other platform.
+- Related tests returned 64 passed. Fresh full regression returned 1839 passed plus 37 subtests in 344.59 seconds; JUnit `artifacts/test-reports/sol-b2-youtube-card-container-20260911.xml` has zero failures/errors.
+- Third Linux strict-contract run remains required. Production is unchanged.
