@@ -29,3 +29,7 @@ def test_registry_expands_domestic_and_international_reference_sources_without_n
     assert {"github", "hackernews", "reddit", "producthunt", "devto", "medium"}.issubset(rows)
     assert {row["region"] for row in rows.values()} == {"cn", "intl"}
     assert all(row["identity_role"] == "cross_platform_reference" for row in rows.values())
+
+
+def test_juejin_defaults_use_live_verified_recent_lane_queries():
+    assert platform_queries("juejin") == ["Claude Code", "大模型 应用开发", "MCP 开发"]

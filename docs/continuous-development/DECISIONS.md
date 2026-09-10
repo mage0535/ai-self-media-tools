@@ -611,3 +611,9 @@
 - Juejin's comprehensive search returned mostly month/year-old works. The 30-day pool uses the observed public `type=0&sort=1` route, which returned minute/hour-old articles in the same server environment.
 - Latest sorting supplies the time window; engagement still determines relative interest among accepted recent works. Sorting does not waive lane, metric, identity or Top3 gates.
 - Default platform queries must exercise this route so production does not depend on manually supplied query overrides.
+
+## D87: Juejin Default Queries Are Live-Probe Selected
+
+- Use three complementary default queries proven on the latest-published route: `Claude Code`, `大模型 应用开发` and `MCP 开发`.
+- The probe returned 3, 2 and 3 recent rows respectively. `RAG Agent` remains an optional expansion query, not a default, to limit routine browser time.
+- Query results remain subject to deduplication, 30-day age, lane fit, strict evidence and Top3 gates. A configured query is not itself evidence.

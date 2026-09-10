@@ -3,7 +3,7 @@
   "publish_targets": {
     "wechat": {"region": "cn", "aliases": ["weixin", "wechat_official"], "collectors": ["sogou_weixin", "wechat_creator_backend", "wewrite_hotspots"], "default_queries": ["AI效率 工作流", "AI工具 任务管理"]},
     "kuaishou": {"region": "cn", "collectors": ["logged_search", "kuaishou_creator_backend"], "default_queries": ["AI工具", "AI效率 工作流"]},
-    "juejin": {"region": "cn", "collectors": ["logged_search", "public_search"], "default_queries": ["AI 编程 Agent", "AI 自动化工作流"]},
+    "juejin": {"region": "cn", "collectors": ["logged_search", "public_search"], "default_queries": ["Claude Code", "大模型 应用开发", "MCP 开发"]},
     "twitter": {"region": "intl", "aliases": ["x"], "collectors": ["logged_search", "public_search"], "default_queries": ["AI agents workflow", "AI productivity tools"]},
     "douyin_ai": {"region": "cn", "aliases": ["douyin"], "collectors": ["douyin_hot_board", "douyin_shipin", "logged_search"], "default_queries": ["AI工具", "AI工作流"]},
     "douyin_pet": {"region": "cn", "aliases": ["douyin"], "collectors": ["douyin_hot_board", "douyin_shipin", "logged_search"], "default_queries": ["猫咪治愈", "猫狗日常"]},
