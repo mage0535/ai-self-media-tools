@@ -199,6 +199,12 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(created[0][0], "Douyin AI workflow trend")
             self.assertTrue(created[0][2]["platform_source_matrix"]["real_platform_collection_verified"])
+            self.assertEqual(created[0][2]["topic_decision"]["version"], "topic_decision_v1")
+            self.assertEqual(
+                created[0][2]["topic_decision"]["selected"]["title"],
+                "Douyin AI workflow trend",
+            )
+            self.assertEqual(created[0][2]["topic_candidates"][0]["platform"], "douyin_ai")
 
     def test_analyze_topic_returns_strategy_report(self):
         with tempfile.TemporaryDirectory() as tmp:

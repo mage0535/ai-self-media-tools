@@ -1216,13 +1216,30 @@ def execute(args):
                 if not source_matrix["real_platform_collection_verified"]:
                     continue
                 sources = [item["url"]] if item.get("url") else []
+                from .topic_selection_engine import decide_topic
+
+                decision_candidate = {
+                    **item,
+                    "platform": str(platform).casefold(),
+                    "identity_role": "target_platform",
+                    "evidence_type": str(item.get("evidence_type") or "native"),
+                    "captured_at": str(item.get("captured_at") or collection_time),
+                    "collector": str(item.get("collector") or item.get("source") or "cli_auto"),
+                }
+                topic_decision = decide_topic(
+                    str(platform),
+                    [decision_candidate],
+                    lane_keywords=[str(value) for value in (profile.get("keywords") or [])],
+                )
                 brief = {
                     "source": item.get("source"),
                     "sources": sources,
                     "platform_source_matrix": source_matrix,
+                    "topic_candidates": [decision_candidate],
+                    "topic_keywords": [str(value) for value in (profile.get("keywords") or [])],
                     "topic_decision": {
-                        "score": item.get("score", 0),
-                        "signals": derive_topic_growth_signals(item),
+                        **topic_decision,
+                        "growth_signals": derive_topic_growth_signals(item),
                     },
                 }
                 job = pipeline.create(item["title"], [platform], brief, args.profile, item["fingerprint"])

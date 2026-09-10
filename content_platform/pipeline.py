@@ -101,7 +101,11 @@ class Pipeline:
 
     def create(self, topic, platforms, brief=None, profile="default", topic_fingerprint=""):
         platforms = list(dict.fromkeys(str(p).strip() for p in platforms if str(p).strip()))
-        explicit_brief = brief or {}
+        explicit_brief = dict(brief or {})
+        if len(platforms) == 1:
+            from .topic_selection_engine import ensure_topic_decision
+
+            explicit_brief = ensure_topic_decision(topic, platforms[0], explicit_brief)
         resolved = resolve_profile(self.config.get("profiles", {}), profile, explicit_brief)
         resolved["platforms"] = platforms
         if len(platforms) == 1:
@@ -185,6 +189,7 @@ class Pipeline:
                                 "generate",
                                 {
                                     "content_blueprint": brief.get("content_blueprint") or {},
+                                    "topic_decision": brief.get("topic_decision") or {},
                                     "claim_ledger": list(brief.get("claim_ledger") or []),
                                     "tool_selection_plan": dict(brief.get("tool_selection_plan") or {}),
                                     "strategy": compact_compiled_strategy(compiled),
@@ -215,6 +220,7 @@ class Pipeline:
                             "generate",
                             {
                                 **dict(brief.get("bounded_model_input") or {}),
+                                "topic_decision": brief.get("topic_decision") or {},
                                 "content_profile": capability_context["profile"],
                                 "capability_plan": capability_context["capability_plan"],
                                 "tool_selection": capability_context["tool_selection"],

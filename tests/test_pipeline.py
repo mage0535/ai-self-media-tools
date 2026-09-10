@@ -333,6 +333,45 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(bounded["content_quality_reference_pack"]["loaded"])
         self.assertEqual(bounded["content_quality_reference_pack"]["sha256"], reference["sha256"])
 
+    def test_pipeline_persists_topic_decision_and_sends_it_to_provider(self):
+        captured = {}
+        candidate = {
+            "platform": "wechat",
+            "title": "AI工作流三步实测",
+            "evidence_type": "same_lane_hot_work",
+            "identity_role": "target_platform",
+            "url": "https://mp.weixin.qq.com/s/example",
+            "captured_at": "2026-09-10T08:00:00+00:00",
+            "collector": "wechat_article_collector",
+            "views": 1200,
+            "lane_fit_score": 0.9,
+            "content_value_score": 0.8,
+            "saturation_score": 0.2,
+        }
+        job = self.pipeline.create(
+            candidate["title"],
+            ["wechat"],
+            {"topic_candidates": [candidate], "topic_keywords": ["AI", "工作流"]},
+        )
+
+        def generate(topic, brief):
+            captured["brief"] = brief
+            return {
+                "title": topic,
+                "body": "A concrete, evidence-backed workflow with a reusable checklist.",
+                "draft_meta": {"quality_gate": {"passed": True}, "strategy": {}},
+            }
+
+        with patch.object(self.pipeline.generator, "generate", side_effect=generate):
+            self.pipeline.run(job["id"])
+
+        saved = self.store.get_job(job["id"])
+        self.assertEqual(saved["brief"]["topic_decision"]["version"], "topic_decision_v1")
+        self.assertEqual(
+            captured["brief"]["bounded_model_input"]["topic_decision"]["selected"]["title"],
+            candidate["title"],
+        )
+
     def test_publish_uses_delivery_queue(self):
         job = self.pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
         self.pipeline.run(job["id"])

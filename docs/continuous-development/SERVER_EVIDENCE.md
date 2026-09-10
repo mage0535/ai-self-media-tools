@@ -688,3 +688,11 @@ Observed read-only on 2026-08-31.
 - TDD added `topic_selection_engine.py`. The RED test failed because the module did not exist. Five pure decision tests and one overnight integration test now prove same-platform priority, official non-native identity, missing-metric rejection and cross-platform reference isolation.
 - Focused selection regression returned 85 passed. Full post-change regression returned 1818 passed plus 37 subtests in 376.67 seconds; JUnit is `artifacts/test-reports/sol-b1-topic-engine-20260910.xml`.
 - Overnight preparation now persists the unified decision at task level and compiles its version, status, selected layer and evidence coverage into the pre-generation brief. This is a compatibility-observation milestone; production remains unchanged and CLI/MCP/Pipeline authority is still pending.
+
+## 2026-09-10 Sol B1 Four-Entry Contract Evidence
+
+- Two RED tests proved Pipeline and MCP-created jobs did not persist `topic_decision_v1`. A third RED assertion proved CLI auto retained its legacy score-only dictionary.
+- `Pipeline.create` now uses one idempotent compiler. Existing decisions remain unchanged, evidenced candidates are classified, and bare topics become `missing_evidence` rather than fabricated candidates. MCP inherits the Pipeline path; CLI auto supplies its selected candidate and collection provenance.
+- The first GREEN run was blocked by `RunContractError: unknown stage fields: topic_decision`. The generate-stage allowlist and optional bounded fields were explicitly extended; unknown fields remain rejected.
+- Focused four-entry and generation-contract regression returned 141 passed in 200.99 seconds. Full regression returned 1820 passed plus 37 subtests in 429.32 seconds; JUnit `artifacts/test-reports/sol-b1-four-entry-20260910.xml` reports zero failures and errors.
+- This milestone is local only. It does not replace the legacy ranker, prove all 12 collectors, activate production, call publishers or enable timers.

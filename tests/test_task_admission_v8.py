@@ -79,6 +79,50 @@ def test_mcp_create_job_compiles_single_platform_automated_contract(tmp_path):
     assert saved["brief"]["run_contract"]["platform"] == "kuaishou"
 
 
+def test_mcp_create_job_uses_pipeline_topic_decision_contract(tmp_path):
+    home = tmp_path / "runtime"
+    data = tmp_path / "data"
+    home.mkdir()
+    data.mkdir()
+    config = home / "config.json"
+    config.write_text(json.dumps({"data_dir": str(data)}), encoding="utf-8")
+    candidate = {
+        "platform": "kuaishou",
+        "title": "AI工作流三步实测",
+        "evidence_type": "same_lane_hot_work",
+        "identity_role": "target_platform",
+        "url": "https://www.kuaishou.com/short-video/example",
+        "captured_at": "2026-09-10T08:00:00+00:00",
+        "collector": "kuaishou_search",
+        "views": 1800,
+        "lane_fit_score": 0.9,
+        "content_value_score": 0.8,
+        "saturation_score": 0.2,
+    }
+
+    with patch.dict(
+        "os.environ",
+        {
+            "CONTENT_PLATFORM_HOME": str(home),
+            "CONTENT_PLATFORM_CONFIG": str(config),
+            "CONTENT_PLATFORM_DATA_DIR": str(data),
+            "HOME": str(home),
+            "USERPROFILE": str(home),
+        },
+        clear=True,
+    ):
+        tools = {name: handler for handler, name, _, _ in mcp_server._tools()}
+        result = asyncio.run(tools["create_job"](
+            candidate["title"],
+            "kuaishou",
+            json.dumps({"topic_candidates": [candidate], "topic_keywords": ["AI", "工作流"]}),
+        ))
+
+    saved = Store(data / "state.db").get_job(result["job_id"])
+    assert saved["brief"]["topic_decision"]["version"] == "topic_decision_v1"
+    assert saved["brief"]["topic_decision"]["selected"]["title"] == candidate["title"]
+
+
 def test_mcp_create_job_rejects_multiple_platforms(tmp_path):
     home = tmp_path / "runtime"
     data = tmp_path / "data"
