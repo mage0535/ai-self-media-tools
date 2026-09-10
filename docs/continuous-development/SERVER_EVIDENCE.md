@@ -721,3 +721,11 @@ Observed read-only on 2026-08-31.
 - TDD verifies omission defaults to all 12 publishing targets, explicit subsets record omitted targets, and unknown names fail before collection. Results persist `collection_scope` so downstream reports cannot mislabel a subset.
 - Related CLI/hot-work tests returned 102 passed. Fresh full regression returned 1825 passed plus 37 subtests in 349.80 seconds; JUnit `artifacts/test-reports/sol-b2-collection-scope-20260910.xml` has zero failures/errors.
 - Production remains signed `2f4f612`; no server code, collector state, publisher or timer was changed.
+
+## 2026-09-10 Public Collector And Bilibili Detail Evidence
+
+- Candidate staging `3e9466a` was transferred as a Git bundle. The first SCP was interrupted and produced a truncated file; local bundle verification and SHA comparison caught it before use. A second persistent transfer matched SHA-256 and cloned a clean detached staging while production current remained `2f4f612`.
+- Linux B1/B2 targeted regression returned 85 passed. An isolated direct-only smoke for Bilibili, Juejin and YouTube returned 49 search rows in about one minute: 24/23/2. `collection_scope` correctly labeled the three-target subset and listed nine omitted targets.
+- Strict audit rejected every row. Bilibili and Juejin legacy packs were ready but all rows lacked full identity/time/metric/snapshot contracts; YouTube had two similarly incomplete rows. This demonstrates discovery success but detail-evidence failure.
+- TDD added Bilibili public detail enrichment using real BV IDs. It records an anonymized owner ID, publication time, six structured metric fields, canonical URL and raw API response SHA; failed details do not enter strict candidates.
+- Related tests returned 42 passed. Fresh full regression returned 1826 passed plus 37 subtests in 354.82 seconds; JUnit `artifacts/test-reports/sol-b2-bilibili-detail-20260910.xml` has zero failures/errors. A fresh Linux Bilibili live smoke on this commit remains required.

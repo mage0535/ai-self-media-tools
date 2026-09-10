@@ -560,3 +560,10 @@
 - Unknown platform names fail before collection. They cannot be converted to an unavailable status that looks like a completed attempt.
 - Collection results persist the exact scope alongside status rows. A subset run cannot be reported as full-platform collection, even if every requested source succeeds.
 - Scope coverage does not prove collector success. Each platform still needs an attempt record and strict work evidence before it is contract-ready.
+
+## D79: Search Discovery And Platform Detail Evidence Are Separate Stages
+
+- Search pages discover content URLs and visible metrics. They do not by themselves prove author identity, publication time or complete platform metrics.
+- Bilibili search candidates are enriched through the public view API using the real BV identifier. The accepted row binds canonical URL, anonymized owner ID, publication time, structured metrics and raw response SHA-256.
+- Detail failures remove the row from strict candidates; they do not fall back to title-only evidence. The original search artifacts and status remain available for diagnosis.
+- Each additional platform needs its own detail adapter and tests. Bilibili fields cannot be generalized into fabricated Juejin or YouTube identities.

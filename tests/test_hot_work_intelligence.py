@@ -5,6 +5,7 @@ from pathlib import Path
 from content_platform.hot_work_intelligence import (
     analyze_work,
     build_hot_work_parameter_pack,
+    enrich_bilibili_work,
     load_samples,
     normalize_browser_cookies,
     parse_douyin_shipin_html,
@@ -16,6 +17,39 @@ from content_platform.hot_work_intelligence import (
     should_use_regional_proxy,
     logged_search_artifact_stem,
 )
+
+
+def test_bilibili_detail_enrichment_builds_strict_work_evidence():
+    response = {
+        "code": 0,
+        "data": {
+            "bvid": "BV17p3M6SEuo",
+            "pubdate": 1788990000,
+            "owner": {"mid": 12345},
+            "stat": {"view": 5221, "like": 312, "danmaku": 44, "reply": 21, "favorite": 99, "share": 17},
+        },
+    }
+    row = {
+        "platform": "bilibili",
+        "title": "AI工作流实测",
+        "url": "https://www.bilibili.com/video/BV17p3M6SEuo/?spm_id_from=333",
+        "query": "AI 工作流",
+        "captured_at": "2026-09-10T12:22:12+00:00",
+        "collector": "bilibili_logged_search",
+    }
+
+    enriched = enrich_bilibili_work(row, fetch_json=lambda _url: response)
+
+    assert enriched["content_id"] == "BV17p3M6SEuo"
+    assert enriched["canonical_url"] == "https://www.bilibili.com/video/BV17p3M6SEuo"
+    assert enriched["account_lane"] == "AI 工作流"
+    assert len(enriched["author_id_hash"]) == 64
+    assert enriched["published_at"].endswith("+00:00")
+    assert enriched["fetched_at"] == row["captured_at"]
+    assert enriched["metric_observed_at"] == row["captured_at"]
+    assert enriched["metrics"]["views"] == 5221
+    assert enriched["metrics"]["favorites"] == 99
+    assert len(enriched["raw_snapshot_sha256"]) == 64
 
 
 def test_logged_search_artifact_stem_keeps_distinct_chinese_queries_unique():

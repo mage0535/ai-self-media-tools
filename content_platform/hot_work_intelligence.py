@@ -405,6 +405,65 @@ def parse_platform_search_evidence(
     return rows
 
 
+def enrich_bilibili_work(
+    row: dict[str, Any],
+    *,
+    fetch_json: Any | None = None,
+) -> dict[str, Any]:
+    """Bind a Bilibili search row to public detail identity and metrics."""
+    source = dict(row)
+    match = re.search(r"/video/(BV[0-9A-Za-z]+)", str(source.get("url") or ""), re.I)
+    if not match:
+        return {**source, "detail_enrichment_status": "invalid_content_url"}
+    bvid = match.group(1)
+    endpoint = "https://api.bilibili.com/x/web-interface/view?bvid=" + urllib.parse.quote(bvid)
+
+    def default_fetch(url: str) -> dict[str, Any]:
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Referer": "https://www.bilibili.com/"})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8", errors="replace"))
+
+    try:
+        payload = (fetch_json or default_fetch)(endpoint)
+    except Exception as exc:
+        return {**source, "detail_enrichment_status": "failed", "detail_enrichment_error": type(exc).__name__}
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, dict) or payload.get("code") != 0:
+        return {**source, "detail_enrichment_status": "invalid_response"}
+    owner_id = str((data.get("owner") or {}).get("mid") or "").strip()
+    published = data.get("pubdate")
+    stat = data.get("stat") if isinstance(data.get("stat"), dict) else {}
+    if not owner_id or not published or not stat:
+        return {**source, "detail_enrichment_status": "contract_incomplete"}
+    observed_at = str(source.get("captured_at") or datetime.now(timezone.utc).isoformat())
+    metrics = {
+        "views": int(stat.get("view") or 0),
+        "likes": int(stat.get("like") or 0),
+        "comments": int(stat.get("reply") or 0),
+        "shares": int(stat.get("share") or 0),
+        "favorites": int(stat.get("favorite") or 0),
+        "danmaku": int(stat.get("danmaku") or 0),
+    }
+    snapshot = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {
+        **source,
+        "account_lane": str(source.get("account_lane") or source.get("query") or ""),
+        "content_id": bvid,
+        "canonical_url": f"https://www.bilibili.com/video/{bvid}",
+        "author_id_hash": hashlib.sha256(f"bilibili:{owner_id}".encode("utf-8")).hexdigest(),
+        "published_at": datetime.fromtimestamp(int(published), tz=timezone.utc).isoformat(),
+        "fetched_at": observed_at,
+        "metrics": metrics,
+        "metric_observed_at": observed_at,
+        "raw_snapshot_sha256": hashlib.sha256(snapshot).hexdigest(),
+        "views": metrics["views"],
+        "likes": metrics["likes"],
+        "engagement": max(metrics.values()),
+        "detail_collector": "bilibili_public_view_api",
+        "detail_enrichment_status": "ok",
+    }
+
+
 def parse_twitter_search_cards(cards: list[dict[str, str]], *, query: str, limit: int = 12) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
@@ -937,6 +996,9 @@ def collect_logged_short_video_search(
         rows = parse_xiaohongshu_search_text(text, query=query, limit=limit, anchors=anchors)
     else:
         rows = parse_logged_short_video_search_text(text, platform=platform, query=query, limit=limit, anchors=anchors)
+    if platform == "bilibili" and rows:
+        rows = [enrich_bilibili_work(row) for row in rows]
+        rows = [row for row in rows if row.get("detail_enrichment_status") == "ok"]
     if rows:
         status.update({"status": "ok", "count": len(rows)})
     else:
