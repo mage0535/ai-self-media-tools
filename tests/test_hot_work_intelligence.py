@@ -186,6 +186,25 @@ def test_youtube_visible_card_builds_strict_month_work_evidence():
     assert len(row["raw_snapshot_sha256"]) == 64
 
 
+def test_youtube_real_card_order_and_login_navigation_are_supported():
+    rows = parse_youtube_search_cards(
+        [{
+            "text": "How to Build an AI Assistant for Work",
+            "href": "https://www.youtube.com/watch?v=Video12345A",
+            "context": "How to Build an AI Assistant for Work\n2.4万次观看\n5天前\nExample Channel\nA practical workflow",
+        }],
+        query="AI Assistant Work",
+        captured_at="2026-09-11T08:00:00+00:00",
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["metrics"]["views"] == 24000
+    assert classify_logged_search_failure(
+        "登录\n首页\nShorts\n最近上传\n过滤\n5次观看\n1天前",
+        platform="youtube",
+    ) == "layout_changed_or_no_lane_results"
+
+
 def test_save_collection_writes_latest_to_mutable_data_root(tmp_path, monkeypatch):
     from pathlib import Path
     from content_platform.hot_work_intelligence import save_collection
