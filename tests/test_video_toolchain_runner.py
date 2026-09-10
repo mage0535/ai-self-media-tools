@@ -1239,6 +1239,31 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(records[1]["source_url"], "https://www.pexels.com/photo/1/")
             self.assertEqual(records[1]["license"], "Pexels Content License")
 
+    def test_reselection_preserves_fresh_assets_and_replaces_only_history_collisions(self):
+        from scripts.video_toolchain_runner import _merge_nonreused_backgrounds
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = root / "old.jpg"
+            fresh = root / "fresh.jpg"
+            replacement = root / "replacement.jpg"
+            old.write_bytes(b"old-published-asset")
+            fresh.write_bytes(b"fresh-current-asset")
+            replacement.write_bytes(b"new-replacement-asset")
+            old_hash = hashlib.sha256(old.read_bytes()).hexdigest()
+
+            merged = _merge_nonreused_backgrounds(
+                [
+                    {"scene": 1, "path": str(old), "source_url": "https://example.test/old"},
+                    {"scene": 2, "path": str(fresh), "source_url": "https://example.test/fresh"},
+                ],
+                [{"scene": 1, "background_image": str(replacement), "source_url": "https://example.test/new"}],
+                {old_hash},
+            )
+
+            self.assertEqual([Path(row["path"]).name for row in merged], ["fresh.jpg", "replacement.jpg"])
+            self.assertEqual([row["scene"] for row in merged], [1, 2])
+
     def test_materialized_assets_become_the_manifest_and_card_assignments(self):
         from scripts.video_toolchain_runner import _visual_assets_from_materialized
 
