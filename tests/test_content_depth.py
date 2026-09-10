@@ -32,3 +32,15 @@ def test_remove_unplanned_continuation_drops_only_the_empty_future_promise():
     assert "下一篇" not in cleaned
     assert "先建立基线" in cleaned
     assert "记录下来" in cleaned
+
+
+def test_remove_unplanned_continuation_covers_short_next_and_later_promises():
+    body = (
+        "先把一个工具用熟。\n\n"
+        "想学更多技巧，点个关注，后面持续分享。\n\n"
+        "关注我，下期教你选对工具"
+    )
+
+    cleaned = remove_unplanned_continuation(body)
+
+    assert cleaned == "先把一个工具用熟。"
