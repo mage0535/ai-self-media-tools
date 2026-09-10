@@ -742,3 +742,10 @@ Observed read-only on 2026-08-31.
 - Staging advanced to `4c98dc1` and production current remained signed `2f4f612`. The repeated isolated Bilibili smoke no longer mislabeled the page as login-required, but still returned zero rows.
 - Saved DOM inspection showed title text split across multiple highlighted spans. Thumbnail anchors contained metrics and duration; title/author/date lived in the surrounding card. The first parser expected a complete title followed by author/date and therefore rejected every real card.
 - The parser now follows the observed card order and reconstructs only the bounded title fragments. Related tests returned 54 passed; fresh full regression returned 1829 passed plus 37 subtests in 352.67 seconds. Linux live rerun on the follow-up commit remains required.
+
+## 2026-09-10 Bilibili Linux Strict Acceptance
+
+- Staging advanced incrementally to `3e0eed1`; the detached worktree was clean and production current remained signed `2f4f612`.
+- Fresh isolated Bilibili collection ran direct without proxy. Two lane queries returned 12 rows each, 24 total, with explicit subset scope and 11 omitted targets.
+- The generated parameter pack retained ten Bilibili top samples. `platform_intelligence_contract_report_v1` returned `contract_ready_count=1`, `contract_ready_sample_count=10`, zero missing fields and no legacy-ready mismatch.
+- This is real Bilibili collection and contract evidence only. It is not production activation, content generation, publication or all-platform acceptance. Timers and publishers remained untouched.
