@@ -1253,6 +1253,14 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertEqual(packet["assignments"][0]["background_image"], "/tmp/bg-1.jpg")
         self.assertEqual(packet["assignments"][0]["source_url"], "https://pexels.test/1")
 
+    def test_video_asset_gate_requires_all_eight_scene_assets(self):
+        from scripts.video_toolchain_runner import _require_video_asset_count
+
+        gate = _require_video_asset_count({"passed": True, "failures": []}, [{"path": f"{i}.jpg"} for i in range(6)])
+
+        self.assertFalse(gate["passed"])
+        self.assertIn("visual_assets_incomplete:6/8", gate["failures"])
+
     def test_rejected_backgrounds_are_quarantined_before_recovery(self):
         from scripts.video_toolchain_runner import _quarantine_rejected_backgrounds
 

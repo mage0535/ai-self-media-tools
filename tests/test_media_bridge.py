@@ -138,6 +138,31 @@ def test_video_resume_reuses_local_provenance_assets_before_upstream_paths(tmp_p
     assert str(stale) in paths
 
 
+def test_video_asset_packet_preserves_hash_bound_semantic_evidence(tmp_path):
+    output = tmp_path / "output"
+    output.mkdir()
+    source = tmp_path / "verified.jpg"
+    source.write_bytes(b"verified-image")
+    digest = __import__("hashlib").sha256(source.read_bytes()).hexdigest()
+    semantic = {
+        "version": "image_semantic_evidence_v1",
+        "passed": True,
+        "image_sha256": digest,
+        "score_source": "deterministic_caption_label_recall",
+        "evidence_level": "artifact_verified",
+    }
+    (output / "asset_provenance.json").write_text(json.dumps({"assets": [{
+        "path": str(source), "source_url": "https://pexels.test/1", "license": "licensed",
+        "semantic_match_score": 0.9, "semantic_required": True, "semantic_evidence": semantic,
+    }]}), encoding="utf-8")
+    bridge = MediaBridge({}, tmp_path)
+
+    packet = bridge._prepare_video_visual_assets({"artifacts": []}, output, {})
+
+    assert packet["assignments"][0]["semantic_required"] is True
+    assert packet["assignments"][0]["semantic_evidence"] == semantic
+
+
 def test_video_asset_preparation_defers_failed_generic_images_to_runner_recovery(tmp_path, monkeypatch):
     bridge = MediaBridge({"image": {"enabled": True}, "video": {"visual_image_count": 8}}, tmp_path)
     output = tmp_path / "output"

@@ -1706,6 +1706,8 @@ class MediaBridge:
                     "semantic_match_score": evidence.get("semantic_match_score", 0),
                     "match_reason": evidence.get("match_reason", ""),
                     "semantic_tags": evidence.get("semantic_tags", []),
+                    "semantic_required": evidence.get("semantic_required") is True,
+                    "semantic_evidence": dict(evidence.get("semantic_evidence") or {}),
                     "generation_evidence": evidence.get("generation_evidence", {}),
                 }
             )
