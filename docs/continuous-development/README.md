@@ -105,4 +105,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - A read-only audit of the server's 2026-09-10 hot-work pack reports 0/12 strict-ready platforms: WeChat has incomplete legacy rows, nine targets have no samples, and X plus Shipinhao are omitted. Collector repair must follow these distinct statuses; no missing identity may be synthesized.
 - The contract-gap reporter now distinguishes `platform_missing`, `no_samples` and `contract_incomplete`; its final regression is 1824 tests plus 37 subtests with zero failures.
 - Hot-work collection now defaults to every registry publishing target, labels explicit subsets and rejects unknown platform names. Full regression is 1825 tests plus 37 subtests; live collector smokes remain next.
+- Isolated public smokes found 49 Bilibili/Juejin/YouTube discovery rows but zero strict-ready rows. Bilibili now has a tested public-detail enrichment contract; Linux live confirmation remains pending before Juejin and YouTube adapters.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
