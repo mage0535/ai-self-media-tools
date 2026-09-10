@@ -15,7 +15,8 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 Bilibili Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to Juejin detail contract |
+| Sol B2 Juejin detail evidence | Codex primary | Juejin saved DOM/API evidence and four coordination documents | blocked_on_adapter | parse page embedded state or authenticated detail; enforce 30-day window before strict admission |
+| Sol B2 Bilibili Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; Bilibili collector can proceed to later content Canary |
 | Sol B2 Bilibili real-DOM card ordering | Codex primary | Bilibili card parser and four coordination documents | committed `3e0eed1` | Linux live acceptance passed 24 rows and 10/10 strict pack samples |
 | Sol B2 Bilibili visible-card fallback | Codex primary | Bilibili card parser, detail fallback, login classification, tests and four coordination documents | committed `4c98dc1` | real-DOM follow-up required after first live retry returned zero rows |
 | Sol B2 Bilibili strict detail enrichment | Codex primary | `content_platform/hot_work_intelligence.py`, Bilibili detail tests and four coordination documents | local_complete | commit and sync staging; run fresh Bilibili live collector and strict contract report |
