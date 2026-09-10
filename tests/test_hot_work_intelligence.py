@@ -11,6 +11,7 @@ from content_platform.hot_work_intelligence import (
     normalize_browser_cookies,
     parse_douyin_shipin_html,
     parse_bilibili_search_cards,
+    parse_juejin_search_cards,
     parse_logged_short_video_search_text,
     parse_platform_search_evidence,
     parse_sogou_wechat_html,
@@ -97,6 +98,41 @@ def test_bilibili_login_navigation_does_not_turn_normal_search_into_login_wall()
 
     assert classify_logged_search_failure(text, platform="bilibili") == "layout_changed_or_no_lane_results"
     assert classify_logged_search_failure("验证码 CAPTCHA", platform="bilibili") == "login_required_or_captcha"
+
+
+def test_juejin_visible_card_builds_strict_recent_work_evidence():
+    rows = parse_juejin_search_cards(
+        [{
+            "text": "AI Agent工作流实战",
+            "href": "https://juejin.cn/post/7646622729529737256?searchId=abc",
+            "context": "示例作者\n5天前\n人工智能\nAI Agent工作流实战\n本文介绍实际流程\n312\n21\n微博\n微信扫一扫",
+        }],
+        query="AI Agent 工作流",
+        captured_at="2026-09-10T12:22:32+00:00",
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["content_id"] == "7646622729529737256"
+    assert row["canonical_url"] == "https://juejin.cn/post/7646622729529737256"
+    assert row["published_at"] == "2026-09-05T12:22:32+00:00"
+    assert row["metrics"] == {"engagement": 312}
+    assert len(row["author_id_hash"]) == 64
+    assert len(row["raw_snapshot_sha256"]) == 64
+
+
+def test_juejin_visible_card_rejects_work_older_than_thirty_days():
+    rows = parse_juejin_search_cards(
+        [{
+            "text": "AI Agent生态分析",
+            "href": "https://juejin.cn/post/7646622729529737256",
+            "context": "示例作者\n3月前\n人工智能\nAI Agent生态分析\n3\n微博\n微信扫一扫",
+        }],
+        query="AI Agent",
+        captured_at="2026-09-10T12:22:32+00:00",
+    )
+
+    assert rows == []
 
 
 def test_logged_search_artifact_stem_keeps_distinct_chinese_queries_unique():

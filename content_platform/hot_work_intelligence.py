@@ -517,6 +517,105 @@ def parse_bilibili_search_cards(
     return rows
 
 
+def _juejin_published_at(value: str, captured_at: str) -> str:
+    current = datetime.fromisoformat(str(captured_at).replace("Z", "+00:00"))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    text = str(value or "").strip().lstrip("·").strip()
+    relative = re.fullmatch(r"(\d+)\s*(分钟|小时|天)前", text)
+    if relative:
+        amount = int(relative.group(1))
+        delta = {
+            "分钟": timedelta(minutes=amount),
+            "小时": timedelta(hours=amount),
+            "天": timedelta(days=amount),
+        }[relative.group(2)]
+        published = current - delta
+        if current - published <= timedelta(days=30):
+            return published.astimezone(timezone.utc).isoformat()
+        return ""
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            published = datetime.fromisoformat(text).replace(tzinfo=timezone.utc)
+        elif re.fullmatch(r"\d{2}-\d{2}", text):
+            published = datetime.fromisoformat(f"{current.year}-{text}").replace(tzinfo=timezone.utc)
+            if published > current:
+                published = published.replace(year=current.year - 1)
+        else:
+            return ""
+    except ValueError:
+        return ""
+    return published.isoformat() if timedelta(0) <= current - published <= timedelta(days=30) else ""
+
+
+def parse_juejin_search_cards(
+    cards: list[dict[str, str]],
+    *,
+    query: str,
+    captured_at: str,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Build strict Juejin evidence from recent visible article cards."""
+    rows = []
+    seen = set()
+    for card in cards:
+        href = str(card.get("href") or "").strip()
+        id_match = re.search(r"/post/(\d+)", href)
+        if not id_match:
+            continue
+        content_id = id_match.group(1)
+        if content_id in seen:
+            continue
+        title = strip_markup(str(card.get("text") or ""))
+        if not _looks_like_content_line(title, query):
+            continue
+        lines = [strip_markup(line) for line in str(card.get("context") or "").splitlines() if strip_markup(line)]
+        date_index = next(
+            (index for index, line in enumerate(lines) if _juejin_published_at(line, captured_at)),
+            -1,
+        )
+        if date_index != 1 or not lines[0]:
+            continue
+        published_at = _juejin_published_at(lines[date_index], captured_at)
+        metric_values = [
+            line for line in lines[date_index + 1:]
+            if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)
+        ]
+        if not metric_values or _metric_number(metric_values[0]) <= 0:
+            continue
+        metric = int(_metric_number(metric_values[0]))
+        canonical_url = f"https://juejin.cn/post/{content_id}"
+        snapshot = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        row = _work(
+            "juejin",
+            "juejin_visible_search_card",
+            query,
+            title,
+            url=canonical_url,
+            engagement=metric,
+            evidence_strength="strong_logged_search_result",
+        )
+        row.update({
+            "account_lane": query,
+            "content_id": content_id,
+            "canonical_url": canonical_url,
+            "author_id_hash": hashlib.sha256(f"juejin-visible:{lines[0]}".encode("utf-8")).hexdigest(),
+            "published_at": published_at,
+            "captured_at": captured_at,
+            "fetched_at": captured_at,
+            "metrics": {"engagement": metric},
+            "metric_observed_at": captured_at,
+            "raw_snapshot_sha256": hashlib.sha256(snapshot).hexdigest(),
+            "detail_collector": "juejin_visible_search_card",
+            "detail_enrichment_status": "search_card_verified",
+        })
+        seen.add(content_id)
+        rows.append(row)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def _has_bilibili_card_contract(row: dict[str, Any]) -> bool:
     return bool(
         row.get("content_id")
@@ -1118,6 +1217,8 @@ def collect_logged_short_video_search(
         )
     if platform == "bilibili":
         rows = parse_bilibili_search_cards(anchors, query=query, captured_at=captured_at, limit=limit)
+    elif platform == "juejin":
+        rows = parse_juejin_search_cards(anchors, query=query, captured_at=captured_at, limit=limit)
     elif platform == "twitter":
         rows = parse_twitter_search_cards(anchors, query=query, limit=limit)
     elif platform == "tiktok":

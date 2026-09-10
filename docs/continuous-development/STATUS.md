@@ -9,13 +9,14 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1829 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-bilibili-visible-card-20260910.xml`.
+- Latest complete regression on this branch: 1831 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-juejin-visible-card-20260910.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 Juejin detail evidence | Codex primary | Juejin saved DOM/API evidence and four coordination documents | blocked_on_adapter | parse page embedded state or authenticated detail; enforce 30-day window before strict admission |
+| Sol B2 Juejin visible-card contract | Codex primary | Juejin card parser, 30-day gate, tests and four coordination documents | local_complete | commit, staging sync and real Juejin strict-contract smoke |
+| Sol B2 Juejin detail evidence | Codex primary | Juejin saved DOM/API evidence and four coordination documents | recovered_with_visible_card | strict card adapter implemented; real staging acceptance pending |
 | Sol B2 Bilibili Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; Bilibili collector can proceed to later content Canary |
 | Sol B2 Bilibili real-DOM card ordering | Codex primary | Bilibili card parser and four coordination documents | committed `3e0eed1` | Linux live acceptance passed 24 rows and 10/10 strict pack samples |
 | Sol B2 Bilibili visible-card fallback | Codex primary | Bilibili card parser, detail fallback, login classification, tests and four coordination documents | committed `4c98dc1` | real-DOM follow-up required after first live retry returned zero rows |
