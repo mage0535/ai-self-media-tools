@@ -61,8 +61,18 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
         if not isinstance(sample, dict):
             continue
         samples.append({
+            "account_lane": sample.get("account_lane") or "",
+            "content_id": sample.get("content_id") or sample.get("item_id") or "",
+            "canonical_url": sample.get("canonical_url") or sample.get("url") or sample.get("source_url") or sample.get("work_url") or "",
+            "author_id_hash": sample.get("author_id_hash") or "",
             "title": str(sample.get("title") or "")[:120],
             "author": str(sample.get("author") or "")[:60],
+            "published_at": sample.get("published_at") or "",
+            "fetched_at": sample.get("fetched_at") or sample.get("captured_at") or sample.get("collected_at") or "",
+            "query": sample.get("query") or "",
+            "metrics": dict(sample.get("metrics") or {}),
+            "metric_observed_at": sample.get("metric_observed_at") or sample.get("captured_at") or sample.get("collected_at") or "",
+            "raw_snapshot_sha256": sample.get("raw_snapshot_sha256") or sample.get("evidence_hash") or "",
             "metric": sample.get("views") or sample.get("likes") or sample.get("favorites") or sample.get("engagement") or "",
             "views": sample.get("views") or 0,
             "likes": sample.get("likes") or 0,
@@ -118,6 +128,10 @@ def build_same_lane_selection_items(
         evidence_hash = hashlib.sha256(json.dumps(sample, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         items.append({
             "platform": str(platform).casefold(),
+            "account_lane": sample.get("account_lane") or "",
+            "content_id": sample.get("content_id") or "",
+            "canonical_url": sample.get("canonical_url") or url,
+            "author_id_hash": sample.get("author_id_hash") or "",
             "title": title[:180],
             "source": f"{str(platform).casefold()}:same_lane_hot_work",
             "url": url,
@@ -130,6 +144,12 @@ def build_same_lane_selection_items(
             "evidence_type": "same_lane_hot_work",
             "native_verified": False,
             "captured_at": captured_at,
+            "published_at": sample.get("published_at") or "",
+            "fetched_at": sample.get("fetched_at") or captured_at,
+            "query": sample.get("query") or "",
+            "metrics": dict(sample.get("metrics") or {}),
+            "metric_observed_at": sample.get("metric_observed_at") or captured_at,
+            "raw_snapshot_sha256": sample.get("raw_snapshot_sha256") or "",
             "collector": collector,
             "lane_fit_score": lane_score,
             "semantic_fit_score": lane_score,
@@ -252,7 +272,7 @@ def build_due_tasks(
                 if researched:
                     candidates = researched
                     break
-        from .topic_selection_engine import decide_topic
+        from .topic_selection_engine import add_shadow_comparison, decide_topic
 
         decision_keywords = raw.get("topic_keywords")
         if not isinstance(decision_keywords, list) or not decision_keywords:
@@ -356,6 +376,10 @@ def build_due_tasks(
                 selected = {**selected, "associated_hotspot": hotspot}
                 if topic_reservation_path:
                     persist_associated_hotspot(Path(topic_reservation_path).with_name("associated-hotspots.json"), hotspot)
+            unified_topic_decision = add_shadow_comparison(
+                unified_topic_decision,
+                str(selected.get("title") or ""),
+            )
             trend_candidate = build_trend_candidate(
                 platform=platform,
                 topic=selected["title"],

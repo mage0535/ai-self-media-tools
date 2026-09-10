@@ -11,6 +11,18 @@ CROSS_PLATFORM_REFERENCE = "cross_platform_reference"
 
 _WORK_EVIDENCE = {"same_lane_hot_work", "native"}
 _OFFICIAL_EVIDENCE = {"official_activity", "official_keyword", "official_reference"}
+_WORK_REQUIRED_FIELDS = (
+    "account_lane",
+    "content_id",
+    "canonical_url",
+    "author_id_hash",
+    "published_at",
+    "fetched_at",
+    "query",
+    "metrics",
+    "metric_observed_at",
+    "raw_snapshot_sha256",
+)
 
 
 def _number(value: Any) -> float:
@@ -29,7 +41,12 @@ def _number(value: Any) -> float:
 
 
 def _metric(item: dict[str, Any]) -> float:
-    return max(_number(item.get(key)) for key in ("heat", "views", "likes", "engagement", "points", "favorites"))
+    metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
+    keys = ("heat", "views", "likes", "engagement", "points", "favorites", "comments", "shares", "saves")
+    return max(
+        [*(_number(item.get(key)) for key in keys), *(_number(metrics.get(key)) for key in keys)],
+        default=0.0,
+    )
 
 
 def _freshness(item: dict[str, Any], now: datetime) -> float:
@@ -57,6 +74,21 @@ def _source_complete(item: dict[str, Any]) -> bool:
         and item.get("captured_at")
         and item.get("collector")
     )
+
+
+def _missing_work_contract_fields(item: dict[str, Any]) -> list[str]:
+    missing = []
+    for field in _WORK_REQUIRED_FIELDS:
+        value = item.get(field)
+        if field == "metrics":
+            if not isinstance(value, dict):
+                missing.append(field)
+        elif not str(value or "").strip():
+            missing.append(field)
+    digest = str(item.get("raw_snapshot_sha256") or "")
+    if "raw_snapshot_sha256" not in missing and len(digest) != 64:
+        missing.append("raw_snapshot_sha256")
+    return missing
 
 
 def _terms(item: dict[str, Any], lane_keywords: list[str]) -> set[str]:
@@ -113,6 +145,14 @@ def decide_topic(
             rejected.append({**item, "reason": "account_lane_mismatch"})
             continue
         if layer == SAME_PLATFORM_WORK:
+            missing = _missing_work_contract_fields(item)
+            if missing:
+                rejected.append({
+                    **item,
+                    "reason": "same_platform_work_contract_incomplete",
+                    "missing_fields": missing,
+                })
+                continue
             if _metric(item) <= 0:
                 rejected.append({**item, "reason": "same_platform_work_metric_missing"})
                 continue
@@ -210,4 +250,16 @@ def ensure_topic_decision(
     return result
 
 
-__all__ = ["decide_topic", "ensure_topic_decision"]
+def add_shadow_comparison(decision: dict[str, Any], legacy_selected_title: str) -> dict[str, Any]:
+    result = dict(decision)
+    unified_title = str((result.get("selected") or {}).get("title") or "")
+    legacy_title = str(legacy_selected_title or "")
+    result["shadow_comparison"] = {
+        "legacy_selected_title": legacy_title,
+        "unified_selected_title": unified_title,
+        "matches": bool(legacy_title and unified_title and legacy_title == unified_title),
+    }
+    return result
+
+
+__all__ = ["add_shadow_comparison", "decide_topic", "ensure_topic_decision"]

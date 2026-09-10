@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 
 from content_platform.topic_selection_engine import decide_topic
-from content_platform.overnight_batch import build_due_tasks
+from content_platform.overnight_batch import build_due_tasks, build_same_lane_selection_items
 
 
 NOW = datetime(2026, 9, 10, tzinfo=timezone.utc)
@@ -19,12 +20,22 @@ def _item(
 ) -> dict:
     row = {
         "platform": platform,
+        "account_lane": "ai_productivity",
+        "content_id": f"item-{abs(hash(title))}",
+        "author_id_hash": hashlib.sha256(f"author:{platform}".encode("utf-8")).hexdigest(),
         "title": title,
         "evidence_type": evidence_type,
         "identity_role": identity_role,
         "url": f"https://{platform}.example/items/{abs(hash(title))}",
+        "canonical_url": f"https://{platform}.example/items/{abs(hash(title))}",
+        "published_at": (NOW - timedelta(hours=hours_old + 1)).isoformat(),
         "captured_at": (NOW - timedelta(hours=hours_old)).isoformat(),
+        "fetched_at": (NOW - timedelta(hours=hours_old)).isoformat(),
+        "query": "AI 工作流",
         "collector": f"{platform}_collector",
+        "metric_observed_at": (NOW - timedelta(hours=hours_old)).isoformat(),
+        "metrics": {},
+        "raw_snapshot_sha256": hashlib.sha256(title.encode("utf-8")).hexdigest(),
         "lane_fit_score": lane_fit,
         "content_value_score": 0.8,
         "actionability_score": 0.8,
@@ -32,6 +43,7 @@ def _item(
     }
     if metric is not None:
         row["views"] = metric
+        row["metrics"] = {"views": metric}
     return row
 
 
@@ -91,6 +103,40 @@ def test_empty_metrics_cannot_qualify_as_same_platform_viral_work():
     assert result["rejected"][0]["reason"] == "same_platform_work_metric_missing"
 
 
+def test_same_platform_work_requires_real_identity_time_query_and_snapshot_contract():
+    incomplete = _item("bilibili", "AI工作流演示", "same_lane_hot_work", metric=900)
+    for field in ("content_id", "published_at", "query", "metric_observed_at", "raw_snapshot_sha256"):
+        incomplete.pop(field)
+
+    result = decide_topic(
+        "bilibili",
+        [incomplete],
+        lane_keywords=["AI", "工作流"],
+        now=NOW,
+    )
+
+    assert result["status"] == "insufficient"
+    assert result["rejected"][0]["reason"] == "same_platform_work_contract_incomplete"
+    assert set(result["rejected"][0]["missing_fields"]) == {
+        "content_id", "published_at", "query", "metric_observed_at", "raw_snapshot_sha256"
+    }
+
+
+def test_normalized_nested_metrics_are_used_without_legacy_flat_fields():
+    normalized = _item("youtube", "AI workflow field test", "same_lane_hot_work", metric=900)
+    normalized.pop("views")
+
+    result = decide_topic(
+        "youtube",
+        [normalized],
+        lane_keywords=["AI", "workflow"],
+        now=NOW,
+    )
+
+    assert result["status"] == "selected"
+    assert result["selected"]["title"] == normalized["title"]
+
+
 def test_official_keyword_can_be_selected_but_keeps_official_reference_identity():
     official = _item("wechat", "AI效率工具征集", "official_keyword", metric=None)
     official.update({"official_reference_only": True, "native_verified": False})
@@ -146,3 +192,34 @@ def test_overnight_due_task_persists_unified_topic_decision_before_generation():
     assert task["topic_decision"]["version"] == "topic_decision_v1"
     assert task["topic_decision"]["selected"]["title"] == candidate["title"]
     assert task["brief"]["topic_decision"]["selection_layer"] == "same_platform_same_lane_work"
+
+
+def test_hot_work_compact_loader_preserves_strict_decision_evidence(tmp_path):
+    sample = _item("kuaishou", "AI工作流三步实测", "same_lane_hot_work", metric=1500)
+    sample.update({"evidence_strength": "strong", "source": "kuaishou_search"})
+    pack_path = tmp_path / "hot-work.json"
+    pack_path.write_text(
+        __import__("json").dumps({
+            "version": "hot_work_parameter_pack_v1",
+            "platforms": {
+                "kuaishou": {
+                    "ready": True,
+                    "strong_sample_count": 1,
+                    "top_samples": [sample],
+                }
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    _pack, items = build_same_lane_selection_items(
+        "kuaishou", ["AI", "工作流"], path=pack_path,
+    )
+
+    assert len(items) == 1
+    for field in (
+        "account_lane", "content_id", "canonical_url", "author_id_hash",
+        "published_at", "fetched_at", "query", "metrics",
+        "metric_observed_at", "raw_snapshot_sha256",
+    ):
+        assert items[0][field] == sample[field]
