@@ -532,3 +532,10 @@
 - Same-platform viral works require a real URL, capture time, collector and at least one non-zero platform metric. Official activities may lack public interaction metrics, but remain `native_verified=false` unless a separately verified native hotspot identity exists.
 - Official support boosts a work only when at least two configured lane terms overlap; one generic term such as `AI` is insufficient unless it is the account's only configured term.
 - The first rollout is compatibility observation in overnight preparation. It records the unified decision and coverage before generation without silently changing legacy ranking. CLI, MCP and Pipeline become authoritative only after their collectors satisfy the same contract and shadow differences are accepted.
+
+## D75: Pipeline Owns Topic-Decision Compilation For Every Creation Entry
+
+- `Pipeline.create` idempotently preserves an existing `topic_decision_v1`, compiles one from supplied candidate evidence, or records `missing_evidence`; it never manufactures a platform candidate from a title alone.
+- MCP inherits this behavior by calling Pipeline. CLI auto passes its selected candidate, target identity, collection time and collector into the same contract. Overnight keeps the richer task-level decision and provider brief fields.
+- The run contract explicitly admits `topic_decision` in generation input and treats it as bounded advisory evidence. Unknown fields remain fail-closed; adding topic evidence does not loosen the contract.
+- Four-entry consistency means the same contract reaches model input. It does not mean legacy ranking is removed or that weak collector evidence becomes sufficient. Authoritative cutover waits for B2 contracts and accepted shadow differences.

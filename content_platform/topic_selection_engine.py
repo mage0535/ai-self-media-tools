@@ -177,4 +177,37 @@ def decide_topic(
     }
 
 
-__all__ = ["decide_topic"]
+def ensure_topic_decision(
+    topic: str,
+    platform: str,
+    brief: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Compile one topic decision into a job brief without inventing evidence."""
+    result = dict(brief or {})
+    existing = result.get("topic_decision")
+    if isinstance(existing, dict) and existing.get("version") == "topic_decision_v1":
+        return result
+    candidates = result.get("topic_candidates") or result.get("intelligence_items") or []
+    if isinstance(result.get("topic_candidate"), dict):
+        candidates = [result["topic_candidate"], *(candidates if isinstance(candidates, list) else [])]
+    if not isinstance(candidates, list):
+        candidates = []
+    keywords = result.get("topic_keywords") or result.get("lane_keywords") or []
+    if not isinstance(keywords, list):
+        keywords = []
+    decision = decide_topic(
+        platform,
+        candidates,
+        lane_keywords=[str(value) for value in keywords],
+    )
+    if not candidates:
+        decision = {
+            **decision,
+            "status": "missing_evidence",
+            "requested_topic": str(topic or ""),
+        }
+    result["topic_decision"] = decision
+    return result
+
+
+__all__ = ["decide_topic", "ensure_topic_decision"]
