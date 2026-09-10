@@ -792,3 +792,11 @@ Observed read-only on 2026-08-31.
 - Claude Code returned 3 rows, large-model application development 2 and MCP development 3. The deduplicated result retained eight recent works.
 - The generated parameter pack passed `platform_intelligence_contract_report_v1`: `contract_ready_count=1`, 8/8 complete samples, required minimum 3 and zero missing fields.
 - This closes Juejin hot-work collection only. It does not prove content generation, platform-hosted images, draft creation or publication. Production remains `2f4f612`; timers and publishers remain untouched.
+
+## 2026-09-11 YouTube This-Month Contract
+
+- Saved YouTube discovery cards contained real video IDs, channels, views and relative ages, but default relevance results were predominantly months or a year old.
+- Guessed URL parameters failed to change the window. A real browser interaction with Filters → Upload date → This month produced `sp=EgIIBA%253D%253D` and results from two days to three weeks old.
+- TDD adds the verified URL and a YouTube-specific visible-card parser with ID, anonymized channel, captured/published/metric times, nested views and card snapshot SHA.
+- Related tests returned 62 passed. Fresh full regression returned 1837 passed plus 37 subtests in 332.88 seconds; JUnit `artifacts/test-reports/sol-b2-youtube-month-cards-20260911.xml` has zero failures/errors.
+- Linux default-query strict acceptance remains pending. Production and timers remain unchanged.
