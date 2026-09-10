@@ -15,7 +15,8 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 Juejin verified default queries | Codex primary | platform intelligence registry, query tests and four coordination documents | local_complete | commit, staging sync and default-query Linux strict acceptance |
+| Sol B2 Juejin Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to YouTube detail contract |
+| Sol B2 Juejin verified default queries | Codex primary | platform intelligence registry, query tests and four coordination documents | committed `13f98f9` | Linux default path passed 8/8 strict pack samples |
 | Sol B2 Juejin latest-published route | Codex primary | logged-search URL contract, tests and four coordination documents | local_complete | commit, staging sync and default-query Linux acceptance |
 | Sol B2 Top3 readiness and Juejin search classification | Codex primary | contract-gap reporter, Juejin failure classification, tests and four coordination documents | local_complete | commit, staging sync and repeat Juejin strict report/query expansion |
 | Sol B2 Juejin visible-card contract | Codex primary | Juejin card parser, 30-day gate, tests and four coordination documents | local_complete | commit, staging sync and real Juejin strict-contract smoke |

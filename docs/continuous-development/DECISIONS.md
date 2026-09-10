@@ -617,3 +617,8 @@
 - Use three complementary default queries proven on the latest-published route: `Claude Code`, `大模型 应用开发` and `MCP 开发`.
 - The probe returned 3, 2 and 3 recent rows respectively. `RAG Agent` remains an optional expansion query, not a default, to limit routine browser time.
 - Query results remain subject to deduplication, 30-day age, lane fit, strict evidence and Top3 gates. A configured query is not itself evidence.
+
+## D88: Juejin Acceptance Uses The Override-Free Default Path
+
+- Platform acceptance must run without manual query overrides. The default registry, latest-sort route, card parser, deduplication and strict pack report must succeed together.
+- Juejin acceptance is eight deduplicated recent rows and 8/8 strict pack samples from three direct queries. It does not cover draft upload or publication.

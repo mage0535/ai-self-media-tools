@@ -785,3 +785,10 @@ Observed read-only on 2026-08-31.
 - To bound routine latency while retaining coverage, the registry now defaults to Claude Code, large-model application development and MCP development. RAG Agent remains available for recapture expansion.
 - TDD fixes the exact default query list. Related tests returned 63 passed. Fresh full regression returned 1835 passed plus 37 subtests in 351.16 seconds; JUnit `artifacts/test-reports/sol-b2-juejin-default-queries-20260911.xml` has zero failures/errors.
 - A fresh Linux run without explicit query overrides remains the acceptance gate. Production is unchanged.
+
+## 2026-09-11 Juejin Linux Strict Acceptance
+
+- Staging advanced to `13f98f9` and ran `hot-works-collect --platform juejin` without query overrides, direct and isolated from shared data.
+- Claude Code returned 3 rows, large-model application development 2 and MCP development 3. The deduplicated result retained eight recent works.
+- The generated parameter pack passed `platform_intelligence_contract_report_v1`: `contract_ready_count=1`, 8/8 complete samples, required minimum 3 and zero missing fields.
+- This closes Juejin hot-work collection only. It does not prove content generation, platform-hosted images, draft creation or publication. Production remains `2f4f612`; timers and publishers remain untouched.
