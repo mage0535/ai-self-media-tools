@@ -705,3 +705,11 @@ Observed read-only on 2026-08-31.
 - CLI and overnight compatibility paths now persist `shadow_comparison`. The existing CLI fixture intentionally demonstrates a mismatch: legacy selected a title-only row while the unified contract rejected it as insufficient.
 - Focused regression returned 129 passed after correcting two newly created fixtures to contain complete evidence. Fresh full regression returned 1823 passed plus 37 subtests in 401.31 seconds; JUnit `artifacts/test-reports/sol-b2-evidence-contract-20260910.xml` has zero failures/errors.
 - This proves contract enforcement and evidence preservation, not live collector completeness. Production remains unchanged and timers remain inactive.
+
+## 2026-09-10 Live Platform Intelligence Contract-Gap Evidence
+
+- The server's latest hot-work parameter pack was updated at 2026-09-10 13:19 CST. A private-safe key/count probe found only WeChat had rows: ten legacy samples with title, URL, query and source fields but without the strict identity/metric/snapshot contract. Nine listed platforms had zero samples; Twitter/X and Shipinhao were absent from the pack.
+- The local candidate evaluated that exact read-only server pack across the 12 configured publishing targets. Result: zero contract-ready platforms, one legacy-ready but contract-incomplete platform, two missing platforms and nine no-sample platforms.
+- Statuses are WeChat `contract_incomplete`; Twitter and Shipinhao `platform_missing`; Kuaishou, Juejin, Douyin AI, Douyin Pet, Xiaohongshu, Bilibili, Zhihu, YouTube and TikTok `no_samples`.
+- The generated report is `artifacts/research/2026-09-10-external-capabilities/platform_intelligence_contract_report.json`. It contains aggregate statuses and missing field names, not credentials. This is a collector repair queue, not proof that platform collection succeeded.
+- Fresh full regression after the report status refinement returned 1824 passed plus 37 subtests in 353.07 seconds. JUnit `artifacts/test-reports/sol-b2-contract-gap-report-20260910.xml` reports zero failures and errors.
