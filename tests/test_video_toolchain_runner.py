@@ -1264,6 +1264,38 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual([Path(row["path"]).name for row in merged], ["fresh.jpg", "replacement.jpg"])
             self.assertEqual([row["scene"] for row in merged], [1, 2])
 
+    def test_reselection_renumbers_all_surviving_and_replacement_scenes(self):
+        from scripts.video_toolchain_runner import _merge_nonreused_backgrounds
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = []
+            for index in range(4):
+                path = root / f"asset-{index}.jpg"
+                path.write_bytes(f"unique-{index}".encode())
+                paths.append(path)
+
+            merged = _merge_nonreused_backgrounds(
+                [{"scene": 7, "path": str(paths[0])}, {"scene": 7, "path": str(paths[1])}],
+                [{"scene": 1, "background_image": str(paths[2])}, {"scene": 2, "background_image": str(paths[3])}],
+                set(),
+            )
+
+            self.assertEqual([row["scene"] for row in merged], [1, 2, 3, 4])
+
+    def test_background_recovery_never_overwrites_noncontiguous_existing_file(self):
+        from scripts.pexels_auto_bg import _next_background_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("bg_01.jpg", "bg_03.jpg", "bg_05.jpg", "bg_08.jpg"):
+                (root / name).write_bytes(name.encode())
+
+            target = _next_background_path(root, ".jpg")
+
+            self.assertEqual(target.name, "bg_02.jpg")
+            self.assertEqual((root / "bg_05.jpg").read_bytes(), b"bg_05.jpg")
+
     def test_materialized_assets_become_the_manifest_and_card_assignments(self):
         from scripts.video_toolchain_runner import _visual_assets_from_materialized
 
