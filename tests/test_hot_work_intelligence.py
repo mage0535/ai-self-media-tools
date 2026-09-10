@@ -12,6 +12,7 @@ from content_platform.hot_work_intelligence import (
     parse_douyin_shipin_html,
     parse_bilibili_search_cards,
     parse_juejin_search_cards,
+    parse_youtube_search_cards,
     parse_logged_short_video_search_text,
     parse_platform_search_evidence,
     parse_sogou_wechat_html,
@@ -156,6 +157,33 @@ def test_juejin_search_uses_latest_sort_for_thirty_day_pool():
     assert "sort=1" in url
     assert "type=0" in url
     assert "query=AI%20Agent" in url
+
+
+def test_youtube_search_uses_verified_this_month_filter():
+    url = logged_search_url("youtube", "AI agent workflow")
+
+    assert "sp=EgIIBA%253D%253D" in url
+
+
+def test_youtube_visible_card_builds_strict_month_work_evidence():
+    rows = parse_youtube_search_cards(
+        [{
+            "text": "Build a Reliable AI Agent Workflow",
+            "href": "https://www.youtube.com/watch?v=FwOTs4UxQS4&pp=abc",
+            "context": "Build a Reliable AI Agent Workflow\nExample Channel\nExample Channel\n•\n•\n12K views\n6 days ago",
+        }],
+        query="AI agent workflow",
+        captured_at="2026-09-11T08:00:00+00:00",
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["content_id"] == "FwOTs4UxQS4"
+    assert row["canonical_url"] == "https://www.youtube.com/watch?v=FwOTs4UxQS4"
+    assert row["published_at"] == "2026-09-05T08:00:00+00:00"
+    assert row["metrics"] == {"views": 12000}
+    assert len(row["author_id_hash"]) == 64
+    assert len(row["raw_snapshot_sha256"]) == 64
 
 
 def test_save_collection_writes_latest_to_mutable_data_root(tmp_path, monkeypatch):

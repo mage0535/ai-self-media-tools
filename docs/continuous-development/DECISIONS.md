@@ -622,3 +622,9 @@
 
 - Platform acceptance must run without manual query overrides. The default registry, latest-sort route, card parser, deduplication and strict pack report must succeed together.
 - Juejin acceptance is eight deduplicated recent rows and 8/8 strict pack samples from three direct queries. It does not cover draft upload or publication.
+
+## D89: YouTube Current-Month Evidence Uses The Visible Filter Contract
+
+- Use YouTube's observed `This month` filter parameter `sp=EgIIBA%253D%253D`; guessed sort parameters did not change the result window and remain excluded.
+- Accepted cards require a real video/short ID, visible channel, parseable minute/hour/day/week age and positive views. Month/year-old rows, chapters and duration-only anchors are rejected.
+- The visible channel is anonymized, the card is hash-bound, and views remain named views. Data API may enrich this evidence when configured but is not fabricated when unavailable.
