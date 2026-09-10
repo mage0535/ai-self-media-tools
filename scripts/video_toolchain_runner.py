@@ -211,19 +211,30 @@ def main(argv: list[str] | None = None) -> int:
         if previous_hashes.intersection(current_hashes):
             try:
                 from pexels_auto_bg import auto_fetch_backgrounds
-                replacements = auto_fetch_backgrounds(
-                    script_body or title,
-                    title or "",
-                    output_dir,
-                    _primary_platform(plan),
-                    force=True,
-                    excluded_hashes=previous_hashes,
-                    semantic_required=True,
-                )
-                replacement_rows = _merge_materialized_backgrounds([], replacements)
-                if len(replacement_rows) >= 8:
-                    materialized_backgrounds = replacement_rows
-                else:
+                replacement_rows = _merge_nonreused_backgrounds(materialized_backgrounds, [], previous_hashes)
+                excluded_hashes = previous_hashes | {
+                    hashlib.sha256(Path(str(item["path"])).read_bytes()).hexdigest()
+                    for item in replacement_rows
+                }
+                for round_index in range(1, 4):
+                    if len(replacement_rows) >= 8:
+                        break
+                    replacements = auto_fetch_backgrounds(
+                        script_body or title,
+                        title or "",
+                        output_dir / "asset_reselection" / f"round_{round_index}",
+                        _primary_platform(plan),
+                        force=True,
+                        excluded_hashes=excluded_hashes,
+                        semantic_required=True,
+                    )
+                    replacement_rows = _merge_nonreused_backgrounds(replacement_rows, replacements, previous_hashes)
+                    excluded_hashes.update(
+                        hashlib.sha256(Path(str(item["path"])).read_bytes()).hexdigest()
+                        for item in replacement_rows
+                    )
+                materialized_backgrounds = replacement_rows
+                if len(replacement_rows) < 8:
                     print(f"[asset-reselection] insufficient unique replacements: {len(replacement_rows)}/8", file=sys.stderr)
             except Exception as exc:
                 print(f"[asset-reselection] failed: {exc}", file=sys.stderr)
@@ -1256,6 +1267,25 @@ def _merge_materialized_backgrounds(existing: list[dict], additions: list[dict])
             "generation_evidence": dict(item.get("generation_evidence") or {}),
         })
     return merged[:8]
+
+
+def _merge_nonreused_backgrounds(existing: list[dict], additions: list[dict], previous_hashes: set[str]) -> list[dict]:
+    """Keep current fresh assets and add only hash-distinct replacements."""
+    normalized_additions = _merge_materialized_backgrounds([], additions)
+    merged = []
+    seen_hashes = set(previous_hashes or set())
+    for item in [*existing, *normalized_additions]:
+        path = Path(str(item.get("path") or item.get("background_image") or ""))
+        if not path.is_file():
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest in seen_hashes:
+            continue
+        seen_hashes.add(digest)
+        merged.append({**item, "path": str(path), "scene": len(merged) + 1})
+        if len(merged) >= 8:
+            break
+    return merged
 
 
 def _renderer_path(plan: dict) -> Path:
