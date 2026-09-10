@@ -586,3 +586,9 @@
 - A successful search status and non-zero raw row count are discovery evidence only. Platform acceptance requires the generated parameter pack to pass the strict contract report.
 - Bilibili acceptance is 24 direct discovery rows and 10/10 retained top samples with complete identity, time, metric and snapshot fields. This acceptance applies only to Bilibili on staging commit `3e0eed1`.
 - Other platforms remain independently unverified. Bilibili success cannot satisfy Juejin, YouTube or any missing platform.
+
+## D83: Hot-Work Windows Are Hard Admission Boundaries
+
+- Seven-day and 30-day pools are derived from real publication times. A work older than 30 days may remain historical style context but cannot enter the current-month hot-work candidate pool.
+- A search page's relative age must be anchored to captured time or replaced by a verified detail timestamp. Missing or ambiguous dates are insufficient.
+- Juejin's public detail endpoint returning an application error is not usable evidence. Preserve the response status and use a separately verified embedded-page or authenticated-detail adapter; never infer publication time from article ID.

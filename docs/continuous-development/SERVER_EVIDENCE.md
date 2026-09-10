@@ -749,3 +749,10 @@ Observed read-only on 2026-08-31.
 - Fresh isolated Bilibili collection ran direct without proxy. Two lane queries returned 12 rows each, 24 total, with explicit subset scope and 11 omitted targets.
 - The generated parameter pack retained ten Bilibili top samples. `platform_intelligence_contract_report_v1` returned `contract_ready_count=1`, `contract_ready_sample_count=10`, zero missing fields and no legacy-ready mismatch.
 - This is real Bilibili collection and contract evidence only. It is not production activation, content generation, publication or all-platform acceptance. Timers and publishers remained untouched.
+
+## 2026-09-10 Juejin Detail Probe
+
+- Saved Juejin search DOM contains real `/post/{article_id}` links, visible authors, relative publication ages and interaction counts. The inspected leading results were three months to one year old and therefore outside the required 30-day hot-work window.
+- A direct POST to the public article-detail endpoint for a real observed article ID returned `err_no=2` with no data. That endpoint is not admitted as a detail source in the current server context.
+- Juejin remains `contract_incomplete`. The next adapter must parse verified page-embedded state or use valid authenticated detail access, record raw response SHA and hard-filter publication age before the row can become strict-ready.
+- Production current, timers, publishers and shared state were unchanged.
