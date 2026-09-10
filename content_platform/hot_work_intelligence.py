@@ -683,13 +683,21 @@ def parse_youtube_search_cards(
             title_index = lines.index(title)
         except ValueError:
             title_index = 0
-        author = next(
+        author_before_age = next(
             (
                 line for line in lines[title_index + 1:age_index]
                 if line not in {"•", title, view_line} and not re.fullmatch(r"\d+(?::\d+)+", line)
             ),
             "",
         )
+        author_after_age = next(
+            (
+                line for line in lines[age_index + 1:]
+                if line not in {"•", title, view_line} and not re.fullmatch(r"\d+(?::\d+)+", line)
+            ),
+            "",
+        )
+        author = author_before_age or author_after_age
         if not author or views <= 0:
             continue
         canonical_url = f"https://www.youtube.com/watch?v={video_id}"
@@ -1163,6 +1171,10 @@ def classify_logged_search_failure(text: str, *, platform: str = "") -> str:
     ) or (
         normalized_platform == "juejin"
         and all(token in lowered for token in ("综合", "文章", "用户"))
+    ) or (
+        normalized_platform == "youtube"
+        and all(token in lowered for token in ("shorts", "过滤"))
+        and bool(re.search(r"\d[\d,.]*(?:\.\d+)?(?:k|m|b|万)?\s*(?:views|次观看)", lowered, re.I))
     )
     if strong_login or (not normal_public_search and any(token in lowered for token in ("登录", "login"))):
         return "login_required_or_captcha"

@@ -628,3 +628,9 @@
 - Use YouTube's observed `This month` filter parameter `sp=EgIIBA%253D%253D`; guessed sort parameters did not change the result window and remain excluded.
 - Accepted cards require a real video/short ID, visible channel, parseable minute/hour/day/week age and positive views. Month/year-old rows, chapters and duration-only anchors are rejected.
 - The visible channel is anonymized, the card is hash-bound, and views remain named views. Data API may enrich this evidence when configured but is not fabricated when unavailable.
+
+## D90: YouTube Card Parsing Supports Observed Metadata Order
+
+- The live this-month card order is title, views, relative age and channel. The parser accepts channel metadata either before or after age but never uses description text when a nearer channel field is available.
+- Normal public YouTube pages contain login prompts. A page with Shorts/filter controls and visible view metrics is public search context; login text alone is not authentication failure. CAPTCHA remains blocking.
+- The parser still rejects duration/chapters, missing view labels, absent age and rows outside 30 days.

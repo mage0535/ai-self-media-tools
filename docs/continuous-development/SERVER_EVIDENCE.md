@@ -800,3 +800,10 @@ Observed read-only on 2026-08-31.
 - TDD adds the verified URL and a YouTube-specific visible-card parser with ID, anonymized channel, captured/published/metric times, nested views and card snapshot SHA.
 - Related tests returned 62 passed. Fresh full regression returned 1837 passed plus 37 subtests in 332.88 seconds; JUnit `artifacts/test-reports/sol-b2-youtube-month-cards-20260911.xml` has zero failures/errors.
 - Linux default-query strict acceptance remains pending. Production and timers remain unchanged.
+
+## 2026-09-11 YouTube Real-DOM Recovery
+
+- Staging `2ea53a6` ran the default YouTube queries and returned zero. Saved text showed valid this-month results with title, views, age and channel, but the generic failure classifier treated normal login navigation as a login wall.
+- The original parser fixture placed channel before views/age; live YouTube places channel after age. TDD adds the observed order and public-search structure negative control while preserving CAPTCHA and 30-day gates.
+- Related tests returned 63 passed. Fresh full regression returned 1838 passed plus 37 subtests in 348.42 seconds; JUnit `artifacts/test-reports/sol-b2-youtube-real-dom-20260911.xml` has zero failures/errors.
+- A repeated Linux strict-contract run remains required. Production is unchanged.
