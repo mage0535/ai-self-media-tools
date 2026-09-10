@@ -553,3 +553,10 @@
 - `no_samples` means the platform exists but produced no candidate rows; repair collection/auth/query routing rather than field normalization.
 - `contract_incomplete` means rows exist but required identity, metric or snapshot evidence is absent; repair the collector-to-pack contract. A legacy `ready=true` does not override this status.
 - Contract-gap reports contain counts, statuses and missing field names. They do not need public titles, account identifiers or raw credentials and can be retained as deployment evidence.
+
+## D78: Hot-Work Collection Scope Defaults To Every Publishing Target
+
+- Omitting `--platform` resolves the live collection scope from the publishing registry, not a hard-coded subset. An explicit list is labeled `explicit_subset` and records every omitted target.
+- Unknown platform names fail before collection. They cannot be converted to an unavailable status that looks like a completed attempt.
+- Collection results persist the exact scope alongside status rows. A subset run cannot be reported as full-platform collection, even if every requested source succeeds.
+- Scope coverage does not prove collector success. Each platform still needs an attempt record and strict work evidence before it is contract-ready.
