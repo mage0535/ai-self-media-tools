@@ -15,7 +15,8 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 Bilibili visible-card fallback | Codex primary | Bilibili card parser, detail fallback, login classification, tests and four coordination documents | local_complete | commit, sync staging and repeat Bilibili live strict-contract smoke |
+| Sol B2 Bilibili real-DOM card ordering | Codex primary | Bilibili card parser and four coordination documents | local_complete | commit, incremental staging sync, live Bilibili strict-contract rerun |
+| Sol B2 Bilibili visible-card fallback | Codex primary | Bilibili card parser, detail fallback, login classification, tests and four coordination documents | committed `4c98dc1` | real-DOM follow-up required after first live retry returned zero rows |
 | Sol B2 Bilibili strict detail enrichment | Codex primary | `content_platform/hot_work_intelligence.py`, Bilibili detail tests and four coordination documents | local_complete | commit and sync staging; run fresh Bilibili live collector and strict contract report |
 | Sol B2 all-target collection scope | Codex primary | CLI hot-work scope, parser help, scope tests and four coordination documents | local_complete | commit milestone; then run isolated server collector smokes for every no-sample target |
 | Sol B2 live contract-gap audit | Codex primary | contract report helper, generated private-safe report and four coordination documents | local_complete | commit milestone; then repair omitted target aliases followed by incomplete/empty collectors |

@@ -451,25 +451,34 @@ def parse_bilibili_search_cards(
         if bvid in seen:
             continue
         title = strip_markup(str(card.get("text") or ""))
-        if not _looks_like_content_line(title, query):
-            continue
         lines = [strip_markup(line) for line in str(card.get("context") or "").splitlines() if strip_markup(line)]
-        try:
-            title_index = next(index for index, line in enumerate(lines) if line == title)
-        except StopIteration:
-            title_index = 0
-        author = lines[title_index + 1] if len(lines) > title_index + 1 else ""
         date_index = next(
-            (index for index in range(title_index + 2, len(lines)) if _bilibili_published_at(lines[index], captured_at)),
+            (index for index, line in enumerate(lines) if _bilibili_published_at(line, captured_at)),
             -1,
         )
+        author = lines[date_index - 1] if date_index > 0 else ""
         if not author or date_index < 0:
             continue
         published_at = _bilibili_published_at(lines[date_index], captured_at)
-        metric_values = [
-            line for line in lines[date_index + 1:]
-            if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)
-        ]
+        duration_index = next(
+            (index for index in range(date_index - 1, -1, -1) if re.fullmatch(r"\d{1,2}:\d{2}(?::\d{2})?", lines[index])),
+            -1,
+        )
+        if duration_index >= 0:
+            visible_title = "".join(lines[duration_index + 1:date_index - 1]).strip()
+            if visible_title:
+                title = visible_title
+            metric_values = [
+                line for line in lines[:duration_index]
+                if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)
+            ][-2:]
+        else:
+            metric_values = [
+                line for line in lines[date_index + 1:]
+                if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)
+            ]
+        if not _looks_like_content_line(title, query):
+            continue
         if not metric_values or _metric_number(metric_values[0]) <= 0:
             continue
         metrics = {"views": int(_metric_number(metric_values[0]))}
