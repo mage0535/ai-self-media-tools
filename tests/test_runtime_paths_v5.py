@@ -32,6 +32,18 @@ def test_load_config_uses_db_parent_when_no_data_dir(tmp_path, monkeypatch):
     assert result["data_dir"] == str(runtime_data)
 
 
+def test_load_config_rejects_release_local_data_dir_without_runtime_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("CONTENT_PLATFORM_DATA_DIR", raising=False)
+    legacy_release = tmp_path / ".ai-self-media-tools-releases" / "aebd7a9"
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"data_dir": str(legacy_release / "data")}), encoding="utf-8")
+    runtime_data = tmp_path / "runtime-data"
+
+    result = load_config(str(config_path), str(runtime_data / "state.db"))
+
+    assert result["data_dir"] == str(runtime_data)
+
+
 def test_overnight_entrypoint_uses_external_runtime_roots():
     script = Path("scripts/run_overnight_batch.sh").read_text(encoding="utf-8")
     assert 'data_root="${CONTENT_PLATFORM_DATA_DIR:?CONTENT_PLATFORM_DATA_DIR is required}"' in script
