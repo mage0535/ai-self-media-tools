@@ -405,6 +405,119 @@ def parse_platform_search_evidence(
     return rows
 
 
+def _bilibili_published_at(value: str, captured_at: str) -> str:
+    current = datetime.fromisoformat(str(captured_at).replace("Z", "+00:00"))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    text = str(value or "").strip().lstrip("·").strip()
+    relative = re.fullmatch(r"(\d+)\s*(分钟|小时|天)前", text)
+    if relative:
+        amount = int(relative.group(1))
+        delta = {
+            "分钟": timedelta(minutes=amount),
+            "小时": timedelta(hours=amount),
+            "天": timedelta(days=amount),
+        }[relative.group(2)]
+        return (current - delta).astimezone(timezone.utc).isoformat()
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            return datetime.fromisoformat(text).replace(tzinfo=timezone.utc).isoformat()
+        if re.fullmatch(r"\d{2}-\d{2}", text):
+            parsed = datetime.fromisoformat(f"{current.year}-{text}").replace(tzinfo=timezone.utc)
+            if parsed > current:
+                parsed = parsed.replace(year=current.year - 1)
+            return parsed.isoformat()
+    except ValueError:
+        return ""
+    return ""
+
+
+def parse_bilibili_search_cards(
+    cards: list[dict[str, str]],
+    *,
+    query: str,
+    captured_at: str,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Build strict Bilibili evidence from visible search-card fields."""
+    rows = []
+    seen = set()
+    for card in cards:
+        href = str(card.get("href") or "").strip()
+        id_match = re.search(r"/video/(BV[0-9A-Za-z]+)", href, re.I)
+        if not id_match:
+            continue
+        bvid = id_match.group(1)
+        if bvid in seen:
+            continue
+        title = strip_markup(str(card.get("text") or ""))
+        if not _looks_like_content_line(title, query):
+            continue
+        lines = [strip_markup(line) for line in str(card.get("context") or "").splitlines() if strip_markup(line)]
+        try:
+            title_index = next(index for index, line in enumerate(lines) if line == title)
+        except StopIteration:
+            title_index = 0
+        author = lines[title_index + 1] if len(lines) > title_index + 1 else ""
+        date_index = next(
+            (index for index in range(title_index + 2, len(lines)) if _bilibili_published_at(lines[index], captured_at)),
+            -1,
+        )
+        if not author or date_index < 0:
+            continue
+        published_at = _bilibili_published_at(lines[date_index], captured_at)
+        metric_values = [
+            line for line in lines[date_index + 1:]
+            if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)
+        ]
+        if not metric_values or _metric_number(metric_values[0]) <= 0:
+            continue
+        metrics = {"views": int(_metric_number(metric_values[0]))}
+        if len(metric_values) > 1:
+            metrics["danmaku"] = int(_metric_number(metric_values[1]))
+        canonical_url = f"https://www.bilibili.com/video/{bvid}"
+        snapshot = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        row = _work(
+            "bilibili",
+            "bilibili_logged_search",
+            query,
+            title,
+            url=canonical_url,
+            engagement=metrics["views"],
+            evidence_strength="strong_logged_search_result",
+        )
+        row.update({
+            "account_lane": query,
+            "content_id": bvid,
+            "canonical_url": canonical_url,
+            "author_id_hash": hashlib.sha256(f"bilibili-visible:{author}".encode("utf-8")).hexdigest(),
+            "published_at": published_at,
+            "captured_at": captured_at,
+            "fetched_at": captured_at,
+            "metrics": metrics,
+            "metric_observed_at": captured_at,
+            "raw_snapshot_sha256": hashlib.sha256(snapshot).hexdigest(),
+            "views": metrics["views"],
+            "detail_collector": "bilibili_visible_search_card",
+            "detail_enrichment_status": "search_card_verified",
+        })
+        seen.add(bvid)
+        rows.append(row)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _has_bilibili_card_contract(row: dict[str, Any]) -> bool:
+    return bool(
+        row.get("content_id")
+        and row.get("author_id_hash")
+        and row.get("published_at")
+        and isinstance(row.get("metrics"), dict)
+        and row.get("raw_snapshot_sha256")
+    )
+
+
 def enrich_bilibili_work(
     row: dict[str, Any],
     *,
@@ -426,9 +539,13 @@ def enrich_bilibili_work(
     try:
         payload = (fetch_json or default_fetch)(endpoint)
     except Exception as exc:
+        if _has_bilibili_card_contract(source):
+            return {**source, "detail_enrichment_status": "search_card_verified_detail_unavailable", "detail_enrichment_error": type(exc).__name__}
         return {**source, "detail_enrichment_status": "failed", "detail_enrichment_error": type(exc).__name__}
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict) or payload.get("code") != 0:
+        if _has_bilibili_card_contract(source):
+            return {**source, "detail_enrichment_status": "search_card_verified_detail_unavailable"}
         return {**source, "detail_enrichment_status": "invalid_response"}
     owner_id = str((data.get("owner") or {}).get("mid") or "").strip()
     published = data.get("pubdate")
@@ -813,7 +930,7 @@ def needs_dynamic_content_wait(text: str) -> bool:
     return len(visible) < 40
 
 
-def classify_logged_search_failure(text: str) -> str:
+def classify_logged_search_failure(text: str, *, platform: str = "") -> str:
     lowered = str(text or "").casefold()
     try:
         payload = json.loads(str(text or ""))
@@ -821,7 +938,11 @@ def classify_logged_search_failure(text: str) -> str:
         payload = {}
     if isinstance(payload, dict) and payload.get("result") in {2, 3}:
         return "login_required_or_captcha"
-    if any(token in lowered for token in ("登录", "验证码", "login", "captcha")):
+    strong_login = any(token in lowered for token in ("验证码", "captcha"))
+    bilibili_public_search = str(platform or "").casefold() == "bilibili" and all(
+        token in lowered for token in ("综合排序", "最多播放", "最新发布")
+    )
+    if strong_login or (not bilibili_public_search and any(token in lowered for token in ("登录", "login"))):
         return "login_required_or_captcha"
     if any(token in lowered for token in (
         "服务器出错", "服务器出现问题", "刷新重试", "请求过于频繁", "访问验证", "安全验证",
@@ -986,7 +1107,9 @@ def collect_logged_short_video_search(
             captured_at=captured_at,
             limit=limit,
         )
-    if platform == "twitter":
+    if platform == "bilibili":
+        rows = parse_bilibili_search_cards(anchors, query=query, captured_at=captured_at, limit=limit)
+    elif platform == "twitter":
         rows = parse_twitter_search_cards(anchors, query=query, limit=limit)
     elif platform == "tiktok":
         rows = parse_tiktok_search_cards(anchors, query=query, limit=limit)
@@ -998,11 +1121,11 @@ def collect_logged_short_video_search(
         rows = parse_logged_short_video_search_text(text, platform=platform, query=query, limit=limit, anchors=anchors)
     if platform == "bilibili" and rows:
         rows = [enrich_bilibili_work(row) for row in rows]
-        rows = [row for row in rows if row.get("detail_enrichment_status") == "ok"]
+        rows = [row for row in rows if str(row.get("detail_enrichment_status") or "").startswith(("ok", "search_card_verified"))]
     if rows:
         status.update({"status": "ok", "count": len(rows)})
     else:
-        status.update({"status": classify_logged_search_failure(text), "count": 0})
+        status.update({"status": classify_logged_search_failure(text, platform=platform), "count": 0})
     status.update({"text_path": str(text_path), "screenshot_path": str(screenshot_path), "dynamic_wait_ms": dynamic_wait_ms, "page_retry_count": page_retry_count})
     return rows, status
 

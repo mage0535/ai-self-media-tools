@@ -567,3 +567,10 @@
 - Bilibili search candidates are enriched through the public view API using the real BV identifier. The accepted row binds canonical URL, anonymized owner ID, publication time, structured metrics and raw response SHA-256.
 - Detail failures remove the row from strict candidates; they do not fall back to title-only evidence. The original search artifacts and status remain available for diagnosis.
 - Each additional platform needs its own detail adapter and tests. Bilibili fields cannot be generalized into fabricated Juejin or YouTube identities.
+
+## D80: A Complete Visible Card May Survive A Blocked Detail API
+
+- Bilibili visible cards provide BV ID, visible author, publication time and metrics. When these fields and the exact card snapshot hash are complete, they form strict evidence independent of the public detail API.
+- The detail API remains an optional enhancement. HTTP 412 or another detail failure records `search_card_verified_detail_unavailable` and preserves complete card evidence; incomplete cards are still rejected.
+- Relative dates are anchored to captured time. Ads, courses and rows without a real publication date are excluded.
+- A normal Bilibili public page may contain login navigation and prompts. Login failure requires CAPTCHA or absence of public-search structure; the word `登录` alone is not a blocking signal.

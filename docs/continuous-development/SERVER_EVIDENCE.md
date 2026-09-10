@@ -729,3 +729,10 @@ Observed read-only on 2026-08-31.
 - Strict audit rejected every row. Bilibili and Juejin legacy packs were ready but all rows lacked full identity/time/metric/snapshot contracts; YouTube had two similarly incomplete rows. This demonstrates discovery success but detail-evidence failure.
 - TDD added Bilibili public detail enrichment using real BV IDs. It records an anonymized owner ID, publication time, six structured metric fields, canonical URL and raw API response SHA; failed details do not enter strict candidates.
 - Related tests returned 42 passed. Fresh full regression returned 1826 passed plus 37 subtests in 354.82 seconds; JUnit `artifacts/test-reports/sol-b2-bilibili-detail-20260910.xml` has zero failures/errors. A fresh Linux Bilibili live smoke on this commit remains required.
+
+## 2026-09-10 Bilibili Visible-Card Recovery
+
+- Fresh staging Bilibili smoke after API enrichment returned zero rows. Direct API inspection showed HTTP 412, while saved public search text contained titles, authors, dates and metrics. The final status was then mislabeled login-required because normal Bilibili navigation includes login prompts.
+- TDD adds strict visible-card evidence, relative/absolute date normalization, author hashing, nested views/danmaku metrics and card snapshot SHA. A complete card survives detail API failure with an explicit degraded detail status; incomplete cards do not.
+- Bilibili failure classification now recognizes normal public-search structure and reserves login blocking for CAPTCHA or a real login-wall context.
+- Related tests returned 55 passed. Fresh full regression returned 1829 passed plus 37 subtests in 376.44 seconds; JUnit `artifacts/test-reports/sol-b2-bilibili-visible-card-20260910.xml` has zero failures/errors. Linux live strict-contract smoke is next.
