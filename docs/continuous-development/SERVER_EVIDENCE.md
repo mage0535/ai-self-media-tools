@@ -696,3 +696,12 @@ Observed read-only on 2026-08-31.
 - The first GREEN run was blocked by `RunContractError: unknown stage fields: topic_decision`. The generate-stage allowlist and optional bounded fields were explicitly extended; unknown fields remain rejected.
 - Focused four-entry and generation-contract regression returned 141 passed in 200.99 seconds. Full regression returned 1820 passed plus 37 subtests in 429.32 seconds; JUnit `artifacts/test-reports/sol-b1-four-entry-20260910.xml` reports zero failures and errors.
 - This milestone is local only. It does not replace the legacy ranker, prove all 12 collectors, activate production, call publishers or enable timers.
+
+## 2026-09-10 Sol B2 Strict Intelligence Evidence
+
+- RED proved a row with title, URL and views but without content identity, publication/query/metric times and snapshot hash was still selected. The decision engine now rejects it as `same_platform_work_contract_incomplete` with exact missing fields.
+- Normalized nested metrics are now scored alongside legacy flat metrics. Empty metrics remain `same_platform_work_metric_missing` and are never converted to zero-valued evidence.
+- RED also proved the compact hot-work handoff discarded strict identity fields. The loader and same-lane candidate builder now preserve account lane, content ID, canonical URL, anonymized author hash, publication/fetch/query fields, nested metrics, observation time and raw snapshot SHA.
+- CLI and overnight compatibility paths now persist `shadow_comparison`. The existing CLI fixture intentionally demonstrates a mismatch: legacy selected a title-only row while the unified contract rejected it as insufficient.
+- Focused regression returned 129 passed after correcting two newly created fixtures to contain complete evidence. Fresh full regression returned 1823 passed plus 37 subtests in 401.31 seconds; JUnit `artifacts/test-reports/sol-b2-evidence-contract-20260910.xml` has zero failures/errors.
+- This proves contract enforcement and evidence preservation, not live collector completeness. Production remains unchanged and timers remain inactive.

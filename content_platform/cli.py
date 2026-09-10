@@ -1216,7 +1216,7 @@ def execute(args):
                 if not source_matrix["real_platform_collection_verified"]:
                     continue
                 sources = [item["url"]] if item.get("url") else []
-                from .topic_selection_engine import decide_topic
+                from .topic_selection_engine import add_shadow_comparison, decide_topic
 
                 decision_candidate = {
                     **item,
@@ -1226,10 +1226,13 @@ def execute(args):
                     "captured_at": str(item.get("captured_at") or collection_time),
                     "collector": str(item.get("collector") or item.get("source") or "cli_auto"),
                 }
-                topic_decision = decide_topic(
-                    str(platform),
-                    [decision_candidate],
-                    lane_keywords=[str(value) for value in (profile.get("keywords") or [])],
+                topic_decision = add_shadow_comparison(
+                    decide_topic(
+                        str(platform),
+                        [decision_candidate],
+                        lane_keywords=[str(value) for value in (profile.get("keywords") or [])],
+                    ),
+                    str(item.get("title") or ""),
                 )
                 brief = {
                     "source": item.get("source"),

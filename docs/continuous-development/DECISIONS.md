@@ -539,3 +539,10 @@
 - MCP inherits this behavior by calling Pipeline. CLI auto passes its selected candidate, target identity, collection time and collector into the same contract. Overnight keeps the richer task-level decision and provider brief fields.
 - The run contract explicitly admits `topic_decision` in generation input and treats it as bounded advisory evidence. Unknown fields remain fail-closed; adding topic evidence does not loosen the contract.
 - Four-entry consistency means the same contract reaches model input. It does not mean legacy ranking is removed or that weak collector evidence becomes sufficient. Authoritative cutover waits for B2 contracts and accepted shadow differences.
+
+## D76: Same-Platform Viral Evidence Requires A Complete Work Contract
+
+- A same-platform viral work requires account lane, real content ID, canonical URL, anonymized author identity, publication and fetch times, query, nested metrics, metric observation time and a 64-character raw snapshot SHA-256. Missing values are reported; they are never synthesized from a title or URL.
+- At least one metric must be non-zero. Metrics may use the normalized nested object or backward-compatible flat fields, but missing metrics remain `insufficient`, not zero-performance evidence.
+- The compact hot-work handoff preserves every strict contract field. Dropping evidence between collector and selection is a pipeline defect, not grounds to relax selection.
+- Compatibility paths record a shadow comparison of legacy and unified selected titles. A legacy selection rejected by the strict contract may continue only while shadow mode is explicit; it is evidence of a collector gap, not an accepted unified candidate.

@@ -200,9 +200,18 @@ class CliTests(unittest.TestCase):
             self.assertEqual(created[0][0], "Douyin AI workflow trend")
             self.assertTrue(created[0][2]["platform_source_matrix"]["real_platform_collection_verified"])
             self.assertEqual(created[0][2]["topic_decision"]["version"], "topic_decision_v1")
+            self.assertEqual(created[0][2]["topic_decision"]["status"], "insufficient")
             self.assertEqual(
-                created[0][2]["topic_decision"]["selected"]["title"],
-                "Douyin AI workflow trend",
+                created[0][2]["topic_decision"]["rejected"][0]["reason"],
+                "same_platform_work_contract_incomplete",
+            )
+            self.assertEqual(
+                created[0][2]["topic_decision"]["shadow_comparison"],
+                {
+                    "legacy_selected_title": "Douyin AI workflow trend",
+                    "unified_selected_title": "",
+                    "matches": False,
+                },
             )
             self.assertEqual(created[0][2]["topic_candidates"][0]["platform"], "douyin_ai")
 

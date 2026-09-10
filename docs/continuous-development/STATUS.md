@@ -9,12 +9,13 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1820 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b1-four-entry-20260910.xml`.
+- Latest complete regression on this branch: 1823 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-evidence-contract-20260910.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
+| Sol B2 platform intelligence evidence contract | Codex primary | `content_platform/topic_selection_engine.py`, hot-work normalization, B2 tests and four coordination documents | local_complete | commit milestone; next generate live per-platform contract-gap report and repair collectors without fabricating missing identity |
 | Sol B0/B1 runtime convergence and unified three-layer topic decision | Codex primary | topic decision, Pipeline/CLI/MCP/overnight integration, run contract, tests and four coordination documents | local_complete | commit milestone; then enforce B2 evidence contracts and produce shadow difference reports before authoritative cutover |
 | Runtime code/config/data convergence | Codex primary | `content_platform/runtime_paths.py`, `content_platform/mcp_server.py`, systemd/deploy/runtime tests | committed `c9babbd` | verify gateway drop-in and shared DB during deployment |
 | Automated admission contract | Codex primary | `content_platform/task_admission.py`, `content_platform/pipeline.py`, `content_platform/mcp_server.py`, admission tests | committed `4d9c567` | server verification during deployment |
