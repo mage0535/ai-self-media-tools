@@ -19,6 +19,7 @@ from content_platform.hot_work_intelligence import (
     parse_xiaohongshu_search_text,
     should_use_regional_proxy,
     logged_search_artifact_stem,
+    logged_search_url,
 )
 
 
@@ -147,6 +148,14 @@ def test_logged_search_artifact_stem_keeps_distinct_chinese_queries_unique():
     second = logged_search_artifact_stem("xiaohongshu", "AI效率工具")
     assert first != second
     assert first.startswith("xiaohongshu_AI_")
+
+
+def test_juejin_search_uses_latest_sort_for_thirty_day_pool():
+    url = logged_search_url("juejin", "AI Agent")
+
+    assert "sort=1" in url
+    assert "type=0" in url
+    assert "query=AI%20Agent" in url
 
 
 def test_save_collection_writes_latest_to_mutable_data_root(tmp_path, monkeypatch):

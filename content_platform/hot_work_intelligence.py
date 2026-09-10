@@ -1065,6 +1065,28 @@ def classify_logged_search_failure(text: str, *, platform: str = "") -> str:
     return "layout_changed_or_no_lane_results"
 
 
+def logged_search_url(platform: str, query: str) -> str:
+    normalized = str(platform or "").casefold().strip()
+    encoded = urllib.parse.quote(str(query or ""))
+    urls = {
+        "douyin": f"https://www.douyin.com/search/{encoded}?type=video",
+        "douyin_ai": f"https://www.douyin.com/search/{encoded}?type=video",
+        "douyin_pet": f"https://www.douyin.com/search/{encoded}?type=video",
+        "kuaishou": f"https://www.kuaishou.com/search/video?searchKey={encoded}",
+        "xiaohongshu": f"https://www.xiaohongshu.com/search_result?keyword={encoded}",
+        "tiktok": f"https://www.tiktok.com/search?q={encoded}",
+        "youtube": f"https://www.youtube.com/results?search_query={encoded}",
+        "bilibili": f"https://search.bilibili.com/all?keyword={encoded}",
+        "zhihu": f"https://www.zhihu.com/search?q={encoded}",
+        "juejin": f"https://juejin.cn/search?query={encoded}&type=0&sort=1",
+        "twitter": f"https://x.com/search?q={encoded}&src=typed_query",
+        "shipinhao": "https://channels.weixin.qq.com/platform",
+    }
+    if normalized not in urls:
+        raise ValueError(f"unsupported logged short-video platform: {normalized}")
+    return urls[normalized]
+
+
 def should_retry_logged_page(text: str) -> bool:
     lowered = str(text or "").casefold()
     return any(token in lowered for token in ("服务器出错", "服务器出现问题", "刷新重试", "请重试"))
@@ -1089,23 +1111,7 @@ def collect_logged_short_video_search(
     from playwright.sync_api import sync_playwright
 
     platform = str(platform or "").casefold().strip()
-    encoded = urllib.parse.quote(str(query or ""))
-    urls = {
-        "douyin": f"https://www.douyin.com/search/{encoded}?type=video",
-        "douyin_ai": f"https://www.douyin.com/search/{encoded}?type=video",
-        "douyin_pet": f"https://www.douyin.com/search/{encoded}?type=video",
-        "kuaishou": f"https://www.kuaishou.com/search/video?searchKey={encoded}",
-        "xiaohongshu": f"https://www.xiaohongshu.com/search_result?keyword={encoded}",
-        "tiktok": f"https://www.tiktok.com/search?q={encoded}",
-        "youtube": f"https://www.youtube.com/results?search_query={encoded}",
-        "bilibili": f"https://search.bilibili.com/all?keyword={encoded}",
-        "zhihu": f"https://www.zhihu.com/search?q={encoded}",
-        "juejin": f"https://juejin.cn/search?query={encoded}",
-        "twitter": f"https://x.com/search?q={encoded}&src=typed_query",
-        "shipinhao": "https://channels.weixin.qq.com/platform",
-    }
-    if platform not in urls:
-        raise ValueError(f"unsupported logged short-video platform: {platform}")
+    target_url = logged_search_url(platform, query)
     base = Path(output_dir)
     base.mkdir(parents=True, exist_ok=True)
     status: dict[str, Any] = {"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0, "route": route_name}
@@ -1137,7 +1143,7 @@ def collect_logged_short_video_search(
             context_options["storage_state"] = str(state_file)
         context = browser.new_context(**context_options)
         page = context.new_page()
-        page.goto(urls[platform], wait_until="domcontentloaded", timeout=timeout_ms)
+        page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
         try:
             page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
