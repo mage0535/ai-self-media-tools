@@ -599,3 +599,9 @@
 - Relative minutes, hours and days are anchored to captured time. Month/year labels and any timestamp older than 30 days are excluded from the current hot-work pool.
 - The visible metric is labeled `engagement`; it is not relabeled as views or likes without a platform field label. Card snapshot SHA binds the evidence.
 - The failed public article-detail endpoint remains excluded. A future authenticated detail adapter may add named metrics but cannot replace or weaken the 30-day boundary.
+
+## D85: Top3 Readiness Requires Three Complete Samples
+
+- One or two complete rows remain valid evidence but produce `insufficient_sample_count`; they do not make a platform contract-ready.
+- The contract-gap report records accepted and required counts separately. Current Top3 readiness defaults to three complete samples.
+- Normal Juejin search pages contain login navigation. Login blocking requires CAPTCHA or absence of normal search structure; navigation text alone cannot turn a no-result query into an authentication failure.

@@ -100,6 +100,13 @@ def test_bilibili_login_navigation_does_not_turn_normal_search_into_login_wall()
     assert classify_logged_search_failure("验证码 CAPTCHA", platform="bilibili") == "login_required_or_captcha"
 
 
+def test_juejin_login_navigation_does_not_turn_normal_search_into_login_wall():
+    text = "登录\n首页\n综合\n文章\n用户\n搜索结果\nAI自动化工作流"
+
+    assert classify_logged_search_failure(text, platform="juejin") == "layout_changed_or_no_lane_results"
+    assert classify_logged_search_failure("登录验证 CAPTCHA", platform="juejin") == "login_required_or_captcha"
+
+
 def test_juejin_visible_card_builds_strict_recent_work_evidence():
     rows = parse_juejin_search_cards(
         [{

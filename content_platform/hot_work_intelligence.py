@@ -1047,10 +1047,15 @@ def classify_logged_search_failure(text: str, *, platform: str = "") -> str:
     if isinstance(payload, dict) and payload.get("result") in {2, 3}:
         return "login_required_or_captcha"
     strong_login = any(token in lowered for token in ("验证码", "captcha"))
-    bilibili_public_search = str(platform or "").casefold() == "bilibili" and all(
-        token in lowered for token in ("综合排序", "最多播放", "最新发布")
+    normalized_platform = str(platform or "").casefold()
+    normal_public_search = (
+        normalized_platform == "bilibili"
+        and all(token in lowered for token in ("综合排序", "最多播放", "最新发布"))
+    ) or (
+        normalized_platform == "juejin"
+        and all(token in lowered for token in ("综合", "文章", "用户"))
     )
-    if strong_login or (not bilibili_public_search and any(token in lowered for token in ("登录", "login"))):
+    if strong_login or (not normal_public_search and any(token in lowered for token in ("登录", "login"))):
         return "login_required_or_captcha"
     if any(token in lowered for token in (
         "服务器出错", "服务器出现问题", "刷新重试", "请求过于频繁", "访问验证", "安全验证",

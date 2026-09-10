@@ -227,6 +227,15 @@ def test_hot_work_compact_loader_preserves_strict_decision_evidence(tmp_path):
 
 def test_contract_gap_report_covers_requested_platforms_and_never_trusts_legacy_ready():
     complete = _item("kuaishou", "AI工作流三步实测", "same_lane_hot_work", metric=1500)
+    complete_rows = [
+        {
+            **complete,
+            "content_id": f"{complete['content_id']}-{index}",
+            "canonical_url": f"{complete['canonical_url']}-{index}",
+            "raw_snapshot_sha256": hashlib.sha256(f"{complete['title']}:{index}".encode("utf-8")).hexdigest(),
+        }
+        for index in range(3)
+    ]
     legacy = {
         "title": "AI工具清单",
         "url": "https://mp.weixin.qq.com/s/example",
@@ -237,7 +246,7 @@ def test_contract_gap_report_covers_requested_platforms_and_never_trusts_legacy_
     report = build_contract_gap_report(
         {
             "platforms": {
-                "kuaishou": {"ready": True, "top_samples": [complete]},
+                "kuaishou": {"ready": True, "top_samples": complete_rows},
                 "wechat": {"ready": True, "top_samples": [legacy]},
                 "youtube": {"ready": False, "top_samples": []},
             }
@@ -258,3 +267,17 @@ def test_contract_gap_report_covers_requested_platforms_and_never_trusts_legacy_
     assert report["platforms"]["youtube"]["status"] == "no_samples"
     assert report["platforms"]["youtube"]["missing_fields"] == []
     assert report["platforms"]["twitter"]["status"] == "platform_missing"
+
+
+def test_contract_gap_report_requires_three_complete_samples_for_top_three_pool():
+    one = _item("juejin", "AI工作流实测", "same_lane_hot_work", metric=300)
+
+    report = build_contract_gap_report(
+        {"platforms": {"juejin": {"ready": False, "top_samples": [one]}}},
+        platforms=["juejin"],
+    )
+
+    assert report["summary"]["contract_ready_count"] == 0
+    assert report["platforms"]["juejin"]["status"] == "insufficient_sample_count"
+    assert report["platforms"]["juejin"]["contract_ready_sample_count"] == 1
+    assert report["platforms"]["juejin"]["required_sample_count"] == 3
