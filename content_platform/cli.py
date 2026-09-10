@@ -116,7 +116,13 @@ def load_config(path, db_path, code_root=None):
     if path and Path(path).is_file():
         config = json.loads(Path(path).read_text(encoding="utf-8"))
     db_parent = str(Path(db_path).parent)
-    data_root = os.environ.get("CONTENT_PLATFORM_DATA_DIR", "").strip() or str(config.get("data_dir") or db_parent)
+    environment_data_root = os.environ.get("CONTENT_PLATFORM_DATA_DIR", "").strip()
+    configured_data_root = str(config.get("data_dir") or "").strip()
+    release_local_data = bool(re.match(
+        r"^.*[\\/](?:\.ai-self-media-tools-releases[\\/][^\\/]+|\.ai-self-media-tools-current)[\\/]data(?:[\\/].*)?$",
+        configured_data_root,
+    ))
+    data_root = environment_data_root or (db_parent if release_local_data else configured_data_root) or db_parent
     secrets_root = os.environ.get("CONTENT_PLATFORM_SECRETS_DIR", "").strip() or str(Path(data_root).parent / "secrets")
     home_root = project_home()
     release_root = home_root.parent / f"{home_root.name}-current"
