@@ -239,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
             str(plan.get("work_id") or output_dir.name),
             ledger,
         )
+        asset_gate = _require_video_asset_count(asset_gate, asset_records)
         (output_dir / "asset_quality_gate.json").write_text(json.dumps(asset_gate, ensure_ascii=False, indent=2), encoding="utf-8")
         if not asset_gate.get("passed"):
             _write_manifest(output_dir, {"ok": False, "status": "asset_quality_failed", "error": "visual assets failed provenance, semantic fit, or reuse gate: " + ", ".join(asset_gate.get("failures") or ["unknown"]), "asset_quality_gate": asset_gate, "reselection_required": any("reuse" in str(item) or "duplicate" in str(item) for item in asset_gate.get("failures") or [])})
@@ -1186,6 +1187,16 @@ def _asset_provenance_records(materialized: list[dict]) -> list[dict]:
         for index, item in enumerate(materialized, 1)
         if item.get("path")
     ]
+
+
+def _require_video_asset_count(gate: dict, records: list[dict], required: int = 8) -> dict:
+    result = dict(gate or {})
+    failures = list(result.get("failures") or [])
+    actual = len(records or [])
+    if actual < required:
+        failures.append(f"visual_assets_incomplete:{actual}/{required}")
+    result.update(passed=not failures, failures=list(dict.fromkeys(failures)), required_count=required, actual_count=actual)
+    return result
 
 
 def _visual_assets_from_materialized(materialized: list[dict]) -> dict:
