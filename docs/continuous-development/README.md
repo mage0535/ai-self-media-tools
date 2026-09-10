@@ -114,4 +114,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Juejin live staging found one complete recent sample. Top3 readiness now requires three complete samples and reports 1–2 as insufficient; navigation login text no longer creates a false auth failure. Full regression is 1833 tests plus 37 subtests.
 - Juejin current-month collection now uses the observed public latest-published route (`type=0&sort=1`) while preserving engagement and strict Top3 gates. Full regression is 1834 tests plus 37 subtests; Linux acceptance remains pending.
 - Juejin defaults now use three live-probe-selected recent queries and retain RAG Agent only for bounded recapture. Full regression is 1835 tests plus 37 subtests; an override-free Linux run remains pending.
+- Juejin override-free Linux acceptance now passes on `13f98f9`: eight deduplicated recent rows and 8/8 strict contract-ready pack samples. This is collector evidence only; content and draft Canaries remain separate.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
