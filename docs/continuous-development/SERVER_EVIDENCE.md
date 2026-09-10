@@ -756,3 +756,10 @@ Observed read-only on 2026-08-31.
 - A direct POST to the public article-detail endpoint for a real observed article ID returned `err_no=2` with no data. That endpoint is not admitted as a detail source in the current server context.
 - Juejin remains `contract_incomplete`. The next adapter must parse verified page-embedded state or use valid authenticated detail access, record raw response SHA and hard-filter publication age before the row can become strict-ready.
 - Production current, timers, publishers and shared state were unchanged.
+
+## 2026-09-10 Juejin Visible-Card Contract
+
+- TDD adds a platform-specific parser for real Juejin article cards. It records article ID, canonical URL, anonymized visible author, captured/fetched/metric times, nested engagement and card snapshot SHA.
+- A positive fixture at five days is accepted; a three-month fixture is rejected. Publication age above 30 days is a hard boundary and is not rescued by engagement.
+- Related tests returned 57 passed. Fresh full regression returned 1831 passed plus 37 subtests in 348.55 seconds; JUnit `artifacts/test-reports/sol-b2-juejin-visible-card-20260910.xml` has zero failures/errors.
+- This is local contract proof only. Linux staging collection and strict pack acceptance remain pending; production and publishers are unchanged.

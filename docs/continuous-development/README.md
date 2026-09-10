@@ -110,4 +110,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - The first live retry exposed Bilibili's split-title DOM ordering. A follow-up parser reconstructs title fragments between duration and author while keeping neighboring card text out; another isolated live rerun is pending.
 - Bilibili Linux staging acceptance now passes: 24 direct discovery rows and 10/10 strict contract-ready top samples on `3e0eed1`. This does not change production or establish any other platform.
 - Juejin discovery works but inspected results are outside 30 days, and its public detail endpoint returned an application error. Juejin remains blocked pending embedded-page or authenticated detail evidence; publication dates cannot be inferred.
+- Juejin now has a tested visible-card contract with a hard 30-day publication boundary and card snapshot evidence. Full regression is 1831 tests plus 37 subtests; Linux staging acceptance remains pending.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

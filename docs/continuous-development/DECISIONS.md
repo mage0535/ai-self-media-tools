@@ -592,3 +592,10 @@
 - Seven-day and 30-day pools are derived from real publication times. A work older than 30 days may remain historical style context but cannot enter the current-month hot-work candidate pool.
 - A search page's relative age must be anchored to captured time or replaced by a verified detail timestamp. Missing or ambiguous dates are insufficient.
 - Juejin's public detail endpoint returning an application error is not usable evidence. Preserve the response status and use a separately verified embedded-page or authenticated-detail adapter; never infer publication time from article ID.
+
+## D84: Juejin Visible Cards Are A Bounded Detail Source
+
+- A Juejin row requires a real `/post/{article_id}` URL, visible author, parseable publication age and positive visible engagement from the same saved card.
+- Relative minutes, hours and days are anchored to captured time. Month/year labels and any timestamp older than 30 days are excluded from the current hot-work pool.
+- The visible metric is labeled `engagement`; it is not relabeled as views or likes without a platform field label. Card snapshot SHA binds the evidence.
+- The failed public article-detail endpoint remains excluded. A future authenticated detail adapter may add named metrics but cannot replace or weaken the 30-day boundary.
