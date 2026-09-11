@@ -850,13 +850,19 @@ def parse_twitter_search_cards(
         if published > observed + timedelta(hours=1) or observed - published > timedelta(days=30):
             continue
         metric_values: dict[str, int] = {}
-        aliases = {"reply": "replies", "replies": "replies", "repost": "reposts", "reposts": "reposts", "like": "likes", "likes": "likes", "view": "views", "views": "views"}
+        number = r"(\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?)"
+        metric_patterns = {
+            "replies": rf"{number}\s*(?:replies?|回复)",
+            "reposts": rf"{number}\s*(?:reposts?|次转帖|转帖|转发)",
+            "likes": rf"{number}\s*(?:likes?|喜欢(?:次数)?)",
+            "views": rf"{number}\s*(?:views?|次观看|观看|浏览)",
+        }
         for label in card.get("metric_labels") or []:
             label_text = strip_markup(str(label))
-            number_match = re.search(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", label_text, re.I)
-            name_match = re.search(r"(replies?|reposts?|likes?|views?)", label_text, re.I)
-            if number_match and name_match:
-                metric_values[aliases[name_match.group(1).casefold()]] = int(_metric_number(number_match.group(0)))
+            for metric_name, pattern in metric_patterns.items():
+                match = re.search(pattern, label_text, re.I)
+                if match:
+                    metric_values[metric_name] = int(_metric_number(match.group(1)))
         if not title or not metric_values or max(metric_values.values()) <= 0:
             continue
         snapshot = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")

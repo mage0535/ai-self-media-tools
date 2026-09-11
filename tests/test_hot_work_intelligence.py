@@ -169,6 +169,21 @@ def test_twitter_card_builds_strict_status_identity_time_and_metrics():
     assert len(row["raw_snapshot_sha256"]) == 64
 
 
+def test_twitter_card_parses_localized_combined_metric_label():
+    rows = parse_twitter_search_cards(
+        [{
+            "href": "https://x.com/example_user/status/2097291801828942019",
+            "context": "Example\n@example_user\nAI agents complete real workflow tasks",
+            "published_at": "2026-09-08T11:51:46.000Z",
+            "metric_labels": ["5 回复、53 次转帖、117 喜欢、9 书签、2.6万 次观看"],
+        }],
+        query="AI agents workflow",
+        captured_at="2026-09-11T00:31:31+00:00",
+    )
+
+    assert rows[0]["metrics"] == {"replies": 5, "reposts": 53, "likes": 117, "views": 26000}
+
+
 def test_zhihu_article_detail_builds_strict_recent_evidence():
     detail = '''
     <meta itemProp="datePublished" content="2026-09-05T08:10:13.000Z"/>
