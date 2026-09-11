@@ -153,6 +153,25 @@ class ToolRegistryTests(unittest.TestCase):
                 result = ToolRegistry().probe()
         self.assertEqual(result["tts_engines"]["qwen3-tts"]["model"], "qwen-audio-3.0-tts-flash")
 
+    def test_registry_reports_hojo_only_after_install_and_quality_gate_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "hojo"
+            (home / ".venv" / "bin").mkdir(parents=True)
+            (home / ".venv" / "bin" / "python").write_text("python", encoding="utf-8")
+            (home / "models").mkdir()
+            (home / "models" / "Hojo-TTS-Light-40M-llm.onnx").write_bytes(b"model")
+            (home / "hojo_worker.py").write_text("worker", encoding="utf-8")
+            (home / "quality_gate.json").write_text(
+                '{"approved": true, "decision": "hojo-first"}', encoding="utf-8"
+            )
+            with patch.dict("os.environ", {"HOJO_TTS_HOME": str(home)}, clear=False):
+                result = ToolRegistry().probe()
+
+        self.assertTrue(result["tts_engines"]["hojo-tts-light-40m"]["available"])
+        self.assertEqual(result["tts_engines"]["hojo-tts-light-40m"]["quality_decision"], "hojo-first")
+        self.assertFalse(result["tts_engines"]["kokoro"]["available"])
+        self.assertTrue(result["tts_engines"]["kokoro"]["retired"])
+
     def test_registry_reports_image_provider_capabilities(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = {

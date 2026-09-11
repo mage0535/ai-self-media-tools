@@ -19,6 +19,7 @@ from content_platform.hot_work_intelligence import (
     parse_platform_search_evidence,
     parse_sogou_wechat_html,
     parse_tiktok_search_text,
+    parse_twitter_search_cards,
     parse_xiaohongshu_search_text,
     should_use_regional_proxy,
     logged_search_artifact_stem,
@@ -144,6 +145,28 @@ def test_juejin_visible_card_rejects_work_older_than_thirty_days():
     )
 
     assert rows == []
+
+
+def test_twitter_card_builds_strict_status_identity_time_and_metrics():
+    rows = parse_twitter_search_cards(
+        [{
+            "href": "https://x.com/example_user/status/2097291801828942019",
+            "context": "Example\n@example_user\nAI agents complete real workflow tasks\n5\n53\n117\n2.6万",
+            "published_at": "2026-09-08T11:51:46.000Z",
+            "metric_labels": ["5 Replies", "53 reposts", "117 Likes", "26K Views"],
+        }],
+        query="AI agents workflow",
+        captured_at="2026-09-11T00:31:31+00:00",
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["content_id"] == "2097291801828942019"
+    assert row["canonical_url"] == "https://x.com/example_user/status/2097291801828942019"
+    assert row["published_at"] == "2026-09-08T11:51:46+00:00"
+    assert row["metrics"] == {"replies": 5, "reposts": 53, "likes": 117, "views": 26000}
+    assert len(row["author_id_hash"]) == 64
+    assert len(row["raw_snapshot_sha256"]) == 64
 
 
 def test_zhihu_article_detail_builds_strict_recent_evidence():

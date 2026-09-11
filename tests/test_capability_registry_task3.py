@@ -110,7 +110,7 @@ def test_real_nested_tools_are_executable_or_parent_executed_with_telemetry():
         "cover_renderer",
         "template_family_registry",
         "edge_tts",
-        "kokoro",
+        "hojo_tts_light_40m",
         "subtitle_burner",
         "online_real_instrument_bgm_resolver",
         "bgm_fingerprint_gate",
@@ -125,6 +125,9 @@ def test_real_nested_tools_are_executable_or_parent_executed_with_telemetry():
             parent = capabilities[capability["parent_id"]]
             assert parent["lifecycle"] == "executable"
             assert capability["telemetry_contract"]
+
+    assert capabilities["kokoro"]["lifecycle"] == "inventory_only"
+    assert registry["inventory_dispositions"]["kokoro"]["mode"] == "retired"
 
 
 def test_registry_rejects_parent_executed_capability_without_valid_parent_contract():

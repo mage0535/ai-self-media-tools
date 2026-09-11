@@ -107,6 +107,11 @@ def test_changed_render_contract_invalidates_stale_shots(tmp_path):
     stale_shot.write_bytes(b"stale")
     stale_final = tmp_path / "final.mp4"
     stale_final.write_bytes(b"stale")
+    stale_tts = tmp_path / "tts" / "tts_01.mp3"
+    stale_tts.parent.mkdir()
+    stale_tts.write_bytes(b"old-provider")
+    stale_tts_config = tmp_path / "tts_config.json"
+    stale_tts_config.write_text('{"provider":"edge-tts"}', encoding="utf-8")
 
     changed = film_renderer.prepare_render_contract(
         tmp_path,
@@ -116,6 +121,19 @@ def test_changed_render_contract_invalidates_stale_shots(tmp_path):
     assert changed is True
     assert not stale_shot.exists()
     assert not stale_final.exists()
+    assert not stale_tts.exists()
+    assert not stale_tts_config.exists()
+
+
+def test_film_tts_record_cache_preserves_actual_provider(tmp_path):
+    (tmp_path / "tts_config.json").write_text(
+        json.dumps({"segments": [{"index": 1, "provider": "hojo", "voice": "hojo_zh_f_01"}]}),
+        encoding="utf-8",
+    )
+
+    records = film_renderer.load_tts_record_cache(tmp_path)
+
+    assert records[1]["provider"] == "hojo"
 
 
 def test_cinematic_quality_rejects_still_fallback():

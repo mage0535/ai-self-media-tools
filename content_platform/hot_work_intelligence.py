@@ -806,25 +806,72 @@ def enrich_bilibili_work(
     }
 
 
-def parse_twitter_search_cards(cards: list[dict[str, str]], *, query: str, limit: int = 12) -> list[dict[str, Any]]:
+def parse_twitter_search_cards(
+    cards: list[dict[str, str]],
+    *,
+    query: str,
+    captured_at: str | None = None,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
+    observed_at = (captured_at or datetime.now(timezone.utc).isoformat()).replace("Z", "+00:00")
+    try:
+        observed = datetime.fromisoformat(observed_at).astimezone(timezone.utc)
+    except ValueError:
+        observed = datetime.now(timezone.utc)
+        observed_at = observed.isoformat()
     for card in cards:
         href = str(card.get("href") or "").strip()
-        match = re.match(r"(https?://(?:www\.)?(?:x|twitter)\.com/[^/]+/status/\d+)", href, re.I)
+        match = re.match(r"https?://(?:www\.)?(?:x|twitter)\.com/([^/]+)/status/(\d+)", href, re.I)
         if not match:
             continue
-        canonical_url = match.group(1)
+        author, content_id = match.groups()
+        canonical_url = f"https://x.com/{author}/status/{content_id}"
         if canonical_url in seen_urls:
             continue
         lines = [strip_markup(line) for line in str(card.get("context") or "").splitlines() if strip_markup(line)]
         title = next((line for line in lines if _looks_like_content_line(line, query)), "")
-        metrics = [line for line in lines if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)]
-        metric = max(metrics, key=_metric_number) if metrics else ""
-        if not title or _metric_number(metric) <= 0:
+        published_raw = str(card.get("published_at") or "").replace("Z", "+00:00")
+        if not published_raw or not card.get("metric_labels"):
+            metric_labels = [line for line in lines if re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", line, re.I)]
+            metric = max(metric_labels, key=_metric_number) if metric_labels else ""
+            if not title or _metric_number(metric) <= 0:
+                continue
+            seen_urls.add(canonical_url)
+            rows.append(_work("twitter", "twitter_logged_search", query, title, url=canonical_url, engagement=metric, evidence_strength="strong_logged_search_result"))
+            if len(rows) >= limit:
+                break
             continue
+        try:
+            published = datetime.fromisoformat(published_raw).astimezone(timezone.utc)
+        except ValueError:
+            continue
+        if published > observed + timedelta(hours=1) or observed - published > timedelta(days=30):
+            continue
+        metric_values: dict[str, int] = {}
+        aliases = {"reply": "replies", "replies": "replies", "repost": "reposts", "reposts": "reposts", "like": "likes", "likes": "likes", "view": "views", "views": "views"}
+        for label in card.get("metric_labels") or []:
+            label_text = strip_markup(str(label))
+            number_match = re.search(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:K|M|万)?", label_text, re.I)
+            name_match = re.search(r"(replies?|reposts?|likes?|views?)", label_text, re.I)
+            if number_match and name_match:
+                metric_values[aliases[name_match.group(1).casefold()]] = int(_metric_number(number_match.group(0)))
+        if not title or not metric_values or max(metric_values.values()) <= 0:
+            continue
+        snapshot = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         seen_urls.add(canonical_url)
-        rows.append(_work("twitter", "twitter_logged_search", query, title, url=canonical_url, engagement=metric, evidence_strength="strong_logged_search_result"))
+        rows.append({
+            **_work("twitter", "twitter_logged_search", query, title, url=canonical_url, engagement=max(metric_values.values()), evidence_strength="strong_logged_search_result"),
+            "content_id": content_id,
+            "canonical_url": canonical_url,
+            "author_id_hash": hashlib.sha256(f"twitter:{author.casefold()}".encode("utf-8")).hexdigest(),
+            "published_at": published.isoformat(),
+            "fetched_at": observed_at,
+            "metrics": metric_values,
+            "metric_observed_at": observed_at,
+            "raw_snapshot_sha256": hashlib.sha256(snapshot).hexdigest(),
+        })
         if len(rows) >= limit:
             break
     return rows
@@ -1396,7 +1443,9 @@ def collect_logged_short_video_search(
                 return {
                     text: ((heading && heading.innerText) || a.innerText || a.getAttribute('aria-label') || a.title || '').trim(),
                     href: a.href || a.getAttribute('data-url') || '',
-                    context: (box.innerText || '').trim()
+                    context: (box.innerText || '').trim(),
+                    published_at: ((box.querySelector('time') || {}).dateTime || ''),
+                    metric_labels: Array.from(box.querySelectorAll('[aria-label]')).map(node => node.getAttribute('aria-label') || '').filter(Boolean)
                 };
             })""",
             logged_search_card_selector(platform),
@@ -1432,7 +1481,7 @@ def collect_logged_short_video_search(
     elif platform == "youtube":
         rows = parse_youtube_search_cards(anchors, query=query, captured_at=captured_at, limit=limit)
     elif platform == "twitter":
-        rows = parse_twitter_search_cards(anchors, query=query, limit=limit)
+        rows = parse_twitter_search_cards(anchors, query=query, captured_at=captured_at, limit=limit)
     elif platform == "tiktok":
         rows = parse_tiktok_search_cards(anchors, query=query, limit=limit)
     elif platform == "zhihu":

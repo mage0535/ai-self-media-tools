@@ -683,7 +683,7 @@ Observed read-only on 2026-08-31.
 
 ## 2026-09-10 Sol B0 Baseline And B1 Topic Decision Evidence
 
-- Read-only server verification found `/root/.ai-self-media-tools-current` still points to signed `production-runtime-v8-2f4f612-20260906`. The mutable server main repository is at `6f4c88a` with 30 dirty paths; those paths were not modified. Hermes gateway is active, both inspected project timers are inactive, failed systemd units are zero, and root filesystem use was 81%.
+- Read-only server verification found `$CURRENT_RELEASE` still points to signed `production-runtime-v8-2f4f612-20260906`. The mutable server main repository is at `6f4c88a` with 30 dirty paths; those paths were not modified. Hermes gateway is active, both inspected project timers are inactive, failed systemd units are zero, and root filesystem use was 81%.
 - Local candidate HEAD before this milestone was `ce036a7`. Pre-change full regression returned 1812 passed plus 37 subtests in 386.24 seconds; JUnit is `artifacts/test-reports/sol-prechange-20260910.xml`.
 - TDD added `topic_selection_engine.py`. The RED test failed because the module did not exist. Five pure decision tests and one overnight integration test now prove same-platform priority, official non-native identity, missing-metric rejection and cross-platform reference isolation.
 - Focused selection regression returned 85 passed. Full post-change regression returned 1818 passed plus 37 subtests in 376.67 seconds; JUnit is `artifacts/test-reports/sol-b1-topic-engine-20260910.xml`.
@@ -843,3 +843,19 @@ Observed read-only on 2026-08-31.
 - The strict report returned `contract_ready_count=0`, `status=insufficient_sample_count`, two complete samples, required minimum three and zero missing fields.
 - Four bounded expansion queries produced no additional complete rows. One was initially labeled login-required by navigation text and three had no eligible details; none were used to manufacture a third sample.
 - Zhihu remains partial. Its next adapter is official hot/topic detail or a later fresh snapshot. Production current remains `2f4f612`; timers and publishers remain untouched.
+
+## 2026-09-11 Hojo-First Unified TTS Evidence
+
+- Read-only inspection confirmed the server quality gate reports `approved=true` and `decision=hojo-first`; the prior standalone sample exists. The active gateway environment did not expose a Hojo approval override, so project code cannot rely on an inherited flag.
+- The server-side draft patch was not copied into production. Audit found it forced approval inside `voice_engine.py`, depended on a mutable Hermes script path and mapped Chinese male aliases to English Hojo voices. The project implementation instead owns provider selection and maps Chinese narration only to Chinese Hojo voices.
+- Local red/green coverage proves durable gate and install probing, auto provider order, language-safe voice resolution, atomic output, total-failure preservation, failure evidence, Edge fallback, renderer wiring, checkpoint provider preservation and capability discovery.
+- An isolated Linux module smoke selected Hojo automatically and produced a 4.049-second MP3 in 5.891 seconds. `ffprobe` verified 44.1kHz stereo and the runtime persisted the actual provider, model, requested/actual voice, substitution flag, SHA-256 and audio probe.
+- A separate fault injection made the probed Hojo interpreter non-executable. Hojo failed visibly and Edge succeeded in 1.229 seconds with `fallback_used=true`; the final audio again passed 44.1kHz stereo probing.
+- The updated Kuaishou `gen_tts` entry then ran one real Chinese card in isolated staging. It selected Hojo without a provider override, generated 4.441 seconds of audio and wrote matching `tts_config.json` and `tts_fingerprint.json` provider/spec evidence.
+- Final local regression after the explicit-Qwen negative path: 1854 passed plus 37 subtests in 316.95 seconds; JUnit `artifacts/test-reports/hojo-tts-integration-final-v2-20260911.xml` has zero failures. License audit covers 66 capabilities with zero issues. Production release, shared data, publishers and timers remain unchanged.
+
+## 2026-09-11 X Strict Visible-Card Contract
+
+- The saved X article DOM exposes a canonical `/status/{id}` link, `time[datetime]` and labeled reply/repost/like/view controls. The browser extractor now preserves these fields from the same article container.
+- Strict rows bind status ID, canonical URL, anonymized author, publication/fetch/metric times, named metrics and raw card SHA. Legacy rows without the new fields remain discovery-only and cannot satisfy the strict pack contract.
+- Local regression is included in the 1854-test zero-failure report. A fresh isolated Linux X collection and Top3 strict report remain required; production is unchanged.

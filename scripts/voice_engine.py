@@ -6,7 +6,7 @@
 - 赛道自适应：技术教程/萌宠/财经/情感/科普（每种语言独立调优）
 - 去AI化：呼吸音、随机停顿、语速波动、语气词、底噪
 - 字幕自动生成（SRT格式，含时间戳）
-- 主力引擎：edge-tts + FFmpeg 后处理
+- 主力引擎：质量门批准后的 Hojo-TTS-Light-40M，Edge-TTS 自动兜底
 
 Usage:
   python scripts/voice_engine.py script.txt --lang auto --genre auto
@@ -30,13 +30,22 @@ from typing import Optional
 
 import requests
 from content_platform.tts_text_compiler import TTSTextCompiler
+from content_platform.tts_runtime import probe_hojo, synthesize_tts_segment
 from content_platform.voice_plan import build_voice_plan
 
 
-def select_tts_provider(requested: str, *, qwen_available: bool, language: str) -> str:
+def select_tts_provider(
+    requested: str,
+    *,
+    qwen_available: bool,
+    language: str,
+    hojo_available: bool = False,
+) -> str:
     selected = str(requested or "edge").strip().lower()
     if selected != "auto":
         return selected
+    if hojo_available and language in {"zh", "en"}:
+        return "hojo"
     approved = os.environ.get("TTS_AB_TEST_APPROVED_PROVIDER", "").strip().lower() == "qwen"
     quality_approved = os.environ.get("QWEN_TTS_QUALITY_APPROVED", "false").strip().lower() in {"1", "true", "yes"}
     return "qwen" if qwen_available and language in {"zh", "en"} and approved and quality_approved else "edge"
@@ -800,8 +809,13 @@ class VoiceEngine:
         dictionary = Path(dictionary_path) if dictionary_path else default_dictionary
         compiler = TTSTextCompiler.from_file(dictionary) if dictionary.is_file() else TTSTextCompiler([])
         platform = os.environ.get("TTS_PLATFORM", "")
-        selected_provider = (provider_name or os.environ.get("VOICE_TTS_PROVIDER", "edge")).strip().lower()
-        selected_provider = select_tts_provider(selected_provider, qwen_available=qwen_provider.available, language=lang)
+        selected_provider = (provider_name or os.environ.get("VOICE_TTS_PROVIDER", "auto")).strip().lower()
+        selected_provider = select_tts_provider(
+            selected_provider,
+            qwen_available=qwen_provider.available,
+            hojo_available=probe_hojo().get("available") is True,
+            language=lang,
+        )
         audio_files, all_timings, segment_texts, all_durations = [], [], [], []
         provider_events = []
         tts_records = []
@@ -814,7 +828,25 @@ class VoiceEngine:
             controls = voice_plan[index]
             compiled = compiler.compile(seg.text, context=genre, platform=platform)
             event = {"requested_provider": selected_provider, "provider": "edge-tts", "fallback_used": False}
-            if selected_provider == "qwen":
+            if selected_provider == "hojo":
+                try:
+                    runtime_result = await asyncio.to_thread(
+                        synthesize_tts_segment,
+                        compiled.tts_text,
+                        out,
+                        language=lang,
+                        voice=voice,
+                        rate=controls["rate"],
+                        pitch=controls["pitch"],
+                        requested_provider="hojo",
+                    )
+                    event.update(runtime_result)
+                    dur = float((runtime_result.get("audio") or {}).get("duration_seconds") or 0)
+                    timing = self._even_timing(compiled.tts_text, dur)
+                except Exception as exc:
+                    event.update({"provider": "edge-tts", "fallback_used": True, "fallback_reason": str(exc)[:160]})
+                    timing = await self._synthesize_edge(edge_provider, compiled.tts_text, out, voice, controls)
+            elif selected_provider == "qwen":
                 try:
                     qwen_result = qwen_provider.synthesize(
                         compiled.tts_text,
@@ -839,7 +871,7 @@ class VoiceEngine:
                 all_durations.append(dur)
                 event["audio_duration"] = dur
                 provider_events.append(event)
-                tts_records.append({"display_text": compiled.display_text, "tts_text": compiled.tts_text, "applied_rules": compiled.applied_rules, "unhandled_latin_tokens": compiled.unhandled_latin_tokens, "provider": event.get("provider"), "voice": voice, "duration_seconds": dur})
+                tts_records.append({"display_text": compiled.display_text, "tts_text": compiled.tts_text, "applied_rules": compiled.applied_rules, "unhandled_latin_tokens": compiled.unhandled_latin_tokens, "provider": event.get("provider"), "model": event.get("model"), "voice": event.get("voice") or voice, "requested_voice": voice, "rate": controls["rate"], "pitch": controls["pitch"], "duration_seconds": dur})
                 total_dur += dur
 
         if not audio_files:
@@ -1002,7 +1034,7 @@ if __name__ == "__main__":
     ap.add_argument("--mode", "-m", default="auto",
                     choices=["auto","single","dialogue"])
     ap.add_argument("--provider", default=None, choices=["auto", "edge", "qwen"],
-                    help="TTS provider override; defaults to VOICE_TTS_PROVIDER or edge")
+                    help="TTS provider override; defaults to VOICE_TTS_PROVIDER or auto (approved Hojo first, Edge fallback)")
     args = ap.parse_args()
 
     sp = Path(args.script)

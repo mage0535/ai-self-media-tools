@@ -1,8 +1,6 @@
 import asyncio
 import json
-import sys
 import time
-from types import SimpleNamespace
 from pathlib import Path
 
 from scripts import kuaishou_render
@@ -11,19 +9,23 @@ from scripts import kuaishou_render
 def test_card_tts_retries_transient_no_audio_and_writes_auditable_config(tmp_path, monkeypatch):
     attempts = []
 
-    class FakeCommunicate:
-        def __init__(self, text, voice):
-            self.text = text
-            self.voice = voice
+    def fake_synthesize(text, output, **kwargs):
+        attempts.append((text, kwargs["voice"]))
+        if len(attempts) == 1:
+            raise RuntimeError("temporary no audio")
+        Path(output).write_bytes(b"audio" * 4096)
+        return {
+            "provider": "edge-tts",
+            "model": "edge-tts",
+            "voice": kwargs["voice"],
+            "rate": "+0%",
+            "pitch": "+0Hz",
+            "fallback_used": False,
+            "attempts": [{"provider": "edge", "status": "succeeded"}],
+            "audio": {"sample_rate": 44100, "channels": 2},
+        }
 
-        async def save(self, output):
-            attempts.append((self.text, self.voice))
-            if len(attempts) == 1:
-                raise RuntimeError("temporary no audio")
-            with open(output, "wb") as handle:
-                handle.write(b"audio" * 4096)
-
-    monkeypatch.setitem(sys.modules, "edge_tts", SimpleNamespace(Communicate=FakeCommunicate))
+    monkeypatch.setattr(kuaishou_render, "synthesize_tts_segment", fake_synthesize)
     monkeypatch.setenv("KUAISHOU_TTS_RETRY_DELAY_SECONDS", "0")
     monkeypatch.setattr(kuaishou_render, "_media_duration", lambda *_args, **_kwargs: 2.5)
 
@@ -43,15 +45,10 @@ def test_card_tts_retries_transient_no_audio_and_writes_auditable_config(tmp_pat
 
 
 def test_card_tts_times_out_each_attempt_instead_of_hanging(tmp_path, monkeypatch):
-    class HungCommunicate:
-        def __init__(self, text, voice):
-            self.text = text
-            self.voice = voice
+    def hung_synthesize(*_args, **_kwargs):
+        time.sleep(1)
 
-        async def save(self, output):
-            await asyncio.sleep(1)
-
-    monkeypatch.setitem(sys.modules, "edge_tts", SimpleNamespace(Communicate=HungCommunicate))
+    monkeypatch.setattr(kuaishou_render, "synthesize_tts_segment", hung_synthesize)
     monkeypatch.setenv("KUAISHOU_TTS_MAX_ATTEMPTS", "1")
     monkeypatch.setenv("KUAISHOU_TTS_ATTEMPT_TIMEOUT_SECONDS", "0.01")
 
@@ -61,6 +58,37 @@ def test_card_tts_times_out_each_attempt_instead_of_hanging(tmp_path, monkeypatc
         assert "timeout" in str(exc)
     else:  # pragma: no cover - makes an unexpected successful network wait explicit
         raise AssertionError("hung TTS call must fail closed")
+
+
+def test_card_tts_checkpoint_preserves_actual_provider_evidence(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_synthesize(text, output, **kwargs):
+        calls.append(text)
+        Path(output).write_bytes(b"audio" * 4096)
+        return {
+            "provider": "hojo",
+            "model": "HojoAI/Hojo-TTS-Light-40M",
+            "voice": "hojo_zh_f_01",
+            "rate": "+0%",
+            "pitch": "+0Hz",
+            "fallback_used": False,
+            "attempts": [{"provider": "hojo", "status": "succeeded"}],
+            "audio": {"sample_rate": 44100, "channels": 2},
+        }
+
+    monkeypatch.setattr(kuaishou_render, "synthesize_tts_segment", fake_synthesize)
+    monkeypatch.setattr(kuaishou_render, "_media_duration", lambda *_args, **_kwargs: 2.5)
+    cards = [{"tts": "统一运行时复用测试"}]
+
+    asyncio.run(kuaishou_render.gen_tts(tmp_path, cards))
+    result = asyncio.run(kuaishou_render.gen_tts(tmp_path, cards))
+    config = json.loads((tmp_path / "tts_config.json").read_text(encoding="utf-8"))
+
+    assert result["reused"] == 1
+    assert calls == ["统一运行时复用测试"]
+    assert config["segments"][0]["provider"] == "hojo"
+    assert config["segments"][0]["voice"] == "hojo_zh_f_01"
 
 
 def test_bgm_download_fails_before_opening_network_when_budget_is_exhausted(tmp_path, monkeypatch):

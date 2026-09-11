@@ -183,7 +183,7 @@ def validate_capability_registry(registry: dict[str, Any] | None) -> dict[str, A
         if not isinstance(disposition, dict):
             failures.append(f"{capability_id}.inventory_disposition_missing")
             continue
-        if disposition.get("mode") not in {"compiled_reference", "license_excluded", "planned_adapter"}:
+        if disposition.get("mode") not in {"compiled_reference", "license_excluded", "planned_adapter", "retired"}:
             failures.append(f"{capability_id}.inventory_disposition_invalid")
         if not str(disposition.get("reason") or "").strip():
             failures.append(f"{capability_id}.inventory_disposition_reason_missing")

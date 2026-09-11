@@ -23,11 +23,17 @@ class _Response:
 
 
 class QwenTTSProviderTests(unittest.TestCase):
+    def test_auto_provider_prefers_approved_available_hojo(self):
+        self.assertEqual(
+            select_tts_provider("auto", qwen_available=True, hojo_available=True, language="zh"),
+            "hojo",
+        )
+
     def test_auto_provider_keeps_edge_until_qwen_quality_is_approved(self):
         with patch.dict("os.environ", {"QWEN_TTS_QUALITY_APPROVED": "false"}, clear=False):
-            self.assertEqual(select_tts_provider("auto", qwen_available=True, language="zh"), "edge")
+            self.assertEqual(select_tts_provider("auto", qwen_available=True, hojo_available=False, language="zh"), "edge")
         with patch.dict("os.environ", {"QWEN_TTS_QUALITY_APPROVED": "true", "TTS_AB_TEST_APPROVED_PROVIDER": "qwen"}, clear=False):
-            self.assertEqual(select_tts_provider("auto", qwen_available=True, language="zh"), "qwen")
+            self.assertEqual(select_tts_provider("auto", qwen_available=True, hojo_available=False, language="zh"), "qwen")
 
     def test_provider_downloads_audio_url_and_writes_manifest(self):
         payload = {

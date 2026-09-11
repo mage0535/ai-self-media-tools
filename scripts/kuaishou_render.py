@@ -27,6 +27,7 @@ from scripts.build_subtitles import load_cards, write_ass_from_cards
 from scripts.pre_render_gate import validate_render_inputs
 from scripts.render_checkpoint import fingerprint_paths, mark_complete, stage_current_or_adopt
 from scripts.render_timing import record_stage_timing, write_timing_summary
+from content_platform.tts_runtime import probe_hojo, synthesize_tts_segment
 try:
     from playwright.async_api import async_playwright
 except ModuleNotFoundError:
@@ -628,7 +629,6 @@ def _segment_checkpoint_inputs(video_dir, card, index, width, height):
 
 async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
     """Generate auditable card narration with bounded retry for transient TTS outages."""
-    import edge_tts
     import re as _re_lang
     from content_platform.tts_text_compiler import TTSTextCompiler
 
@@ -661,6 +661,15 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
     rendered = 0
     reused = 0
     records = []
+    requested_provider = os.environ.get("TTS_PROVIDER", "auto").strip().lower() or "auto"
+    hojo_policy = probe_hojo()
+    prior_records = {}
+    prior_config_path = Path(video_dir) / "tts_config.json"
+    try:
+        prior_config = json.loads(prior_config_path.read_text(encoding="utf-8"))
+        prior_records = {int(row.get("index") or 0): row for row in prior_config.get("segments") or []}
+    except (OSError, ValueError, TypeError):
+        prior_records = {}
 
     for i, card in enumerate(cards):
         idx = i + 1
@@ -671,24 +680,36 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
         tts_text = compiled.tts_text
         out = tts_dir / f"tts_{idx:02d}.mp3"
         checkpoint_inputs = {
-            "renderer": "edge_tts_card_v3",
+            "renderer": "unified_tts_runtime_v1",
             "index": idx,
             "voice": edge_voice,
+            "requested_provider": requested_provider,
+            "hojo_available": hojo_policy.get("available") is True,
+            "hojo_quality_decision": hojo_policy.get("quality_decision"),
             "display_text": display_text,
             "tts_text": tts_text,
             "renderer_source": fingerprint_paths([Path(__file__)]),
         }
         checkpoint = stage_current_or_adopt(Path(video_dir), f"tts_{idx:02d}", checkpoint_inputs, [out], legacy_marker="tts.done")
-        if checkpoint.get("current"):
+        prior_record = prior_records.get(idx)
+        if checkpoint.get("current") and prior_record:
             print(f"  tts_{idx:02d}.mp3 reused ({checkpoint.get('reason')})")
             reused += 1
+            runtime_result = dict(prior_record)
         else:
             errors = []
             for attempt in range(1, max_attempts + 1):
                 try:
                     out.unlink(missing_ok=True)
-                    await asyncio.wait_for(
-                        edge_tts.Communicate(tts_text, edge_voice).save(str(out)),
+                    runtime_result = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            synthesize_tts_segment,
+                            tts_text,
+                            out,
+                            language=_tts_lang,
+                            voice=edge_voice,
+                            requested_provider=requested_provider,
+                        ),
                         timeout=attempt_timeout,
                     )
                     if not out.is_file() or out.stat().st_size <= 10_000:
@@ -713,8 +734,14 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
         dur = _media_duration(out, default=0)
         records.append({
             "index": idx,
-            "provider": "edge-tts",
-            "voice": edge_voice,
+            "provider": runtime_result.get("provider"),
+            "model": runtime_result.get("model"),
+            "voice": runtime_result.get("voice") or edge_voice,
+            "requested_voice": edge_voice,
+            "rate": runtime_result.get("rate") or "+0%",
+            "pitch": runtime_result.get("pitch") or "+0Hz",
+            "fallback_used": runtime_result.get("fallback_used", False),
+            "attempts": runtime_result.get("attempts") or [],
             "display_text": display_text,
             "tts_text": tts_text,
             "applied_rules": list(compiled.applied_rules),
@@ -724,7 +751,7 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
         print(f"  ✅ tts_{idx:02d}: {out.stat().st_size//1024}KB, {dur:.1f}s ({edge_voice})")
 
     (Path(video_dir) / "tts_config.json").write_text(
-        json.dumps({"version": "tts_config_v1", "provider": "edge-tts", "voice": edge_voice, "segments": records}, ensure_ascii=False, indent=2),
+        json.dumps({"version": "tts_config_v2", "provider": sorted({str(row.get("provider") or "") for row in records}), "voice": edge_voice, "segments": records}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     digest = hashlib.sha256()
@@ -735,9 +762,9 @@ async def gen_tts(video_dir, cards, voice_idx=0, platform=""):
     fingerprint = {
         "display_text": "\n".join(str(row.get("display_text") or "") for row in records),
         "tts_text": "\n".join(str(row.get("tts_text") or "") for row in records),
-        "provider": "edge-tts",
-        "voice": edge_voice,
-        "rate": "+0%",
+        "provider": ",".join(sorted({str(row.get("provider") or "") for row in records})),
+        "voice": ",".join(sorted({str(row.get("voice") or "") for row in records})),
+        "rate": ",".join(sorted({str(row.get("rate") or "") for row in records})),
         "sample_rate": 44100,
         "channels": 2,
         "duration_seconds": round(sum(float(row.get("duration_seconds") or 0) for row in records), 3),
