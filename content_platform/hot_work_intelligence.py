@@ -1211,7 +1211,7 @@ def logged_search_url(platform: str, query: str) -> str:
 def logged_search_card_selector(platform: str) -> str:
     common = 'article, li, [class*="card"], [class*="item"], [class*="video"], [class*="feed"]'
     if str(platform or "").casefold().strip() == "youtube":
-        return "ytd-video-renderer, ytd-rich-item-renderer, " + common
+        return "ytd-video-renderer, ytd-rich-item-renderer"
     return common
 
 

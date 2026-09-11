@@ -640,3 +640,9 @@
 - Generic nearest card/item/video class selection resolves to title or thumbnail subtrees on YouTube and omits channel/views/age metadata.
 - YouTube extraction first selects `ytd-video-renderer` or `ytd-rich-item-renderer`, then falls back to common containers. This platform-specific selector does not alter Bilibili, Juejin or other collectors.
 - Parser acceptance still requires the strict card fields; a larger DOM context does not make every anchor eligible.
+
+## D92: YouTube Excludes Generic Video-Class Selectors
+
+- YouTube title anchors themselves carry a CSS class containing `ytd-video-renderer`. A combined selector with `[class*="video"]` therefore makes `closest()` return the anchor instead of the outer custom element.
+- YouTube uses only `ytd-video-renderer, ytd-rich-item-renderer` for card ancestry. Generic class selectors remain available to other platforms.
+- This is a DOM extraction correction, not a relaxation of title, age, channel, view or Top3 validation.

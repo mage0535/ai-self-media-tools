@@ -15,7 +15,8 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 YouTube full-card DOM container | Codex primary | platform card selector, tests and four coordination documents | local_complete | commit, staging sync and third Linux strict-contract run |
+| Sol B2 YouTube closest-selector collision | Codex primary | YouTube card selector, tests and four coordination documents | local_complete | commit, staging sync and fourth Linux strict-contract run |
+| Sol B2 YouTube full-card DOM container | Codex primary | platform card selector, tests and four coordination documents | committed `de2d719` | third Linux retry exposed common selector matching title anchor itself |
 | Sol B2 YouTube real-DOM ordering/login classification | Codex primary | YouTube card parser, failure classifier, tests and four coordination documents | committed `997d6d9` | second Linux retry exposed too-small anchor context |
 | Sol B2 YouTube this-month visible-card contract | Codex primary | YouTube URL/card parser, tests and four coordination documents | committed `2ea53a6` | first Linux retry exposed real-DOM ordering and login-navigation false positive |
 | Sol B2 Juejin Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to YouTube detail contract |

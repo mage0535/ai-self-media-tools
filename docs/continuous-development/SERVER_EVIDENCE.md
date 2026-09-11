@@ -814,3 +814,10 @@ Observed read-only on 2026-08-31.
 - TDD adds a platform-specific card selector for full YouTube video/rendered-item containers and keeps the common selector for every other platform.
 - Related tests returned 64 passed. Fresh full regression returned 1839 passed plus 37 subtests in 344.59 seconds; JUnit `artifacts/test-reports/sol-b2-youtube-card-container-20260911.xml` has zero failures/errors.
 - Third Linux strict-contract run remains required. Production is unchanged.
+
+## 2026-09-11 YouTube Closest-Selector Collision
+
+- The third staging run still returned zero. Replaying the exact candidate selector showed every title anchor retained title-only context despite a valid outer `YTD-VIDEO-RENDERER` ancestor.
+- Ancestor inspection proved the title anchor's own class includes `ytd-video-renderer`; the common `[class*="video"]` alternative matched the anchor before `closest()` reached the custom element.
+- TDD excludes generic video-class selectors from YouTube while retaining them for other platforms. Related tests returned 64 passed; full regression returned 1839 passed plus 37 subtests in 341.66 seconds with zero failures/errors. JUnit is `artifacts/test-reports/sol-b2-youtube-closest-fix-20260911.xml`.
+- Fourth Linux strict-contract run remains required. Production is unchanged.
