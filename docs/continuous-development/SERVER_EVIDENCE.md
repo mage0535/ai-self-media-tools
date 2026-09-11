@@ -821,3 +821,10 @@ Observed read-only on 2026-08-31.
 - Ancestor inspection proved the title anchor's own class includes `ytd-video-renderer`; the common `[class*="video"]` alternative matched the anchor before `closest()` reached the custom element.
 - TDD excludes generic video-class selectors from YouTube while retaining them for other platforms. Related tests returned 64 passed; full regression returned 1839 passed plus 37 subtests in 341.66 seconds with zero failures/errors. JUnit is `artifacts/test-reports/sol-b2-youtube-closest-fix-20260911.xml`.
 - Fourth Linux strict-contract run remains required. Production is unchanged.
+
+## 2026-09-11 YouTube Linux Strict Acceptance
+
+- Staging advanced to `dc8d366`; the worktree was clean and production current remained signed `2f4f612`.
+- Fresh override-free YouTube collection used direct routing. Both default queries returned 12 strict visible-card rows, 24 total, with explicit subset scope and no proxy fallback.
+- The generated parameter pack retained ten samples. `platform_intelligence_contract_report_v1` returned `contract_ready_count=1`, 10/10 complete samples, required minimum 3 and zero missing fields.
+- This closes YouTube hot-work collection only. It is not generation, handoff, upload, publication or account-performance proof. Timers and production were unchanged.
