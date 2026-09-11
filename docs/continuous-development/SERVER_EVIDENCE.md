@@ -894,3 +894,11 @@ Observed read-only on 2026-08-31.
 - The second clean-commit rerun completed both default queries. Each returned `platform_error_or_rate_limited`, route `direct`, zero works and `fallback_status=proxy_unavailable`; no generic `failed` status or proxy exception replaced the platform evidence.
 - This verifies timeout and proxy recovery behavior, not Xiaohongshu Top3 readiness. The valid cookie structure plus official `300012` page remains an external platform/network blocker; manual-handoff publishing policy is unchanged.
 - Final local regression returned 1865 passed plus 37 subtests in 423.02 seconds; JUnit `artifacts/test-reports/sol-b2-auth-proxy-recovery-20260911.xml` has zero failures.
+
+## 2026-09-11 Douyin Variants And WeChat Reference Boundaries
+
+- The current 50-item Douyin official board contains no AI-tool or pet-lane match. Both public `shipin` query pairs returned zero verified works. The official filters therefore return `no_lane_results` independently for AI and pet.
+- Server cookie inventory contains two structurally valid generic Douyin states but none at the rulebook's exact `douyin_ai` or `douyin_pet` account paths. The two account variants remain `auth_required`; assigning the generic state to either account would be an unsupported identity decision.
+- Hermes has a second Web API script under the SenseNova social-search skill. A read-only probe used the generic state for `AI工具`, `AI工作流` and `猫咪治愈`; all three returned zero rows. The standalone `douyin-hot` skill duplicates the same official hot-board endpoint already used by the project. Neither adds a valid same-lane adapter today.
+- WeChat Sogou collection returned ten real articles for each of two queries, 20 total. The strict pack retained zero because public interaction metrics are absent. These remain article/topic references, not a same-platform hot-work Top3.
+- Production, account files, publishers, shared state and timers were not changed.
