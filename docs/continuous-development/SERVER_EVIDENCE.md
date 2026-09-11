@@ -828,3 +828,11 @@ Observed read-only on 2026-08-31.
 - Fresh override-free YouTube collection used direct routing. Both default queries returned 12 strict visible-card rows, 24 total, with explicit subset scope and no proxy fallback.
 - The generated parameter pack retained ten samples. `platform_intelligence_contract_report_v1` returned `contract_ready_count=1`, 10/10 complete samples, required minimum 3 and zero missing fields.
 - This closes YouTube hot-work collection only. It is not generation, handoff, upload, publication or account-performance proof. Timers and production were unchanged.
+
+## 2026-09-11 Zhihu Detail Contract
+
+- Isolated Zhihu probe used an existing valid Playwright state and direct routing. Default queries discovered 22 rows, but the strict report rejected the legacy pack for missing identity, publication, nested metric and snapshot fields.
+- DOM inspection showed title-only anchors. A public Zhihu column article request returned real datePublished, authorName, voteupCount and commentCount; an answer URL returned HTTP 403.
+- TDD adds public-detail enrichment, 30-day filtering, anonymized author identity, canonical IDs, nested votes/comments and response SHA. Detail failures never infer time from IDs.
+- Related tests returned 65 passed. Fresh full regression returned 1841 passed plus 37 subtests in 340.98 seconds; JUnit `artifacts/test-reports/sol-b2-zhihu-detail-20260911.xml` has zero failures/errors.
+- Linux strict acceptance remains pending. Production and timers remain unchanged.

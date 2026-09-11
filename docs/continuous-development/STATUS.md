@@ -9,12 +9,13 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1839 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-youtube-card-container-20260911.xml`.
+- Latest complete regression on this branch: 1841 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-zhihu-detail-20260911.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
+| Sol B2 Zhihu public-detail evidence | Codex primary | Zhihu detail enrichment, metric scoring, tests and four coordination documents | local_complete | commit, staging sync and logged-search Linux strict acceptance |
 | Sol B2 YouTube Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to Zhihu collector contract |
 | Sol B2 YouTube closest-selector collision | Codex primary | YouTube card selector, tests and four coordination documents | committed `dc8d366` | Linux default path passed 24 rows and 10/10 strict pack samples |
 | Sol B2 YouTube full-card DOM container | Codex primary | platform card selector, tests and four coordination documents | committed `de2d719` | third Linux retry exposed common selector matching title anchor itself |
