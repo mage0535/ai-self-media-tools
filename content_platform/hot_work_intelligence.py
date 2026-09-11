@@ -876,6 +876,76 @@ def parse_zhihu_search_cards(cards: list[dict[str, str]], *, query: str, limit: 
     return rows
 
 
+def enrich_zhihu_work(
+    row: dict[str, Any],
+    *,
+    fetch_text: Any | None = None,
+) -> dict[str, Any]:
+    """Bind a Zhihu search row to public article/answer detail evidence."""
+    source = dict(row)
+    url = str(source.get("url") or "").strip()
+    match = re.search(r"(?:zhuanlan\.zhihu\.com/p/|/answer/)(\d+)", url)
+    if not match:
+        return {**source, "detail_enrichment_status": "invalid_content_url"}
+    content_id = match.group(1)
+    canonical_url = (
+        f"https://zhuanlan.zhihu.com/p/{content_id}"
+        if "zhuanlan.zhihu.com/p/" in url
+        else urllib.parse.urlunsplit((*urllib.parse.urlsplit(url)[:3], "", ""))
+    )
+
+    def default_fetch(target: str) -> str:
+        request = urllib.request.Request(target, headers={"User-Agent": USER_AGENT, "Referer": "https://www.zhihu.com/"})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return response.read().decode("utf-8", errors="replace")
+
+    try:
+        raw = (fetch_text or default_fetch)(canonical_url)
+    except Exception as exc:
+        return {**source, "detail_enrichment_status": "failed", "detail_enrichment_error": type(exc).__name__}
+    decoded = html.unescape(str(raw or ""))
+    date_match = re.search(r'itemProp=["\']datePublished["\'][^>]*content=["\']([^"\']+)', decoded, re.I)
+    if not date_match:
+        date_match = re.search(r'content=["\']([^"\']+)["\'][^>]*itemProp=["\']datePublished["\']', decoded, re.I)
+    author_match = re.search(r'["\']authorName["\']\s*:\s*["\']([^"\']+)', decoded, re.I)
+    vote_match = re.search(r'["\']voteupCount["\']\s*:\s*(\d+)', decoded, re.I)
+    comment_match = re.search(r'itemProp=["\']commentCount["\'][^>]*content=["\'](\d+)', decoded, re.I)
+    if not (date_match and author_match and vote_match):
+        return {**source, "detail_enrichment_status": "contract_incomplete"}
+    try:
+        published = datetime.fromisoformat(date_match.group(1).replace("Z", "+00:00"))
+        observed = datetime.fromisoformat(str(source.get("captured_at") or "").replace("Z", "+00:00"))
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return {**source, "detail_enrichment_status": "invalid_publication_time"}
+    if not timedelta(0) <= observed - published <= timedelta(days=30):
+        return {**source, "detail_enrichment_status": "outside_30_day_window"}
+    votes = int(vote_match.group(1))
+    comments = int(comment_match.group(1)) if comment_match else 0
+    if max(votes, comments) <= 0:
+        return {**source, "detail_enrichment_status": "metric_missing"}
+    captured_at = observed.astimezone(timezone.utc).isoformat()
+    snapshot = decoded.encode("utf-8")
+    return {
+        **source,
+        "account_lane": str(source.get("query") or ""),
+        "content_id": content_id,
+        "canonical_url": canonical_url,
+        "author_id_hash": hashlib.sha256(f"zhihu:{author_match.group(1)}".encode("utf-8")).hexdigest(),
+        "published_at": published.astimezone(timezone.utc).isoformat(),
+        "fetched_at": captured_at,
+        "metrics": {"votes": votes, "comments": comments},
+        "metric_observed_at": captured_at,
+        "raw_snapshot_sha256": hashlib.sha256(snapshot).hexdigest(),
+        "engagement": max(votes, comments),
+        "detail_collector": "zhihu_public_detail",
+        "detail_enrichment_status": "ok",
+    }
+
+
 def _is_shipinhao_content_url(href: str) -> bool:
     parsed = urllib.parse.urlparse(str(href or "").strip())
     host = (parsed.hostname or "").casefold()
@@ -1374,6 +1444,9 @@ def collect_logged_short_video_search(
     if platform == "bilibili" and rows:
         rows = [enrich_bilibili_work(row) for row in rows]
         rows = [row for row in rows if str(row.get("detail_enrichment_status") or "").startswith(("ok", "search_card_verified"))]
+    if platform == "zhihu" and rows:
+        rows = [enrich_zhihu_work(row) for row in rows]
+        rows = [row for row in rows if row.get("detail_enrichment_status") == "ok"]
     if rows:
         status.update({"status": "ok", "count": len(rows)})
     else:

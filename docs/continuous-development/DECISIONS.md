@@ -651,3 +651,9 @@
 
 - YouTube acceptance requires the registry default queries, verified this-month filter, platform-specific full-card selector, deduplication and strict pack report to succeed together.
 - Acceptance is 24 direct discovery rows and 10/10 retained strict samples. It does not prove video generation, upload, Studio access or publication metrics.
+
+## D94: Zhihu Search Discovery Requires Public Detail Enrichment
+
+- Search cards supply real article/answer URLs and visible votes but do not expose complete author/time metadata in the captured anchor context.
+- Public Zhihu article detail may provide datePublished, authorName, voteupCount and commentCount. Accepted rows bind those fields, canonical content ID and raw response SHA.
+- Votes remain named `votes`; they are not relabeled as views or likes. Answer/detail 403, missing date/author/votes or publication age above 30 days fails closed without ID-derived timestamps.

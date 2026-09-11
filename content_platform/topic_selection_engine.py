@@ -42,7 +42,7 @@ def _number(value: Any) -> float:
 
 def _metric(item: dict[str, Any]) -> float:
     metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
-    keys = ("heat", "views", "likes", "engagement", "points", "favorites", "comments", "shares", "saves")
+    keys = ("heat", "views", "likes", "votes", "engagement", "points", "favorites", "comments", "shares", "saves")
     return max(
         [*(_number(item.get(key)) for key in keys), *(_number(metrics.get(key)) for key in keys)],
         default=0.0,

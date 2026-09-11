@@ -8,6 +8,7 @@ from content_platform.hot_work_intelligence import (
     classify_logged_search_failure,
     logged_search_card_selector,
     enrich_bilibili_work,
+    enrich_zhihu_work,
     load_samples,
     normalize_browser_cookies,
     parse_douyin_shipin_html,
@@ -143,6 +144,46 @@ def test_juejin_visible_card_rejects_work_older_than_thirty_days():
     )
 
     assert rows == []
+
+
+def test_zhihu_article_detail_builds_strict_recent_evidence():
+    detail = '''
+    <meta itemProp="datePublished" content="2026-09-05T08:10:13.000Z"/>
+    <meta itemProp="commentCount" content="13"/>
+    <script>{&quot;authorName&quot;:&quot;示例作者&quot;,&quot;voteupCount&quot;:103}</script>
+    '''
+    row = {
+        "platform": "zhihu",
+        "title": "AI Agent工作流实测",
+        "url": "https://zhuanlan.zhihu.com/p/2066544914452543247",
+        "query": "AI Agent 工作流",
+        "captured_at": "2026-09-11T00:15:09+00:00",
+        "collector": "zhihu_logged_search",
+    }
+
+    enriched = enrich_zhihu_work(row, fetch_text=lambda _url: detail)
+
+    assert enriched["content_id"] == "2066544914452543247"
+    assert enriched["published_at"] == "2026-09-05T08:10:13+00:00"
+    assert enriched["metrics"] == {"votes": 103, "comments": 13}
+    assert len(enriched["author_id_hash"]) == 64
+    assert len(enriched["raw_snapshot_sha256"]) == 64
+
+
+def test_zhihu_detail_failure_never_infers_date_from_content_id():
+    row = {
+        "platform": "zhihu",
+        "title": "AI Agent回答",
+        "url": "https://www.zhihu.com/question/1/answer/2078942166643107445",
+        "query": "AI Agent",
+        "captured_at": "2026-09-11T00:15:09+00:00",
+        "collector": "zhihu_logged_search",
+    }
+
+    enriched = enrich_zhihu_work(row, fetch_text=lambda _url: (_ for _ in ()).throw(OSError("403")))
+
+    assert enriched["detail_enrichment_status"] == "failed"
+    assert "published_at" not in enriched
 
 
 def test_logged_search_artifact_stem_keeps_distinct_chinese_queries_unique():
