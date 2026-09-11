@@ -162,6 +162,7 @@ def test_twitter_card_builds_strict_status_identity_time_and_metrics():
     assert len(rows) == 1
     row = rows[0]
     assert row["content_id"] == "2097291801828942019"
+    assert row["account_lane"] == "AI agents workflow"
     assert row["canonical_url"] == "https://x.com/example_user/status/2097291801828942019"
     assert row["published_at"] == "2026-09-08T11:51:46+00:00"
     assert row["metrics"] == {"replies": 5, "reposts": 53, "likes": 117, "views": 26000}

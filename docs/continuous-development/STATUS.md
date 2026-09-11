@@ -16,7 +16,7 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
 | Hojo-first unified TTS runtime | Codex primary | `content_platform/tts_runtime.py`, TTS render entry points, capability registry, TTS tests and four coordination documents | local_and_staging_verified | commit milestone; then include it in the next signed release candidate without changing current production directly |
-| Sol B2 X/Twitter strict card evidence | Codex primary | `content_platform/hot_work_intelligence.py`, `tests/test_hot_work_intelligence.py` and four coordination documents | first_live_retry_localized_metric_fix | commit localized metric parser; repeat isolated live X collection and strict pack report |
+| Sol B2 X/Twitter strict card evidence | Codex primary | `content_platform/hot_work_intelligence.py`, `tests/test_hot_work_intelligence.py` and four coordination documents | second_live_retry_lane_fix | commit query-to-account-lane binding; repeat isolated live X collection and strict pack report |
 | Sol B2 Zhihu Linux collector result | Codex primary | server staging evidence and four coordination documents | insufficient_sample_count | retain two complete rows; add official topic/hot-list detail route or collect a later fresh snapshot |
 | Sol B2 Zhihu public-detail evidence | Codex primary | Zhihu detail enrichment, metric scoring, tests and four coordination documents | committed `4b15db9` | Linux default path produced 2 complete rows; Top3 remains insufficient |
 | Sol B2 YouTube Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to Zhihu collector contract |

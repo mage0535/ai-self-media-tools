@@ -869,6 +869,7 @@ def parse_twitter_search_cards(
         seen_urls.add(canonical_url)
         rows.append({
             **_work("twitter", "twitter_logged_search", query, title, url=canonical_url, engagement=max(metric_values.values()), evidence_strength="strong_logged_search_result"),
+            "account_lane": query,
             "content_id": content_id,
             "canonical_url": canonical_url,
             "author_id_hash": hashlib.sha256(f"twitter:{author.casefold()}".encode("utf-8")).hexdigest(),
