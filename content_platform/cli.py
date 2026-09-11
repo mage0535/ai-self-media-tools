@@ -802,6 +802,25 @@ def execute(args):
                         official_row, official_status = public_row, public_status
                     if official_row:
                         official_status["matrix_path"] = str(upsert_official_signal_matrix(data_dir, official_row))
+                if platform == "tiktok":
+                    from .kuaishou_official_signals import upsert_official_signal_matrix
+                    from .tiktok_official_signals import collect_tiktok_creative_center_signals
+
+                    try:
+                        official_row, official_status = collect_tiktok_creative_center_signals(
+                            output_dir / "tiktok_official_creative_center",
+                            state_file=state_file,
+                        )
+                    except Exception as exc:
+                        official_row, official_status = {}, {
+                            "source": "tiktok:official_creative_center",
+                            "status": "failed",
+                            "count": 0,
+                            "error": f"{type(exc).__name__}: {str(exc)[:180]}",
+                        }
+                    if official_row:
+                        official_status["matrix_path"] = str(upsert_official_signal_matrix(data_dir, official_row))
+                    statuses.append(official_status)
                 if not state_file and platform not in public_without_state:
                     continue
                 queries = query_map.get(platform) or query_map.get("douyin" if platform.startswith("douyin") else platform) or query_map.get("all")
