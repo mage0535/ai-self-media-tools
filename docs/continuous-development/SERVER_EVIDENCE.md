@@ -862,5 +862,13 @@ Observed read-only on 2026-08-31.
 - The third override-free staging run again returned 3 and 4 rows over the two default direct queries. `platform_intelligence_contract_report_v1` returned `contract_ready_count=1`, 7/7 complete samples, minimum 3 and zero missing fields.
 - Final local regression after acceptance documentation returned 1855 passed plus 37 subtests in 409.51 seconds; JUnit `artifacts/test-reports/sol-b2-x-acceptance-20260911.xml` has zero failures.
 - This closes X same-lane hot-work collection only. It does not prove direct publication, publication identity, metric windows or content performance. Production, shared data, publishers and timers were unchanged.
+
+## 2026-09-11 TikTok Official Creative Center Contract
+
+- TikTok logged search used a valid private state, direct-first routing and the US fallback only after the platform returned its own server-error page. Both default AI queries remained `platform_error_or_rate_limited` with zero works; no cached or cross-platform row was promoted.
+- Read-only inspection of TikTok's current Creative Center JavaScript identified the public CreativeOne overview, hashtag and Top Videos contracts. The official Top Videos API is served from the US host for US video rankings; the generic host returned an empty preview.
+- A real server request for the 30-day `Technology & Finance` content label returned four public-preview items out of a reported 100. Each item exposed a TikTok item ID, caption, author handle, creation time, views, organic views, engagement rate and six-second VTR.
+- The preview is broader than the AI-tools lane. The new adapter therefore records it as `official_reference`, `native_verified=false`, `access_level=public_preview`; it does not satisfy same-lane Top3 readiness. Local parser/collector/CLI tests: 66 passed.
+- This is local implementation plus read-only endpoint evidence. A clean-commit Linux CLI run and official matrix readback remain required. Production and timers remain unchanged.
 - Strict rows bind status ID, canonical URL, anonymized author, publication/fetch/metric times, named metrics and raw card SHA. Legacy rows without the new fields remain discovery-only and cannot satisfy the strict pack contract.
 - Local regression is included in the 1854-test zero-failure report. A fresh isolated Linux X collection and Top3 strict report remain required; production is unchanged.

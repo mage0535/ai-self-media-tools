@@ -155,6 +155,47 @@ class CliV2Tests(unittest.TestCase):
         search = next(row for row in result["collection_status"] if row["source"] == "tiktok:logged_search")
         self.assertEqual(search["route"], "verified_cache")
 
+    def test_hot_works_collect_tiktok_persists_official_reference_separately(self):
+        output = self.root / "hot-works-tiktok-official"
+        row = {
+            "platform": "tiktok",
+            "status": "verified",
+            "evidence_type": "official_reference",
+            "native_verified": False,
+            "signals": ["AI workflow on a phone"],
+        }
+        status = {
+            "source": "tiktok:official_creative_center",
+            "status": "ok",
+            "count": 1,
+            "access_level": "public_preview",
+        }
+        matrix_path = self.root / "overnight" / "today" / "official-platform-signal-matrix-v3.json"
+        with (
+            patch("content_platform.cli._load_env_defaults", return_value=""),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={
+                "status": "ready", "reason": "", "state_file": str(self.root / "tiktok-state.json"),
+                "source_format": "cookie_list",
+            }),
+            patch("content_platform.tiktok_official_signals.collect_tiktok_creative_center_signals", return_value=(row, status)) as collect_official,
+            patch("content_platform.kuaishou_official_signals.upsert_official_signal_matrix", return_value=matrix_path) as upsert,
+            patch("content_platform.cli.collect_logged_short_video_search", return_value=([], {
+                "source": "tiktok:logged_search", "status": "platform_error_or_rate_limited", "count": 0,
+            })),
+            patch.dict("os.environ", {"CONTENT_PLATFORM_DATA_DIR": str(self.root)}, clear=False),
+        ):
+            code, result = self.call(
+                "hot-works-collect", "--platform", "tiktok", "--query", "tiktok=AI tools workflow",
+                "--output-dir", str(output),
+            )
+
+        self.assertEqual(code, 0)
+        collect_official.assert_called_once()
+        upsert.assert_called_once_with(self.root, row)
+        official = next(item for item in result["collection_status"] if item["source"] == "tiktok:official_creative_center")
+        self.assertEqual(official["matrix_path"], str(matrix_path))
+        self.assertEqual(result["items"], 0)
+
     def test_hot_works_collect_kuaishou_updates_official_matrix_separately(self):
         output = self.root / "hot-works-kuaishou"
         row = {"platform": "kuaishou", "status": "backend_loaded", "signals": ["ai工具"]}

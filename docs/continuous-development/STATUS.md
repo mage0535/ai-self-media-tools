@@ -15,6 +15,7 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
+| Sol B2 TikTok official Creative Center reference | Codex primary | `content_platform/tiktok_official_signals.py`, CLI integration, TikTok tests and four coordination documents | local_complete | commit and run isolated Linux CLI; verify official matrix row remains separate from failed same-lane search |
 | Hojo-first unified TTS runtime | Codex primary | `content_platform/tts_runtime.py`, TTS render entry points, capability registry, TTS tests and four coordination documents | local_and_staging_verified | commit milestone; then include it in the next signed release candidate without changing current production directly |
 | Sol B2 X/Twitter strict card evidence | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated 7/7 strict evidence; proceed to the next unverified platform collector |
 | Sol B2 Zhihu Linux collector result | Codex primary | server staging evidence and four coordination documents | insufficient_sample_count | retain two complete rows; add official topic/hot-list detail route or collect a later fresh snapshot |

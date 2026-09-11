@@ -677,3 +677,10 @@
 - X collection accepts only canonical status cards with a visible publication time and named engagement controls from the same article container. A valid login state or a maximum visible number alone is discovery evidence, not strict evidence.
 - Chinese X combines replies, reposts, likes and views in one aria-label. The parser recognizes the localized labels, preserves each metric name and binds the query as `account_lane`; it does not infer one metric from another.
 - Platform acceptance requires at least three complete current-month rows. The verified staging result contains seven complete rows over the default two direct queries; it does not prove X publishing or performance collection.
+
+## D98: TikTok Creative Center Is A Separate Official Reference Layer
+
+- TikTok same-platform same-lane works come from real TikTok video search or an authorized research/data adapter. A Creative Center `Technology & Finance` ranking is official commercial/industry reference evidence, not an AI-lane work pool and not a native hotspot identity.
+- The official adapter uses the current CreativeOne overview cutoff and US Top Videos endpoint, persists the raw response hash, and records item identity, anonymized author, publication time, views, organic views, engagement rate and six-second VTR when present.
+- A four-item response with a larger upstream total is explicitly `public_preview`; valid TikTok cookies do not become Creative Center authentication proof. Empty, invalid-login, stale, unlabeled or non-metric rows fail closed.
+- CLI collection runs the official adapter independently of logged TikTok search and writes it to the official signal matrix with `evidence_type=official_reference` and `native_verified=false`. It may inform second-layer scoring only when title/lane rules permit; it cannot satisfy the first-layer Top3 contract.
