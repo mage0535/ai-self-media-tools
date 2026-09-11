@@ -3,6 +3,7 @@ import hashlib
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -172,11 +173,179 @@ def test_missing_or_tampered_hotspot_blocks_before_pipeline_create(tmp_path: Pat
     assert "hotspot" in result["error"]
 
 
+def test_canary_accepts_hash_bound_editorial_fallback_without_associated_hotspot(tmp_path: Path):
+    from scripts.task9_canary import _canary_brief, _load_verified_topic_evidence, build_canary_matrix
+
+    strategy = _write(tmp_path / "_inputs" / "editorial" / "strategy.json", '{"topics":["A verified evergreen workflow guide"]}')
+    strategy_hash = hashlib.sha256(strategy.read_bytes()).hexdigest()
+    evidence = {
+        "platform": "tiktok",
+        "selection_mode": "editorial_calendar",
+        "topic": "A verified evergreen workflow guide",
+        "strategy_source": "editorial/strategy.json",
+        "strategy_sha256": strategy_hash,
+        "calendar_column": "evergreen",
+        "planned_for": datetime.now(timezone.utc).date().isoformat(),
+        "dedupe_passed": True,
+        "dedupe_lookback_days": 7,
+        "research_attempts": [
+            {"round": 1, "candidate_count": 0},
+            {"round": 2, "candidate_count": 0},
+            {"round": 3, "candidate_count": 0},
+        ],
+    }
+    _write(tmp_path / "_inputs" / "editorial" / "tiktok.json", json.dumps(evidence))
+    case = next(row for row in build_canary_matrix() if row["platform"] == "tiktok")
+
+    selection = _load_verified_topic_evidence(tmp_path, case)
+    brief = _canary_brief(case, selection)
+
+    assert selection["selection_mode"] == "editorial_calendar"
+    assert selection["evidence_verified"] is True
+    assert brief["selection_mode"] == "editorial_calendar"
+    assert brief.get("associated_hotspot") is None
+    assert brief["editorial_evidence"]["strategy_source"] == "editorial/strategy.json"
+    assert brief["platform_source_matrix"]["real_platform_collection_verified"] is False
+
+
+def test_canary_rejects_editorial_fallback_without_three_recapture_rounds(tmp_path: Path):
+    from scripts.task9_canary import _load_verified_topic_evidence
+
+    strategy = _write(tmp_path / "_inputs" / "editorial" / "strategy.json", "verified")
+    _write(tmp_path / "_inputs" / "editorial" / "tiktok.json", json.dumps({
+        "platform": "tiktok", "selection_mode": "editorial_calendar", "topic": "Evergreen",
+        "strategy_source": "editorial/strategy.json", "strategy_sha256": hashlib.sha256(strategy.read_bytes()).hexdigest(),
+        "calendar_column": "evergreen", "planned_for": datetime.now(timezone.utc).date().isoformat(), "dedupe_passed": True,
+        "dedupe_lookback_days": 7, "research_attempts": [{"round": 1, "candidate_count": 0}],
+    }))
+
+    with pytest.raises(ValueError, match="editorial_research_attempts_incomplete"):
+        _load_verified_topic_evidence(tmp_path, {"platform": "tiktok", "delivery_policy": "manual_handoff_only"})
+
+
+def test_editorial_selection_provenance_passes_without_hotspot_identity(tmp_path: Path):
+    from scripts import task9_canary
+    from scripts.task9_canary import _load_verified_topic_evidence, _validate_hotspot_provenance
+
+    strategy = _write(tmp_path / "_inputs" / "editorial" / "strategy.json", "Evergreen workflow")
+    _write(tmp_path / "_inputs" / "editorial" / "tiktok.json", json.dumps({
+        "platform": "tiktok", "selection_mode": "editorial_calendar", "topic": "Evergreen workflow",
+        "strategy_source": "editorial/strategy.json", "strategy_sha256": hashlib.sha256(strategy.read_bytes()).hexdigest(),
+        "calendar_column": "evergreen", "planned_for": datetime.now(timezone.utc).date().isoformat(), "dedupe_passed": True,
+        "dedupe_lookback_days": 7,
+        "research_attempts": [{"round": index, "candidate_count": 0} for index in range(1, 4)],
+    }))
+    selection = _load_verified_topic_evidence(tmp_path, {"platform": "tiktok", "delivery_policy": "manual_handoff_only"})
+
+    result = _validate_hotspot_provenance(
+        {"platform": "tiktok", "delivery_policy": "manual_handoff_only"},
+        {"hotspot": selection, "source_evidence": []},
+    )
+
+    assert result["passed"] is True
+    assert result["selection_mode"] == "editorial_calendar"
+    assert result["associated_hotspot"] is None
+
+    tampered = dict(selection)
+    tampered["dedupe_passed"] = False
+    canonical_keys = (
+        "platform", "selection_mode", "topic", "strategy_source", "strategy_sha256",
+        "calendar_column", "planned_for", "dedupe_passed", "dedupe_lookback_days", "research_attempts",
+    )
+    tampered["provenance_hash"] = task9_canary._json_hash({key: tampered.get(key) for key in canonical_keys})
+    rejected = _validate_hotspot_provenance(
+        {"platform": "tiktok", "delivery_policy": "manual_handoff_only"},
+        {"hotspot": tampered, "source_evidence": []},
+    )
+    assert rejected["passed"] is False
+    assert "editorial_dedupe_evidence_invalid" in rejected["failures"]
+
+
+def test_editorial_canary_reaches_pipeline_create_with_no_associated_hotspot(tmp_path: Path):
+    from scripts.task9_canary import _run_pipeline_case
+
+    strategy = _write(tmp_path / "_inputs" / "editorial" / "strategy.json", "Evergreen workflow")
+    _write(tmp_path / "_inputs" / "editorial" / "tiktok.json", json.dumps({
+        "platform": "tiktok", "selection_mode": "editorial_calendar", "topic": "Evergreen workflow",
+        "strategy_source": "editorial/strategy.json", "strategy_sha256": hashlib.sha256(strategy.read_bytes()).hexdigest(),
+        "calendar_column": "evergreen", "planned_for": datetime.now(timezone.utc).date().isoformat(), "dedupe_passed": True,
+        "dedupe_lookback_days": 7,
+        "research_attempts": [{"round": index, "candidate_count": 0} for index in range(1, 4)],
+    }))
+    observed = {}
+
+    class PipelineBoundary:
+        def __init__(self, store, config):
+            pass
+
+        def create(self, topic, platforms, brief, **_kwargs):
+            observed.update({"topic": topic, "platforms": platforms, "brief": brief})
+            return {"id": "editorial-job"}
+
+        def run(self, job_id):
+            return {"id": job_id, "state": "blocked", "artifacts": [], "deliveries": [], "draft_meta": {}}
+
+    class StoreBoundary:
+        def __init__(self, path):
+            self.path = path
+
+        def artifacts(self, _job_id):
+            return []
+
+        def deliveries(self, _job_id):
+            return []
+
+        def events(self, _job_id):
+            return []
+
+    case = {
+        "platform": "tiktok", "content_form": "vertical_video", "language": "en",
+        "delivery_policy": "manual_handoff_only", "dry_run": False, "order": 12,
+    }
+    result = _run_pipeline_case(
+        case,
+        tmp_path / "case",
+        hotspot_root=tmp_path,
+        pipeline_factory=PipelineBoundary,
+        store_factory=StoreBoundary,
+    )
+
+    assert result["pipeline_evidence"]["create_called"] is True
+    assert observed["brief"]["selection_mode"] == "editorial_calendar"
+    assert observed["brief"].get("associated_hotspot") is None
+
+
+def test_canary_rejects_ambiguous_hotspot_and_editorial_inputs(tmp_path: Path):
+    from scripts.task9_canary import _load_verified_topic_evidence
+
+    _write(tmp_path / "_inputs" / "editorial" / "tiktok.json", "{}")
+    _write(tmp_path / "_inputs" / "hotspots" / "tiktok.json", "{}")
+
+    with pytest.raises(ValueError, match="canary_topic_evidence_ambiguous"):
+        _load_verified_topic_evidence(tmp_path, {"platform": "tiktok"}, now=datetime(2026, 9, 11, tzinfo=timezone.utc))
+
+
+def test_canary_rejects_stale_editorial_plan(tmp_path: Path):
+    from scripts.task9_canary import _load_verified_topic_evidence
+
+    strategy = _write(tmp_path / "_inputs" / "editorial" / "strategy.json", "Evergreen")
+    _write(tmp_path / "_inputs" / "editorial" / "tiktok.json", json.dumps({
+        "platform": "tiktok", "selection_mode": "editorial_calendar", "topic": "Evergreen",
+        "strategy_source": "editorial/strategy.json", "strategy_sha256": hashlib.sha256(strategy.read_bytes()).hexdigest(),
+        "calendar_column": "evergreen", "planned_for": "2026-08-01", "dedupe_passed": True,
+        "dedupe_lookback_days": 7,
+        "research_attempts": [{"round": index, "candidate_count": 0} for index in range(1, 4)],
+    }))
+
+    with pytest.raises(ValueError, match="editorial_plan_stale"):
+        _load_verified_topic_evidence(tmp_path, {"platform": "tiktok"}, now=datetime(2026, 9, 11, tzinfo=timezone.utc))
+
+
 def test_pipeline_canary_runs_with_production_admission_enabled(tmp_path: Path, monkeypatch):
     from scripts import task9_canary
 
     monkeypatch.delenv("CONTENT_PLATFORM_RUNTIME_MODE", raising=False)
-    monkeypatch.setattr(task9_canary, "_load_verified_hotspot", lambda root, case: {
+    monkeypatch.setattr(task9_canary, "_load_verified_topic_evidence", lambda root, case: {
         "platform": case["platform"], "observed_title": "Verified topic",
         "fetched_at": "2026-09-07T00:00:00Z", "source_url": "https://example.test/work",
         "provenance_hash": "a" * 64, "evidence_verified": True, "source_claims": [],

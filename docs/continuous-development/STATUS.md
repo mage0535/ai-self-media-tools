@@ -9,13 +9,13 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1865 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-auth-proxy-recovery-20260911.xml`.
+- Latest complete regression on this branch: 1871 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-e-canary-selection-modes-20260911.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol E Canary topic-evidence modes | Codex primary | `scripts/task9_canary.py`, Task9 tests and four coordination documents | design_gap_identified | add strict editorial-calendar evidence path; keep associated hotspot empty and require three recapture attempts plus dedupe proof |
+| Sol E Canary topic-evidence modes | Codex primary | `scripts/task9_canary.py`, Task9 tests and four coordination documents | local_complete | commit; run Linux contract smoke for hotspot/editorial exclusivity, then prepare current evidence inputs for serial artifact Canaries |
 | Sol C unified capability re-audit | Codex primary | capability registry/DAG evidence and four coordination documents | verified_structure | preserve 66-capability/22-group report; prove real artifact impact through subsequent platform Canaries |
 | Sol B2 Douyin account variants | Codex primary | server staging evidence and four coordination documents | exact_account_auth_required | preserve empty official/public/script evidence; do not assign generic Douyin state to either account without binding proof |
 | Sol B2 WeChat live collector | Codex primary | server staging evidence and four coordination documents | reference_only_no_metrics | retain 20 real article references; do not label them hot-work Top3 without public metrics |

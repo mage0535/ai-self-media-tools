@@ -303,9 +303,126 @@ def _load_verified_hotspot(root: Path, case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _load_verified_topic_evidence(
+    root: Path,
+    case: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Load a verified hotspot or an audited editorial-calendar fallback."""
+    inputs_root = (root / "_inputs").resolve()
+    editorial_path = (inputs_root / "editorial" / f"{case['platform']}.json").resolve()
+    hotspot_path = (inputs_root / "hotspots" / f"{case['platform']}.json").resolve()
+    if editorial_path.is_file() and hotspot_path.is_file():
+        raise ValueError("canary_topic_evidence_ambiguous")
+    if not editorial_path.is_file():
+        return _load_verified_hotspot(root, case)
+    record = _load_json(editorial_path)
+    failures: list[str] = []
+    platform = str(record.get("platform") or "").strip()
+    topic = str(record.get("topic") or "").strip()
+    if platform != str(case.get("platform") or ""):
+        failures.append("editorial_platform_mismatch")
+    if record.get("selection_mode") != "editorial_calendar":
+        failures.append("editorial_selection_mode_invalid")
+    if not topic:
+        failures.append("editorial_topic_missing")
+    try:
+        planned_date = datetime.fromisoformat(str(record.get("planned_for") or "")).date()
+        current_date = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).date()
+        if abs((current_date - planned_date).days) > 1:
+            failures.append("editorial_plan_stale")
+    except ValueError:
+        failures.append("editorial_planned_for_invalid")
+    attempts = [row for row in record.get("research_attempts") or [] if isinstance(row, dict)]
+    expected_rounds = list(range(1, len(attempts) + 1))
+    if len(attempts) < 3 or [int(row.get("round") or 0) for row in attempts] != expected_rounds or any(int(row.get("candidate_count") or 0) != 0 for row in attempts):
+        failures.append("editorial_research_attempts_incomplete")
+    if record.get("dedupe_passed") is not True or int(record.get("dedupe_lookback_days") or 0) < 7:
+        failures.append("editorial_dedupe_evidence_invalid")
+    for field in ("calendar_column", "planned_for", "strategy_source", "strategy_sha256"):
+        if not str(record.get(field) or "").strip():
+            failures.append(f"editorial_{field}_missing")
+    strategy_rel = str(record.get("strategy_source") or "").replace("\\", "/")
+    strategy_path = (inputs_root / strategy_rel).resolve()
+    try:
+        strategy_path.relative_to(inputs_root)
+    except ValueError:
+        failures.append("editorial_strategy_path_outside_inputs")
+    actual_hash = sha256_file(strategy_path) if strategy_path.is_file() else ""
+    if not strategy_path.is_file():
+        failures.append("editorial_strategy_source_missing")
+    if actual_hash != str(record.get("strategy_sha256") or "").lower():
+        failures.append("editorial_strategy_hash_mismatch")
+    strategy_text = strategy_path.read_text(encoding="utf-8", errors="replace") if strategy_path.is_file() else ""
+    if topic and topic not in strategy_text:
+        failures.append("editorial_topic_missing_from_strategy")
+    if failures:
+        raise ValueError(";".join(sorted(set(failures))))
+    canonical = {
+        "platform": platform,
+        "selection_mode": "editorial_calendar",
+        "topic": topic,
+        "strategy_source": strategy_rel,
+        "strategy_sha256": actual_hash,
+        "calendar_column": str(record["calendar_column"]),
+        "planned_for": str(record["planned_for"]),
+        "dedupe_passed": True,
+        "dedupe_lookback_days": int(record["dedupe_lookback_days"]),
+        "research_attempts": attempts,
+    }
+    return {
+        **canonical,
+        "mode": "editorial_calendar",
+        "observed_title": topic,
+        "evidence_verified": True,
+        "provenance_hash": _json_hash(canonical),
+        "source_claims": [],
+        "related_sources": [],
+        "external_sources": [],
+    }
+
+
 def _validate_hotspot_provenance(case: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
     hotspot = manifest.get("hotspot") if isinstance(manifest.get("hotspot"), dict) else {}
     platform = str(case.get("platform") or "")
+    if hotspot.get("selection_mode") == "editorial_calendar":
+        canonical = {
+            key: hotspot.get(key)
+            for key in (
+                "platform", "selection_mode", "topic", "strategy_source", "strategy_sha256",
+                "calendar_column", "planned_for", "dedupe_passed", "dedupe_lookback_days",
+                "research_attempts",
+            )
+        }
+        failures = []
+        if hotspot.get("platform") != platform:
+            failures.append("editorial_platform_mismatch")
+        if hotspot.get("evidence_verified") is not True:
+            failures.append("editorial_evidence_not_verified")
+        if hotspot.get("native_verified") is True or hotspot.get("source_url"):
+            failures.append("editorial_fallback_has_hotspot_identity")
+        attempts = hotspot.get("research_attempts") if isinstance(hotspot.get("research_attempts"), list) else []
+        if (
+            hotspot.get("dedupe_passed") is not True
+            or int(hotspot.get("dedupe_lookback_days") or 0) < 7
+        ):
+            failures.append("editorial_dedupe_evidence_invalid")
+        if (
+            len(attempts) < 3
+            or [int(row.get("round") or 0) for row in attempts if isinstance(row, dict)] != list(range(1, len(attempts) + 1))
+            or any(int(row.get("candidate_count") or 0) != 0 for row in attempts if isinstance(row, dict))
+        ):
+            failures.append("editorial_research_attempts_incomplete")
+        if str(hotspot.get("provenance_hash") or "") != _json_hash(canonical):
+            failures.append("editorial_provenance_hash_mismatch")
+        return {
+            "passed": not failures,
+            "failures": failures,
+            "selection_mode": "editorial_calendar",
+            "associated_hotspot": None,
+            "source_hash": str(hotspot.get("provenance_hash") or ""),
+        }
     source_url = str(hotspot.get("source_url") or "")
     observed_title = str(hotspot.get("observed_title") or "")
     expected = _hotspot_source_hash(
@@ -794,6 +911,58 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
     """Build bounded input from externally verified evidence."""
     platform = str(case["platform"])
     title = str(hotspot["observed_title"])
+    if hotspot.get("selection_mode") == "editorial_calendar":
+        attempts = list(hotspot.get("research_attempts") or [])
+        brief = {
+            "platform": platform,
+            "platforms": [platform],
+            "language": case["language"],
+            "locale": case["language"],
+            "content_form": case["content_form"],
+            "content_blueprint": {
+                "topic": title,
+                "content_form": case["content_form"],
+                "audience": "canary operators",
+                "platform": platform,
+                "language": case["language"],
+            },
+            "selection_mode": "editorial_calendar",
+            "editorial_evidence": {
+                key: hotspot[key]
+                for key in ("strategy_source", "strategy_sha256", "calendar_column", "planned_for", "dedupe_passed", "dedupe_lookback_days", "provenance_hash")
+            },
+            "research_attempts": attempts,
+            "platform_source_matrix": {
+                "version": "platform_source_matrix_v2",
+                "platform": platform,
+                "attempted_sources": [
+                    {"source": f"{platform}:same_lane_requery", "status": "empty", "count": 0, "round": row["round"]}
+                    for row in attempts
+                ],
+                "successful_source_count": 0,
+                "platform_internal_verified": False,
+                "real_platform_collection_verified": False,
+                "current_platform_specific_topic": True,
+                "native_verified": False,
+                "official_signals": [],
+                "shared_trend_only": False,
+                "trend_evidence": {"source": "editorial_calendar", "samples": []},
+            },
+            "source_catalog": [],
+            "automated_workflow": True,
+            "dry_run": case.get("dry_run") is True,
+            "run_contract": build_run_contract(platform),
+            "delivery_policy": case["delivery_policy"],
+            "claim_ledger": [],
+            "content_depth_plan": build_content_depth_plan(
+                title,
+                "Explain the evergreen problem, give an actionable workflow, and state the evidence boundary.",
+                evidence=[],
+                actions=["explain the problem", "give the workflow", "state the evidence boundary"],
+                platform=platform,
+            ),
+        }
+        return brief
     related = [row for row in hotspot.get("related_sources") or [] if isinstance(row, dict) and row.get("source_url") and row.get("provenance_hash")]
     attempted = [{
         "source": f"{platform}:task9_verified_evidence",
@@ -1284,7 +1453,7 @@ def _run_pipeline_case(case: dict[str, Any], root: Path, *, pipeline_factory=Non
 
     root.mkdir(parents=True, exist_ok=True)
     try:
-        verified_hotspot = _load_verified_hotspot(hotspot_root or root, case)
+        verified_hotspot = _load_verified_topic_evidence(hotspot_root or root, case)
     except ValueError as exc:
         (root / "hotspot_preflight.json").write_text(json.dumps({"passed": False, "error": str(exc)}, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return {"passed": False, "pipeline_evidence": {"create_called": False, "run_called": False, "serial_index": case["order"], "job_id": ""}, "job": {}, "manifest": {}, "error": str(exc)}
@@ -1541,7 +1710,7 @@ def run_canaries(
         pipeline_evidence = model_case.get("pipeline_evidence") if isinstance(model_case.get("pipeline_evidence"), dict) else {}
         probes = model_case.get("probes") if isinstance(model_case.get("probes"), dict) else {}
         try:
-            input_hotspot = _load_verified_hotspot(root, case)
+            input_hotspot = _load_verified_topic_evidence(root, case)
             brief_hash = _json_hash(_canary_brief(case, input_hotspot))
         except ValueError:
             brief_hash = ""
