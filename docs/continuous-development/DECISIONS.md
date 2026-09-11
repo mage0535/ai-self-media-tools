@@ -671,3 +671,9 @@
 - Every provider writes a same-directory partial artifact, converts it to 44.1kHz stereo, passes a real audio probe, and only then atomically replaces the target. A failed Hojo attempt remains visible before Edge fallback. Existing output survives total failure.
 - VoiceEngine, cinematic film, Kuaishou cards and landscape video use this runtime. Provider-policy changes invalidate stale renderer TTS caches, while valid checkpoint reuse preserves the original provider/model/voice evidence.
 - Kokoro remains an inventory-only historical record. It is not a fallback candidate. The capability registry and ToolRegistry expose Hojo availability and Edge fallback without treating quality approval as proof of a completed video.
+
+## D97: X Strict Evidence Uses Localized Article Controls
+
+- X collection accepts only canonical status cards with a visible publication time and named engagement controls from the same article container. A valid login state or a maximum visible number alone is discovery evidence, not strict evidence.
+- Chinese X combines replies, reposts, likes and views in one aria-label. The parser recognizes the localized labels, preserves each metric name and binds the query as `account_lane`; it does not infer one metric from another.
+- Platform acceptance requires at least three complete current-month rows. The verified staging result contains seven complete rows over the default two direct queries; it does not prove X publishing or performance collection.
