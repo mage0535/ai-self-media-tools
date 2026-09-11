@@ -857,5 +857,6 @@ Observed read-only on 2026-08-31.
 ## 2026-09-11 X Strict Visible-Card Contract
 
 - The saved X article DOM exposes a canonical `/status/{id}` link, `time[datetime]` and labeled reply/repost/like/view controls. The browser extractor now preserves these fields from the same article container.
+- The first Linux retry retained four status cards per query but returned zero strict rows because the live Chinese locale exposes all metrics in one combined label (`回复/转帖/喜欢/观看`), while the initial parser expected separate English labels. A red/green fixture now parses localized combined labels without relabeling metrics.
 - Strict rows bind status ID, canonical URL, anonymized author, publication/fetch/metric times, named metrics and raw card SHA. Legacy rows without the new fields remain discovery-only and cannot satisfy the strict pack contract.
 - Local regression is included in the 1854-test zero-failure report. A fresh isolated Linux X collection and Top3 strict report remain required; production is unchanged.
