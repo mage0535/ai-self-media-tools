@@ -702,3 +702,9 @@
 - Base-platform credentials cannot be assigned to account variants by filename proximity. `douyin_ai` and `douyin_pet` require their configured account-specific states because cross-account collection would contaminate lane history and later publication identity.
 - A generic Douyin state may be tested by a read-only generic adapter, but zero-result or unsigned API responses do not become variant evidence. Exact account state absence is `auth_required`, not a reason to merge the two lanes.
 - Public official boards remain platform-level evidence and are filtered separately for AI and pet lanes. A current board with no matching terms correctly yields `no_lane_results` for both accounts.
+
+## D102: Canary Topic Evidence May Be Hotspot Or Audited Editorial Fallback
+
+- A real artifact Canary does not require every platform to have a current hotspot. It may use either a verified platform hotspot/activity/work record or an approved `editorial_calendar` topic after the configured same-platform recapture sequence is exhausted.
+- Editorial fallback evidence must include platform, strategy version/source hash, selected topic, at least three bounded recapture attempts, seven-day dedupe proof and selection reason. It has no associated hotspot, no native identity and no hotspot score.
+- The Canary must probe whichever selection mode was used. Missing or tampered evidence blocks before Pipeline creation; lack of a hotspot alone does not justify manufacturing one or preventing a legitimate evergreen artifact test.
