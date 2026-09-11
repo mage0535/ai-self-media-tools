@@ -171,6 +171,7 @@ def test_youtube_dom_uses_full_video_renderer_as_card_container():
 
     assert "ytd-video-renderer" in selector
     assert "ytd-rich-item-renderer" in selector
+    assert '[class*="video"]' not in selector
 
 
 def test_youtube_visible_card_builds_strict_month_work_evidence():
