@@ -836,3 +836,10 @@ Observed read-only on 2026-08-31.
 - TDD adds public-detail enrichment, 30-day filtering, anonymized author identity, canonical IDs, nested votes/comments and response SHA. Detail failures never infer time from IDs.
 - Related tests returned 65 passed. Fresh full regression returned 1841 passed plus 37 subtests in 340.98 seconds; JUnit `artifacts/test-reports/sol-b2-zhihu-detail-20260911.xml` has zero failures/errors.
 - Linux strict acceptance remains pending. Production and timers remain unchanged.
+
+## 2026-09-11 Zhihu Linux Partial Result
+
+- Staging advanced to `4b15db9`. The existing Zhihu Playwright state was valid; two default queries ran direct and each retained one complete recent article after detail enrichment.
+- The strict report returned `contract_ready_count=0`, `status=insufficient_sample_count`, two complete samples, required minimum three and zero missing fields.
+- Four bounded expansion queries produced no additional complete rows. One was initially labeled login-required by navigation text and three had no eligible details; none were used to manufacture a third sample.
+- Zhihu remains partial. Its next adapter is official hot/topic detail or a later fresh snapshot. Production current remains `2f4f612`; timers and publishers remain untouched.

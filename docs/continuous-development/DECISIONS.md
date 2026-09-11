@@ -657,3 +657,9 @@
 - Search cards supply real article/answer URLs and visible votes but do not expose complete author/time metadata in the captured anchor context.
 - Public Zhihu article detail may provide datePublished, authorName, voteupCount and commentCount. Accepted rows bind those fields, canonical content ID and raw response SHA.
 - Votes remain named `votes`; they are not relabeled as views or likes. Answer/detail 403, missing date/author/votes or publication age above 30 days fails closed without ID-derived timestamps.
+
+## D95: Zhihu Keeps Partial Strict Evidence Without Claiming Top3
+
+- Two complete recent rows remain usable low-coverage evidence but produce `insufficient_sample_count`. Query expansion that yields no additional verified details does not lower the minimum.
+- The next source is a separately verified Zhihu hot-list/topic-detail route or a later fresh collection snapshot. Cross-platform rows cannot fill the missing third Zhihu work.
+- Repeated detail requests are bounded to avoid treating platform throttling as a reason for infinite retries.
