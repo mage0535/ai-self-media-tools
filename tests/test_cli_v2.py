@@ -180,6 +180,30 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(search["fallback_status"], "proxy_attempt_failed")
         self.assertEqual(search["route_attempts"][1]["status"], "failed")
 
+    def test_hot_works_collect_retries_one_same_route_browser_timeout(self):
+        output = self.root / "hot-works-timeout-retry"
+        calls = []
+
+        def collect(_platform, _query, **kwargs):
+            calls.append(kwargs.get("route_name"))
+            if len(calls) == 1:
+                raise RuntimeError("Page.goto: Timeout 30000ms exceeded")
+            return [], {"source": "xiaohongshu:logged_search", "status": "platform_error_or_rate_limited", "count": 0, "route": "direct"}
+
+        with (
+            patch("content_platform.cli._load_env_defaults", return_value=""),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={"status": "ready", "reason": "", "state_file": str(self.root / "xhs-state.json")}),
+            patch("content_platform.cli.collect_logged_short_video_search", side_effect=collect),
+            patch.dict("os.environ", {}, clear=False),
+        ):
+            os.environ.pop("CN_PROXY", None)
+            code, result = self.call("hot-works-collect", "--platform", "xiaohongshu", "--query", "xiaohongshu=AI工具", "--output-dir", str(output))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["direct", "direct"])
+        search = next(row for row in result["collection_status"] if row["source"] == "xiaohongshu:logged_search")
+        self.assertEqual(search["same_route_retry_count"], 1)
+
     def test_hot_works_collect_uses_verified_cache_after_transient_failure(self):
         output = self.root / "hot-works-cache"
         cached_row = {
