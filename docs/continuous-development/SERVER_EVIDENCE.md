@@ -902,3 +902,10 @@ Observed read-only on 2026-08-31.
 - Hermes has a second Web API script under the SenseNova social-search skill. A read-only probe used the generic state for `AI工具`, `AI工作流` and `猫咪治愈`; all three returned zero rows. The standalone `douyin-hot` skill duplicates the same official hot-board endpoint already used by the project. Neither adds a valid same-lane adapter today.
 - WeChat Sogou collection returned ten real articles for each of two queries, 20 total. The strict pack retained zero because public interaction metrics are absent. These remain article/topic references, not a same-platform hot-work Top3.
 - Production, account files, publishers, shared state and timers were not changed.
+
+## 2026-09-11 Unified Capability And Canary Re-Audit
+
+- Registry inspection reports 66 capabilities across 22 groups: 27 executable, 20 parent-executed and 19 inventory-only. Every executable has an adapter; every parent-executed child has a telemetry contract; all inventory-only entries have compiled-reference, license-excluded or retired dispositions.
+- Capability registry, adapter, execution, effect and trace suites returned 81 passed. This proves structural routing and evidence semantics, not that every capability improved a real artifact.
+- `scripts/task9_canary.py` currently calls `_load_verified_hotspot` before every Pipeline case. Platforms with valid exhausted recapture and an approved evergreen cannot enter a real artifact Canary, despite the production selection policy allowing `editorial_calendar` without associated hotspot.
+- D102 records the required correction. Implementation and a real serial matrix remain pending; production and timers remain unchanged.
