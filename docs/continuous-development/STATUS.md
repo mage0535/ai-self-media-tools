@@ -15,7 +15,8 @@ Last updated: 2026-09-10 Asia/Shanghai (Sol plan execution resumed; B0 baseline 
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 Zhihu public-detail evidence | Codex primary | Zhihu detail enrichment, metric scoring, tests and four coordination documents | local_complete | commit, staging sync and logged-search Linux strict acceptance |
+| Sol B2 Zhihu Linux collector result | Codex primary | server staging evidence and four coordination documents | insufficient_sample_count | retain two complete rows; add official topic/hot-list detail route or collect a later fresh snapshot |
+| Sol B2 Zhihu public-detail evidence | Codex primary | Zhihu detail enrichment, metric scoring, tests and four coordination documents | committed `4b15db9` | Linux default path produced 2 complete rows; Top3 remains insufficient |
 | Sol B2 YouTube Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to Zhihu collector contract |
 | Sol B2 YouTube closest-selector collision | Codex primary | YouTube card selector, tests and four coordination documents | committed `dc8d366` | Linux default path passed 24 rows and 10/10 strict pack samples |
 | Sol B2 YouTube full-card DOM container | Codex primary | platform card selector, tests and four coordination documents | committed `de2d719` | third Linux retry exposed common selector matching title anchor itself |

@@ -121,4 +121,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - The third retry found a selector collision: YouTube title anchors matched the generic video-class selector themselves. YouTube now uses only real renderer custom elements; a fourth Linux run remains pending.
 - YouTube override-free Linux acceptance now passes on `dc8d366`: 24 direct monthly rows and 10/10 strict pack samples. This is collector evidence only; generation and handoff Canaries remain separate.
 - Zhihu now enriches real search URLs from public detail metadata, preserves votes/comments semantics and rejects answer 403 or out-of-window rows. Full regression is 1841 tests plus 37 subtests; Linux acceptance remains pending.
+- Zhihu Linux staging retained two complete recent articles but did not reach the required Top3; bounded query expansion added none. Status is `insufficient_sample_count`, with official topic/hot-list detail or a later snapshot next.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
