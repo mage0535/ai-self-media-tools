@@ -15,7 +15,7 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 Kuaishou state-purpose isolation | Codex primary | auth-state resolution, CLI Kuaishou routing, hot-work tests and four coordination documents | local_complete | commit and Linux verify creator signals remain available while public-search state is rejected and public rank fallback runs |
+| Sol B2 Kuaishou state-purpose isolation | Codex primary | auth-state resolution, CLI Kuaishou routing, hot-work tests and four coordination documents | linux_verified_official_only | commit explicit search-auth status; preserve creator signals and keep same-lane Top3 blocked until a public-search state or public work adapter exists |
 | Sol B2 Shipinhao live collector | Codex primary | server staging evidence and four coordination documents | auth_required | preserve login-page evidence; do not reuse WeChat identity; retry only after a fresh platform state exists |
 | Sol B2 TikTok official Creative Center reference | Codex primary | server staging evidence and four coordination documents | verified_official_reference_same_lane_blocked | preserve four-item official preview; repair or add a valid same-lane video adapter without relabeling this reference |
 | Hojo-first unified TTS runtime | Codex primary | `content_platform/tts_runtime.py`, TTS render entry points, capability registry, TTS tests and four coordination documents | local_and_staging_verified | commit milestone; then include it in the next signed release candidate without changing current production directly |

@@ -265,6 +265,33 @@ class CliV2Tests(unittest.TestCase):
         official = next(item for item in result["collection_status"] if item["source"] == "kuaishou:official_public_hot_rank")
         self.assertEqual(official["matrix_path"], str(matrix_path))
 
+    def test_hot_works_collect_records_kuaishou_search_auth_requirement(self):
+        output = self.root / "hot-works-kuaishou-purpose"
+        creator_state = self.root / "kuaishou-creator-state.json"
+
+        def resolve_state(_platform, _output, **kwargs):
+            if kwargs.get("purpose") == "creator_backend":
+                return {"status": "ready", "reason": "", "state_file": str(creator_state)}
+            return {"status": "unavailable", "reason": "kuaishou_public_search_cookie_missing", "state_file": ""}
+
+        with (
+            patch("content_platform.cli._load_env_defaults", return_value=""),
+            patch("content_platform.cli.resolve_logged_search_state", side_effect=resolve_state),
+            patch("content_platform.kuaishou_official_signals.collect_kuaishou_creator_signals", return_value=(
+                {"platform": "kuaishou", "status": "backend_loaded", "signals": ["AI技巧"]},
+                {"source": "kuaishou:official_creator", "status": "ok", "count": 1},
+            )),
+            patch("content_platform.kuaishou_official_signals.upsert_official_signal_matrix", return_value=self.root / "matrix.json"),
+            patch("content_platform.cli.collect_logged_short_video_search") as collect_search,
+        ):
+            code, result = self.call("hot-works-collect", "--platform", "kuaishou", "--output-dir", str(output))
+
+        self.assertEqual(code, 0)
+        collect_search.assert_not_called()
+        skipped = next(item for item in result["collection_status"] if item["source"] == "kuaishou:logged_search")
+        self.assertEqual(skipped["status"], "auth_required")
+        self.assertEqual(skipped["reason"], "kuaishou_public_search_cookie_missing")
+
     def test_hot_works_collect_routes_shipinhao_to_existing_collector(self):
         output = self.root / "hot-works-shipinhao"
         row = {"platform": "shipinhao", "title": "AI工作流实战", "url": "https://channels.weixin.qq.com/post/123"}
