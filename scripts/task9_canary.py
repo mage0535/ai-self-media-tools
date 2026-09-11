@@ -963,6 +963,7 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
             ),
         }
         return brief
+    evidence_type = str(hotspot.get("evidence_type") or "verified_platform_evidence")
     related = [row for row in hotspot.get("related_sources") or [] if isinstance(row, dict) and row.get("source_url") and row.get("provenance_hash")]
     attempted = [{
         "source": f"{platform}:task9_verified_evidence",
@@ -1000,7 +1001,7 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
             "platform_internal_verified": hotspot.get("evidence_verified") is True,
             "real_platform_collection_verified": True,
             "current_platform_specific_topic": True,
-            "native_verified": True,
+            "native_verified": hotspot.get("native_verified") is True,
             "official_signals": [hotspot],
             "source_url": hotspot["source_url"],
             "source_hash": hotspot["provenance_hash"],
@@ -1012,10 +1013,10 @@ def _canary_brief(case: dict[str, Any], hotspot: dict[str, Any]) -> dict[str, An
             "platform": platform,
             "title": hotspot["observed_title"],
             "url": hotspot["source_url"],
-            "source": "official_native_canary",
+            "source": evidence_type,
             "source_hash": hotspot["provenance_hash"],
         }],
-        "selection_mode": "official_native_canary",
+        "selection_mode": evidence_type,
         "automated_workflow": True,
         "dry_run": case.get("dry_run") is True,
         "run_contract": build_run_contract(platform),

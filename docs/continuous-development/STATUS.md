@@ -16,7 +16,7 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
 | Sol E Canary topic-evidence modes | Codex primary | server staging evidence and four coordination documents | verified | preserve hotspot/editorial exclusivity; use current evidence to start serial artifact Canaries |
-| Sol E YouTube real artifact Canary | Codex primary | isolated server inputs/artifacts and four coordination documents | preparing | bind a current strict YouTube work plus verified factual sources, then run one horizontal-video Pipeline case without publishing |
+| Sol E YouTube real artifact Canary | Codex primary | Task9 evidence identity, isolated server inputs/artifacts and four coordination documents | identity_fix_local | commit non-native identity preservation; repeat preflight before any horizontal-video generation |
 | Sol C unified capability re-audit | Codex primary | capability registry/DAG evidence and four coordination documents | verified_structure | preserve 66-capability/22-group report; prove real artifact impact through subsequent platform Canaries |
 | Sol B2 Douyin account variants | Codex primary | server staging evidence and four coordination documents | exact_account_auth_required | preserve empty official/public/script evidence; do not assign generic Douyin state to either account without binding proof |
 | Sol B2 WeChat live collector | Codex primary | server staging evidence and four coordination documents | reference_only_no_metrics | retain 20 real article references; do not label them hot-work Top3 without public metrics |

@@ -709,3 +709,4 @@
 - Editorial fallback evidence must include platform, strategy version/source hash, selected topic, at least three bounded recapture attempts, seven-day dedupe proof and selection reason. It has no associated hotspot, no native identity and no hotspot score.
 - The Canary must probe whichever selection mode was used. Missing or tampered evidence blocks before Pipeline creation; lack of a hotspot alone does not justify manufacturing one or preventing a legitimate evergreen artifact test.
 - Hotspot and editorial files are mutually exclusive for one platform/run. Editorial evidence expires when its planned date differs from the current UTC date by more than one day; a stale or ambiguous input fails before model generation.
+- Non-native work or activity evidence retains its exact `evidence_type`, association mode and native flag in the brief and source matrix. Canary code must not relabel `same_lane_hot_work` as an official/native hotspot for convenience.
