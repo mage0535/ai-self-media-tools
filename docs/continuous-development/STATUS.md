@@ -15,7 +15,7 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 proxy fallback evidence preservation | Codex primary | CLI proxy route, CLI tests and four coordination documents | local_complete | commit; Linux rerun Xiaohongshu with inactive CN proxy and verify direct risk evidence is preserved |
+| Sol B2 proxy fallback evidence preservation | Codex primary | CLI proxy route, CLI tests and four coordination documents | linux_partial_followup_local | commit one bounded same-route timeout retry; rerun Xiaohongshu and preserve risk/proxy-unavailable evidence |
 | Sol B2 Xiaohongshu live collector | Codex primary | server staging evidence and four coordination documents | platform_risk_proxy_unavailable | retain valid-state and risk-page evidence; retry through CN only when its endpoint probe passes |
 | Sol B2 Kuaishou state-purpose isolation | Codex primary | auth-state resolution, CLI Kuaishou routing, hot-work tests and four coordination documents | linux_verified_official_only | commit explicit search-auth status; preserve creator signals and keep same-lane Top3 blocked until a public-search state or public work adapter exists |
 | Sol B2 Shipinhao live collector | Codex primary | server staging evidence and four coordination documents | auth_required | preserve login-page evidence; do not reuse WeChat identity; retry only after a fresh platform state exists |

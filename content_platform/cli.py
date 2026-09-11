@@ -51,6 +51,11 @@ def _proxy_endpoint_available(proxy_url: str, *, timeout: float = 0.5) -> bool:
         return False
 
 
+def _retryable_collector_exception(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}: {exc}".casefold()
+    return "timeout" in text or "timed out" in text
+
+
 def resolve_hot_work_platform_scope(requested: list[str] | None) -> dict:
     """Resolve and label the exact platform scope for a hot-work run."""
     from .platform_intelligence_registry import publishing_platforms
@@ -858,10 +863,19 @@ def execute(args):
                 for query in queries:
                     started = datetime.now()
                     try:
-                        rows, status = collect_logged_short_video_search(
-                            platform, query, state_file=state_file,
-                            output_dir=output_dir / "logged_search", route_name="direct",
-                        )
+                        try:
+                            rows, status = collect_logged_short_video_search(
+                                platform, query, state_file=state_file,
+                                output_dir=output_dir / "logged_search", route_name="direct",
+                            )
+                        except Exception as exc:
+                            if not _retryable_collector_exception(exc):
+                                raise
+                            rows, status = collect_logged_short_video_search(
+                                platform, query, state_file=state_file,
+                                output_dir=output_dir / "logged_search", route_name="direct",
+                            )
+                            status["same_route_retry_count"] = 1
                         from .hot_work_intelligence import should_use_regional_proxy
                         proxy_env = "US_PROXY" if platform in {"tiktok", "youtube", "twitter"} else "CN_PROXY"
                         proxy_url = os.environ.get(proxy_env, "")
