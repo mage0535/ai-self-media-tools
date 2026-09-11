@@ -389,6 +389,25 @@ def test_canary_brief_uses_the_same_strict_run_contract_as_production():
     assert brief["run_contract"]["platform"] == "kuaishou"
 
 
+def test_canary_brief_preserves_non_native_same_lane_identity():
+    from scripts.task9_canary import _canary_brief
+
+    case = {"platform": "youtube", "language": "en", "content_form": "horizontal_video", "delivery_policy": "manual_handoff_only", "dry_run": False}
+    evidence = {
+        "platform": "youtube", "observed_title": "AI workflow", "source_url": "https://www.youtube.com/watch?v=abc",
+        "fetched_at": "2026-09-11T00:00:00+00:00", "provenance_hash": "a" * 64,
+        "evidence_type": "same_lane_hot_work", "association_mode": "manual_handoff",
+        "native_verified": False, "evidence_verified": True,
+    }
+
+    brief = _canary_brief(case, evidence)
+
+    assert brief["selection_mode"] == "same_lane_hot_work"
+    assert brief["associated_hotspot"]["native_verified"] is False
+    assert brief["platform_source_matrix"]["native_verified"] is False
+    assert brief["source_catalog"][0]["source"] == "same_lane_hot_work"
+
+
 def test_verified_source_claims_are_hash_bound_and_enter_canary_claim_ledger(tmp_path: Path):
     from scripts.task9_canary import _canary_brief, _hotspot_source_hash, _load_verified_hotspot, build_canary_matrix
 
