@@ -780,10 +780,18 @@ def execute(args):
 
                     official_row = {}
                     official_status = {}
-                    if state_file:
+                    creator_state_file = state_file
+                    if not creator_state_file:
+                        creator_auth = resolve_logged_search_state(
+                            platform,
+                            output_dir / "cookie_states",
+                            purpose="creator_backend",
+                        )
+                        creator_state_file = str(creator_auth.get("state_file") or "")
+                    if creator_state_file:
                         try:
                             official_row, official_status = collect_kuaishou_creator_signals(
-                                state_file, output_dir / "kuaishou_official_creator",
+                                creator_state_file, output_dir / "kuaishou_official_creator",
                             )
                         except Exception as exc:
                             official_status = {
@@ -792,7 +800,7 @@ def execute(args):
                             }
                         statuses.append(official_status)
                     if not official_row and (
-                        not state_file
+                        not creator_state_file
                         or official_status.get("status") in {"login_required_or_captcha", "contract_failed"}
                     ):
                         public_row, public_status = collect_kuaishou_public_hot_rank(
