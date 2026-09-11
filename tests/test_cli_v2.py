@@ -115,6 +115,7 @@ class CliV2Tests(unittest.TestCase):
                 "source_format": "cookie_list",
             }),
             patch("content_platform.cli.collect_logged_short_video_search", side_effect=collect),
+            patch("content_platform.cli._proxy_endpoint_available", return_value=True),
             patch.dict("os.environ", {}, clear=False),
         ):
             os.environ.pop("US_PROXY", None)
@@ -125,6 +126,59 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual([row[2] for row in calls], ["direct", "US_PROXY"])
         self.assertEqual(calls[1][3], "socks5://127.0.0.1:2080")
         self.assertEqual(result["items"], 1)
+
+    def test_hot_works_collect_preserves_direct_failure_when_backup_proxy_is_down(self):
+        output = self.root / "hot-works-proxy-down"
+        with (
+            patch("content_platform.cli._load_env_defaults", side_effect=lambda: os.environ.__setitem__("CN_PROXY", "socks5://127.0.0.1:1080") or "private"),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={
+                "status": "ready", "reason": "", "state_file": str(self.root / "xhs-state.json"),
+                "source_format": "cookie_list",
+            }),
+            patch("content_platform.cli.collect_logged_short_video_search", return_value=([], {
+                "source": "xiaohongshu:logged_search", "status": "platform_error_or_rate_limited", "count": 0, "route": "direct",
+            })) as collect,
+            patch("content_platform.cli._proxy_endpoint_available", return_value=False),
+            patch.dict("os.environ", {}, clear=False),
+        ):
+            os.environ.pop("CN_PROXY", None)
+            code, result = self.call(
+                "hot-works-collect", "--platform", "xiaohongshu", "--query", "xiaohongshu=AI工具",
+                "--output-dir", str(output),
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(collect.call_count, 1)
+        search = next(row for row in result["collection_status"] if row["source"] == "xiaohongshu:logged_search")
+        self.assertEqual(search["status"], "platform_error_or_rate_limited")
+        self.assertEqual(search["fallback_status"], "proxy_unavailable")
+
+    def test_hot_works_collect_preserves_direct_evidence_when_proxy_attempt_raises(self):
+        output = self.root / "hot-works-proxy-error"
+        calls = []
+
+        def collect(_platform, _query, **kwargs):
+            calls.append(kwargs.get("route_name"))
+            if kwargs.get("route_name") == "CN_PROXY":
+                raise RuntimeError("proxy connection failed")
+            return [], {"source": "xiaohongshu:logged_search", "status": "platform_error_or_rate_limited", "count": 0, "route": "direct"}
+
+        with (
+            patch("content_platform.cli._load_env_defaults", side_effect=lambda: os.environ.__setitem__("CN_PROXY", "socks5://127.0.0.1:1080") or "private"),
+            patch("content_platform.cli.resolve_logged_search_state", return_value={"status": "ready", "reason": "", "state_file": str(self.root / "xhs-state.json")}),
+            patch("content_platform.cli.collect_logged_short_video_search", side_effect=collect),
+            patch("content_platform.cli._proxy_endpoint_available", return_value=True),
+            patch.dict("os.environ", {}, clear=False),
+        ):
+            os.environ.pop("CN_PROXY", None)
+            code, result = self.call("hot-works-collect", "--platform", "xiaohongshu", "--query", "xiaohongshu=AI工具", "--output-dir", str(output))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["direct", "CN_PROXY"])
+        search = next(row for row in result["collection_status"] if row["source"] == "xiaohongshu:logged_search")
+        self.assertEqual(search["status"], "platform_error_or_rate_limited")
+        self.assertEqual(search["fallback_status"], "proxy_attempt_failed")
+        self.assertEqual(search["route_attempts"][1]["status"], "failed")
 
     def test_hot_works_collect_uses_verified_cache_after_transient_failure(self):
         output = self.root / "hot-works-cache"
