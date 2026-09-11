@@ -69,6 +69,22 @@ def test_creative_center_response_without_real_items_fails_closed():
     assert "creative_center_api_failed" in result["failures"]
 
 
+def test_current_ranking_keeps_older_creation_time_without_calling_it_recent():
+    payload = _payload()
+    payload["entityInfos"][0]["itemInfo"]["createTime"] = 1780704000
+
+    result = parse_creative_center_top_videos(
+        payload,
+        captured_at=NOW,
+        source_url="https://ads.us.tiktok.com/CreativeOne/Report/CreativeCenterGetTopContentsList",
+        snapshot_sha256="a" * 64,
+    )
+
+    assert result["passed"] is True
+    assert result["matrix_row"]["ranking_window_days"] == 30
+    assert result["matrix_row"]["signal_details"][0]["published_at"].startswith("2026-06-")
+
+
 def test_collector_uses_latest_cutoff_and_never_exposes_cookie_values(tmp_path):
     state = tmp_path / "state.json"
     state.write_text(
