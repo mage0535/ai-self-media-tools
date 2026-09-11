@@ -9,14 +9,14 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1860 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-tiktok-official-reference-20260911.xml`.
+- Latest complete regression on this branch: 1865 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-auth-proxy-recovery-20260911.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 proxy fallback evidence preservation | Codex primary | CLI proxy route, CLI tests and four coordination documents | linux_partial_followup_local | commit one bounded same-route timeout retry; rerun Xiaohongshu and preserve risk/proxy-unavailable evidence |
-| Sol B2 Xiaohongshu live collector | Codex primary | server staging evidence and four coordination documents | platform_risk_proxy_unavailable | retain valid-state and risk-page evidence; retry through CN only when its endpoint probe passes |
+| Sol B2 proxy fallback evidence preservation | Codex primary | server staging evidence and four coordination documents | verified | preserve direct risk evidence and bounded timeout recovery; reuse for remaining platform collectors |
+| Sol B2 Xiaohongshu live collector | Codex primary | server staging evidence and four coordination documents | platform_risk_proxy_unavailable | both default queries preserve direct `300012`; retry through CN only when its endpoint probe passes |
 | Sol B2 Kuaishou state-purpose isolation | Codex primary | auth-state resolution, CLI Kuaishou routing, hot-work tests and four coordination documents | linux_verified_official_only | commit explicit search-auth status; preserve creator signals and keep same-lane Top3 blocked until a public-search state or public work adapter exists |
 | Sol B2 Shipinhao live collector | Codex primary | server staging evidence and four coordination documents | auth_required | preserve login-page evidence; do not reuse WeChat identity; retry only after a fresh platform state exists |
 | Sol B2 TikTok official Creative Center reference | Codex primary | server staging evidence and four coordination documents | verified_official_reference_same_lane_blocked | preserve four-item official preview; repair or add a valid same-lane video adapter without relabeling this reference |
