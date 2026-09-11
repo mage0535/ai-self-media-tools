@@ -61,7 +61,11 @@ def parse_creative_center_top_videos(
         if not (item_id.isdigit() and title and handle and created > 0 and views > 0 and labels):
             continue
         published = datetime.fromtimestamp(created, tz=timezone.utc)
-        if published > captured + timedelta(hours=1) or captured - published > timedelta(days=30):
+        # Creative Center's period is the ranking observation window, not a
+        # publication-date filter. Older videos can legitimately re-enter the
+        # current ranking, so retain their real creation time without calling
+        # them newly published.
+        if published > captured + timedelta(hours=1):
             continue
         details.append({
             "rank": rank,
@@ -101,6 +105,7 @@ def parse_creative_center_top_videos(
         "access_level": "public_preview" if public_preview else "authenticated",
         "content_label_id": TECH_FINANCE_LABEL,
         "content_label": "Technology & Finance",
+        "ranking_window_days": 30,
     }
     return {"passed": not failures, "failures": failures, "matrix_row": row if not failures else {}}
 
