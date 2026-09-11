@@ -158,14 +158,18 @@ class ToolRegistry:
             return {"available": False, "url": api, "kind": "research"}
 
     def _probe_tts(self):
+        from .tts_runtime import probe_hojo
+
         engines = {}
-        for name in ["edge-tts", "kokoro"]:
-            try:
-                __import__(name)
-                engines[name] = True
-            except ImportError:
-                engines[name] = False
-        engines["piper"] = shutil.which("piper") is not None
+        try:
+            __import__("edge_tts")
+            edge_available = True
+        except ImportError:
+            edge_available = False
+        engines["edge-tts"] = {"available": edge_available, "kind": "cloud_tts"}
+        engines["kokoro"] = {"available": False, "kind": "historical_tts", "retired": True}
+        engines["piper"] = {"available": shutil.which("piper") is not None, "kind": "local_tts"}
+        engines["hojo-tts-light-40m"] = {**probe_hojo(), "kind": "local_tts"}
         qwen_key = os.environ.get("QWEN_TTS_API_KEY") or os.environ.get("DASHSCOPE_API_KEY")
         engines["qwen3-tts"] = {
             "available": bool(qwen_key),

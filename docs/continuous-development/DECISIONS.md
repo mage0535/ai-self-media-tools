@@ -663,3 +663,11 @@
 - Two complete recent rows remain usable low-coverage evidence but produce `insufficient_sample_count`. Query expansion that yields no additional verified details does not lower the minimum.
 - The next source is a separately verified Zhihu hot-list/topic-detail route or a later fresh collection snapshot. Cross-platform rows cannot fill the missing third Zhihu work.
 - Repeated detail requests are bounded to avoid treating platform throttling as a reason for infinite retries.
+
+## D96: TTS Selection Is One Quality-Gated Runtime Contract
+
+- The project runtime, not an active Hermes skill or renderer-local branch, selects TTS. `auto` uses Hojo only when its durable quality gate says `approved=true` and `decision=hojo-first` and the isolated interpreter, worker and model are present; otherwise it uses Edge. Business code must never set the approval flag itself.
+- Hojo supports Chinese and English. Chinese Edge voice aliases may map only to Chinese Hojo voices; an absent Chinese male embedding must never be substituted with an English voice. Requested and actual voices remain separate evidence.
+- Every provider writes a same-directory partial artifact, converts it to 44.1kHz stereo, passes a real audio probe, and only then atomically replaces the target. A failed Hojo attempt remains visible before Edge fallback. Existing output survives total failure.
+- VoiceEngine, cinematic film, Kuaishou cards and landscape video use this runtime. Provider-policy changes invalidate stale renderer TTS caches, while valid checkpoint reuse preserves the original provider/model/voice evidence.
+- Kokoro remains an inventory-only historical record. It is not a fallback candidate. The capability registry and ToolRegistry expose Hojo availability and Edge fallback without treating quality approval as proof of a completed video.

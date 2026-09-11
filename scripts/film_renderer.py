@@ -28,6 +28,7 @@ ROOT = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path(__file__).resolve()
 sys.path.insert(0, str(ROOT))
 
 from content_platform.video_artifact import MOTION_EVIDENCE_VERSION, measure_motion_evidence
+from content_platform.tts_runtime import probe_hojo, synthesize_tts_segment
 
 W, H = 1080, 1920
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
@@ -213,9 +214,9 @@ def ensure_visual_treatment_plan(out: Path, bg_paths: list[Path]) -> Path:
 
 def _remove_renderer_outputs(out: Path) -> None:
     """Remove only reproducible renderer outputs when its contract changes."""
-    for dirname in ("html", "webm", "shots", "frames", "sub"):
+    for dirname in ("html", "webm", "shots", "frames", "sub", "tts"):
         shutil.rmtree(out / dirname, ignore_errors=True)
-    for pattern in ("group_*.mp4", "visual_xfade.mp4", "mixed_v2.mp4", "final.mp4", "voice_aligned.wav", "groups.txt"):
+    for pattern in ("group_*.mp4", "visual_xfade.mp4", "mixed_v2.mp4", "final.mp4", "voice_aligned.wav", "groups.txt", "tts_config.json", "tts_records.json", "tts_fingerprint.json"):
         for path in out.glob(pattern):
             path.unlink(missing_ok=True)
 
@@ -229,12 +230,24 @@ def prepare_render_contract(out: Path, contract: dict[str, object]) -> bool:
             previous = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             previous = {"invalid": True}
-    derived_outputs_exist = any((out / name).exists() for name in ("shots", "webm", "frames", "final.mp4", "mixed_v2.mp4"))
+    derived_outputs_exist = any((out / name).exists() for name in ("shots", "webm", "frames", "tts", "final.mp4", "mixed_v2.mp4"))
     changed = previous != contract if previous is not None else derived_outputs_exist
     if changed:
         _remove_renderer_outputs(out)
     state_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
     return changed
+
+
+def load_tts_record_cache(out: Path) -> dict[int, dict[str, object]]:
+    try:
+        payload = json.loads((out / "tts_config.json").read_text(encoding="utf-8"))
+        return {
+            int(row.get("index") or index): dict(row)
+            for index, row in enumerate(payload.get("segments") or [], 1)
+            if isinstance(row, dict)
+        }
+    except (OSError, ValueError, TypeError):
+        return {}
 
 
 def validate_audio_spec(probe: dict[str, object]) -> dict[str, object]:
@@ -1420,6 +1433,8 @@ def main() -> int:
     except ValueError as exc:
         print(f"视觉导演计划无效: {exc}", file=sys.stderr)
         return 2
+    tts_provider = os.environ.get("TTS_PROVIDER", "auto").strip().lower() or "auto"
+    tts_policy = probe_hojo()
     render_contract = {
         "renderer_version": RENDERER_VERSION,
         **render_policy,
@@ -1435,6 +1450,12 @@ def main() -> int:
         "xfade_long": XFADE_DUR_LONG,
         "element_frame_render_min_timeout_seconds": ELEMENT_FRAME_RENDER_MIN_TIMEOUT_SECONDS,
         "motion_evidence_version": MOTION_EVIDENCE_VERSION,
+        "tts_policy": {
+            "requested_provider": tts_provider,
+            "hojo_available": tts_policy.get("available") is True,
+            "hojo_quality_decision": tts_policy.get("quality_decision"),
+            "model": tts_policy.get("model"),
+        },
     }
     if prepare_render_contract(out, render_contract):
         print("渲染契约变化：已废弃旧镜头与最终成片缓存")
@@ -1442,11 +1463,8 @@ def main() -> int:
         (out / sub).mkdir(parents=True, exist_ok=True)
     print(f"渲染质量: {render_policy['quality_profile']} / {render_policy['motion_mode']}")
 
-    # TTS 生产默认 = Edge TTS 逐段独立合成（08-14 用户 8 条规则）。
-    # ⚠️ 不经 voice_engine 的 DeAI 后处理（呼吸音/停顿/变速会引入间隔性杂音——08-14 实测）。
-    # Edge 逐段生成：SSML 控制语速/音调/停顿（rate/pitch），display_text/tts_text 分离 +
-    # pronunciation_dictionary 处理专有名词（TTSTextCompiler），每段真实时长对齐镜头。
-    # Qwen 仅灰度备用（TTS_PROVIDER=qwen），须试听验收不低于 Edge 才可进生产。
+    # Unified TTS runtime owns Hojo-first selection, Edge fallback, atomic output,
+    # pronunciation binding and real audio probing. Qwen remains an explicit opt-in.
     tts_files = []
     tts_dir = out / "tts"
     tts_dir.mkdir(parents=True, exist_ok=True)
@@ -1460,7 +1478,6 @@ def main() -> int:
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
                     voice_env.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-    tts_provider = os.environ.get("TTS_PROVIDER", "edge").strip().lower()
     print(f"TTS provider: {tts_provider}")
 
     full_script = "\n\n".join(script_segments[:8]) if script_segments else ""
@@ -1496,6 +1513,7 @@ def main() -> int:
     except Exception:
         tts_rate = "-5%"
 
+    prior_tts_records = load_tts_record_cache(out)
     tts_records = []
     for i in range(1, 9):
         mp3 = tts_dir / f"tts_{i:02d}.mp3"
@@ -1505,16 +1523,23 @@ def main() -> int:
         display_text = text
         tts_text = text
         applied_rules = []
+        unhandled_latin_tokens = []
         if compiler:
             try:
                 compiled = compiler.compile(text, context="tech", platform=args.platform)
                 tts_text = compiled.tts_text
                 display_text = compiled.display_text
                 applied_rules = list(compiled.applied_rules or [])
+                unhandled_latin_tokens = list(compiled.unhandled_latin_tokens or [])
             except Exception:
                 pass
         existing_audio = mp3.is_file() and mp3.stat().st_size > 10_000
-        provider_used = "edge-tts"
+        prior_record = prior_tts_records.get(i)
+        if existing_audio and not prior_record:
+            mp3.unlink(missing_ok=True)
+            existing_audio = False
+        provider_result = dict(prior_record or {})
+        provider_used = str(provider_result.get("provider") or "")
         if not existing_audio and tts_provider == "qwen":
             # 灰度：Qwen 直接合成（不经 DeAI）
             try:
@@ -1528,17 +1553,29 @@ def main() -> int:
             except Exception as exc:
                 print(f"Qwen 合成失败({i}): {str(exc)[:80]}", file=sys.stderr)
         if not mp3.is_file() or mp3.stat().st_size <= 10_000:
-            synthesize_edge_tts(tts_text, mp3, edge_voice, rate=tts_rate)
-            provider_used = "edge-tts"
+            provider_result = synthesize_tts_segment(
+                tts_text,
+                mp3,
+                language=tts_lang,
+                voice=edge_voice,
+                rate=tts_rate,
+                pitch="+0Hz",
+                requested_provider="auto" if tts_provider == "qwen" else tts_provider,
+            )
+            provider_used = str(provider_result.get("provider") or "")
         if mp3.is_file() and mp3.stat().st_size > 10_000:
             tts_files.append(str(mp3))
             tts_records.append({
                 "provider": provider_used,
-                "voice": edge_voice if provider_used == "edge-tts" else os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6"),
+                "model": provider_result.get("model") or (os.environ.get("QWEN_TTS_MODEL") if provider_used == "qwen" else ""),
+                "voice": provider_result.get("voice") or (edge_voice if provider_used != "qwen" else os.environ.get("QWEN_AUDIO_TTS_VOICE", "longanhuan_v3.6")),
+                "requested_voice": edge_voice,
                 "rate": tts_rate, "pitch": "+0Hz",
+                "fallback_used": provider_result.get("fallback_used", False),
+                "attempts": provider_result.get("attempts") or [],
                 "tts_text": tts_text, "display_text": display_text,
                 "applied_rules": applied_rules,
-                "unhandled_latin_tokens": list(compiled.unhandled_latin_tokens) if compiler else [],
+                "unhandled_latin_tokens": unhandled_latin_tokens,
                 "duration_seconds": _duration(str(mp3)),
             })
     durs = [_duration(p) for p in tts_files]
@@ -1550,18 +1587,12 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    # 逐段兜底（多段模式失败时）
+    # The unified runtime already performs the approved fallback chain. Missing
+    # segments are a hard failure; regenerating raw text here would bypass the
+    # pronunciation compiler and fingerprint contract.
     if len(tts_files) < 8:
-        tts_files = []
-        for i in range(1, 9):
-            mp3 = tts_dir / f"tts_{i:02d}.mp3"
-            text = script_segments[i - 1] if i <= len(script_segments) and script_segments[i - 1] \
-                else str(cards[i - 1].get("tts") or cards[i - 1].get("txt") or "")
-            if mp3.is_file() and mp3.stat().st_size > 10_000:
-                tts_files.append(str(mp3))
-                continue
-            synthesize_edge_tts(text, mp3, "zh-CN-YunxiNeural")
-            tts_files.append(str(mp3))
+        print(f"TTS 片段不完整: expected=8 actual={len(tts_files)}", file=sys.stderr)
+        return 3
     durs = [_duration(p) for p in tts_files]
     print("TTS 时长:", [round(d, 2) for d in durs])
     duration_check = validate_render_durations(durs, args.platform)

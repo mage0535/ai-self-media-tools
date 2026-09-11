@@ -15,7 +15,8 @@ from .video_recipe import load_effect_module_registry
 
 _SAFE_FIELDS = {
     "available", "kind", "daemon", "autocli_ok", "fusion_script_ok",
-    "chrome_ext_ok", "total_skills", "skill_count",
+    "chrome_ext_ok", "total_skills", "skill_count", "model",
+    "quality_decision", "retired",
 }
 
 

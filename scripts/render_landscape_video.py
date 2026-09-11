@@ -8,6 +8,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -20,6 +21,8 @@ if str(ROOT) not in sys.path:
 
 from content_platform.content_recipe import build_tool_invocation_manifest
 from content_platform.tool_selection import build_tool_selection_evidence
+from content_platform.tts_runtime import synthesize_tts_segment
+from content_platform.tts_text_compiler import TTSTextCompiler
 from content_platform.video_recipe import build_visual_recipe
 
 
@@ -106,15 +109,34 @@ def _landscape_visual_copy(beat: str, index: int) -> tuple[str, str]:
 
 
 async def _tts(render_dir: Path, beats: list[str], voice: str) -> None:
-    import edge_tts
-
     tts_dir = render_dir / "tts"
     tts_dir.mkdir(exist_ok=True)
+    compiler = TTSTextCompiler.default()
+    language = "zh" if any("\u4e00" <= char <= "\u9fff" for beat in beats for char in beat) else "en"
+    records = []
     for idx, beat in enumerate(beats, 1):
         out = tts_dir / f"tts_{idx:02d}.mp3"
-        if out.exists() and out.stat().st_size > 10_000:
-            continue
-        await edge_tts.Communicate(beat, voice).save(str(out))
+        compiled = compiler.compile(beat, context="tech")
+        result = await asyncio.to_thread(
+            synthesize_tts_segment,
+            compiled.tts_text,
+            out,
+            language=language,
+            voice=voice,
+            requested_provider=os.environ.get("TTS_PROVIDER", "auto"),
+        )
+        records.append({
+            "index": idx,
+            "display_text": compiled.display_text,
+            "tts_text": compiled.tts_text,
+            "applied_rules": list(compiled.applied_rules),
+            "unhandled_latin_tokens": list(compiled.unhandled_latin_tokens),
+            **result,
+        })
+    (render_dir / "tts_config.json").write_text(
+        json.dumps({"version": "tts_config_v2", "segments": records}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 async def _screenshots(render_dir: Path, count: int) -> None:
@@ -322,7 +344,7 @@ def render(args: argparse.Namespace) -> dict:
         "mix_bgm_with_gate": "scripts/mix_bgm_with_gate.py",
         "check_bgm_uniqueness": "scripts/check_bgm_uniqueness.py",
         "visual_recipe": "content_platform.video_recipe",
-        "edge_tts": "edge_tts",
+        "voice_engine": "content_platform.tts_runtime:synthesize_tts_segment",
         "playwright_screenshots": "playwright.chromium",
         "ffmpeg_encode": "tool:ffmpeg",
     }
