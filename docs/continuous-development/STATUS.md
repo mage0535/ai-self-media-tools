@@ -15,6 +15,8 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
+| Sol B2 Douyin account variants | Codex primary | server staging evidence and four coordination documents | exact_account_auth_required | preserve empty official/public/script evidence; do not assign generic Douyin state to either account without binding proof |
+| Sol B2 WeChat live collector | Codex primary | server staging evidence and four coordination documents | reference_only_no_metrics | retain 20 real article references; do not label them hot-work Top3 without public metrics |
 | Sol B2 proxy fallback evidence preservation | Codex primary | server staging evidence and four coordination documents | verified | preserve direct risk evidence and bounded timeout recovery; reuse for remaining platform collectors |
 | Sol B2 Xiaohongshu live collector | Codex primary | server staging evidence and four coordination documents | platform_risk_proxy_unavailable | both default queries preserve direct `300012`; retry through CN only when its endpoint probe passes |
 | Sol B2 Kuaishou state-purpose isolation | Codex primary | auth-state resolution, CLI Kuaishou routing, hot-work tests and four coordination documents | linux_verified_official_only | commit explicit search-auth status; preserve creator signals and keep same-lane Top3 blocked until a public-search state or public work adapter exists |

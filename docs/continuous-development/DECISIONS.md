@@ -696,3 +696,9 @@
 - Every collector starts direct. A platform/network classification may authorize a regional fallback, but the configured proxy host/port must pass a bounded connection probe before browser launch.
 - An unavailable fallback records `fallback_status=proxy_unavailable` on the direct result. A proxy attempt exception records a separate failed route attempt while preserving the original direct status, response classification and artifacts.
 - Proxy failure must not turn a valid platform risk page into a generic collector failure, and status objects must never contain self-references that make JSON reporting fail.
+
+## D101: Account Variants Require Exact Credential Binding
+
+- Base-platform credentials cannot be assigned to account variants by filename proximity. `douyin_ai` and `douyin_pet` require their configured account-specific states because cross-account collection would contaminate lane history and later publication identity.
+- A generic Douyin state may be tested by a read-only generic adapter, but zero-result or unsigned API responses do not become variant evidence. Exact account state absence is `auth_required`, not a reason to merge the two lanes.
+- Public official boards remain platform-level evidence and are filtered separately for AI and pet lanes. A current board with no matching terms correctly yields `no_lane_results` for both accounts.
