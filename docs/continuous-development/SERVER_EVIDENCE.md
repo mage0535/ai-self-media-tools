@@ -883,3 +883,10 @@ Observed read-only on 2026-08-31.
 - TDD makes Kuaishou search require its public-search session while allowing the same file for `purpose=creator_backend`. CLI resolves these independently, retaining creator inspiration and using the public official-rank fallback when no search state exists. Related hot-work/CLI tests: 89 passed.
 - Linux verification at `5c6ff74` reported `kuaishou:auth_state unavailable` with `kuaishou_public_search_cookie_missing`, retained five official creator signals, and kept the same-lane contract at `no_samples`.
 - A follow-up red/green test adds an explicit `kuaishou:logged_search status=auth_required` row so the intentionally skipped browser path is not mistaken for an omitted collector. Production, shared data, publishers and timers remain unchanged.
+
+## 2026-09-11 Xiaohongshu Direct Risk And Proxy Availability
+
+- Two isolated CLI runs initially reported `ERR_PROXY_CONNECTION_FAILED`. A direct HTTP and Playwright probe then returned HTTP 200; repeating the exact collector exposed the real platform response: `安全限制 / IP存在风险 / 300012`.
+- The fallback CN tunnel is disabled/inactive. Its journal shows historical connection refusals/timeouts and a later clean stop; it was not restarted during code validation. The CLI previously attempted its configured loopback endpoint without checking availability, overwriting the useful direct diagnosis with a proxy exception.
+- TDD adds a bounded proxy endpoint probe, preserves the direct status when the fallback is unavailable, and separately records exceptions from a live fallback attempt. Related CLI/hot-work tests: 92 passed; project/privacy and license audits pass.
+- A clean-commit Linux CLI rerun remains required. Xiaohongshu publishing remains manual handoff only, and no publishing path was opened.

@@ -690,3 +690,9 @@
 - A structurally valid cookie file is not automatically valid for every surface on the same platform. Probes distinguish creator backend, public search, publisher and metrics purposes before opening an expensive browser path.
 - Kuaishou creator cookies (`cp.api_st/cp.api_ph`) may read creator inspiration but cannot authenticate `www.kuaishou.com` work search without `kuaishou.server.web_st`. Creator evidence remains available through its own state resolution while public search is skipped or uses a separately valid state.
 - Shipinhao/WeChat identities remain separate. A Video Channels login page or expired state is `auth_required`; public WeChat article data cannot satisfy Video Channels work or official-activity evidence.
+
+## D100: Proxy Fallback Must Be Reachable And Cannot Erase Direct Evidence
+
+- Every collector starts direct. A platform/network classification may authorize a regional fallback, but the configured proxy host/port must pass a bounded connection probe before browser launch.
+- An unavailable fallback records `fallback_status=proxy_unavailable` on the direct result. A proxy attempt exception records a separate failed route attempt while preserving the original direct status, response classification and artifacts.
+- Proxy failure must not turn a valid platform risk page into a generic collector failure, and status objects must never contain self-references that make JSON reporting fail.

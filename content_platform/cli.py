@@ -2,7 +2,9 @@ import argparse
 import json
 import os
 import re
+import socket
 import sys
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,6 +38,17 @@ from .hot_work_intelligence import (
     save_collection,
     write_playwright_state,
 )
+
+
+def _proxy_endpoint_available(proxy_url: str, *, timeout: float = 0.5) -> bool:
+    try:
+        parsed = urllib.parse.urlparse(str(proxy_url or ""))
+        if not parsed.hostname or not parsed.port:
+            return False
+        with socket.create_connection((parsed.hostname, parsed.port), timeout=timeout):
+            return True
+    except (OSError, ValueError):
+        return False
 
 
 def resolve_hot_work_platform_scope(requested: list[str] | None) -> dict:
@@ -852,14 +865,27 @@ def execute(args):
                         from .hot_work_intelligence import should_use_regional_proxy
                         proxy_env = "US_PROXY" if platform in {"tiktok", "youtube", "twitter"} else "CN_PROXY"
                         proxy_url = os.environ.get(proxy_env, "")
-                        if not rows and proxy_url and should_use_regional_proxy(status):
+                        if not rows and proxy_url and should_use_regional_proxy(status) and _proxy_endpoint_available(proxy_url):
                             direct_status = dict(status)
-                            rows, status = collect_logged_short_video_search(
-                                platform, query, state_file=state_file, output_dir=output_dir / "logged_search",
-                                proxy_url=proxy_url, route_name=proxy_env,
-                            )
-                            status["route_attempts"] = [direct_status, dict(status)]
-                            status["fallback_reason"] = direct_status.get("status")
+                            try:
+                                rows, status = collect_logged_short_video_search(
+                                    platform, query, state_file=state_file, output_dir=output_dir / "logged_search",
+                                    proxy_url=proxy_url, route_name=proxy_env,
+                                )
+                            except Exception as exc:
+                                status = {
+                                    **direct_status,
+                                    "fallback_status": "proxy_attempt_failed",
+                                    "route_attempts": [
+                                    dict(direct_status),
+                                    {"route": proxy_env, "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:180]}"},
+                                    ],
+                                }
+                            else:
+                                status["route_attempts"] = [direct_status, dict(status)]
+                                status["fallback_reason"] = direct_status.get("status")
+                        elif not rows and proxy_url and should_use_regional_proxy(status):
+                            status["fallback_status"] = "proxy_unavailable"
                         cache_root = data_dir / "intel" / "hot_work_search_cache"
                         if rows:
                             status["cache_write"] = save_logged_search_cache(cache_root, platform, query, rows, status)
