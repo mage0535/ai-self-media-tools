@@ -760,10 +760,12 @@ def execute(args):
             from .platform_intelligence_registry import publishing_platforms
             for platform in sorted(live_platforms.intersection(set(publishing_platforms()))):
                 state_file = state_files.get(platform) or state_files.get("douyin" if platform.startswith("douyin") else platform)
+                search_auth_reason = ""
                 public_without_state = {"bilibili", "juejin", "youtube"}
                 if not state_file and platform not in public_without_state:
                     auth_state = resolve_logged_search_state(platform, output_dir / "cookie_states")
                     state_file = str(auth_state.get("state_file") or "")
+                    search_auth_reason = str(auth_state.get("reason") or "")
                     statuses.append({
                         "source": f"{platform}:auth_state",
                         "status": str(auth_state.get("status") or "unavailable"),
@@ -830,6 +832,12 @@ def execute(args):
                         official_status["matrix_path"] = str(upsert_official_signal_matrix(data_dir, official_row))
                     statuses.append(official_status)
                 if not state_file and platform not in public_without_state:
+                    statuses.append({
+                        "source": f"{platform}:logged_search",
+                        "status": "auth_required",
+                        "count": 0,
+                        "reason": search_auth_reason or "platform_search_state_missing",
+                    })
                     continue
                 queries = query_map.get(platform) or query_map.get("douyin" if platform.startswith("douyin") else platform) or query_map.get("all")
                 if not queries:
