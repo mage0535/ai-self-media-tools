@@ -9,14 +9,14 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1854 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/hojo-tts-integration-final-v2-20260911.xml`.
+- Latest complete regression on this branch: 1855 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-x-acceptance-20260911.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
 | Hojo-first unified TTS runtime | Codex primary | `content_platform/tts_runtime.py`, TTS render entry points, capability registry, TTS tests and four coordination documents | local_and_staging_verified | commit milestone; then include it in the next signed release candidate without changing current production directly |
-| Sol B2 X/Twitter strict card evidence | Codex primary | `content_platform/hot_work_intelligence.py`, `tests/test_hot_work_intelligence.py` and four coordination documents | second_live_retry_lane_fix | commit query-to-account-lane binding; repeat isolated live X collection and strict pack report |
+| Sol B2 X/Twitter strict card evidence | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated 7/7 strict evidence; proceed to the next unverified platform collector |
 | Sol B2 Zhihu Linux collector result | Codex primary | server staging evidence and four coordination documents | insufficient_sample_count | retain two complete rows; add official topic/hot-list detail route or collect a later fresh snapshot |
 | Sol B2 Zhihu public-detail evidence | Codex primary | Zhihu detail enrichment, metric scoring, tests and four coordination documents | committed `4b15db9` | Linux default path produced 2 complete rows; Top3 remains insufficient |
 | Sol B2 YouTube Linux collector acceptance | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated evidence; proceed to Zhihu collector contract |
