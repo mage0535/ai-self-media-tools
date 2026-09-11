@@ -119,4 +119,5 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - The first YouTube Linux retry exposed live metadata ordering and login-navigation false positives. The parser and classifier now match saved real DOM while retaining age/view/CAPTCHA gates; full regression is 1838 tests plus 37 subtests.
 - The second retry exposed undersized YouTube anchor contexts. Extraction now uses full `ytd-video-renderer` containers without changing other platforms; full regression is 1839 tests plus 37 subtests.
 - The third retry found a selector collision: YouTube title anchors matched the generic video-class selector themselves. YouTube now uses only real renderer custom elements; a fourth Linux run remains pending.
+- YouTube override-free Linux acceptance now passes on `dc8d366`: 24 direct monthly rows and 10/10 strict pack samples. This is collector evidence only; generation and handoff Canaries remain separate.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.

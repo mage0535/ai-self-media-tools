@@ -646,3 +646,8 @@
 - YouTube title anchors themselves carry a CSS class containing `ytd-video-renderer`. A combined selector with `[class*="video"]` therefore makes `closest()` return the anchor instead of the outer custom element.
 - YouTube uses only `ytd-video-renderer, ytd-rich-item-renderer` for card ancestry. Generic class selectors remain available to other platforms.
 - This is a DOM extraction correction, not a relaxation of title, age, channel, view or Top3 validation.
+
+## D93: YouTube Acceptance Uses The Override-Free Monthly Path
+
+- YouTube acceptance requires the registry default queries, verified this-month filter, platform-specific full-card selector, deduplication and strict pack report to succeed together.
+- Acceptance is 24 direct discovery rows and 10/10 retained strict samples. It does not prove video generation, upload, Studio access or publication metrics.
