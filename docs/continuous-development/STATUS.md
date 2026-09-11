@@ -9,13 +9,13 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1855 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-x-acceptance-20260911.xml`.
+- Latest complete regression on this branch: 1860 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-b2-tiktok-official-reference-20260911.xml`.
 
 ## Active work
 
 | Work item | Owner | Files reserved | State | Next verification |
 |---|---|---|---|---|
-| Sol B2 TikTok official Creative Center reference | Codex primary | `content_platform/tiktok_official_signals.py`, CLI integration, TikTok tests and four coordination documents | first_linux_retry_ranking_window_fix | commit ranking-window semantics; repeat isolated Linux CLI and matrix readback |
+| Sol B2 TikTok official Creative Center reference | Codex primary | server staging evidence and four coordination documents | verified_official_reference_same_lane_blocked | preserve four-item official preview; repair or add a valid same-lane video adapter without relabeling this reference |
 | Hojo-first unified TTS runtime | Codex primary | `content_platform/tts_runtime.py`, TTS render entry points, capability registry, TTS tests and four coordination documents | local_and_staging_verified | commit milestone; then include it in the next signed release candidate without changing current production directly |
 | Sol B2 X/Twitter strict card evidence | Codex primary | server staging evidence and four coordination documents | verified | preserve isolated 7/7 strict evidence; proceed to the next unverified platform collector |
 | Sol B2 Zhihu Linux collector result | Codex primary | server staging evidence and four coordination documents | insufficient_sample_count | retain two complete rows; add official topic/hot-list detail route or collect a later fresh snapshot |
