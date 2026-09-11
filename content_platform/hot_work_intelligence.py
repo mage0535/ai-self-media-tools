@@ -73,6 +73,7 @@ def resolve_logged_search_state(
     output_dir: str | Path,
     *,
     cookie_dir: str = "",
+    purpose: str = "logged_search",
 ) -> dict[str, Any]:
     """Resolve a valid private cookie file and materialize Playwright state."""
     from .auth_registry import cookie_file_status, resolve_cookie_file
@@ -81,6 +82,12 @@ def resolve_logged_search_state(
     status = cookie_file_status(source, platform)
     if not status.get("valid"):
         return {"status": "unavailable", "reason": "valid_private_cookie_state_not_found", "state_file": ""}
+    if (
+        str(platform or "").casefold() == "kuaishou"
+        and purpose == "logged_search"
+        and "kuaishou.server.web_st" not in set(status.get("required_names_present") or [])
+    ):
+        return {"status": "unavailable", "reason": "kuaishou_public_search_cookie_missing", "state_file": ""}
     if status.get("format") == "playwright_storage_state":
         state = source
     else:

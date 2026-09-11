@@ -684,3 +684,9 @@
 - The official adapter uses the current CreativeOne overview cutoff and US Top Videos endpoint, persists the raw response hash, and records item identity, anonymized author, publication time, views, organic views, engagement rate and six-second VTR when present.
 - A four-item response with a larger upstream total is explicitly `public_preview`; valid TikTok cookies do not become Creative Center authentication proof. Empty, invalid-login, stale, unlabeled or non-metric rows fail closed.
 - CLI collection runs the official adapter independently of logged TikTok search and writes it to the official signal matrix with `evidence_type=official_reference` and `native_verified=false`. It may inform second-layer scoring only when title/lane rules permit; it cannot satisfy the first-layer Top3 contract.
+
+## D99: Authentication State Is Purpose-Specific
+
+- A structurally valid cookie file is not automatically valid for every surface on the same platform. Probes distinguish creator backend, public search, publisher and metrics purposes before opening an expensive browser path.
+- Kuaishou creator cookies (`cp.api_st/cp.api_ph`) may read creator inspiration but cannot authenticate `www.kuaishou.com` work search without `kuaishou.server.web_st`. Creator evidence remains available through its own state resolution while public search is skipped or uses a separately valid state.
+- Shipinhao/WeChat identities remain separate. A Video Channels login page or expired state is `auth_required`; public WeChat article data cannot satisfy Video Channels work or official-activity evidence.

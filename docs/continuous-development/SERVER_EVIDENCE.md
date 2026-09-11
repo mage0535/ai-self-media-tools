@@ -874,5 +874,13 @@ Observed read-only on 2026-08-31.
 - The second clean-commit Linux CLI run returned `tiktok:official_creative_center status=ok`, four public-preview rows and a matrix row that reloads as `status=ready`, `evidence_type=official_reference`, `native_verified=false`, `validity=valid`.
 - Both default logged-search queries still returned TikTok's own server-error page after direct-first and US fallback. The same-lane strict report remains `no_samples`; the official reference did not change that result. This is the required identity separation, not full TikTok collector acceptance.
 - Final local regression returned 1860 passed plus 37 subtests in 406.65 seconds; JUnit `artifacts/test-reports/sol-b2-tiktok-official-reference-20260911.xml` has zero failures. Project/privacy and license audits remain required after the final documentation commit.
+
+## 2026-09-11 Shipinhao And Kuaishou Auth-Purpose Evidence
+
+- Isolated Video Channels collection resolved a structurally valid state, but both default queries landed on the official login surface with `登录视频号助手` and `加载失败`. It returned no content URL or metric and remains `auth_required`; no WeChat article or generic product copy was admitted.
+- Isolated Kuaishou collection successfully read five creator-backend inspiration signals, including three AI-related terms, and wrote valid `official_keyword` evidence. The same state failed both public-work searches because it is a creator-center state, not a `www.kuaishou.com` state.
+- Safe cookie-name inspection found `cp.api_st/cp.api_ph`, `did` and `userId` but no `kuaishou.server.web_st`. The old generic resolver treated any required-name overlap as sufficient and repeatedly opened a doomed browser search.
+- TDD makes Kuaishou search require its public-search session while allowing the same file for `purpose=creator_backend`. CLI resolves these independently, retaining creator inspiration and using the public official-rank fallback when no search state exists. Related hot-work/CLI tests: 89 passed.
+- Linux verification of the purpose-aware flow remains required. Production, shared data, publishers and timers remain unchanged.
 - Strict rows bind status ID, canonical URL, anonymized author, publication/fetch/metric times, named metrics and raw card SHA. Legacy rows without the new fields remain discovery-only and cannot satisfy the strict pack contract.
 - Local regression is included in the 1854-test zero-failure report. A fresh isolated Linux X collection and Top3 strict report remain required; production is unchanged.

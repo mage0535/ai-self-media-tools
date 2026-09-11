@@ -21,6 +21,7 @@ from content_platform.hot_work_intelligence import (
     parse_tiktok_search_text,
     parse_twitter_search_cards,
     parse_xiaohongshu_search_text,
+    resolve_logged_search_state,
     should_use_regional_proxy,
     logged_search_artifact_stem,
     logged_search_url,
@@ -779,6 +780,24 @@ def test_tiktok_server_problem_is_retryable_then_proxy_eligible():
     assert should_retry_logged_page(text) is True
     assert status == "platform_error_or_rate_limited"
     assert should_use_regional_proxy({"status": status}) is True
+
+
+def test_kuaishou_creator_cookie_is_not_misclassified_as_public_search_state(tmp_path, monkeypatch):
+    cookie = tmp_path / "kuaishou.json"
+    cookie.write_text(json.dumps({"cookies": [
+        {"name": "did", "value": "private", "domain": ".kuaishou.com", "path": "/"},
+        {"name": "userId", "value": "private", "domain": ".kuaishou.com", "path": "/"},
+        {"name": "kuaishou.web.cp.api_st", "value": "private", "domain": ".kuaishou.com", "path": "/"},
+    ]}), encoding="utf-8")
+    monkeypatch.setattr("content_platform.auth_registry.resolve_cookie_file", lambda *_args, **_kwargs: cookie)
+
+    state = resolve_logged_search_state("kuaishou", tmp_path / "state")
+
+    assert state["status"] == "unavailable"
+    assert state["reason"] == "kuaishou_public_search_cookie_missing"
+
+    creator_state = resolve_logged_search_state("kuaishou", tmp_path / "creator-state", purpose="creator_backend")
+    assert creator_state["status"] == "ready"
 
 
 def test_kuaishou_result_two_is_classified_as_expired_auth_not_empty_layout():
