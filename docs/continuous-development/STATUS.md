@@ -603,3 +603,11 @@ These describe the audited production release, not the current development code.
 - AI interface, human review and digital workspace concepts now require observable screen/person/review/computer anchors. Claude workflow queries request human actions rather than robots. Cover selection rejects a best candidate whose content-match score is not positive, and workflow cover prompts forbid generic robots and unrelated sci-fi collages.
 - Related regression: 157 passed. Full regression: 1888 passed plus 37 subtests in 400.16 seconds. Project/privacy audit 594/0; license audit 66/0.
 - Next: commit/push, Linux focused verification, then a fresh full-length YouTube Canary and manual cover/contact-sheet review. Production and timers remain unchanged.
+
+## 2026-09-12 YouTube v2 Fact-Gate Conflict
+
+- Linux staging at `e0fcb19` passed 44 focused tests and both audits. YouTube v2 used the real active model and completed generation in about two minutes, but stopped before media.
+- `validate_factual_claims` correctly accepted the source title `Use Claude Better Than 99% of People` because the exact numeric claim was covered by the strict same-platform claim ledger. `run_safety_gate` then independently saw `99%`, ignored claim coverage and blocked it as unsourced.
+- TDD now subtracts only exact covered compliance findings: a numeric detail must appear in a `covered=true` claim text, while attribution requires a covered attribution finding. A second unrelated percentage remains blocked.
+- Focused tests: 2 passed. Related Pipeline/video/semantic/Task9 regression: 219 passed. Full regression: 1889 passed plus 37 subtests in 364.24 seconds. Privacy 594/0; license 66/0.
+- Next: commit/push, Linux verification and fresh YouTube v3. Production and timers remain unchanged.

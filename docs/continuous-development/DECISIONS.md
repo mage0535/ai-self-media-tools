@@ -760,3 +760,10 @@
 - Display copy follows the content language. Cross-language defaults are forbidden unless the content blueprint explicitly requests bilingual output.
 - Abstract AI/technology token overlap is insufficient visual proof. Interface concepts require a visible screen/interface; human-review concepts require a person, review action and screen; digital workspaces require an observable computer.
 - A cover background must have a positive content-match score in addition to OCR/platform safety. Generic robots, portraits and sci-fi collages are explicitly excluded from workflow cover generation unless the topic itself requires them.
+
+## D110: Compliance Cannot Re-Block An Exactly Covered Claim
+
+- Factual validation is authoritative for claim coverage. A later compliance pass may add safety findings, but it cannot relabel the same exact covered numeric or attribution claim as unsourced.
+- Numeric exclusion is detail-specific: the compliance detail must occur in a fact-gate finding whose `covered` field is true. One covered number does not authorize other numbers.
+- Attribution exclusion requires a covered attribution finding. A non-empty ledger or an unrelated source is insufficient.
+- Remaining unsupported compliance findings keep the existing fail-closed behavior before media generation.

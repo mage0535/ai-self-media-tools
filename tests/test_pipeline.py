@@ -1380,6 +1380,25 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(blocked["state"], "blocked")
         generate_media.assert_not_called()
 
+    def test_compliance_claim_findings_exclude_only_exact_fact_gate_coverage(self):
+        compliance = {
+            "level": "review",
+            "findings": [
+                {"code": "numeric_claim_without_source", "detail": "99%"},
+                {"code": "numeric_claim_without_source", "detail": "80%"},
+            ],
+        }
+        claim_gate = {
+            "passed": True,
+            "findings": [
+                {"type": "numeric", "text": "Use Claude Better Than 99% of People", "covered": True},
+            ],
+        }
+
+        remaining = self.pipeline._uncovered_compliance_claim_findings(compliance, claim_gate)
+
+        self.assertEqual([item["detail"] for item in remaining], ["80%"])
+
     def test_prepopulated_markdown_keeps_fenced_code_structure(self):
         job = self.pipeline.create("Code guide", ["juejin"], {"audience": "builders"})
         body = "# Guide\n\n```python\ndef run():\n    return True\n```\n\n" + ("正文内容。" * 100)
