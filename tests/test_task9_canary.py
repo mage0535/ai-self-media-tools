@@ -785,6 +785,23 @@ def test_youtube_probe_prefers_platform_sized_cover(tmp_path: Path):
     assert self_path == preferred
 
 
+def test_asr_terminal_coverage_rejects_video_that_loses_final_cta():
+    from scripts.task9_canary import _terminal_narration_coverage
+
+    expected = (
+        "Better results come from context, clear tasks, and deliberate refinement, not a magic prompt. "
+        "Save this workflow, test it on a real task, and comment with the Claude feature you want next."
+    )
+    complete_asr = (
+        "Better results come from context, clear tasks, and deliberate refinement, not a magic prompt. "
+        "Save this workflow, test it on a real task, and comment with the Clawd feature you want next."
+    )
+    truncated_asr = "Better results come from context, clear tasks, and deliberate refinement, not a magic project."
+
+    assert _terminal_narration_coverage(expected, complete_asr)["passed"] is True
+    assert _terminal_narration_coverage(expected, truncated_asr)["passed"] is False
+
+
 def test_safe_manual_publisher_builds_handoff_from_real_artifacts(tmp_path: Path):
     from scripts.task9_canary import _PolicySafePublisher
 

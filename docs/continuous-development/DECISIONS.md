@@ -745,3 +745,10 @@
 - When resuming pending asset, render or gate stages, deterministic runtime overlays each selected node's current registry `verification_level` before execution.
 - The runtime cannot add an unselected capability through this rule. It may only require stronger current evidence for a previously selected capability.
 - This prevents old jobs from bypassing newly deployed artifact/effect gates while retaining deterministic routing history.
+
+## D108: Duration Limits Follow Content Form, And ASR Must Cover The Ending
+
+- Platform identity alone cannot select a short-video duration cap. YouTube horizontal and long-form videos are not Shorts and must not be trimmed to 59.8 seconds.
+- YouTube duration normalization applies only to explicit short/vertical forms. Existing short-platform limits remain unchanged unless their platform rule contract changes.
+- Full-transcript ASR similarity is insufficient because a missing ending can still score above threshold. Video acceptance separately compares the expected final narration sentence with the ASR tail.
+- A previously generated file that lost its final sentence remains rejected even if all earlier artifact hashes and motion probes pass. Evidence cannot repair damaged media.

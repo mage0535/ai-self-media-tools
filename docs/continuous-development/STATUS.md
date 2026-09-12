@@ -571,3 +571,12 @@ These describe the audited production release, not the current development code.
 - Resume must preserve which capability was selected, but current code owns the acceptance policy. It now overlays the current registry `verification_level` before running pending asset/render/gate stages.
 - The RED regression starts with an old Shotcraft selection and real final-video evidence; it now reaches `effect_verified`. Related tests: 42 passed. Full regression: 1880 passed plus 37 subtests in 373.55 seconds.
 - Next: commit/push, advance isolated Linux staging and repeat evidence-only revalidation on the retained YouTube final MP4. Production and timers remain unchanged.
+
+## 2026-09-12 YouTube Horizontal Completeness Failure
+
+- Linux retained-artifact revalidation promoted Shotcraft to `effect_verified` and the original independent probe became green. Manual contact-sheet and cover review still rejected the package: generic blue technology cover, mechanical chapter labels and at least one weakly related robot visual.
+- Full ASR exposed a harder failure: narration ended near `not a magic prompt` and omitted the entire CTA. The renderer produced about 68.8 seconds, but `_normalize_short_video_duration` applied YouTube's 59.8-second Shorts cap to a horizontal-video case.
+- TDD passes content form into duration normalization. YouTube horizontal/long video is exempt; only explicit YouTube short/vertical forms use the cap. Kuaishou short normalization remains covered and unchanged.
+- Task9 now separately verifies terminal narration coverage. Whole-script ASR similarity cannot hide a missing final sentence; minor recognition drift such as `Claude/Clawd` remains tolerated.
+- Focused tests: 3 passed. Related video/Task9 regression: 117 passed. Full regression: 1882 passed plus 37 subtests in 379.30 seconds. The retained MP4 is a negative sample and must not be delivered.
+- Next: commit/push, Linux focused verification, then improve cover/scene semantic and reader-facing chapter quality before a fresh YouTube Canary. Production and timers remain unchanged.

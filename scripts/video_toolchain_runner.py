@@ -491,7 +491,11 @@ def main(argv: list[str] | None = None) -> int:
         _normalize_alternate_renderer_outputs(renderer, output_dir, plan, script_body)
     generated = sorted(output_dir.glob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
     if proc.returncode == 0 and generated:
-        duration_fix = _normalize_short_video_duration(generated[0], _primary_platform(plan))
+        duration_fix = _normalize_short_video_duration(
+            generated[0],
+            _primary_platform(plan),
+            str(plan.get("content_form") or ""),
+        )
         manifest["duration_normalization"] = duration_fix
         if not duration_fix.get("passed"):
             manifest.update({"ok": False, "output": str(generated[0]), "status": "duration_normalization_failed", "error": duration_fix.get("error") or "short video duration normalization failed"})
@@ -607,11 +611,14 @@ def main(argv: list[str] | None = None) -> int:
     return proc.returncode or 3
 
 
-def _normalize_short_video_duration(path: Path, platform: str) -> dict:
+def _normalize_short_video_duration(path: Path, platform: str, content_form: str = "") -> dict:
     """Trim over-limit vertical shorts before measured artifact gates run."""
     normalized = str(platform or "").casefold()
-    if normalized not in {"douyin", "douyin_ai", "douyin_pet", "kuaishou", "shipinhao", "tiktok", "youtube"}:
+    if normalized not in {"douyin", "douyin_ai", "douyin_pet", "kuaishou", "shipinhao", "tiktok", "youtube", "youtube_shorts"}:
         return {"passed": True, "applied": False, "reason": "platform has no short duration limit"}
+    form = str(content_form or "").casefold()
+    if normalized == "youtube" and form not in {"short_video", "vertical_video", "youtube_short", "youtube_shorts"}:
+        return {"passed": True, "applied": False, "reason": "content form has no short duration limit"}
     duration = _video_duration(path)
     if duration <= 60.0:
         return {"passed": True, "applied": False, "duration_seconds": round(duration, 3)}

@@ -958,3 +958,12 @@ Observed read-only on 2026-08-31.
 - The remaining difference was the serialized old selection record: it carried the pre-change `output_verified` policy, and resumed DAG execution trusted that value instead of the current registry.
 - Local TDD now overlays only current verification levels while preserving selected IDs and stages. Full regression returned 1880 passed plus 37 subtests in 373.55 seconds; JUnit is `artifacts/test-reports/sol-youtube-checkpoint-policy-20260912.xml`.
 - Final retained-artifact revalidation remains pending. No production release, shared state, timer or external publisher was changed.
+
+## 2026-09-12 YouTube Manual Review And Truncation Root Cause
+
+- Linux staging at `27ca9ee` passed 10 focused tests. Retained evidence revalidation promoted Shotcraft to `effect_verified`; all original independent Task9 probes reported green and archive execution no longer raised an exception.
+- Manual review rejected the result despite machine green: the cover is a generic blue technology composition rather than a film-poster or brand-ad concept, chapter headings are mechanical, and one robot background is only weakly related to the Claude workflow.
+- The stored script ends with a complete save/test/comment CTA. Faster-whisper ASR ends before that CTA. The renderer's mixed duration was about 68.8 seconds, while the delivered root MP4 was 59.8 seconds.
+- Code tracing found `_normalize_short_video_duration` called with only platform identity and included all YouTube output. The horizontal case was therefore trimmed as if it were a Short.
+- Local TDD adds content-form-aware duration policy and a separate terminal-ASR coverage probe. The observed truncated transcript is the negative case; a transcript with minor product-name recognition drift and a complete CTA is positive.
+- Full local regression returned 1882 passed plus 37 subtests in 379.30 seconds. JUnit is `artifacts/test-reports/sol-youtube-horizontal-completeness-20260912.xml`. Production, shared state, timers and external publishers remain unchanged.
