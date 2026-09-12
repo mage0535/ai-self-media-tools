@@ -11,7 +11,7 @@ from pathlib import Path
 from .compliance import ComplianceChecker
 from .claim_ledger import append_verified_sources, build_grounded_technical_article, compile_verified_claim_ledger, restore_verified_domains, sanitize_unsupported_claims, validate_claims
 from .content_depth import replace_unplanned_video_continuations, validate_content_depth_plan
-from .content_hygiene import audit_topic, complete_known_terminal_cta, normalize_generated_markdown, validate_generated_text
+from .content_hygiene import audit_topic, complete_known_terminal_cta, deduplicate_terminal_cta_actions, normalize_generated_markdown, validate_generated_text
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
 from .capability_runtime import execution_evidence_required, execute_delivery_postcheck_capability, execute_generation_capabilities, execute_post_generation_capabilities
 from .execution_trace import build_pre_delivery_trace, complete_delivery_trace
@@ -340,6 +340,8 @@ class Pipeline:
                     "stages": workflow_invocations,
                 }
                 draft["body"] = normalize_generated_markdown(draft.get("body") or "")
+                if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
+                    draft["body"] = deduplicate_terminal_cta_actions(draft.get("body") or "")
                 generated_hygiene = validate_generated_text(str(draft.get("title") or "") + "\n" + str(draft.get("body") or ""))
                 draft.setdefault("draft_meta", {})["generated_text_hygiene"] = generated_hygiene
                 rule_consumption = draft["draft_meta"].get("skill_rule_consumption")
@@ -609,6 +611,7 @@ class Pipeline:
                     draft["draft_meta"]["factual_budget_repair"] = {"attempted": True, "passed": True, "before": post_claim_budget, "after": repaired_budget}
                 if {str(item).casefold() for item in job.get("platforms", [])}.intersection(SHORT_VIDEO_PLATFORMS):
                     draft["body"] = replace_unplanned_video_continuations(draft.get("body") or "")
+                    draft["body"] = deduplicate_terminal_cta_actions(draft.get("body") or "")
                     draft["body"] = complete_known_terminal_cta(draft.get("body") or "")
                     text = str(draft.get("title") or "") + "\n" + str(draft.get("body") or "")
                 final_text_hygiene = validate_generated_text(
