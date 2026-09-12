@@ -345,6 +345,8 @@ class DraftGenerator:
         if code in {"401", "403"}:
             if re.search(r"(?:not available in your country|regionerror|country or region)", text, flags=re.IGNORECASE):
                 return "provider_region_failed"
+            if code == "403" and re.search(r"html\s+error\s+page", text, flags=re.IGNORECASE):
+                return "provider_edge_forbidden"
             return "provider_auth_failed"
         if code == "429":
             return "provider_429"
@@ -979,7 +981,7 @@ class DraftGenerator:
             return self._hermes_attempt(topic, brief, context, retry=False, language_instruction=language_instruction, factual_boundary=factual_boundary, body_requirement=body_requirement, style_limit=style_limit)
         except ProviderAuthError as exc:
             proxy_url = str(os.environ.get("US_PROXY") or "").strip()
-            if str(exc) != "provider_region_failed" or not proxy_url:
+            if str(exc) not in {"provider_region_failed", "provider_edge_forbidden"} or not proxy_url:
                 raise
             return self._hermes_attempt(
                 topic, brief, context, retry=False, language_instruction=language_instruction,

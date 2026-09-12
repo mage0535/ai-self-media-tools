@@ -117,6 +117,39 @@ def test_region_error_retries_once_with_configured_us_proxy_without_model_overri
     assert "proxy.internal" not in json.dumps(attempts)
 
 
+def test_html_edge_403_retries_once_with_configured_us_proxy(monkeypatch, tmp_path):
+    processes = [
+        FakeProcess([(0, "HTTP 403 — HTML error page (title not found)")]),
+        FakeProcess([(0, '{"title":"T","body":"' + 'safe body ' * 140 + '"}')]),
+    ]
+    calls = []
+
+    def popen(command, **kwargs):
+        calls.append((command, kwargs.get("env")))
+        return processes.pop(0)
+
+    monkeypatch.setattr("content_platform.generator.subprocess.Popen", popen)
+    monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")
+    generator = DraftGenerator({
+        "provider": "hermes-cli",
+        "checkpoint_dir": str(tmp_path),
+        "generation_attempts_path": str(tmp_path / "generation_attempts.json"),
+        "clock": lambda: 0,
+        "sleep": lambda _: None,
+    })
+    generator._normalize = lambda draft, context, provider, topic, brief: draft
+
+    result = generator._hermes("topic", {"platform": "youtube"}, {"language": "en", "platform_rules": ""})
+
+    assert result["title"] == "T"
+    assert len(calls) == 2
+    assert calls[0][1] is None
+    assert calls[1][1]["HTTPS_PROXY"] == "socks5h://proxy.internal:2080"
+    attempts = json.loads((tmp_path / "generation_attempts.json").read_text(encoding="utf-8"))
+    assert attempts[0]["error_class"] == "provider_edge_forbidden"
+    assert "proxy.internal" not in json.dumps(attempts)
+
+
 def test_compact_retry_timeout_uses_one_proxy_route_with_same_active_model(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setenv("US_PROXY", "socks5h://proxy.internal:2080")

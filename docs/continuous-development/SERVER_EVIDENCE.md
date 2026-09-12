@@ -926,3 +926,11 @@ Observed read-only on 2026-08-31.
 - Local TDD added a conservative exact-CTA completion helper and Pipeline integration before final hygiene. An unrelated incomplete terminal sentence remains a negative control and is still rejected.
 - Verification: focused content/Pipeline regression 21 passed; related Pipeline/content-depth regression 88 passed; full regression 1874 passed plus 37 subtests. The JUnit report is `artifacts/test-reports/sol-youtube-cta-repair-20260912.xml`.
 - Project/privacy audit is 593 files with zero issues; license audit is 66 capabilities with zero issues. Production remains on the prior signed release and all automatic timers remain disabled pending a fresh isolated YouTube run and the remaining serial Canary matrix.
+
+## 2026-09-12 Hermes Direct And Proxy Inference Comparison
+
+- Clean Linux staging advanced to `1f7806f`; 21 focused tests passed, project/privacy audit scanned 592 files with zero issues and license audit checked 66 capabilities with zero issues.
+- A new isolated YouTube case loaded the real private runtime config but redirected state and delivery to its own root. It failed before Pipeline completion with one generation attempt classified `provider_auth_failed`; artifact count was zero.
+- Hermes status showed the OpenAI Codex OAuth identity logged in and the gateway healthy. A minimal standalone direct inference returned an HTML 403 with exit code zero. The same prompt, identity and model selection returned `OK` when only that process used the configured US proxy.
+- Local TDD records the observed response as `provider_edge_forbidden`, retries it once through US fallback and preserves generic API-key rejection as a one-attempt failure. Three focused route tests and 127 related tests passed.
+- Full local regression returned 1875 passed plus 37 subtests in 369.73 seconds. JUnit is `artifacts/test-reports/sol-youtube-edge-recovery-20260912.xml`. No production release, shared database, timer, gateway configuration or publisher was changed.
