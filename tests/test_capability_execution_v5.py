@@ -1,6 +1,6 @@
 import hashlib
 
-from content_platform.capability_runtime import execution_evidence_required, execute_generation_capabilities, validate_generation_execution
+from content_platform.capability_runtime import execution_evidence_required, execute_generation_capabilities, execute_post_generation_capabilities, validate_generation_execution
 from content_platform.execution_dag import execute_capability_dag
 
 
@@ -108,3 +108,49 @@ def test_generation_runtime_receives_compiled_growth_strategy():
     )
     growth = next(row for row in result["executed"] if row["capability_id"] == "growth_strategy_latest")
     assert growth["status"] == "executed"
+
+
+def test_resumed_capability_uses_current_stricter_verification_policy(tmp_path):
+    final = tmp_path / "final.mp4"
+    final.write_bytes(b"final video")
+    digest = hashlib.sha256(final.read_bytes()).hexdigest()
+    segments = [
+        {"scene_id": f"s{index:02d}", "move_id": move, "artifact_verified": True}
+        for index, move in enumerate(("push_in", "split_screen", "detail_reveal"), 1)
+    ]
+    scene_evidence = {
+        "passed": True,
+        "artifact_sha256": digest,
+        "effect_evidence": {"passed": True, "artifact_sha256": digest, "probe": "scene_probe"},
+        "scenes": segments,
+    }
+    prior = {
+        "selected": [{
+            "capability_id": "shotcraft_moves",
+            "stage": "render",
+            "required_or_optional": "required",
+            "verification_level": "output_verified",
+        }],
+        "planned": [],
+        "executed": [],
+        "output_verified": [],
+        "artifact_verified": [],
+        "effect_verified": [],
+        "completed_stages": ["generation"],
+        "profile": {"content_format": "long_video"},
+    }
+    result = execute_post_generation_capabilities(
+        prior,
+        {"draft_meta": {"scene_execution_evidence": scene_evidence}},
+        {"content_blueprint": {"topic": "AI workflow"}, "platform": "youtube"},
+        artifacts=[],
+        render_manifest={
+            "status": "rendered",
+            "output": str(final),
+            "shotcraft_motion_plan": {"available": True, "shots": segments},
+            "segment_motion_evidence": {"segments": segments},
+        },
+        quality_gate={},
+    )
+
+    assert "shotcraft_moves" in {row["capability_id"] for row in result["effect_verified"]}

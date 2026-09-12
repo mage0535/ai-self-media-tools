@@ -564,3 +564,10 @@ These describe the audited production release, not the current development code.
 - TDD now distinguishes legacy `platform/date/render` from a direct package root, keeps discovery within the selected package and records copied sources relative to that package. Absolute machine paths do not enter the result.
 - Archive tests: 2 passed. Related archive/video-toolchain/Task9/effect/registry regression: 152 passed. Full regression: 1879 passed plus 37 subtests in 358.62 seconds.
 - Next: commit/push, advance clean Linux staging, verify Shotcraft against the retained final MP4, rerun archive on the isolated package and regenerate the independent artifact probe. Production and timers remain unchanged.
+
+## 2026-09-12 Checkpoint Verification Policy Upgrade
+
+- The first retained-artifact revalidation still reported Shotcraft as `output_verified`. The current registry required `effect_verified`, but the pre-change job's serialized `selected` record retained the old level and resume trusted it.
+- Resume must preserve which capability was selected, but current code owns the acceptance policy. It now overlays the current registry `verification_level` before running pending asset/render/gate stages.
+- The RED regression starts with an old Shotcraft selection and real final-video evidence; it now reaches `effect_verified`. Related tests: 42 passed. Full regression: 1880 passed plus 37 subtests in 373.55 seconds.
+- Next: commit/push, advance isolated Linux staging and repeat evidence-only revalidation on the retained YouTube final MP4. Production and timers remain unchanged.

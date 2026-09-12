@@ -133,8 +133,15 @@ def execute_post_generation_capabilities(
     """Resume selected asset/render/gate nodes using real produced evidence."""
     registry = load_registry()
     by_id = {item["id"]: item for item in registry["capabilities"]}
+    resumed_candidates = []
+    for selected in prior.get("selected") or prior.get("planned") or []:
+        item = dict(selected)
+        current = by_id.get(str(item.get("capability_id") or ""), {})
+        if current.get("verification_level"):
+            item["verification_level"] = current["verification_level"]
+        resumed_candidates.append(item)
     plan = {
-        "candidates": [dict(item) for item in prior.get("selected") or prior.get("planned") or []],
+        "candidates": resumed_candidates,
         "consulted": list(prior.get("consulted") or []),
         "selection_failures": list(prior.get("selection_failures") or []),
     }
