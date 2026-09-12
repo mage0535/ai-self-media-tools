@@ -557,3 +557,10 @@ These describe the audited production release, not the current development code.
 - Acceptance still failed because required `shotcraft_moves` was only `output_verified`. TDD now requires the capability itself to bind final MP4 SHA, a named effect probe and exact scene-to-move equality between rendered segments and measured final-video evidence.
 - Shotcraft RED covered registry level, missing artifact binding and mismatched move mapping. Focused tests are 3 passed; related capability/effect/Task9 regression is 100 passed; full regression is 1877 passed plus 37 subtests in 365.38 seconds.
 - A separate `archive_warning` remains open because the legacy archive helper assumes every output uses `platform/date/render`. Do not call the YouTube Canary fully accepted until Shotcraft re-probe and archive-layout repair both pass.
+
+## 2026-09-12 External Package Archive Repair
+
+- `archive_delivery_package_direct` treated every argument as a `render/` directory and moved arbitrary Task9 package roots up one level. Source labels also called `relative_to` against the code repository, which fails for correctly external production data.
+- TDD now distinguishes legacy `platform/date/render` from a direct package root, keeps discovery within the selected package and records copied sources relative to that package. Absolute machine paths do not enter the result.
+- Archive tests: 2 passed. Related archive/video-toolchain/Task9/effect/registry regression: 152 passed. Full regression: 1879 passed plus 37 subtests in 358.62 seconds.
+- Next: commit/push, advance clean Linux staging, verify Shotcraft against the retained final MP4, rerun archive on the isolated package and regenerate the independent artifact probe. Production and timers remain unchanged.

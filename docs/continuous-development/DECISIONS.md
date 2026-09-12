@@ -731,3 +731,10 @@
 - Rendered segment evidence and final-video scene evidence must contain the same non-empty scene-to-move mapping with at least three scenes. Any missing, changed or unmeasured move fails the capability.
 - The capability verification level is `effect_verified`, not `output_verified`. A parent renderer's effect success cannot silently promote a child Shotcraft capability.
 - Task9 continues to reject any required artifact-relevant capability below `artifact_verified`; the repair improves evidence rather than weakening that acceptance rule.
+
+## D106: Delivery Archives Are Data-Root Relative
+
+- Delivery artifacts are expected to live outside immutable code releases. Archive logic must never require an artifact path to be relative to the repository root.
+- The direct archive entrypoint accepts both the legacy `platform/date/render` directory and a direct package root containing an optional `render/` child. It cannot silently move an arbitrary package to its parent.
+- Discovery and copying remain bounded to the selected package and its known child directories. Human-readable copy records use package-relative paths or a filename fallback, never absolute private paths.
+- Archive warnings remain acceptance failures until the package is revalidated; final media success does not erase packaging failure.
