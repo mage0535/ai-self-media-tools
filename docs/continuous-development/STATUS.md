@@ -533,3 +533,11 @@ These describe the audited production release, not the current development code.
 - v21 completed four unique images. Scores were 0.8/0.88/0.88/0.82; final providers were one `cover_renderer` plus three `knowledge_card_renderer` outputs. Manual review passed title completeness, Chinese labels, semantic roles, watermark absence and SHA uniqueness.
 - Final regression: 1764 passed plus 37 subtests. Project/privacy audit: 586/0. License audit: 65/0. Private `manual-review.json` records `publisher_called=false` and explicitly excludes live draft or 12-platform proof.
 - Next: fast-forward staging to the final evidence-isolation commit, then continue the serial platform Canary matrix. Production and timers remain unchanged.
+
+## 2026-09-12 YouTube Terminal CTA Recovery
+
+- The first isolated YouTube artifact run used a strict same-platform monthly work record and reached generation. It stopped before media because the final standalone CTA was `Save this` without terminal punctuation; `generated_text_hygiene` correctly reported `truncated_terminal_sentence`.
+- The repair is deliberately narrow: only exact known standalone CTA lines receive terminal punctuation. Arbitrary incomplete prose is left unchanged and remains blocked by the existing hygiene gate.
+- TDD evidence: the missing helper failed first; content-hygiene and Pipeline integration tests then passed. Related regression is 88 passed. Full regression is 1874 passed plus 37 subtests in 357.14 seconds.
+- Project/privacy audit scanned 593 files with zero issues; license audit checked 66 capabilities with zero issues; `git diff --check` passed.
+- Current owner: Codex. Files: `content_platform/content_hygiene.py`, `content_platform/pipeline.py`, the two focused test files and the four coordination documents. Next: commit/push, advance isolated Linux staging, then run a fresh YouTube artifact Canary from a new data root. Production release and timers remain unchanged.

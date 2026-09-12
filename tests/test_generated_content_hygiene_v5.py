@@ -1,4 +1,4 @@
-from content_platform.content_hygiene import normalize_generated_markdown, validate_generated_text
+from content_platform.content_hygiene import complete_known_terminal_cta, normalize_generated_markdown, validate_generated_text
 
 
 def test_generated_text_rejects_scraped_page_script():
@@ -116,6 +116,16 @@ def test_truncated_chinese_and_english_terminal_sentences_are_rejected():
 
     assert "truncated_terminal_sentence" in chinese["reasons"]
     assert "truncated_terminal_sentence" in english["reasons"]
+
+
+def test_known_terminal_cta_is_completed_without_masking_arbitrary_truncation():
+    repaired = complete_known_terminal_cta("Check the result.\n\nSave this")
+    untouched = complete_known_terminal_cta("Check the result.\n\nThis explanation still needs")
+
+    assert repaired.endswith("Save this.")
+    assert validate_generated_text(repaired)["passed"] is True
+    assert untouched.endswith("still needs")
+    assert validate_generated_text(untouched)["passed"] is False
 
 
 def test_repeated_paragraph_and_duplicated_conclusion_are_rejected():
