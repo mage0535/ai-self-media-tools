@@ -89,6 +89,31 @@ def test_landscape_renderer_consumes_compiled_card_copy(tmp_path):
     assert "The core question" not in html
 
 
+def test_landscape_renderer_consumes_card_bound_background_outside_sequence_dir(tmp_path):
+    background_dir = tmp_path / "backgrounds"
+    background_dir.mkdir()
+    selected = tmp_path / "asset_reselection" / "round_1" / "selected.jpg"
+    selected.parent.mkdir(parents=True)
+    Image.new("RGB", (1280, 720), (21, 43, 65)).save(selected)
+    render_dir = tmp_path / "render"
+    cards = [{
+        "t": "Use the verified asset",
+        "txt": "The renderer follows the scene contract",
+        "visual_asset": {"background_image": str(selected)},
+    }]
+
+    _write_slides(
+        render_dir,
+        ["Use the background selected and verified for this scene."],
+        background_dir,
+        {"bg": "rgba(0,0,0,.7)", "accent": "#ff3355", "label": "YouTube Explainer"},
+        cards=cards,
+    )
+
+    html = (render_dir / "slides" / "slide_01_bg.html").read_text(encoding="utf-8")
+    assert "data:image/jpeg;base64," in html
+
+
 def test_film_renderer_rejects_runaway_tts_durations_before_rendering():
     assert validate_render_durations([4.0] * 8)["passed"] is True
 

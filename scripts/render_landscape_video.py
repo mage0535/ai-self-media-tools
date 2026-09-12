@@ -74,10 +74,19 @@ def _write_slides(render_dir: Path, beats: list[str], bg_dir: Path, theme: dict,
     slide_dir = render_dir / "slides"
     slide_dir.mkdir(parents=True, exist_ok=True)
     for idx, beat in enumerate(beats, 1):
-        bg = next((candidate for candidate in [bg_dir / f"bg_{idx:02d}.jpg", bg_dir / f"bg_{idx}.jpg", bg_dir / f"bg_{idx:02d}.png"] if candidate.is_file()), None)
+        compiled = cards[idx - 1] if cards and idx <= len(cards) and isinstance(cards[idx - 1], dict) else {}
+        visual_asset = compiled.get("visual_asset") if isinstance(compiled.get("visual_asset"), dict) else {}
+        bound_background = Path(str(
+            visual_asset.get("materialized_background")
+            or visual_asset.get("background_image")
+            or visual_asset.get("source_image")
+            or ""
+        ))
+        candidates = [bound_background] if bound_background.is_file() else []
+        candidates.extend([bg_dir / f"bg_{idx:02d}.jpg", bg_dir / f"bg_{idx}.jpg", bg_dir / f"bg_{idx:02d}.png"])
+        bg = next((candidate for candidate in candidates if candidate.is_file()), None)
         if not bg:
             raise RuntimeError(f"missing landscape background for beat {idx}: {bg_dir}")
-        compiled = cards[idx - 1] if cards and idx <= len(cards) and isinstance(cards[idx - 1], dict) else {}
         fallback_title, fallback_points = _landscape_visual_copy(beat, idx)
         title = html.escape(str(compiled.get("t") or fallback_title))
         visual_points = html.escape(str(compiled.get("txt") or compiled.get("sub") or fallback_points))
