@@ -943,3 +943,10 @@ Observed read-only on 2026-08-31.
 - The final scene evidence already recorded eight distinct measured moves bound to the final MP4 SHA. The capability adapter did not consume that evidence and the registry requested only output verification.
 - Local TDD changes `shotcraft_moves` to `effect_verified`, requires exact rendered/measured move mapping and binds the final MP4 SHA plus named probe. Full regression is 1877 passed plus 37 subtests; JUnit is `artifacts/test-reports/sol-youtube-shotcraft-effect-20260912.xml`.
 - An archive warning remains separately unresolved because the legacy helper assumes a fixed `platform/date/render` hierarchy. Production, shared state, timers and external publishers remain unchanged.
+
+## 2026-09-12 External Delivery Package Archive Contract
+
+- The YouTube renderer called the archive helper with its direct isolated job package. The helper assumed that argument was `render/`, derived the wrong parent package and failed while formatting a source outside the code repository.
+- Local RED tests reproduced both the arbitrary package-root error and the same repository-relative failure in a conventional `local_ops_platform/date/render` layout located outside source control.
+- The implementation now detects both layouts, copies only within the selected package boundary and emits package-relative labels. Two focused and 152 related tests passed.
+- Full local regression returned 1879 passed plus 37 subtests in 358.62 seconds. JUnit is `artifacts/test-reports/sol-youtube-archive-layout-20260912.xml`; Linux retained-artifact verification is still required before accepting the Canary.

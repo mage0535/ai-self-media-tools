@@ -87,6 +87,13 @@ def find_first(base: Path, names: list[str], max_depth: int = 1, date_hint: str 
     return None
 
 
+def _source_label(source: Path, package_root: Path) -> str:
+    try:
+        return source.resolve().relative_to(package_root.resolve()).as_posix()
+    except ValueError:
+        return source.name
+
+
 def archive_platform(platform: str, date_str: str, platform_root: Path, dry_run: bool = False) -> dict:
     pkg_dir = platform_root / date_str
     render_dir = pkg_dir / "render"
@@ -122,7 +129,7 @@ def archive_platform(platform: str, date_str: str, platform_root: Path, dry_run:
             if date_str in src_str or src_str.endswith(target_name):
                 if not dry_run:
                     shutil.copy2(source, target)
-                copied.append(f"{target_name} <- {source.relative_to(ROOT)}")
+                copied.append(f"{target_name} <- {_source_label(source, pkg_dir)}")
             else:
                 missing.append(f"{target_name} (源跨日期: {source.name})")
         else:
@@ -147,7 +154,7 @@ def archive_platform(platform: str, date_str: str, platform_root: Path, dry_run:
             if date_str in src_str or src_str.endswith(target_name):
                 if not dry_run:
                     shutil.copy2(source, target)
-                copied.append(f"{target_name} <- {source.relative_to(ROOT)}")
+                copied.append(f"{target_name} <- {_source_label(source, pkg_dir)}")
             else:
                 missing.append(f"{target_name} (源跨日期: {source.name})")
         else:
@@ -189,7 +196,7 @@ def archive_delivery_package_direct(output_dir: Path) -> dict:
     归档目标是其父目录（交付包根）。
     """
     output_dir = Path(output_dir).resolve()
-    pkg_dir = output_dir.parent
+    pkg_dir = output_dir.parent if output_dir.name == "render" else output_dir
     platform_root = pkg_dir.parent
     platform = platform_root.name.replace("local_ops_", "") if platform_root.name.startswith("local_ops_") else platform_root.name
     date_str = pkg_dir.name
