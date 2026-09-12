@@ -40,6 +40,7 @@ def test_registry_has_complete_group_coverage_and_valid_candidate_references():
     assert set(registry["inventory_dispositions"]) == inventory
     assert all(registry["inventory_dispositions"][item]["reason"] for item in inventory)
     assert registry["verification_levels"]["video_toolchain_runner"] == "effect_verified"
+    assert registry["verification_levels"]["shotcraft_moves"] == "effect_verified"
 
 
 def test_inventory_only_capabilities_are_not_reported_as_consulted_or_executed():

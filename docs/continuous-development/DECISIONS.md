@@ -724,3 +724,10 @@
 - After a direct attempt, this exact class may retry once through the configured US fallback, using the same active provider/model selection. Proxy values are never persisted in generation evidence.
 - Region-specific 403 keeps the existing bounded proxy recovery. Generic 401/403 credential rejection remains `provider_auth_failed` and must not retry through a regional proxy.
 - A CLI exit code of zero does not override response-body error classification; successful content is still required before generation can proceed.
+
+## D105: Shotcraft Requires Final-Video Effect Evidence
+
+- A Shotcraft plan or renderer invocation is not artifact proof. Required video runs promote `shotcraft_moves` only when the final MP4 exists, its SHA-256 matches scene execution evidence and a named effect probe passes.
+- Rendered segment evidence and final-video scene evidence must contain the same non-empty scene-to-move mapping with at least three scenes. Any missing, changed or unmeasured move fails the capability.
+- The capability verification level is `effect_verified`, not `output_verified`. A parent renderer's effect success cannot silently promote a child Shotcraft capability.
+- Task9 continues to reject any required artifact-relevant capability below `artifact_verified`; the repair improves evidence rather than weakening that acceptance rule.
