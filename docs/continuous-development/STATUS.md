@@ -627,3 +627,10 @@ These describe the audited production release, not the current development code.
 - Root cause was a second duration source in `scene_manifest.py`: it assigned every YouTube manifest a 60-second maximum despite the earlier normalizer correctly exempting horizontal video.
 - TDD now derives the scene duration limit from platform and `content_form`. YouTube horizontal/long output has no Shorts cap; explicit vertical/short forms retain 60 seconds. Related tests: 10 passed. Full: 1891 passed plus 37 subtests in 373.26 seconds.
 - Next: commit/push, Linux focused verification and retained v4b checkpoint revalidation. Production and timers remain unchanged.
+
+## 2026-09-12 Linux v4b Duration Revalidation
+
+- Clean staging advanced to `74f356a`; horizontal and short-form duration tests passed 2/2.
+- The historical v4b manifest correctly remains immutable with its old 60-second policy. Rebuilding from the original cards, visual recipe and `article_explainer_video` plan produced `max_seconds=null`, and the unchanged 66.68-second rendered file passed duration validation.
+- This proves the policy repair only. v4b remains a failed run with no handoff; a fresh full Pipeline run and manual cover/contact-sheet/ASR review are still required.
+- Production and timers remain unchanged. Next owner should begin with the four coordination documents, then run a fresh YouTube Canary from a new root.
