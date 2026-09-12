@@ -64,7 +64,7 @@ def build_cover_direction(
     )
     negative_subjects = (
         "; no generic humanoid robot, no generic portrait, no unrelated sci-fi collage"
-        if "workflow playbook" in visual_cue
+        if "workflow" in visual_cue
         else ""
     )
     if not mascot_only and visual_cue not in focal_subjects:

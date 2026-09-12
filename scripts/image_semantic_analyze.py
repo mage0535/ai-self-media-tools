@@ -34,6 +34,9 @@ _REQUIRED_CONCEPT_ANCHORS = {
     "multiple software tool tabs and unfinished task list": {"tab", "unfinished"},
     "goal input output checklist card": {"goal", "input", "output"},
     "four panel task boundary checklist": {"goal", "input", "accept", "blocker"},
+    "artificial intelligence technology interface": {"dashboard"},
+    "human reviewing ai assistant output": {"person", "reviewing", "dashboard"},
+    "modern digital workspace": {"computer"},
 }
 
 
@@ -53,6 +56,7 @@ _SYNONYM_GROUPS = (
     ("directory", "directories", "file tree", "folder tree", "files", "folders", "documents", "document structure", "resource folders", "skill.md", "yaml frontmatter", "markdown instructions", "scripts", "references", "assets", "目录", "文件结构", "资源结构"),
     ("loading", "load", "loaded", "on demand", "selective loading", "progressive loading", "resource loading", "按需加载", "渐进式加载"),
     ("person", "people", "human", "人物", "人", "用户"),
+    ("reviewing", "review", "reviews", "inspect", "inspects", "inspection", "checking", "核对", "检查", "复核"),
     ("text", "words", "typography", "文字", "文本"),
     ("agent", "software agent", "ai agent", "robot", "assistant", "机器人", "智能体"),
     ("search", "information retrieval", "retrieval", "magnifying glass", "searching", "检索", "搜索"),

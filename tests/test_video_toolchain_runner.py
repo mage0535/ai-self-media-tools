@@ -252,6 +252,37 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertTrue(all(" · " not in str(card.get("t") or "") for card in cards))
         self.assertTrue(all(card["t"] != card["txt"] for card in cards))
 
+    def test_english_cards_use_complete_content_phrases_without_chinese_defaults(self):
+        from scripts.video_toolchain_runner import build_cards
+
+        script = "\n\n".join([
+            "Still using Claude like a search box?",
+            "The trap is asking for polished output before defining the goal.",
+            "Start with context and explain the audience and constraints.",
+            "Ask Claude to analyze and compare the available choices.",
+            "Keep the useful conversation and refine the missing constraint.",
+            "Use project files when the task depends on real evidence.",
+            "Inspect the result before accepting a confident answer.",
+            "Save this workflow and test it on one real task.",
+        ])
+        plan = {
+            "template_family": "chaptered_explainer",
+            "selected_pipeline": "article_explainer_video",
+            "video_route": {"scene_presentations": [
+                "hero_conflict", "split_screen", "side_a", "side_b",
+                "difference_grid", "evidence_zoom", "winner_reveal", "cta",
+            ]},
+        }
+
+        cards = build_cards(script, "Use Claude Better", plan)
+
+        reader_copy = " ".join(
+            str(card.get(key) or "") for card in cards for key in ("t", "txt", "sub", "hook_prefix")
+        )
+        self.assertIsNone(re.search(r"[\u3400-\u9fff]", reader_copy))
+        self.assertTrue(all(" · " not in str(card.get("t") or "") for card in cards))
+        self.assertTrue(cards[1]["t"].casefold().startswith("the trap"))
+
     def test_chinese_tool_reduction_beats_compile_to_complete_visual_phrases(self):
         from scripts.video_toolchain_runner import _visual_label
 
@@ -309,6 +340,24 @@ class VideoToolchainRunnerTests(unittest.TestCase):
 
         self.assertEqual(selected, str(screens))
         self.assertGreater(evidence["score"], 0)
+
+    def test_cover_background_rejects_zero_score_generic_technology_image(self):
+        from scripts.video_toolchain_runner import _select_cover_background
+
+        with tempfile.TemporaryDirectory() as tmp:
+            generic = Path(tmp) / "generic.jpg"
+            generic.write_bytes(b"generic")
+            with patch("scripts.video_toolchain_runner.subprocess.run", return_value=Mock(stdout="", returncode=0)):
+                selected, evidence = _select_cover_background([
+                    {
+                        "background_image": str(generic),
+                        "purpose": "robotic hand and abstract blue network technology",
+                    }
+                ], "youtube", context="Use Claude Better with a verified workflow")
+
+        self.assertEqual(selected, str(generic))
+        self.assertFalse(evidence["passed"])
+        self.assertEqual(evidence["reason"], "cover_background_content_match_insufficient")
 
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]

@@ -1439,14 +1439,24 @@ class MediaBridge:
         segments = []
         english = sum(ch.isascii() and ch.isalpha() for ch in raw) > sum("\u4e00" <= ch <= "\u9fff" for ch in raw) * 2
         if english:
-            words = re.sub(r"\s+", " ", raw).strip().split()
-            count = min(cls.VIDEO_SCRIPT_MAX_SEGMENTS, max(1, len(words)))
-            base, extra = divmod(len(words), count)
-            cursor = 0
-            for index in range(count):
-                size = base + (1 if index < extra else 0)
-                segments.append(" ".join(words[cursor : cursor + size]))
-                cursor += size
+            normalized_english = re.sub(r"\s+", " ", raw).strip()
+            sentences = [item.strip() for item in re.findall(r"[^.!?]+[.!?]+|[^.!?]+$", normalized_english) if item.strip()]
+            if len(sentences) >= cls.VIDEO_SCRIPT_MAX_SEGMENTS:
+                base, extra = divmod(len(sentences), cls.VIDEO_SCRIPT_MAX_SEGMENTS)
+                cursor = 0
+                for index in range(cls.VIDEO_SCRIPT_MAX_SEGMENTS):
+                    size = base + (1 if index < extra else 0)
+                    segments.append(" ".join(sentences[cursor : cursor + size]))
+                    cursor += size
+            else:
+                words = normalized_english.split()
+                count = min(cls.VIDEO_SCRIPT_MAX_SEGMENTS, max(1, len(words)))
+                base, extra = divmod(len(words), count)
+                cursor = 0
+                for index in range(count):
+                    size = base + (1 if index < extra else 0)
+                    segments.append(" ".join(words[cursor : cursor + size]))
+                    cursor += size
         for chunk in chunks:
             if english:
                 break

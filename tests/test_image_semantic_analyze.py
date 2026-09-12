@@ -237,6 +237,35 @@ def test_task_boundary_visuals_require_their_observable_anchors():
     assert boxes_matches == ["four-panel task boundary checklist"]
 
 
+def test_ai_workflow_interface_and_human_review_require_visible_anchors():
+    interface_score, interface_matches = analyzer.score_semantics(
+        ["artificial intelligence technology interface"],
+        "A futuristic robotic hand glows in front of abstract blue network lines.",
+        ["robot", "technology", "network"],
+    )
+    review_score, review_matches = analyzer.score_semantics(
+        ["human reviewing AI assistant output"],
+        "A humanoid robot waves in front of a science-fiction display.",
+        ["robot", "human-like", "technology"],
+    )
+    workspace_score, workspace_matches = analyzer.score_semantics(
+        ["modern digital workspace"],
+        "An empty modern office has a desk, plants, and a city window.",
+        ["office", "desk", "plants"],
+    )
+    positive_score, positive_matches = analyzer.score_semantics(
+        ["human reviewing AI assistant output"],
+        "A person inspects an AI assistant response on a laptop screen.",
+        ["person", "reviewing", "AI assistant", "laptop"],
+    )
+
+    assert interface_score < analyzer.DEFAULT_THRESHOLD and interface_matches == []
+    assert review_score < analyzer.DEFAULT_THRESHOLD and review_matches == []
+    assert workspace_score < analyzer.DEFAULT_THRESHOLD and workspace_matches == []
+    assert positive_score >= analyzer.DEFAULT_THRESHOLD
+    assert positive_matches == ["human reviewing AI assistant output"]
+
+
 def test_bookshelf_documents_and_robot_assistant_ground_memory_archive():
     score, matched = analyzer.score_semantics(
         ["organized memory archive"],

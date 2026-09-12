@@ -71,6 +71,10 @@ def _semantic_queries(text: str, count: int = 8) -> list[str]:
 
 def _query_for_beat(beat: str) -> str:
     rules = [
+        (("claude", "search box", "chat interface"), "person using AI chat interface laptop"),
+        (("goal", "audience", "constraints"), "person writing project brief on laptop"),
+        (("compare choices", "inspect the result", "review pass"), "person reviewing AI assistant output laptop"),
+        (("project files", "verify the final", "workflow output"), "developer reviewing project files checklist"),
         (("工具越来越多", "装得越多", "工具太多", "too many tools"), "overwhelmed creator multiple computer screens"),
         (("资料散", "注意力", "切得稀碎", "来回切换", "switching"), "overwhelmed worker switching multiple screens"),
         (("做减法", "重复的工具", "只留一个"), "person organizing apps single laptop"),

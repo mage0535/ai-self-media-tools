@@ -974,3 +974,11 @@ Observed read-only on 2026-08-31.
 - Independent probing of the retained 59.8-second MP4 now rejects its ASR evidence. Ten ASR segments and 0.7844 whole-script similarity are insufficient because the expected final sentence is absent; terminal similarity is 0.0135 and word coverage is 0.2778.
 - The detailed probe records `asr_terminal_coverage_missing`. The existing outer summary still uses a generic ASR failure label; this is a diagnostics-only follow-up and does not make the artifact pass.
 - The old video remains a negative sample. No external handoff was sent, no publisher was invoked, and production code, shared state and timers were not changed.
+
+## 2026-09-12 YouTube Visual And Copy Root-Cause Evidence
+
+- The retained `cards.json` contained incomplete English word bags such as `polished answer before` and `of restarting Keep`, plus Chinese fallback labels in an English package. The landscape renderer did not read that file and instead emitted fixed role titles such as `The core question` and `How it works`.
+- Asset provenance showed three false positives: a robotic hand accepted as an AI interface, a humanoid robot accepted as a human reviewing output, and an empty office accepted as a digital workspace. The selected cover background had content-match score zero but was marked passed.
+- Local TDD repairs all four boundaries without changing Chinese narration or platform routing. Six new positive/negative tests cover sentence preservation, compiled-card consumption, language consistency, semantic anchors, Claude queries and zero-score cover rejection.
+- Related regression returned 157 passed. Full regression returned 1888 passed plus 37 subtests in 400.16 seconds. JUnit is `artifacts/test-reports/sol-youtube-visual-copy-semantics-20260912.xml`; privacy and license audits have zero issues.
+- Linux staging and a fresh YouTube artifact run are still required. Production release, mutable runtime, shared data, timer and publisher were not changed.

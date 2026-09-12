@@ -28,6 +28,7 @@ def test_cover_direction_is_platform_specific_and_avoids_recent_style():
     assert kuaishou["platform_profile"] != youtube["platform_profile"]
     assert kuaishou["background_prompt"].endswith("no text, no letters, no logo, no watermark")
     assert not youtube["subtitle_text"].endswith("with")
+    assert "no generic humanoid robot" in youtube["background_prompt"]
 
 
 def test_rendered_cover_contains_typography_and_machine_evidence(tmp_path: Path):
