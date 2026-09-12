@@ -717,3 +717,10 @@
 - This repair runs after factual and narration-budget repairs but before final generated-text hygiene, so the unchanged hygiene gate judges the persisted reader-facing body.
 - Prefix, fuzzy and arbitrary prose matching are forbidden. An incomplete explanatory sentence remains untouched and must still fail `truncated_terminal_sentence`.
 - A CTA that is grammatically complete after punctuation is not a sentence fragment merely because it ends in a demonstrative such as `this`; only allowlisted CTA text receives that exception.
+
+## D104: HTML Edge 403 Is A Network Route Failure, Not Credential Proof
+
+- A Hermes response matching `HTTP 403` plus an explicit HTML error-page marker is classified as `provider_edge_forbidden`. It is not sufficient evidence that OAuth or an API key is invalid.
+- After a direct attempt, this exact class may retry once through the configured US fallback, using the same active provider/model selection. Proxy values are never persisted in generation evidence.
+- Region-specific 403 keeps the existing bounded proxy recovery. Generic 401/403 credential rejection remains `provider_auth_failed` and must not retry through a regional proxy.
+- A CLI exit code of zero does not override response-body error classification; successful content is still required before generation can proceed.

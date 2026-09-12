@@ -541,3 +541,11 @@ These describe the audited production release, not the current development code.
 - TDD evidence: the missing helper failed first; content-hygiene and Pipeline integration tests then passed. Related regression is 88 passed. Full regression is 1874 passed plus 37 subtests in 357.14 seconds.
 - Project/privacy audit scanned 593 files with zero issues; license audit checked 66 capabilities with zero issues; `git diff --check` passed.
 - Current owner: Codex. Files: `content_platform/content_hygiene.py`, `content_platform/pipeline.py`, the two focused test files and the four coordination documents. Next: commit/push, advance isolated Linux staging, then run a fresh YouTube artifact Canary from a new data root. Production release and timers remain unchanged.
+
+## 2026-09-12 Hermes HTML Edge 403 Recovery
+
+- Linux staging at `1f7806f` passed 21 focused tests and both audits. A fresh isolated YouTube run then failed in 19 seconds before Pipeline completion with `provider_auth_failed`; no media or publisher capability ran.
+- Read-only Hermes status reported the OpenAI Codex OAuth identity logged in. An exact minimal direct request returned `HTTP 403` with an HTML edge-page classification and exit code zero; the same request through the configured US proxy returned `OK`.
+- TDD now distinguishes `provider_edge_forbidden` from a real API-key rejection. Only region and HTML-edge network classes receive one US-proxy retry; generic credential 403 remains fail-fast and proxy values remain absent from evidence.
+- Focused recovery tests: 3 passed. Related generation/content/Pipeline tests: 127 passed. Full regression: 1875 passed plus 37 subtests in 369.73 seconds.
+- Current owner remains Codex. Next: commit/push, advance clean staging, run Linux focused verification, then execute another fresh YouTube artifact Canary. Production and timers remain unchanged.
