@@ -767,3 +767,10 @@
 - Numeric exclusion is detail-specific: the compliance detail must occur in a fact-gate finding whose `covered` field is true. One covered number does not authorize other numbers.
 - Attribution exclusion requires a covered attribution finding. A non-empty ledger or an unrelated source is insufficient.
 - Remaining unsupported compliance findings keep the existing fail-closed behavior before media generation.
+
+## D111: Automated Video Reuse Requires Complete Asset Provenance
+
+- An image artifact from an earlier stage is not automatically a valid video background. Automated video reuse requires source URL, license, passing semantic evidence and exact semantic-evidence SHA binding to the file.
+- Missing provenance causes that candidate to be skipped before copying into the video background pool. The video runner may then collect or generate a complete clean set through its normal recovery chain.
+- The rule applies to automated production runs. Legacy/manual preparation remains compatible, but final video asset gates still enforce their own contracts.
+- A later set of valid assets cannot hide one invalid retained candidate; required video asset admission evaluates the actual selected set.
