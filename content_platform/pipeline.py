@@ -701,9 +701,10 @@ class Pipeline:
                 risk["content_hygiene"] = hygiene
                 compliance = self.compliance.evaluate(text, job["brief"], job["platforms"])
                 risk["compliance"] = compliance
+                uncovered_claim_findings = self._uncovered_compliance_claim_findings(compliance, claim_gate)
                 blocking_claim_codes = {
                     str(item.get("code") or "")
-                    for item in compliance.get("findings", [])
+                    for item in uncovered_claim_findings
                     if isinstance(item, dict)
                 }
                 strict_compliance = (
@@ -716,7 +717,7 @@ class Pipeline:
                         "run_safety_gate",
                         "unsupported_factual_claims",
                         "unsourced numeric or attribution claims cannot proceed to media generation",
-                        compliance,
+                        {**compliance, "findings": uncovered_claim_findings},
                         depends_on=["run_fact_check"],
                     )
                 if risk["level"] == "pass" and compliance["level"] == "review":
@@ -1196,6 +1197,27 @@ class Pipeline:
         if hygiene:
             brief["content_hygiene"] = hygiene
         return brief
+
+    @staticmethod
+    def _uncovered_compliance_claim_findings(compliance, claim_gate):
+        covered = [
+            item for item in (claim_gate or {}).get("findings") or []
+            if isinstance(item, dict) and item.get("covered") is True
+        ]
+        remaining = []
+        for finding in (compliance or {}).get("findings") or []:
+            if not isinstance(finding, dict):
+                continue
+            code = str(finding.get("code") or "")
+            detail = str(finding.get("detail") or "").strip().casefold()
+            matched = False
+            if code == "numeric_claim_without_source" and detail:
+                matched = any(detail in str(item.get("text") or "").casefold() for item in covered)
+            elif code == "attribution_without_source":
+                matched = any(str(item.get("type") or "").casefold() == "attribution" for item in covered)
+            if not matched:
+                remaining.append(finding)
+        return remaining
 
     @staticmethod
     def _video_script_budget(draft, job):

@@ -982,3 +982,10 @@ Observed read-only on 2026-08-31.
 - Local TDD repairs all four boundaries without changing Chinese narration or platform routing. Six new positive/negative tests cover sentence preservation, compiled-card consumption, language consistency, semantic anchors, Claude queries and zero-score cover rejection.
 - Related regression returned 157 passed. Full regression returned 1888 passed plus 37 subtests in 400.16 seconds. JUnit is `artifacts/test-reports/sol-youtube-visual-copy-semantics-20260912.xml`; privacy and license audits have zero issues.
 - Linux staging and a fresh YouTube artifact run are still required. Production release, mutable runtime, shared data, timer and publisher were not changed.
+
+## 2026-09-12 YouTube v2 Covered-Claim Conflict
+
+- Clean staging at `e0fcb19` passed 44 focused tests and project/license audits. A fresh isolated YouTube v2 then completed active-model generation but ended blocked after 146 seconds; only its workflow report existed and no media or publisher ran.
+- The factual step reported one covered numeric finding: the strict source title containing `99%`. The following compliance step reported the same `99%` as unsourced because it did not consume fact-gate coverage.
+- Local TDD adds exact finding reconciliation. The covered `99%` is excluded, while an uncovered `80%` remains. Related regression is 219 passed; full regression is 1889 passed plus 37 subtests.
+- JUnit is `artifacts/test-reports/sol-youtube-compliance-merge-20260912.xml`. Production, shared state, timers and publishers remain unchanged; v2 is a blocked content-only negative sample.
