@@ -657,3 +657,9 @@ These describe the audited production release, not the current development code.
 - TDD adds a target-aware provider order: YouTube and YouTube Shorts try the platform-scoped Audio Library first; other platforms retain Wikimedia/Openverse before that inapplicable provider. License, real-instrument and seven-day fingerprint gates remain unchanged.
 - Focused runner regression: 67 passed. Full regression: 1896 passed plus 37 subtests in 397.48 seconds. Privacy 594/0; license 66/0.
 - The calendar date has advanced. Do not run another Canary using the 2026-09-11 source fixture as current evidence; refresh strict YouTube same-lane evidence first. Production and timers remain unchanged.
+
+## 2026-09-13 Linux YouTube Audio Library Smoke
+
+- Clean staging advanced to `2274ca6`; provider-order regression passed.
+- A live read-only query of the public YouTube Audio Library index returned ten candidates for acoustic-guitar instrumental use. The first is `Acoustic Meditation 2`, marked `youtube_only` with verified license metadata.
+- No audio was downloaded or registered in this smoke. Next: collect fresh 2026-09-13 strict YouTube same-lane evidence, then run a new isolated Canary. Production and timers remain unchanged.
