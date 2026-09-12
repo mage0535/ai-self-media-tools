@@ -950,3 +950,11 @@ Observed read-only on 2026-08-31.
 - Local RED tests reproduced both the arbitrary package-root error and the same repository-relative failure in a conventional `local_ops_platform/date/render` layout located outside source control.
 - The implementation now detects both layouts, copies only within the selected package boundary and emits package-relative labels. Two focused and 152 related tests passed.
 - Full local regression returned 1879 passed plus 37 subtests in 358.62 seconds. JUnit is `artifacts/test-reports/sol-youtube-archive-layout-20260912.xml`; Linux retained-artifact verification is still required before accepting the Canary.
+
+## 2026-09-12 Retained YouTube Evidence Revalidation Gap
+
+- Linux staging at `01c9b60` passed 43 focused tests and both audits. The new archive helper completed without exception on the retained external package and copied normalized BGM, TTS, cover and audio files; it reported legacy optional package names separately as missing.
+- The first capability revalidation still left Shotcraft at `output_verified`. Direct execution of the new adapter against the same final MP4 succeeded, proving the artifact and scene/move evidence were valid.
+- The remaining difference was the serialized old selection record: it carried the pre-change `output_verified` policy, and resumed DAG execution trusted that value instead of the current registry.
+- Local TDD now overlays only current verification levels while preserving selected IDs and stages. Full regression returned 1880 passed plus 37 subtests in 373.55 seconds; JUnit is `artifacts/test-reports/sol-youtube-checkpoint-policy-20260912.xml`.
+- Final retained-artifact revalidation remains pending. No production release, shared state, timer or external publisher was changed.

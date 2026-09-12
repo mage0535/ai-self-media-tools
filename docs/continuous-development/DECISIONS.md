@@ -738,3 +738,10 @@
 - The direct archive entrypoint accepts both the legacy `platform/date/render` directory and a direct package root containing an optional `render/` child. It cannot silently move an arbitrary package to its parent.
 - Discovery and copying remain bounded to the selected package and its known child directories. Human-readable copy records use package-relative paths or a filename fallback, never absolute private paths.
 - Archive warnings remain acceptance failures until the package is revalidated; final media success does not erase packaging failure.
+
+## D107: Resumed Jobs Use Current Verification Policy
+
+- A checkpoint preserves the selected capability IDs, stages and required/optional decisions. It does not permanently freeze an obsolete, weaker verification level.
+- When resuming pending asset, render or gate stages, deterministic runtime overlays each selected node's current registry `verification_level` before execution.
+- The runtime cannot add an unselected capability through this rule. It may only require stronger current evidence for a previously selected capability.
+- This prevents old jobs from bypassing newly deployed artifact/effect gates while retaining deterministic routing history.
