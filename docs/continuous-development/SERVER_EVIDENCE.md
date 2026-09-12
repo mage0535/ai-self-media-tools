@@ -1034,3 +1034,9 @@ Observed read-only on 2026-08-31.
 - The run failed after 1196.8 seconds before final MP4. Multiple Openverse audio downloads timed out on direct and US-proxy routes; the later YouTube Audio Library provider was never reached within the shared budget.
 - Local TDD makes provider order target-aware. YouTube targets now try the YouTube Audio Library first; non-YouTube order remains unchanged. Full regression returned 1896 passed plus 37 subtests.
 - JUnit is `artifacts/test-reports/sol-youtube-bgm-priority-20260912.xml`. No handoff or publisher ran, and production/timers remain unchanged. The next real run requires newly collected current-date YouTube evidence.
+
+## 2026-09-13 Linux YouTube Audio Library Candidate Smoke
+
+- Staging advanced cleanly to `2274ca6`; the target-aware provider-order test passed.
+- A live public-index call with `BGM_TARGET_PLATFORM=youtube` returned ten YouTube Audio Library candidates. The first provider is the Audio Library and the first candidate carries `youtube_only` scope plus verified license metadata.
+- The smoke did not download, fingerprint or register audio. It proves discovery and priority only. Production and timers remain unchanged.
