@@ -1027,3 +1027,10 @@ Observed read-only on 2026-08-31.
 - Staging advanced cleanly to `b3daaee` and passed four focused tests covering the exact v5 manual-review defects.
 - The production symlink still resolves to the prior signed release; the overnight timer remains inactive.
 - This is code verification only. No v6 model, media, ASR or handoff ran, and v5 remains rejected.
+
+## 2026-09-13 YouTube v6 BGM Budget Failure
+
+- Fresh YouTube v6 used staging `1bacbfd` and real strict evidence. It completed model/content stages, strict scene-asset recovery, eight TTS/card segments and raw video.
+- The run failed after 1196.8 seconds before final MP4. Multiple Openverse audio downloads timed out on direct and US-proxy routes; the later YouTube Audio Library provider was never reached within the shared budget.
+- Local TDD makes provider order target-aware. YouTube targets now try the YouTube Audio Library first; non-YouTube order remains unchanged. Full regression returned 1896 passed plus 37 subtests.
+- JUnit is `artifacts/test-reports/sol-youtube-bgm-priority-20260912.xml`. No handoff or publisher ran, and production/timers remain unchanged. The next real run requires newly collected current-date YouTube evidence.

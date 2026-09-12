@@ -1461,6 +1461,15 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(result["effect_evidence"]["probe"], "per_scene_frame_difference_and_shotcraft_mapping")
             self.assertEqual(result["effect_evidence"]["measured_scene_count"], 8)
 
+    def test_youtube_bgm_provider_order_prioritizes_platform_audio_library(self):
+        from scripts.kuaishou_render import _online_bgm_provider_order
+
+        youtube = [provider.__name__ for provider in _online_bgm_provider_order("youtube")]
+        other = [provider.__name__ for provider in _online_bgm_provider_order("kuaishou")]
+
+        self.assertEqual(youtube[0], "_youtube_audio_library_candidates")
+        self.assertGreater(other.index("_youtube_audio_library_candidates"), other.index("_openverse_candidates"))
+
     def test_bgm_download_rejects_electronic_synthetic_candidates(self):
         from scripts.kuaishou_render import download_bgm
 
