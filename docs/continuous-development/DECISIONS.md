@@ -710,3 +710,10 @@
 - The Canary must probe whichever selection mode was used. Missing or tampered evidence blocks before Pipeline creation; lack of a hotspot alone does not justify manufacturing one or preventing a legitimate evergreen artifact test.
 - Hotspot and editorial files are mutually exclusive for one platform/run. Editorial evidence expires when its planned date differs from the current UTC date by more than one day; a stale or ambiguous input fails before model generation.
 - Non-native work or activity evidence retains its exact `evidence_type`, association mode and native flag in the brief and source matrix. Canary code must not relabel `same_lane_hot_work` as an official/native hotspot for convenience.
+
+## D103: Known Standalone CTAs May Be Completed, Not Guessed
+
+- A generated short-video script may deterministically add terminal punctuation only when its final non-empty line exactly matches a versioned allowlist of complete CTA phrases.
+- This repair runs after factual and narration-budget repairs but before final generated-text hygiene, so the unchanged hygiene gate judges the persisted reader-facing body.
+- Prefix, fuzzy and arbitrary prose matching are forbidden. An incomplete explanatory sentence remains untouched and must still fail `truncated_terminal_sentence`.
+- A CTA that is grammatically complete after punctuation is not a sentence fragment merely because it ends in a demonstrative such as `this`; only allowlisted CTA text receives that exception.

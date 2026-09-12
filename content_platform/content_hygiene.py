@@ -5,6 +5,17 @@ from collections import Counter
 
 _TECHNICAL_FILE_EXTENSION = r"(?:md|json|ya?ml|toml|py|js|ts|tsx|jsx|html|css|sh|ps1)"
 
+_KNOWN_TERMINAL_CTAS = {
+    "save this": ".",
+    "save this for later": ".",
+    "follow for more": ".",
+    "comment below": ".",
+    "先收藏": "。",
+    "收藏一下": "。",
+    "评论区说说": "。",
+    "关注获取更多": "。",
+}
+
 
 def normalize_generated_markdown(text):
     """Repair deterministic model formatting damage without rewriting prose."""
@@ -59,6 +70,19 @@ def normalize_generated_markdown(text):
     if value.count("```") % 2:
         value = value.rstrip() + "\n```"
     return value
+
+
+def complete_known_terminal_cta(text):
+    """Complete only a known standalone CTA at the end of generated prose."""
+    value = str(text or "")
+    match = re.search(r"(?P<cta>[^\s\n][^\n]*?)(?P<trailing>[ \t\r\n]*)$", value)
+    if not match:
+        return value
+    cta = match.group("cta").strip()
+    punctuation = _KNOWN_TERMINAL_CTAS.get(cta.casefold())
+    if not punctuation:
+        return value
+    return value[: match.start("cta")] + cta + punctuation + match.group("trailing")
 
 
 def _tokens(text):
@@ -260,6 +284,8 @@ def _quote_issues(text):
 
 def _is_obvious_fragment(sentence):
     value = re.sub(r"[.!?。！？\s]+$", "", str(sentence or "").strip()).casefold()
+    if value in _KNOWN_TERMINAL_CTAS:
+        return False
     if re.search(r"\b(?:a|an|the|this|that|these|those|to|of|for|with|and|or|but)$", value):
         return True
     if re.search(r"(?:因为|所以|但是|以及|或者)$", value):

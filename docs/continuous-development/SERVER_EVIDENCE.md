@@ -918,3 +918,11 @@ Observed read-only on 2026-08-31.
 - This closes the selection-mode contract only. No model, media renderer, handoff or publisher ran in that smoke; the next acceptance is one real artifact Canary using currently strict-ready platform evidence.
 - Preparing the YouTube case selected a current strict row with complete identity/time/view/query/snapshot fields. Preflight then exposed that `_canary_brief` hardcoded every verified input as `official_native_canary` and `native_verified=true`, even when the source was `same_lane_hot_work` with native false.
 - TDD now preserves exact evidence type and native status in selection mode, source catalog and platform matrix. Task9 tests: 48 passed. No YouTube generation started before this identity correction.
+
+## 2026-09-12 YouTube Content Canary And CTA Gate Evidence
+
+- Isolated staging ran one YouTube case from a strict monthly same-lane work record. The active generator returned an eight-paragraph English script in about 66 seconds; the final line was the standalone CTA `Save this` without punctuation.
+- The job was blocked at generated-text hygiene with `truncated_terminal_sentence`. No image, TTS, BGM, render, handoff or publisher capability ran, so this is content-gate evidence only.
+- Local TDD added a conservative exact-CTA completion helper and Pipeline integration before final hygiene. An unrelated incomplete terminal sentence remains a negative control and is still rejected.
+- Verification: focused content/Pipeline regression 21 passed; related Pipeline/content-depth regression 88 passed; full regression 1874 passed plus 37 subtests. The JUnit report is `artifacts/test-reports/sol-youtube-cta-repair-20260912.xml`.
+- Project/privacy audit is 593 files with zero issues; license audit is 66 capabilities with zero issues. Production remains on the prior signed release and all automatic timers remain disabled pending a fresh isolated YouTube run and the remaining serial Canary matrix.
