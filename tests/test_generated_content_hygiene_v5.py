@@ -1,4 +1,9 @@
-from content_platform.content_hygiene import complete_known_terminal_cta, normalize_generated_markdown, validate_generated_text
+from content_platform.content_hygiene import (
+    complete_known_terminal_cta,
+    deduplicate_terminal_cta_actions,
+    normalize_generated_markdown,
+    validate_generated_text,
+)
 
 
 def test_generated_text_rejects_scraped_page_script():
@@ -83,6 +88,31 @@ def test_xhs_repeated_cta_is_rejected():
     )
     assert result["passed"] is False
     assert "repeated_sentence" in result["reasons"]
+
+
+def test_semantically_repeated_terminal_comment_ctas_are_rejected():
+    result = validate_generated_text(
+        "The path from beginner to pro is better context and deliberate iteration. "
+        "Comment with the workflow you want to upgrade. "
+        "Comment with the Claude workflow you want to improve. "
+        "Save this."
+    )
+
+    assert result["passed"] is False
+    assert "repeated_cta_action" in result["reasons"]
+
+
+def test_terminal_cta_deduplication_keeps_one_action_and_other_cta_types():
+    value = (
+        "Check the final artifact. Comment with the workflow you want to upgrade. "
+        "Comment with the Claude workflow you want to improve. Save this."
+    )
+
+    repaired = deduplicate_terminal_cta_actions(value)
+
+    assert repaired.count("Comment with") == 1
+    assert repaired.endswith("Save this.")
+    assert validate_generated_text(repaired)["passed"] is True
 
 
 def test_youtube_dangling_article_fragment_is_rejected():

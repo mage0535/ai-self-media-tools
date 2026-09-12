@@ -85,6 +85,25 @@ def complete_known_terminal_cta(text):
     return value[: match.start("cta")] + cta + punctuation + match.group("trailing")
 
 
+def deduplicate_terminal_cta_actions(text):
+    """Keep the first of repeated CTA actions in the final sentence window."""
+    value = str(text or "")
+    matches = list(re.finditer(r"[^.!?。！？\n]+[.!?。！？]+", value))
+    seen = set()
+    removals = []
+    for match in matches[-5:]:
+        action = _cta_action(match.group(0))
+        if not action:
+            continue
+        if action in seen:
+            removals.append(match.span())
+        else:
+            seen.add(action)
+    for start, end in reversed(removals):
+        value = value[:start] + value[end:]
+    return re.sub(r"[ \t]{2,}", " ", value)
+
+
 def _tokens(text):
     return [
         token
@@ -208,6 +227,11 @@ def validate_generated_text(text):
         reasons.append("repeated_sentence")
         findings.append({"reason": reasons[-1], "matches": repeated_sentences[:3]})
 
+    repeated_cta_actions = _repeated_terminal_cta_actions(sentences)
+    if repeated_cta_actions:
+        reasons.append("repeated_cta_action")
+        findings.append({"reason": reasons[-1], "matches": repeated_cta_actions})
+
     duplicated_conclusions = _duplicated_conclusions(value)
     if duplicated_conclusions:
         reasons.append("duplicated_conclusion")
@@ -266,6 +290,26 @@ def _prose_paragraphs(text):
 
 def _normalize_prose(text):
     return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(text or "").casefold())
+
+
+def _repeated_terminal_cta_actions(sentences):
+    actions = []
+    for sentence in list(sentences or [])[-5:]:
+        action = _cta_action(sentence)
+        if action:
+            actions.append(action)
+    return [action for action, count in Counter(actions).items() if count > 1]
+
+
+def _cta_action(sentence):
+    value = str(sentence or "").strip(" \t\r\n.!?。！？").casefold()
+    patterns = {
+        "comment": r"^(?:comment\b|tell (?:me|us)\b|share\b.*\bcomments?\b|评论|留言)",
+        "save": r"^(?:save\b|bookmark\b|收藏)",
+        "follow": r"^(?:follow\b|关注)",
+        "like": r"^(?:like\b|点赞)",
+    }
+    return next((name for name, pattern in patterns.items() if re.search(pattern, value)), "")
 
 
 def _quote_issues(text):

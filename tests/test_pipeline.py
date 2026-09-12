@@ -612,6 +612,29 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(persisted["body"].endswith("Save this."))
         self.assertTrue(persisted["draft_meta"]["generated_text_hygiene"]["passed"])
 
+    def test_automated_video_removes_repeated_terminal_cta_action_before_hygiene_gate(self):
+        body = (
+            "Start with one verified task, define the expected result, and record what evidence can prove completion.\n\n"
+            "Inspect every source before relying on its recommendation, date, identity, or visible performance metric.\n\n"
+            "Separate collected evidence from assumptions so the draft never presents an inference as a tested fact.\n\n"
+            "Choose the smallest workflow that can produce the result while preserving every required quality checkpoint.\n\n"
+            "Run each step once, retain its output hash, and make failures visible for a focused retry.\n\n"
+            "Compare the generated result with the original requirement, platform rules, audience need, source evidence, measured quality signals, and delivery contract before release every time.\n\n"
+            "Comment with the workflow you want to upgrade.\n\n"
+            "Comment with the Claude workflow you want to improve. Save this."
+        )
+        job = self.pipeline.create("Practical workflow", ["youtube"], {"automated_workflow": True})
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Practical workflow",
+            "body": body,
+            "draft_meta": {"claim_ledger": [], "quality_gate": {"passed": True}},
+        }), patch.object(self.pipeline.media, "generate", return_value=None):
+            self.pipeline.run(job["id"])
+
+        persisted = self.store.get_job(job["id"])
+        self.assertLessEqual(persisted["body"].count("Comment with"), 1)
+        self.assertTrue(persisted["draft_meta"]["generated_text_hygiene"]["passed"])
+
     def test_automated_article_requires_three_readable_h2_sections_before_media(self):
         body = (
             "## 问题\n先确认输入来源，再检查输出契约，最后保存能够复查的证据。\n\n"
