@@ -619,3 +619,11 @@ These describe the audited production release, not the current development code.
 - Automated video jobs now reuse an existing image only when it has a non-empty source URL, license, passing semantic evidence and an image SHA matching the file. Unverified existing images are skipped; the runner then owns clean recovery. Non-automated compatibility behavior remains unchanged.
 - TDD first reproduced the unverified cover leak. Focused tests: 3 passed. Related media/Pipeline/video regression: 152 passed. Full regression: 1890 passed plus 37 subtests in 359.74 seconds.
 - Current owner: Codex. Next: update all coordination evidence, commit/push, Linux focused verification and fresh YouTube v4. Production and timers remain unchanged.
+
+## 2026-09-12 YouTube v4b Scene Duration Policy
+
+- YouTube v4 first hit a transient Hermes provider failure after direct edge-403 recovery; an immediate proxy probe passed. Same-platform v4b retry then passed generation and content gates.
+- v4b discarded the unverified article cover and built eight licensed video backgrounds, proving the v3 provenance fix. It generated 86 media files and a full landscape render, but final admission failed with `duration exceeds platform limit`.
+- Root cause was a second duration source in `scene_manifest.py`: it assigned every YouTube manifest a 60-second maximum despite the earlier normalizer correctly exempting horizontal video.
+- TDD now derives the scene duration limit from platform and `content_form`. YouTube horizontal/long output has no Shorts cap; explicit vertical/short forms retain 60 seconds. Related tests: 10 passed. Full: 1891 passed plus 37 subtests in 373.26 seconds.
+- Next: commit/push, Linux focused verification and retained v4b checkpoint revalidation. Production and timers remain unchanged.

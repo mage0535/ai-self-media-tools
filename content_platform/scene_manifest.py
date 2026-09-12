@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Any
 
 
-SHORT_DURATION_LIMITS = {"tiktok": 60, "youtube": 60}
+SHORT_DURATION_LIMITS = {"tiktok": 60}
+YOUTUBE_SHORT_FORMS = {"short_video", "vertical_video", "youtube_short", "youtube_shorts"}
 LAYER_KEYS = ("background", "subject", "text", "transition")
 
 
@@ -77,7 +78,8 @@ def build_scene_manifest(
                 },
             }
         )
-    max_seconds = SHORT_DURATION_LIMITS.get(platform)
+    content_form = str(plan.get("content_form") or "").casefold()
+    max_seconds = 60 if platform == "youtube" and content_form in YOUTUBE_SHORT_FORMS else SHORT_DURATION_LIMITS.get(platform)
     result = {
         "version": "scene_manifest_v2",
         "title": str(title or "").strip(),

@@ -997,3 +997,11 @@ Observed read-only on 2026-08-31.
 - The first selected visual was a prior cover image copied into `backgrounds` without provenance. Eight later Pexels recovery assets carried URLs and licenses, but the invalid first candidate still made the selected set fail.
 - Local TDD now excludes such images before automated video reuse. Full regression returned 1890 passed plus 37 subtests in 359.74 seconds; JUnit is `artifacts/test-reports/sol-youtube-video-provenance-20260912.xml`.
 - Production release, mutable runtime, shared state, timers and publishers were not changed. A fresh v4 remains required.
+
+## 2026-09-12 YouTube v4b Clean Assets And Duration Rejection
+
+- Linux staging at `2959e55` passed provenance tests and both audits. Initial v4 failed on a transient provider error after edge-route fallback; the same proxy then passed a minimal probe, and v4b was run from a fresh root.
+- v4b passed generation/content gates and built eight licensed, source-bound video backgrounds without the prior unverified cover. This proves the automated video provenance isolation in a real run.
+- The renderer produced 86 files, but the final scene-duration gate rejected its horizontal output because `scene_manifest.SHORT_DURATION_LIMITS` still mapped all YouTube output to 60 seconds.
+- Local TDD makes that policy content-form aware. Full regression returned 1891 passed plus 37 subtests in 373.26 seconds; JUnit is `artifacts/test-reports/sol-youtube-scene-duration-policy-20260912.xml`.
+- v4b has no accepted handoff. Production, shared state, timers and external publishers remain unchanged; retained checkpoint revalidation is required.
