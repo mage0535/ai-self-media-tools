@@ -283,6 +283,32 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertTrue(all(" · " not in str(card.get("t") or "") for card in cards))
         self.assertTrue(cards[1]["t"].casefold().startswith("the trap"))
 
+    def test_story_beats_do_not_cut_complete_english_paragraph_at_200_characters(self):
+        from scripts.video_toolchain_runner import _story_beats
+
+        long_sentence = (
+            "Step three requests an Artifact when the answer should become a dashboard, document, presentation, "
+            "or interactive tool that a reviewer can inspect before accepting the final workflow result, while preserving "
+            "the source evidence, decision boundary, requested format, and final acceptance notes for the next review result."
+        )
+        script = "\n\n".join([f"Complete beat {index}." for index in range(1, 8)] + [long_sentence])
+
+        beats = _story_beats(script)
+
+        self.assertEqual(beats[-1], long_sentence)
+        self.assertTrue(beats[-1].endswith("result."))
+
+    def test_short_complete_english_beat_remains_its_own_card_title(self):
+        from scripts.video_toolchain_runner import build_cards
+
+        script = "\n\n".join([
+            "Start with the goal.", "Add the source context.", "Define the output format.", "Check every constraint.",
+            "Then iterate.", "Review the evidence.", "Verify the final result.", "Save this workflow.",
+        ])
+        cards = build_cards(script, "A practical workflow", {"video_route": {"scene_presentations": ["hero_conflict", "split_screen", "side_a", "side_b", "difference_grid", "evidence_zoom", "winner_reveal", "cta"]}})
+
+        self.assertEqual(cards[4]["t"], "Iterate with feedback")
+
     def test_chinese_tool_reduction_beats_compile_to_complete_visual_phrases(self):
         from scripts.video_toolchain_runner import _visual_label
 

@@ -634,3 +634,12 @@ These describe the audited production release, not the current development code.
 - The historical v4b manifest correctly remains immutable with its old 60-second policy. Rebuilding from the original cards, visual recipe and `article_explainer_video` plan produced `max_seconds=null`, and the unchanged 66.68-second rendered file passed duration validation.
 - This proves the policy repair only. v4b remains a failed run with no handoff; a fresh full Pipeline run and manual cover/contact-sheet/ASR review are still required.
 - Production and timers remain unchanged. Next owner should begin with the four coordination documents, then run a fresh YouTube Canary from a new root.
+
+## 2026-09-12 YouTube v5 Machine Pass And Manual Rejection
+
+- YouTube v5 completed in 953.9 seconds. Pipeline and independent artifact probes passed with 88 artifacts, full ASR ending, eight licensed backgrounds, Hojo TTS, online BGM, subtitles, Shotcraft effect evidence, cover and isolated handoff. No external publisher ran.
+- Manual review rejected the package. Scene four ended display/TTS text at `interac` because `_story_beats` hard-clipped each paragraph to 200 characters. Scene five replaced the complete short beat `Then iterate` with the unrelated fallback `Merge overlap`.
+- The cover was complete and readable but reduced the title to `Use Claude Better`, dropping the `3 Steps` payoff after the colon. Its split-comparison layout contained only a shade polygon rather than an observable visual story.
+- TDD removes paragraph character slicing after the bounded script compiler, maps the iteration beat to `Iterate with feedback`, preserves the numbered YouTube payoff and draws six split-comparison nodes/connectors with measured evidence.
+- Related cover/video regression: 85 passed. Full regression: 1895 passed plus 37 subtests in 397.14 seconds. Privacy 594/0; license 66/0.
+- Current owner: Codex. Next: commit/push, Linux focused verification and fresh YouTube v6 with manual cover/contact-sheet/ASR review. Production and timers remain unchanged.
