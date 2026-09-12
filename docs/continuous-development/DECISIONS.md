@@ -774,3 +774,10 @@
 - Missing provenance causes that candidate to be skipped before copying into the video background pool. The video runner may then collect or generate a complete clean set through its normal recovery chain.
 - The rule applies to automated production runs. Legacy/manual preparation remains compatible, but final video asset gates still enforce their own contracts.
 - A later set of valid assets cannot hide one invalid retained candidate; required video asset admission evaluates the actual selected set.
+
+## D112: Scene Duration Policy Uses Platform And Content Form
+
+- Every duration gate must distinguish a platform's short-form and long-form products. Platform name alone is not sufficient.
+- YouTube receives a 60-second scene-manifest cap only for explicit short/vertical content forms. Horizontal and long-form YouTube manifests have no Shorts maximum.
+- TikTok and other configured short-only targets retain their existing limits. Tests must include both the horizontal exemption and a short-form positive control.
+- Duplicate duration policy implementations must produce the same result before a renderer output can be accepted.

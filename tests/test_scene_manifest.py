@@ -56,6 +56,21 @@ def test_scene_manifest_rejects_missing_scene_evidence_and_platform_duration_ove
     assert duration_validation["limit_seconds"] == 60
 
 
+def test_youtube_horizontal_scene_manifest_has_no_shorts_duration_limit():
+    from content_platform.scene_manifest import build_scene_manifest, validate_rendered_duration
+
+    horizontal = build_scene_manifest(
+        _cards(), _recipe(), {"platforms": ["youtube"], "content_form": "horizontal_video"}, "Useful video"
+    )
+    short = build_scene_manifest(
+        _cards(), _recipe(), {"platforms": ["youtube"], "content_form": "vertical_video"}, "Useful short"
+    )
+
+    assert horizontal["duration_policy"] == {"max_seconds": None, "enforced": False}
+    assert validate_rendered_duration(horizontal, 75.0)["passed"] is True
+    assert short["duration_policy"] == {"max_seconds": 60, "enforced": True}
+
+
 def test_video_runner_writes_a_valid_scene_manifest_in_dry_run():
     root = Path(__file__).resolve().parents[1]
     script = root / "scripts" / "video_toolchain_runner.py"
