@@ -652,6 +652,16 @@ def _terminal_narration_coverage(expected: str, observed: str) -> dict[str, Any]
     }
 
 
+def _asr_failure_reasons(asr_text: str, segments: Any, similarity: float, terminal_coverage: dict[str, Any]) -> list[str]:
+    if not asr_text or not segments:
+        return ["asr_transcript_or_segments_missing"]
+    if similarity < 0.5:
+        return ["asr_transcript_mismatch"]
+    if terminal_coverage.get("passed") is not True:
+        return ["asr_terminal_coverage_missing"]
+    return []
+
+
 def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str, Any]:
     """Probe a materialized canary package and return independent evidence."""
     root = Path(artifact_dir).resolve()
@@ -744,14 +754,10 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
         asr_similarity = SequenceMatcher(None, normalize(asr_text), normalize(expected_text)).ratio() if asr_text and expected_text else 0.0
         terminal_coverage = _terminal_narration_coverage(expected_text, asr_text)
         asr_passed = bool(asr_text) and bool(asr.get("segments")) and asr_similarity >= 0.5 and terminal_coverage["passed"]
-        asr_failures = [] if asr_passed else (
-            ["asr_transcript_or_segments_missing"] if not asr_text or not asr.get("segments")
-            else ["asr_transcript_mismatch"] if asr_similarity < 0.5
-            else ["asr_terminal_coverage_missing"]
-        )
+        asr_failures = _asr_failure_reasons(asr_text, asr.get("segments"), asr_similarity, terminal_coverage)
         probes["asr"] = _probe("asr", asr_passed, details={"segment_count": len(asr.get("segments", [])) if isinstance(asr.get("segments"), list) else 0, "tts_similarity": round(asr_similarity, 4), "terminal_coverage": terminal_coverage, "provider": asr.get("provider"), "model": asr.get("model")}, failures=asr_failures, level="artifact_verified" if asr_passed else "declared")
         if not asr_passed:
-            failures.append("asr:asr_transcript_or_segments_missing")
+            failures.extend(f"asr:{value}" for value in asr_failures)
 
     handoff = manifest.get("handoff_contract")
     if isinstance(handoff, dict):

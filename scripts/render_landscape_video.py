@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import base64
 import hashlib
+import html
 import json
 import os
 import re
@@ -69,14 +70,17 @@ def _image_b64(path: Path) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
 
 
-def _write_slides(render_dir: Path, beats: list[str], bg_dir: Path, theme: dict) -> None:
+def _write_slides(render_dir: Path, beats: list[str], bg_dir: Path, theme: dict, cards: list[dict] | None = None) -> None:
     slide_dir = render_dir / "slides"
     slide_dir.mkdir(parents=True, exist_ok=True)
     for idx, beat in enumerate(beats, 1):
         bg = next((candidate for candidate in [bg_dir / f"bg_{idx:02d}.jpg", bg_dir / f"bg_{idx}.jpg", bg_dir / f"bg_{idx:02d}.png"] if candidate.is_file()), None)
         if not bg:
             raise RuntimeError(f"missing landscape background for beat {idx}: {bg_dir}")
-        title, visual_points = _landscape_visual_copy(beat, idx)
+        compiled = cards[idx - 1] if cards and idx <= len(cards) and isinstance(cards[idx - 1], dict) else {}
+        fallback_title, fallback_points = _landscape_visual_copy(beat, idx)
+        title = html.escape(str(compiled.get("t") or fallback_title))
+        visual_points = html.escape(str(compiled.get("txt") or compiled.get("sub") or fallback_points))
         bg_html = f"""<!doctype html><html><head><meta charset='utf-8'><style>
 body{{margin:0;width:1280px;height:720px;overflow:hidden;background:#000;}}
 .bg{{position:absolute;inset:0;background:url('{_image_b64(bg)}') center/cover no-repeat;transform:scale(1.08);}}
@@ -94,7 +98,6 @@ p{{margin:0;color:#f3f4f6;font-size:27px;line-height:1.65;font-weight:650;letter
 
 
 def _landscape_visual_copy(beat: str, index: int) -> tuple[str, str]:
-    role = LANDSCAPE_SCENE_ROLES[(index - 1) % len(LANDSCAPE_SCENE_ROLES)]
     words = re.findall(r"[A-Za-z][A-Za-z0-9'-]*", str(beat or ""))
     stop = {"this", "that", "with", "from", "your", "have", "what", "when", "they", "into", "about", "just", "then"}
     keywords = []
@@ -105,7 +108,12 @@ def _landscape_visual_copy(beat: str, index: int) -> tuple[str, str]:
         keywords.append(clean)
         if len(keywords) == 3:
             break
-    return role, "  ·  ".join(keywords) or "Evidence  ·  Action  ·  Result"
+    first_clause = re.split(r"[,;:]", str(beat or ""), maxsplit=1)[0].strip(" .!?\t\r\n")
+    title_words = first_clause.split()[:6]
+    while title_words and title_words[-1].casefold() in {"a", "an", "the", "to", "of", "for", "with", "and", "or", "but", "before"}:
+        title_words.pop()
+    title = " ".join(title_words) or LANDSCAPE_SCENE_ROLES[(index - 1) % len(LANDSCAPE_SCENE_ROLES)]
+    return title, ", ".join(keywords) or "Evidence, action, result"
 
 
 async def _tts(render_dir: Path, beats: list[str], voice: str) -> None:
@@ -277,7 +285,12 @@ def render(args: argparse.Namespace) -> dict:
         raise RuntimeError(f"estimated duration {estimated:.0f}s exceeds max {args.max_duration}s; revise script or use --force")
 
     theme = THEMES[args.platform]
-    _write_slides(render_dir, beats, bg_dir, theme)
+    cards_path = out_dir / "cards.json"
+    try:
+        cards = json.loads(cards_path.read_text(encoding="utf-8")) if cards_path.is_file() else []
+    except (OSError, json.JSONDecodeError):
+        cards = []
+    _write_slides(render_dir, beats, bg_dir, theme, cards=cards if isinstance(cards, list) else [])
     voice = _resolve_voice(args.platform, args.voice, script_text)
     asyncio.run(_tts(render_dir, beats, voice))
     asyncio.run(_screenshots(render_dir, len(beats)))

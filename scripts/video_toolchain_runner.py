@@ -696,7 +696,12 @@ def build_cards(
         if visual_assignments:
             card["visual_asset"] = visual_assignments[index % len(visual_assignments)]
         if layout == "cover":
-            card.update({"sub": "先看问题，再看统一路径", "hook": title, "hook_prefix": "内容工作流实测"})
+            english = not bool(re.search(r"[\u3400-\u9fff]", script_body))
+            card.update({
+                "sub": "See the problem, then the workflow" if english else "先看问题，再看统一路径",
+                "hook": title,
+                "hook_prefix": "Content workflow review" if english else "内容工作流实测",
+            })
         if layout == "card_stack":
             card["items"] = _supporting_labels(presentation, index)
         if layout == "big_number":
@@ -723,9 +728,19 @@ def _card_visual_label(text: str, presentation: str, index: int) -> str:
 
 def _card_supporting_label(text: str, presentation: str, index: int) -> str:
     mapped = _presentation_label(presentation, index)
+    chinese = bool(re.search(r"[\u3400-\u9fff]", str(text or "")))
+    if not chinese:
+        english_labels = {
+            "hero_poster": "Core question", "hero_conflict": "Core conflict", "hero_number": "Key figure",
+            "establishing": "Real context", "detail_closeup": "Problem detail", "process_flow": "Action path",
+            "split_screen": "Two approaches", "side_a": "First approach", "side_b": "Second approach",
+            "evidence_zoom": "Evidence check", "winner_reveal": "Practical payoff", "payoff_reveal": "Practical payoff",
+            "difference_grid": "Decision rule", "cta": "Next action",
+        }
+        return english_labels.get(presentation, ["Core conflict", "Problem context", "Cost source", "Action step", "Decision rule", "Evidence check", "Practical payoff", "Open question"][index % 8])
     if not re.fullmatch(r"关键点\s*\d+", mapped):
         return mapped
-    if re.search(r"[\u3400-\u9fff]", str(text or "")):
+    if chinese:
         roles = ["核心冲突", "问题背景", "成本来源", "执行步骤", "取舍标准", "核对依据", "行动收益", "评论互动"]
     else:
         roles = ["Core conflict", "Problem context", "Cost source", "Action step", "Decision rule", "Evidence check", "Practical payoff", "Open question"]
@@ -752,16 +767,12 @@ def _visual_label(text: str) -> str:
                 return label
         clause = next((part.strip() for part in re.split(r"[，。；！？]", clean) if len(part.strip()) >= 4), clean)
         return clause if len(clause) <= 16 else clause[:16].rstrip("的了和与")
-    tokens = re.findall(r"[A-Za-z][A-Za-z0-9.+#-]{1,18}|[\u3400-\u9fff]{2,6}", clean)
-    stop = {"为什么", "这是", "一个", "第一步", "第二步", "第三步", "直接", "根据", "不要", "可以"}
-    selected = []
-    for token in tokens:
-        if token in stop or token in selected:
-            continue
-        selected.append(token)
-        if len(selected) >= 3:
-            break
-    return " · ".join(selected) if selected else clean[:18]
+    clause = re.split(r"[,;:]", clean, maxsplit=1)[0].strip()
+    words = clause.split()
+    selected = words[:6]
+    while selected and selected[-1].casefold().strip(".,!?;:") in {"a", "an", "the", "to", "of", "for", "with", "and", "or", "but", "before"}:
+        selected.pop()
+    return " ".join(selected) or clean[:36]
 
 
 def _visual_headline(text: str, presentation: str, index: int) -> str:
@@ -1364,7 +1375,12 @@ def _select_cover_background(assignments: list[dict], platform: str, context: st
     selected = max(usable or candidates, key=lambda row: (row["score"], -row["assignment_index"]), default=None)
     if not selected:
         return None, {"passed": False, "reason": "no_cover_background_candidates"}
-    return selected["path"], {"passed": not selected["ocr_conflicts"] and not selected["text_heavy"], **selected, "candidate_count": len(candidates)}
+    passed = not selected["ocr_conflicts"] and not selected["text_heavy"] and selected["score"] > 0
+    reason = "" if passed else (
+        "cover_background_content_match_insufficient" if selected["score"] <= 0
+        else "cover_background_text_or_platform_conflict"
+    )
+    return selected["path"], {"passed": passed, "reason": reason, **selected, "candidate_count": len(candidates)}
 
 
 def _write_visual_treatment_plan(output_dir: Path, plan: dict, assignments: list[dict]) -> Path:

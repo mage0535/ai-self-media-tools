@@ -2,8 +2,9 @@ import json
 
 from content_platform.media import MediaBridge
 from scripts.film_renderer import validate_render_durations
-from scripts.render_landscape_video import _landscape_visual_copy
+from scripts.render_landscape_video import _landscape_visual_copy, _write_slides
 from pathlib import Path
+from PIL import Image
 from unittest.mock import patch
 
 
@@ -42,14 +43,50 @@ def test_video_script_compiler_preserves_english_word_budget():
     assert result["max_words_per_segment"] == 18
 
 
-def test_landscape_panel_uses_role_and_keywords_not_full_narration():
+def test_video_script_compiler_keeps_english_sentence_boundaries():
+    body = " ".join(
+        f"Sentence {index} explains one complete workflow decision clearly."
+        for index in range(1, 13)
+    )
+
+    result = MediaBridge.compile_video_script({"body": body})
+
+    assert len(result["segments"]) == 8
+    assert all(segment.endswith(".") for segment in result["segments"])
+    assert " ".join(result["script"].split()) == " ".join(body.split())
+
+
+def test_landscape_panel_uses_content_phrase_not_fixed_role_or_keyword_bag():
     beat = "An agent plans actions, calls tools, observes results, and adjusts until the goal is complete."
 
     title, points = _landscape_visual_copy(beat, 4)
 
-    assert title == "How it works"
+    assert title == "An agent plans actions"
+    assert title != "How it works"
+    assert "·" not in points
     assert beat not in title + points
     assert "agent" in points.casefold()
+
+
+def test_landscape_renderer_consumes_compiled_card_copy(tmp_path):
+    background_dir = tmp_path / "backgrounds"
+    background_dir.mkdir()
+    Image.new("RGB", (1280, 720), (10, 20, 30)).save(background_dir / "bg_01.jpg")
+    render_dir = tmp_path / "render"
+    cards = [{"t": "Define the goal first", "txt": "Goal, audience, constraints"}]
+
+    _write_slides(
+        render_dir,
+        ["Define the goal before asking Claude to draft the answer."],
+        background_dir,
+        {"bg": "rgba(0,0,0,.7)", "accent": "#ff3355", "label": "YouTube Explainer"},
+        cards=cards,
+    )
+
+    html = (render_dir / "slides" / "slide_01_text.html").read_text(encoding="utf-8")
+    assert "Define the goal first" in html
+    assert "Goal, audience, constraints" in html
+    assert "The core question" not in html
 
 
 def test_film_renderer_rejects_runaway_tts_durations_before_rendering():

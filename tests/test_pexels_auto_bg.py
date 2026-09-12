@@ -171,6 +171,23 @@ def test_semantic_queries_are_scene_specific_not_generic_single_words():
     assert any("multiple" in query or "overwhelmed" in query for query in queries)
 
 
+def test_claude_workflow_queries_request_observable_human_actions_not_robots():
+    from scripts.pexels_auto_bg import _semantic_queries
+
+    script = "\n\n".join([
+        "Still using Claude like a search box?",
+        "Define your goal, audience, and constraints before drafting.",
+        "Ask Claude to compare choices and inspect the result.",
+        "Use project files and verify the final workflow output.",
+    ])
+
+    queries = _semantic_queries(script, 8)
+
+    assert all("robot" not in query.casefold() for query in queries)
+    assert any("chat interface" in query.casefold() for query in queries)
+    assert any("review" in query.casefold() or "verify" in query.casefold() for query in queries)
+
+
 def test_pexels_alt_metadata_is_hash_bound_source_semantic_evidence(tmp_path):
     from scripts.pexels_auto_bg import _source_metadata_semantic_evidence
 

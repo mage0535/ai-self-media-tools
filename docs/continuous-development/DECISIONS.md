@@ -752,3 +752,11 @@
 - YouTube duration normalization applies only to explicit short/vertical forms. Existing short-platform limits remain unchanged unless their platform rule contract changes.
 - Full-transcript ASR similarity is insufficient because a missing ending can still score above threshold. Video acceptance separately compares the expected final narration sentence with the ASR tail.
 - A previously generated file that lost its final sentence remains rejected even if all earlier artifact hashes and motion probes pass. Evidence cannot repair damaged media.
+
+## D109: Renderers Consume Compiled Copy And Observable Visual Semantics
+
+- English video narration is grouped at complete sentence boundaries before balancing to the supported scene count. Equal word-count slicing cannot create reader-facing or spoken fragments.
+- `cards.json` is the authoritative display-copy input for the selected renderer. A renderer cannot replace compiled card titles and supporting copy with fixed role labels or keyword bags.
+- Display copy follows the content language. Cross-language defaults are forbidden unless the content blueprint explicitly requests bilingual output.
+- Abstract AI/technology token overlap is insufficient visual proof. Interface concepts require a visible screen/interface; human-review concepts require a person, review action and screen; digital workspaces require an observable computer.
+- A cover background must have a positive content-match score in addition to OCR/platform safety. Generic robots, portraits and sci-fi collages are explicitly excluded from workflow cover generation unless the topic itself requires them.

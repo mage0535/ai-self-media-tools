@@ -587,3 +587,19 @@ These describe the audited production release, not the current development code.
 - Re-probing the retained MP4 now fails as intended. Whole-script ASR similarity is 0.7844, while terminal similarity is 0.0135 and terminal word coverage is 0.2778; the detailed reason is `asr_terminal_coverage_missing`.
 - The outer failure summary still emits an older generic ASR label and should be aligned with the detailed probe in the next focused change. This does not alter the rejection result.
 - The next acceptance work is not deployment: harden cover click quality, scene semantic relevance and reader-facing chapter copy, then generate a fresh full-length YouTube Canary. Production release and timers remain unchanged.
+
+## Active Work 2026-09-12
+
+- Owner: Codex.
+- Files reserved: `scripts/task9_canary.py`, cover-quality/director modules, video card/title compilation modules, their focused tests, and the four coordination documents.
+- Server constraint: a user-started Hermes Video Channels render is active in the mutable runtime. Do not edit, stop or reuse that runtime; local TDD may proceed, but Linux staging verification waits for resource isolation.
+
+## 2026-09-12 YouTube Visual And Copy Hardening
+
+- The user-started Video Channels render ended without intervention. Production remains isolated.
+- Root-cause tracing found two broken consumption boundaries: English narration was divided by equal word count rather than sentence boundaries, and `render_landscape_video.py` ignored the already compiled `cards.json`, replacing it with eight fixed role labels plus keyword bags.
+- The retained media evidence also showed robot/network images passing interface and human-review concepts, an empty office passing digital-workspace semantics, and a zero-score generic technology image being accepted as the cover background.
+- TDD now preserves complete English sentences across eight balanced beats, emits complete reader-facing card phrases with no Chinese defaults, passes compiled cards into the landscape renderer, and reports exact ASR terminal failure reasons.
+- AI interface, human review and digital workspace concepts now require observable screen/person/review/computer anchors. Claude workflow queries request human actions rather than robots. Cover selection rejects a best candidate whose content-match score is not positive, and workflow cover prompts forbid generic robots and unrelated sci-fi collages.
+- Related regression: 157 passed. Full regression: 1888 passed plus 37 subtests in 400.16 seconds. Project/privacy audit 594/0; license audit 66/0.
+- Next: commit/push, Linux focused verification, then a fresh full-length YouTube Canary and manual cover/contact-sheet review. Production and timers remain unchanged.

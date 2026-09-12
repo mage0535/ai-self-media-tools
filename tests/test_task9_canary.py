@@ -786,7 +786,7 @@ def test_youtube_probe_prefers_platform_sized_cover(tmp_path: Path):
 
 
 def test_asr_terminal_coverage_rejects_video_that_loses_final_cta():
-    from scripts.task9_canary import _terminal_narration_coverage
+    from scripts.task9_canary import _asr_failure_reasons, _terminal_narration_coverage
 
     expected = (
         "Better results come from context, clear tasks, and deliberate refinement, not a magic prompt. "
@@ -800,6 +800,9 @@ def test_asr_terminal_coverage_rejects_video_that_loses_final_cta():
 
     assert _terminal_narration_coverage(expected, complete_asr)["passed"] is True
     assert _terminal_narration_coverage(expected, truncated_asr)["passed"] is False
+    assert _asr_failure_reasons(truncated_asr, [{"text": truncated_asr}], 0.78, {"passed": False}) == [
+        "asr_terminal_coverage_missing"
+    ]
 
 
 def test_safe_manual_publisher_builds_handoff_from_real_artifacts(tmp_path: Path):
