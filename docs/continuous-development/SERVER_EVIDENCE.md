@@ -1012,3 +1012,12 @@ Observed read-only on 2026-08-31.
 - The retained renderer output is 66.68 seconds. Its historical manifest still records the old 60-second policy and remains a valid failure record.
 - Rebuilding a separate scene contract from v4b's original `cards.json`, `visual_recipe.json` and `video_toolchain_plan.json` identified `article_explainer_video`, emitted no maximum and passed duration validation against the unchanged media.
 - The revalidation result is stored separately in the isolated Canary root. It is policy evidence, not a completed Pipeline or handoff. Production and timers remain unchanged.
+
+## 2026-09-12 YouTube v5 Full Run And Manual Review
+
+- Fresh YouTube v5 completed in 953.9 seconds at staging commit `c711174`. Pipeline and all independent probes passed; the job stopped at `review_required` with an isolated handoff and no external publication.
+- ASR included the final CTA, horizontal duration was preserved, eight source/license-bound backgrounds passed, and no generic robot survived the stricter semantic route.
+- Manual contact-sheet review rejected three defects despite machine green: scene four ended in `interac`, scene five displayed `Merge overlap` for `Then iterate`, and the cover omitted `3 Steps` while remaining a sparse dark composition.
+- Code tracing found a downstream `[:200]` story-beat slice, positional fallback copy and colon-based cover truncation. Local TDD fixes those paths and records six materialized graphic elements for split-comparison covers.
+- Full local regression returned 1895 passed plus 37 subtests in 397.14 seconds. JUnit is `artifacts/test-reports/sol-youtube-manual-review-copy-cover-20260912.xml`; audits have zero issues.
+- v5 remains rejected and was not externally delivered. Production and timers remain unchanged; a fresh v6 is required.

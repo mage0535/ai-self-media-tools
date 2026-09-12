@@ -782,3 +782,11 @@
 - TikTok and other configured short-only targets retain their existing limits. Tests must include both the horizontal exemption and a short-form positive control.
 - Duplicate duration policy implementations must produce the same result before a renderer output can be accepted.
 - Historical manifests are immutable evidence. Revalidation writes a separate result from original inputs; it must not overwrite the failed manifest to manufacture success.
+
+## D113: Machine-Green Video Still Requires Complete Scene Copy And Click Payoff
+
+- A bounded video script may not be hard-sliced again by a downstream renderer or card compiler. Every scene narration and display phrase must end at a complete semantic boundary.
+- Short complete beats receive a content-specific visual headline, not an unrelated positional fallback and not a verbatim narration duplicate.
+- YouTube cover compression preserves a numbered payoff immediately following a colon when it fits the platform title budget. Dropping the payoff invalidates the click promise even when typography is safe.
+- A declared split-comparison cover must materialize observable comparison/story elements. A shade polygon and metadata label alone are not sufficient visual execution evidence.
+- Manual review can reject a machine-green Canary. The rejected artifacts remain negative evidence and require a fresh run after deterministic fixes.

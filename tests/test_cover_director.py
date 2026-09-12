@@ -107,6 +107,33 @@ def test_youtube_cover_keeps_complete_question_and_skips_question_subtitle():
     assert direction["subtitle_text"] == "Chatbots reply. Agents plan, act, and verify."
 
 
+def test_youtube_cover_preserves_numbered_payoff_after_colon():
+    direction = build_cover_direction(
+        platform="youtube",
+        topic="Use Claude Better",
+        title="Use Claude Better: 3 Steps from Beginner to Pro",
+        body="Stop using a blank chat box and build a reviewable workflow.",
+    )
+
+    assert direction["title_text"] == "Use Claude Better: 3 Steps"
+
+
+def test_split_comparison_cover_materializes_visual_story_elements(tmp_path: Path):
+    background = tmp_path / "background.jpg"
+    Image.new("RGB", (1920, 1080), (8, 16, 28)).save(background)
+    output = tmp_path / "cover.jpg"
+    direction = build_cover_direction(
+        platform="youtube", topic="Claude workflow",
+        title="Before vs After: 3 Workflow Steps",
+        body="Compare a blank chat with a reviewable workflow.",
+    )
+
+    evidence = render_cover_poster(background, output, direction)
+
+    assert direction["layout_key"] == "split_comparison"
+    assert evidence["poster_graphic_elements"] >= 5
+
+
 def test_agent_skills_cover_uses_workflow_playbook_visual_and_clean_subtitle():
     direction = build_cover_direction(
         platform="juejin",

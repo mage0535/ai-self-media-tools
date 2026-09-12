@@ -714,11 +714,11 @@ def build_cards(
 
 def _card_visual_label(text: str, presentation: str, index: int) -> str:
     label = _visual_label(text)
+    chinese = bool(re.search(r"[\u3400-\u9fff]", str(text or "")))
     spoken = re.sub(r"\s+", "", str(text or "")).casefold()
     displayed = re.sub(r"\s+", "", label).casefold()
     if spoken and displayed and spoken != displayed:
         return label
-    chinese = bool(re.search(r"[\u3400-\u9fff]", str(text or "")))
     if chinese:
         fallbacks = ["核心冲突", "切换成本", "减少入口", "只留高频", "合并重叠", "固定分工", "流程回报", "你的选择"]
     else:
@@ -778,6 +778,7 @@ def _visual_label(text: str) -> str:
 def _visual_headline(text: str, presentation: str, index: int) -> str:
     lowered = str(text or "").casefold()
     rules = [
+        (("then iterate", "iterate again", "refine and repeat"), "Iterate with feedback"),
         (("切换", "工具越多", "too many tools", "switching"), "工具切换黑洞"),
         (("账号", "密码", "登录", "充值", "会员"), "隐藏的管理成本"),
         (("文本", "图像", "图片", "语音", "视频"), "能力散落在各处"),
@@ -2009,7 +2010,7 @@ def _run_autoclip_repost(plan: dict, output_dir: Path, title: str, source_url: s
 def _beats(text: str) -> list[str]:
     paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text or "") if part.strip()]
     if len(paragraphs) >= 2:
-        return [part[:200] for part in paragraphs][:10]
+        return paragraphs[:10]
     parts = [part.strip(" -#\t") for part in re.split(r"\n+|[。.!?；;]", text or "") if part.strip(" -#\t")]
     return [part[:200] for part in parts if len(part) >= 8][:10]
 
@@ -2020,7 +2021,7 @@ def _story_beats(text: str) -> list[str]:
     # 无空行分段时回退到按句号切分（兼容单段落脚本）。
     paragraphs = [part.strip() for part in re.split(r"\n\s*\n", str(text or "")) if part.strip()]
     if len(paragraphs) >= 2:
-        return [part[:200] for part in paragraphs][:10]
+        return paragraphs[:10]
     parts = re.split(r"\n+|[.!?;\u3002\uff01\uff1f\uff1b]", str(text or ""))
     return [part.strip(" -#\t")[:200] for part in parts if len(part.strip(" -#\t")) >= 8]
 

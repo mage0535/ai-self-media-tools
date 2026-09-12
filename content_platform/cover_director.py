@@ -116,7 +116,7 @@ def render_cover_poster(background: str | Path, output: str | Path, direction: d
     draw = ImageDraw.Draw(overlay)
     layout = str(direction.get("layout_key") or "hero_subject")
     accent = _rgb(str(direction.get("accent") or "#FFD166"))
-    _poster_shade(draw, width, height, layout)
+    poster_graphic_elements = _poster_shade(draw, width, height, layout)
     margin = round(width * 0.065)
     title_size = max(52, round(width * (0.086 if width < height else 0.064)))
     subtitle_size = max(28, round(title_size * 0.45))
@@ -171,6 +171,7 @@ def render_cover_poster(background: str | Path, output: str | Path, direction: d
         "title_line_count": len(title_lines),
         "max_text_line_width_px": max_text_width,
         "text_safe_width_px": text_max_width,
+        "poster_graphic_elements": poster_graphic_elements,
     }
     return evidence
 
@@ -184,6 +185,13 @@ def _cover_title(value: str, platform: str) -> str:
         limit = 24 if platform in {"twitter", "x"} and not re.search(r"[\u3400-\u9fff]", clean) else 18
     if len(clean) <= limit:
         return clean
+    if platform == "youtube" and ":" in clean:
+        first, second = [part.strip() for part in clean.split(":", 1)]
+        numbered = re.match(r"(\d+\s+\w+)", second)
+        if numbered:
+            candidate = f"{first}: {numbered.group(1)}"
+            if len(candidate) <= limit:
+                return candidate
     first = next((part.strip() for part in re.split(r"[：:，,。！？!?|]", clean) if 6 <= len(part.strip()) <= limit), "")
     return first or clean[:limit].rstrip("，。！？!? ")
 
@@ -250,19 +258,31 @@ def _treatment(text: str, profile: str) -> str:
     return "premium_editorial" if "editorial" in profile else "cinematic_utility"
 
 
-def _poster_shade(draw: ImageDraw.ImageDraw, width: int, height: int, layout: str) -> None:
+def _poster_shade(draw: ImageDraw.ImageDraw, width: int, height: int, layout: str) -> int:
     for index in range(height):
         ratio = index / max(1, height - 1)
         alpha = int(18 + 188 * ratio)
         draw.line((0, index, width, index), fill=(0, 0, 0, alpha))
     if layout == "split_comparison":
         draw.polygon(((width * 0.48, 0), (width, 0), (width, height), (width * 0.62, height)), fill=(8, 15, 28, 75))
+        left = (round(width * 0.68), round(height * 0.18), round(width * 0.88), round(height * 0.36))
+        right = (round(width * 0.72), round(height * 0.58), round(width * 0.92), round(height * 0.76))
+        draw.rounded_rectangle(left, radius=24, outline=(255, 255, 255, 105), width=4, fill=(8, 15, 28, 95))
+        draw.rounded_rectangle(right, radius=24, outline=(255, 51, 85, 180), width=4, fill=(8, 15, 28, 105))
+        start = (round(width * 0.78), round(height * 0.36))
+        end = (round(width * 0.82), round(height * 0.58))
+        draw.line((*start, *end), fill=(255, 255, 255, 145), width=6)
+        draw.ellipse((start[0] - 11, start[1] - 11, start[0] + 11, start[1] + 11), fill=(255, 255, 255, 190))
+        draw.ellipse((end[0] - 11, end[1] - 11, end[0] + 11, end[1] + 11), fill=(255, 51, 85, 230))
+        return 6
     elif layout == "evidence_interface":
         draw.rounded_rectangle((width * 0.54, height * 0.08, width * 0.94, height * 0.38), radius=28, outline=(255, 255, 255, 65), width=3)
         for index, ratio in enumerate((0.15, 0.22, 0.29)):
             cy = height * ratio
             draw.ellipse((width * 0.58, cy - 9, width * 0.58 + 18, cy + 9), fill=(255, 209, 102, 170))
             draw.rounded_rectangle((width * 0.62, cy - 7, width * (0.86 - index * 0.04), cy + 7), radius=7, fill=(255, 255, 255, 75))
+        return 7
+    return 1
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
