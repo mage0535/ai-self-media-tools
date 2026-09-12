@@ -643,3 +643,9 @@ These describe the audited production release, not the current development code.
 - TDD removes paragraph character slicing after the bounded script compiler, maps the iteration beat to `Iterate with feedback`, preserves the numbered YouTube payoff and draws six split-comparison nodes/connectors with measured evidence.
 - Related cover/video regression: 85 passed. Full regression: 1895 passed plus 37 subtests in 397.14 seconds. Privacy 594/0; license 66/0.
 - Current owner: Codex. Next: commit/push, Linux focused verification and fresh YouTube v6 with manual cover/contact-sheet/ASR review. Production and timers remain unchanged.
+
+## 2026-09-12 Linux Scene-Copy And Cover Verification
+
+- Clean staging advanced to `b3daaee`. Long scene preservation, content-specific iteration title, numbered YouTube cover payoff and split-comparison graphic execution tests passed 4/4.
+- Staging has no tracked drift. Production remains the prior signed release and the overnight timer remains inactive.
+- Next: run YouTube v6 from a fresh isolated root; require Pipeline plus artifact probes and repeat manual title/body/cards/ASR/cover/contact-sheet review. Do not reuse or deliver v5.
