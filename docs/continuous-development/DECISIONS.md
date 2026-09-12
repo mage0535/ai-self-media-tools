@@ -790,3 +790,10 @@
 - YouTube cover compression preserves a numbered payoff immediately following a colon when it fits the platform title budget. Dropping the payoff invalidates the click promise even when typography is safe.
 - A declared split-comparison cover must materialize observable comparison/story elements. A shade polygon and metadata label alone are not sufficient visual execution evidence.
 - Manual review can reject a machine-green Canary. The rejected artifacts remain negative evidence and require a fresh run after deterministic fixes.
+
+## D114: Platform-Scoped BGM Providers Run Before Generic Sources
+
+- When a target platform has a verified, platform-scoped online music provider, that provider runs before generic sources so generic network failures cannot consume the complete BGM resolution budget.
+- YouTube Audio Library remains valid only for YouTube targets and retains its attribution/license scope. It must not be promoted for other platforms.
+- Provider priority never bypasses real-instrument, license, source URL, download integrity or seven-day fingerprint gates.
+- Failed BGM resolution blocks final delivery; an existing raw video or partial audio file is not a completed artifact.

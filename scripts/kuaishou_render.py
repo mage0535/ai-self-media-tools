@@ -1198,16 +1198,7 @@ def _bgm_queries(style):
 
 def _online_bgm_candidates(style):
     global _ACTIVE_BGM_CANDIDATE_DEADLINE
-    providers = [
-        _wikimedia_commons_candidates,
-        _openverse_candidates,
-        _youtube_audio_library_candidates,
-        _jamendo_candidates,
-        _pixabay_music_candidates,
-        _musopen_candidates,
-        _ccmixter_candidates,
-        _incompetech_candidates,
-    ]
+    providers = _online_bgm_provider_order(os.environ.get("BGM_TARGET_PLATFORM", ""))
     for query in _bgm_queries(style):
         for provider in providers:
             if _bgm_deadline_reached():
@@ -1223,6 +1214,23 @@ def _online_bgm_candidates(style):
                 continue
             finally:
                 _ACTIVE_BGM_CANDIDATE_DEADLINE = previous_deadline
+
+
+def _online_bgm_provider_order(target_platform=""):
+    providers = [
+        _wikimedia_commons_candidates,
+        _openverse_candidates,
+        _youtube_audio_library_candidates,
+        _jamendo_candidates,
+        _pixabay_music_candidates,
+        _musopen_candidates,
+        _ccmixter_candidates,
+        _incompetech_candidates,
+    ]
+    if str(target_platform or "").casefold() in {"youtube", "youtube_shorts", "youtube-shorts"}:
+        providers.remove(_youtube_audio_library_candidates)
+        providers.insert(0, _youtube_audio_library_candidates)
+    return providers
 
 
 def _bgm_deadline_reached():

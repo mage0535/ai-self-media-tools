@@ -649,3 +649,11 @@ These describe the audited production release, not the current development code.
 - Clean staging advanced to `b3daaee`. Long scene preservation, content-specific iteration title, numbered YouTube cover payoff and split-comparison graphic execution tests passed 4/4.
 - Staging has no tracked drift. Production remains the prior signed release and the overnight timer remains inactive.
 - Next: run YouTube v6 from a fresh isolated root; require Pipeline plus artifact probes and repeat manual title/body/cards/ASR/cover/contact-sheet review. Do not reuse or deliver v5.
+
+## 2026-09-13 YouTube v6 Online BGM Provider Priority
+
+- YouTube v6 completed generation, content gates, strict asset recovery, eight scene cards, Hojo TTS segments and raw video. It failed after 1196.8 seconds during online BGM resolution; no final MP4 or handoff was accepted.
+- Direct and US-proxy downloads for multiple Openverse candidates timed out. The project already had a YouTube Audio Library adapter, but provider order placed it after Wikimedia and Openverse, so earlier candidates consumed the global resolution budget.
+- TDD adds a target-aware provider order: YouTube and YouTube Shorts try the platform-scoped Audio Library first; other platforms retain Wikimedia/Openverse before that inapplicable provider. License, real-instrument and seven-day fingerprint gates remain unchanged.
+- Focused runner regression: 67 passed. Full regression: 1896 passed plus 37 subtests in 397.48 seconds. Privacy 594/0; license 66/0.
+- The calendar date has advanced. Do not run another Canary using the 2026-09-11 source fixture as current evidence; refresh strict YouTube same-lane evidence first. Production and timers remain unchanged.
