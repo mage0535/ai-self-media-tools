@@ -967,3 +967,10 @@ Observed read-only on 2026-08-31.
 - Code tracing found `_normalize_short_video_duration` called with only platform identity and included all YouTube output. The horizontal case was therefore trimmed as if it were a Short.
 - Local TDD adds content-form-aware duration policy and a separate terminal-ASR coverage probe. The observed truncated transcript is the negative case; a transcript with minor product-name recognition drift and a complete CTA is positive.
 - Full local regression returned 1882 passed plus 37 subtests in 379.30 seconds. JUnit is `artifacts/test-reports/sol-youtube-horizontal-completeness-20260912.xml`. Production, shared state, timers and external publishers remain unchanged.
+
+## 2026-09-12 Linux Rejection Of Retained Truncated Video
+
+- Isolated staging advanced cleanly to `a3e6c02`; three focused duration/ASR tests passed.
+- Independent probing of the retained 59.8-second MP4 now rejects its ASR evidence. Ten ASR segments and 0.7844 whole-script similarity are insufficient because the expected final sentence is absent; terminal similarity is 0.0135 and word coverage is 0.2778.
+- The detailed probe records `asr_terminal_coverage_missing`. The existing outer summary still uses a generic ASR failure label; this is a diagnostics-only follow-up and does not make the artifact pass.
+- The old video remains a negative sample. No external handoff was sent, no publisher was invoked, and production code, shared state and timers were not changed.
