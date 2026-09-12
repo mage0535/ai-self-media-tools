@@ -135,3 +135,91 @@ def test_video_capability_rejects_scene_effect_for_another_artifact(tmp_path):
 
     assert result["status"] == "failed"
     assert "scene_effect_not_verified" in result["output"]["reason"]
+
+
+def test_shotcraft_capability_binds_observed_moves_to_final_video(tmp_path):
+    final = tmp_path / "final.mp4"
+    final.write_bytes(b"final video")
+    digest = hashlib.sha256(final.read_bytes()).hexdigest()
+    segments = [
+        {"scene_id": "s01", "move_id": "push_in", "artifact_verified": True},
+        {"scene_id": "s02", "move_id": "split_screen", "artifact_verified": True},
+        {"scene_id": "s03", "move_id": "detail_reveal", "artifact_verified": True},
+    ]
+    scene_evidence = {
+        "passed": True,
+        "artifact_sha256": digest,
+        "effect_evidence": {
+            "passed": True,
+            "artifact_sha256": digest,
+            "probe": "per_scene_frame_difference_and_shotcraft_mapping",
+        },
+        "scenes": segments,
+    }
+    capability = {
+        "id": "shotcraft_moves",
+        "kind": "tool",
+        "lifecycle": "executable",
+        "adapter": "python:content_platform.adapters.runtime:execute",
+        "availability_probe": "module:content_platform.adapters.runtime",
+        "required_inputs": ["content_profile", "content_blueprint"],
+        "output_contract": "shotcraft_plan_v1",
+    }
+
+    result = execute_capability(capability, {
+        "content_profile": {"content_format": "long_video"},
+        "content_blueprint": {"topic": "AI workflow"},
+        "render_manifest": {
+            "status": "rendered",
+            "output": str(final),
+            "shotcraft_motion_plan": {"available": True, "shots": segments},
+            "segment_motion_evidence": {"segments": segments},
+        },
+        "scene_execution_evidence": scene_evidence,
+    })
+
+    assert result["status"] == "executed"
+    assert result["output"]["artifact_evidence"] == [{"path": str(final), "sha256": digest}]
+    assert result["output"]["effect_evidence"]["probe"] == "per_scene_frame_difference_and_shotcraft_mapping"
+
+
+def test_shotcraft_capability_rejects_move_mapping_not_observed_in_final_video(tmp_path):
+    final = tmp_path / "final.mp4"
+    final.write_bytes(b"final video")
+    digest = hashlib.sha256(final.read_bytes()).hexdigest()
+    planned = [
+        {"scene_id": "s01", "move_id": "push_in", "artifact_verified": True},
+        {"scene_id": "s02", "move_id": "split_screen", "artifact_verified": True},
+        {"scene_id": "s03", "move_id": "detail_reveal", "artifact_verified": True},
+    ]
+    observed = [dict(item) for item in planned]
+    observed[1]["move_id"] = "wrong_move"
+    capability = {
+        "id": "shotcraft_moves",
+        "kind": "tool",
+        "lifecycle": "executable",
+        "adapter": "python:content_platform.adapters.runtime:execute",
+        "availability_probe": "module:content_platform.adapters.runtime",
+        "required_inputs": ["content_profile", "content_blueprint"],
+        "output_contract": "shotcraft_plan_v1",
+    }
+
+    result = execute_capability(capability, {
+        "content_profile": {"content_format": "long_video"},
+        "content_blueprint": {"topic": "AI workflow"},
+        "render_manifest": {
+            "status": "rendered",
+            "output": str(final),
+            "shotcraft_motion_plan": {"available": True, "shots": planned},
+            "segment_motion_evidence": {"segments": planned},
+        },
+        "scene_execution_evidence": {
+            "passed": True,
+            "artifact_sha256": digest,
+            "effect_evidence": {"passed": True, "artifact_sha256": digest, "probe": "scene_probe"},
+            "scenes": observed,
+        },
+    })
+
+    assert result["status"] == "failed"
+    assert "shotcraft_effect_not_verified" in result["output"]["reason"]

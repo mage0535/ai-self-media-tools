@@ -549,3 +549,11 @@ These describe the audited production release, not the current development code.
 - TDD now distinguishes `provider_edge_forbidden` from a real API-key rejection. Only region and HTML-edge network classes receive one US-proxy retry; generic credential 403 remains fail-fast and proxy values remain absent from evidence.
 - Focused recovery tests: 3 passed. Related generation/content/Pipeline tests: 127 passed. Full regression: 1875 passed plus 37 subtests in 369.73 seconds.
 - Current owner remains Codex. Next: commit/push, advance clean staging, run Linux focused verification, then execute another fresh YouTube artifact Canary. Production and timers remain unchanged.
+
+## 2026-09-12 YouTube Real Media And Shotcraft Evidence
+
+- The fresh isolated YouTube run completed in 815.8 seconds: real active-model generation, eight unique scene backgrounds, eight Hojo TTS segments, online licensed BGM, burned subtitles, 59.8-second final MP4, 1920x1080 cover, ASR and isolated manual handoff.
+- Pipeline finished `review_required`; no external publisher ran. Independent Task9 probes passed cover, 44.1 kHz stereo, subtitles, frame motion, TTS, BGM, eight-scene execution, ASR, handoff, source provenance and delivery policy.
+- Acceptance still failed because required `shotcraft_moves` was only `output_verified`. TDD now requires the capability itself to bind final MP4 SHA, a named effect probe and exact scene-to-move equality between rendered segments and measured final-video evidence.
+- Shotcraft RED covered registry level, missing artifact binding and mismatched move mapping. Focused tests are 3 passed; related capability/effect/Task9 regression is 100 passed; full regression is 1877 passed plus 37 subtests in 365.38 seconds.
+- A separate `archive_warning` remains open because the legacy archive helper assumes every output uses `platform/date/render`. Do not call the YouTube Canary fully accepted until Shotcraft re-probe and archive-layout repair both pass.

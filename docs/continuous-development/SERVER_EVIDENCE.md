@@ -934,3 +934,12 @@ Observed read-only on 2026-08-31.
 - Hermes status showed the OpenAI Codex OAuth identity logged in and the gateway healthy. A minimal standalone direct inference returned an HTML 403 with exit code zero. The same prompt, identity and model selection returned `OK` when only that process used the configured US proxy.
 - Local TDD records the observed response as `provider_edge_forbidden`, retries it once through US fallback and preserves generic API-key rejection as a one-attempt failure. Three focused route tests and 127 related tests passed.
 - Full local regression returned 1875 passed plus 37 subtests in 369.73 seconds. JUnit is `artifacts/test-reports/sol-youtube-edge-recovery-20260912.xml`. No production release, shared database, timer, gateway configuration or publisher was changed.
+
+## 2026-09-12 YouTube Real Media Canary And Shotcraft Gap
+
+- With production worker proxy environment loaded, the next isolated YouTube run completed in 815.8 seconds. It used one strict same-platform monthly work record and retained `same_lane_hot_work`, `native_verified=false` and manual-handoff association identity.
+- Generated artifacts include eight independent backgrounds, eight Hojo TTS segments, online BGM with source evidence, burned subtitles, a 59.8-second 1280x720 final MP4, a 1920x1080 cover, scene execution evidence and faster-whisper ASR with ten segments.
+- Independent probes passed cover, audio, subtitles, frame difference, subtitle file, TTS fingerprint, BGM fingerprint, eight scenes, ASR similarity, handoff package, source provenance, cover safe zone and delivery policy. The sole failure was `artifact_capability_not_verified:shotcraft_moves`.
+- The final scene evidence already recorded eight distinct measured moves bound to the final MP4 SHA. The capability adapter did not consume that evidence and the registry requested only output verification.
+- Local TDD changes `shotcraft_moves` to `effect_verified`, requires exact rendered/measured move mapping and binds the final MP4 SHA plus named probe. Full regression is 1877 passed plus 37 subtests; JUnit is `artifacts/test-reports/sol-youtube-shotcraft-effect-20260912.xml`.
+- An archive warning remains separately unresolved because the legacy helper assumes a fixed `platform/date/render` hierarchy. Production, shared state, timers and external publishers remain unchanged.

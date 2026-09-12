@@ -208,7 +208,43 @@ def _shotcraft_plan(inputs: dict[str, Any], capability_id: str) -> dict[str, Any
     observed = rendered.get("segment_motion_evidence") if isinstance(rendered.get("segment_motion_evidence"), dict) else {}
     motion = rendered.get("shotcraft_motion_plan") if isinstance(rendered.get("shotcraft_motion_plan"), dict) else {}
     if rendered.get("status") == "rendered" and motion.get("available") and len(observed.get("segments") or []) >= 3:
-        return _executed(capability_id, "shotcraft_plan_v1", {"shots": observed["segments"], "motion_plan": motion})
+        output = Path(str(rendered.get("output") or ""))
+        scene_execution = _dict_value(inputs, "scene_execution_evidence")
+        effect = scene_execution.get("effect_evidence") if isinstance(scene_execution.get("effect_evidence"), dict) else {}
+        if not output.is_file() or output.stat().st_size <= 0:
+            return _failure(capability_id, "shotcraft_plan_v1", "invalid_evidence:shotcraft_effect_not_verified")
+        digest = hashlib.sha256(output.read_bytes()).hexdigest()
+        rendered_moves = {
+            str(row.get("scene_id") or ""): str(row.get("move_id") or "")
+            for row in observed.get("segments") or []
+            if isinstance(row, dict) and row.get("scene_id") and row.get("move_id")
+        }
+        measured_moves = {
+            str(row.get("scene_id") or ""): str(row.get("move_id") or "")
+            for row in scene_execution.get("scenes") or []
+            if isinstance(row, dict) and row.get("scene_id") and row.get("move_id")
+        }
+        verified = (
+            scene_execution.get("passed") is True
+            and str(scene_execution.get("artifact_sha256") or "") == digest
+            and effect.get("passed") is True
+            and str(effect.get("artifact_sha256") or "") == digest
+            and str(effect.get("probe") or "")
+            and rendered_moves == measured_moves
+            and len(rendered_moves) >= 3
+        )
+        if not verified:
+            return _failure(capability_id, "shotcraft_plan_v1", "invalid_evidence:shotcraft_effect_not_verified")
+        return _executed(
+            capability_id,
+            "shotcraft_plan_v1",
+            {
+                "shots": observed["segments"],
+                "motion_plan": motion,
+                "artifact_evidence": [{"path": str(output), "sha256": digest}],
+                "effect_evidence": effect,
+            },
+        )
     evidence = _dict_value(inputs, "shotcraft_plan", "shotcraft_motion_plan")
     if not evidence:
         return _failure(capability_id, "shotcraft_plan_v1", "missing_evidence:shotcraft_plan")
