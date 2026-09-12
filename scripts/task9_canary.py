@@ -629,6 +629,29 @@ def _artifact_paths(root: Path, manifest: dict[str, Any]) -> tuple[dict[str, str
     return hashes, failures
 
 
+def _terminal_narration_coverage(expected: str, observed: str) -> dict[str, Any]:
+    expected_sentences = [part.strip() for part in re.split(r"(?<=[.!?。！？])\s+", str(expected or "").strip()) if part.strip()]
+    terminal = expected_sentences[-1] if expected_sentences else ""
+    normalize = lambda value: re.sub(r"[^0-9a-z\u3400-\u9fff]", "", str(value or "").casefold())
+    expected_tail = normalize(terminal)
+    observed_text = normalize(observed)
+    observed_tail = observed_text[-max(160, len(expected_tail) * 3):]
+    similarity = SequenceMatcher(None, expected_tail, observed_tail).ratio() if expected_tail and observed_tail else 0.0
+    expected_words = re.findall(r"[a-z0-9]+", terminal.casefold())
+    observed_words = set(re.findall(r"[a-z0-9]+", str(observed or "").casefold())[-40:])
+    word_coverage = (
+        sum(1 for word in expected_words if word in observed_words) / len(expected_words)
+        if expected_words else 0.0
+    )
+    passed = bool(expected_tail) and (similarity >= 0.48 or word_coverage >= 0.65)
+    return {
+        "passed": passed,
+        "similarity": round(similarity, 4),
+        "word_coverage": round(word_coverage, 4),
+        "expected_terminal_length": len(expected_tail),
+    }
+
+
 def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str, Any]:
     """Probe a materialized canary package and return independent evidence."""
     root = Path(artifact_dir).resolve()
@@ -719,9 +742,14 @@ def probe_artifacts(case: dict[str, Any], artifact_dir: Path | str) -> dict[str,
         expected_text = str(tts.get("tts_text") or "").strip()
         normalize = lambda value: re.sub(r"[^0-9a-z\u3400-\u9fff]", "", value.casefold())
         asr_similarity = SequenceMatcher(None, normalize(asr_text), normalize(expected_text)).ratio() if asr_text and expected_text else 0.0
-        asr_passed = bool(asr_text) and bool(asr.get("segments")) and asr_similarity >= 0.5
-        asr_failures = [] if asr_passed else (["asr_transcript_or_segments_missing"] if not asr_text or not asr.get("segments") else ["asr_transcript_mismatch"])
-        probes["asr"] = _probe("asr", asr_passed, details={"segment_count": len(asr.get("segments", [])) if isinstance(asr.get("segments"), list) else 0, "tts_similarity": round(asr_similarity, 4), "provider": asr.get("provider"), "model": asr.get("model")}, failures=asr_failures, level="artifact_verified" if asr_passed else "declared")
+        terminal_coverage = _terminal_narration_coverage(expected_text, asr_text)
+        asr_passed = bool(asr_text) and bool(asr.get("segments")) and asr_similarity >= 0.5 and terminal_coverage["passed"]
+        asr_failures = [] if asr_passed else (
+            ["asr_transcript_or_segments_missing"] if not asr_text or not asr.get("segments")
+            else ["asr_transcript_mismatch"] if asr_similarity < 0.5
+            else ["asr_terminal_coverage_missing"]
+        )
+        probes["asr"] = _probe("asr", asr_passed, details={"segment_count": len(asr.get("segments", [])) if isinstance(asr.get("segments"), list) else 0, "tts_similarity": round(asr_similarity, 4), "terminal_coverage": terminal_coverage, "provider": asr.get("provider"), "model": asr.get("model")}, failures=asr_failures, level="artifact_verified" if asr_passed else "declared")
         if not asr_passed:
             failures.append("asr:asr_transcript_or_segments_missing")
 

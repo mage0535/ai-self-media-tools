@@ -184,6 +184,22 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(result["duration_seconds"], 59.8)
             self.assertEqual(path.read_bytes(), b"trimmed")
 
+    def test_youtube_horizontal_video_is_not_trimmed_to_short_limit(self):
+        from scripts import video_toolchain_runner as runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "final.mp4"
+            path.write_bytes(b"original")
+            with patch.object(runner, "_video_duration", return_value=68.8):
+                with patch.object(runner.subprocess, "run") as ffmpeg:
+                    result = runner._normalize_short_video_duration(path, "youtube", "horizontal_video")
+
+            self.assertTrue(result["passed"])
+            self.assertFalse(result["applied"])
+            self.assertEqual(result["reason"], "content form has no short duration limit")
+            self.assertEqual(path.read_bytes(), b"original")
+            ffmpeg.assert_not_called()
+
     def test_script_structure_gate_requires_distinct_story_beats(self):
         from scripts.video_toolchain_runner import validate_script_structure
 
