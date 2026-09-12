@@ -580,3 +580,10 @@ These describe the audited production release, not the current development code.
 - Task9 now separately verifies terminal narration coverage. Whole-script ASR similarity cannot hide a missing final sentence; minor recognition drift such as `Claude/Clawd` remains tolerated.
 - Focused tests: 3 passed. Related video/Task9 regression: 117 passed. Full regression: 1882 passed plus 37 subtests in 379.30 seconds. The retained MP4 is a negative sample and must not be delivered.
 - Next: commit/push, Linux focused verification, then improve cover/scene semantic and reader-facing chapter quality before a fresh YouTube Canary. Production and timers remain unchanged.
+
+## 2026-09-12 Linux Horizontal Completeness Verification
+
+- Clean staging advanced to `a3e6c02`; horizontal-duration, short-duration negative control and terminal-ASR tests passed 3/3.
+- Re-probing the retained MP4 now fails as intended. Whole-script ASR similarity is 0.7844, while terminal similarity is 0.0135 and terminal word coverage is 0.2778; the detailed reason is `asr_terminal_coverage_missing`.
+- The outer failure summary still emits an older generic ASR label and should be aligned with the detailed probe in the next focused change. This does not alter the rejection result.
+- The next acceptance work is not deployment: harden cover click quality, scene semantic relevance and reader-facing chapter copy, then generate a fresh full-length YouTube Canary. Production release and timers remain unchanged.
