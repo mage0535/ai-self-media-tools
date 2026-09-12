@@ -781,3 +781,4 @@
 - YouTube receives a 60-second scene-manifest cap only for explicit short/vertical content forms. Horizontal and long-form YouTube manifests have no Shorts maximum.
 - TikTok and other configured short-only targets retain their existing limits. Tests must include both the horizontal exemption and a short-form positive control.
 - Duplicate duration policy implementations must produce the same result before a renderer output can be accepted.
+- Historical manifests are immutable evidence. Revalidation writes a separate result from original inputs; it must not overwrite the failed manifest to manufacture success.

@@ -1005,3 +1005,10 @@ Observed read-only on 2026-08-31.
 - The renderer produced 86 files, but the final scene-duration gate rejected its horizontal output because `scene_manifest.SHORT_DURATION_LIMITS` still mapped all YouTube output to 60 seconds.
 - Local TDD makes that policy content-form aware. Full regression returned 1891 passed plus 37 subtests in 373.26 seconds; JUnit is `artifacts/test-reports/sol-youtube-scene-duration-policy-20260912.xml`.
 - v4b has no accepted handoff. Production, shared state, timers and external publishers remain unchanged; retained checkpoint revalidation is required.
+
+## 2026-09-12 Linux v4b Duration Revalidation
+
+- Staging advanced to `74f356a`; two focused scene-duration tests passed.
+- The retained renderer output is 66.68 seconds. Its historical manifest still records the old 60-second policy and remains a valid failure record.
+- Rebuilding a separate scene contract from v4b's original `cards.json`, `visual_recipe.json` and `video_toolchain_plan.json` identified `article_explainer_video`, emitted no maximum and passed duration validation against the unchanged media.
+- The revalidation result is stored separately in the isolated Canary root. It is policy evidence, not a completed Pipeline or handoff. Production and timers remain unchanged.
