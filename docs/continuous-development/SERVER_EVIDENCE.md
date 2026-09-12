@@ -1021,3 +1021,9 @@ Observed read-only on 2026-08-31.
 - Code tracing found a downstream `[:200]` story-beat slice, positional fallback copy and colon-based cover truncation. Local TDD fixes those paths and records six materialized graphic elements for split-comparison covers.
 - Full local regression returned 1895 passed plus 37 subtests in 397.14 seconds. JUnit is `artifacts/test-reports/sol-youtube-manual-review-copy-cover-20260912.xml`; audits have zero issues.
 - v5 remains rejected and was not externally delivered. Production and timers remain unchanged; a fresh v6 is required.
+
+## 2026-09-12 Linux Scene-Copy And Cover Focused Verification
+
+- Staging advanced cleanly to `b3daaee` and passed four focused tests covering the exact v5 manual-review defects.
+- The production symlink still resolves to the prior signed release; the overnight timer remains inactive.
+- This is code verification only. No v6 model, media, ASR or handoff ran, and v5 remains rejected.
