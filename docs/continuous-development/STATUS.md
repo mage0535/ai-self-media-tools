@@ -611,3 +611,11 @@ These describe the audited production release, not the current development code.
 - TDD now subtracts only exact covered compliance findings: a numeric detail must appear in a `covered=true` claim text, while attribution requires a covered attribution finding. A second unrelated percentage remains blocked.
 - Focused tests: 2 passed. Related Pipeline/video/semantic/Task9 regression: 219 passed. Full regression: 1889 passed plus 37 subtests in 364.24 seconds. Privacy 594/0; license 66/0.
 - Next: commit/push, Linux verification and fresh YouTube v3. Production and timers remain unchanged.
+
+## 2026-09-12 YouTube v3 Video Provenance Isolation
+
+- YouTube v3 completed active-model generation and passed factual, depth, safety and quality gates. It entered media and ran semantic recovery, but the video provider failed after 466.2 seconds; no final video or handoff was produced.
+- The video asset gate correctly reported `asset_license_missing` and `asset_source_url_missing`. Root cause: an article-cover image was copied into the video background pool without its provenance record, while the runner's eight newly collected licensed images were appended after it.
+- Automated video jobs now reuse an existing image only when it has a non-empty source URL, license, passing semantic evidence and an image SHA matching the file. Unverified existing images are skipped; the runner then owns clean recovery. Non-automated compatibility behavior remains unchanged.
+- TDD first reproduced the unverified cover leak. Focused tests: 3 passed. Related media/Pipeline/video regression: 152 passed. Full regression: 1890 passed plus 37 subtests in 359.74 seconds.
+- Current owner: Codex. Next: update all coordination evidence, commit/push, Linux focused verification and fresh YouTube v4. Production and timers remain unchanged.

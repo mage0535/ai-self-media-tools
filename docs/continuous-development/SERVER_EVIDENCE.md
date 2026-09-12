@@ -989,3 +989,11 @@ Observed read-only on 2026-08-31.
 - The factual step reported one covered numeric finding: the strict source title containing `99%`. The following compliance step reported the same `99%` as unsourced because it did not consume fact-gate coverage.
 - Local TDD adds exact finding reconciliation. The covered `99%` is excluded, while an uncovered `80%` remains. Related regression is 219 passed; full regression is 1889 passed plus 37 subtests.
 - JUnit is `artifacts/test-reports/sol-youtube-compliance-merge-20260912.xml`. Production, shared state, timers and publishers remain unchanged; v2 is a blocked content-only negative sample.
+
+## 2026-09-12 YouTube v3 Cross-Stage Asset Provenance Failure
+
+- Staging at `f6024d9` passed the covered/uncovered claim tests. Fresh YouTube v3 then passed generation and all content gates, proving the v2 compliance fix in the real Pipeline.
+- Video generation failed closed after 466.2 seconds. Its manifest reported `asset_license_missing` and `asset_source_url_missing`; 27 intermediate artifacts existed, but no final MP4, ASR or handoff.
+- The first selected visual was a prior cover image copied into `backgrounds` without provenance. Eight later Pexels recovery assets carried URLs and licenses, but the invalid first candidate still made the selected set fail.
+- Local TDD now excludes such images before automated video reuse. Full regression returned 1890 passed plus 37 subtests in 359.74 seconds; JUnit is `artifacts/test-reports/sol-youtube-video-provenance-20260912.xml`.
+- Production release, mutable runtime, shared state, timers and publishers were not changed. A fresh v4 remains required.

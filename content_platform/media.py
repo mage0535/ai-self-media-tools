@@ -1694,19 +1694,32 @@ class MediaBridge:
         backgrounds = output_dir / "backgrounds"
         backgrounds.mkdir(parents=True, exist_ok=True)
         assignments = []
+        strict_provenance = bool((job.get("brief") or {}).get("automated_workflow"))
         # Never fill missing scenes by cycling the same image. The renderer's
         # asset gate must receive the actual unique set so approved retrieval
         # or generation can add more material, otherwise the job fails closed.
-        for index, image_path in enumerate(image_paths[:required_count]):
+        for image_path in image_paths:
+            if len(assignments) >= required_count:
+                break
             source = Path(image_path)
+            evidence = provenance_by_path.get(str(source.resolve()), {})
+            semantic = evidence.get("semantic_evidence") if isinstance(evidence.get("semantic_evidence"), dict) else {}
+            source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            semantic_digest = str(semantic.get("image_sha256") or semantic.get("output_sha256") or "").removeprefix("sha256:")
+            if strict_provenance and not (
+                str(evidence.get("source_url") or "").strip()
+                and str(evidence.get("license") or "").strip()
+                and semantic.get("passed") is True
+                and semantic_digest == source_digest
+            ):
+                continue
             suffix = source.suffix if source.suffix.casefold() in {".jpg", ".jpeg", ".png", ".webp"} else ".png"
-            target = backgrounds / f"bg_{index + 1:02d}{suffix}"
+            target = backgrounds / f"bg_{len(assignments) + 1:02d}{suffix}"
             if source.resolve() != target.resolve():
                 shutil.copy2(source, target)
-            evidence = provenance_by_path.get(str(source.resolve()), {})
             assignments.append(
                 {
-                    "scene": index + 1,
+                    "scene": len(assignments) + 1,
                     "source_image": str(source),
                     "background_image": str(target),
                     "reused": False,
@@ -1723,10 +1736,10 @@ class MediaBridge:
             )
         return {
             "source": "media.image",
-            "image_count": len(image_paths),
+            "image_count": len(assignments),
             "scene_count": len(assignments),
             "assignments": assignments,
-        }
+        } if assignments else {}
 
     @staticmethod
     def _existing_image_paths(job, output_dir):

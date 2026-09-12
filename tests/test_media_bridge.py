@@ -163,6 +163,26 @@ def test_video_asset_packet_preserves_hash_bound_semantic_evidence(tmp_path):
     assert packet["assignments"][0]["semantic_evidence"] == semantic
 
 
+def test_automated_video_drops_existing_image_without_complete_provenance(tmp_path):
+    output = tmp_path / "output"
+    output.mkdir()
+    unverified = tmp_path / "cover.png"
+    unverified.write_bytes(b"generated-cover-without-provenance")
+    bridge = MediaBridge({}, tmp_path)
+
+    packet = bridge._prepare_video_visual_assets(
+        {
+            "artifacts": [{"kind": "image", "path": str(unverified)}],
+            "brief": {"automated_workflow": True},
+        },
+        output,
+        {"selected_pipeline": "article_explainer_video"},
+    )
+
+    assert packet == {}
+    assert not (output / "backgrounds" / "bg_01.png").exists()
+
+
 def test_video_asset_preparation_defers_failed_generic_images_to_runner_recovery(tmp_path, monkeypatch):
     bridge = MediaBridge({"image": {"enabled": True}, "video": {"visual_image_count": 8}}, tmp_path)
     output = tmp_path / "output"
