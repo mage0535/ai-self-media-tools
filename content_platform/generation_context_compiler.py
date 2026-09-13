@@ -27,8 +27,12 @@ def _bounded_value(value: Any) -> Any:
     return _short(value, 500)
 
 
-def _selected_rules(brief: dict[str, Any], platform: str) -> list[dict[str, str]]:
-    rules = select_platform_rules(((brief.get("compiled_skill_rules") or {}).get("rules") or []), platform)
+def _selected_rules(brief: dict[str, Any], platform: str, content_format: str) -> list[dict[str, str]]:
+    rules = select_platform_rules(
+        ((brief.get("compiled_skill_rules") or {}).get("rules") or []),
+        platform,
+        content_format=content_format,
+    )
     result = []
     for rule in rules:
         if not isinstance(rule, dict):
@@ -68,7 +72,7 @@ def compile_generation_context(
         "samples": [_short((item.get("title") or item.get("url") or item.get("source") or ""), 180) for item in (evidence.get("samples") or [])[:6]] if isinstance(evidence, dict) else [],
     }
     capability = brief.get("selected_capability") or ((brief.get("capability_plan") or {}).get("executed") or [])
-    selected_rules = _selected_rules(brief, platform)
+    selected_rules = _selected_rules(brief, platform, content_format)
     consumption = compile_rule_consumption(
         brief.get("compiled_skill_rules") if isinstance(brief.get("compiled_skill_rules"), dict) else {},
         selected_rule_ids=[str(item.get("id") or "") for item in selected_rules],

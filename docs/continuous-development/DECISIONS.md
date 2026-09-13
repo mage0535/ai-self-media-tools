@@ -837,3 +837,10 @@
 - Legacy or direct calls without an explicit ID derive a privacy-safe hash from the resolved render path. Generic names such as render, render_v2 or a repeated date directory cannot create cross-work idempotence.
 - Candidate pre-filtering and final fingerprint registration must read and write through the same registry resolver. A legacy Hermes-local registry cannot coexist as an independent default fact source.
 - Same-work retry remains idempotent only when the stable work identity matches. A different work using the same fingerprint is rejected within the configured seven-day window.
+
+## D121: Format-Specific Rules And Source-Aware Visual Relevance
+
+- Platform identity alone is insufficient for skill-rule routing. Rules selected for the model input must also match the content form; horizontal YouTube cannot inherit 1080x1920 Shorts instructions from a platform-compatible short-video skill.
+- A verified stock asset may still depict the wrong named product. Compare named-product evidence in source identity and semantic caption with the actual title/script; an unrequested competitor is rejected before rendering, not counted as a semantically valid scene.
+- Cover background selection must accept observable topic-related work scenes, not only a fixed list of API/dashboard keywords. It must still reject generic abstract imagery, heavy embedded text, conflicting platform UI and competing products.
+- A failed cover gate is a failed work, even when a final MP4 exists. Propagate the specific gate reason through stderr so the supervising workflow can classify and repair it instead of reporting a generic renderer failure.

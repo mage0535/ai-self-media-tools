@@ -29,6 +29,25 @@ def test_juejin_context_excludes_douyin_rules_and_inventory():
     assert payload["claims"][0]["claim"] == "async improves throughput"
 
 
+def test_horizontal_youtube_model_input_excludes_shorts_dimensions():
+    result = compile_generation_context(
+        platform="youtube",
+        content_format="horizontal_video",
+        stage="generate",
+        brief={
+            "content_blueprint": {"topic": "Claude Projects", "content_form": "horizontal_video"},
+            "compiled_skill_rules": {"rules": [
+                {"id": "short:1", "source": "skill:content/intl-short-video-pipeline", "text": "视频尺寸 1080×1920，竖屏，YouTube Shorts 标准"},
+                {"id": "shared:1", "source": "skill:content/visual-quality-standards", "text": "封面与场景素材应匹配当前内容"},
+            ]},
+        },
+    )
+
+    payload = json.loads(result["text"])
+    assert [row["id"] for row in payload["selected_rule_ids"]] == ["shared:1"]
+    assert "1080×1920" not in result["text"]
+
+
 def test_retry_context_uses_reduced_budget_and_no_full_inventory():
     result = compile_generation_context(
         platform="wechat",

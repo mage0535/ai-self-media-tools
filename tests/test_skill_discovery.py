@@ -60,6 +60,25 @@ def test_shared_skill_rules_do_not_leak_other_platform_instructions():
     assert {row["id"] for row in selected} == {"shared:2", "shared:3"}
 
 
+def test_horizontal_video_rules_exclude_vertical_short_video_instructions():
+    rules = [
+        {
+            "id": "youtube-short:1",
+            "source": "skill:content/intl-short-video-pipeline",
+            "text": "视频尺寸 1080×1920，竖屏，YouTube Shorts 标准",
+        },
+        {
+            "id": "youtube-shared:1",
+            "source": "skill:content/visual-quality-standards",
+            "text": "封面和场景素材必须与当前内容语义匹配",
+        },
+    ]
+
+    selected = select_platform_rules(rules, "youtube", content_format="horizontal_video")
+
+    assert {row["id"] for row in selected} == {"youtube-shared:1"}
+
+
 def test_video_skill_discovery_excludes_retired_and_format_conflicting_skills(tmp_path: Path):
     valid = _skill(tmp_path, "cinema-motion", "cinematic shots motion transitions and BGM")
     retired = _skill(tmp_path, "content-ai-autoclip", "Downloads and recompiles source videos")

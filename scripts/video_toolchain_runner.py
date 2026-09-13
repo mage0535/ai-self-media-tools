@@ -582,6 +582,7 @@ def main(argv: list[str] | None = None) -> int:
         if not bg_for_cover or not Path(str(bg_for_cover)).is_file():
             manifest.update({"ok": False, "status": "cover_failed", "error": "topic-matched cover background missing"})
             _write_manifest(output_dir, manifest)
+            print(manifest["error"], file=sys.stderr)
             return 6
         try:
             cover = _generate_video_cover(
@@ -591,6 +592,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             manifest.update({"ok": False, "status": "cover_failed", "error": str(exc)[:500]})
             _write_manifest(output_dir, manifest)
+            print(manifest["error"], file=sys.stderr)
             return 6
         manifest["cover"] = cover["path"]
         manifest["cover_quality_evidence"] = cover["evidence"]
@@ -1163,7 +1165,10 @@ def _verify_materialized_semantics(
             "match_reason": str(semantic.get("caption") or semantic.get("failure") or ""),
             "semantic_tags": list(semantic.get("labels") or semantic.get("matched_concepts") or []),
         }
-        brand_conflicts = _visible_brand_conflicts(semantic, title=title, script_body=script_body)
+        brand_conflicts = _visible_brand_conflicts(
+            semantic, title=title, script_body=script_body,
+            source_url=str(item.get("source_url") or semantic.get("source_url") or ""),
+        )
         if brand_conflicts:
             candidate.update(failure="unrequested_visible_brand", brand_conflicts=brand_conflicts)
             rejected.append(candidate)
@@ -1174,7 +1179,7 @@ def _verify_materialized_semantics(
     return passed, rejected
 
 
-def _visible_brand_conflicts(semantic: dict, *, title: str, script_body: str) -> list[str]:
+def _visible_brand_conflicts(semantic: dict, *, title: str, script_body: str, source_url: str = "") -> list[str]:
     """Reject explicit commercial branding unless the content requested it."""
     observed = " ".join([
         str(semantic.get("caption") or ""),
@@ -1189,6 +1194,18 @@ def _visible_brand_conflicts(semantic: dict, *, title: str, script_body: str) ->
     ):
         if re.search(pattern, observed, flags=re.IGNORECASE) and not re.search(pattern, context, flags=re.IGNORECASE):
             conflicts.append(marker)
+    source_slug = urllib.parse.unquote(urllib.parse.urlparse(source_url).path).casefold()
+    product_patterns = {
+        "chatgpt": r"\bchat[-_ ]?gpt\b",
+        "deepseek": r"\bdeep[-_ ]?seek\b",
+        "claude": r"\bclaude\b",
+        "gemini": r"\bgemini\b",
+        "copilot": r"\bcopilot\b",
+        "perplexity": r"\bperplexity\b",
+    }
+    for product, pattern in product_patterns.items():
+        if re.search(pattern, f"{observed} {source_slug}", flags=re.IGNORECASE) and not re.search(pattern, context, flags=re.IGNORECASE):
+            conflicts.append(f"product:{product}")
     return conflicts
 
 
@@ -1385,17 +1402,25 @@ def _select_cover_background(assignments: list[dict], platform: str, context: st
         ocr_tokens = re.findall(r"[A-Za-z0-9\u3400-\u9fff]+", ocr)
         text_heavy = len(ocr_tokens) > 4
         purpose = str(item.get("purpose") or item.get("match_reason") or "").casefold()
+        brand_conflicts = _visible_brand_conflicts(
+            {"caption": purpose}, title=context, script_body="",
+            source_url=str(item.get("source_url") or ""),
+        )
         stock_ui = "pexels.com" in str(item.get("source_url") or "").casefold() and any(token in purpose for token in ("interface", "dashboard", "screen"))
         score = sum(token in purpose for token in ("api", "workflow", "developer", "dashboard", "tool")) - 10 * len(conflicts) - (10 if text_heavy else 0) - (4 if stock_ui else 0)
+        if re.search(r"\b(?:ai|claude|chatgpt|deepseek|gemini|copilot)\b", context, flags=re.IGNORECASE):
+            score += 2 * bool(re.search(r"\b(?:laptop|computer|software|workstation)\b", purpose))
+        context_terms = set(re.findall(r"[a-z]{4,}", context.casefold())) - {"with", "better", "using", "your", "from"}
+        score += len(context_terms & set(re.findall(r"[a-z]{4,}", purpose)))
         if any(token in str(context).casefold() for token in ("工具", "tool", "切换", "switch")):
             score += 3 * sum(token in purpose for token in ("multiple", "screens", "software", "laptop", "workflow", "overwhelmed"))
             score -= 5 * sum(token in purpose for token in ("camera", "coffee", "food", "drink"))
-        candidates.append({"path": str(path), "score": score, "ocr_conflicts": conflicts, "ocr_token_count": len(ocr_tokens), "text_heavy": text_heavy, "assignment_index": index, "purpose": purpose})
-    usable = [row for row in candidates if not row["ocr_conflicts"] and not row["text_heavy"]]
+        candidates.append({"path": str(path), "score": score, "ocr_conflicts": conflicts, "brand_conflicts": brand_conflicts, "ocr_token_count": len(ocr_tokens), "text_heavy": text_heavy, "assignment_index": index, "purpose": purpose})
+    usable = [row for row in candidates if not row["ocr_conflicts"] and not row["brand_conflicts"] and not row["text_heavy"]]
     selected = max(usable or candidates, key=lambda row: (row["score"], -row["assignment_index"]), default=None)
     if not selected:
         return None, {"passed": False, "reason": "no_cover_background_candidates"}
-    passed = not selected["ocr_conflicts"] and not selected["text_heavy"] and selected["score"] > 0
+    passed = not selected["ocr_conflicts"] and not selected["brand_conflicts"] and not selected["text_heavy"] and selected["score"] > 0
     reason = "" if passed else (
         "cover_background_content_match_insufficient" if selected["score"] <= 0
         else "cover_background_text_or_platform_conflict"
