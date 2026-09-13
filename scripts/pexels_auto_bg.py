@@ -171,14 +171,25 @@ def auto_fetch_backgrounds(
     seen_hashes.update(hashlib.sha256(path.read_bytes()).hexdigest() for path in base_existing if path.is_file())
     seen_ids: set[str] = set()
     accepted_queries: set[str] = set()
+    orientation = "landscape" if str(platform or "").casefold() in {"youtube", "bilibili"} else "portrait"
     if key:
         for _round in range(3):
             for q in queries:
-                if q in accepted_queries:
+                # Preserve query diversity for the first two passes. If the
+                # remaining queries still cannot satisfy semantic review, the
+                # final pass may select another unique asset for a query that
+                # already worked instead of leaving the scene pool incomplete.
+                if q in accepted_queries and _round < 2:
                     continue
                 if len(assignments) >= needed:
                     break
-                photo = _download_pexels(q, key, exclude_ids=seen_ids, exclude_hashes=seen_hashes)
+                photo = _download_pexels(
+                    q,
+                    key,
+                    orientation=orientation,
+                    exclude_ids=seen_ids,
+                    exclude_hashes=seen_hashes,
+                )
                 if not photo:
                     attempt_evidence.append({"provider": "pexels", "query": q, "status": "no_candidate"})
                     time.sleep(1)

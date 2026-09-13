@@ -115,6 +115,20 @@ def test_terminal_cta_deduplication_keeps_one_action_and_other_cta_types():
     assert validate_generated_text(repaired)["passed"] is True
 
 
+def test_terminal_try_cta_variants_are_deduplicated():
+    value = (
+        "Treat prompting as an iterative process. "
+        "Try this framework on your next task, then compare the result. "
+        "Try the framework on your next task. Save this."
+    )
+
+    repaired = deduplicate_terminal_cta_actions(value)
+
+    assert repaired.count("Try") == 1
+    assert "repeated_cta_action" in validate_generated_text(value)["reasons"]
+    assert validate_generated_text(repaired)["passed"] is True
+
+
 def test_youtube_dangling_article_fragment_is_rejected():
     result = validate_generated_text(
         "The workflow can collect evidence and draft a weekly plan. "
