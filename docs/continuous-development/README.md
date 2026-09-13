@@ -147,3 +147,10 @@ Record one row per active work item in `STATUS.md`. Only one owner may hold a fi
 - Zhihu now enriches real search URLs from public detail metadata, preserves votes/comments semantics and rejects answer 403 or out-of-window rows. Full regression is 1841 tests plus 37 subtests; Linux acceptance remains pending.
 - Zhihu Linux staging retained two complete recent articles but did not reach the required Top3; bounded query expansion added none. Status is `insufficient_sample_count`, with official topic/hot-list detail or a later snapshot next.
 - At handoff, update all four documents with exact commands/results, remaining gaps, and file ownership. Do not describe an old server observation as a fresh health check.
+
+## 2026-09-13 Current Handoff
+
+- Development branch and isolated Linux staging are at `fd2a9e8`; the signed production symlink is still `2f4f612`. Timers remain disabled. Do not report the new fixes as deployed.
+- YouTube v7-v8d failures drove scene-bound landscape asset rendering, semantic recovery to eight unique images, terminal CTA deduplication, and single BGM verification/registration. These are code and focused Linux evidence, not a successful full Canary.
+- A dirty `phase0/integration-baseline` server worktree contains a platform-content-DNA prototype. Treat it as read-only design input; do not cherry-pick its dirty files or claim its 943-test baseline applies to this branch. See STATUS, DECISIONS and SERVER_EVIDENCE for the revised integration requirements.
+- Next owner: run a fresh isolated YouTube Pipeline Canary only when no user/Hermes media job is competing, manually review copy, cover, contact sheet and ASR, then implement platform DNA as a content-form/account-aware strategy overlay by TDD. Preserve the Sol plan's platform-intelligence and full Canary gates.
