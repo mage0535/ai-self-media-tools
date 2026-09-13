@@ -113,6 +113,24 @@ def test_video_assets_accept_hash_bound_pexels_source_metadata(tmp_path, monkeyp
     assert rejected == []
 
 
+def test_video_assets_reject_competing_product_named_in_source_url(tmp_path):
+    image = _image(tmp_path / "bg.png")
+    evidence = _evidence(image)
+    row = {
+        "path": str(image),
+        "source_url": "https://www.pexels.com/photo/man-using-chatgpt-16094046/",
+        "semantic_evidence": evidence,
+    }
+
+    passed, rejected = runner._verify_materialized_semantics(
+        [row], title="Use Claude Projects", script_body="Create a project brief in Claude", platform="youtube"
+    )
+
+    assert passed == []
+    assert rejected[0]["failure"] == "unrequested_visible_brand"
+    assert "product:chatgpt" in rejected[0]["brand_conflicts"]
+
+
 def test_video_provenance_json_is_written_atomically(tmp_path):
     target = tmp_path / "asset_provenance.json"
     runner._write_json_atomic(target, {"version": "v1", "assets": [{"id": 1}]})

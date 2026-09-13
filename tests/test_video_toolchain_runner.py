@@ -385,6 +385,22 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertFalse(evidence["passed"])
         self.assertEqual(evidence["reason"], "cover_background_content_match_insufficient")
 
+    def test_cover_background_prefers_relevant_work_scene_over_competing_product(self):
+        from scripts.video_toolchain_runner import _select_cover_background
+
+        with tempfile.TemporaryDirectory() as tmp:
+            rival = Path(tmp) / "rival.jpg"; rival.write_bytes(b"rival")
+            work = Path(tmp) / "work.jpg"; work.write_bytes(b"work")
+            with patch("scripts.video_toolchain_runner.subprocess.run", return_value=Mock(stdout="", returncode=0)):
+                selected, evidence = _select_cover_background([
+                    {"background_image": str(rival), "match_reason": "Person using AI software on laptop", "source_url": "https://www.pexels.com/photo/man-using-chatgpt-123/"},
+                    {"background_image": str(work), "match_reason": "Person writing a project brief on a laptop", "source_url": "https://www.pexels.com/photo/person-writing-notes-456/"},
+                ], "youtube", context="Use Claude better with a project brief")
+
+        self.assertEqual(selected, str(work))
+        self.assertTrue(evidence["passed"])
+        self.assertEqual(evidence["brand_conflicts"], [])
+
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"

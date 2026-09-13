@@ -49,8 +49,25 @@ def _source_platforms(source: str) -> set[str]:
     return tokens.intersection(_PLATFORMS)
 
 
-def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[dict[str, Any]]:
-    """Keep shared content rules and rules named for the active platform only."""
+def _format_compatible(source: str, text: str, content_format: str) -> bool:
+    active_format = str(content_format or "").casefold().replace("-", "_")
+    if not active_format:
+        return True
+    normalized_source = source.casefold().replace("_", "-")
+    normalized_text = " ".join(text.casefold().replace("×", "x").split())
+    vertical_markers = ("short-video", "1080x1920", "vertical video", "竖屏", "youtube shorts")
+    horizontal_markers = ("1920x1080", "horizontal video", "横版", "横屏")
+    if active_format in {"horizontal_video", "long_video"}:
+        return not any(marker in normalized_source or marker in normalized_text for marker in vertical_markers)
+    if active_format in {"vertical_video", "short_video"}:
+        return not any(marker in normalized_source or marker in normalized_text for marker in horizontal_markers)
+    return True
+
+
+def select_platform_rules(
+    rules: list[dict[str, Any]], platform: str, *, content_format: str = ""
+) -> list[dict[str, Any]]:
+    """Keep rules compatible with both the active platform and content form."""
     active = str(platform or "").casefold()
     active_names = {active.removesuffix("_ai").removesuffix("_pet")}
     if active in {"douyin_ai", "douyin_pet"}:
@@ -76,6 +93,8 @@ def select_platform_rules(rules: list[dict[str, Any]], platform: str) -> list[di
             continue
         normalized_text = " ".join(str(rule.get("text") or "").split()).casefold()
         if not normalized_text:
+            continue
+        if not _format_compatible(source, normalized_text, content_format):
             continue
         text_platforms = {
             name for name, markers in _PLATFORM_TEXT_MARKERS.items()

@@ -34,7 +34,11 @@ def build_generation_capability_context(platform: str, content_blueprint: dict) 
             "section": rule["section"], "text": str(rule.get("text") or "")[:160],
             "affected_outputs": list(rule.get("affected_outputs") or ["generation_context", "provider_brief"]),
         }
-        for rule in select_platform_rules(compiled_skill_rules.get("rules", []), platform)[:32]
+        for rule in select_platform_rules(
+            compiled_skill_rules.get("rules", []),
+            platform,
+            content_format=str(content_blueprint.get("content_form") or profile["content_format"]),
+        )[:32]
     ]
     assets = load_compiled_assets(project_root / "config" / "content_assets")
     selected_assets = select_content_asset_ids(profile, assets)
