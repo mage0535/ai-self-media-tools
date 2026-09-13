@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import hashlib
 import json
 import os
 import re
@@ -60,6 +61,17 @@ def _within_dedup_window(row: dict, days: int = 7) -> bool:
     return observed >= datetime.now(timezone.utc) - timedelta(days=max(1, int(days)))
 
 
+def _resolve_work_id(render_dir: Path) -> str:
+    configured = str(os.environ.get("BGM_WORK_ID") or "").strip()
+    if configured:
+        return configured
+    name = render_dir.name.strip()
+    if re.fullmatch(r"render(?:[_-]v?\d+)?", name, flags=re.IGNORECASE) and render_dir.parent != render_dir:
+        digest = hashlib.sha256(str(render_dir.resolve()).encode("utf-8")).hexdigest()[:16]
+        return f"path-{digest}"
+    return name
+
+
 @contextmanager
 def _locked_registry(path: Path, timeout: float = 5.0):
     lock = path.with_suffix(path.suffix + ".lock")
@@ -113,7 +125,7 @@ def check(render_dir: Path, platform: str = "", registry_path: Path | None = Non
         if volume is None or volume <= -40:
             failures.append("bgm_silent_or_unreadable")
 
-    work_id = str(os.environ.get("BGM_WORK_ID") or render_dir.name).strip()
+    work_id = _resolve_work_id(render_dir)
     duplicate = None
     idempotent = False
     registry.parent.mkdir(parents=True, exist_ok=True)

@@ -830,3 +830,10 @@
 - Display copy must reflect the current narration beat, but cannot copy a long contiguous narration phrase. This applies to CTA cards as well as explanatory scenes.
 - CTA presentations compile one concise action summary from the current beat. They do not fall back to generic positional labels and do not bypass the existing narration/display duplicate gate.
 - A pre-render rejection is preferable to spending TTS, BGM and encode resources on duplicated visible copy.
+
+## D120: BGM Identity Is Explicit And Registry Resolution Is Singular
+
+- The production video boundary passes a stable work ID to every nested BGM resolver and verifier. Plan work ID takes precedence, then job ID; renderer directory names are not authoritative identities.
+- Legacy or direct calls without an explicit ID derive a privacy-safe hash from the resolved render path. Generic names such as render, render_v2 or a repeated date directory cannot create cross-work idempotence.
+- Candidate pre-filtering and final fingerprint registration must read and write through the same registry resolver. A legacy Hermes-local registry cannot coexist as an independent default fact source.
+- Same-work retry remains idempotent only when the stable work identity matches. A different work using the same fingerprint is rejected within the configured seven-day window.

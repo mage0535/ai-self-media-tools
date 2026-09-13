@@ -299,6 +299,38 @@ def test_bgm_registry_enforces_only_the_seven_day_window(tmp_path, monkeypatch):
     assert "source:https://source.test/legacy" in keys
 
 
+def test_bgm_candidate_precheck_reads_the_same_default_registry_as_final_gate(tmp_path, monkeypatch):
+    from scripts.check_bgm_uniqueness import check
+
+    render_dir = tmp_path / "job-1" / "render"
+    render_dir.mkdir(parents=True)
+    (render_dir / "bgm.mp3").write_bytes(b"audio" * 200_000)
+    (render_dir / "bgm_source.json").write_text(
+        json.dumps(
+            {
+                "sha256": "sha256:test-track",
+                "title": "Test piano",
+                "source_url": "https://source.test/shared",
+                "license": "test-license",
+                "source": "test-provider",
+                "manifest": {"asset_id": "shared-1"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("BGM_FINGERPRINT_REGISTRY", raising=False)
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path / "project"))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.setattr("scripts.check_bgm_uniqueness._mean_volume", lambda _path: -18.0)
+
+    result = check(render_dir, platform="youtube")
+    keys = kuaishou_render._registered_bgm_candidate_keys()
+
+    assert result["passed"] is True
+    assert "source:https://source.test/shared" in keys
+    assert "asset:test-provider:shared-1" in keys
+
+
 def test_bgm_queries_prioritize_requested_instruments_before_broad_fallbacks():
     queries = kuaishou_render._bgm_queries("muted percussion and low strings")
 

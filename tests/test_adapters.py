@@ -111,6 +111,7 @@ class AdapterTests(unittest.TestCase):
 
         def fake_run(command, **kwargs):
             output_dir = Path(kwargs["env"]["VIDEO_OUTPUT_DIR"])
+            self.assertEqual(kwargs["env"]["BGM_WORK_ID"], "j1")
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / "generated.mp4").write_bytes(b"video")
             return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()

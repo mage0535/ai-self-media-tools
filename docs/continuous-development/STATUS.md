@@ -697,3 +697,12 @@ These describe the audited production release, not the current development code.
 - This is a valid early rejection: no TTS, BGM, final MP4 or handoff was produced. The content-derived card label repeated a contiguous phrase from the CTA narration.
 - `87d22f0` maps CTA presentations to a short content-specific action summary such as `Apply it to one recurring task`. It remains grounded in the scene but is not a copy of the narration. Related video/pre-render tests passed; full regression 1912 passed plus 37 subtests; privacy 594/0; license 66/0.
 - Next: fast-forward Linux staging, run the precise CTA-card/pre-render tests, then create a fresh YouTube Pipeline Canary and perform full machine plus manual review. Production release and timers remain unchanged.
+
+## 2026-09-13 BGM Work Identity And Registry Consistency
+
+- Review of the v8d BGM recovery found a shared-production collision risk: nested landscape render directories commonly use generic names such as 'render' or 'render_v3'. Treating that basename, or only its date parent, as the work identity could make separate works look like one idempotent retry.
+- MediaBridge now passes the real plan/job identity through BGM_WORK_ID. Direct or legacy runner calls without that environment value use a privacy-safe SHA-256 path identity instead of a generic directory name.
+- The BGM candidate precheck and final locked registration now resolve the same default registry. Previously download-time candidate filtering read a Hermes-local legacy JSON path while the final gate wrote the project registry, delaying duplicate rejection until after download.
+- Added regression coverage for separate */render works, same-named date/render paths, explicit MediaBridge identity propagation and default registry consistency. Related adapter/video/BGM suite: 106 passed. Full regression: 1915 passed plus 37 subtests in 381.20 seconds; privacy audit 594/0 and license audit 66/0.
+- Server observation during validation: Hermes independently ran a mutable-runtime Kuaishou render_v4 with degraded/safe flags. Codex did not stop, edit or reuse it and did not launch a competing YouTube Canary. Its outputs are not acceptance evidence unless a complete runner manifest and quality probes pass.
+- Next: commit/push, advance clean Linux staging and rerun focused tests. Start YouTube v8i only after the user/Hermes media process is absent, then perform full Pipeline, Task9 and manual cover/contact-sheet/ASR review. Production and timers remain unchanged.
