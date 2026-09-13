@@ -401,6 +401,23 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertTrue(evidence["passed"])
         self.assertEqual(evidence["brand_conflicts"], [])
 
+    def test_refinement_beat_uses_summary_title_not_spoken_sentence(self):
+        from scripts.pre_render_gate import validate_render_inputs
+        from scripts.video_toolchain_runner import _card_supporting_label, _visual_headline
+
+        beat = "Refine the weakest part. Caution: role-play cannot repair missing information."
+        headline = _visual_headline(beat, "evidence_zoom", 5)
+        supporting = _card_supporting_label(beat, "evidence_zoom", 5)
+        gate = validate_render_inputs(
+            Path("."),
+            [{"layout": "diagonal", "t": headline, "txt": supporting, "tts": beat, "items": []}],
+            require_backgrounds=False,
+            require_cover_contract=False,
+        )
+
+        self.assertNotIn("card_1_narration_display_duplicate", gate["failures"])
+        self.assertIn("weak", headline.casefold())
+
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"
