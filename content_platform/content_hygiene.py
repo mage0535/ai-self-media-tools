@@ -308,6 +308,7 @@ def _cta_action(sentence):
         "save": r"^(?:save\b|bookmark\b|收藏)",
         "follow": r"^(?:follow\b|关注)",
         "like": r"^(?:like\b|点赞)",
+        "try": r"^(?:try\b|试试|尝试)",
     }
     return next((name for name, pattern in patterns.items() if re.search(pattern, value)), "")
 

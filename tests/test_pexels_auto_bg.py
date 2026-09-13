@@ -115,6 +115,51 @@ def test_pexels_retries_next_candidates_until_scene_pool_is_full(tmp_path: Path)
     assert calls[8:] == ["scene query 0", "scene query 1"]
 
 
+def test_pexels_final_round_revisits_successful_queries_with_new_assets(tmp_path: Path):
+    from scripts.pexels_auto_bg import auto_fetch_backgrounds
+
+    calls = []
+
+    def download(query, _key, **kwargs):
+        calls.append((query, kwargs.get("orientation")))
+        index = len(calls)
+        return {
+            "content": f"photo-{index}".encode(),
+            "source_url": f"https://www.pexels.com/photo/{index}/",
+            "alt": f"Person using a computer in workflow scene {index}",
+            "artist": "A",
+            "artist_url": "",
+            "asset_id": str(index),
+        }
+
+    def semantic(path, expected, platform, source=None):
+        passed = expected[0] not in {"q0", "q1"}
+        return {
+            "version": "image_semantic_evidence_v1",
+            "passed": passed,
+            "semantic_match_score": 0.8 if passed else 0.0,
+            "caption": source["alt"],
+            "labels": ["workflow"],
+            "expected_concepts": expected,
+            "matched_concepts": expected if passed else [],
+            "threshold": 0.6,
+            "image_sha256": __import__("hashlib").sha256(Path(path).read_bytes()).hexdigest(),
+        }
+
+    with (
+        patch("scripts.pexels_auto_bg._pexels_key", return_value="key"),
+        patch("scripts.pexels_auto_bg._semantic_queries", return_value=[f"q{i}" for i in range(8)]),
+        patch("scripts.pexels_auto_bg._download_pexels", side_effect=download),
+        patch("scripts.pexels_auto_bg._semantic_evidence", side_effect=semantic),
+        patch("content_platform.image_provider.generate_image", side_effect=ImageProviderError("not needed")),
+        patch("scripts.pexels_auto_bg.time.sleep"),
+    ):
+        rows = auto_fetch_backgrounds("AI workflow", "Title", tmp_path, "youtube", semantic_required=True)
+
+    assert len(rows) == 8
+    assert calls[-2:] == [("q2", "landscape"), ("q3", "landscape")]
+
+
 def test_force_fetch_excludes_historical_hashes(tmp_path: Path):
     from scripts.pexels_auto_bg import auto_fetch_backgrounds
     import hashlib
