@@ -824,3 +824,9 @@
 - When an eight-scene strict video has fewer than eight accepted assets, expand content-derived semantic queries before generated fallback. Do not lower semantic thresholds or re-admit a named competing product.
 - Expanded retrieval remains bounded. Every accepted row needs a distinct source identity and SHA-256 plus license and semantic evidence. Failure to reach the required count still blocks rendering.
 - A live asset smoke proves retrieval only. Final acceptance still requires Pipeline, render, media probes and manual visual review.
+
+## D119: Scene-Derived Display Copy Must Still Be A Summary
+
+- Display copy must reflect the current narration beat, but cannot copy a long contiguous narration phrase. This applies to CTA cards as well as explanatory scenes.
+- CTA presentations compile one concise action summary from the current beat. They do not fall back to generic positional labels and do not bypass the existing narration/display duplicate gate.
+- A pre-render rejection is preferable to spending TTS, BGM and encode resources on duplicated visible copy.
