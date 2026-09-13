@@ -1057,8 +1057,20 @@ def _write_bgm_source(video_dir, candidate, style):
             "source_url": source_url,
         },
     }
-    _register_bgm_fingerprint(meta)
     Path(video_dir, "bgm_source.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def verify_and_register_bgm(video_dir, platform=""):
+    from scripts.check_bgm_uniqueness import check
+
+    result = check(Path(video_dir), platform=platform)
+    path = Path(video_dir) / "bgm_history_check.json"
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+    if not result.get("passed"):
+        raise RuntimeError("BGM gate failed: " + json.dumps(result, ensure_ascii=False))
+    return result
 
 
 def _upgrade_existing_bgm_source(video_dir):
@@ -2015,6 +2027,7 @@ async def main():
         print("\n=== Step 5: BGM + 混音 ===")
         started = time.perf_counter()
         download_bgm_with_retries(vd, args.bgm_style)
+        verify_and_register_bgm(vd, platform=args.platform)
         mix_audio(vd)
         _record_stage_timing(vd, "audio_mix", started)
 

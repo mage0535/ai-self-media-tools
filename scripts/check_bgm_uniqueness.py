@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
+import os
 import re
 import subprocess
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
@@ -44,6 +47,44 @@ def _load_json(path: Path, default: dict) -> dict:
         raise RuntimeError(f"invalid JSON registry: {path}") from exc
 
 
+def _within_dedup_window(row: dict, days: int = 7) -> bool:
+    value = str((row or {}).get("registered_at") or "").strip()
+    if not value:
+        return True
+    try:
+        observed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return True
+    return observed >= datetime.now(timezone.utc) - timedelta(days=max(1, int(days)))
+
+
+@contextmanager
+def _locked_registry(path: Path, timeout: float = 5.0):
+    lock = path.with_suffix(path.suffix + ".lock")
+    deadline = time.monotonic() + timeout
+    descriptor = None
+    while descriptor is None:
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > 60:
+                    lock.unlink()
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"BGM registry lock timeout: {path}")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        os.close(descriptor)
+        lock.unlink(missing_ok=True)
+
+
 def check(render_dir: Path, platform: str = "", registry_path: Path | None = None, register: bool = True) -> dict:
     render_dir = render_dir.resolve()
     source_path = render_dir / "bgm_source.json"
@@ -72,14 +113,34 @@ def check(render_dir: Path, platform: str = "", registry_path: Path | None = Non
         if volume is None or volume <= -40:
             failures.append("bgm_silent_or_unreadable")
 
-    data = _load_json(registry, {"tracks": []})
-    tracks = data.get("tracks") if isinstance(data.get("tracks"), list) else []
+    work_id = str(os.environ.get("BGM_WORK_ID") or render_dir.name).strip()
     duplicate = None
-    if fingerprint:
-        duplicate = next((row for row in tracks if isinstance(row, dict) and str(row.get("fingerprint") or row.get("sha256") or "") == fingerprint), None)
-    if duplicate:
-        failures.append("bgm_fingerprint_duplicate")
-
+    idempotent = False
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    with _locked_registry(registry):
+        data = _load_json(registry, {"tracks": []})
+        tracks = [row for row in (data.get("tracks") if isinstance(data.get("tracks"), list) else []) if isinstance(row, dict) and _within_dedup_window(row)]
+        if fingerprint:
+            matching = [row for row in tracks if str(row.get("fingerprint") or row.get("sha256") or "") == fingerprint]
+            idempotent = any(str(row.get("work_id") or "") == work_id for row in matching)
+            duplicate = next((row for row in matching if str(row.get("work_id") or "") != work_id), None)
+        if duplicate:
+            failures.append("bgm_fingerprint_duplicate")
+        if not failures and register and not idempotent:
+            tracks.append({
+                "fingerprint": fingerprint,
+                "title": title,
+                "source_url": source_url,
+                "license": source.get("license", ""),
+                "platform": platform,
+                "provider": source.get("source", ""),
+                "asset_id": (source.get("manifest") or {}).get("asset_id", ""),
+                "work_id": work_id,
+                "registered_at": datetime.now(timezone.utc).isoformat(),
+            })
+            temporary = registry.with_suffix(registry.suffix + ".tmp")
+            temporary.write_text(json.dumps({"tracks": tracks[-500:]}, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temporary, registry)
     result = {
         "passed": not failures,
         "failed_dimensions": failures,
@@ -91,21 +152,9 @@ def check(render_dir: Path, platform: str = "", registry_path: Path | None = Non
         "source_url": source_url,
         "mean_volume_db": volume,
         "duplicate": duplicate or {},
+        "work_id": work_id,
+        "idempotent_registration": idempotent,
     }
-    if result["passed"] and register:
-        tracks.append(
-            {
-                "fingerprint": fingerprint,
-                "title": title,
-                "source_url": source_url,
-                "license": source.get("license", ""),
-                "platform": platform,
-                "registered_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-        data["tracks"] = tracks[-500:]
-        registry.parent.mkdir(parents=True, exist_ok=True)
-        registry.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
 
 
