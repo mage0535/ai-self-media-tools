@@ -811,3 +811,10 @@
 - Resolve by platform, internal account alias and content form. YouTube long video versus Shorts and Douyin AI versus pet must not collapse to one generic profile.
 - Channel rulebook and growth policy retain precedence for publishing, account recovery, and metrics. DNA adds content, visual, hook and CTA direction with stable rule IDs; it must not become a parallel facts or authorization source.
 - Static `evidence_status` cannot imply current same-lane collection, live account performance or native hotspot verification. Required evidence must be checked in generation/delivery gates; metrics must map to real Publication Ledger collector fields. Merely including DNA in a prompt is not effect verification.
+
+## D117: Machine-Green Packaging Is Not Audience-Ready
+
+- Cover typography checks must measure the meaning of the selected headline as well as pixel fit. A headline cut mid-word or stripped of its actionable payoff is not safe merely because the rendered substring fits.
+- Split comparison requires an explicit two-sided topic; the single word `before` in body prose cannot create empty comparison boxes.
+- Stock metadata and visual captions that identify a competing product cannot substantiate a tutorial about one named product. Reject and recapture instead of relying on generic AI-interface similarity.
+- English supporting card copy derives from the scene beat; timed subtitles must not split words across cues. ASR similarity or file presence does not override a negative human visual review.
