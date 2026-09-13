@@ -797,3 +797,17 @@
 - YouTube Audio Library remains valid only for YouTube targets and retains its attribution/license scope. It must not be promoted for other platforms.
 - Provider priority never bypasses real-instrument, license, source URL, download integrity or seven-day fingerprint gates.
 - Failed BGM resolution blocks final delivery; an existing raw video or partial audio file is not a completed artifact.
+
+## D115: Verified Media Recovery And BGM Work Identity
+
+- A landscape renderer consumes the verified scene/card-bound visual asset path; sequential background filenames are compatibility fallback, not the source of truth. Missing bindings or unreadable files fail closed.
+- For an eight-scene video, semantic recovery can select a second unique asset from a proven query only after the diverse-query passes. Distinct source identity, file SHA-256, license and semantic evidence remain mandatory; never cycle one image across scenes.
+- BGM download records source evidence only. Both landscape and Kuaishou invoke the same history verification and registration before mixing, under an exclusive registry lock with atomic write. Rechecks for the same work are idempotent; a distinct work using the same seven-day fingerprint is rejected. Passing this step does not by itself establish that final mixed audio or delivery passed.
+- A direct runner revalidation without persisted complete visual inputs is invalid. Preserve failed runs and use a fresh isolated Pipeline case rather than reconstructing unrecorded inputs.
+
+## D116: Platform Content DNA Is A Strategy Overlay
+
+- The uncommitted server prototype is not a production rule or deployable baseline. Reimplement selected ideas against this branch instead of merging dirty files from `phase0/integration-baseline`.
+- Resolve by platform, internal account alias and content form. YouTube long video versus Shorts and Douyin AI versus pet must not collapse to one generic profile.
+- Channel rulebook and growth policy retain precedence for publishing, account recovery, and metrics. DNA adds content, visual, hook and CTA direction with stable rule IDs; it must not become a parallel facts or authorization source.
+- Static `evidence_status` cannot imply current same-lane collection, live account performance or native hotspot verification. Required evidence must be checked in generation/delivery gates; metrics must map to real Publication Ledger collector fields. Merely including DNA in a prompt is not effect verification.
