@@ -844,3 +844,8 @@
 - A verified stock asset may still depict the wrong named product. Compare named-product evidence in source identity and semantic caption with the actual title/script; an unrequested competitor is rejected before rendering, not counted as a semantically valid scene.
 - Cover background selection must accept observable topic-related work scenes, not only a fixed list of API/dashboard keywords. It must still reject generic abstract imagery, heavy embedded text, conflicting platform UI and competing products.
 - A failed cover gate is a failed work, even when a final MP4 exists. Propagate the specific gate reason through stderr so the supervising workflow can classify and repair it instead of reporting a generic renderer failure.
+
+## D122: Narration And Card Copy Must Be Distinct Without Generic Placeholders
+
+- The pre-render narration/display duplicate gate remains required and fail-closed. A model may produce a strong spoken beat but the deterministic card compiler must not reuse a long contiguous spoken phrase as its title or supporting label.
+- For an observed refinement and missing-information beat, use a short action summary and an explicit missing-input summary. Do not bypass the gate, replace the card with a generic index label, or pretend a failed pre-render job completed.
