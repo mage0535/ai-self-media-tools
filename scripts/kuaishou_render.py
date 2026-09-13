@@ -1100,10 +1100,9 @@ def _upgrade_existing_bgm_source(video_dir):
 
 
 def _bgm_registry_path():
-    configured = os.environ.get("BGM_FINGERPRINT_REGISTRY", "").strip()
-    if configured:
-        return Path(configured).expanduser()
-    return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "data" / "bgm_fingerprint.json"
+    from scripts.check_bgm_uniqueness import _default_registry
+
+    return _default_registry()
 
 
 def _bgm_candidate_keys(candidate):

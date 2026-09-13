@@ -1567,6 +1567,7 @@ class MediaBridge:
         env["FILM_MOTION_MODE"] = str(plan.get("motion_mode") or "cinematic")
         env["FILM_ALLOW_DEGRADED"] = "1" if plan.get("allow_degraded") is True else "0"
         env["VIDEO_OUTPUT_DIR"] = str(output_dir)
+        env["BGM_WORK_ID"] = str(plan.get("work_id") or job.get("id") or job.get("job_id") or output_dir.name)
         # Make the licensed local BGM fallback explicit for nested renderers;
         # do not rely on an inherited shell environment across adapters.
         if os.environ.get("BGM_LIBRARY_DIR"):

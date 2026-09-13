@@ -1041,6 +1041,15 @@ Observed read-only on 2026-08-31.
 - A live public-index call with `BGM_TARGET_PLATFORM=youtube` returned ten YouTube Audio Library candidates. The first provider is the Audio Library and the first candidate carries `youtube_only` scope plus verified license metadata.
 - The smoke did not download, fingerprint or register audio. It proves discovery and priority only. Production and timers remain unchanged.
 
+## 2026-09-13 BGM Identity Hardening Evidence
+
+- Red test 1 reproduced false idempotence across work-a/render and work-b/render: before the fix, both registrations used work ID render and the second duplicate was incorrectly accepted.
+- Red test 2 reproduced a deeper collision across kuaishou/20260913/render_v3 and youtube/20260913/render_v3: a parent-name fallback collapsed both to 20260913.
+- The implemented fallback emits a path-prefixed 16-hex digest from the resolved render path and exposes no private path. Normal MediaBridge runs explicitly pass plan/job identity in BGM_WORK_ID.
+- Red test 3 showed that final registration wrote CONTENT_PLATFORM_HOME/data/bgm_fingerprint_registry.json while candidate pre-filtering read HERMES_HOME/data/bgm_fingerprint.json. kuaishou_render._bgm_registry_path() now reuses the final gate registry resolver.
+- Verification: combined tests/test_adapters.py tests/test_video_toolchain_runner.py tests/test_kuaishou_render_tts.py passed 106 tests in 41.61 seconds. Full JUnit run artifacts/test-reports/p10-bgm-work-id.xml passed 1915 tests plus 37 subtests in 381.20 seconds. Project/privacy audit scanned 594 files with zero issues; license audit checked 66 capabilities with zero issues.
+- Live safety check found Hermes running Kuaishou render_v4 from the mutable runtime with degraded/safe flags. Codex left that process untouched and did not start YouTube. Production target remained production-runtime-v8-2f4f612-20260906; the project timer remained inactive.
+
 ## 2026-09-13 YouTube V7-V8D Linux And Server Handoff Evidence
 
 - Isolated v7: 929.2 seconds; real generation succeeded but rendering failed at missing sequential background 7 while verified reselection assets existed. Local `b912d45` full pytest: 1897 passed plus 37 subtests, project/privacy 594/0, license 66/0. Linux focused bound-asset tests passed 2/2.

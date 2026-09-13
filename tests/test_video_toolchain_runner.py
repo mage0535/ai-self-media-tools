@@ -1166,6 +1166,59 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             history = json.loads((root / "bgm_history_check.json").read_text(encoding="utf-8"))
             self.assertIn("bgm_fingerprint_duplicate", history["failed_dimensions"])
 
+    def test_bgm_registration_distinguishes_separate_work_render_directories(self):
+        from scripts.kuaishou_render import verify_and_register_bgm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / "bgm_registry.json"
+            fingerprint = "sha256:shared-track"
+            render_dirs = [root / "work-a" / "render", root / "work-b" / "render"]
+            for render_dir in render_dirs:
+                render_dir.mkdir(parents=True)
+                (render_dir / "bgm.mp3").write_bytes(b"1" * 900_000)
+                (render_dir / "bgm_source.json").write_text(
+                    json.dumps(
+                        {
+                            "sha256": fingerprint,
+                            "title": "Shared acoustic track",
+                            "source_url": "https://example.test/shared-track",
+                            "license": "test-license",
+                            "source": "test-provider",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            with patch.dict(os.environ, {"BGM_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
+                os.environ.pop("BGM_WORK_ID", None)
+                with patch("scripts.check_bgm_uniqueness._mean_volume", return_value=-18.0):
+                    first = verify_and_register_bgm(render_dirs[0], platform="youtube")
+                    with self.assertRaisesRegex(RuntimeError, "BGM gate failed"):
+                        verify_and_register_bgm(render_dirs[1], platform="youtube")
+
+            self.assertTrue(first["work_id"].startswith("path-"))
+            second = json.loads((render_dirs[1] / "bgm_history_check.json").read_text(encoding="utf-8"))
+            self.assertTrue(second["work_id"].startswith("path-"))
+            self.assertNotEqual(first["work_id"], second["work_id"])
+            self.assertIn("bgm_fingerprint_duplicate", second["failed_dimensions"])
+
+    def test_bgm_registration_does_not_collapse_same_named_date_render_paths(self):
+        from scripts.check_bgm_uniqueness import _resolve_work_id
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = root / "kuaishou" / "20260913" / "render_v3"
+            second = root / "youtube" / "20260913" / "render_v3"
+
+            with patch.dict(os.environ, {}, clear=True):
+                first_id = _resolve_work_id(first)
+                second_id = _resolve_work_id(second)
+
+            self.assertNotEqual(first_id, second_id)
+            self.assertNotIn(str(root), first_id)
+            self.assertNotIn(str(root), second_id)
+
     def test_bgm_download_replaces_stale_existing_bgm_every_render(self):
         from scripts.kuaishou_render import download_bgm, REAL_BGM_MIN_BYTES
 
