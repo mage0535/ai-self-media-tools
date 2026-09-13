@@ -26,23 +26,45 @@ class OperationalScriptTests(unittest.TestCase):
         self.assertIn("bgm_source_json_missing", result["failed_dimensions"])
         self.assertIn("bgm_fingerprint_missing", result["failed_dimensions"])
 
-    def test_bgm_uniqueness_rejects_duplicate_and_registers_new_track(self):
+    def test_bgm_uniqueness_rejects_duplicate_across_distinct_works(self):
         from scripts.check_bgm_uniqueness import check
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            bgm = root / "bgm.mp3"
-            bgm.write_bytes(b"a" * 80_000)
             source = {"sha256": "fp1", "title": "Acoustic", "source_url": "https://example.test/a.mp3", "license": "cc-by"}
-            (root / "bgm_source.json").write_text(json.dumps(source), encoding="utf-8")
             registry = root / "registry.json"
+            first_work = root / "work-one"
+            second_work = root / "work-two"
+            for work in (first_work, second_work):
+                work.mkdir()
+                (work / "bgm.mp3").write_bytes(b"a" * 80_000)
+                (work / "bgm_source.json").write_text(json.dumps(source), encoding="utf-8")
+            with patch("scripts.check_bgm_uniqueness._mean_volume", return_value=-18.0):
+                first = check(first_work, platform="kuaishou", registry_path=registry)
+                second = check(second_work, platform="kuaishou", registry_path=registry)
+
+        self.assertTrue(first["passed"])
+        self.assertFalse(second["passed"])
+        self.assertIn("bgm_fingerprint_duplicate", second["failed_dimensions"])
+
+    def test_bgm_uniqueness_is_idempotent_for_the_same_work(self):
+        from scripts.check_bgm_uniqueness import check
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "same-work"
+            root.mkdir()
+            (root / "bgm.mp3").write_bytes(b"a" * 80_000)
+            (root / "bgm_source.json").write_text(json.dumps({
+                "sha256": "fp1", "title": "Acoustic", "source_url": "https://example.test/a.mp3", "license": "cc-by"
+            }), encoding="utf-8")
+            registry = Path(tmp) / "registry.json"
             with patch("scripts.check_bgm_uniqueness._mean_volume", return_value=-18.0):
                 first = check(root, platform="kuaishou", registry_path=registry)
                 second = check(root, platform="kuaishou", registry_path=registry)
 
         self.assertTrue(first["passed"])
-        self.assertFalse(second["passed"])
-        self.assertIn("bgm_fingerprint_duplicate", second["failed_dimensions"])
+        self.assertTrue(second["passed"])
+        self.assertTrue(second["idempotent_registration"])
 
     def test_media_delivery_requires_configured_target(self):
         from scripts.deliver_media import deliver

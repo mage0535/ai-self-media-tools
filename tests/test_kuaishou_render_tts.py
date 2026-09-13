@@ -229,6 +229,7 @@ def test_bgm_source_records_measured_real_instrument_evidence(tmp_path, monkeypa
     evidence = json.loads((tmp_path / "bgm_source.json").read_text(encoding="utf-8"))
     assert evidence["real_instrument"] is True
     assert evidence["duration"] == 73.5
+    assert not (tmp_path / "registry.json").exists()
 
 
 def test_existing_online_bgm_evidence_is_upgraded_before_reuse(tmp_path, monkeypatch):

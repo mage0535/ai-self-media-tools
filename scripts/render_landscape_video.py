@@ -239,13 +239,10 @@ def _concat(render_dir: Path, count: int) -> Path:
 
 
 def _resolve_bgm(render_dir: Path, style: str, platform: str) -> Path:
-    from scripts.kuaishou_render import download_bgm
-    from scripts.check_bgm_uniqueness import check as check_bgm
+    from scripts.kuaishou_render import download_bgm, verify_and_register_bgm
 
     download_bgm(render_dir, style)
-    result = check_bgm(render_dir, platform=platform)
-    if not result.get("passed"):
-        raise RuntimeError("BGM gate failed: " + json.dumps(result, ensure_ascii=False))
+    verify_and_register_bgm(render_dir, platform=platform)
     return render_dir / "bgm.mp3"
 
 

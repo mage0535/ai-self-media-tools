@@ -1091,7 +1091,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 assert_output(str(video), 2_000_000, "short.mp4")
 
     def test_bgm_download_uses_online_real_instrument_candidate(self):
-        from scripts.kuaishou_render import download_bgm
+        from scripts.kuaishou_render import download_bgm, verify_and_register_bgm
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1118,17 +1118,19 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
                     with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
                         bgm = download_bgm(root, "acoustic guitar")
-
-            self.assertEqual(Path(bgm), root / "bgm.mp3")
-            source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
-            self.assertEqual(source["source"], "pixabay_music")
-            self.assertEqual(source["license"], "Pixabay Content License")
-            self.assertTrue(source["sha256"])
+                self.assertEqual(Path(bgm), root / "bgm.mp3")
+                source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
+                self.assertEqual(source["source"], "pixabay_music")
+                self.assertEqual(source["license"], "Pixabay Content License")
+                self.assertTrue(source["sha256"])
+                self.assertFalse(registry.exists())
+                with patch("scripts.check_bgm_uniqueness._mean_volume", return_value=-18.0):
+                    verify_and_register_bgm(root, platform="youtube")
             registry_data = json.loads(registry.read_text(encoding="utf-8"))
             self.assertEqual(registry_data["tracks"][0]["fingerprint"], source["sha256"])
 
     def test_bgm_download_rejects_registry_duplicate_fingerprint(self):
-        from scripts.kuaishou_render import download_bgm
+        from scripts.kuaishou_render import download_bgm, verify_and_register_bgm
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1156,10 +1158,13 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             with patch.dict(os.environ, {"BGM_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
                 with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[candidate]):
                     with patch("scripts.kuaishou_render._download_candidate_bgm", side_effect=fake_download):
-                        with self.assertRaisesRegex(RuntimeError, "BGM fingerprint already used"):
-                            download_bgm(root, "acoustic guitar")
+                        download_bgm(root, "acoustic guitar")
+                        with self.assertRaisesRegex(RuntimeError, "BGM gate failed"):
+                            verify_and_register_bgm(root, platform="youtube")
 
-            self.assertFalse((root / "bgm_source.json").exists())
+            self.assertTrue((root / "bgm_source.json").exists())
+            history = json.loads((root / "bgm_history_check.json").read_text(encoding="utf-8"))
+            self.assertIn("bgm_fingerprint_duplicate", history["failed_dimensions"])
 
     def test_bgm_download_replaces_stale_existing_bgm_every_render(self):
         from scripts.kuaishou_render import download_bgm, REAL_BGM_MIN_BYTES
