@@ -731,6 +731,13 @@ def _card_supporting_label(text: str, presentation: str, index: int) -> str:
     chinese = bool(re.search(r"[\u3400-\u9fff]", str(text or "")))
     if not chinese:
         content = str(text or "").strip()
+        lowered = content.casefold()
+        if presentation in {"cta", "cta_footage", "interaction"}:
+            if "recurring task" in lowered:
+                return "Apply it to one recurring task"
+            if "next task" in lowered:
+                return "Use it on your next task"
+            return "Put the workflow into practice"
         if ":" in content:
             content = content.split(":", 1)[1].strip()
         elif "," in content:

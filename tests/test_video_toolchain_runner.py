@@ -1422,6 +1422,15 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertIn("write prompts", second)
         self.assertNotEqual(first, second)
 
+    def test_english_cta_support_label_is_content_specific_without_copying_narration(self):
+        from scripts.video_toolchain_runner import _card_supporting_label
+
+        narration = "Save this workflow, test it on one recurring task, and comment with the step that helped most."
+        label = _card_supporting_label(narration, "cta", 7)
+
+        self.assertEqual(label, "Apply it to one recurring task")
+        self.assertNotIn(label.casefold(), narration.casefold())
+
     def test_video_asset_gate_requires_all_eight_scene_assets(self):
         from scripts.video_toolchain_runner import _require_video_asset_count
 
