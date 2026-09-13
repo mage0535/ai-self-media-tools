@@ -171,6 +171,15 @@ class PreRenderGateTests(unittest.TestCase):
         self.assertNotIn("...", ass)
         self.assertIn("下一步行动", ass)
 
+    def test_english_subtitle_chunks_do_not_end_midword(self):
+        from scripts.build_subtitles import split_timed_cue
+
+        text = "Caution: connectors and external actions expand capability and risk. Review permissions and outputs before automation."
+        chunks = split_timed_cue(0, 8, text, max_chars=28, max_lines=2)
+
+        self.assertEqual(" ".join(part for _, _, part in chunks), text)
+        self.assertTrue(all(part.endswith((".", " ", "risk", "capability", "and", "actions", "external", "connectors")) or part.split()[-1] in text.split() for _, _, part in chunks))
+
     def test_kuaishou_renderer_writes_pre_render_evidence_before_rendering(self):
         from scripts.kuaishou_render import run_pre_render_gate
 

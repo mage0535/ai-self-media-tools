@@ -205,6 +205,8 @@ def auto_fetch_backgrounds(
                 fp = _next_background_path(bg_dir)
                 fp.write_bytes(content)
                 semantic = _semantic_evidence(fp, [q], platform, source=photo) if semantic_required else {}
+                if semantic_required and _competing_product_visible(f"{title} {script_body}", f"{semantic.get('caption') or ''} {photo.get('alt') or ''}"):
+                    semantic = {**semantic, "passed": False, "failure": "competing_product_visible"}
                 if semantic_required and not semantic.get("passed"):
                     attempt_evidence.append({"provider": "pexels", "query": q, "status": "semantic_rejected"})
                     fp.unlink(missing_ok=True)
@@ -255,6 +257,8 @@ def auto_fetch_backgrounds(
                             fp.unlink(missing_ok=True)
                             continue
                         semantic = _semantic_evidence(fp, [query], platform) if semantic_required else {}
+                        if semantic_required and _competing_product_visible(f"{title} {script_body}", str(semantic.get("caption") or "")):
+                            semantic = {**semantic, "passed": False, "failure": "competing_product_visible"}
                         if semantic_required and not semantic.get("passed"):
                             attempt_evidence.append({"provider": str(generated.get("provider") or "auto"), "query": query, "status": "semantic_rejected"})
                             fp.unlink(missing_ok=True)
@@ -336,7 +340,14 @@ def _semantic_evidence(path: Path, expected: list[str], platform: str, source: d
         }
 
 
-def _source_metadata_semantic_evidence(path: Path, expected: list[str], source: dict) -> dict:
+def _competing_product_visible(topic: str, caption: str) -> bool:
+    brands = ("claude", "chatgpt", "deepseek", "gemini", "copilot", "perplexity")
+    expected = {brand for brand in brands if __import__("re").search(rf"\b{brand}\b", str(topic or ""), __import__("re").I)}
+    observed = {brand for brand in brands if __import__("re").search(rf"\b{brand}\b", str(caption or ""), __import__("re").I)}
+    return bool(expected and observed - expected)
+
+
+def _source_metadata_semantic_evidence(path: Path, expected: list[str], source: dict, *, topic: str = "") -> dict:
     """Build truthful stock-source evidence from Pexels' asset metadata."""
     from scripts.image_semantic_analyze import score_semantics
 
@@ -349,6 +360,7 @@ def _source_metadata_semantic_evidence(path: Path, expected: list[str], source: 
     labels = list(dict.fromkeys(__import__("re").findall(r"[a-z0-9]+", caption.casefold())))[:32]
     score, matched = score_semantics(expected, caption, labels)
     threshold = 0.6
+    competing = _competing_product_visible(topic, caption)
     return {
         "version": "image_semantic_evidence_v1",
         "analyzer": "pexels_alt_metadata",
@@ -359,7 +371,8 @@ def _source_metadata_semantic_evidence(path: Path, expected: list[str], source: 
         "matched_concepts": matched,
         "semantic_match_score": score,
         "threshold": threshold,
-        "passed": score >= threshold,
+        "passed": score >= threshold and not competing,
+        **({"failure": "competing_product_visible"} if competing else {}),
         "image_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
         "score_source": "provider_caption_label_recall",
         "evidence_level": "source_verified",

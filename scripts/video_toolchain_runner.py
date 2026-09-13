@@ -730,6 +730,18 @@ def _card_supporting_label(text: str, presentation: str, index: int) -> str:
     mapped = _presentation_label(presentation, index)
     chinese = bool(re.search(r"[\u3400-\u9fff]", str(text or "")))
     if not chinese:
+        content = str(text or "").strip()
+        if ":" in content:
+            content = content.split(":", 1)[1].strip()
+        elif "," in content:
+            content = content.split(",", 1)[1].strip()
+        else:
+            words = content.split()
+            content = " ".join(words[5:]) if len(words) > 8 else content
+        phrase = re.split(r"[.!?;]", content, maxsplit=1)[0].strip(" ,")
+        words = phrase.split()
+        if len(words) >= 3:
+            return " ".join(words[:7]).rstrip(" ,")
         english_labels = {
             "hero_poster": "Core question", "hero_conflict": "Core conflict", "hero_number": "Key figure",
             "establishing": "Real context", "detail_closeup": "Problem detail", "process_flow": "Action path",

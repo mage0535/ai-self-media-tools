@@ -45,13 +45,21 @@ def build_cover_direction(
     normalized = str(platform or "").casefold()
     profile = PLATFORM_PROFILES.get(normalized, {"id": "editorial", "size": (1200, 1200), "kicker": "EDITORIAL", "accent": "#FFD166"})
     text = f"{title} {topic} {body}".casefold()
-    ranked = [layout for layout, signals in LAYOUT_SIGNALS if not signals or any(signal in text for signal in signals)]
+    explicit_comparison = bool(
+        re.search(r"\b(?:vs\.?|versus)\b|对比|区别|比较", text)
+        or ("before" in text and "after" in text)
+    )
+    ranked = [
+        layout for layout, signals in LAYOUT_SIGNALS
+        if (layout != "split_comparison" or explicit_comparison)
+        and (not signals or any(signal in text for signal in signals))
+    ]
     ranked.extend(layout for layout, _ in LAYOUT_SIGNALS if layout not in ranked)
     recent = set(str(item) for item in (recent_direction_ids or []))
     treatment = _treatment(text, profile["id"])
     layout = next((item for item in ranked if f"{normalized}:{item}:{treatment}" not in recent), ranked[0])
     direction_id = f"{normalized}:{layout}:{treatment}"
-    title_text = _cover_title(title or topic, normalized)
+    title_text = _cover_title(title or topic, normalized, body=body)
     subtitle = _cover_subtitle(body, topic, title_text, normalized)
     subject = str((existing or {}).get("visual_subject") or topic or title_text).strip()
     focal_subjects = list((existing or {}).get("focal_subjects") or [subject, title_text])
@@ -176,7 +184,7 @@ def render_cover_poster(background: str | Path, output: str | Path, direction: d
     return evidence
 
 
-def _cover_title(value: str, platform: str) -> str:
+def _cover_title(value: str, platform: str, *, body: str = "") -> str:
     clean = re.sub(r"[#\n\r]+", " ", str(value or "")).strip()
     clean = re.sub(r"\s+", " ", clean)
     if platform == "youtube" and not re.search(r"[\u3400-\u9fff]", clean):
@@ -185,6 +193,12 @@ def _cover_title(value: str, platform: str) -> str:
         limit = 24 if platform in {"twitter", "x"} and not re.search(r"[\u3400-\u9fff]", clean) else 18
     if len(clean) <= limit:
         return clean
+    if platform == "youtube" and all(re.search(rf"\bstep\s+{word}\b", body, re.I) for word in ("one", "two", "three")):
+        comparison = re.match(r"(?P<lead>Use\s+[A-Za-z0-9-]+\s+Better)\s+Than\s+\d+%", clean, re.I)
+        if comparison:
+            candidate = f"{comparison.group('lead')}: 3 Steps"
+            if len(candidate) <= limit:
+                return candidate
     if platform == "youtube" and ":" in clean:
         first, second = [part.strip() for part in clean.split(":", 1)]
         numbered = re.match(r"(\d+\s+\w+)", second)
@@ -193,7 +207,12 @@ def _cover_title(value: str, platform: str) -> str:
             if len(candidate) <= limit:
                 return candidate
     first = next((part.strip() for part in re.split(r"[：:，,。！？!?|]", clean) if 6 <= len(part.strip()) <= limit), "")
-    return first or clean[:limit].rstrip("，。！？!? ")
+    if first:
+        return first
+    clipped = clean[:limit].rstrip("，。！？!? ")
+    if platform == "youtube" and not re.search(r"[\u3400-\u9fff]", clean) and len(clean) > limit and " " in clipped:
+        clipped = clipped.rsplit(" ", 1)[0]
+    return clipped
 
 
 def _cover_subtitle(body: str, topic: str, title: str, platform: str) -> str:
