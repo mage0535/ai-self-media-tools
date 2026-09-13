@@ -160,7 +160,7 @@ def auto_fetch_backgrounds(
         return [{"background_image": str(p), "rights_cleared": True, "real_scene": True} for p in existing[:8]]
 
     key = _pexels_key()
-    queries = _semantic_queries(f"{script_body} {title}", 8)
+    queries = _semantic_queries(f"{script_body} {title}", 16 if semantic_required else 8)
     assignments = []
     attempt_evidence = []
     base_existing = [] if force else existing

@@ -295,12 +295,50 @@ def test_video_asset_recovery_drops_competing_product_photo(tmp_path):
         patch("scripts.pexels_auto_bg._semantic_queries", return_value=[f"scene-{i}" for i in range(8)]),
         patch("scripts.pexels_auto_bg._download_pexels", side_effect=download),
         patch("scripts.pexels_auto_bg._semantic_evidence", side_effect=semantic),
+        patch("content_platform.image_provider.generate_image", side_effect=ImageProviderError("must expand stock queries")),
         patch("scripts.pexels_auto_bg.time.sleep"),
     ):
         rows = auto_fetch_backgrounds("Use Claude for a practical workflow", "Claude tutorial", tmp_path, "youtube", semantic_required=True)
     assert len(rows) == 8
     assert all(row["asset_id"] != "1" for row in rows)
     assert json.loads((tmp_path / "asset_selection_attempts.json").read_text())["attempts"][0]["status"] == "semantic_rejected"
+
+
+def test_video_asset_recovery_expands_scene_queries_after_initial_rejections(tmp_path):
+    from scripts.pexels_auto_bg import auto_fetch_backgrounds
+    import hashlib
+
+    calls = []
+    def download(query, _key, **_kwargs):
+        calls.append(query)
+        if query in {f"q{i}" for i in range(8)}:
+            return None
+        index = len(calls)
+        return {
+            "content": f"photo-{index}".encode(), "source_url": f"https://www.pexels.com/photo/{index}/",
+            "alt": "A person reviewing an AI workflow on a laptop",
+            "asset_id": str(index), "artist": "A", "artist_url": "",
+        }
+    def semantic(path, expected, platform, source=None):
+        return {
+            "passed": True, "caption": source["alt"],
+            "image_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+            "semantic_match_score": 0.8,
+        }
+    def queries(_text, count=8):
+        return [f"q{i}" for i in range(count)]
+    with (
+        patch("scripts.pexels_auto_bg._pexels_key", return_value="key"),
+        patch("scripts.pexels_auto_bg._semantic_queries", side_effect=queries),
+        patch("scripts.pexels_auto_bg._download_pexels", side_effect=download),
+        patch("scripts.pexels_auto_bg._semantic_evidence", side_effect=semantic),
+        patch("content_platform.image_provider.generate_image", side_effect=ImageProviderError("must expand stock queries")),
+        patch("scripts.pexels_auto_bg.time.sleep"),
+    ):
+        rows = auto_fetch_backgrounds("Claude workflow", "Claude tutorial", tmp_path, "youtube", semantic_required=True)
+
+    assert len(rows) == 8
+    assert any(query == "q8" for query in calls)
 
 
 def test_vision_quota_opens_circuit_and_reuses_pexels_source_evidence(tmp_path):
