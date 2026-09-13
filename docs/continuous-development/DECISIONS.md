@@ -818,3 +818,9 @@
 - Split comparison requires an explicit two-sided topic; the single word `before` in body prose cannot create empty comparison boxes.
 - Stock metadata and visual captions that identify a competing product cannot substantiate a tutorial about one named product. Reject and recapture instead of relying on generic AI-interface similarity.
 - English supporting card copy derives from the scene beat; timed subtitles must not split words across cues. ASR similarity or file presence does not override a negative human visual review.
+
+## D118: Strict Scene Retrieval May Expand Queries, Not Lower Gates
+
+- When an eight-scene strict video has fewer than eight accepted assets, expand content-derived semantic queries before generated fallback. Do not lower semantic thresholds or re-admit a named competing product.
+- Expanded retrieval remains bounded. Every accepted row needs a distinct source identity and SHA-256 plus license and semantic evidence. Failure to reach the required count still blocks rendering.
+- A live asset smoke proves retrieval only. Final acceptance still requires Pipeline, render, media probes and manual visual review.

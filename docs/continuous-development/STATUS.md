@@ -682,3 +682,11 @@ These describe the audited production release, not the current development code.
 - Manual cover/contact-sheet/copy review rejected it. Poster headline was clipped mid-word at `(Be` and split-comparison graphic had empty boxes. Scene one displayed a DeepSeek UI in a Claude tutorial; another scene used ChatGPT imagery. Generic support labels and midword subtitle cues remained visible.
 - `fa14637` adds a complete three-step cover payoff for the observed comparative source title, prevents unpaired `before` from selecting split comparison, rejects stock captions naming a competing AI product, derives English card support copy from its scene beat and keeps subtitle chunks on word boundaries. Related tests 51 passed; full regression 1910 passed plus 37 subtests; privacy 594/0, license 66/0. This is code evidence, not a newly accepted video.
 - Current owner: Codex. Next: advance isolated staging, Linux focused tests, fresh YouTube Pipeline case and repeat visual/ASR review. Then continue the serial platform matrix and platform DNA v2. Signed production release and timer remain unchanged.
+
+## 2026-09-13 YouTube V8G Strict Asset Pool Expansion
+
+- v8g used staging `60a4447`. Its first 7,985-character model attempt reached the 180-second hard timeout; the built-in 4,144-character retry succeeded in 31 seconds. It then failed closed after 379.0 seconds with only 6/8 assets.
+- The stricter product-name gate rejected unsuitable media rather than restoring DeepSeek/ChatGPT visuals. Attempt evidence recorded 16 Pexels, 22 Pixazo and 2 Cloudflare semantic rejections; no MP4, BGM or handoff was accepted.
+- `3d6b193` expands only strict semantic scene retrieval from 8 to 16 content-derived queries. Existing diverse-query passes, second-asset recovery, source identity, license, SHA and semantic thresholds remain intact.
+- Local full regression: 1911 passed plus 37 subtests; privacy 594/0; license 66/0. Linux focused suite passed 16 tests. A live smoke using the exact v8g script returned 8 assets with 8 distinct SHA-256 values, 8 distinct source URLs and zero DeepSeek/ChatGPT captions.
+- Next: run a fresh v8h full Pipeline/probe/manual-review case. Production and automatic timers remain unchanged.
