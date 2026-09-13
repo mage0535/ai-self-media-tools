@@ -1406,6 +1406,22 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertEqual(packet["assignments"][0]["background_image"], "/tmp/bg-1.jpg")
         self.assertEqual(packet["assignments"][0]["source_url"], "https://pexels.test/1")
 
+    def test_english_supporting_labels_reflect_each_beats_actual_action(self):
+        from scripts.video_toolchain_runner import _card_supporting_label
+
+        first = _card_supporting_label(
+            "Step one: create a Project for a goal. Add files and instructions.",
+            "timeline", 2,
+        )
+        second = _card_supporting_label(
+            "Step two: write prompts with a role, task, constraints, examples, and success criteria.",
+            "timeline", 3,
+        )
+
+        self.assertIn("create a Project", first)
+        self.assertIn("write prompts", second)
+        self.assertNotEqual(first, second)
+
     def test_video_asset_gate_requires_all_eight_scene_assets(self):
         from scripts.video_toolchain_runner import _require_video_asset_count
 

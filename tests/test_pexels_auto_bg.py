@@ -255,6 +255,54 @@ def test_pexels_alt_metadata_is_hash_bound_source_semantic_evidence(tmp_path):
     assert result["asset_id"] == "15601232"
 
 
+def test_claude_topic_rejects_competing_named_product_in_stock_caption(tmp_path):
+    from scripts.pexels_auto_bg import _source_metadata_semantic_evidence
+
+    image = tmp_path / "asset.jpg"
+    image.write_bytes(b"stock-image")
+    result = _source_metadata_semantic_evidence(
+        image,
+        ["person using AI chat interface laptop"],
+        {
+            "alt": "Laptop displaying DeepSeek AI chat interface.",
+            "source_url": "https://www.pexels.com/photo/30530416/",
+            "asset_id": "30530416",
+        },
+        topic="Use Claude Better",
+    )
+
+    assert result["passed"] is False
+    assert result["failure"] == "competing_product_visible"
+
+
+def test_video_asset_recovery_drops_competing_product_photo(tmp_path):
+    from scripts.pexels_auto_bg import auto_fetch_backgrounds
+    import hashlib
+
+    calls = []
+    def download(query, _key, **_kwargs):
+        calls.append(query)
+        index = len(calls)
+        alt = "Laptop showing DeepSeek chat interface" if index == 1 else f"Person using a laptop in a workspace {index}"
+        return {
+            "content": f"photo-{index}".encode(), "source_url": f"https://www.pexels.com/photo/{index}/",
+            "alt": alt, "asset_id": str(index), "artist": "A", "artist_url": "",
+        }
+    def semantic(path, expected, platform, source=None):
+        return {"passed": True, "caption": source["alt"], "image_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(), "semantic_match_score": 0.8}
+    with (
+        patch("scripts.pexels_auto_bg._pexels_key", return_value="key"),
+        patch("scripts.pexels_auto_bg._semantic_queries", return_value=[f"scene-{i}" for i in range(8)]),
+        patch("scripts.pexels_auto_bg._download_pexels", side_effect=download),
+        patch("scripts.pexels_auto_bg._semantic_evidence", side_effect=semantic),
+        patch("scripts.pexels_auto_bg.time.sleep"),
+    ):
+        rows = auto_fetch_backgrounds("Use Claude for a practical workflow", "Claude tutorial", tmp_path, "youtube", semantic_required=True)
+    assert len(rows) == 8
+    assert all(row["asset_id"] != "1" for row in rows)
+    assert json.loads((tmp_path / "asset_selection_attempts.json").read_text())["attempts"][0]["status"] == "semantic_rejected"
+
+
 def test_vision_quota_opens_circuit_and_reuses_pexels_source_evidence(tmp_path):
     import scripts.pexels_auto_bg as pexels
 

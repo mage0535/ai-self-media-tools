@@ -99,6 +99,10 @@ def split_timed_cue(start: float, end: float, text: str, *, max_chars: int, max_
         window = remaining[: capacity + 1]
         boundary = max(window.rfind(mark) for mark in "，。！？；,.!?;")
         cut = boundary + 1 if boundary >= max(6, capacity // 2) else capacity
+        if cut == capacity and remaining[capacity - 1:capacity + 1].isalpha():
+            space = window.rfind(" ", max(6, capacity // 2), capacity)
+            if space > 0:
+                cut = space
         chunks.append(remaining[:cut].strip())
         remaining = remaining[cut:].strip()
     total_weight = sum(max(1, len(chunk)) for chunk in chunks)

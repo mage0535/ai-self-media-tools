@@ -118,6 +118,39 @@ def test_youtube_cover_preserves_numbered_payoff_after_colon():
     assert direction["title_text"] == "Use Claude Better: 3 Steps"
 
 
+def test_youtube_comparative_source_title_uses_complete_three_step_payoff():
+    direction = build_cover_direction(
+        platform="youtube",
+        topic="Use Claude Better Than 99% of People (Beginner to Pro)",
+        title="Use Claude Better Than 99% of People (Beginner to Pro)",
+        body="Step one: create a Project. Step two: specify the task. Step three: review an Artifact.",
+    )
+    assert direction["title_text"] == "Use Claude Better: 3 Steps"
+    assert direction["layout_key"] != "split_comparison"
+
+
+def test_youtube_three_step_cover_is_pixel_safe(tmp_path: Path):
+    background = tmp_path / "background.jpg"
+    Image.new("RGB", (1920, 1080), (24, 40, 54)).save(background)
+    direction = build_cover_direction(
+        platform="youtube",
+        topic="Use Claude Better Than 99% of People (Beginner to Pro)",
+        title="Use Claude Better Than 99% of People (Beginner to Pro)",
+        body="Step one: set context. Step two: define output. Step three: review the result.",
+    )
+    evidence = render_cover_poster(background, tmp_path / "cover.jpg", direction)
+    assert evidence["title_text"] == "Use Claude Better: 3 Steps"
+    assert validate_cover(tmp_path / "cover.jpg", evidence, "youtube")["passed"] is True
+
+
+def test_unpaired_before_in_body_does_not_create_empty_comparison_layout():
+    direction = build_cover_direction(
+        platform="youtube", topic="Claude workflow", title="Use Claude Better",
+        body="Define the job before asking for the answer.",
+    )
+    assert direction["layout_key"] != "split_comparison"
+
+
 def test_split_comparison_cover_materializes_visual_story_elements(tmp_path: Path):
     background = tmp_path / "background.jpg"
     Image.new("RGB", (1920, 1080), (8, 16, 28)).save(background)
