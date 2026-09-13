@@ -690,3 +690,10 @@ These describe the audited production release, not the current development code.
 - `3d6b193` expands only strict semantic scene retrieval from 8 to 16 content-derived queries. Existing diverse-query passes, second-asset recovery, source identity, license, SHA and semantic thresholds remain intact.
 - Local full regression: 1911 passed plus 37 subtests; privacy 594/0; license 66/0. Linux focused suite passed 16 tests. A live smoke using the exact v8g script returned 8 assets with 8 distinct SHA-256 values, 8 distinct source URLs and zero DeepSeek/ChatGPT captions.
 - Next: run a fresh v8h full Pipeline/probe/manual-review case. Production and automatic timers remain unchanged.
+
+## 2026-09-13 YouTube V8H CTA Card Gate
+
+- v8h used `61c210a`; the active model completed its full generation attempt in about 66 seconds. The strict asset expansion produced eight backgrounds, but pre-render validation stopped the job after 129.3 seconds with `card_7_narration_display_duplicate`.
+- This is a valid early rejection: no TTS, BGM, final MP4 or handoff was produced. The content-derived card label repeated a contiguous phrase from the CTA narration.
+- `87d22f0` maps CTA presentations to a short content-specific action summary such as `Apply it to one recurring task`. It remains grounded in the scene but is not a copy of the narration. Related video/pre-render tests passed; full regression 1912 passed plus 37 subtests; privacy 594/0; license 66/0.
+- Next: fast-forward Linux staging, run the precise CTA-card/pre-render tests, then create a fresh YouTube Pipeline Canary and perform full machine plus manual review. Production release and timers remain unchanged.

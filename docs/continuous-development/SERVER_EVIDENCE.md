@@ -1062,3 +1062,9 @@ Observed read-only on 2026-08-31.
 - Strict asset attempts rejected 16 Pexels, 22 Pixazo and 2 Cloudflare candidates. The observed failure confirms stronger product/content semantics can reduce supply and must be paired with broader bounded retrieval rather than relaxed acceptance.
 - At `3d6b193`, local full pytest returned 1911 passed plus 37 subtests in 345.81 seconds; project/privacy 594/0 and license 66/0. Linux staging passed all 16 Pexels recovery tests.
 - Linux live smoke reused only the v8g script text in a new output root. Result: 8 accepted assets, 8 unique SHA-256 values, 8 unique source URLs and zero accepted captions naming DeepSeek or ChatGPT. This is asset-stage proof only; a fresh complete Canary and manual review remain required.
+
+## 2026-09-13 YouTube V8H Pre-Render Rejection
+
+- v8h ended after 129.3 seconds at `generated cards failed pre-render validation: card_7_narration_display_duplicate`. The full model attempt succeeded; eight strict backgrounds were present. No TTS, BGM, final MP4 or handoff was created.
+- Observed CTA narration was summarized by copying `test it on one recurring task, and`, which correctly triggered the duplicate gate. `87d22f0` generates `Apply it to one recurring task` for this case.
+- Local full pytest after the correction returned 1912 passed plus 37 subtests in 369.24 seconds. Project/privacy audit scanned 594 files with zero issues; license audit checked 66 capabilities with zero issues. Linux focused verification and a fresh full Canary remain required.
