@@ -418,6 +418,28 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertNotIn("card_1_narration_display_duplicate", gate["failures"])
         self.assertIn("weak", headline.casefold())
 
+    def test_claude_workflow_cards_do_not_reconstruct_narration_from_display_copy(self):
+        from scripts.pre_render_gate import validate_render_inputs
+        from scripts.video_toolchain_runner import build_cards
+
+        beats = [
+            "Still using Claude like a chatbot? The upgrade is a better workflow.",
+            "The common trap is switching features without giving Claude clear context, constraints, or a definition of done. Step one: state the goal, audience, inputs, output format, and limits.",
+            "Ask Claude to flag missing information before drafting. Step two: use Projects for recurring work.",
+            "Add stable instructions and reference files so each conversation starts with the right context. Step three: turn strong results into reusable Skills, then connect only the tools or code the task needs.",
+            "Caution: advanced features cannot rescue a vague request.",
+            "If the answer feels generic, improve the brief and examples before changing models.",
+            "The beginner-to-pro path is simple: better context, repeatable instructions, then controlled tool use.",
+            "Save this checklist, try one small workflow, and comment with the task you want to improve next.",
+        ]
+        cards = build_cards("\n\n".join(beats), "Use Claude Better", {"video_route": {"scene_presentations": ["hero_conflict", "process_flow", "process_flow", "process_flow", "evidence_zoom", "evidence_zoom", "payoff_reveal", "cta"]}})
+
+        gate = validate_render_inputs(Path("."), cards, require_backgrounds=False, require_cover_contract=True)
+
+        self.assertNotIn("card_6_narration_display_duplicate", gate["failures"])
+        self.assertNotIn("card_7_narration_display_duplicate", gate["failures"])
+        self.assertTrue(gate["passed"], gate["failures"])
+
     def test_runner_blocks_non_dry_short_scripts_before_renderer(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"

@@ -419,6 +419,15 @@ def _stock_query(prompt: str) -> str:
         for required, query in concept_queries:
             if all(concept in subjects for concept in required):
                 return query
+    if not any(token in lower for token in ("no cat", "no dog", "不要猫", "不要狗", "无猫", "无狗")):
+        cat = "猫" in lower or bool(re.search(r"(?<![a-z])(?:cat|kitten)(?![a-z])", lower))
+        dog = "狗" in lower or bool(re.search(r"(?<![a-z])(?:dog|puppy)(?![a-z])", lower))
+        if cat and dog:
+            return "cat dog home office" if any(token in lower for token in ("家", "室内", "home", "indoor", "desk", "书桌")) else "cat dog outdoors"
+        if cat:
+            return "cute cat home office" if any(token in lower for token in ("家", "室内", "home", "indoor", "desk", "书桌")) else "cute cat outdoors"
+        if dog:
+            return "playful dog home office" if any(token in lower for token in ("家", "室内", "home", "indoor", "desk", "书桌")) else "playful dog outdoors"
     topic_map = {
         "ai": "artificial intelligence workspace",
         "人工智能": "artificial intelligence workspace",
@@ -830,15 +839,10 @@ def _retouch_stock_image(prompt: str, output: Path, original: dict, *, size: str
         except Exception as exc:
             failures.append(f"{name}:{type(exc).__name__}")
             temporary.unlink(missing_ok=True)
-    return {
-        **original,
-        "edited": False,
-        "edit_attempted": True,
-        "edit_status": "fallback_kept_stock",
-        "edit_error_provider": failures[-1].split(":", 1)[0] if failures else "",
-        "edit_failures": failures,
-        "original_evidence_path": str(original_copy),
-    }
+    raise ImageProviderError(
+        "requested stock-image edit did not produce a verified result; "
+        + ", ".join(failures or ["no_edit_provider_available"])
+    )
 
 
 def _verify_image_file(path: Path) -> None:
@@ -1009,7 +1013,10 @@ def _provider_chain(provider: str, *, intent: str = "auto", input_image: str | P
         chain = ["stock", "agnes", "sense_nova", "pixazo", "cloudflare", "pollinations"]
     if os.environ.get("AGNES_IMAGE_AUTO_ENABLED") != "1":
         chain = [name for name in chain if name != "agnes"]
-    if os.environ.get("IMAGE_PROVIDER_ALLOW_PAID") == "1":
+    allow_paid = os.environ.get("IMAGE_PROVIDER_ALLOW_PAID") == "1"
+    if not allow_paid:
+        chain = [name for name in chain if name not in {"pixazo", "openai", "gemini"}]
+    elif not configured:
         chain.extend(["openai", "gemini"])
     if input_image or intent == "image_edit":
         chain = [name for name in chain if name in {"agnes", "sense_nova", "gemini", "openai"}]
@@ -1034,14 +1041,15 @@ def _cache_key(prompt: str, provider: str, model: str = "", size: str = "1024x10
     h.update(prompt.encode("utf-8"))
     h.update(b"\0")
     h.update(str(intent or "auto").encode("utf-8"))
+    h.update(b"\0")
+    h.update(os.environ.get("IMAGE_RENDERER_VERSION", "image_provider_v1").encode("utf-8"))
     if input_image:
         source = Path(input_image)
         h.update(b"\0")
-        h.update(str(source).encode("utf-8"))
         try:
             h.update(hashlib.sha256(source.read_bytes()).digest())
-        except OSError:
-            pass
+        except OSError as exc:
+            raise ImageProviderError("input image is unavailable for cache identity") from exc
     return h.hexdigest()
 
 
@@ -1055,6 +1063,8 @@ def _read_cache(prompt: str, output: Path, provider: str, model: str = "", size:
         return None
     try:
         result = json.loads(meta.read_text(encoding="utf-8"))
+        if result.get("cache_key") != key or result.get("content_sha256") != hashlib.sha256(image.read_bytes()).hexdigest():
+            return None
         shutil.copyfile(image, output)
         result.update({"path": str(output), "bytes": output.stat().st_size, "cache_hit": True})
         return result
@@ -1071,7 +1081,7 @@ def _write_cache(prompt: str, output: Path, provider: str, result: dict, model: 
     image = _cache_dir() / f"{key}.img"
     meta = _cache_dir() / f"{key}.json"
     cache_result = {k: v for k, v in result.items() if k not in {"path"}}
-    cache_result.update({"cache_key": key, "cached_at": int(time.time())})
+    cache_result.update({"cache_key": key, "content_sha256": hashlib.sha256(output.read_bytes()).hexdigest(), "cached_at": int(time.time())})
     try:
         shutil.copyfile(output, image)
         meta.write_text(json.dumps(cache_result, ensure_ascii=False, indent=2), encoding="utf-8")

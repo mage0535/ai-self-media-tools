@@ -773,8 +773,19 @@ class Pipeline:
                         ).to_dict()
                         package["job_id"] = job_id
                         self.store.save_content_package(package, job_id=job_id)
+            # Reject deterministic video-card defects before any expensive
+            # image, TTS, BGM, browser, or rendering work begins.
+                pre_media_dependencies = ["run_quality_gate"]
+                planned_media_kinds = set(generated_media_kinds_for_job(self.store.get_job(job_id), self.config))
+                if "video" in planned_media_kinds:
+                    runner.run(
+                        "validate_video_card_plan",
+                        lambda: self.media.preflight_video_cards(self.store.get_job(job_id)),
+                        depends_on=["run_quality_gate"],
+                    )
+                    pre_media_dependencies = ["validate_video_card_plan"]
             # 归藏材质插画：为文章内容生成带中文标签的解释图
-                runner.succeeded("collect_or_prepare_materials", {"content_package_v1": bool(self.config.get("feature_flags", {}).get("content_package_v1"))}, depends_on=["run_quality_gate"])
+                runner.succeeded("collect_or_prepare_materials", {"content_package_v1": bool(self.config.get("feature_flags", {}).get("content_package_v1"))}, depends_on=pre_media_dependencies)
                 illustration_enabled = self.config.get("media", {}).get("illustration", {}).get("enabled", False)
                 if illustration_enabled:
                     self._generate_optional_media(job_id, "illustration", runner, ["collect_or_prepare_materials"])
