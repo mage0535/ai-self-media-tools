@@ -871,3 +871,10 @@
 - A generic AI topic defaults to no mascot. Explicit disable wins. Explicit role plans or topic-level cat/dog subjects may select one or both roles.
 - When selected, each role still needs a non-decorative narrative function, scene/knowledge-point alignment, source/license evidence and normal semantic quality gates. A mascot cannot replace tool demonstrations or factual evidence.
 - Cover, stock-query and scene systems consume the recorded blueprint decision; they must not independently inject a mascot merely because the lane contains AI.
+
+## D126: Provider Availability Is Not Image Acceptance
+
+- Image provider smoke separates transport success from artifact quality, branding safety and work-level semantic fit. `provider_ok` cannot imply production readiness.
+- The smoke can run deterministic file/variance and branding gates. Semantic matching remains `not_evaluated` until a real content request supplies expected concepts and binds analysis to the output SHA-256.
+- `--require-all` may verify all requested transports, but reports must separately expose whether every artifact passed. No aggregate field may hide a provider that returned a low-variance, branded or semantically unrelated image.
+- Cache speed is an efficiency measurement only. Cached output still passes the same artifact, branding and semantic gates as a fresh result.
