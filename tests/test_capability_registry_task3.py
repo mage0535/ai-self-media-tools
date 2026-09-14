@@ -339,6 +339,17 @@ def test_parent_executed_children_route_to_one_parent_invocation_with_child_tele
     assert {"pexels", "pixabay", "knowledge_card_renderer", "cover_renderer"} <= set(media[0]["child_capability_ids"])
 
 
+def test_video_media_parent_exposes_stock_providers_used_by_runtime():
+    from content_platform.capability_router import match_capabilities, load_registry
+
+    registry = load_registry("youtube")
+    plan = match_capabilities({"platform": "youtube", "content_format": "long_video"}, registry)
+    media = [row for row in plan["candidates"] if row["capability_id"] == "media_asset_pipeline"]
+
+    assert len(media) == 1
+    assert {"pexels", "pixabay"} <= set(media[0]["child_capability_ids"])
+
+
 def test_internal_runtime_children_are_not_left_as_inventory_and_unverified_methodology_is_not_consulted():
     from content_platform.capability_router import match_capabilities, load_registry
 

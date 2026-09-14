@@ -488,6 +488,14 @@ def test_section_image_rejects_provider_that_declares_embedded_branding():
     ) is True
 
 
+def test_media_bridge_auto_recovery_respects_paid_provider_opt_in(monkeypatch):
+    monkeypatch.delenv("IMAGE_PROVIDER_ALLOW_PAID", raising=False)
+    for intent in ("real_scene", "cinematic_cover", "editorial_illustration", "knowledge_card_background"):
+        assert "pixazo" not in MediaBridge._image_provider_attempt_chain(intent, "auto")
+    monkeypatch.setenv("IMAGE_PROVIDER_ALLOW_PAID", "1")
+    assert "pixazo" in MediaBridge._image_provider_attempt_chain("cinematic_cover", "auto")
+
+
 def test_boundary_visual_uses_deterministic_final_recovery_only():
     item = {
         "role": "section",

@@ -1,4 +1,5 @@
 import json
+import inspect
 
 from content_platform.media import MediaBridge
 from scripts.film_renderer import validate_render_durations
@@ -6,6 +7,7 @@ from scripts.render_landscape_video import _landscape_visual_copy, _write_slides
 from pathlib import Path
 from PIL import Image
 from unittest.mock import patch
+from content_platform.pipeline import Pipeline
 
 
 def test_video_script_compiler_converts_long_article_to_eight_bounded_beats(tmp_path):
@@ -143,3 +145,37 @@ def test_video_bridge_passes_compiled_narration_and_persists_its_contract(tmp_pa
     assert len(narration) < len(body)
     assert narration == saved_contract["script"]
     assert saved_contract["source"] == "derived_from_draft"
+
+
+def test_video_card_preflight_runs_without_media_assets_for_valid_script(tmp_path):
+    beats = [
+        "Still using Claude like a chatbot? The upgrade is a better workflow.",
+        "Define the goal, audience, inputs, output format, and limits.",
+        "Ask Claude to flag missing information before drafting.",
+        "Add stable instructions and reference files for recurring work.",
+        "Caution: advanced features cannot rescue a vague request.",
+        "If the answer feels generic, improve the brief and examples before changing models.",
+        "The beginner-to-pro path is simple: better context, repeatable instructions, then controlled tool use.",
+        "Save this checklist and try it on one small workflow.",
+    ]
+    bridge = MediaBridge({}, tmp_path)
+    result = bridge.preflight_video_cards({
+        "title": "Use Claude Better",
+        "body": "\n\n".join(beats),
+        "platforms": ["youtube"],
+        "draft_meta": {
+            "video_script": "\n\n".join(beats),
+            "video_toolchain_plan": {"video_route": {"scene_presentations": ["hero_conflict", "process_flow", "process_flow", "process_flow", "evidence_zoom", "evidence_zoom", "payoff_reveal", "cta"]}},
+        },
+    })
+
+    assert result["passed"] is True
+    assert result["card_count"] == 8
+    assert result["media_called"] is False
+
+
+def test_pipeline_preflights_video_cards_before_image_and_video_generation():
+    source = inspect.getsource(Pipeline.run)
+
+    assert source.index("preflight_video_cards") < source.index('_generate_optional_media(job_id, "image"')
+    assert source.index("preflight_video_cards") < source.index("for kind in generated_kinds")

@@ -948,6 +948,8 @@ class MediaBridge:
         defaults = by_intent.get(str(intent or "auto"), ["auto", "sense_nova", "pixazo", "cloudflare", "pollinations"])
         if os.environ.get("AGNES_IMAGE_AUTO_ENABLED") != "1":
             defaults = [name for name in defaults if name != "agnes"]
+        if os.environ.get("IMAGE_PROVIDER_ALLOW_PAID") != "1":
+            defaults = [name for name in defaults if name not in {"pixazo", "openai", "gemini"}]
         if configured == "auto":
             return defaults
         return [configured, *[name for name in defaults if name != configured]]
@@ -1522,6 +1524,35 @@ class MediaBridge:
             if text and text not in paths:
                 paths.append(text)
         return os.pathsep.join(paths)
+
+    def preflight_video_cards(self, job):
+        """Reject invalid display copy before any image, TTS, or render work."""
+        from scripts.pre_render_gate import validate_render_inputs
+        from scripts.video_toolchain_runner import build_cards
+
+        script_contract = self.compile_video_script(job)
+        plan = dict((job.get("draft_meta") or {}).get("video_toolchain_plan") or {})
+        cards = build_cards(
+            script_contract["script"],
+            str(job.get("title") or job.get("topic") or ""),
+            plan,
+        )
+        platform = str(next(iter(job.get("platforms") or []), ""))
+        gate = validate_render_inputs(
+            Path("."),
+            cards,
+            platform=platform,
+            require_backgrounds=False,
+            require_cover_contract=True,
+        )
+        if not gate.get("passed"):
+            raise RuntimeError("video card preflight failed: " + ", ".join(gate.get("failures") or []))
+        return {
+            "passed": True,
+            "card_count": len(cards),
+            "media_called": False,
+            "script_sha256": hashlib.sha256(script_contract["script"].encode("utf-8")).hexdigest(),
+        }
 
     def _generate_video(self, job, output_dir):
         output_dir.mkdir(parents=True, exist_ok=True)

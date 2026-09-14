@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -76,11 +77,29 @@ def build_content_blueprint(
             "motion_discipline_gate": "motion_discipline_gate" in sections,
             "compliance_gate": "compliance_gate" in sections,
         }
-    if ai_lane:
-        blueprint["mascot_roles"] = {
-            "cat": {"tone": "cute_playful", "narrative_function": f"explore or draft the {topic} workflow", "decorative_only": False},
-            "dog": {"tone": "alert_supportive", "narrative_function": f"verify evidence and guard the {topic} result", "decorative_only": False},
-        }
+    topic_text = str(topic or "").casefold()
+    cat_fit = "猫" in topic_text or bool(re.search(r"\b(?:cat|kitten)\b", topic_text))
+    dog_fit = "狗" in topic_text or bool(re.search(r"\b(?:dog|puppy)\b", topic_text))
+    if slot.get("use_mascots") is False:
+        reason = "explicitly_disabled"
+    elif isinstance(slot.get("mascot_roles"), dict) and slot["mascot_roles"]:
+        blueprint["mascot_roles"] = dict(slot["mascot_roles"])
+        reason = "explicit_role_plan"
+    elif ai_lane and (slot.get("use_mascots") is True or cat_fit or dog_fit):
+        selected_cat = cat_fit or slot.get("use_mascots") is True
+        selected_dog = dog_fit or slot.get("use_mascots") is True
+        if selected_cat:
+            blueprint["mascot_roles"]["cat"] = {
+                "tone": "cute_playful", "narrative_function": f"explore or draft the {topic} workflow", "decorative_only": False,
+            }
+        if selected_dog:
+            blueprint["mascot_roles"]["dog"] = {
+                "tone": "alert_supportive", "narrative_function": f"verify evidence and guard the {topic} result", "decorative_only": False,
+            }
+        reason = "explicitly_selected" if slot.get("use_mascots") is True else "topic_subject_fit"
+    else:
+        reason = "not_needed_for_content"
+    blueprint["mascot_decision"] = {"selected": bool(blueprint["mascot_roles"]), "reason": reason}
     return blueprint
 
 

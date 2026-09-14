@@ -49,8 +49,10 @@
   },
   "ai_knowledge_cat_dog_role_policy": {
    "enforced": true,
-   "scope": "all_ai_knowledge_content_including_video_article_inline_images_knowledge_cards_wechat_newspic_xiaohongshu_and_little_green_book",
-   "primary_style": "cute_playful_cat_and_dog_roles",
+   "required": false,
+   "selection_mode": "optional_content_fit",
+   "scope": "ai_knowledge_content_when_cat_dog_roles_serve_the_specific_topic",
+   "primary_style": "content_adaptive",
    "semantic_roles": [
     "curious_cat_explorer",
     "playful_cat_error_branch",
@@ -100,7 +102,7 @@
     "knowledge_depth_plan",
     "hook_plan",
     "content_structure",
-    "cat_dog_role_plan_when_ai_knowledge_lane",
+    "mascot_selection_decision_when_relevant",
     "asset_and_evidence_plan",
     "subtitle_and_pacing_plan_when_video",
     "adaptive_cover_direction",

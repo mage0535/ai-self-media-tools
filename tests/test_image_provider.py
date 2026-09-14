@@ -471,6 +471,50 @@ def test_image_provider_cache_reuses_previous_success(tmp_path, monkeypatch):
     assert urlopen.call_count == 1
 
 
+def test_auto_provider_chain_never_selects_paid_sources_without_opt_in(monkeypatch):
+    monkeypatch.delenv("IMAGE_PROVIDER_ALLOW_PAID", raising=False)
+    monkeypatch.delenv("IMAGE_PROVIDER_CHAIN", raising=False)
+    for intent in ("real_scene", "cinematic_cover", "editorial_illustration", "fast_fallback"):
+        assert not {"pixazo", "openai", "gemini"} & set(image_provider._provider_chain("auto", intent=intent))
+
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "pixazo,openai,sense_nova,stock")
+    assert image_provider._provider_chain("auto", intent="cinematic_cover") == ["sense_nova", "stock"]
+    monkeypatch.setenv("IMAGE_PROVIDER_ALLOW_PAID", "1")
+    assert image_provider._provider_chain("auto", intent="cinematic_cover") == ["pixazo", "openai", "sense_nova", "stock"]
+
+
+def test_image_cache_key_uses_reference_content_not_path_and_renderer_version(tmp_path, monkeypatch):
+    first = tmp_path / "first.png"
+    second = tmp_path / "second.png"
+    first.write_bytes(b"same-image")
+    second.write_bytes(b"same-image")
+    monkeypatch.setenv("IMAGE_RENDERER_VERSION", "renderer-v1")
+    one = image_provider._cache_key("edit", "sense_nova", input_image=first, intent="image_edit")
+    assert one == image_provider._cache_key("edit", "sense_nova", input_image=second, intent="image_edit")
+    monkeypatch.setenv("IMAGE_RENDERER_VERSION", "renderer-v2")
+    assert one != image_provider._cache_key("edit", "sense_nova", input_image=second, intent="image_edit")
+
+
+def test_image_cache_rejects_modified_cached_bytes(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
+    monkeypatch.delenv("IMAGE_PROVIDER_DISABLE_CACHE", raising=False)
+    original = tmp_path / "original.png"
+    original.write_bytes(b"original" * 500)
+    image_provider._write_cache("topic", original, "pollinations", {"provider": "pollinations"})
+    key = image_provider._cache_key("topic", "pollinations")
+    cache_file = tmp_path / "data" / "cache" / "image_provider" / f"{key}.img"
+    cache_file.write_bytes(b"changed!" * 500)
+
+    assert image_provider._read_cache("topic", tmp_path / "reused.png", "pollinations") is None
+
+
+def test_stock_query_prioritizes_pet_subject_over_generic_ai_context():
+    query = image_provider._stock_query("AI知识视频，真实小猫和小狗在家庭书桌旁互动，电影海报封面，无文字")
+
+    assert "cat" in query or "dog" in query
+    assert query != "artificial intelligence workspace"
+
+
 def test_auto_routes_photographic_prompts_to_stock_before_ai_generation(tmp_path, monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
     monkeypatch.delenv("IMAGE_PROVIDER_CHAIN", raising=False)
@@ -601,9 +645,9 @@ def test_stock_original_is_preserved_and_temp_edit_atomically_replaces_output(tm
     assert result["provenance"]["original_provider"] == "pexels"
 
 
-def test_edit_failure_keeps_stock_output_and_reports_fallback(tmp_path, monkeypatch):
+def test_edit_failure_does_not_accept_unedited_stock_as_final_output(tmp_path, monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
-    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "stock,sense_nova")
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "stock,sense_nova,cloudflare")
     output = tmp_path / "fallback.png"
 
     def fake_stock(prompt, output_path, **kwargs):
@@ -616,13 +660,18 @@ def test_edit_failure_keeps_stock_output_and_reports_fallback(tmp_path, monkeypa
     monkeypatch.setattr(image_provider, "_stock_image", fake_stock)
     monkeypatch.setattr(image_provider, "_sensenova_image", failing_sensenova, raising=False)
 
+    def fake_cloudflare(prompt, output_path, **kwargs):
+        Path(output_path).write_bytes(b"\x89PNG\r\n\x1a\n" + b"c" * 3000)
+        return {"provider": "cloudflare", "mode": "generate", "license": "Cloudflare"}
+
+    monkeypatch.setattr(image_provider, "_cloudflare_image", fake_cloudflare)
+
     result = generate_image("editorial cover, remove watermark-like text", output, provider="auto")
 
-    assert result["provider"] == "pixabay"
-    assert result["mode"] == "search"
-    assert result["edit_status"] == "fallback_kept_stock"
-    assert result["edit_error_provider"] == "sense_nova"
-    assert output.read_bytes().endswith(b"s" * 3000)
+    assert result["provider"] == "cloudflare"
+    assert output.read_bytes().endswith(b"c" * 3000)
+    original = output.parent / "image_edit_evidence" / output.name
+    assert original.read_bytes().endswith(b"s" * 3000)
 
 
 def test_sensenova_edit_sends_source_image_and_aspect_tier(tmp_path, monkeypatch):

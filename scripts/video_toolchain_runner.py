@@ -736,6 +736,14 @@ def _card_supporting_label(text: str, presentation: str, index: int) -> str:
         lowered = content.casefold()
         if "role-play" in lowered and "missing information" in lowered:
             return "Add the missing information"
+        if "flag missing information" in lowered:
+            return "Expose gaps before drafting"
+        if "advanced features" in lowered and "vague request" in lowered:
+            return "Clear input comes before advanced features"
+        if "feels generic" in lowered and any(token in lowered for token in ("brief", "example")):
+            return "Add clearer examples before switching"
+        if "beginner-to-pro" in lowered and "context" in lowered and "tool" in lowered:
+            return "Context, instructions, then tools"
         if presentation in {"cta", "cta_footage", "interaction"}:
             if "recurring task" in lowered:
                 return "Apply it to one recurring task"
@@ -802,6 +810,12 @@ def _visual_headline(text: str, presentation: str, index: int) -> str:
     lowered = str(text or "").casefold()
     if "refine" in lowered and any(token in lowered for token in ("weakest", "weak part", "weak step")):
         return "Improve the weak step"
+    if "advanced features" in lowered and "vague request" in lowered:
+        return "Fix the request first"
+    if "feels generic" in lowered and any(token in lowered for token in ("brief", "example")):
+        return "Strengthen the input"
+    if "beginner-to-pro" in lowered and "context" in lowered and "tool" in lowered:
+        return "Build the workflow in layers"
     rules = [
         (("then iterate", "iterate again", "refine and repeat"), "Iterate with feedback"),
         (("切换", "工具越多", "too many tools", "switching"), "工具切换黑洞"),

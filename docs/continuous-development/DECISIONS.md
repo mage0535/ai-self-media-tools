@@ -849,3 +849,25 @@
 
 - The pre-render narration/display duplicate gate remains required and fail-closed. A model may produce a strong spoken beat but the deterministic card compiler must not reuse a long contiguous spoken phrase as its title or supporting label.
 - For an observed refinement and missing-information beat, use a short action summary and an explicit missing-input summary. Do not bypass the gate, replace the card with a generic index label, or pretend a failed pre-render job completed.
+
+## D123: Server Optimization Prototypes Are Design Input, Not A Second Runtime
+
+- Do not copy the mutable server checkout's standalone Prompt Registry, Prompt Compiler, SearchSpec, source router or asset-cache prototype into this branch. Its useful contracts must be implemented through the existing content profile, generation-context compiler, capability registry, execution DAG and evidence gates.
+- Provider/source capabilities used inside an executable parent may remain `parent_executed`, but their content-form applicability and child telemetry must match real runtime use. Pexels/Pixabay therefore apply to article, carousel, short video and long video.
+- Registry-only Wikimedia, Playwright MCP or Apify entries cannot be selected or reported as executed. Each needs an allowlisted adapter, availability probe, input/output contract, rights/source evidence, failure receipt and Linux smoke before promotion.
+- Prompt, asset and render caches are separate evidence layers. No cache hit bypasses semantic or artifact gates; render reuse requires renderer version, scene manifest, asset hashes, FFmpeg parameters, final hash and effect evidence.
+
+## D124: Image Auto-Routing Requires Cost, Subject And Cache Integrity Gates
+
+- `auto` at both the image-provider and MediaBridge recovery boundaries excludes paid providers unless the explicit paid opt-in is present. An operator-selected provider is distinct from an automatic fallback.
+- An explicitly requested cat/dog subject takes precedence over generic AI terms in stock queries, but negative no-pet instructions remain authoritative. `No text` is a generation constraint, not by itself an edit request.
+- Cache reuse is keyed by content identity and renderer version, not a temporary input path. A cache entry is valid only if its stored content digest matches the cached bytes; legacy unverifiable entries are misses.
+- When retouch was requested, failure of every edit provider cannot be recorded as a successful untouched stock image. Preserve the original as evidence, continue to an allowed generator or fail closed. Never silently swallow the failure.
+- A pet or dog can be a functional character in AI knowledge content outside the pet account. Do not import a blanket pet-visual ban from a separate dirty checkout.
+
+## D125: Mascot Roles Are Optional And Content-Driven
+
+- Cat/dog characters are neither mandatory for every AI work nor forbidden outside the pet account. Select them only when topic semantics, audience treatment or an explicit strategy gives them a useful role.
+- A generic AI topic defaults to no mascot. Explicit disable wins. Explicit role plans or topic-level cat/dog subjects may select one or both roles.
+- When selected, each role still needs a non-decorative narrative function, scene/knowledge-point alignment, source/license evidence and normal semantic quality gates. A mascot cannot replace tool demonstrations or factual evidence.
+- Cover, stock-query and scene systems consume the recorded blueprint decision; they must not independently inject a mascot merely because the lane contains AI.
