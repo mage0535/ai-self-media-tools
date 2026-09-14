@@ -744,3 +744,10 @@ These describe the audited production release, not the current development code.
 - TDD now leaves a generic AI meeting-notes topic without mascot roles, selects relevant roles when the topic or strategy explicitly asks for them, and makes explicit disable authoritative. The blueprint records the selection decision and reason. Functional-role validation still runs whenever roles are selected.
 - The channel rulebook now states `optional_content_fit` instead of mandatory enforcement. Image stock-query routing preserves an explicitly requested cat/dog subject; it does not add one when the blueprint omitted mascots. Related blueprint/generator/pre-render tests: 39 passed after the correction.
 - The optional policy is included in the final 1932-pass regression. Linux staging is still required before Canary. Production remains unchanged.
+
+## 2026-09-14 Image Provider Smoke Evidence Levels
+
+- Clean staging `0dc6ad8` passed 181 related Linux tests, project/privacy 593/0, license 66/0 and compileall. An isolated direct-route smoke called Stock, SenseNova, Cloudflare, Pollinations and auto with paid/Agnes automatic selection disabled; all five returned files. Auto reused the SenseNova cache in 0.03 seconds.
+- Independent visual gate rejected the Stock file as 26KB with pixel standard deviation 10.1. Manual contact-sheet review also found it semantically weak; Pollinations was a generic camera, Cloudflare a generic illustration, and SenseNova/auto visibly carried provider branding. API availability is not production image quality.
+- `smoke_image_provider.py` now reports artifact and branding gates and leaves semantics `not_evaluated`; its report cannot set production ready without the real work-level semantic gate. Two new tests cover low-variance output and embedded-branding risk. Related integrated suite: 252 passed. Final full regression: 1934 passed plus 37 subtests in 370.96 seconds.
+- Next: commit/push this evidence-level fix, advance staging, rerun focused tests and assess the retained smoke files with the new reporter contract. A fresh content-specific image/cover Canary remains required before production switch.

@@ -14,6 +14,26 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from content_platform.image_provider import ImageProviderError, generate_image, load_secret
+from scripts.visual_gate import check_image
+
+
+def _artifact_assessment(path: Path, provider_result: dict) -> dict:
+    passed, reports = check_image(str(path))
+    branding_passed = not bool((provider_result or {}).get("embedded_branding_possible"))
+    return {
+        "artifact_gate": {"passed": passed, "reports": reports},
+        "branding_gate": {
+            "passed": branding_passed,
+            "reason": "embedded_branding_possible" if not branding_passed else "",
+        },
+        "semantic_status": "not_evaluated",
+        "production_ready": False,
+        "production_pending": [
+            *([] if passed else ["artifact_gate"]),
+            *([] if branding_passed else ["branding_gate"]),
+            "semantic_gate",
+        ],
+    }
 
 
 def _provider_config_status(provider: str) -> str:
@@ -78,12 +98,20 @@ def main() -> int:
                     "path": str(output),
                 }
             )
+            item.update(_artifact_assessment(output, result))
         except (ImageProviderError, OSError) as exc:
             item.update({"ok": False, "reason": type(exc).__name__, "message": str(exc)[:220]})
         results.append(item)
     any_passed = any(item.get("ok") for item in results)
     all_passed = bool(results) and all(item.get("ok") for item in results)
-    report = {"ok": all_passed if args.require_all else any_passed, "all_requested_passed": all_passed, "results": results}
+    report = {
+        "ok": all_passed if args.require_all else any_passed,
+        "all_requested_passed": all_passed,
+        "all_artifacts_passed": bool(results) and all((item.get("artifact_gate") or {}).get("passed") is True for item in results),
+        "production_ready": bool(results) and all(item.get("production_ready") is True for item in results),
+        "production_pending": ["per_work_semantic_gate"],
+        "results": results,
+    }
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["ok"] else 1
 

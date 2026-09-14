@@ -130,3 +130,10 @@ explicit strategy makes them useful, and then validates their narrative
 function and asset relevance.
 The new document's 967-test count belongs to that dirty checkout; it is not
 this branch's test or deployment evidence.
+
+Provider smoke evidence is layered. `provider_ok` proves a request returned a
+file; `artifact_gate` checks decodability, dimensions, file size and visual
+variance; `branding_gate` records embedded-branding risk; semantic status stays
+`not_evaluated` until a real work supplies expected concepts and runs the
+normal semantic gate. A provider smoke therefore cannot report
+`production_ready=true` by itself.
