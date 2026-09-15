@@ -878,3 +878,18 @@
 - The smoke can run deterministic file/variance and branding gates. Semantic matching remains `not_evaluated` until a real content request supplies expected concepts and binds analysis to the output SHA-256.
 - `--require-all` may verify all requested transports, but reports must separately expose whether every artifact passed. No aggregate field may hide a provider that returned a low-variance, branded or semantically unrelated image.
 - Cache speed is an efficiency measurement only. Cached output still passes the same artifact, branding and semantic gates as a fresh result.
+
+## D127: Video Forms Follow Evidence, Not A Fixed Knowledge-Card Container
+
+- Knowledge cards are one candidate form, never the default container for every video. Record selected form, rejected alternatives and the reason before generation.
+- Same-platform hot-work analysis contributes mechanisms only: hook family, display structure, pacing, proof requirement and CTA behavior. Never copy a source title, script, frame order or original media.
+- A verified mechanism may influence renderer route and scene mix. Eight uniform knowledge-card forms are a hard failure; legacy inputs receive deterministic compatible evidence.
+- Manifest fields, CSS classes and transition names do not prove visual variation. Final HTML/MP4 scene, frame and effect evidence remains mandatory.
+
+## D128: Fusion Is Capability Admission, Not Chronological Merge
+
+- The current V8 branch is the only code authority. Signed releases, mutable server code, Hermes Skills and older branches are candidate sources; no source wins because it is newer.
+- Admit only the smallest compatible contract or behavior with provenance, license disposition, adapter/probe, red-to-green test and effect boundary. Never copy a dirty checkout or introduce a second router/registry/orchestrator.
+- Topic evidence is calibrated: E1 topic signal, E2 item metadata, E3 lane-supported content evidence, E4 account-local performance evidence. Each tier limits downstream claims and actions.
+- Consumers must reject `fusion_eligible=false`; producer flags alone are insufficient. Missing fields remain null/insufficient rather than inferred or replaced across platforms.
+- Direct scripts are diagnostic-only. Production acceptance requires the canonical Pipeline, shared database, capability evidence, quality report and platform delivery/postcheck boundary.

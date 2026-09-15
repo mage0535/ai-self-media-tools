@@ -752,3 +752,19 @@ These describe the audited production release, not the current development code.
 - `smoke_image_provider.py` now reports artifact and branding gates and leaves semantics `not_evaluated`; its report cannot set production ready without the real work-level semantic gate. Two new tests cover low-variance output and embedded-branding risk. Related integrated suite: 252 passed. Final full regression: 1934 passed plus 37 subtests in 370.96 seconds.
 - Next: commit/push this evidence-level fix, advance staging, rerun focused tests and assess the retained smoke files with the new reporter contract. A fresh content-specific image/cover Canary remains required before production switch.
 - `e970aa4` is pushed and clean Linux staging passed 183 related tests, privacy 594/0 and license 66/0. The new assessment correctly labels Stock artifact failure, SenseNova/auto branding failure, and Cloudflare/Pollinations semantic pending. A content-specific image Canary was deferred because Hermes was actively rendering Kuaishou from the mutable runtime; Codex did not compete or alter that process.
+
+## 2026-09-14 Adaptive Video Form Integration
+
+- Server audit: the new anti-fixed-card rule is present in `video-viral-visual-production/SKILL.md`, but the signed production release does not implement or record its required fields. Mutable main has 118 dirty entries and cannot be treated as a release.
+- Current branch already had content-driven renderer routing and varied scene mixes. TDD adds `selected_form`, `rejected_forms`, `form_selection_reason`, `viral_pattern_evidence` and `visual_forms` to the plan/recipe/runner manifest.
+- Verified same-platform hot-work mechanisms may influence form selection without copying source content. A test proves a `对比评测` mechanism selects `split_comparison`. Eight supported video platforms produce at least six distinct scene presentations in the routing matrix.
+- Uniform knowledge-card forms fail the visual-recipe gate. Legacy plans receive deterministic selection evidence rather than failing solely because the new fields were absent.
+- Focused verification: 5 tests plus 8 subtests passed. Full regression, Linux staging and fresh multi-platform media Canary remain pending. Production and timers are unchanged.
+
+## 2026-09-15 Optimal Fusion And Stabilization
+
+- Live read-only state: signed production remains `2f4f612`; staging and GitHub remain `64a74a3`; mutable server main remains `6f4c88a` with 118 dirty entries. The active Hermes MCP resolves through the signed production symlink. Timers are inactive.
+- The shared database has 433 historical jobs but no canonical updates after August 31; it contains 0 publication identities, metric windows, observations or collection attempts. September direct-script media runs are outside the canonical job ledger and cannot prove production completion or learning.
+- The interrupted adaptive-video branch initially had 9 media-quality failures because new form-selection fields were made globally mandatory for legacy packets. Compatibility is repaired: new Pipeline plans remain complete and uniform-card rejection remains active; historical recipe packets validate without pretending to contain new evidence.
+- Optimal fusion accepted structured `trend_evidence/platform_source_matrix` samples into reference analysis, nested platform-list samples into same-lane analysis, consumer-side fusion denial and E1-E4 claim boundaries. It rejected the mutable checkout's parallel Prompt Registry/orchestrator and unsafe ad-hoc fallback paths.
+- Combined topic/intelligence/video/media regression: 224 passed plus 8 subtests. Full regression completed at 1942 passed plus 45 subtests in 314.88 seconds; project/privacy 595/0, license 66/0, compileall and diff check passed. Linux staging, signed RC and real four-format Canaries remain pending. No production, timer, publisher or shared database was changed.

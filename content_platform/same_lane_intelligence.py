@@ -323,8 +323,12 @@ def _flatten_platform_samples(platform: str, payload: Any) -> list[dict[str, Any
                     if isinstance(row, dict):
                         rows.append(row)
         return rows
-    if isinstance(payload.get("platforms"), dict) and isinstance(payload["platforms"].get(platform), dict):
-        return _flatten_platform_samples(platform, payload["platforms"][platform])
+    if isinstance(payload.get("platforms"), dict) and platform in payload["platforms"]:
+        nested = payload["platforms"][platform]
+        if isinstance(nested, list):
+            return [dict(row) for row in nested if isinstance(row, dict)]
+        if isinstance(nested, dict):
+            return _flatten_platform_samples(platform, nested)
     return []
 
 

@@ -10,6 +10,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY = ROOT / "config" / "video_effect_modules.json"
+_VIDEO_FORM_OPTIONS = {
+    "real_footage_story", "screen_demo", "split_comparison", "data_story",
+    "layered_checklist", "cinematic_explainer", "knowledge_card",
+}
 
 
 DEFAULT_REQUIRED_KEYS = {
@@ -61,6 +65,18 @@ def build_visual_recipe(
             "selected_pipeline": selected_pipeline,
             "content_form": str(plan.get("content_form") or selected_pipeline),
             "template_family": template_family,
+            "selected_form": str(plan.get("selected_form") or template_family),
+            "rejected_forms": list(plan.get("rejected_forms") or []),
+            "form_selection_reason": str(plan.get("form_selection_reason") or "content and platform signals selected the visual form"),
+            "visual_forms": [
+                str(item.get("visual_mode") or item.get("presentation_mode") or "")
+                for item in (
+                    (plan.get("visual_contract") or plan.get("scene_contract") or [])
+                    if isinstance(plan.get("visual_contract") or plan.get("scene_contract") or [], list)
+                    else []
+                )
+                if isinstance(item, dict) and str(item.get("visual_mode") or item.get("presentation_mode") or "")
+            ] or list((plan.get("video_route") or {}).get("scene_presentations") or []),
             "modules": effect_stack[:8],
             "style_variants": _style_variants(cinema_scenes or [], plan, title, script_body),
             "asset_strategy": {
@@ -83,6 +99,16 @@ def build_visual_recipe(
     recipe.setdefault("selected_pipeline", str(plan.get("selected_pipeline") or ""))
     recipe.setdefault("content_form", str(plan.get("content_form") or plan.get("selected_pipeline") or ""))
     recipe.setdefault("template_family", str(plan.get("template_family") or "knowledge_card_motion_case"))
+    recipe.setdefault("selected_form", str(plan.get("selected_form") or recipe.get("template_family") or "cinematic_explainer"))
+    selected_form = str(recipe.get("selected_form") or plan.get("selected_form") or recipe.get("template_family") or "cinematic_explainer")
+    if not recipe.get("rejected_forms"):
+        recipe["rejected_forms"] = sorted(_VIDEO_FORM_OPTIONS - {selected_form}) or ["not_selected"]
+    recipe.setdefault("form_selection_reason", str(plan.get("form_selection_reason") or "content and platform signals selected the visual form"))
+    recipe.setdefault("visual_forms", [
+        str(item.get("visual_mode") or item.get("presentation_mode") or "")
+        for item in (plan.get("visual_contract") or plan.get("scene_contract") or [])
+        if isinstance(item, dict) and str(item.get("visual_mode") or item.get("presentation_mode") or "")
+    ] or list((plan.get("video_route") or {}).get("scene_presentations") or []))
     recipe.setdefault("modules", _default_modules(str(plan.get("selected_pipeline") or ""), str(recipe["template_family"]), registry or load_effect_module_registry()))
     recipe.setdefault("style_variants", _style_variants(cinema_scenes or [], plan, title, script_body))
     recipe.setdefault("asset_strategy", {"primary": "verified_visual_assets", "fallback": "html_css_knowledge_card_fallback", "forbidden": ["random_unmatched_background"]})
@@ -127,6 +153,12 @@ def validate_visual_recipe(recipe: dict[str, Any] | None, registry: dict[str, An
         failures.append("avoid must include same_recipe_fingerprint")
     if "same_bgm_fingerprint" not in avoid:
         failures.append("avoid must include same_bgm_fingerprint")
+    form_fields = ("selected_form", "rejected_forms", "form_selection_reason")
+    if any(field in recipe for field in form_fields) and any(recipe.get(field) in (None, "", []) for field in form_fields):
+        failures.append("form_selection_incomplete")
+    forms = recipe.get("visual_forms") if isinstance(recipe.get("visual_forms"), list) else []
+    if forms and len(set(str(item) for item in forms)) == 1 and str(forms[0]) in {"knowledge_card", "knowledge_card_motion_case"}:
+        failures.append("uniform_knowledge_card_forms")
     return {
         "passed": not failures,
         "failures": failures,

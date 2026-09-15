@@ -14,6 +14,10 @@ from .video_director import build_video_route
 VIDEO_FORMS = {"short_video", "knowledge_card_video", "edited_short_video", "microcase_video", "article_explainer_video"}
 MIXED_VIDEO_FORMS = {"image_text_knowledge_card_short_video_mix"}
 VIDEO_ASSETS = {"short_video", "source_video", "human_voiceover", "background_music", "knowledge_cards"}
+VIDEO_FORM_OPTIONS = (
+    "real_footage_story", "screen_demo", "split_comparison", "data_story",
+    "layered_checklist", "cinematic_explainer", "knowledge_card",
+)
 
 
 def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -44,14 +48,20 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
         from .agnes_provider import probe_agnes
 
         available_assets = {**available_assets, "agnes_video_available": probe_agnes()["video_auto_enabled"]}
+    viral_pattern_evidence = _viral_pattern_evidence(brief, platforms[0] if platforms else "")
+    route_body = " ".join(
+        [str(brief.get("body") or brief.get("summary") or ""), *viral_pattern_evidence["recommended_patterns"], *viral_pattern_evidence["generation_requirements"]]
+    )
     route = build_video_route(
         platform=platforms[0] if platforms else "",
         title=str(brief.get("topic") or brief.get("title") or ""),
-        body=str(brief.get("body") or brief.get("summary") or ""),
+        body=route_body,
         content_form=content_form,
         available_assets=available_assets,
         recent_style_ids=list(brief.get("recent_video_style_ids") or []),
     )
+    selected_form = str(route.get("presentation_mode") or route.get("renderer_id") or "cinematic_explainer")
+    rejected_forms = [form for form in VIDEO_FORM_OPTIONS if form != selected_form]
     # Preserve the public pipeline contract. The renderer is selected once in
     # video_route and must not rewrite selected_pipeline downstream.
     selected_pipeline = legacy_pipeline
@@ -63,6 +73,10 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
         "platforms": platforms,
         "selected_pipeline": selected_pipeline,
         "template_family": template_family,
+        "selected_form": selected_form,
+        "rejected_forms": rejected_forms,
+        "form_selection_reason": _form_selection_reason(route, viral_pattern_evidence),
+        "viral_pattern_evidence": viral_pattern_evidence,
         "video_route": route,
         "legacy_pipeline_hint": legacy_pipeline,
         "recent_cover_direction_ids": list(brief.get("recent_cover_direction_ids") or []),
@@ -133,6 +147,8 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
             "post_render_cinema_visual_gate",
             "audio_mix_probe_recorded",
             "renderer_steps_recorded",
+            "form_selection_recorded",
+            "non_uniform_visual_forms",
         ],
     }
     plan["visual_recipe"] = build_visual_recipe(plan, title=str(brief.get("topic") or brief.get("title") or ""))
@@ -149,6 +165,28 @@ def build_video_toolchain_plan(strategy: dict[str, Any] | None, brief: dict[str,
         planned_manifest=tool_manifest,
     ))
     return plan
+
+
+def _viral_pattern_evidence(brief: dict[str, Any], platform: str) -> dict[str, Any]:
+    """Extract only audited viral mechanisms; never copy a source answer/title."""
+    pack = brief.get("hot_work_parameter_pack") if isinstance(brief.get("hot_work_parameter_pack"), dict) else {}
+    platform_pack = (pack.get("platforms") or {}).get(platform) if isinstance(pack.get("platforms"), dict) else {}
+    same_lane = brief.get("same_lane_intelligence") if isinstance(brief.get("same_lane_intelligence"), dict) else {}
+    patterns = list(platform_pack.get("recommended_patterns") or []) if isinstance(platform_pack, dict) else []
+    requirements = list(platform_pack.get("generation_requirements") or []) if isinstance(platform_pack, dict) else []
+    patterns.extend(str(item) for item in (same_lane.get("visual_patterns") or []) if str(item))
+    return {
+        "source": "same_platform_same_lane_parameter_pack" if platform_pack else "no_verified_viral_pack",
+        "ready": bool(platform_pack.get("ready")) if isinstance(platform_pack, dict) else False,
+        "recommended_patterns": list(dict.fromkeys(str(item) for item in patterns if str(item)))[:8],
+        "generation_requirements": list(dict.fromkeys(str(item) for item in requirements if str(item)))[:8],
+    }
+
+
+def _form_selection_reason(route: dict[str, Any], evidence: dict[str, Any]) -> str:
+    base = str(route.get("selection_reason") or "content and platform signals selected the visual form")
+    patterns = evidence.get("recommended_patterns") or []
+    return f"{base}; viral mechanisms referenced without copying source content: {', '.join(patterns[:4]) or 'none'}"
 
 
 def _select_pipeline(platforms: list[str], content_form: str, asset_plan: set[str], brief: dict[str, Any]) -> str:

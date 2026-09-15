@@ -440,6 +440,12 @@ def main(argv: list[str] | None = None) -> int:
         "agnes_footage_evidence": agnes_footage_evidence,
         "selected_pipeline": plan.get("selected_pipeline", ""),
         "template_family": template_family,
+        "form_selection": {
+            "selected_form": str(visual_recipe.get("selected_form") or plan.get("selected_form") or template_family),
+            "rejected_forms": list(visual_recipe.get("rejected_forms") or plan.get("rejected_forms") or []),
+            "form_selection_reason": str(visual_recipe.get("form_selection_reason") or plan.get("form_selection_reason") or ""),
+            "visual_forms": list(visual_recipe.get("visual_forms") or []),
+        },
         "cards_json": str(cards_path),
         "renderer": str(renderer),
         "renderer_command_preview": renderer_cmd,

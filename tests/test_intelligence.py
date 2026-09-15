@@ -59,6 +59,30 @@ class IntelligenceTests(unittest.TestCase):
         self.assertEqual(len(posts), 1)
         self.assertIn("AI 自动化工作流", posts[0]["title"])
 
+    def test_reference_posts_consume_structured_collector_samples(self):
+        posts = collect_reference_posts(
+            {
+                "platform_source_matrix": {
+                    "trend_evidence": {
+                        "samples": [
+                            {
+                                "title": "AI workflow comparison",
+                                "summary": "A verified before and after workflow example",
+                                "source": "youtube_collector",
+                                "platform": "youtube",
+                                "url": "https://www.youtube.com/watch?v=verified",
+                                "views": 1200,
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0]["body"], "A verified before and after workflow example")
+        self.assertEqual(posts[0]["platform"], "youtube")
+
     def test_numeric_claim_without_source_requires_review(self):
         result = ComplianceChecker().evaluate("Efficiency improved by 73% in 2026.", {"sources": []}, ["wechat"])
         self.assertEqual(result["level"], "review")

@@ -1121,3 +1121,18 @@ Observed read-only on 2026-08-31.
 - Local TDD adds artifact/branding/semantic evidence levels to the smoke report. Related tests: 252 passed; final full JUnit: 1934 passed plus 37 subtests in 370.96 seconds. Linux verification of the updated smoke reporter remains pending. Production symlink and timer are unchanged.
 - Staging advanced to `e970aa4` and passed 183 related Linux tests, project/privacy 594/0 and license 66/0. Replaying `_artifact_assessment` over retained files produced the expected layered results: Stock artifact gate failed; SenseNova and auto branding gates failed; Cloudflare and Pollinations passed basic artifact/branding checks but all five remained `semantic_status=not_evaluated` and `production_ready=false`.
 - Before starting a content-specific image Canary, process inspection found Hermes actively running a Kuaishou `video_toolchain_runner` and `film_renderer` in the mutable runtime. Codex did not start competing media work and did not modify that runtime. The image/cover Canary remains pending for resource isolation, not code failure.
+
+## 2026-09-14 Video Rule Audit Evidence
+
+- Read-only server audit found the rule text in the mutable Hermes skill, while signed production still points to the old release. The mutable checkout has 118 dirty entries; no direct merge or copy was performed.
+- The latest mutable Kuaishou plan contains eight distinct beat contracts and final scene evidence, but lacks `selected_form`, `rejected_forms` and `form_selection_reason`; its runner manifest ended `visual_gate_failed`. This proves partial execution, not full multi-platform rollout.
+- Current branch TDD adds explicit form-selection audit data, audited viral-pattern intake, all-platform route coverage and a uniform-card rejection. Focused tests passed (5 plus 8 subtests). Full regression and Linux staging remain pending; no production or publisher state changed.
+
+## 2026-09-15 Live State And Optimal-Fusion Evidence
+
+- Read-only server observation: production symlink resolves to signed `2f4f612`; isolated staging is `64a74a3`; mutable main is `6f4c88a` with 118 dirty entries. The MCP process environment points `CONTENT_PLATFORM_HOME` and `PYTHONPATH` at the signed production symlink. No project timers or failed units were observed.
+- Server disk was 87% used with about 12GB free; memory had about 4.2GiB available and swap usage about 911MiB. This is a capacity warning, not the current functional blocker.
+- Shared state database counts: 433 jobs, 3158 workflow steps, 920 artifacts, 34 deliveries, 18 publish receipts, and zero publication identities/metric windows/observations/attempts. Recent canonical job timestamps stop at August 31 despite September direct media artifacts.
+- New Hermes Skills contain useful evidence-tier, native-source and video-form rules, but also private paths, stale platform facts and ad-hoc fallback instructions. The current integration copied no skill body. It implemented bounded equivalents in the existing topic/video/intelligence authorities.
+- Red tests proved structured collector samples and nested platform-list samples were ignored, and denied fusion records were accepted. Corrections passed 13 topic-selection tests plus the two focused collector tests. The nine interrupted media-quality failures now pass. Combined relevant regression: 224 tests plus 8 subtests.
+- Final local JUnit `p11-optimal-fusion-video-intelligence-20260915.xml` returned 1942 passed plus 45 subtests in 314.88 seconds. Project/privacy audit scanned 595 files with zero issues; license audit checked 66 capabilities with zero issues; compileall and diff check passed. Linux staging has not yet verified this commit.
