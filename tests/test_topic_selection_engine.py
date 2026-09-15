@@ -175,6 +175,29 @@ def test_cross_platform_reference_alone_never_claims_target_platform_identity():
     assert result["references"][0]["identity_role"] == "cross_platform_reference"
 
 
+def test_fusion_ineligible_record_is_rejected_by_the_topic_consumer():
+    candidate = _item("kuaishou", "AI工作流三步实测", "same_lane_hot_work", metric=1500)
+    candidate["fusion_eligible"] = False
+
+    result = decide_topic("kuaishou", [candidate], lane_keywords=["AI", "工作流"], now=NOW)
+
+    assert result["status"] == "insufficient"
+    assert result["rejected"][0]["reason"] == "fusion_ineligible"
+
+
+def test_topic_decision_calibrates_work_evidence_without_claiming_deep_analysis():
+    metadata_only = _item("kuaishou", "AI工作流三步实测", "same_lane_hot_work", metric=1500)
+    deep = _item("kuaishou", "AI工作流对比复盘", "same_lane_hot_work", metric=1400)
+    deep.update({"lane_evidence_status": "confirmed", "content_excerpt": "展示真实界面、失败结果和修复步骤"})
+
+    result = decide_topic("kuaishou", [metadata_only, deep], lane_keywords=["AI", "工作流"], now=NOW)
+    tiers = {row["title"]: row["evidence_tier"] for row in result["ranked"]}
+
+    assert tiers[metadata_only["title"]] == "E2"
+    assert tiers[deep["title"]] == "E3"
+    assert result["ranked"][0]["test_priority"] == result["ranked"][0]["decision_score"]
+
+
 def test_overnight_due_task_persists_unified_topic_decision_before_generation():
     candidate = _item("kuaishou", "AI工作流三步实测", "same_lane_hot_work", metric=1500)
     candidate["source"] = "kuaishou:same_lane_hot_work"

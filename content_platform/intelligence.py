@@ -61,24 +61,40 @@ def _fetch_url(url, timeout=15):
 def collect_reference_posts(brief, limit=3):
     brief = brief or {}
     posts = []
-    for row in brief.get("reference_posts", []):
+    rows = list(brief.get("reference_posts") or [])
+    trend = brief.get("trend_evidence") if isinstance(brief.get("trend_evidence"), dict) else {}
+    matrix = brief.get("platform_source_matrix") if isinstance(brief.get("platform_source_matrix"), dict) else {}
+    matrix_trend = matrix.get("trend_evidence") if isinstance(matrix.get("trend_evidence"), dict) else matrix
+    for source in (trend, matrix_trend):
+        rows.extend(source.get("samples") or [])
+        rows.extend(source.get("reference_posts") or [])
+    seen = set()
+    for row in rows:
         if isinstance(row, dict) and _is_non_content_endpoint(row.get("url") or row.get("source")):
             continue
-        if isinstance(row, dict) and (row.get("title") or row.get("body")):
+        if isinstance(row, dict) and (row.get("title") or row.get("body") or row.get("summary") or row.get("description")):
+            title = _plain(row.get("title", ""))
+            body = _plain(row.get("body") or row.get("summary") or row.get("description") or "")
+            url = str(row.get("url") or row.get("source_url") or "")
+            identity = (title, body, url)
+            if identity in seen:
+                continue
+            seen.add(identity)
             posts.append(
                 {
-                    "title": _plain(row.get("title", "")),
-                    "body": _plain(row.get("body", "")),
+                    "title": title,
+                    "body": body,
                     "source": row.get("source", "reference"),
                     "account_handle": str(row.get("account_handle", "")),
                     "platform": str(row.get("platform", "")),
-                    "url": str(row.get("url", "")),
+                    "url": url,
                     "views": row.get("views", row.get("plays", row.get("impressions", 0))),
                     "likes": row.get("likes", 0),
                     "comments": row.get("comments", 0),
                     "shares": row.get("shares", row.get("reposts", 0)),
                     "saves": row.get("saves", row.get("favorites", 0)),
                     "followers": row.get("followers", row.get("account_followers", 0)),
+                    "evidence_status": str(row.get("status") or "available"),
                 }
             )
     if posts:

@@ -11,6 +11,7 @@ from content_platform.generator import DraftGenerator
 from content_platform.video_artifact import verify_artifact
 from content_platform.strategy_router import choose_content_strategy
 from content_platform.video_recipe import build_visual_recipe
+from content_platform.video_toolchain import build_video_toolchain_plan
 
 
 class VideoToolchainTests(unittest.TestCase):
@@ -44,6 +45,10 @@ class VideoToolchainTests(unittest.TestCase):
         ]:
             self.assertIn(tool, plan["required_tools"])
         self.assertEqual(plan["template_family"], "pet_repost_real_behavior")
+        self.assertIn("selected_form", plan)
+        self.assertIn("rejected_forms", plan)
+        self.assertTrue(plan["form_selection_reason"])
+        self.assertNotIn(plan["selected_form"], plan["rejected_forms"])
         self.assertIn("visual_recipe", plan)
         self.assertEqual(plan["visual_recipe"]["template_family"], "pet_repost_real_behavior")
         self.assertGreaterEqual(len(plan["visual_recipe"]["modules"]), 3)
@@ -95,6 +100,79 @@ class VideoToolchainTests(unittest.TestCase):
         self.assertTrue(first["style_variants"]["variant_driven"])
         self.assertTrue(first["auto_generated"])
         self.assertTrue(first["requires_visual_asset_resolution"])
+
+    def test_visual_recipe_rejects_uniform_knowledge_card_forms(self):
+        from content_platform.video_recipe import validate_visual_recipe
+
+        recipe = build_visual_recipe({
+            "selected_pipeline": "knowledge_card_video",
+            "content_form": "short_video",
+            "template_family": "knowledge_card_motion_case",
+            "selected_form": "knowledge_card",
+            "rejected_forms": ["screen_demo"],
+            "form_selection_reason": "not enough evidence",
+            "visual_contract": [{"visual_mode": "knowledge_card"}] * 8,
+        }, title="Uniform card test")
+        recipe["visual_forms"] = ["knowledge_card"] * 8
+
+        result = validate_visual_recipe(recipe)
+
+        self.assertFalse(result["passed"])
+        self.assertIn("uniform_knowledge_card_forms", result["failures"])
+
+    def test_video_plan_records_rejected_forms_as_a_selection_audit(self):
+        strategy = choose_content_strategy(
+            "AI workflow with a before and after result",
+            {"platforms": ["kuaishou"], "audience": "operators", "content_form": "short_video"},
+            {"dimensions": {"visual_promise": 0.6, "utility": 0.8}, "total_score": 0.75},
+            {},
+        )
+        plan = strategy["video_toolchain_plan"]
+
+        assert plan["selected_form"]
+        assert plan["form_selection_reason"]
+        assert isinstance(plan["rejected_forms"], list)
+
+    def test_all_video_platforms_receive_adaptive_form_and_six_visual_structures(self):
+        cases = {
+            "kuaishou": "AI workflow before and after comparison",
+            "douyin_ai": "AI workflow before and after comparison",
+            "douyin_pet": "real cat behavior story with verified footage",
+            "shipinhao": "AI workflow checklist with first step and second step",
+            "xiaohongshu": "AI workflow checklist with first step and second step",
+            "bilibili": "AI product interface demo with screenshots",
+            "youtube": "AI product interface demo with screenshots",
+            "tiktok": "AI metric growth chart and result",
+        }
+        for platform, topic in cases.items():
+            with self.subTest(platform=platform):
+                plan = build_video_toolchain_plan(
+                    {"content_form": "short_video", "primary_platforms": [platform], "asset_plan": ["short_video"]},
+                    {"platforms": [platform], "topic": topic, "body": topic, "available_video_assets": {"screenshot_count": 2}},
+                )
+                presentations = plan["video_route"]["scene_presentations"]
+                self.assertTrue(plan["selected_form"])
+                self.assertNotIn(plan["selected_form"], plan["rejected_forms"])
+                self.assertGreaterEqual(len(set(presentations)), 6)
+
+    def test_hot_work_visual_patterns_influence_form_selection_without_copying_title(self):
+        plan = build_video_toolchain_plan(
+            {"content_form": "short_video", "primary_platforms": ["kuaishou"], "asset_plan": ["short_video"]},
+            {
+                "platforms": ["kuaishou"],
+                "topic": "How to verify an AI test workflow",
+                "body": "Show the evidence and the practical boundary.",
+                "hot_work_parameter_pack": {"platforms": {"kuaishou": {
+                    "ready": True,
+                    "recommended_patterns": ["对比评测", "结果先行"],
+                    "generation_requirements": ["include side-by-side comparison with explicit decision rule"],
+                }}},
+            },
+        )
+
+        assert plan["selected_form"] == "split_comparison"
+        assert plan["viral_pattern_evidence"]["recommended_patterns"] == ["对比评测", "结果先行"]
+        assert "对比评测" in plan["form_selection_reason"]
 
     def test_visual_recipe_core_keeps_explicit_style_differences(self):
         base = {

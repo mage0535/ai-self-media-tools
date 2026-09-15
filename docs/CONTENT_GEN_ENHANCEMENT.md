@@ -137,3 +137,33 @@ variance; `branding_gate` records embedded-branding risk; semantic status stays
 `not_evaluated` until a real work supplies expected concepts and runs the
 normal semantic gate. A provider smoke therefore cannot report
 `production_ready=true` by itself.
+
+## Video Form Selection And Viral Mechanism Intake
+
+Video form is selected from platform, topic, available evidence and audited
+same-platform hot-work mechanisms. Every plan records `selected_form`,
+`rejected_forms`, `form_selection_reason` and `viral_pattern_evidence` before
+generation. Only reusable mechanisms such as hook type, display structure,
+pacing and proof requirements are consumed; source titles, scripts, frame
+order and original media are never copied.
+
+The selected mechanism can change the deterministic route, for example from a
+generic explainer to `split_comparison` when verified samples support a
+side-by-side decision structure. Eight uniform knowledge-card forms are a hard
+failure. Manifest labels or CSS names alone are not effect evidence; final
+HTML/MP4 scene and frame probes still have to prove the selected structures.
+
+## Optimal-Fusion Admission
+
+Server evolution, older branches, Hermes Skills and signed releases are input
+sources, not merge order. The authoritative branch admits one capability or
+contract at a time only when it has a clear owner, compatible schema, license
+status, adapter/probe, focused regression and observable production effect.
+
+The 2026-09-15 intake accepted three reusable improvements without importing a
+second orchestrator: structured collector samples now feed reference analysis;
+platform-list sample packs feed same-lane distillation; and topic candidates
+carry E1-E4 evidence tiers with consumer-side `fusion_eligible=false`
+enforcement. E1 topic signals cannot become work-level viral analysis, E2
+metadata cannot claim content mechanisms, E3 permits a falsifiable mechanism
+test, and E4 additionally requires comparable first-party account evidence.

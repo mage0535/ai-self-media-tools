@@ -156,3 +156,17 @@ def test_load_samples_file_supports_nested_platform_query_items(tmp_path):
     samples = load_samples_file(sample_file)
 
     assert samples["zhihu"][0]["title"] == "AI 工作流真实案例"
+
+
+def test_load_samples_file_supports_platform_list_payload(tmp_path):
+    from content_platform.same_lane_intelligence import load_samples_file
+
+    sample_file = tmp_path / "platform-list.json"
+    sample_file.write_text(
+        json.dumps({"platforms": {"youtube": [{"title": "AI workflow", "url": "https://youtube.com/watch?v=1"}]}}),
+        encoding="utf-8",
+    )
+
+    samples = load_samples_file(sample_file)
+
+    assert samples["youtube"][0]["title"] == "AI workflow"

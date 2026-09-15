@@ -118,6 +118,20 @@ def _layer(item: dict[str, Any], target_platform: str) -> str:
     return "unsupported"
 
 
+def _evidence_tier(item: dict[str, Any], layer: str) -> str:
+    if item.get("first_party_performance_verified") is True:
+        return "E4"
+    deep_content = any(
+        item.get(field)
+        for field in ("content_excerpt", "body_snapshot_path", "transcript_path", "media_probe", "deep_analysis")
+    )
+    if layer == SAME_PLATFORM_WORK and str(item.get("lane_evidence_status") or "").casefold() == "confirmed" and deep_content:
+        return "E3"
+    if layer == SAME_PLATFORM_WORK:
+        return "E2"
+    return "E1"
+
+
 def decide_topic(
     target_platform: str,
     items: list[dict[str, Any]],
@@ -137,6 +151,9 @@ def decide_topic(
         if not isinstance(raw, dict):
             continue
         item = dict(raw)
+        if item.get("fusion_eligible") is False:
+            rejected.append({**item, "reason": "fusion_ineligible"})
+            continue
         layer = _layer(item, target)
         if not _source_complete(item):
             rejected.append({**item, "reason": "source_contract_incomplete"})
@@ -197,6 +214,14 @@ def decide_topic(
             "cross_platform_support": references_for_topic,
             "native_verified": bool(verified_hotspot),
             "associated_hotspot": verified_hotspot,
+            "evidence_tier": _evidence_tier(item, layer),
+            "test_priority": round(score, 6),
+            "claim_boundary": {
+                "E1": "topic_discovery_only",
+                "E2": "observed_item_metadata_only",
+                "E3": "pattern_hypothesis_and_falsifiable_test",
+                "E4": "account_local_scaling_candidate",
+            }[_evidence_tier(item, layer)],
         })
 
     ranked.sort(key=lambda row: row["decision_score"], reverse=True)
