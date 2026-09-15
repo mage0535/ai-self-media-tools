@@ -1,6 +1,6 @@
 # Production Runtime V8 Status
 
-Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first unified TTS milestone locally and on isolated Linux staging verified)
+Last updated: 2026-09-15 Asia/Shanghai (optimal-fusion routing committed and isolated Linux staging verified)
 
 ## Current state
 
@@ -9,7 +9,9 @@ Last updated: 2026-09-11 Asia/Shanghai (Sol collection continues; Hojo-first uni
 - Production release observed on 2026-09-06: `production-runtime-v8-2f4f612-20260906`.
 - Production/GitHub commit: `2f4f6125ff9c0d5dff1ffaa1e4e7defe51b3c15f`.
 - Development branch: `codex/production-runtime-v8`
-- Latest complete regression on this branch: 1871 passed + 37 subtests; zero failures; JUnit saved at `artifacts/test-reports/sol-e-canary-selection-modes-20260911.xml`.
+- Development/staging commit: `46440b0`; signed production remains `2f4f612`.
+- Latest complete regression on this branch: 1942 passed + 45 subtests; zero failures; JUnit saved at `artifacts/test-reports/p11-optimal-fusion-video-intelligence-20260915.xml`.
+- Latest isolated Linux focused regression: 224 passed + 8 subtests; privacy 594/0; license 66/0; compileall PASS.
 
 ## Active work
 
@@ -767,4 +769,4 @@ These describe the audited production release, not the current development code.
 - The shared database has 433 historical jobs but no canonical updates after August 31; it contains 0 publication identities, metric windows, observations or collection attempts. September direct-script media runs are outside the canonical job ledger and cannot prove production completion or learning.
 - The interrupted adaptive-video branch initially had 9 media-quality failures because new form-selection fields were made globally mandatory for legacy packets. Compatibility is repaired: new Pipeline plans remain complete and uniform-card rejection remains active; historical recipe packets validate without pretending to contain new evidence.
 - Optimal fusion accepted structured `trend_evidence/platform_source_matrix` samples into reference analysis, nested platform-list samples into same-lane analysis, consumer-side fusion denial and E1-E4 claim boundaries. It rejected the mutable checkout's parallel Prompt Registry/orchestrator and unsafe ad-hoc fallback paths.
-- Combined topic/intelligence/video/media regression: 224 passed plus 8 subtests. Full regression completed at 1942 passed plus 45 subtests in 314.88 seconds; project/privacy 595/0, license 66/0, compileall and diff check passed. Linux staging, signed RC and real four-format Canaries remain pending. No production, timer, publisher or shared database was changed.
+- Combined topic/intelligence/video/media regression: 224 passed plus 8 subtests. Full regression completed at 1942 passed plus 45 subtests in 314.88 seconds; project/privacy 595/0, license 66/0, compileall and diff check passed. Linux staging at `46440b0` repeated the 224+8 focused suite, privacy 594/0, license 66/0 and compileall. Signed RC and real four-format Canaries remain pending. No production, timer, publisher or shared database was changed.
