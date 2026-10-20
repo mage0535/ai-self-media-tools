@@ -199,6 +199,46 @@ class WorkflowStepRunner:
             )
 
 
+class SourceRepairStepRunner(WorkflowStepRunner):
+    """只将本次原生collect阶段写alias，原三个step绝不写。"""
+    def _map(self, name):
+        from .source_repair_runtime import SOURCE, ALIAS, active_grant
+        grant = active_grant(self.store)
+        return grant.get("alias", ALIAS) if name == SOURCE else name
+
+    def _deps(self, depends_on):
+        from .source_repair_runtime import SOURCE
+        if SOURCE in (depends_on or []):
+            self.store.resolve_source_repair_step(self.job_id, SOURCE)
+        return [self._map(name) for name in (depends_on or [])]
+
+    def run(self, step_name, func, required=True, depends_on=None, require_output=False, input_payload=None):
+        from .source_repair_runtime import SOURCE, record_source_repair_success
+        if step_name in {"initialize_task", "load_platform_workflow_context"}:
+            raise PermissionError("original_successful_prefix_must_not_replay")
+        if step_name == SOURCE and any(row["step_name"] == self._map(step_name) for row in self.store.workflow_steps(self.job_id)):
+            raise PermissionError("source_repair_collect_once_only")
+        output = super().run(self._map(step_name), func, required, self._deps(depends_on), require_output, input_payload)
+        if step_name == SOURCE:
+            record_source_repair_success(self.store)
+        return output
+
+    def succeeded(self, step_name, output=None, required=True, depends_on=None, message=""):
+        if step_name in {"initialize_task", "load_platform_workflow_context"}:
+            raise PermissionError("original_successful_prefix_must_not_rewrite")
+        return super().succeeded(self._map(step_name), output, required, self._deps(depends_on), message)
+
+    def block(self, step_name, reason_code, message, gate_result=None, depends_on=None):
+        if step_name in {"initialize_task", "load_platform_workflow_context"}:
+            raise PermissionError("original_successful_prefix_must_not_rewrite")
+        return super().block(self._map(step_name), reason_code, message, gate_result, self._deps(depends_on))
+
+    def skipped(self, step_name, reason_code, message, required=False, depends_on=None):
+        if step_name in {"initialize_task", "load_platform_workflow_context", "collect_native_source_inputs"}:
+            raise PermissionError("original_source_repair_cannot_skip")
+        return super().skipped(self._map(step_name), reason_code, message, required, self._deps(depends_on))
+
+
 @contextmanager
 def strict_workflow_lock(store, owner, workflow_id, ttl_seconds=1800, enabled=True):
     if not enabled:

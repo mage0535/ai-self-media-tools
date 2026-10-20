@@ -1,0 +1,13 @@
+{
+  "version": "scene_contract_v1",
+  "scenes": [
+    {"beat_id":"s01","visual_hook":"先看到结果差异","visual_mode":"before_after_split","template_id":"before_after_split_v1","evidence_asset":"/abs/path/before.jpg","group_motion":["wipe_reveal"],"platform_reason":"前三秒结果前置","reading_hold_seconds":2.0},
+    {"beat_id":"s02","visual_hook":"字段逐字出现","visual_mode":"prompt_typewriter","template_id":"prompt_typewriter_v1","evidence_asset":"/abs/path/prompt.png","group_motion":["type_in","caret_follow"],"platform_reason":"把抽象方法变成可模仿操作","reading_hold_seconds":2.0},
+    {"beat_id":"s03","visual_hook":"标注线指向主体变量","visual_mode":"annotation_callout","template_id":"annotation_callout_v1","evidence_asset":"/abs/path/subject.jpg","group_motion":["callout_draw","local_highlight"],"platform_reason":"建立字段与画面关系","reading_hold_seconds":2.0},
+    {"beat_id":"s04","visual_hook":"多个场景可选择","visual_mode":"location_selector","template_id":"location_selector_v1","evidence_asset":"/abs/path/location.jpg","group_motion":["orbit_select","focus_shift"],"platform_reason":"展示场景选择的影响","reading_hold_seconds":2.0},
+    {"beat_id":"s05","visual_hook":"冷暖光直接对照","visual_mode":"light_split_compare","template_id":"light_split_compare_v1","evidence_asset":"/abs/path/light.jpg","group_motion":["split_reveal","temperature_shift"],"platform_reason":"让参数变化可见","reading_hold_seconds":2.0},
+    {"beat_id":"s06","visual_hook":"构图框逐步收紧","visual_mode":"composition_push_in","template_id":"composition_push_in_v1","evidence_asset":"/abs/path/composition.jpg","group_motion":["frame_draw","push_in"],"platform_reason":"把构图变成镜头动作","reading_hold_seconds":2.0},
+    {"beat_id":"s07","visual_hook":"错误先出现再修正","visual_mode":"error_fix_compare","template_id":"error_fix_compare_v1","evidence_asset":"/abs/path/error.jpg","group_motion":["error_mark","fix_reveal"],"platform_reason":"用失败制造留存和记忆点","reading_hold_seconds":2.0},
+    {"beat_id":"s08","visual_hook":"清单逐项确认并锁定","visual_mode":"checklist_stamp","template_id":"checklist_stamp_v1","evidence_asset":"/abs/path/checklist.jpg","group_motion":["check_each","stamp_lock"],"platform_reason":"提供截图收藏理由","reading_hold_seconds":3.0}
+  ]
+}

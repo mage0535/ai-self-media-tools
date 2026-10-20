@@ -103,6 +103,24 @@ class StrategyTests(unittest.TestCase):
         self.assertEqual(strategy["content_form"], "short_video")
         self.assertEqual(strategy["video_toolchain_plan"]["selected_pipeline"], "localized_repost_video")
 
+    def test_strict_strategy_requires_executed_research_contract(self):
+        with self.assertRaisesRegex(ValueError, "strategy evidence contract invalid"):
+            choose_content_strategy(
+                "猫咪治愈瞬间",
+                {"platforms": ["douyin_pet"], "require_live_strategy_evidence": True},
+                {"total_score": 0.8, "dimensions": {"visual_promise": 0.9, "utility": 0.2}, "trend_stage": "hot"},
+                {"style_signature": {"formats": ["reaction"]}, "platform_distribution": {"douyin_pet": 3}},
+            )
+
+    def test_run_contract_enables_strategy_evidence_gate_by_default(self):
+        with self.assertRaisesRegex(ValueError, "strategy evidence contract invalid"):
+            choose_content_strategy(
+                "猫咪治愈",
+                {"platforms": ["douyin_pet"], "run_contract": {"strategy_evidence_required": True, "enforce_strategy_evidence": True}},
+                {"total_score": 0.8, "dimensions": {"visual_promise": 0.9, "utility": 0.2}, "trend_stage": "hot"},
+                {"platform_distribution": {"douyin_pet": 3}},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

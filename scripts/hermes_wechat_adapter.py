@@ -8,12 +8,14 @@ returns a JSON delivery result. It intentionally avoids hard-coded server paths.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -34,6 +36,12 @@ def main() -> int:
 
 
 def publish_packet(packet: dict, work_dir: Path) -> dict:
+    native = packet.get('native_article')
+    if 'native_article' in packet:
+        from wechat_native_article import validate_transport
+        validate_transport(native)
+        if str((packet.get('cover_design') or {}).get('title_text') or '').strip() != str(packet.get('title') or '').strip():
+            return {"ok": False, "status": "blocked", "error": "native_article_cover_title_mismatch"}
     # 预检：运行 preflight_wechat.py
     preflight_script = Path(__file__).parent / "preflight_wechat.py"
     if preflight_script.exists():
@@ -43,8 +51,6 @@ def publish_packet(packet: dict, work_dir: Path) -> dict:
             err = r.stdout.split("\n")[-5:] if r.stdout else ["preflight check failed"]
             return {"ok": False, "status": "blocked", "error": " | ".join(err[-3:])}
 
-    if not os.environ.get("CN_PROXY"):
-        return {"ok": False, "status": "blocked", "error": "missing CN_PROXY"}
     license_result = _run_publish_license_gate(packet, Path(__file__).parent / "gzh_publish_license.py")
     if not license_result.get("passed"):
         failures = "; ".join(str(item) for item in license_result.get("failures", [])[:3])
@@ -71,10 +77,24 @@ def publish_packet(packet: dict, work_dir: Path) -> dict:
     title = str(packet.get("title", ""))[:64]
     theme = _select_theme(packet, theme_files)
     cover_path = _cover_path(packet)
+    if native is not None and not cover_path:
+        return {"ok": False, "status": "blocked", "error": "native_article_cover_missing_no_generation"}
     if not cover_path:
         cover_path = _generate_image(packet, work_dir, "cover")
     if not cover_path:
         return {"ok": False, "status": "failed", "error": "cover image unavailable"}
+    cover_gate = _cover_artifact_gate(packet, cover_path)
+    if not cover_gate["passed"]:
+        return {"ok": False, "status": "blocked", "error": "cover artifact gate failed", "cover_gate": cover_gate}
+    idempotency_key = _idempotency_key(packet, cover_path)
+    prior = work_dir / "wechat_adapter_evidence.json"
+    if prior.is_file():
+        try:
+            previous = json.loads(prior.read_text(encoding="utf-8"))
+            if previous.get("idempotency_key") == idempotency_key and (previous.get("postcheck") or {}).get("passed"):
+                return {"ok": True, "status": "drafted_reused", "media_id": previous.get("media_id", ""), "postcheck": previous.get("postcheck"), "evidence_path": str(prior), "idempotency_key": idempotency_key}
+        except (OSError, json.JSONDecodeError):
+            pass
     cover_upload = wx.upload_image(token, str(cover_path))
     if isinstance(cover_upload, dict):
         thumb_id = cover_upload.get("media_id", "")
@@ -85,23 +105,47 @@ def publish_packet(packet: dict, work_dir: Path) -> dict:
         thumb_id, cover_url = "", ""
     if not thumb_id:
         return {"ok": False, "status": "failed", "error": "cover upload failed"}
-    inline_urls = _upload_inline_images(packet, work_dir, token, wx)
-    if len(inline_urls) < 3:
-        return {"ok": False, "status": "failed", "error": f"inline image upload incomplete: {len(inline_urls)}/3"}
-    try:
-        md = _markdown_with_inline_images(packet, cover_url, inline_urls)
-    except ValueError as exc:
-        return {"ok": False, "status": "blocked", "error": str(exc)}
-    html = wx.md_to_wechat(md, theme=theme)
+    if native is not None:
+        from wechat_native_article import publication_html
+        def upload_bound(path):
+            result = wx.upload_image(token, str(path))
+            return str(result.get('url', '')) if isinstance(result, dict) else str(result[0]) if isinstance(result, tuple) else ''
+        html, inline_urls = publication_html(native, upload_bound)
+    else:
+        inline_urls = _upload_inline_images(packet, work_dir, token, wx)
+        if len(inline_urls) < 3:
+            return {"ok": False, "status": "failed", "error": f"inline image upload incomplete: {len(inline_urls)}/3"}
+        try:
+            md = _markdown_with_inline_images(packet, cover_url, inline_urls)
+        except ValueError as exc:
+            return {"ok": False, "status": "blocked", "error": str(exc)}
+        html = wx.md_to_wechat(md, theme=theme)
     digest = _digest(packet)
     author = _author(packet)
     media_id = wx.publish_draft(token, title, html, author=author, digest=digest, thumb_media_id=thumb_id)
     if not media_id:
         return {"ok": False, "status": "failed", "error": "draft add returned no media_id"}
-    postcheck = _batchget_confirm(token, media_id, title, expected_inline_images=len(inline_urls))
+    postcheck = _batchget_confirm(
+        token,
+        media_id,
+        title,
+        expected_inline_images=len(inline_urls),
+        expected_thumb_media_id=thumb_id,
+        expected_inline_urls=inline_urls,
+        expected_html=html if native is not None else None,
+    )
     evidence = {
         "theme": theme,
+        "reviewed_html_sha256": hashlib.sha256(html.encode()).hexdigest() if native is not None else None,
+        "native_content_revision": native["content_revision"] if native is not None else None,
+        "media_id": media_id,
+        "idempotency_key": idempotency_key,
         "cover_uploaded": bool(thumb_id),
+        "cover_artifact": {
+            "path": str(cover_path),
+            "sha256": _sha256(cover_path),
+            "media_id": thumb_id,
+        },
         "inline_image_count": len(inline_urls),
         "digest_present": bool(digest),
         "author": author,
@@ -134,14 +178,88 @@ def _select_theme(packet: dict, theme_files: list[Path]) -> str:
 
 
 def _cover_path(packet: dict) -> Path | None:
+    cover = packet.get("cover_design") or {}
+    declared = Path(str(cover.get("path", "")))
+    if declared.is_file():
+        return declared
+    for item in packet.get("artifacts") or []:
+        if item.get("kind") in {"cover", "cover_image"}:
+            path = Path(str(item.get("path", "")))
+            if path.is_file():
+                return path
     for item in packet.get("artifacts") or []:
         if item.get("kind") == "image":
             path = Path(str(item.get("path", "")))
             if path.is_file():
                 return path
+    return None
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _idempotency_key(packet: dict, cover_path: Path) -> str:
+    payload = {
+        "platform": "wechat",
+        "run_id": packet.get("run_id") or packet.get("id") or "",
+        "title": str(packet.get("title") or "").strip(),
+        "cover_sha256": _sha256(cover_path),
+    }
+    if 'native_article' in packet:
+        native = packet['native_article']
+        payload['native_article'] = {key: native[key] for key in ('content_revision', 'source_sha256', 'transport_sha256')}
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _cover_artifact_gate(packet: dict, path: Path) -> dict:
+    """Require a real final cover and OCR evidence before WeChat upload."""
     cover = packet.get("cover_design") or {}
-    path = Path(str(cover.get("path", "")))
-    return path if path.is_file() else None
+    strict = packet.get("strict_cover_gate", True) is True
+    required = ["title_text", "title_present", "title_readable", "title_no_overflow"]
+    missing = [key for key in required if not cover.get(key)]
+    expected = str(cover.get("title_text") or packet.get("title") or "").strip()
+    native = packet.get('native_article')
+    proof = native.get('cover_render_evidence') if isinstance(native, dict) else None
+    if proof is not None:
+        strict = True
+        try:
+            if native.get('cover_sha256') != _sha256(path) or expected != str(packet.get('title') or '').strip():
+                raise ValueError('native_cover_title_or_pixels_changed')
+            import importlib.util
+            helper = Path(__file__).parent / 'wechat_cover_render.py'
+            if not helper.is_file() or _sha256(helper) != '2f01d5d48afdf41c291790601a974703fa1e88b743804118cec1668fc902f3e2':
+                raise ValueError('native_cover_verify_helper_hash_mismatch')
+            spec = importlib.util.spec_from_file_location('trusted_wechat_cover_verify', helper)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            ocr = module.verify_cover_title(path, expected, proof)
+        except Exception as exc:
+            ocr = {"checked": False, "matched": False, "error": type(exc).__name__ + ': ' + str(exc)[:200]}
+    else:
+        ocr = _ocr_cover_title(path, expected) if strict and path.is_file() and expected else {"checked": False, "matched": False, "text": ""}
+    review = str(cover.get("manual_visual_review") or "").casefold()
+    passed = path.is_file() and (not strict or (not missing and ocr.get("matched") is True))
+    return {"passed": passed, "strict": strict, "path": str(path), "sha256": _sha256(path) if path.is_file() else "", "missing": missing, "manual_visual_review": review, "ocr": ocr}
+
+
+def _ocr_cover_title(path: Path, expected: str) -> dict:
+    """Use installed Tesseract as a hard title-presence check."""
+    try:
+        result = subprocess.run(
+            ["tesseract", str(path), "stdout", "-l", "chi_sim+eng", "--psm", "6"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        text = re.sub(r"\s+", "", result.stdout or "")
+        target = re.sub(r"\s+", "", expected)
+        matched = bool(target) and target in text
+        return {"checked": True, "matched": matched, "text": text[:500], "returncode": result.returncode}
+    except Exception as exc:
+        return {"checked": False, "matched": False, "text": "", "error": str(exc)[:160]}
 
 
 def _generate_image(packet: dict, work_dir: Path, role: str) -> Path | None:
@@ -314,36 +432,60 @@ def _author(packet: dict) -> str:
     return str(strategy.get("geo_author") or strategy.get("author") or "Magic")[:32]
 
 
-def _batchget_confirm(token: str, media_id: str, title: str, *, expected_inline_images: int = 0) -> dict:
+def _batchget_confirm(
+    token: str,
+    media_id: str,
+    title: str,
+    *,
+    expected_inline_images: int = 0,
+    expected_thumb_media_id: str = "",
+    expected_inline_urls: list[str] | None = None,
+    expected_html: str | None = None,
+) -> dict:
+    """Read back a draft with bounded retry; never create a duplicate on delay."""
     url = "https://api.weixin.qq.com/cgi-bin/draft/batchget?" + urllib.parse.urlencode({"access_token": token})
-    data = json.dumps({"offset": 0, "count": 20, "no_content": 0}, ensure_ascii=False).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            result = json.loads(response.read())
-    except Exception as exc:
-        return {"passed": False, "error": str(exc)[:200]}
-    for item in result.get("item", []) or []:
-        if item.get("media_id") != media_id:
-            continue
-        content = item.get("content") or {}
-        news = content.get("news_item") or []
-        article = next((row for row in news if str(row.get("title", "")) == title), {})
-        found_title = bool(article)
-        content = str(article.get("content", ""))
-        inline_image_count = len(
-            re.findall(r"<img\b[^>]*\b(?:src|data-src)=[\"']https?://", content, flags=re.IGNORECASE)
-        )
-        inline_images_match = inline_image_count >= expected_inline_images
-        return {
-            "passed": found_title and inline_images_match,
-            "media_id": media_id,
-            "title_match": found_title,
-            "inline_image_count": inline_image_count,
-            "expected_inline_images": expected_inline_images,
-            "inline_images_match": inline_images_match,
-        }
-    return {"passed": False, "media_id": media_id, "error": "media_id not found in draft batchget"}
+    expected_inline_urls = expected_inline_urls or []
+    last_error = "media_id not found in draft batchget"
+    for attempt in range(4):
+        data = json.dumps({"offset": 0, "count": 50, "no_content": 0}, ensure_ascii=False).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read())
+        except Exception as exc:
+            last_error = str(exc)[:200]
+            result = {}
+        for item in result.get("item", []) or []:
+            if item.get("media_id") != media_id:
+                continue
+            content_obj = item.get("content") or {}
+            news = content_obj.get("news_item") or []
+            article = next((row for row in news if str(row.get("title", "")) == title), {})
+            body = str(article.get("content", ""))
+            inline_urls = re.findall(r"<img\b[^>]*\b(?:src|data-src)=[\"'](https?://[^\"']+)", body, flags=re.IGNORECASE)
+            inline_count = len(inline_urls)
+            thumb_id = str(article.get("thumb_media_id") or item.get("thumb_media_id") or "")
+            title_match = bool(article)
+            images_match = inline_count >= expected_inline_images
+            thumb_match = not expected_thumb_media_id or thumb_id == expected_thumb_media_id
+            urls_match = not expected_inline_urls or all(url in inline_urls for url in expected_inline_urls)
+            return {
+                "passed": title_match and images_match and thumb_match and urls_match and (expected_html is None or body == expected_html),
+                "reviewed_html_match": expected_html is None or body == expected_html,
+                "media_id": media_id,
+                "title_match": title_match,
+                "inline_image_count": inline_count,
+                "expected_inline_images": expected_inline_images,
+                "inline_images_match": images_match,
+                "thumb_media_id": thumb_id,
+                "expected_thumb_media_id": expected_thumb_media_id,
+                "thumb_media_match": thumb_match,
+                "inline_urls_match": urls_match,
+                "attempt": attempt + 1,
+            }
+        if attempt < 3:
+            time.sleep(2 ** attempt)
+    return {"passed": False, "status": "verification_pending", "media_id": media_id, "error": last_error, "attempt": 4}
 
 
 def _run_publish_license_gate(packet: dict, license_script: Path) -> dict:

@@ -116,6 +116,22 @@ def build_packet(args: argparse.Namespace) -> dict:
     visual_recipe = json.loads((render_dir / "visual_recipe.json").read_text(encoding="utf-8")) if (render_dir / "visual_recipe.json").is_file() else {}
     source_assets = _background_assets(render_dir, len(cards))
     script_text = Path(args.script).read_text(encoding="utf-8") if args.script else "\n".join(card.get("tts", "") for card in cards)
+    publication_desc=args.desc
+    music_copy=None
+    plan_path=render_dir/'video_toolchain_plan.json'
+    plan=json.loads(plan_path.read_text(encoding='utf-8')) if plan_path.is_file() else {}
+    audio=plan.get('audio_plan') or {}
+    if audio.get('status')=='resolved' and audio.get('route')=='embedded_licensed_bgm' and audio.get('license')=='https://creativecommons.org/licenses/by/4.0/':
+        from content_platform.audio_attribution_formatter import bind_audio_attribution
+        from content_platform.resolved_audio_inputs import verify_rendered_audio_binding,actual_audio_render_changes
+        verify_rendered_audio_binding(audio,render_dir,final,platform='kuaishou')
+        changes=actual_audio_render_changes(render_dir,final,audio)
+        planned=plan.get('music_publication_copy') or {}
+        base=dict(planned);base.pop('music_attribution_status',None)
+        music_copy=bind_audio_attribution(base,audio,platform='kuaishou',render_changes=changes,copy_limit=220)
+        if publication_desc and publication_desc!=music_copy['caption']:
+            raise ValueError('music_packet_description_conflicts_with_frozen_copy')
+        publication_desc=music_copy['caption']
     preflight = build_preflight_manifest(
         channel="kuaishou",
         content_type="knowledge_card_video",
@@ -124,7 +140,7 @@ def build_packet(args: argparse.Namespace) -> dict:
         strategy_summary=args.strategy_summary or "Kuaishou strategy loaded before render",
         selected_topic=args.title,
         selection_reason=args.selection_reason or "platform-specific source matrix selected this topic",
-        content_angle=args.desc,
+        content_angle=publication_desc,
         required_assets=["video", "cover", "bgm", "subtitles", "source_assets"],
         source_policy="licensed_or_verified_runtime_assets",
         quality_gates=["kuaishou_auto_packet", "visual_recipe", "bgm_fingerprint", "postcheck"],
@@ -150,7 +166,8 @@ def build_packet(args: argparse.Namespace) -> dict:
         "content_type": "knowledge_card_video",
         "content_form": "knowledge_card_video",
         "title": args.title,
-        "description": args.desc,
+        "description": publication_desc,
+        **({'music_attribution':music_copy['music_attribution']} if music_copy else {}),
         "tags": [tag.strip() for tag in args.tags.split(",") if tag.strip()],
         "schedule_time": args.schedule,
         "file": str(final),
@@ -161,9 +178,9 @@ def build_packet(args: argparse.Namespace) -> dict:
         "video_plan": {
             "theme": args.title,
             "target_audience": "Kuaishou viewers",
-            "user_pain": args.desc,
+            "user_pain": publication_desc,
             "opening_hook": cards[0].get("text") or args.title,
-            "core_message": args.desc,
+            "core_message": publication_desc,
             "storyboard": cards,
             "voiceover": "segmented human-paced TTS",
             "subtitle_plan": "lower-third ASS subtitles",

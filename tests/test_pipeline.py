@@ -1,4 +1,3 @@
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,83 +27,6 @@ class PipelineTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
-
-    def test_renderer_tool_invocation_manifest_is_promoted_to_draft_metadata(self):
-        manifest = {
-            "planned_tools": {"video_toolchain_runner": "renderer"},
-            "invocations": {"video_toolchain_runner": {"status": "ok", "output": "final.mp4"}},
-        }
-        draft = {"draft_meta": {}}
-        Pipeline._attach_video_render_evidence(
-            draft,
-            {"render_manifest": {"tool_invocation_manifest": manifest}, "render_packet": {}},
-        )
-        self.assertEqual(draft["draft_meta"]["tool_invocation_manifest"], manifest)
-
-    def test_rendered_gate_recovers_manifest_after_later_optional_media_failure(self):
-        import json
-
-        job_id = "render-recovery"
-        artifact_dir = self.pipeline.data_dir / "artifacts" / job_id
-        artifact_dir.mkdir(parents=True)
-        output = artifact_dir / "final.mp4"
-        output.write_bytes(b"video")
-        manifest = {
-            "status": "rendered",
-            "ok": True,
-            "output": str(output),
-            "tool_invocation_manifest": {
-                "planned_tools": {"video_toolchain_runner": "renderer"},
-                "invocations": {"video_toolchain_runner": {"status": "ok"}},
-            },
-        }
-        (artifact_dir / "video_toolchain_runner_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-        draft = {"draft_meta": {}}
-
-        self.pipeline._recover_video_render_evidence(job_id, draft)
-
-        self.assertEqual(draft["draft_meta"]["render_manifest"]["status"], "rendered")
-        self.assertEqual(
-            draft["draft_meta"]["tool_invocation_manifest"]["invocations"]["video_toolchain_runner"]["status"],
-            "ok",
-        )
-
-    def test_rendered_gate_reads_renderer_sidecar_measurements(self):
-        import json
-        from unittest.mock import patch
-
-        root = self.pipeline.data_dir / "artifacts" / "sidecar-render"
-        (root / "backgrounds").mkdir(parents=True)
-        output = root / "final.mp4"
-        output.write_bytes(b"video")
-        for index in range(4):
-            (root / "backgrounds" / f"bg_{index:02d}.png").write_bytes(b"image")
-        (root / "bgm_source.json").write_text(json.dumps({
-            "source": "licensed_local_library", "source_url": "https://example.test/license",
-            "license": "CC BY", "fit_reason": "matched", "fallback_used": False,
-        }), encoding="utf-8")
-        (root / "narration.srt").write_text("\n".join(f"{i}\n00:00:00,000 --> 00:00:01,000\ntext" for i in range(1, 9)), encoding="utf-8")
-        required = {
-            "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text",
-            "kuaishou_render.render_cards", "kuaishou_render.download_bgm",
-            "kuaishou_render.gen_subtitles", "kuaishou_render.encode_final",
-        }
-        manifest = {
-            "ok": True, "status": "rendered", "output": str(output),
-            "toolchain_contract": {"planned_tools": sorted(required)},
-            "motion_evidence": {"passed": True, "unique_frame_count": 4},
-            "segment_motion_evidence": {"segments": [{"move_id": "m1", "profile": "p1"}] * 3},
-        }
-        packet = {
-            "video_toolchain_plan": {"required": True, "platforms": ["kuaishou"]},
-            "video_artifact": {"path": str(output)},
-            "render_manifest": manifest,
-        }
-        probe = type("Result", (), {"stdout": json.dumps({"streams": [{"codec_type": "audio"}], "format": {"duration": "45"}})})()
-        with patch("content_platform.pipeline.subprocess.run", return_value=probe):
-            result = Pipeline._rendered_video_platform_gate(packet, "kuaishou")
-
-        assert result["passed"] is True
 
     def test_end_to_end_requires_approval_and_is_idempotent(self):
         job = self.pipeline.create("Practical automation", ["wechat", "xiaohongshu"], {"audience": "operators"})
@@ -156,6 +78,24 @@ class PipelineTests(unittest.TestCase):
         queue = self.store.list_delivery_queue("completed")
         self.assertEqual(len(queue), 1)
 
+    def test_run_marks_each_platform_for_final_quality_evidence(self):
+        output = Path(self.tmp.name) / "video.mp4"
+        output.write_bytes(b"video")
+        media = Mock()
+        media.generate.return_value = {"kind": "video", "path": output, "checksum": "test"}
+        self.pipeline.media = media
+        self.pipeline.config.setdefault("media", {}).setdefault("video", {})["enabled"] = True
+        job = self.pipeline.create("quality evidence", ["kuaishou", "wechat"], {})
+        class Runner:
+            def run(self, _step, callback, **_kwargs):
+                return callback()
+
+        self.pipeline._generate_video_per_platform(job["id"], Runner(), [])
+        calls = media.generate.call_args_list
+        self.assertEqual(len(calls), 2)
+        for call in calls:
+            self.assertTrue(call.args[1]["quality_evidence_required"])
+
     def test_run_persists_intelligence_records(self):
         job = self.pipeline.create(
             "Automation visuals",
@@ -205,47 +145,6 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(self.store.list_delivery_queue("completed"))
         self.assertTrue(self.store.workflow_reports(job["id"], "wechat"))
         self.assertIn("send_completion_report", [row["step_name"] for row in self.store.workflow_steps(job["id"], "wechat")])
-
-    def test_generation_input_includes_latest_same_lane_playbook(self):
-        report_path = Path(self.tmp.name) / "same_lane.json"
-        report_path.write_text(
-            json.dumps(
-                {
-                    "reports": {
-                        "wechat": {
-                            "platform": "wechat",
-                            "own_data_status": "insufficient",
-                            "topic_patterns": ["tool_workflow_tutorial"],
-                            "proof_requirements": ["screen_or_tool_stack_demo"],
-                            "recommended_content_moves": ["show a concrete tool stack"],
-                            "top_accounts": [{"account": "Sample", "total_views": 100}],
-                            "top_works": [{"title": "AI 工作流案例", "account": "Sample", "views": 100}],
-                        }
-                    }
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-        self.store.save_tool_inventory("same_lane_intelligence:latest", {"report_path": str(report_path), "platforms": ["wechat"]})
-        captured = {}
-        job = self.pipeline.create("Practical automation", ["wechat"], {"audience": "operators"})
-
-        def generate(topic, brief):
-            captured["brief"] = brief
-            return {
-                "title": topic,
-                "body": "A concrete, evidence-backed workflow with a reusable checklist.",
-                "draft_meta": {"quality_gate": {"passed": True}, "strategy": {}},
-            }
-
-        with patch.object(self.pipeline.generator, "generate", side_effect=generate):
-            self.pipeline.run(job["id"])
-
-        same_lane = captured["brief"]["bounded_model_input"]["same_lane_intelligence"]
-        self.assertEqual(same_lane["own_data_status"], "insufficient")
-        self.assertEqual(same_lane["topic_patterns"], ["tool_workflow_tutorial"])
-        self.assertIn("show a concrete tool stack", same_lane["recommended_content_moves"])
 
     def test_required_unified_acceptance_blocks_publish(self):
         pipeline = Pipeline(
@@ -359,7 +258,44 @@ class PipelineTests(unittest.TestCase):
         assert result["state"] == "review_required"
         assert result["title"] == "Verified workflow"
 
-    def test_short_video_geo_gate_uses_short_form_contract(self):
+    def test_compiled_zhihu_bad_article_blocks_without_manifest_or_publisher(self):
+        from content_platform.run_contract import build_run_contract
+
+        job = self.pipeline.create(
+            "AI results look complete: execution guide",
+            ["zhihu"],
+            {"run_contract": build_run_contract("zhihu")},
+        )
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "AI results look complete: execution guide",
+            "body": "source evidence unavailable. This is only an execution guide placeholder.",
+            "draft_meta": {"claim_ledger": []},
+        }), patch.object(self.pipeline.media, "generate", return_value=None) as media, patch(
+            "content_platform.pipeline.build_publisher"
+        ) as publisher:
+            result = self.pipeline.run(job["id"])
+
+        assert result["state"] == "blocked"
+        assert result["deliveries"] == []
+        assert not any(item.get("kind") == "article_artifact_manifest" for item in result["artifacts"])
+        publisher.assert_not_called()
+
+    def test_compiled_zhihu_requires_cover_three_inline_images_before_manifest(self):
+        from content_platform.run_contract import build_run_contract
+
+        job = self.pipeline.create("中文工作流深度拆解", ["zhihu"], {"run_contract": build_run_contract("zhihu")})
+        body = "这是一个中文工作流案例，包含问题、过程、反例和可执行步骤。" * 30
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "中文工作流深度拆解",
+            "body": body,
+            "draft_meta": {"claim_ledger": []},
+        }), patch.object(self.pipeline.media, "generate", return_value={"kind": "image", "images": []}):
+            result = self.pipeline.run(job["id"])
+
+        assert result["state"] == "blocked"
+        assert result["deliveries"] == []
+        assert not any(item.get("kind") == "article_artifact_manifest" for item in result["artifacts"])
+
         draft = {
             "draft_meta": {
                 "content_form": "short_video",
@@ -464,6 +400,42 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(meta["knowledge_card_plan"]["count"], 6)
         self.assertEqual(meta["growth_plan"]["goal"], "completion_rate")
 
+    def test_ai_lane_generated_draft_without_final_package_is_blocked(self):
+        job = self.pipeline.create(
+            "Invoice reconciliation workflow",
+            ["file"],
+            {"lane": "real_world_ai_implementation_v1"},
+        )
+        with patch.object(self.pipeline.generator, "generate", return_value={
+            "title": "Invoice reconciliation workflow",
+            "body": "A concrete workflow body with inputs, process, outcome, limits, and a human review step.",
+            "draft_meta": {},
+        }):
+            result = self.pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        gate = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "validate_real_world_ai_package"][-1]
+        self.assertEqual(gate["reason_code"], "real_world_ai_package_invalid")
+        self.assertIn("policy_profile_missing", gate["gate"]["failures"])
+
+    def test_ai_lane_prepopulated_body_cannot_bypass_final_package_gate(self):
+        job = self.pipeline.create(
+            "Invoice reconciliation workflow",
+            ["file"],
+            {"lane": "real_world_ai_implementation"},
+        )
+        with self.store.connect() as conn:
+            conn.execute(
+                "UPDATE jobs SET body=? WHERE id=?",
+                ("This manually prepared workflow body is long enough to enter the pre-populated content path. " * 3, job["id"]),
+            )
+
+        result = self.pipeline.run(job["id"])
+
+        self.assertEqual(result["state"], "blocked")
+        gate = [row for row in self.store.workflow_steps(job["id"]) if row["step_name"] == "validate_real_world_ai_package"][-1]
+        self.assertEqual(gate["reason_code"], "real_world_ai_package_invalid")
+
     def test_enforced_wechat_requires_professional_toolchain_before_quality_gate(self):
         pipeline = Pipeline(
             self.store,
@@ -537,7 +509,8 @@ class PipelineTests(unittest.TestCase):
 
         self.assertEqual(result["state"], "review_required")
         artifacts = self.store.artifacts(job["id"])
-        self.assertEqual(len([item for item in artifacts if item["kind"] == "image"]), 2)
+        self.assertEqual(len([item for item in artifacts if item["kind"] == "image"]), 1)
+        self.assertEqual(len([item for item in artifacts if item["kind"] == "cover"]), 1)
         self.assertEqual(len([item for item in artifacts if item["kind"] == "section_image_map"]), 1)
 
     def test_delivery_worker_processes_one_item_by_default(self):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -87,6 +88,7 @@ def record_topic(
     follow_up_to: str = "",
     difference_angle: str = "",
     recap_reason: str = "",
+    require_trend_evidence: bool = False,
 ) -> dict:
     """Record one choice, blocking same-direction reuse unless it is documented."""
     root = Path(root)
@@ -99,6 +101,16 @@ def record_topic(
     ]
     documented_follow_up = bool(follow_up_to and difference_angle and recap_reason)
     failed_dimensions = [] if not conflicts or documented_follow_up else ["direction_already_selected"]
+
+    # Fail-Closed: douyin_ai requires real 11-source trend matrix evidence on disk
+    is_douyin_ai = str(platform).casefold().strip() in {"douyin_ai"}
+    trend_enforced = os.environ.get("OPS_RUN_BYPASS_TREND_CHECK") != "1"
+    if (require_trend_evidence or is_douyin_ai) and trend_enforced:
+        matrix_ops = Path(root) / "data" / "ops_runs" / str(date) / "11sources_matrix.json"
+        matrix_local = Path(root) / "data" / "local_ops_douyin" / f"platform_source_matrix_{date}.json"
+        if not matrix_ops.is_file() and not matrix_local.is_file():
+            failed_dimensions.append("missing_11sources_trend_evidence")
+
     record = {
         "platform": str(platform),
         "topic": str(topic),

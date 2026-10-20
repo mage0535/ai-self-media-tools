@@ -22,6 +22,18 @@ from pathlib import Path
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 
 
+def _optional_cover_markup(*, tag: str, hook: str, cta: str, badge: str) -> dict[str, str]:
+    tag_markup = f'<div class="tag">{tag}</div>' if tag.strip() else ""
+    hook_markup = f'<div class="hookbox">{hook}</div>' if hook.strip() else ""
+    cta_parts = []
+    if cta.strip():
+        cta_parts.append(f"<span>{cta}</span>")
+    if badge.strip():
+        cta_parts.append(f'<span class="badge">{badge}</span>')
+    cta_markup = f'<div class="cta">{"".join(cta_parts)}</div>' if cta_parts else ""
+    return {"tag": tag_markup, "hook": hook_markup, "cta": cta_markup}
+
+
 def _bg_base64(bg_path: str) -> str:
     p = Path(bg_path)
     if not p.is_file():
@@ -41,6 +53,7 @@ def generate_cover(
     badge: str = "先收藏",
     highlight: str = "",
     layout: str = "auto",
+    functional_role_atlas_record: dict | None = None,
 ) -> str | None:
     """生成优化封面，返回输出路径或 None。
 
@@ -63,6 +76,7 @@ def generate_cover(
     # 标题双行处理
     title_part = title
     h1 = highlight or title_part
+    optional_markup = _optional_cover_markup(tag=tag, hook=hook, cta=cta, badge=badge)
 
     # 2026-08-16：布局按内容赛道适配（不再单一 hero 模板）
     if layout == "auto":
@@ -78,9 +92,17 @@ def generate_cover(
         except Exception:
             layout = "hero"
 
-    if layout == "big_number":
+    if layout == "evidence_interface":
+        title_style = "font-size:96px; line-height:1.2; font-weight:900; color:#111827; -webkit-text-stroke:2px #fde047; paint-order:stroke fill; text-shadow:0 3px 14px rgba(255,255,255,.45); margin:0;"
+        sub_style = "font-size:40px; line-height:1.3; font-weight:700; color:#fff; text-shadow:0 3px 10px #000; margin-top:24px;"
+        hook_style = "display:inline-block; align-self:flex-start; padding:18px 24px; background:rgba(15,23,42,.62); backdrop-filter:blur(14px); border-left:6px solid #fde047; color:#fff; font-size:36px; font-weight:700; margin-top:22px;"
+    elif layout == "premium_fintech":
+        title_style = "font-size:104px; line-height:1.04; font-weight:900; letter-spacing:-0.025em; color:#f4f1e8; text-shadow:0 5px 18px rgba(0,0,0,0.72); margin:0;"
+        sub_style = "font-size:38px; line-height:1.2; font-weight:650; color:#f4c95d; text-shadow:0 3px 14px rgba(0,0,0,0.65); margin:26px 0 0;"
+        hook_style = "display:inline-block; align-self:flex-start; margin-top:28px; padding:13px 20px; border-left:5px solid #d5473f; background:rgba(7,17,25,0.86); color:#f4f7fa; font-size:26px; line-height:1.2; font-weight:700; letter-spacing:0.01em;"
+    elif layout == "big_number":
         # 数字钩子式：大数字突出 + 结果承诺
-        title_style = "font-size:96px; line-height:1.15; font-weight:900; color:#fff; text-shadow:0 6px 30px rgba(0,0,0,0.9); margin-bottom:30px;"
+        title_style = "font-size:132px; line-height:1.08; font-weight:900; color:#fff; text-shadow:0 8px 34px rgba(0,0,0,0.95); margin-bottom:34px;"
         sub_style = "font-size:44px; font-weight:700; color:#ffd54d; text-shadow:0 3px 16px rgba(0,0,0,0.9); margin-bottom:60px;"
         hook_style = "display:inline-block; align-self:flex-start; padding:28px 56px; background:linear-gradient(135deg,#e74c3c,#f39c12); border-radius:26px; color:#fff; font-size:44px; font-weight:900; box-shadow:0 10px 40px rgba(231,76,60,0.35);"
     elif layout == "checklist":
@@ -99,14 +121,37 @@ def generate_cover(
         sub_style = "font-size:42px; font-weight:700; color:#ffd54d; text-shadow:0 3px 16px rgba(0,0,0,0.9); margin-bottom:80px;"
         hook_style = "display:inline-block; align-self:flex-start; padding:24px 48px; background:linear-gradient(135deg,#e74c3c,#f39c12); border-radius:22px; color:#fff; font-size:38px; font-weight:800;"
 
+    if layout == "evidence_interface":
+        content_css = "position:absolute; left:80px; right:80px; top:80px; z-index:2; display:flex; flex-direction:column; align-items:flex-start; padding:0;"
+        overlay_css = "position:absolute; inset:0; background:linear-gradient(145deg,rgba(10,18,30,.4),rgba(10,18,30,.12) 35%,transparent 70%);"
+    elif layout == "premium_fintech":
+        content_css = "position:absolute; left:80px; top:290px; width:640px; z-index:2; display:flex; flex-direction:column; align-items:flex-start; padding:0;"
+        overlay_css = "position:absolute; inset:0; background:linear-gradient(90deg,rgba(4,12,18,.4) 0%,rgba(4,12,18,.2) 48%,transparent 76%);"
+    else:
+        content_css = f"position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:{padding};"
+        overlay_css = "position:absolute; inset:0; background:linear-gradient(180deg,rgba(10,18,30,.4),rgba(10,18,30,.12) 35%,transparent 70%);"
+
+    if layout == "premium_fintech":
+        title_lines = [part.strip() for part in h1.replace("<br>", "\n").splitlines() if part.strip()]
+        title_markup = "".join(f'<div class="title-line">{part}</div>' for part in title_lines)
+    else:
+        title_markup = f'<div class="title">{h1}</div>'
+
+    role_markup=''
+    if functional_role_atlas_record is not None:
+        from content_platform.native_visual_inputs import functional_role_markup
+        role_markup=functional_role_markup(functional_role_atlas_record,8,size=450)
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK SC',sans-serif; }}
 .bg {{ position:absolute; inset:0; background:url(data:image/jpeg;base64,{b64}) center/cover no-repeat; }}
-.overlay {{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.72) 40%, rgba(0,0,0,0.93) 100%); }}
-.content {{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:{padding}; }}
+.overlay {{ {overlay_css} }}
+.functional-role-sprite {{ position:absolute;right:64px;bottom:280px;z-index:3;filter:drop-shadow(0 9px 12px rgba(0,0,0,.25)); }}
+.content {{ {content_css} }}
 .tag {{ display:inline-block; align-self:flex-start; padding:16px 38px; background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.35); border-radius:50px; color:#fff; font-size:30px; font-weight:600; margin-bottom:46px; }}
 .title {{ {title_style} }}
+.title-line {{ {title_style} display:block; width:max-content; max-width:640px; white-space:nowrap; background:rgba(4,12,18,0.34); padding:4px 14px 6px 8px; border-radius:3px; }}
+.title-line:nth-child(2) {{ color:#f4c95d; }}
 .hl {{ color:#ffd54d; }}
 .sub {{ {sub_style} }}
 .hookbox {{ {hook_style} }}
@@ -116,21 +161,25 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 </style></head><body>
 <div class="bg"></div><div class="overlay"></div>
 <div class="content">
-  <div class="tag">{tag}</div>
-  <div class="title">{h1}</div>
+  {optional_markup["tag"]}
+  {title_markup}
   <div class="sub">{subtitle}</div>
-  <div class="hookbox">{hook}</div>
+  {optional_markup["hook"]}
 </div>
-<div class="cta"><span>{cta}</span><span class="badge">{badge}</span></div>
+{optional_markup["cta"]}
+{role_markup}
 </body></html>"""
 
     tmp = Path(tempfile.gettempdir()) / f"cover_{Path(output_path).stem}.html"
     tmp.write_text(html, encoding="utf-8")
 
     code = f"""
+import sys
+sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r})
 from playwright.sync_api import sync_playwright
+from scripts.film_renderer import _chromium_executable_path, _chromium_launch_environment
 with sync_playwright() as p:
-    b = p.chromium.launch(headless=True, args=['--no-sandbox'])
+    b = p.chromium.launch(headless=True, executable_path=_chromium_executable_path(), env=_chromium_launch_environment(), args=['--no-sandbox'])
     pg = b.new_page(viewport={{"width": {W}, "height": {H}}}, device_scale_factor=1)
     pg.goto('file://{tmp}')
     pg.wait_for_timeout(500)
@@ -140,10 +189,12 @@ with sync_playwright() as p:
     try:
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=90)
         if r.returncode != 0:
+            print(f"封面浏览器失败 ({r.returncode}): {r.stderr[-12000:]}", file=sys.stderr)
             return None
         if out.is_file() and out.stat().st_size > 5000:
             return str(out)
-    except Exception:
+    except Exception as exc:
+        print(f"封面浏览器异常: {exc}", file=sys.stderr)
         return None
     return None
 

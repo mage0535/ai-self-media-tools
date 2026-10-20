@@ -10,13 +10,13 @@ from content_platform.health_refresh import classify_platform_health, refresh_de
 
 class HealthRefreshTests(unittest.TestCase):
     def test_file_manual_only_domestic_route_stays_manual_handoff(self):
-        with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+        with patch.dict(os.environ, {}, clear=True):
             entry = classify_platform_health("douyin", {"type": "file"})
 
         self.assertEqual(entry["state"], "manual_handoff_only")
         self.assertFalse(entry["can_publish_now"])
 
-    def test_domestic_route_requires_cn_proxy_before_probe(self):
+    def test_domestic_direct_route_probes_before_auth_check(self):
         with patch.dict(os.environ, {}, clear=True):
             entry = classify_platform_health(
                 "kuaishou",
@@ -29,10 +29,10 @@ class HealthRefreshTests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(entry["state"], "proxy_unavailable")
+        self.assertEqual(entry["state"], "auth_required")
 
     def test_xiaohongshu_policy_overrides_valid_route(self):
-        with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+        with patch.dict(os.environ, {}, clear=True):
             entry = classify_platform_health(
                 "xiaohongshu",
                 {
@@ -48,7 +48,7 @@ class HealthRefreshTests(unittest.TestCase):
         self.assertFalse(entry["can_publish_now"])
 
     def test_manual_handoff_publisher_reports_manual_only_health(self):
-        with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+        with patch.dict(os.environ, {}, clear=True):
             entry = classify_platform_health("douyin", {"type": "manual-handoff"})
 
         self.assertEqual(entry["state"], "manual_handoff_only")
@@ -63,7 +63,7 @@ class HealthRefreshTests(unittest.TestCase):
             def fake_run(*args, **kwargs):
                 return type("Result", (), {"returncode": 0, "stdout": "valid", "stderr": ""})()
 
-            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+            with patch.dict(os.environ, {}, clear=True):
                 with patch("content_platform.health_refresh.subprocess.run", side_effect=fake_run):
                     entry = classify_platform_health(
                         "kuaishou",
@@ -84,7 +84,7 @@ class HealthRefreshTests(unittest.TestCase):
     def test_refresh_writes_state_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "health.json"
-            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+            with patch.dict(os.environ, {}, clear=True):
                 result = refresh_delivery_health(
                     {"publishers": {"platforms": {"douyin": {"type": "file"}}}},
                     out,
@@ -112,7 +112,7 @@ class HealthRefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cookie_dir = Path(tmp)
             (cookie_dir / "juejin_main.json").write_text(json.dumps([{"name": "sessionid", "value": "x"}]), encoding="utf-8")
-            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+            with patch.dict(os.environ, {}, clear=True):
                 entry = classify_platform_health(
                     "juejin",
                     {"type": "juejin-api", "account": "main", "cookie_dir": str(cookie_dir)},
@@ -126,7 +126,7 @@ class HealthRefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cookie_dir = Path(tmp)
             (cookie_dir / "zhihu_main.json").write_text(json.dumps([{"name": "z_c0", "value": "x"}]), encoding="utf-8")
-            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+            with patch.dict(os.environ, {}, clear=True):
                 with patch("content_platform.health_refresh.importlib.util.find_spec", return_value=object()):
                     entry = classify_platform_health(
                         "zhihu",
@@ -140,7 +140,7 @@ class HealthRefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cookie_dir = Path(tmp)
             (cookie_dir / "zhihu_main.json").write_text(json.dumps([{"name": "z_c0", "value": "x"}]), encoding="utf-8")
-            with patch.dict(os.environ, {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=True):
+            with patch.dict(os.environ, {}, clear=True):
                 with patch("content_platform.health_refresh.importlib.util.find_spec", return_value=None):
                     entry = classify_platform_health(
                         "zhihu",

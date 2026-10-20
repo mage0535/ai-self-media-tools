@@ -74,12 +74,25 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _postcheck_passed(report: dict[str, Any]) -> bool:
-    """Accept only explicit scheduled or submitted-for-review management states."""
-    return bool(report.get("passed")) and str(report.get("status") or "") in {
-        "management_postcheck_found",
-        "success_under_review",
-    }
+def _postcheck_passed(report: dict[str, Any], manifest: dict[str, Any]) -> bool:
+    """Require one evidenced work; only the scheduled state satisfies scheduling."""
+    matched_work = report.get("matched_work")
+    if report.get("passed") is not True or not isinstance(matched_work, dict):
+        return False
+    if (matched_work.get("title") != manifest["title"]
+            or matched_work.get("description") != manifest["description"]
+            or report.get("title_found") is not True
+            or report.get("description_found") is not True
+            or not Path(str(report.get("evidence_path") or "")).is_file()):
+        return False
+    if report.get("status") == "success_under_review":
+        return report.get("delivery_state") == matched_work.get("state") == "under_review"
+    return bool(
+        report.get("status") == "management_postcheck_found"
+        and report.get("delivery_state") == matched_work.get("state") == "scheduled"
+        and report.get("schedule_found") is True
+        and matched_work.get("schedule_time") == manifest["schedule_time"]
+    )
 
 
 def _require_ops_runner_context() -> bool:
@@ -98,29 +111,8 @@ def _require_ops_runner_context() -> bool:
 
 
 def _skip_preflight_authorized(manifest: dict[str, Any]) -> bool:
-    audit_path = str(os.environ.get("OPS_SKIP_PREFLIGHT_AUDIT", "")).strip()
-    if not audit_path:
-        return False
-    path = Path(audit_path).expanduser()
-    if not path.is_file():
-        return False
-    try:
-        audit = json.loads(path.read_text(encoding="utf-8-sig"))
-    except Exception:
-        return False
-    reason = str(
-        audit.get("reason")
-        or manifest.get("skip_preflight_reason")
-        or manifest.get("emergency_reason")
-        or ""
-    ).strip()
-    return bool(
-        audit.get("allow_skip_preflight") is True
-        and audit.get("workflow_id") == os.environ.get("WORKFLOW_ID")
-        and audit.get("run_id") == os.environ.get("RUN_ID")
-        and audit.get("job_id") == os.environ.get("JOB_ID")
-        and reason
-    )
+    """Current Kuaishou policy requires preflight for every publishing run."""
+    return False
 
 
 def main() -> int:
@@ -191,7 +183,7 @@ def main() -> int:
     _write_json(clean_manifest_path, clean_manifest)
 
     env = os.environ.copy()
-    env.setdefault("CN_PROXY", "socks5://127.0.0.1:1080")
+
     env.setdefault("SOCIAL_AUTO_UPLOAD_DIR", str(Path(args.sau_dir)))
     env["KUAISHOU_STANDARD_RUNNER_APPROVED"] = "1"
 
@@ -248,7 +240,7 @@ def main() -> int:
     passed = False
     if report_path.is_file():
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        passed = _postcheck_passed(report)
+        passed = postcheck.returncode == 0 and _postcheck_passed(report, clean_manifest)
     print(
         json.dumps(
             {

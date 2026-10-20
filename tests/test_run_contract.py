@@ -80,3 +80,69 @@ def test_stage_payload_rejects_oversized_provider_input(tmp_path: Path) -> None:
     contract = build_run_contract("tiktok", rulebook_path=rulebook)
     with pytest.raises(RunContractError, match="payload exceeds"):
         bound_stage_payload(contract, "blueprint", {"selected_topic": "x" * 20_000}, rulebook_path=rulebook)
+
+
+def test_run_contract_does_not_invent_sfx_only_when_audio_plan_is_missing(tmp_path: Path) -> None:
+    contract = build_run_contract("tiktok", rulebook_path=_rulebook(tmp_path))
+
+    assert "audio_plan" in contract["stage_fields"]["generate"]
+    assert "audio_plan" in contract["stage_fields"]["render"]
+    assert "audio_plan" not in contract
+
+
+def test_sfx_only_requires_explicit_user_no_bgm_approval() -> None:
+    from content_platform.run_contract import validate_audio_plan
+
+    base = {
+        "route": "sfx_only",
+        "route_reason": "the user explicitly requested no music",
+        "source_audio_action": "replace_with_voiceover_and_sfx",
+        "fallback_route": None,
+    }
+    assert validate_audio_plan(base)["passed"] is False
+    assert validate_audio_plan({**base, "no_bgm_approved": True})["passed"] is False
+    assert validate_audio_plan({**base, "no_bgm_approved": True, "approval_source": "ai_workflow_default"})["passed"] is False
+    assert validate_audio_plan({**base, "no_bgm_approved": True, "approval_source": "explicit_user_request"})["passed"] is True
+
+
+def test_sfx_only_is_rejected_when_the_work_requires_background_music() -> None:
+    from content_platform.run_contract import validate_audio_plan
+
+    result = validate_audio_plan(
+        {
+            "route": "sfx_only",
+            "route_reason": "the user explicitly requested no music",
+            "source_audio_action": "replace_with_voiceover_and_sfx",
+            "fallback_route": None,
+            "no_bgm_approved": True,
+            "approval_source": "explicit_user_request",
+        },
+        require_bgm=True,
+    )
+
+    assert result["passed"] is False
+    assert "audio_plan.sfx_only_conflicts_with_bgm_requirement" in result["failures"]
+
+
+def test_validate_audio_plan_requires_native_track_evidence() -> None:
+    from content_platform.run_contract import validate_audio_plan
+
+    result = validate_audio_plan(
+        {
+            "route": "platform_native_track",
+            "route_reason": "use the current native trend",
+            "source_audio_action": "replace",
+            "fallback_route": None,
+            "platform": "tiktok",
+            "track_id": "track-123",
+            "track_url": "https://www.tiktok.com/music/track-123",
+            "trend_evidence": {"observed_at": "2026-09-16T09:00:00Z", "rank": 4},
+            "rights_scope": "tiktok_native_use",
+            "apply_stage": "platform_publish",
+        }
+    )
+    assert result["passed"] is True
+
+    missing = validate_audio_plan({"route": "platform_native_track", "route_reason": "trend", "source_audio_action": "replace", "fallback_route": None})
+    assert missing["passed"] is False
+    assert "audio_plan.track_id_missing" in missing["failures"]

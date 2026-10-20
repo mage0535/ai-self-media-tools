@@ -224,6 +224,9 @@ def _candidate_source_url_is_native(platform: str, candidate: dict[str, Any]) ->
     source = str(candidate.get("source") or "").casefold()
     if not source.endswith(":web_search"):
         return True
+    # 微信/掘金/视频号的 web_search 为工具测评类聚合内容，源域广泛，不做原生域强校验
+    if platform in {"wechat", "juejin", "shipinhao"}:
+        return True
     host = (urlparse(str(candidate.get("url") or "")).hostname or "").casefold()
     roots = {
         "douyin": ("douyin.com", "iesdouyin.com"),

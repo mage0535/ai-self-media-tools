@@ -87,6 +87,9 @@ def build_visual_recipe(
     recipe.setdefault("style_variants", _style_variants(cinema_scenes or [], plan, title, script_body))
     recipe.setdefault("asset_strategy", {"primary": "verified_visual_assets", "fallback": "html_css_knowledge_card_fallback", "forbidden": ["random_unmatched_background"]})
     recipe.setdefault("avoid", ["same_recipe_fingerprint", "same_bgm_fingerprint"])
+    scene_contract = plan.get("visual_contract") or plan.get("scene_contract") or []
+    if scene_contract and not recipe.get("scene_contract_sequence"):
+        recipe["scene_contract_sequence"] = _structural_scene_sequence(scene_contract)
     recipe["core_fingerprint"] = recipe_core_fingerprint(recipe)
     recipe["fingerprint"] = recipe_instance_fingerprint(recipe)
     return recipe
@@ -138,13 +141,12 @@ def validate_visual_recipe(recipe: dict[str, Any] | None, registry: dict[str, An
 
 
 def recipe_core_fingerprint(recipe: dict[str, Any]) -> str:
-    style = dict(recipe.get("style_variants") or {})
-    # 2026-08-17 修复：variant_driven 时保留实际变体值参与指纹。
-    # 原来把所有变体强制替换为 "variant_driven" → 无论换什么变体指纹都相同，
-    # recipe_reuse_gate 永远拦截重渲染（今天 douyin_ai 反复被拦的根因）。
-    # 真正应检测的是"实际用了哪个变体组合"，因此保留 color_mood/text_layout 等真实值。
-    style.pop("recipe_variant", None)
-    style.pop("variant_driven", None)
+    style_source = recipe.get("style_variants") or {}
+    style = {
+        key: style_source[key]
+        for key in ("motion_density", "text_layout", "scene_change_interval_sec")
+        if key in style_source
+    }
     stable = {
         "selected_pipeline": recipe.get("selected_pipeline") or "",
         "content_form": recipe.get("content_form") or "",
@@ -152,9 +154,43 @@ def recipe_core_fingerprint(recipe: dict[str, Any]) -> str:
         "modules": recipe.get("modules") or [],
         "style_variants": style,
         "asset_strategy": recipe.get("asset_strategy") or {},
+        "dom_structure_signatures": recipe.get("dom_structure_signatures") or [],
+        "scene_contract_sequence": _structural_scene_sequence(
+            recipe.get("scene_contract_sequence")
+            or recipe.get("scene_contract")
+            or recipe.get("visual_contract")
+            or []
+        ),
     }
     blob = json.dumps(stable, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return "sha256:" + hashlib.sha256(blob).hexdigest()
+
+
+def _structural_scene_sequence(scenes: Any) -> list[Any]:
+    """Keep ordered scene structure while excluding copy and decoration."""
+    sequence: list[Any] = []
+    for scene in scenes if isinstance(scenes, (list, tuple)) else []:
+        if not isinstance(scene, dict):
+            sequence.append(str(scene))
+            continue
+        sequence.append(
+            {
+                key: scene[key]
+                for key in (
+                    "visual_mode",
+                    "template_id",
+                    "group_motion",
+                    "structure_family",
+                    "scene_structure_signature",
+                    "layout_family",
+                    "motion_grammar",
+                    "transition_grammar",
+                    "shot_grammar",
+                )
+                if scene.get(key) not in (None, "", [], {})
+            }
+        )
+    return sequence
 
 
 def recipe_instance_fingerprint(recipe: dict[str, Any]) -> str:

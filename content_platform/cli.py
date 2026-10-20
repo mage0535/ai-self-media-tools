@@ -13,6 +13,7 @@ from .niche_analysis import analyze_niche
 from .metrics import render_metrics
 from .seo import search as _seo_search, analyze as _seo_analyze, geo_checklist
 from .same_lane_intelligence import build_same_lane_report, load_samples_file
+from .viral_breakdown import build_breakdown_report
 from .paths import project_home, trend_cache_dir
 from .pipeline import Pipeline
 from .project_audit import audit_project
@@ -26,6 +27,7 @@ from .hot_work_intelligence import (
     collect_douyin_shipin,
     collect_logged_short_video_search,
     collect_wechat,
+    import_platform_hot_evidence_bundle,
     load_samples,
     save_collection,
     write_playwright_state,
@@ -111,9 +113,16 @@ def parser():
     create.add_argument("--platform", action="append", required=True)
     create.add_argument("--brief", default="{}", help="JSON object")
     create.add_argument("--profile", default="default")
+    create.add_argument("--request-id", default="", help="Stable controller request ID for routed old-node jobs")
+    create.add_argument("--quality-revision-request", help="Root private normal quality revision request")
+    create.add_argument("--quality-revision-sha256", help="SHA256 of the original private quality request")
     run = sub.add_parser("run")
     run.add_argument("job_id")
     run.add_argument("--force", action="store_true")
+    resume_media = sub.add_parser("resume-media", help="Resume verified unencoded media work on the same native entity")
+    resume_media.add_argument("job_id")
+    resume_media.add_argument("--evidence", required=True)
+    resume_media.add_argument("--evidence-sha256", required=True)
     approve = sub.add_parser("approve")
     approve.add_argument("job_id")
     approve.add_argument("--actor", required=True)
@@ -124,6 +133,8 @@ def parser():
     reject.add_argument("--note", default="")
     publish = sub.add_parser("publish")
     publish.add_argument("job_id")
+    publish.add_argument("--platform", help="Required for a multi-platform job")
+    publish.add_argument("--expected-content-revision", help="Current platform output revision; required for a multi-platform job")
     status = sub.add_parser("status")
     status.add_argument("job_id")
     listing = sub.add_parser("list")
@@ -184,6 +195,10 @@ def parser():
     review_action.add_argument("--action", choices=["approve", "reject"], required=True)
     review_action.add_argument("--actor", required=True)
     review_action.add_argument("--note", default="")
+    revision = sub.add_parser("revise-media", help="Create an explicit media-only revision from verified failed-job inputs")
+    revision.add_argument("parent_job_id")
+    revision.add_argument("--manifest", required=True)
+    revision.add_argument("--manifest-sha256", required=True)
     sub.add_parser("recover")
     maintenance = sub.add_parser("maintenance")
     maintenance.add_argument("--retention-days", type=int, default=14)
@@ -319,6 +334,12 @@ def parser():
     viral = sub.add_parser("viral-monitor", help="Score collected platform works for growth decisions")
     viral.add_argument("--input", required=True, help="JSON file containing posts or {posts,recent_by_account}")
     viral.add_argument("--output", default="")
+    wechat_blowup = sub.add_parser("wechat-blowup-ingest", help="Build auditable WeChat breakout intelligence from authorized or vendor exports")
+    wechat_blowup.add_argument("--input", required=True, help="JSON export containing articles/items/rows/samples")
+    wechat_blowup.add_argument("--output", default="", help="Defaults to data/intel/wechat_blowup_intelligence_latest.json")
+    wechat_blowup_refresh = sub.add_parser("wechat-blowup-refresh", help="Refresh auditable WeChat breakout intelligence from configured legal exports")
+    wechat_blowup_refresh.add_argument("--sources", required=True, help="JSON source config; each source is an explicit authorized local export")
+    wechat_blowup_refresh.add_argument("--output", default="", help="Defaults to data/intel/wechat_blowup_intelligence_latest.json")
     same_lane = sub.add_parser("same-lane-intel", help="Distill same-lane account and work samples into generation rules")
     same_lane.add_argument("--platform", action="append", required=True)
     same_lane.add_argument("--sample-file", required=True, help="JSON samples collected from native platform tools")
@@ -328,11 +349,21 @@ def parser():
     hot_works.add_argument("--platform", action="append", default=[], help="Live platform collector to run; defaults to wechat,douyin_ai,douyin_pet")
     hot_works.add_argument("--query", action="append", default=[], help="Query or platform=query")
     hot_works.add_argument("--sample-file", action="append", default=[], help="JSON sample file from logged browser collectors")
+    hot_works.add_argument("--hot-evidence-file", action="append", default=[], help="Audited public hot-evidence bundle to compile into generation-only context")
     hot_works.add_argument("--output-dir", default="", help="Output directory for raw data, parameter pack, and report")
     hot_works.add_argument("--skip-live", action="store_true", help="Only import sample files and cookie states")
     hot_works.add_argument("--cookie-file", action="append", default=[], help="platform=/private/raw-cookie-export.json")
     hot_works.add_argument("--state-file", action="append", default=[], help="platform=/private/playwright-storage-state.json for logged short-video search")
     hot_works.add_argument("--state-output-dir", default="", help="Private output directory for generated Playwright storage_state files")
+    hot_evidence = sub.add_parser("hot-evidence-collect", help="Collect configured public platform hot evidence into a redacted audit bundle")
+    hot_evidence.add_argument("--source-config", required=True, help="JSON provider config; research imports must set research_only=true")
+    hot_evidence.add_argument("--output", required=True, help="Auditable evidence bundle JSON output")
+    hot_evidence.add_argument("--research-output", default="", help="Optional generated redacted research JSON; defaults beside --output")
+    breakdown = sub.add_parser("viral-breakdown", help="Validate and cache full-media same-lane viral work breakdowns")
+    breakdown.add_argument("--platform", action="append", required=True)
+    breakdown.add_argument("--sample-file", required=True, help="JSON samples collected from native platform tools")
+    breakdown.add_argument("--output", default="", help="Output JSON path")
+    breakdown.add_argument("--ttl-days", type=int, default=7)
     return p
 
 
@@ -387,9 +418,24 @@ def _exec_wewrite(args, config):
         return {"ok": True, "note": "wewrite executed but response not JSON"}
 
 
+class _RoutedResult(dict):
+    """Mark old-controller dispatch results without changing their JSON shape."""
+
+
 def execute(args):
     import time
     from .formatters import format_for_platform
+    controller_overlay = Path('/srv/hermes-worker-control/media_dispatch/legacy_cli_overlay.py')
+    if controller_overlay.is_file() and args.command == "publish" and args.platform:
+        raise PermissionError("scoped publishing is restricted to the new worker")
+    if controller_overlay.is_file() and not (args.command == "publish" and args.platform):
+        overlay_dir = str(controller_overlay.parent)
+        if overlay_dir not in sys.path:
+            sys.path.insert(0, overlay_dir)
+        from legacy_cli_overlay import route_parsed
+        routed = route_parsed(args)
+        if routed is not None:
+            return _RoutedResult(routed)
     store = Store(args.db)
     store.init()
     config = load_config(args.config, args.db)
@@ -401,32 +447,78 @@ def execute(args):
     if args.command == "seo-analyze":
         return _seo_analyze(args.url)
     if args.command == "create":
+        if args.request_id:
+            raise ValueError("request ID requires the old controller route")
         brief = json.loads(args.brief)
         if not isinstance(brief, dict):
             raise ValueError("brief must be a JSON object")
+        quality_path=getattr(args,'quality_revision_request',None)
+        quality_sha=getattr(args,'quality_revision_sha256',None)
+        if bool(quality_path)!=bool(quality_sha):
+            raise ValueError('normal_quality_revision_request_and_sha_required_together')
+        if quality_path:
+            from .quality_revision import read_request,create_quality_revision
+            request=read_request(quality_path,quality_sha)
+            parent=store.get_job(request['parent_job_id'])
+            editorial=request.get('editorial_input')or{}
+            if (args.topic!=parent['topic'] or args.platform!=parent['platforms']
+                    or args.profile!=(parent.get('profile')or'default')
+                    or not set(brief)<={'audience','language','tone','content_form'}
+                    or any(value!=editorial.get(key,(parent.get('brief')or{}).get(key))for key,value in brief.items())):
+                raise ValueError('normal_quality_revision_editorial_scope_changed')
+            return create_quality_revision(pipeline,parent['id'],quality_path,quality_sha)
+        from .topic_request_contract import manual_request_brief
+        brief = manual_request_brief(args.topic, brief)
         return pipeline.create(args.topic, args.platform, brief, args.profile)
+    if args.command == "revise-media":
+        return pipeline.create_media_revision(args.parent_job_id, args.manifest, args.manifest_sha256)
     if args.command == "run":
         return pipeline.run(args.job_id, args.force)
+    if args.command == "resume-media":
+        from .media_revision import resume_media_action
+        return resume_media_action(pipeline, args.job_id, args.evidence, args.evidence_sha256)
     if args.command == "approve":
         return pipeline.approve(args.job_id, args.actor, args.note)
     if args.command == "reject":
         return pipeline.reject(args.job_id, args.actor, args.note)
     if args.command == "publish":
-        return pipeline.publish(args.job_id)
+        if args.platform is None and args.expected_content_revision is None:
+            return pipeline.publish(args.job_id)
+        return pipeline.publish(args.job_id, platform=args.platform,
+                                expected_content_revision=args.expected_content_revision)
     if args.command == "status":
         return pipeline.status(args.job_id)
     if args.command == "list":
         return store.list_jobs(args.limit, args.state)
+    if args.command == "hot-evidence-collect":
+        from .platform_hot_adapters import collect_platform_hot_evidence, write_hot_evidence_snapshot, write_platform_research_export
+
+        source_config = json.loads(Path(args.source_config).read_text(encoding="utf-8"))
+        if not isinstance(source_config, dict):
+            raise ValueError("hot evidence source config must be a JSON object")
+        report = collect_platform_hot_evidence(source_config)
+        output = write_hot_evidence_snapshot(report, args.output)
+        research_path = Path(args.research_output) if args.research_output else output.with_name(output.stem + "_research_export.json")
+        research_output = write_platform_research_export(report, research_path)
+        return {
+            "status": "collected",
+            "output": str(output),
+            "research_export": str(research_output),
+            "item_count": len(report.get("items") or []),
+            "source_count": len(report.get("sources") or []),
+            "auto_selection_eligible": False,
+            "research_only_items": sum(1 for row in report.get("items") or [] if row.get("research_only")),
+        }
     if args.command == "review-token":
         job = store.get_job(args.job_id)
         if job["state"] != "review_required":
             raise ValueError("review tokens require a review_required job")
         return {"job_id": args.job_id, "action": args.action, "token": pipeline.review_tokens.issue(args.job_id, args.action)}
     if args.command == "review-action":
-        payload = pipeline.review_tokens.verify(args.token, args.action)
-        if args.action == "approve":
-            return pipeline.approve(payload["job_id"], args.actor, args.note)
-        return pipeline.reject(payload["job_id"], args.actor, args.note)
+        with store.authorized_migration_review(pipeline.review_tokens, args.token, args.action) as job_id:
+            if args.action == "approve":
+                return pipeline.approve(job_id, args.actor, args.note)
+            return pipeline.reject(job_id, args.actor, args.note)
     if args.command == "recover":
         return {"recovered": store.recover_stale()}
     if args.command == "maintenance":
@@ -560,6 +652,23 @@ def execute(args):
     if args.command == "viral-monitor":
         from .viral_monitor import score_posts_file
         return score_posts_file(args.input, args.output)
+    if args.command == "wechat-blowup-ingest":
+        from .wechat_blowup_intelligence import ingest_authorized_backend_export, load_wechat_blowup_rows, write_wechat_blowup_report
+
+        output = Path(args.output) if args.output else Path(config.get("data_dir", Path(args.db).parent)) / "intel" / "wechat_blowup_intelligence_latest.json"
+        raw_input = json.loads(Path(args.input).read_text(encoding="utf-8-sig"))
+        if isinstance(raw_input, dict) and isinstance(raw_input.get("article_observations"), list):
+            return ingest_authorized_backend_export(args.input, output)
+        return write_wechat_blowup_report(load_wechat_blowup_rows(args.input), output)
+    if args.command == "wechat-blowup-refresh":
+        from .wechat_blowup_intelligence import collect_wechat_blowup_sources
+
+        output = Path(args.output) if args.output else Path(config.get("data_dir", Path(args.db).parent)) / "intel" / "wechat_blowup_intelligence_latest.json"
+        report = collect_wechat_blowup_sources(args.sources)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["output"] = str(output)
+        return report
     if args.command == "same-lane-intel":
         samples_by_platform = load_samples_file(args.sample_file)
         readiness = {}
@@ -567,6 +676,10 @@ def execute(args):
             readiness_payload = json.loads(Path(args.readiness_file).read_text(encoding="utf-8"))
             readiness = readiness_payload.get("platforms") if isinstance(readiness_payload.get("platforms"), dict) else readiness_payload
         report = build_same_lane_report(samples_by_platform, args.platform, readiness)
+        report["viral_breakdown"] = {
+            platform: build_breakdown_report(platform, samples_by_platform.get(platform, []), ttl_days=7)
+            for platform in args.platform
+        }
         if args.output:
             output = Path(args.output)
         else:
@@ -591,6 +704,25 @@ def execute(args):
                 },
             },
         )
+        return report
+    if args.command == "viral-breakdown":
+        samples_by_platform = load_samples_file(args.sample_file)
+        report = {
+            "version": "viral_breakdown_batch_v2",
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "platforms": {
+                platform: build_breakdown_report(
+                    platform,
+                    samples_by_platform.get(platform, []),
+                    ttl_days=args.ttl_days,
+                )
+                for platform in args.platform
+            },
+        }
+        output = Path(args.output) if args.output else Path(config.get("data_dir", Path(args.db).parent)) / "intel" / "viral_breakdown_latest.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["output"] = str(output)
         return report
     if args.command == "hot-works-collect":
         from collections import defaultdict
@@ -627,6 +759,14 @@ def execute(args):
                 statuses.append({"source": f"sample_file:{Path(sample_file).name}", "status": "ok", "count": len(loaded)})
             except Exception as exc:
                 statuses.append({"source": f"sample_file:{Path(sample_file).name}", "status": "failed", "count": 0, "error": str(exc)[:240]})
+
+        for evidence_file in args.hot_evidence_file or []:
+            try:
+                loaded, evidence_statuses = import_platform_hot_evidence_bundle(evidence_file)
+                items.extend(loaded)
+                statuses.extend(evidence_statuses)
+            except Exception as exc:
+                statuses.append({"source": f"platform_hot_evidence:{Path(evidence_file).name}", "status": "failed", "count": 0, "error": str(exc)[:240]})
 
         query_map: dict[str, list[str]] = defaultdict(list)
         for entry in args.query or []:
@@ -685,7 +825,18 @@ def execute(args):
                         statuses.append({"source": f"{platform}:logged_search", "query": query, "status": "failed", "count": 0, "error": str(exc)[:240]})
 
         paths = save_collection(items, statuses, output_dir)
-        result = {"ok": True, "items": len(items), "collection_status": statuses, "paths": paths}
+        grouped = defaultdict(list)
+        for item in items:
+            if isinstance(item, dict):
+                grouped[str(item.get("platform") or "unknown")].append(item)
+        viral_breakdown = {
+            platform: build_breakdown_report(platform, rows, ttl_days=7)
+            for platform, rows in grouped.items()
+        }
+        breakdown_path = output_dir / "viral_breakdown.json"
+        breakdown_path.write_text(json.dumps(viral_breakdown, ensure_ascii=False, indent=2), encoding="utf-8")
+        paths["viral_breakdown"] = str(breakdown_path)
+        result = {"ok": True, "items": len(items), "collection_status": statuses, "paths": paths, "viral_breakdown": viral_breakdown}
         store.save_tool_inventory("hot_work_parameter_pack:latest", result)
         return result
     if args.command == "analyze-topic":
@@ -1100,9 +1251,12 @@ def main(argv=None):
             except Exception:
                 pass
     try:
-        result = execute(parser().parse_args(argv))
+        raw_argv = tuple(sys.argv[1:] if argv is None else argv)
+        args = parser().parse_args(raw_argv)
+        args._raw_argv = raw_argv
+        result = execute(args)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0
+        return 2 if isinstance(result, _RoutedResult) and result.get('ok') is False else 0
     except (ValueError, KeyError, PermissionError, RuntimeError, OSError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2

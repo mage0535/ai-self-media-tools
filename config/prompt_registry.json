@@ -1,0 +1,114 @@
+{
+  "version": "prompt_registry_v1",
+  "policy_profile": "real_world_ai_implementation_v1",
+  "policy_revision": "2026-09-16-universal-ai-lane-r2",
+  "platforms": {
+    "generic_image": {
+      "prompt_profile": "generic_image_v1",
+      "language": "und",
+      "content_type": "image",
+      "aspect_ratio": null,
+      "duration_seconds": null,
+      "required_constraints": ["主题语义匹配", "主体清晰", "禁止随机占位素材"],
+      "forbidden": ["纯色背景", "无关主体"]
+    },
+    "douyin_ai": {
+      "prompt_profile": "douyin_ai_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "short_video", "aspect_ratio": "9:16", "duration_seconds": {"min": 20, "max": 100},
+      "required_constraints": ["真实场景证据", "移动端安全区", "单一CTA"], "forbidden": ["纯色背景", "PPT翻页", "随机占位素材"]
+    },
+    "kuaishou": {
+      "prompt_profile": "kuaishou_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "short_video", "aspect_ratio": "9:16", "duration_seconds": {"min": 20, "max": 100},
+      "required_constraints": ["真实场景证据", "烧录字幕", "单一CTA"], "forbidden": ["纯色背景", "无声视频", "重复BGM"]
+    },
+    "shipinhao": {
+      "prompt_profile": "shipinhao_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "short_video", "aspect_ratio": "9:16", "duration_seconds": {"min": 20, "max": 100},
+      "required_constraints": ["完整末卡", "真实任务结果", "文字安全区"], "forbidden": ["空旷对比卡", "固定模板复用"]
+    },
+    "wechat": {
+      "prompt_profile": "wechat_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "article", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["证据驱动流程", "实施细节", "失败边界"], "forbidden": ["泛工具清单", "无来源量化结论"]
+    },
+    "juejin": {
+      "prompt_profile": "juejin_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "article", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["可复现流程", "集成细节", "测试与回滚边界"], "forbidden": ["虚构测试结果", "外部图片热链"]
+    },
+    "zhihu": {
+      "prompt_profile": "zhihu_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "article", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["决策上下文", "流程理由", "局限与来源"], "forbidden": ["低于主题所需深度", "空泛经验总结"]
+    },
+    "bilibili": {
+      "prompt_profile": "bilibili_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "video", "aspect_ratio": "16:9", "duration_seconds": {"min": 40, "max": 600},
+      "required_constraints": ["真实操作证据", "横屏演示", "完整解释"], "forbidden": ["纯PPT翻页", "空洞大字卡"]
+    },
+    "tiktok": {
+      "prompt_profile": "tiktok_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "short_video", "aspect_ratio": "9:16", "duration_seconds": {"min": 20, "max": 100},
+      "required_constraints": ["English scenario hook", "one reproducible flow", "single CTA"], "forbidden": ["cross-platform copy", "unverified claims"]
+    },
+    "youtube": {
+      "prompt_profile": "youtube_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "video", "aspect_ratio": null, "duration_seconds": {"min": 20, "max": 600},
+      "required_constraints": ["English narration", "process demonstration", "measurement and handoff"], "forbidden": ["Chinese-only narration", "unverified claims"]
+    },
+    "twitter": {
+      "prompt_profile": "twitter_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "post", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["one concrete scenario", "evidence link", "clear limitation"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "threads": {
+      "prompt_profile": "threads_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "post", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["role-first scenario", "reproducible flow", "human handoff"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "bluesky": {
+      "prompt_profile": "bluesky_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "post", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["one real task", "evidence status", "failure boundary"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "mastodon": {
+      "prompt_profile": "mastodon_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "post", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["one real task", "implementation detail", "human review"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "nostr": {
+      "prompt_profile": "nostr_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "post", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["one real task", "evidence status", "human handoff"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "devto": {
+      "prompt_profile": "devto_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "article", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["reproducible implementation", "test evidence", "rollback boundary"], "forbidden": ["generic tool list", "invented benchmark"]
+    },
+    "telegraph": {
+      "prompt_profile": "telegraph_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "article", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["single scenario narrative", "evidence status", "human accountability"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "writeas": {
+      "prompt_profile": "writeas_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "article", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["single scenario narrative", "process detail", "failure boundary"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "buttondown": {
+      "prompt_profile": "buttondown_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "en", "content_type": "newsletter", "aspect_ratio": null, "duration_seconds": null,
+      "required_constraints": ["one operator scenario", "measurable outcome", "human handoff"], "forbidden": ["generic tool list", "unverified claims"]
+    },
+    "youtube_long_form": {
+      "prompt_profile": "youtube_long_form_real_world_ai_v1", "language": "en", "content_type": "long_video", "aspect_ratio": "16:9", "duration_seconds": {"min": 60, "max": 3600},
+      "required_constraints": ["English narration", "chapter-friendly structure", "platform-appropriate CTA"], "forbidden": ["Chinese-only narration", "unverified claims"]
+    },
+    "youtube_shorts": {
+      "prompt_profile": "youtube_shorts_real_world_ai_v1", "language": "en", "content_type": "short_video", "aspect_ratio": "9:16", "duration_seconds": {"min": 20, "max": 180},
+      "required_constraints": ["English narration", "safe subtitles", "single CTA"], "forbidden": ["Chinese-only narration", "unverified claims"]
+    }
+  }
+}

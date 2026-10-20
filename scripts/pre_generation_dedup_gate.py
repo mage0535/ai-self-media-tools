@@ -19,14 +19,15 @@ import argparse
 import json
 import os
 import re
+import sqlite3
 import sys
 from collections import Counter
 from pathlib import Path
 
-PROJECT_HOME = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+PROJECT_HOME = Path(os.environ.get("CONTENT_PLATFORM_HOME") or (Path.home() / ".ai-self-media-tools")).expanduser()
 DATA_DIR = PROJECT_HOME / "data"
 DRAFT_DIR = DATA_DIR / "drafts"
-STORE_PATH = DATA_DIR / "store.db"
+STORE_PATH = DATA_DIR / "state.db"
 
 
 def _tokens(text: str) -> list[str]:
@@ -93,20 +94,19 @@ def _check_local_drafts(title: str, platform: str, threshold: float = 0.58) -> l
 def _check_store(title: str, platform: str, threshold: float = 0.58) -> list[dict]:
     """通过 content-platform store 检查近期发表的同平台内容"""
     matches = []
-    try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from content_platform.store import SqliteStore
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from content_platform.history_reader import read_history
 
-        store = SqliteStore(str(STORE_PATH))
-        deliveries = store.deliveries_all(limit=200)
-        for delivery in deliveries:
+    with read_history(STORE_PATH, ("jobs", "deliveries")) as (conn, prefix):
+        rows = conn.execute(prefix + """SELECT d.job_id, d.platform, d.status, j.title
+            FROM read_deliveries d JOIN read_jobs j ON j.id=d.job_id
+            ORDER BY d.updated_at DESC, d.id DESC""")
+        for row in rows:
+            delivery = dict(row)
             if str(delivery.get("platform", "")).casefold() != platform.casefold():
                 continue
             job_id = delivery.get("job_id", "")
-            job = store.get_job(job_id)
-            if not job:
-                continue
-            existing_title = str(job.get("title", "")).strip().casefold()
+            existing_title = str(delivery.get("title", "")).strip().casefold()
             if not existing_title:
                 continue
             sim = _weighted_similarity(str(title).strip().casefold(), existing_title)
@@ -114,13 +114,10 @@ def _check_store(title: str, platform: str, threshold: float = 0.58) -> list[dic
                 matches.append({
                     "type": "STORE_TITLE_MATCH",
                     "job_id": job_id,
-                    "existing_title": job.get("title", ""),
+                    "existing_title": delivery.get("title", ""),
                     "similarity": sim,
                     "status": delivery.get("status", ""),
                 })
-    except Exception as exc:
-        # store 不可用时不阻断，只记录
-        return matches
     return matches
 
 
@@ -135,7 +132,11 @@ def main():
 
     all_matches = []
     all_matches.extend(_check_local_drafts(args.title, args.platform, args.threshold))
-    all_matches.extend(_check_store(args.title, args.platform, args.threshold))
+    error_code = ""
+    try:
+        all_matches.extend(_check_store(args.title, args.platform, args.threshold))
+    except (ImportError, OSError, sqlite3.Error, RuntimeError, ValueError) as exc:
+        error_code = getattr(exc, "code", "HISTORY_READER_UNAVAILABLE")
 
     # 去重
     seen = set()
@@ -146,7 +147,7 @@ def main():
             seen.add(key)
             unique_matches.append(m)
 
-    passed = len(unique_matches) == 0
+    passed = not error_code and len(unique_matches) == 0
     result = {
         "passed": passed,
         "matches": unique_matches,
@@ -156,6 +157,14 @@ def main():
         "platform": args.platform,
         "threshold": args.threshold,
     }
+    if error_code:
+        result.update({
+            "history_status": "unavailable",
+            "error_code": error_code,
+            "reason": "历史数据不可用，已阻止生成；请先恢复并验证历史数据。",
+        })
+    else:
+        result["history_status"] = "available"
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

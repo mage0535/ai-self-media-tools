@@ -14,7 +14,7 @@ Usage:
   python3 kuaishou_render.py --video-dir /tmp/ks_myvideo --generate-packet --schedule "2026-07-24 11:15"
 
 """
-import argparse, asyncio, base64, hashlib, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
+import argparse, asyncio, base64, hashlib, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -859,17 +859,6 @@ def download_bgm(video_dir, style="acoustic guitar"):
     errors = []
     timed_out = False
     try:
-        for candidate in _local_bgm_candidates(style):
-            if not _bgm_candidate_allowed(candidate):
-                continue
-            try:
-                _download_candidate_bgm(candidate, bgm)
-                if bgm.exists() and bgm.stat().st_size > REAL_BGM_MIN_BYTES:
-                    _write_bgm_source(video_dir, candidate, style)
-                    return str(bgm)
-            except Exception as exc:  # noqa: BLE001 - continue to the next licensed track.
-                errors.append(f"local_library:{str(exc)[:120]}")
-                bgm.unlink(missing_ok=True)
         for candidate in _online_bgm_candidates(style):
             if _bgm_deadline_reached():
                 timed_out = True
@@ -908,48 +897,6 @@ def download_bgm(video_dir, style="acoustic guitar"):
         "online real-instrument BGM unavailable; checked network music providers; "
         + ("; ".join(errors[-5:]) if errors else "no licensed real-instrument candidates")
     )
-
-
-def _local_bgm_candidates(style):
-    """Read an operator-provided licensed library without treating raw audio as licensed."""
-    root = os.environ.get("BGM_LIBRARY_DIR", "").strip()
-    if not root or not Path(root).is_dir():
-        return []
-    manifest_path = os.environ.get("BGM_LIBRARY_MANIFEST", "").strip()
-    manifests = [Path(manifest_path)] if manifest_path and Path(manifest_path).is_file() else sorted(
-        set(Path(root).rglob("bgm_manifest.json")) | set(Path(root).rglob("*.bgm_manifest.json"))
-    )
-    candidates = []
-    for manifest in manifests[:200]:
-        try:
-            meta = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(meta, dict) or not meta.get("license") or not meta.get("source_url"):
-            continue
-        audio_value = meta.get("audio_path") or meta.get("path")
-        audio = Path(str(audio_value)) if audio_value else manifest.parent / "bgm.mp3"
-        if not audio.is_absolute():
-            audio = manifest.parent / audio
-        if not audio.is_file() or audio.stat().st_size <= REAL_BGM_MIN_BYTES:
-            continue
-        if meta.get("duration") and float(meta.get("duration") or 0) < 60:
-            continue
-        tags = " ".join(str(meta.get(key) or "") for key in ("title", "artist", "style", "fit_reason"))
-        candidates.append({
-            "provider": meta.get("provider") or "licensed_local_library",
-            "download_url": str(audio),
-            "source_url": str(meta["source_url"]),
-            "title": str(meta.get("title") or audio.stem),
-            "artist": str(meta.get("artist") or ""),
-            "license": str(meta["license"]),
-            "license_verified": True,
-            "duration": meta.get("duration", 0),
-            "tags": tags or str(style),
-            "fit_reason": meta.get("fit_reason") or f"licensed local track matched to {style}",
-            "asset_id": meta.get("asset_id") or audio.stem,
-        })
-    return candidates
 
 
 def _fetch_archive_bgm(video_dir):
@@ -994,6 +941,9 @@ def _write_bgm_source(video_dir, candidate, style):
         "license": candidate.get("license", ""),
         "attribution_required": bool(candidate.get("attribution_required")),
         "fit_reason": candidate.get("fit_reason") or f"real-instrument instrumental background matched to {style}",
+        "real_instrument": True,
+        "vocal": "none",
+        "new_for_run": True,
         "duration": candidate.get("duration", 0),
         "sha256": sha256,
         "manifest": {
@@ -1451,14 +1401,6 @@ def _download_candidate_bgm(candidate, bgm):
     tmp = Path(str(bgm) + ".download")
     if _bgm_deadline_reached():
         raise TimeoutError("BGM resolution budget exhausted before download")
-    local = Path(url[7:] if url.startswith("file://") else url)
-    if local.is_file():
-        shutil.copy2(local, tmp)
-        if tmp.stat().st_size <= REAL_BGM_MIN_BYTES:
-            tmp.unlink(missing_ok=True)
-            raise RuntimeError("local BGM too small")
-        tmp.replace(bgm)
-        return
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools online-bgm-resolver"})
     try:
         with urllib.request.urlopen(request, timeout=_bgm_request_timeout(ONLINE_BGM_TIMEOUT)) as response, tmp.open("wb") as handle:
@@ -1682,6 +1624,10 @@ async def main():
     args = parser.parse_args()
 
     vd = str(Path(args.video_dir).resolve())
+    from scripts.visual_contract_gate import enforce_entry
+    contract_gate = enforce_entry(vd, args.platform, require_native=True)
+    if not contract_gate.get("passed"):
+        raise RuntimeError("visual contract failed: " + ", ".join(contract_gate.get("failures", [])))
     os.makedirs(vd, exist_ok=True)
     os.makedirs(f"{vd}/backgrounds", exist_ok=True)
 
@@ -1692,6 +1638,8 @@ async def main():
     if args.generate_packet:
         assert cards, "--generate-packet 需要 cards.json"
         generate_packet(vd, cards, args)
+        from content_platform.standalone_render_state import write_rendered_unverified
+        write_rendered_unverified(Path(vd), platform=args.platform, renderer="kuaishou_render.py")
         return
 
     assert cards, f"cards.json 不存在: {vd}"
@@ -1791,6 +1739,8 @@ async def main():
         cleanup(vd)
 
     timing_summary = write_timing_summary(Path(vd))
+    from content_platform.standalone_render_state import write_rendered_unverified
+    write_rendered_unverified(Path(vd), platform=args.platform, renderer="kuaishou_render.py")
     print(f"  ⏱️ 渲染耗时汇总: {timing_summary}")
 
     print(f"\n✅ {os.path.basename(vd)} 全部完成")

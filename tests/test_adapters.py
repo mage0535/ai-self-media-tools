@@ -78,6 +78,24 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
         self.assertEqual(run.call_args_list[0].args[0][1], str(cinema_script))
 
+    def test_douyin_ai_cinema_route_does_not_silently_fallback(self):
+        cinema_script = self.root / "agent-scripts" / "cinema_video_pipeline.py"
+        cinema_script.parent.mkdir(parents=True, exist_ok=True)
+        cinema_script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge({"video": {"enabled": True, "script": str(cinema_script)}}, self.root)
+        job = {
+            "id": "douyin-cinema-job",
+            "topic": "Topic",
+            "title": "Title",
+            "body": "Body",
+            "platforms": ["douyin_ai"],
+            "visual_route": {"auto": True, "route_order": ["cinema-video"]},
+        }
+        with patch.dict("os.environ", {"CONTENT_PLATFORM_AGENT_SCRIPTS_DIR": str(cinema_script.parent)}), \
+             patch("subprocess.run", side_effect=RuntimeError("adapter unavailable")):
+            with self.assertRaisesRegex(RuntimeError, "cinema_video_route_failed_for_douyin_ai"):
+                bridge._generate_video(job, self.root / "artifacts" / job["id"])
+
     def test_media_bridge_can_run_ocr_transcription_and_analysis_providers(self):
         script = self.root / "tool.py"
         script.write_text("# fixture", encoding="utf-8")
@@ -114,11 +132,44 @@ class AdapterTests(unittest.TestCase):
             return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
         with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
-            artifact = bridge.generate("video", {"id": "j1", "topic": "Topic", "body": "Body"})
+            artifact = bridge.generate("video", {"id": "j1", "topic": "Topic", "body": "Body", "platforms": ["douyin_ai"]})
         command = run.call_args.args[0]
         self.assertNotIn("--output", command)
         self.assertEqual(command[-2:], ["Body", "Topic"])
         self.assertTrue(artifact["path"].endswith("generated.mp4"))
+
+    def test_image_bridge_compiles_real_source_plan(self):
+        script = self.root / "image_gen.py"
+        script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge(
+            {
+                "image": {
+                    "enabled": True,
+                    "script": str(script),
+                    "provider": "auto",
+                    "prefer_real": True,
+                    "min_count": 1,
+                }
+            },
+            self.root,
+        )
+
+        def fake_run(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"image")
+            return type("Result", (), {"returncode": 0, "stdout": '{"provider":"stock","mode":"search"}', "stderr": ""})()
+
+        job = {"id": "real-source", "topic": "real office workspace", "body": "Body"}
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
+            bridge.generate("image", job)
+        command = run.call_args.args[0]
+        self.assertIn("--provider", command)
+        self.assertEqual(command[command.index("--provider") + 1], "stock")
+        plan = job["image_source_plan"]
+        self.assertIsInstance(plan, list)
+        first = next(item for item in plan if isinstance(item, dict))
+        self.assertEqual(first.get("source"), "pexels")
 
     def test_image_bridge_passes_provider_options_and_reference_image(self):
         script = self.root / "image_gen.py"
@@ -157,6 +208,33 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("gemini-test-image", command)
         self.assertIn("--input-image", command)
         self.assertEqual(artifact["kind"], "image")
+
+    def test_image_bridge_passes_quality_first_flag(self):
+        script = self.root / "image_gen.py"
+        script.write_text("# fixture", encoding="utf-8")
+        bridge = MediaBridge(
+            {
+                "image": {
+                    "enabled": True,
+                    "script": str(script),
+                    "provider": "auto",
+                    "quality_first": True,
+                }
+            },
+            self.root,
+        )
+
+        def fake_run(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"image")
+            return type("Result", (), {"returncode": 0, "stdout": '{"ok":true}', "stderr": ""})()
+
+        with patch("content_platform.tool_adapters.subprocess.run", side_effect=fake_run) as run:
+            bridge.generate("image", {"id": "quality", "topic": "Topic", "body": "Body"})
+
+        command = run.call_args.args[0]
+        self.assertIn("--quality-first", command)
 
     def test_image_bridge_enriches_weak_draft_image_prompt(self):
         script = self.root / "image_gen.py"

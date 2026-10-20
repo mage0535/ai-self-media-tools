@@ -65,70 +65,16 @@ AI_PATTERNS = {
 
 
 def _hermes_llm_call(prompt: str, system: str = "", timeout: int = 60) -> str:
-    """通过 Hermes config 动态获取当前 provider 调用 LLM。
-
-    读取 ~/.hermes/config.yaml 获取当前活跃的 provider/model/api_key。
-    优先用 curl 直接调用 API（避免 Python SDK 依赖）。
-    """
-    config_path = os.path.expanduser("~/.hermes/config.yaml")
-    if not os.path.isfile(config_path):
-        # fallback: 返回原文本（不处理）
+    """Use Hermes' current configured route without a provider/model default."""
+    if os.environ.get("CONTENT_PLATFORM_NO_MODEL_CALLS") == "1":
         return ""
-
+    command = [os.environ.get("HERMES_COMMAND") or "hermes", "-z",
+               system + "\n\n" + prompt, "--cli"]
     try:
-        import yaml
-        with open(config_path) as f:
-            cfg = yaml.safe_load(f)
-    except Exception:
-        return ""
-
-    # 获取当前模型配置
-    model_cfg = cfg.get("model", {})
-    provider_name = cfg.get("provider", "opencode-go")
-    api_key = ""
-    base_url = "https://opencode.ai/zen/go/v1"
-
-    # 从 providers 中查找 key
-    providers = cfg.get("providers", {})
-    if provider_name in providers:
-        pcfg = providers[provider_name]
-        api_key = pcfg.get("api_key", "")
-        base_url = pcfg.get("base_url", base_url)
-    else:
-        # 尝试从环境变量取
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-
-    if not api_key:
-        return ""
-
-    model = model_cfg.get("default") or model_cfg.get(provider_name, "")
-
-    payload = {
-        "model": model,
-        "messages": [],
-        "temperature": 0.3,
-        "max_tokens": 4096,
-    }
-    if system:
-        payload["messages"].append({"role": "system", "content": system})
-    payload["messages"].append({"role": "user", "content": prompt})
-
-    try:
-        r = subprocess.run(
-            [
-                "curl", "-s", "--max-time", str(timeout),
-                "-H", f"Authorization: Bearer {api_key}",
-                "-H", "Content-Type: application/json",
-                "-d", json.dumps(payload),
-                f"{base_url}/chat/completions",
-            ],
-            capture_output=True, text=True, timeout=timeout + 5,
-        )
-        if r.returncode != 0:
-            return ""
-        data = json.loads(r.stdout)
-        return data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    except Exception:
+        result = subprocess.run(command, capture_output=True, text=True,
+                                timeout=timeout, check=False)
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired):
         return ""
 
 
@@ -147,6 +93,7 @@ def humanize_text(
     body: str,
     profile: str = "default",
     style_hint: str = "",
+    llm_call=None,
 ) -> dict:
     """对文章正文进行 AI 写作痕迹去除。
 
@@ -215,7 +162,7 @@ def humanize_text(
 {title}
 
 ## 原文正文
-{body[:6000]}
+{body}
 
 {style_guide}
 ## 要求
@@ -227,15 +174,15 @@ def humanize_text(
   "score": 总分(0-50，按直接性/节奏/信任度/真实性/精炼度各10分)
 }}"""
 
-    result_text = _hermes_llm_call(prompt, sys_prompt)
+    result_text = (llm_call or _hermes_llm_call)(prompt, sys_prompt)
     if not result_text:
         # LLM call failed — return original
         return {
-            "ok": True,
+            "ok": False,
             "title": title,
             "body": body,
             "patterns_detected": combined_hits,
-            "score": 35,
+            "score": 0,
             "error": "LLM call failed, returning original",
         }
 
@@ -249,6 +196,11 @@ def humanize_text(
         clean = clean.strip()
 
         data = json.loads(clean)
+        if (not isinstance(data, dict) or not isinstance(data.get('title'), str) or not data['title'].strip()
+                or not isinstance(data.get('body'), str) or not data['body'].strip()
+                or isinstance(data.get('score'), bool) or not isinstance(data.get('score'), (int, float))
+                or not 0 <= data['score'] <= 50):
+            raise ValueError('humanizer_response_invalid')
         return {
             "ok": True,
             "title": data.get("title", title),
@@ -257,13 +209,13 @@ def humanize_text(
             "changes": data.get("changes", []),
             "score": data.get("score", 35),
         }
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
         # 解析失败，保留原文本
         return {
-            "ok": True,
+            "ok": False,
             "title": title,
             "body": body,
             "patterns_detected": combined_hits,
-            "score": 35,
+            "score": 0,
             "error": "failed to parse LLM response",
         }

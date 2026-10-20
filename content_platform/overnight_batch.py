@@ -12,6 +12,12 @@ from typing import Any
 from .risk import redact_secrets
 from .trends import normalize_topic
 from .trend_candidate import build_trend_candidate, validate_trend_candidate
+try:
+    from .distilled_loader import load_distilled_per_account_compact
+    _HAS_DISTILLED = True
+except Exception:
+    load_distilled_per_account_compact = None  # type: ignore
+    _HAS_DISTILLED = False
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,8 +62,13 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
     except Exception as exc:
         return {"version": "hot_work_parameter_pack_compact_v1", "status": "invalid", "error": str(exc)[:160]}
     platform = str(platform or "").casefold().strip()
-    aliases = {"twitter": "x", "douyin": "douyin_ai"}
-    data = (payload.get("platforms") or {}).get(platform) or (payload.get("platforms") or {}).get(aliases.get(platform, ""))
+    aliases = {"twitter": "x", "douyin_ai": "douyin"}
+    platform_payloads = payload.get("platforms") or {}
+    direct = platform_payloads.get(platform) if isinstance(platform_payloads, dict) else None
+    fallback = platform_payloads.get(aliases.get(platform, "")) if isinstance(platform_payloads, dict) else None
+    direct_count = int(direct.get("sample_count") or len(direct.get("top_samples") or []) + len(direct.get("top_discovery_samples") or [])) if isinstance(direct, dict) else 0
+    fallback_count = int(fallback.get("sample_count") or len(fallback.get("top_samples") or []) + len(fallback.get("top_discovery_samples") or [])) if isinstance(fallback, dict) else 0
+    data = fallback if isinstance(fallback, dict) and fallback_count > direct_count else direct
     if not isinstance(data, dict):
         return {"version": "hot_work_parameter_pack_compact_v1", "status": "missing_platform"}
     samples = []
@@ -72,6 +83,19 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
             "source": sample.get("source", ""),
             "analysis": sample.get("analysis", {}),
         })
+    discovery_samples = []
+    for sample in (data.get("top_discovery_samples") or [])[:5]:
+        if not isinstance(sample, dict):
+            continue
+        discovery_samples.append({
+            "title": str(sample.get("title") or "")[:120],
+            "author": str(sample.get("author") or "")[:60],
+            "metric": sample.get("views") or sample.get("likes") or sample.get("favorites") or sample.get("engagement") or "",
+            "source": sample.get("source", ""),
+            "analysis": sample.get("analysis", {}),
+            "generation_only": True,
+            "auto_selection_eligible": False,
+        })
     return {
         "version": "hot_work_parameter_pack_compact_v1",
         "status": "ready" if data.get("ready") else "insufficient",
@@ -79,6 +103,7 @@ def load_hot_work_parameter_pack_compact(platform: str, *, path: str | Path | No
         "recommended_patterns": data.get("recommended_patterns") or [],
         "generation_requirements": data.get("generation_requirements") or [],
         "top_samples": samples,
+        "discovery_samples": discovery_samples,
     }
 
 
@@ -151,8 +176,13 @@ def build_due_tasks(
     report_path: str = "runtime:overnight_trend_collection",
     reserved_topic_fingerprints: set[str] | None = None,
     runtime_capabilities: dict[str, Any] | None = None,
+    stage_payload_binder: Any | None = None,
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows."""
+    def planning_bound_payload(contract,stage,payload):
+        from .run_contract import bound_stage_payload
+        prepared=stage_payload_binder(contract,stage,payload)if stage_payload_binder is not None else payload
+        return bound_stage_payload(contract,stage,prepared)
     tasks: list[dict[str, Any]] = []
     selected_topics: dict[str, dict[str, str]] = {}
     reserved_topic_fingerprints = {str(value).strip() for value in (reserved_topic_fingerprints or set()) if str(value).strip()}
@@ -190,7 +220,9 @@ def build_due_tasks(
                     candidates = researched
                     break
         editorial = _editorial_fallback_candidate(raw)
-        editorial_evidence = dict(raw.get("editorial_fallback") or {})
+        _raw_editorial_evidence = dict(raw.get("editorial_fallback") or {})
+        editorial_evidence = _raw_editorial_evidence
+
         selection_mode = "native_trend"
         selected_matrix: dict[str, Any] | None = None
         if not platform:
@@ -286,7 +318,7 @@ def build_due_tasks(
                 quality_reference_pack=quality_reference_pack,
             )
             blueprint_gate = validate_content_blueprint(content_blueprint)
-            bounded_model_input = bound_stage_payload(
+            bounded_model_input = planning_bound_payload(
                 run_contract,
                 "generate",
                 {
@@ -296,8 +328,6 @@ def build_due_tasks(
                     "strategy": compact_compiled_strategy(compiled_strategy),
                     "content_quality_reference_pack": quality_reference_pack,
                     "runtime_capabilities": build_runtime_capability_snapshot(),
-                    "same_lane_intelligence": (growth_strategy_status.get(platform) or {}).get("same_lane_intelligence") or {"version": "same_lane_playbook_compact_v1", "status": "missing"},
-                    "hot_work_parameter_pack": load_hot_work_parameter_pack_compact(platform),
                 },
             )
             selected_topics.setdefault(
@@ -323,6 +353,8 @@ def build_due_tasks(
                     "content_quality_reference_gate": quality_reference_gate,
                     "selection_mode": selection_mode,
                     **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
+                    **({"original_knowledge_intent": str(raw["original_knowledge_intent"]), "source_collection_required": True}
+                       if selection_mode == "editorial_calendar" and raw.get("original_knowledge_intent") else {}),
                 },
                 "trend_candidate": trend_candidate,
                 "trend_candidate_gate": trend_gate,
@@ -812,10 +844,17 @@ def execute_batch(
         task["state"] = "running"
         _write_state(state_file, state)
         try:
+            brief = dict(task.get("brief") or {})
+            brief["batch_plan"] = {
+                "source": "native.overnight_batch",
+                "expected_count": len(state.get("tasks") or []),
+                "item_index": next(index + 1 for index, row in enumerate(state["tasks"]) if row is task),
+                "batch_state_file": str(state_file),
+            }
             job = pipeline.create(
                 str(task.get("topic") or ""),
                 [platform],
-                dict(task.get("brief") or {}),
+                brief,
                 str(task.get("profile") or "default"),
             )
             task["job_id"] = str(job["id"])

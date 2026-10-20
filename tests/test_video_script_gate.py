@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from video_script_gate import check_emotion, check_hook
+from video_script_gate import check_emotion, check_hook, check_subtitle_line_budget
 
 CASES = [
     # (文本, 期望通过, 说明)
@@ -55,6 +55,25 @@ def test_emotion_recognizes_case_insensitive_english_words():
     assert result["passed"] is True
     assert "amazing" in result["found"]
     assert "frustrating" in result["found"]
+
+
+def test_subtitle_line_budget_gate():
+    valid_subs = [
+        "开发者：换了好几个新模型",
+        "怎么还是天天反复返工啊？",
+        "架构师：别急着怪模型！",
+        "问题是你从没写过验收标准。"
+    ]
+    res_pass = check_subtitle_line_budget(valid_subs, max_chars=19)
+    assert res_pass["passed"] is True
+    assert len(res_pass["overflows"]) == 0
+
+    overflow_subs = [
+        "架构师：锁死4个字段：输入来源、交付格式、边界限制、验收条件。少1个就会瞎猜。"
+    ]
+    res_fail = check_subtitle_line_budget(overflow_subs, max_chars=19)
+    assert res_fail["passed"] is False
+    assert len(res_fail["overflows"]) == 1
 
 
 if __name__ == "__main__":

@@ -1,0 +1,247 @@
+{
+  "version": "platform_work_planning_profiles_v1",
+  "policy_profile": "real_world_ai_implementation_v1",
+  "platforms": {
+    "douyin_ai": {
+      "content_form": "vertical_task_demo",
+      "hook": "3秒展示结果或失败现场",
+      "structure": [
+        "result",
+        "constraint",
+        "screen_demo",
+        "human_check",
+        "before_after",
+        "comment_prompt"
+      ],
+      "success_metric": "watch_quality_saves_and_comments"
+    },
+    "kuaishou": {
+      "content_form": "role_first_practical_demo",
+      "hook": "人物任务和低风险AI环节先出现",
+      "structure": [
+        "person_task",
+        "evidence",
+        "process",
+        "human_check",
+        "boundary",
+        "question"
+      ],
+      "success_metric": "completion_shares_and_scene_comments"
+    },
+    "shipinhao": {
+      "content_form": "native_case_video",
+      "hook": "先展示真实任务结果，再解释流程与人工复核",
+      "structure": [
+        "result",
+        "actor_task",
+        "process",
+        "evidence",
+        "boundary",
+        "human_handoff",
+        "cta"
+      ],
+      "success_metric": "completion_shares_and_comments"
+    },
+    "wechat": {
+      "content_form": "case_article",
+      "hook": "首屏交代任务、投入、结果和人工检查",
+      "structure": [
+        "result",
+        "task",
+        "workflow",
+        "evidence",
+        "boundary",
+        "checklist",
+        "question"
+      ],
+      "success_metric": "shares_saves_and_substantive_comments"
+    },
+    "juejin": {
+      "content_form": "engineering_postmortem",
+      "hook": "先交代工程结论、约束与可复现路径",
+      "structure": [
+        "conclusion",
+        "constraints",
+        "architecture",
+        "test",
+        "failure_rollback",
+        "repository"
+      ],
+      "success_metric": "reads_saves_comments_and_demo_usage"
+    },
+    "zhihu": {
+      "content_form": "evidence_answer",
+      "hook": "先给条件化判断，再给案例与反例",
+      "structure": [
+        "judgment",
+        "conditions",
+        "case",
+        "workflow",
+        "counterexample",
+        "decision_checklist"
+      ],
+      "success_metric": "saves_comments_and_follow_conversion"
+    },
+    "bilibili": {
+      "content_form": "reproducible_experiment",
+      "hook": "任务结论和验收标准先行",
+      "structure": [
+        "result",
+        "criteria",
+        "steps",
+        "failure_control",
+        "boundary",
+        "resources"
+      ],
+      "success_metric": "completion_favorites_and_danmaku_questions"
+    },
+    "tiktok": {
+      "content_form": "searchable_task_demo",
+      "hook": "用可搜索的英文任务词和结果开场",
+      "structure": [
+        "search_task",
+        "result",
+        "constraint",
+        "demo",
+        "human_check",
+        "save_prompt"
+      ],
+      "success_metric": "engaged_views_search_and_saves"
+    },
+    "youtube": {
+      "content_form": "reproducible_case_video",
+      "hook": "前30秒展示验收标准和最终产物",
+      "structure": [
+        "promise",
+        "criteria",
+        "setup",
+        "demo",
+        "failure",
+        "handoff",
+        "resources"
+      ],
+      "success_metric": "retention_watch_time_and_comments"
+    },
+    "twitter": {
+      "content_form": "concise_case_thread",
+      "hook": "一句话交代角色、任务与可核验结果",
+      "structure": [
+        "task_result",
+        "workflow",
+        "evidence",
+        "boundary",
+        "human_handoff",
+        "question"
+      ],
+      "success_metric": "qualified_replies_bookmarks_and_clicks"
+    },
+    "threads": {
+      "content_form": "conversational_case_thread",
+      "hook": "从一个具体角色的任务冲突和结果开场",
+      "structure": [
+        "actor_task",
+        "result",
+        "process",
+        "limitation",
+        "human_handoff",
+        "discussion_prompt"
+      ],
+      "success_metric": "replies_reposts_and_saves"
+    },
+    "bluesky": {
+      "content_form": "concise_case_thread",
+      "hook": "先给具体任务与验证结果",
+      "structure": [
+        "task_result",
+        "workflow",
+        "evidence",
+        "boundary",
+        "human_handoff",
+        "question"
+      ],
+      "success_metric": "qualified_replies_reposts_and_saves"
+    },
+    "mastodon": {
+      "content_form": "federated_case_thread",
+      "hook": "用可复核的任务结果开场",
+      "structure": [
+        "actor_task",
+        "result",
+        "process",
+        "evidence",
+        "boundary",
+        "human_handoff"
+      ],
+      "success_metric": "boosts_favourites_and_substantive_replies"
+    },
+    "nostr": {
+      "content_form": "concise_case_note",
+      "hook": "先写角色、任务和可验证产物",
+      "structure": [
+        "task",
+        "result",
+        "workflow",
+        "evidence",
+        "boundary",
+        "human_handoff"
+      ],
+      "success_metric": "reposts_zaps_and_replies"
+    },
+    "devto": {
+      "content_form": "implementation_article",
+      "hook": "先交代实现目标、验收标准和最终产物",
+      "structure": [
+        "problem",
+        "criteria",
+        "implementation",
+        "test",
+        "failure_boundary",
+        "human_handoff",
+        "resources"
+      ],
+      "success_metric": "reads_saves_comments_and_demo_usage"
+    },
+    "telegraph": {
+      "content_form": "evidence_case_article",
+      "hook": "首屏交代角色、任务、结果与验证状态",
+      "structure": [
+        "result",
+        "task",
+        "workflow",
+        "evidence",
+        "boundary",
+        "human_handoff",
+        "checklist"
+      ],
+      "success_metric": "qualified_reads_shares_and_follow_through"
+    },
+    "writeas": {
+      "content_form": "evidence_case_article",
+      "hook": "先给真实任务和可核验结果",
+      "structure": [
+        "actor_task",
+        "result",
+        "workflow",
+        "evidence",
+        "boundary",
+        "human_handoff",
+        "question"
+      ],
+      "success_metric": "qualified_reads_responses_and_shares"
+    },
+    "buttondown": {
+      "content_form": "case_newsletter",
+      "hook": "摘要先交代任务、结果、证据和人工责任",
+      "structure": [
+        "executive_summary",
+        "actor_task",
+        "workflow",
+        "evidence",
+        "failure_boundary",
+        "human_handoff",
+        "reader_checklist"
+      ],
+      "success_metric": "opens_clicks_replies_and_forwards"
+    }
+  }
+}

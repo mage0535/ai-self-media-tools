@@ -106,6 +106,6 @@ Every item needs both pre-generation and post-generation review evidence:
 - Content review: title promise, hook, information density, structure, concrete value, lack of filler, and same-day differentiation.
 - Visual review: title-cover-body or narration-scene-subtitle consistency, mobile readability, no unrelated visuals, no repeated low-value template.
 - Platform review: declarations, cover, schedule, tags, required fields, and management-page/API postcheck.
-- Network review: Hermes-side domestic channel access must use `CN_PROXY`; Hermes-side international channel access must use `US_PROXY`. Login or upload from the wrong egress class is a hard operational failure because it can invalidate cookies, trigger platform risk controls, or poison account health signals.
+- Network review: Hermes-side domestic channel access must use the explicit `direct` route; Hermes-side international channel access must use `US_PROXY`. A failed direct health probe is a hard operational failure, as is login or upload from the wrong egress class.
 
 Any hard failure must include a concrete rejection reason and requires regeneration, not minor recoloring, title swapping, or replacing one unrelated image.

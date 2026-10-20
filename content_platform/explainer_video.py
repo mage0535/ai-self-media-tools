@@ -40,6 +40,7 @@ def build_explainer_storyboard(
     target_pages: int = 8,
     aspect_ratio: str = "16:9",
     presenter_side: str = "right",
+    audio_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a PPT-style explainer storyboard from article text."""
 
@@ -89,6 +90,7 @@ def build_explainer_storyboard(
             "content_form": "article_explainer_video",
             "primary_platforms": ["youtube", "bilibili", "kuaishou"],
             "asset_plan": ["article", "knowledge_cards", "human_voiceover", "background_music", "content_images"],
+            **({"audio_plan": audio_plan} if isinstance(audio_plan, dict) else {}),
         },
         {
             "content_line": "article_to_explainer_video",
@@ -109,7 +111,9 @@ def build_explainer_storyboard(
             "requires_storyboard": True,
             "requires_section_images": True,
             "requires_voiceover": True,
-            "requires_real_instrument_bgm": True,
+            "requires_real_instrument_bgm": (
+                plan.get("audio_plan", {}).get("route") == "embedded_licensed_bgm"
+            ),
             "requires_lower_third_subtitles": True,
             "requires_cinema_and_shotcraft_manifest": True,
         },

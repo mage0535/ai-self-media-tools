@@ -53,7 +53,8 @@
       "checklist_poster",
       "magazine_story",
       "result_reveal",
-      "zine_grid"
+      "zine_grid",
+      "premium_fintech"
     ],
     "reject": ["unrelated_stock_photo", "single_centered_sentence", "fixed_cover_template", "cropped_text", "reused_recent_cover_layout"]
   },

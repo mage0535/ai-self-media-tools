@@ -19,8 +19,8 @@ Every new content package must also follow the unified rule documents in `docs/r
 - Treat `stage` as local draft preparation by default. Local stage status is `staged`; it must never count as publish success.
 - Do not enable remote staging unless `delivery.allow_remote_stage=true` and the platform is explicitly listed in `delivery.remote_stage_platforms`.
 - Domestic channels must fail closed when current health evidence is absent, malformed, stale, or blocking. A configured publisher route is not health evidence.
-- Hermes must never access a channel through the wrong egress class. Domestic channel login, cookie refresh, upload, draft, schedule, postcheck, analytics, trend scraping, and crawler probes must use `CN_PROXY`; international channel access must use `US_PROXY`. If the required proxy is missing, unreachable, or the observed egress region does not match the channel class, block before login or upload.
-- Douyin auth refresh must prefer the CN-host noVNC real-Chrome profile path when normal Hermes QR login is unstable. Headless QR generation, static QR screenshots, or local multi-hop proxy Chrome sessions are not sufficient success evidence by themselves; the workflow must export storage state from the logged-in CN-host profile and keep `<social-auto-upload-home>/cookies/douyin_uploader/main.json` as the canonical account file.
+- Hermes must never access a channel through the wrong egress class. Domestic channel login, cookie refresh, upload, draft, schedule, postcheck, analytics, trend scraping, and crawler probes use the explicit `direct` route; international channel access uses `US_PROXY`. If the route is unavailable or the observed egress region does not match the channel class, block before login or upload.
+- Domestic platform browser recovery must use the configured `direct` route and preserve storage state without printing secrets.
 - `delivery_health.allow_unknown_health` is only for explicit dry-run or local-only exception work. Do not use it for live or scheduled domestic publishing.
 - `usable_with_postcheck_required` is not complete. It must remain `handoff_pending` / job `partial` until a management-page or API postcheck proves the scheduled/drafted item exists.
 - For platforms with daily limits, use the platform/account timezone, not UTC date slicing. Douyin defaults to `Asia/Shanghai`.
@@ -38,8 +38,7 @@ Every new content package must also follow the unified rule documents in `docs/r
 2. Dedup: check cross-channel and same-channel recent topics/copy before generating content.
 3. Content: generate channel-specific copy and media according to that channel's strategy and template selection.
 4. Quality: verify content completeness, visual/content consistency, subtitle placement, voice quality, cover, required declarations, and required page fields.
-5. Network: verify the required channel proxy before any Hermes-side login, cookie refresh, uploader call, trend crawl, analytics probe, or postcheck. Domestic channels require `CN_PROXY`; international channels require `US_PROXY`.
-   For Douyin, if Hermes browser access through `CN_PROXY` or a local multi-hop proxy shows login loops, system-busy errors, or QR sessions that do not bind, switch to the CN-host noVNC real-Chrome recovery path and preserve the resulting storage-state JSON without printing secrets.
+5. Network: verify the configured channel route before any Hermes-side login, cookie refresh, uploader call, trend crawl, analytics probe, or postcheck. Domestic channels use `direct`; international channels require `US_PROXY`. A failed direct probe is a real block, not an availability exception.
 6. Health: load current delivery health state before any upload or scheduled submission.
 7. Stage: write local review/draft packets first unless the platform has an explicitly verified safe remote-stage route.
 8. Publish: only submit when health allows publish and the channel-specific required fields are set.

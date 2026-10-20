@@ -32,6 +32,14 @@ DEFAULT_MIN_DURATION = 60.0
 LICENSE = "CC-BY-NC-ND 3.0 (archive.org {collection} collection, personal-use video background)"
 CST = timezone(timedelta(hours=8))
 
+# Configure proxy opener if proxy available
+_proxy = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY") or "http://127.0.0.1:2080"
+try:
+    _handler = urllib.request.ProxyHandler({"http": _proxy, "https": _proxy})
+    urllib.request.install_opener(urllib.request.build_opener(_handler))
+except Exception:
+    pass
+
 
 def fetch_json(url: str) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})

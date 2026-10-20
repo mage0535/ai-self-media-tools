@@ -4,11 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
+
+from PIL import Image, UnidentifiedImageError
 
 # 2026-08-15 修复：直接运行缺 PYTHONPATH 时自动注入项目根（self-contained）
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -49,6 +53,8 @@ def validate_render_inputs(
     require_cover_contract: bool = True,
     require_scene_manifest: bool = False,
     require_functional_mascots: bool = False,
+    audio_plan: dict[str, Any] | None = None,
+    require_materialized_audio: bool = True,
 ) -> dict[str, Any]:
     """Validate cheap input contracts without rendering or downloading assets."""
     video_dir = Path(video_dir)
@@ -77,6 +83,16 @@ def validate_render_inputs(
     backgrounds = _background_files(video_dir)
     if require_backgrounds and len(backgrounds) < len(cards):
         failures.append(f"background_assets_incomplete:{len(backgrounds)}/{len(cards)}")
+    for background in backgrounds:
+        try:
+            with Image.open(background) as image:
+                image.verify()
+            with Image.open(background) as image:
+                width, height = image.size
+            if min(width, height) < 320:
+                failures.append(f"background_dimensions_too_small:{background.name}")
+        except (OSError, UnidentifiedImageError):
+            failures.append(f"background_decode_failed:{background.name}")
 
     if require_scene_manifest:
         scene_manifest = video_dir / "scene_manifest.json"
@@ -99,9 +115,27 @@ def validate_render_inputs(
                 if not functional:
                     failures.append("functional_mascot_role_missing")
 
+    if audio_plan is None:
+        configured_plan = Path(os.environ.get("VIDEO_TOOLCHAIN_PLAN_PATH") or "")
+        if configured_plan.is_file():
+            try:
+                configured = json.loads(configured_plan.read_text(encoding="utf-8"))
+                audio_plan = configured.get("audio_plan") if isinstance(configured, dict) else None
+            except (OSError, json.JSONDecodeError):
+                audio_plan = None
+    audio_route = str((audio_plan or {}).get("route") or "")
     bgm = video_dir / "bgm.mp3"
     bgm_source = video_dir / "bgm_source.json"
-    if bgm.exists() or bgm_source.exists():
+    if (
+        audio_route == "embedded_licensed_bgm"
+        and not require_materialized_audio
+        and not bgm.exists()
+        and not bgm_source.exists()
+    ):
+        # Contract-only dry runs validate the route but intentionally do not
+        # download/materialize media. Real renders keep the fail-closed path.
+        warnings.append("bgm_pending_materialization")
+    elif audio_route == "embedded_licensed_bgm" or bgm.exists() or bgm_source.exists():
         if not bgm.exists() or not bgm_source.exists():
             failures.append("bgm_asset_or_source_missing")
         else:
@@ -111,8 +145,17 @@ def validate_render_inputs(
                 source = {}
             if not str(source.get("license") or "").strip():
                 failures.append("bgm_license_missing")
-            if not str(source.get("sha256") or (source.get("manifest") or {}).get("fingerprint") or "").strip():
+            declared_hash = str(source.get("sha256") or (source.get("manifest") or {}).get("fingerprint") or "").removeprefix("sha256:").strip()
+            if not declared_hash:
                 failures.append("bgm_fingerprint_missing")
+            elif declared_hash != hashlib.sha256(bgm.read_bytes()).hexdigest():
+                failures.append("bgm_fingerprint_mismatch")
+            if not str(source.get("source") or source.get("source_url") or "").strip():
+                failures.append("bgm_provenance_missing")
+            if str(source.get("source") or "").casefold() in {"local", "bundled", "asset_library", "historical_local"} or str(source.get("source_url") or "").startswith("file:"):
+                failures.append("bgm_local_historical_forbidden")
+            if source.get("new_for_run") is False:
+                failures.append("bgm_not_new_for_run")
     else:
         warnings.append("bgm_pending_resolution")
 
@@ -129,6 +172,8 @@ def validate_render_inputs(
             "cover_contract_required": require_cover_contract,
             "backgrounds_required": require_backgrounds,
             "bgm_mean_volume_db": bgm_mean_volume_db,
+            "audio_route": audio_route,
+            "materialized_audio_required": require_materialized_audio,
         },
         "failures": failures,
         "warnings": warnings,

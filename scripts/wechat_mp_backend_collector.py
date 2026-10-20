@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -39,23 +39,32 @@ def _load_playwright():
 def _launch_context(profile_dir: Path, *, headless: bool, state_file: Path | None = None):
     sync_playwright = _load_playwright()
     pw = sync_playwright().start()
-    common = {
-        "locale": "zh-CN",
-        "timezone_id": "Asia/Shanghai",
-        "viewport": {"width": 1280, "height": 900},
-    }
-    if state_file:
-        browser = pw.chromium.launch(headless=headless, args=["--no-sandbox", "--disable-dev-shm-usage", "--lang=zh-CN"])
-        context = browser.new_context(storage_state=str(_normalize_state_file(state_file)), **common)
+    browser = None
+    try:
+        common = {
+            "locale": "zh-CN",
+            "timezone_id": "Asia/Shanghai",
+            "viewport": {"width": 1280, "height": 900},
+        }
+        if state_file:
+            browser = pw.chromium.launch(headless=headless, args=["--no-sandbox", "--disable-dev-shm-usage", "--lang=zh-CN"])
+            context = browser.new_context(storage_state=str(_normalize_state_file(state_file)), **common)
+            return pw, context
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        context = pw.chromium.launch_persistent_context(
+            str(profile_dir),
+            headless=headless,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--lang=zh-CN"],
+            **common,
+        )
         return pw, context
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    context = pw.chromium.launch_persistent_context(
-        str(profile_dir),
-        headless=headless,
-        args=["--no-sandbox", "--disable-dev-shm-usage", "--lang=zh-CN"],
-        **common,
-    )
-    return pw, context
+    except BaseException:
+        try:
+            if browser is not None:
+                browser.close()
+        finally:
+            pw.stop()
+        raise
 
 
 def login(profile_dir: Path, timeout_seconds: int) -> dict[str, Any]:
@@ -75,7 +84,40 @@ def login(profile_dir: Path, timeout_seconds: int) -> dict[str, Any]:
         pw.stop()
 
 
-def collect(profile_dir: Path, output: Path, *, days: int, headless: bool, state_file: Path | None = None) -> dict[str, Any]:
+def build_account_snapshot_record(
+    metrics: dict[str, Any],
+    *,
+    days: int,
+    begin_date: str,
+    end_date: str,
+) -> dict[str, Any]:
+    """Build an audit-only account snapshot, never a content-performance row."""
+    snapshot_metrics = {
+        **metrics,
+        "metric_scope": "account_snapshot",
+        "metric_window": "yesterday",
+        "strategy_eligible": False,
+        "strategy_ineligible_reason": "aggregate_account_metrics_have_no_article_identity",
+    }
+    return {
+        "job_id": f"wechat-backend-snapshot-{date.today().isoformat()}",
+        "platform": "wechat",
+        "views": int(snapshot_metrics.get("yesterday_reads", 0) or 0),
+        "shares": int(snapshot_metrics.get("yesterday_shares", 0) or 0),
+        "follows": int(snapshot_metrics.get("new_followers", 0) or 0),
+        "metrics": snapshot_metrics,
+    }
+
+
+def collect(
+    profile_dir: Path,
+    output: Path,
+    *,
+    days: int,
+    headless: bool,
+    state_file: Path | None = None,
+    account_name: str = "",
+) -> dict[str, Any]:
     begin = date.today() - timedelta(days=days)
     end = date.today() - timedelta(days=1)
     pw, context = _launch_context(profile_dir, headless=headless, state_file=state_file)
@@ -118,6 +160,24 @@ def collect(profile_dir: Path, output: Path, *, days: int, headless: bool, state
         )
         page.wait_for_timeout(8000)
         text = page.locator("body").inner_text(timeout=30_000)
+        # The user-analysis page may show a stale login warning while the
+        # authorized session still accepts the article-analysis endpoints. Try
+        # those official endpoints before downgrading to an aggregate snapshot.
+        article_index = _fetch_article_index(page, token)
+        article_analysis = _fetch_article_analysis(page, token)
+        article_observations = build_article_metric_observations(
+            article_analysis,
+            article_index,
+            account_name=account_name,
+            observed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
+        article_collection_audit = build_article_collection_audit(
+            article_analysis,
+            article_index,
+            article_observations,
+            account_name=account_name,
+            article_analysis_requested=True,
+        )
         if _looks_logged_out(text):
             if home_metrics:
                 metrics = {
@@ -128,15 +188,15 @@ def collect(profile_dir: Path, output: Path, *, days: int, headless: bool, state
                     "backend_login_verified": 1,
                     **home_metrics,
                 }
-                record = {
-                    "job_id": f"wechat-backend-snapshot-{date.today().isoformat()}",
-                    "platform": "wechat",
-                    "views": int(metrics.get("yesterday_reads", 0) or 0),
-                    "shares": int(metrics.get("yesterday_shares", 0) or 0),
-                    "follows": int(metrics.get("new_followers", 0) or 0),
-                    "metrics": metrics,
-                }
-                return _write_report(output, status="ok", reason="", records=[record])
+                record = build_account_snapshot_record(metrics, days=days, begin_date=begin.isoformat(), end_date=end.isoformat())
+                return _write_report(
+                    output,
+                    status="ok",
+                    reason="",
+                    records=[record],
+                    article_observations=article_observations,
+                    article_collection_audit=article_collection_audit,
+                )
             return _write_report(
                 output,
                 status="login_required",
@@ -145,6 +205,7 @@ def collect(profile_dir: Path, output: Path, *, days: int, headless: bool, state
             )
         follower_metrics = _parse_follower_summary(text)
         article_summary = _fetch_article_summary(page, token)
+
         metrics = {
             "source": "mp.weixin.qq.com backend visible useranalysis",
             "date_range_days": days,
@@ -166,13 +227,15 @@ def collect(profile_dir: Path, output: Path, *, days: int, headless: bool, state
                 records=[],
             )
         follows = int(metrics.get("new_followers", 0) or 0)
-        record = {
-            "job_id": f"wechat-backend-snapshot-{date.today().isoformat()}",
-            "platform": "wechat",
-            "follows": follows,
-            "metrics": metrics,
-        }
-        return _write_report(output, status="ok", reason="", records=[record])
+        record = build_account_snapshot_record(metrics, days=days, begin_date=begin.isoformat(), end_date=end.isoformat())
+        return _write_report(
+            output,
+            status="ok",
+            reason="",
+            records=[record],
+            article_observations=article_observations,
+            article_collection_audit=article_collection_audit,
+        )
     finally:
         context.close()
         pw.stop()
@@ -328,8 +391,170 @@ def _fetch_article_summary(page: Any, token: str) -> dict[str, int]:
     return {key: int(value or 0) for key, value in dict(result or {}).items()}
 
 
-def _write_report(output: Path, *, status: str, reason: str, records: list[dict[str, Any]]) -> dict[str, Any]:
-    report = {"status": status, "reason": reason, "records": records}
+def _fetch_article_index(page: Any, token: str, *, count: int = 20) -> dict[str, dict[str, Any]]:
+    """Return only stable article identities needed to join authorized analysis."""
+    if not token:
+        return {}
+    script = """
+    async ({token, count}) => {
+      const params = new URLSearchParams({action: 'list_ex', begin: '0', count: String(count), query: '', fakeid: '', type: '9', token, lang: 'zh_CN', f: 'json', ajax: '1'});
+      const response = await fetch('/cgi-bin/appmsg?' + params.toString(), {credentials: 'include'});
+      if (!response.ok) return [];
+      const payload = await response.json();
+      const rows = Array.isArray(payload.app_msg_list) ? payload.app_msg_list : [];
+      return rows.map(row => ({msg_id: String(row.appmsgid || row.aid || ''), item_idx: Number(row.itemidx || 1), link: String(row.link || ''), create_time: Number(row.create_time || 0)}));
+    }
+    """
+    try:
+        rows = page.evaluate(script, {"token": token, "count": max(1, min(int(count), 20))})
+    except Exception:
+        return {}
+    return {
+        f"{str(row.get('msg_id') or '').strip()}:{int(row.get('item_idx') or 0)}": dict(row)
+        for row in rows if isinstance(row, dict) and str(row.get("msg_id") or "").strip()
+    }
+
+
+def build_article_metric_observations(
+    analysis_payload: dict[str, Any],
+    article_index: dict[str, dict[str, Any]],
+    *,
+    account_name: str,
+    observed_at: str,
+) -> list[dict[str, Any]]:
+    """Normalize authorized MP article-analysis rows without claiming a baseline.
+
+    A row is an auditable raw observation, not a breakout verdict.  It becomes a
+    G4 strategy sample only after the separate WeChat evidence gate validates a
+    comparable same-account baseline.
+    """
+    account_name = str(account_name or "").strip()
+    if not account_name:
+        return []
+    rows = analysis_payload.get("article_list") if isinstance(analysis_payload, dict) else []
+    if not isinstance(rows, list):
+        return []
+    observations: list[dict[str, Any]] = []
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        msg_id = str(raw.get("msg_id") or "").strip()
+        item_idx = raw.get("item_idx")
+        title = str(raw.get("title") or "").strip()
+        try:
+            item_idx = int(item_idx or 0)
+            metric_value = int(raw.get("total_read_uv") or 0)
+        except (TypeError, ValueError):
+            continue
+        article = article_index.get(f"{msg_id}:{item_idx}") or {}
+        canonical_url = str(article.get("link") or "").strip()
+        created = article.get("create_time")
+        try:
+            published_at = datetime.fromtimestamp(int(created or 0), tz=timezone.utc).isoformat(timespec="seconds")
+        except (TypeError, ValueError, OSError):
+            published_at = ""
+        if not all((msg_id, title, canonical_url, published_at)):
+            continue
+        observations.append(
+            {
+                "platform": "wechat",
+                "source_kind": "authorized_backend_export",
+                "canonical_url": canonical_url,
+                "article_id": msg_id,
+                "msgid": msg_id,
+                "idx": item_idx,
+                "account_name": account_name,
+                "title": title,
+                "published_at": published_at,
+                "observed_at": observed_at,
+                "metric_name": "total_read_uv",
+                "metric_definition": "Unique readers shown by authorized WeChat MP article analysis",
+                "metric_value": metric_value,
+                "metric_window": str(raw.get("ref_date") or ""),
+                "additional_metrics": {"read_uv_ratio": raw.get("read_uv_ratio")},
+                "baseline_required": True,
+            }
+        )
+    return observations
+
+
+def build_article_collection_audit(
+    analysis_payload: dict[str, Any],
+    article_index: dict[str, dict[str, Any]],
+    observations: list[dict[str, Any]],
+    *,
+    account_name: str,
+    article_analysis_requested: bool = False,
+) -> dict[str, Any]:
+    """Return diagnostic counts only; never expose article titles or metrics."""
+    rows = analysis_payload.get("article_list") if isinstance(analysis_payload, dict) else []
+    return {
+        "article_analysis_row_count": len(rows) if isinstance(rows, list) else 0,
+        "article_index_count": len(article_index) if isinstance(article_index, dict) else 0,
+        "article_observation_count": len(observations) if isinstance(observations, list) else 0,
+        "account_name_provided": bool(str(account_name or "").strip()),
+        "article_analysis_requested": bool(article_analysis_requested),
+        "article_analysis_base_ret": analysis_payload.get("base_ret") if isinstance(analysis_payload, dict) else None,
+        "article_analysis_error": str(analysis_payload.get("__error") or "")[:80] if isinstance(analysis_payload, dict) else "",
+    }
+
+
+def _fetch_article_analysis(page: Any, token: str, *, count: int = 20) -> dict[str, Any]:
+    """Fetch article analysis with the authorized browser-context HTTP client.
+
+    ``page.evaluate(fetch(...))`` can lose its execution context when the MP
+    dashboard refreshes.  BrowserContext.request shares the same authorized
+    session without exporting cookies or bypassing the official backend.
+    """
+    if not token:
+        return {}
+    url = (
+        "https://mp.weixin.qq.com/misc/appmsganalysis?"
+        f"action=all_article&begin=0&count={max(1, min(int(count), 20))}"
+        f"&token={token}&lang=zh_CN&f=json&ajax=1"
+    )
+    try:
+        response = page.request.get(
+            url,
+            timeout=30_000,
+            headers={
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": "https://mp.weixin.qq.com/",
+            },
+        )
+    except Exception:
+        return {"__error": "request_exception"}
+    if not response.ok:
+        return {"__error": f"http_{response.status}"}
+    try:
+        payload = response.json()
+    except Exception:
+        return {"__error": "invalid_json"}
+    if not isinstance(payload, dict):
+        return {"__error": "response_not_object"}
+    return {
+        "article_list": payload.get("article_list") if isinstance(payload.get("article_list"), list) else [],
+        "base_ret": (payload.get("base_resp") or {}).get("ret") if isinstance(payload.get("base_resp"), dict) else None,
+    }
+
+
+def _write_report(
+    output: Path,
+    *,
+    status: str,
+    reason: str,
+    records: list[dict[str, Any]],
+    article_observations: list[dict[str, Any]] | None = None,
+    article_collection_audit: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report = {
+        "status": status,
+        "reason": reason,
+        "records": records,
+        "article_observations": article_observations or [],
+        "article_collection_audit": article_collection_audit or {},
+    }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
@@ -346,6 +571,7 @@ def main(argv: list[str] | None = None) -> int:
     collect_cmd.add_argument("--state-file", type=Path, default=None, help="Optional Playwright storage_state, cookie list, or SAU cookie_info JSON")
     collect_cmd.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     collect_cmd.add_argument("--days", type=int, default=30)
+    collect_cmd.add_argument("--account-name", default="", help="Authorized account display name; required to emit article observations")
     collect_cmd.add_argument("--headed", action="store_true", help="Show the browser while collecting")
     push_cmd = sub.add_parser("push-hermes")
     push_cmd.add_argument("--metrics-file", type=Path, default=DEFAULT_OUTPUT)
@@ -358,7 +584,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "login":
         result = login(args.profile_dir, args.timeout_seconds)
     elif args.command == "collect":
-        result = collect(args.profile_dir, args.output, days=args.days, headless=not args.headed, state_file=args.state_file)
+        result = collect(
+            args.profile_dir,
+            args.output,
+            days=args.days,
+            headless=not args.headed,
+            state_file=args.state_file,
+            account_name=args.account_name,
+        )
     else:
         result = push_hermes(args.metrics_file, args.ssh_target, args.ssh_key, args.ssh_port, args.remote_project)
     print(json.dumps(result, ensure_ascii=False, indent=2))

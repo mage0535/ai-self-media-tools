@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -10,6 +11,7 @@ from .models import GateFailure, GateResult
 from .asset_license import validate_asset_licenses
 from .growth_policy import validate_growth_strategy
 from .preflight_manifest import validate_preflight_manifest
+from .run_contract import AUDIO_ROUTE_REQUIRED_FIELDS, validate_audio_plan
 from .video_recipe import load_effect_module_registry, validate_visual_recipe
 from .content_recipe import validate_article_recipe, validate_image_text_card_recipe, validate_knowledge_card_recipe, validate_tool_invocation_manifest
 from .tool_selection import validate_tool_selection_evidence
@@ -279,6 +281,7 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
     mapping = packet.get("section_image_map") or []
     strategy = packet.get("strategy_brief") or {}
     cover = packet.get("cover_design") or {}
+    strict_cover_gate = packet.get("strict_cover_gate") is True
     card_plan = packet.get("knowledge_card_plan") or {}
     embedded_cards = packet.get("embedded_knowledge_cards") or []
     differentiation = packet.get("differentiation_dimensions") or []
@@ -350,7 +353,15 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "passed": all(
                 cover.get(key)
                 for key in ["visual_subject", "topic_alignment", "mobile_readable", "visual_hierarchy", "template_family"]
+            )
+            and (
+                not strict_cover_gate
+                or (
+                    all(cover.get(key) for key in ["title_text", "title_present", "title_readable", "title_no_overflow"])
+                    and str(cover.get("manual_visual_review") or "").casefold() in ALLOWED_VISUAL_REVIEWS
+                )
             ),
+            "required": ["visual_subject", "topic_alignment", "mobile_readable", "visual_hierarchy", "template_family", "title_text", "title_present", "title_readable", "title_no_overflow", "manual_visual_review"],
         },
         "same_day_differentiation": {"passed": len(differentiation) >= 3, "count": len(differentiation), "minimum": 3},
         "human_value": {
@@ -359,6 +370,56 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "growth_plan": validate_growth_package(packet),
     }
     return _result(gates)
+
+
+def _article_language_gate(packet: dict[str, Any], platform: str) -> dict[str, Any]:
+    cn_platforms = {"wechat", "weixin", "wechat_official", "douyin", "xiaohongshu", "rednote", "bilibili", "kuaishou", "shipinhao", "juejin", "zhihu", "csdn"}
+    body = str(packet.get("body") or packet.get("body_or_script") or "")
+    title = str(packet.get("title") or "")
+    language = str(packet.get("language") or packet.get("locale") or "").casefold()
+    if not language and not packet.get("run_contract"):
+        return {"passed": True, "required": False, "legacy_packet": True}
+    is_cn = str(platform or "").casefold() in cn_platforms or language.startswith(("zh", "cn")) or "中文" in language
+    if not is_cn:
+        return {"passed": True, "language": language or "non_zh"}
+    compact = re.sub(r"\s+", "", title + body)
+    chinese = len(re.findall(r"[\u3400-\u9fff]", compact))
+    placeholder = bool(re.search(r"execution\s+guide|implementation\s+guide|sample\s+body|placeholder|source_status\s*[:=]\s*unavailable|no\s+(?:source|evidence)", compact, re.I))
+    passed = chinese >= max(20, int(len(compact) * 0.08)) and not placeholder
+    return {"passed": passed, "language": "zh", "chinese_characters": chinese, "placeholder_detected": placeholder}
+
+
+def _article_evidence_gate(packet: dict[str, Any], platform: str) -> dict[str, Any]:
+    normalized = str(platform or packet.get("platform") or "").casefold()
+    strict = normalized == "zhihu" or bool(packet.get("run_contract"))
+    if not strict:
+        return {"passed": True, "required": False}
+    matrix = packet.get("platform_source_matrix") or {}
+    trend = packet.get("trend_evidence") or matrix.get("trend_evidence") or {}
+    catalog = packet.get("source_catalog") or []
+    evidence = packet.get("evidence") or packet.get("sources") or []
+    rows = list(trend.get("samples") or []) if isinstance(trend, dict) else []
+    rows += list(matrix.get("attempted_sources") or []) if isinstance(matrix, dict) else []
+    has_evidence = bool(evidence or catalog or rows)
+    status = str(packet.get("source_status") or matrix.get("source_status") or "").casefold()
+    unavailable = status in {"unavailable", "failed", "empty"}
+    passed = has_evidence and not unavailable
+    return {"passed": passed, "required": True, "source_status": status, "evidence_count": len(evidence) + len(catalog) + len(rows)}
+
+
+def _visual_asset_contract_gate(packet: dict[str, Any], platform: str) -> dict[str, Any]:
+    normalized = str(platform or packet.get("platform") or "").casefold()
+    if not packet.get("language") and not packet.get("locale") and not packet.get("run_contract"):
+        return {"passed": True, "required": False, "legacy_packet": True}
+    if normalized not in {"zhihu", "juejin", "wechat", "xiaohongshu", "rednote"}:
+        return {"passed": True, "required": False}
+    cover = packet.get("cover_design") or {}
+    mappings = packet.get("section_image_map") or []
+    def valid(item):
+        return bool(isinstance(item, dict) and item.get("source") and item.get("rights") and item.get("asset_hash") and item.get("semantic_match") is True and float(item.get("semantic_match_score") or 0) >= 0.72)
+    cover_ok = valid(cover)
+    image_ok = bool(mappings) and all(valid(item) for item in mappings)
+    return {"passed": cover_ok and image_ok, "required": True, "cover": cover_ok, "mapped_images": sum(1 for item in mappings if valid(item)), "total_images": len(mappings)}
 
 
 def validate_platform_article_packet(packet: dict[str, Any], platform: str) -> dict[str, Any]:
@@ -371,6 +432,9 @@ def validate_platform_article_packet(packet: dict[str, Any], platform: str) -> d
     gates = {
         "base_article_quality": {"passed": bool(article.get("passed")), "failed": article.get("failed_dimensions", [])},
         **ops_gates,
+        "language_fail_closed": _article_language_gate(packet, normalized),
+        "evidence_fail_closed": _article_evidence_gate(packet, normalized),
+        "visual_asset_contract": _visual_asset_contract_gate(packet, normalized),
         "platform_identity": {
             "passed": str(packet.get("platform") or "").casefold() == normalized
             and str((packet.get("preflight_manifest") or {}).get("channel") or "").casefold() == normalized,
@@ -395,6 +459,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     cards = packet.get("embedded_knowledge_cards") or packet.get("knowledge_card_sequence") or []
     images = packet.get("section_image_map") or packet.get("image_text_plan") or []
     cover = packet.get("cover_design") or {}
+    strict_cover_gate = packet.get("strict_cover_gate") is True
     source_assets = packet.get("source_assets") or packet.get("authentic_source_evidence") or []
     disclosure = str(packet.get("ai_assisted_disclosure") or packet.get("disclosure") or packet.get("body") or "")
     video_plan = packet.get("video_plan") or packet.get("short_video_plan") or {}
@@ -461,7 +526,15 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "passed": all(
                 cover.get(key)
                 for key in ["visual_subject", "topic_alignment", "mobile_readable", "visual_hierarchy", "template_family"]
+            )
+            and (
+                not strict_cover_gate
+                or (
+                    all(cover.get(key) for key in ["title_text", "title_present", "title_readable", "title_no_overflow"])
+                    and str(cover.get("manual_visual_review") or "").casefold() in ALLOWED_VISUAL_REVIEWS
+                )
             ),
+            "required": ["visual_subject", "topic_alignment", "mobile_readable", "visual_hierarchy", "template_family", "title_text", "title_present", "title_readable", "title_no_overflow", "manual_visual_review"],
         },
         "manual_handoff_only": {
             "passed": (packet.get("manual_publish_package") or {}).get("live_publish_allowed") is False
@@ -470,6 +543,42 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "growth_plan": validate_growth_package(packet),
     }
     return _result(gates)
+
+
+def _audio_route_consistency_gate(packet: dict[str, Any]) -> dict[str, Any]:
+    planned = packet.get("audio_plan")
+    actual = packet.get("actual_audio")
+    plan_validation = validate_audio_plan(planned)
+    failures = list(plan_validation["failures"])
+    if not isinstance(actual, dict):
+        failures.append("actual_audio.missing")
+        actual = {}
+    planned_route = str((planned or {}).get("route") or "") if isinstance(planned, dict) else ""
+    actual_route = str(actual.get("route") or "")
+    if actual_route != planned_route:
+        failures.append("audio_route.mismatch")
+    if not actual.get("source_audio_action"):
+        failures.append("actual_audio.source_audio_action_missing")
+    elif isinstance(planned, dict) and actual.get("source_audio_action") != planned.get("source_audio_action"):
+        failures.append("audio_route.source_audio_action_mismatch")
+    for field in AUDIO_ROUTE_REQUIRED_FIELDS.get(actual_route, ()):
+        if actual.get(field) in (None, "", [], {}):
+            failures.append(f"actual_audio.{field}_missing")
+        elif actual_route == planned_route and isinstance(planned, dict) and actual.get(field) != planned.get(field):
+            failures.append(f"audio_route.{field}_mismatch")
+    if actual_route == "embedded_licensed_bgm":
+        if not str(actual.get("asset_path") or "").strip():
+            failures.append("actual_audio.asset_missing")
+        if not str(actual.get("provenance") or "").strip():
+            failures.append("actual_audio.provenance_missing")
+        if not str(actual.get("sha256") or "").strip():
+            failures.append("actual_audio.sha256_missing")
+    return {
+        "passed": not failures,
+        "planned_route": planned_route,
+        "actual_route": actual_route,
+        "failures": failures,
+    }
 
 
 def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
@@ -496,12 +605,15 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
     minimum_duration = float(duration_policy.get("min_seconds") or 25) if experimental_short else 40.0
     maximum_duration = float(duration_policy.get("max_seconds") or 40) if experimental_short else 100.0
     long_reason = str(packet.get("duration_strategy_reason", "")).strip()
+    planned_audio_route = str((packet.get("audio_plan") or {}).get("route") or "")
+    embedded_bgm = planned_audio_route in {"", "embedded_licensed_bgm"}
     gates = {
         "preflight_manifest": validate_preflight_manifest(packet, str(packet.get("platform") or "")),
         "visual_content_policy": {
             "passed": packet_uses_current_policy(packet),
             "required_policy": "visual_content_design_policy_v1",
         },
+        "lane_visual_isolation": _lane_visual_isolation_gate(packet, platform),
         "video_plan": {
             "passed": all(
                 plan.get(key)
@@ -534,12 +646,15 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "audio_stream": {"passed": int(audio.get("stream_count", 0)) > 0 and duration >= minimum_duration},
         "audio_composition": {
-            "passed": bool(packet.get("voiceover_present", True)) and bool(packet.get("background_music_present")),
+            "passed": bool(packet.get("voiceover_present", True))
+            and (not embedded_bgm or bool(packet.get("background_music_present"))),
         },
         "background_music_source": {
-            "passed": bool(packet.get("background_music_present")) and bool(packet.get("bgm_source")),
+            "passed": not embedded_bgm
+            or (bool(packet.get("background_music_present")) and bool(packet.get("bgm_source"))),
             "source": packet.get("bgm_source") or {},
         },
+        "audio_route_consistency": _audio_route_consistency_gate(packet),
         "natural_voice": {
             "passed": bool(voice_style.get("human_pacing"))
             and int(voice_style.get("segment_count", 0)) >= 4
@@ -620,14 +735,59 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
     return _result(gates)
 
 
-def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
+def _lane_visual_isolation_gate(packet: dict[str, Any], platform: str) -> dict[str, Any]:
+    """Prevent pet visuals from leaking into non-pet AI/efficiency lanes."""
+    normalized = str(platform or packet.get("platform") or "").casefold()
+    pet_lane = normalized in {"douyin_pet", "pet", "catmiao5"}
+    ai_platforms = {"kuaishou", "shipinhao", "bilibili", "douyin_ai", "youtube", "youtube_shorts", "tiktok"}
+    lane_text = " ".join(str(packet.get(key) or "") for key in ("channel_lane", "lane", "content_identity", "content_form")).casefold()
+    ai_lane = normalized in ai_platforms or any(token in lane_text for token in ("ai_efficiency", "ai efficiency", "开发者工具", "效率工具", "automation"))
+    sources: list[str] = []
+    for key in ("source_assets", "background_assets", "scene_visual_alignment", "knowledge_card_sequence"):
+        value = packet.get(key) or []
+        if isinstance(value, list):
+            sources.extend(json.dumps(item, ensure_ascii=False) for item in value)
+        elif isinstance(value, dict):
+            sources.append(json.dumps(value, ensure_ascii=False))
+    combined = " ".join(sources).casefold()
+    pet_hits = sorted(set(re.findall(r"cat|cats|kitten|kitty|dog|puppy|pet|猫|猫咪|狗|宠物|喵", combined, re.I)))
+    return {
+        "passed": (not ai_lane) or pet_lane or not pet_hits,
+        "platform": normalized,
+        "ai_lane": ai_lane,
+        "pet_lane": pet_lane,
+        "pet_hits": pet_hits,
+        "rule": "AI lanes reject pet visuals unless the platform is an explicit pet lane",
+    }
+
+
+def validate_wechat_auto_packet(packet: dict[str, Any], *, phase="strict", local_evidence=None, delivery_evidence=None, native_task_scope=None) -> dict[str, Any]:
     """Validate a WeChat auto-workflow packet before draft upload.
 
     This is stricter than the generic article gate because WeChat automation
     has repeatedly failed by skipping the current source plan, section images,
     theme differentiation, and draft postcheck plan.
     """
+    if phase not in {"strict", "generation", "rendered", "delivery"}:
+        raise ValueError("invalid_native_wechat_quality_phase")
+    if native_task_scope not in {None,'single','batch'}:
+        raise ValueError('invalid_native_wechat_task_scope')
     article = validate_article_packet(packet)
+    if phase == "generation":
+        article = _wechat_phase_result(article['gates'], {
+            'real_scene_backgrounds', 'section_real_scene_mapping', 'embedded_knowledge_cards',
+            'tool_invocation_manifest'}, phase)
+    if phase != 'strict':
+        design=packet.get('cover_design') or {}
+        planned=['visual_subject','topic_alignment','mobile_readable','visual_hierarchy','template_family']
+        plan_ok=all(design.get(key) for key in planned) and bool(design.get('title_text') or packet.get('title'))
+        measured=(local_evidence or {}).get('cover_title_review') or {}
+        article['gates']['cover_design']={'passed':bool(plan_ok and (phase=='generation' or measured.get('passed') is True)),
+            'required':planned+['title_text'],
+            'deferred_pixel_facts': ['title_present','title_readable','title_no_overflow','auto_visual_review'] if phase=='generation' else [],
+            'auto_visual_review':measured if phase!='generation' else {'deferred':True},
+            'human_approval_asserted':False}
+        article=_wechat_phase_result(article['gates'],set(article.get('deferred_dimensions',[])),phase)
     body = str(packet.get("body", ""))
     strategy = packet.get("strategy_brief") or {}
     source_data = packet.get("source_data") or {}
@@ -807,7 +967,38 @@ def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "note": "run no_ai_slop_check.py on body",
         },
     }
-    return _result(gates)
+    if phase == 'strict':return _result(gates)
+    gates['base_article_quality']['gates']=article['gates']
+    gates['base_article_quality']['deferred_dimensions']=article.get('deferred_dimensions',[])
+    if native_task_scope=='single':
+        gates['batch_quantity_contract']={'passed':not bool(batch),'scope':'single',
+            'not_applicable':not bool(batch),
+            'reason':'independent_native_task_no_batch_required' if not batch else 'batch_metadata_without_native_binding'}
+    deferred = {'cover_cdn'} if phase in {'generation','rendered'} else set()
+    if phase == 'generation':deferred.update({'inline_img_tags','article_artifact_probe'})
+    if phase == 'rendered':
+        # Local bytes/provenance replace the upload-era combined probe, not a
+        # model-reported flag. CDN/upload remains mandatory at delivery.
+        gates['local_artifact_provenance'] = local_evidence or {'passed':False}
+        gates['inline_img_tags'] = {'passed':bool(local_evidence and local_evidence.get('passed') and local_evidence.get('article_probe',{}).get('inline_image_count',0)>=3)}
+        gates['article_artifact_probe'] = dict(local_evidence or {'passed':False}, pending_delivery=['cover_uploaded'])
+    if phase == 'delivery':
+        gates['actual_draft_postcheck'] = delivery_evidence or {'passed':False}
+        gates['cover_cdn'] = {'passed':bool(delivery_evidence and delivery_evidence.get('passed') and delivery_evidence.get('cover_uploaded'))}
+        gates['article_artifact_probe'] = {'passed':bool(local_evidence and local_evidence.get('passed') and delivery_evidence and delivery_evidence.get('passed'))}
+        gates['inline_img_tags'] = {'passed':bool(local_evidence and local_evidence.get('passed'))}
+    return _wechat_phase_result(gates,deferred,phase)
+
+
+def _wechat_phase_result(gates, deferred, phase):
+    result=_result({key:value for key,value in gates.items() if key not in deferred})
+    result['gates']=dict(gates)
+    for key in deferred:
+        if key in result['gates']:
+            result['gates'][key]=dict(result['gates'][key],deferred=True,required_phase='delivery' if key=='cover_cdn' else 'rendered')
+    result['deferred_dimensions']=sorted(deferred)
+    result['phase']=phase
+    return result
 
 
 def validate_wechat_image_post_packet(packet: dict[str, Any]) -> dict[str, Any]:

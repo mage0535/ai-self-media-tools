@@ -85,7 +85,7 @@ class PublisherV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             runner = Path(tmp) / "runner.py"
             runner.write_text("raise SystemExit(9)", encoding="utf-8")
-            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner), require_cn_proxy=False)
+            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner))
             result = publisher.deliver({"id": "j1", "title": "T", "body": "B"}, "wechat")
         self.assertFalse(result.ok)
         self.assertEqual(result.status, "blocked")
@@ -97,7 +97,7 @@ class PublisherV2Tests(unittest.TestCase):
             runner.write_text("raise SystemExit(9)", encoding="utf-8")
             packet = self._complete_wechat_packet()
             packet.pop("tool_invocations")
-            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner), require_cn_proxy=False)
+            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner))
             result = publisher.deliver(packet, "wechat")
         self.assertFalse(result.ok)
         self.assertEqual(result.status, "blocked")
@@ -113,7 +113,7 @@ class PublisherV2Tests(unittest.TestCase):
                 encoding="utf-8",
             )
             packet = self._complete_wechat_packet()
-            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner), require_cn_proxy=False)
+            publisher = HermesWechatAdapter(data_dir=tmp, command=str(runner))
             result = publisher.deliver(packet, "wechat")
         self.assertTrue(result.ok)
         self.assertEqual(result.status, "handoff_pending")

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -9,6 +10,95 @@ from content_platform.pipeline import Pipeline
 from content_platform.store import Store
 from content_platform.strategy_router import choose_content_strategy
 from content_platform.workflow_runtime import WorkflowBlocked, WorkflowStepRunner
+
+
+def _write_trusted_video_manifest(output: Path, cover: Path) -> None:
+    checker_payload = {"checker": "dedup", "verdict": "pass"}
+    checker_digest = hashlib.sha256(
+        json.dumps(checker_payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    (output.parent / "dedup_checker_evidence.json").write_text(
+        json.dumps({**checker_payload, "evidence_sha256": checker_digest}),
+        encoding="utf-8",
+    )
+    hashes = {
+        "video": hashlib.sha256(output.read_bytes()).hexdigest(),
+        "cover": hashlib.sha256(cover.read_bytes()).hexdigest(),
+    }
+    identity = {"run_id": "run-1", "revision": 1, "attempt_id": "attempt-1"}
+    manifest = {
+        **identity,
+        "state": "HANDOFF_READY",
+        "failure_reason": None,
+        "artifacts": [
+            {"name": "video", "path": str(output), "role": "OUTPUT"},
+            {"name": "cover", "path": str(cover), "role": "OUTPUT"},
+        ],
+        "artifact_sha256": hashes,
+        "gate_evidence": [
+            {
+                **identity,
+                "gate": gate,
+                "artifact_sha256": hashes,
+                "evidence_sha256": checker_digest,
+            }
+            for gate in (
+                "DEDUP_GATED",
+                "MEDIA_GATED",
+                "VISUAL_GATED",
+                "AUDIO_GATED",
+                "COVER_GATED",
+                "PACKAGE_GATED",
+            )
+        ],
+    }
+    (output.parent / "trusted_run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def _complete_video_packet(output: Path) -> dict:
+    planned_tools = [
+        "cinema_composition.storyboard",
+        "shotcraft_moves.shot_plan_for_text",
+        "kuaishou_render.render_cards",
+        "kuaishou_render.download_bgm",
+        "kuaishou_render.gen_subtitles",
+        "kuaishou_render.encode_final",
+    ]
+    return {
+        "video_toolchain_plan": {"required": True, "platforms": ["kuaishou"]},
+        "video_artifact": {"path": str(output)},
+        "render_manifest": {
+            "ok": True,
+            "status": "rendered",
+            "output": str(output),
+            "toolchain_contract": {"planned_tools": planned_tools},
+            "motion_evidence": {"passed": True, "unique_frame_count": 3},
+            "segment_motion_evidence": {
+                "segments": [
+                    {"move_id": "one", "profile": "hero"},
+                    {"move_id": "two", "profile": "demo"},
+                    {"move_id": "three", "profile": "cta"},
+                ]
+            },
+        },
+        "audio_probe": {"stream_count": 1, "duration": 45},
+        "bgm_source": {
+            "source": "licensed_piano",
+            "source_url": "https://example.test/bgm",
+            "license": "CC-BY",
+            "fit_reason": "calm tutorial",
+        },
+        "subtitle": {"cue_count": 8},
+        "burned_captions": {
+            "position": "lower_third",
+            "burned_in": True,
+            "font_size": 48,
+            "max_chars_per_line": 18,
+            "max_lines": 2,
+            "margin_v": 200,
+        },
+        "background_assets": [{"path": f"bg-{index}.png"} for index in range(4)],
+    }
 
 
 class PlatformQualityGateRuntimeTests(unittest.TestCase):
@@ -131,39 +221,60 @@ class PlatformQualityGateRuntimeTests(unittest.TestCase):
             self.assertFalse(gate["passed"])
             self.assertIn("renderer_manifest", gate["failed_dimensions"])
 
-    def test_rendered_video_gate_accepts_complete_measured_evidence(self):
+    def test_rendered_video_gate_rejects_legacy_rendered_without_trusted_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "final.mp4"
             output.write_bytes(b"video")
-            planned_tools = [
-                "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text",
-                "kuaishou_render.render_cards", "kuaishou_render.download_bgm",
-                "kuaishou_render.gen_subtitles", "kuaishou_render.encode_final",
-            ]
-            gate = Pipeline._rendered_video_platform_gate(
-                {
-                    "video_toolchain_plan": {"required": True, "platforms": ["kuaishou"]},
-                    "video_artifact": {"path": str(output)},
-                    "render_manifest": {
-                        "ok": True, "status": "rendered", "output": str(output),
-                        "toolchain_contract": {"planned_tools": planned_tools},
-                        "motion_evidence": {"passed": True, "unique_frame_count": 3},
-                        "segment_motion_evidence": {"segments": [
-                            {"move_id": "one", "profile": "hero"},
-                            {"move_id": "two", "profile": "demo"},
-                            {"move_id": "three", "profile": "cta"},
-                        ]},
-                    },
-                    "audio_probe": {"stream_count": 1, "duration": 45},
-                    "bgm_source": {"source": "licensed_piano", "source_url": "https://example.test/bgm", "license": "CC-BY", "fit_reason": "calm tutorial"},
-                    "subtitle": {"cue_count": 8},
-                    "burned_captions": {"position": "lower_third", "burned_in": True, "font_size": 48, "max_chars_per_line": 18, "max_lines": 2, "margin_v": 200},
-                    "background_assets": [{"path": f"bg-{index}.png"} for index in range(4)],
-                },
-                "kuaishou",
-            )
+
+            gate = Pipeline._rendered_video_platform_gate(_complete_video_packet(output), "kuaishou")
+
+            self.assertFalse(gate["passed"])
+            self.assertIn("trusted_release", gate["failed_dimensions"])
+            self.assertEqual(gate["gates"]["trusted_release"]["error"], "trusted video manifest is missing")
+
+    def test_rendered_video_gate_accepts_hash_current_handoff_ready_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "final.mp4"
+            cover = Path(tmp) / "cover.png"
+            output.write_bytes(b"video")
+            cover.write_bytes(b"cover")
+            _write_trusted_video_manifest(output, cover)
+
+            gate = Pipeline._rendered_video_platform_gate(_complete_video_packet(output), "kuaishou")
 
             self.assertTrue(gate["passed"])
+            self.assertTrue(gate["gates"]["trusted_release"]["passed"])
+
+    def test_rendered_video_gate_rejects_trusted_manifest_after_video_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "final.mp4"
+            cover = Path(tmp) / "cover.png"
+            output.write_bytes(b"video")
+            cover.write_bytes(b"cover")
+            _write_trusted_video_manifest(output, cover)
+            output.write_bytes(b"tampered")
+
+            gate = Pipeline._rendered_video_platform_gate(_complete_video_packet(output), "kuaishou")
+
+            self.assertFalse(gate["passed"])
+            self.assertIn("trusted_release", gate["failed_dimensions"])
+            self.assertIn("hash mismatch", gate["gates"]["trusted_release"]["error"])
+
+    def test_rendered_video_gate_rejects_output_not_named_by_trusted_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trusted_output = Path(tmp) / "trusted.mp4"
+            packet_output = Path(tmp) / "packet.mp4"
+            cover = Path(tmp) / "cover.png"
+            trusted_output.write_bytes(b"trusted-video")
+            packet_output.write_bytes(b"different-video")
+            cover.write_bytes(b"cover")
+            _write_trusted_video_manifest(trusted_output, cover)
+
+            gate = Pipeline._rendered_video_platform_gate(_complete_video_packet(packet_output), "kuaishou")
+
+            self.assertFalse(gate["passed"])
+            self.assertIn("trusted_release", gate["failed_dimensions"])
+            self.assertIn("does not match trusted video", gate["gates"]["trusted_release"]["error"])
 
     def test_media_bridge_reads_renderer_packet_for_final_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -244,7 +355,10 @@ class PlatformQualityGateRuntimeTests(unittest.TestCase):
                 output_dir = Path(kwargs["env"]["VIDEO_OUTPUT_DIR"])
                 output_dir.mkdir(parents=True, exist_ok=True)
                 video = output_dir / "generated.mp4"
+                cover = output_dir / "cover.png"
                 video.write_bytes(b"video")
+                cover.write_bytes(b"cover")
+                _write_trusted_video_manifest(video, cover)
                 (output_dir / "video_toolchain_runner_manifest.json").write_text(
                     json.dumps({"ok": True, "status": "rendered", "output": str(video)}),
                     encoding="utf-8",

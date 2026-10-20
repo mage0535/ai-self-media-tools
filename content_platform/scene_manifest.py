@@ -7,6 +7,8 @@ will be shown.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 
@@ -24,20 +26,28 @@ def build_scene_manifest(
     plan = plan or {}
     platform = _platform(plan)
     matches = list(visual_recipe.get("scene_asset_match") or [])
+    visual_contract = list(plan.get("visual_contract") or plan.get("scene_contract") or [])
+    contract_hash = hashlib.sha256(json.dumps(visual_contract, ensure_ascii=False, sort_keys=True).encode()).hexdigest() if visual_contract else ""
     scenes = []
     for index, card in enumerate(cards, 1):
         match = matches[(index - 1) % len(matches)] if matches else {}
         shotcraft = card.get("shotcraft") if isinstance(card.get("shotcraft"), dict) else {}
         narration = str(card.get("tts") or card.get("txt") or "").strip()
         claim = str(card.get("txt") or narration).strip()
-        source = str(card.get("visual_asset") or match.get("visual_source") or "").strip()
-        reason = str(match.get("match_reason") or "").strip()
+        contract = visual_contract[index - 1] if index <= len(visual_contract) and isinstance(visual_contract[index - 1], dict) else {}
+        source = str(contract.get("evidence_asset") or card.get("visual_asset") or match.get("visual_source") or "").strip()
+        reason = str(contract.get("platform_reason") or match.get("match_reason") or "").strip()
         scenes.append(
             {
                 "scene_id": f"s{index:02d}",
                 "narration": narration,
                 "subtitle": narration,
                 "visual_claim": claim,
+                "visual_hook": str(contract.get("visual_hook") or "").strip(),
+                "visual_mode": str(contract.get("visual_mode") or card.get("visual_mode") or "").strip(),
+                "template_id": str(contract.get("template_id") or card.get("template_id") or "").strip(),
+                "platform_reason": reason,
+                "group_motion": contract.get("group_motion") or card.get("group_motion") or [],
                 "asset": {"source": source, "kind": "resolved_or_planned_visual_asset"},
                 "evidence": [{"source": source, "match_reason": reason}] if source and reason else [],
                 "motion": {
@@ -55,6 +65,8 @@ def build_scene_manifest(
         "platform": platform,
         "duration_policy": {"max_seconds": max_seconds, "enforced": max_seconds is not None},
         "visual_recipe_fingerprint": str(visual_recipe.get("fingerprint") or ""),
+        "scene_contract_hash": contract_hash,
+        "scene_contract_version": "scene_contract_v1" if visual_contract else "",
         "scenes": scenes,
     }
     roles = plan.get("mascot_roles") or plan.get("content_blueprint", {}).get("mascot_roles")
@@ -71,6 +83,9 @@ def validate_scene_manifest(manifest: dict[str, Any] | None) -> dict[str, Any]:
     if manifest.get("version") != "scene_manifest_v1":
         failures.append("scene_manifest version missing or unsupported")
     scenes = manifest.get("scenes") if isinstance(manifest.get("scenes"), list) else []
+    contract_bound = bool(str(manifest.get("scene_contract_hash") or "").strip())
+    if contract_bound and len(scenes) != 8:
+        failures.append("contract-bound scene_manifest must include exactly 8 scenes")
     if len(scenes) < 3:
         failures.append("scene_manifest must include at least 3 scenes")
     seen = set()
@@ -79,6 +94,12 @@ def validate_scene_manifest(manifest: dict[str, Any] | None) -> dict[str, Any]:
         if not isinstance(scene, dict):
             failures.append(f"{prefix} must be an object")
             continue
+        if contract_bound:
+            for key in ("visual_hook", "visual_mode", "template_id", "platform_reason"):
+                if not str(scene.get(key) or "").strip():
+                    failures.append(f"{prefix} {key} missing")
+            if not isinstance(scene.get("group_motion"), list) or not scene.get("group_motion"):
+                failures.append(f"{prefix} group_motion missing")
         scene_id = str(scene.get("scene_id") or "")
         if not scene_id:
             failures.append(f"{prefix} id missing")

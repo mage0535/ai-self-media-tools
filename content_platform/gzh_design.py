@@ -16,8 +16,14 @@ gzh_design.py — gzh-design-skill（1664⭐）桥接模块。
 
 import json, os, subprocess, sys, tempfile, re
 from pathlib import Path
+from .paths import agent_home
 
-SKILL_DIR = Path.home() / ".hermes" / "skills" / "creative" / "gzh-design-skill"
+def _skill_dir():
+    home = Path(os.environ["HERMES_HOME"]) if os.environ.get("HERMES_HOME") else agent_home() if os.environ.get("AGENT_HOME") else Path.home() / ".hermes"
+    return (home / "skills" / "creative" / "gzh-design-skill").resolve()
+
+
+SKILL_DIR = _skill_dir()
 VALIDATE_SCRIPT = SKILL_DIR / "scripts" / "validate_gzh_html.py"
 VALID_THEMES = ["摸鱼绿", "红白色系", "石墨极简风", "留白禅意风", "摸鱼票据风", "橄榄手记"]
 
@@ -33,14 +39,16 @@ THEME_COLORS = {
 
 
 def skill_available() -> bool:
-    return SKILL_DIR.is_dir() and (SKILL_DIR / "SKILL.md").exists()
+    root = _skill_dir()
+    return root.is_dir() and (root / "SKILL.md").is_file() and (root / "scripts" / "validate_gzh_html.py").is_file()
 
 
 def validate_html(html_path: str) -> dict:
-    if not VALIDATE_SCRIPT.is_file():
+    script = _skill_dir() / "scripts" / "validate_gzh_html.py"
+    if not script.is_file():
         return {"ok": False, "error": "validate script not found"}
     try:
-        r = subprocess.run([sys.executable, str(VALIDATE_SCRIPT), html_path],
+        r = subprocess.run([sys.executable, str(script), html_path],
                            capture_output=True, text=True, timeout=30)
         errs = [l for l in r.stdout.split("\n") if "ERROR" in l]
         warns = [l for l in r.stdout.split("\n") if "WARNING" in l]
@@ -88,7 +96,7 @@ def format_for_wechat(markdown: str, theme="摸鱼绿", title="",
 
     # 预览页
     preview_path = None
-    ps = SKILL_DIR / "scripts" / "wrap_preview.py"
+    ps = _skill_dir() / "scripts" / "wrap_preview.py"
     if ps.is_file():
         try:
             subprocess.run([sys.executable, str(ps), str(html_path)],

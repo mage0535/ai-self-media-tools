@@ -10,7 +10,18 @@ class ExplainerVideoTests(unittest.TestCase):
     def test_build_explainer_storyboard_includes_video_toolchain_contract(self):
         article = "# AI工具使用规则\n\n很多人装了很多工具，但效率没有提升。\n\n先砍掉重叠工具，再给每个工具一个唯一用途。"
 
-        package = build_explainer_storyboard(article, target_pages=6)
+        audio_plan = {
+            "route": "embedded_licensed_bgm",
+            "route_reason": "verified instrumental bed for the explainer",
+            "source_audio_action": "mix_under_voiceover",
+            "fallback_route": "sfx_only",
+            "license": "CC-BY-4.0",
+            "source_url": "https://example.test/audio/verified-track",
+            "fingerprint": "a" * 64,
+            "rights_scope": "video synchronization and redistribution",
+        }
+
+        package = build_explainer_storyboard(article, target_pages=6, audio_plan=audio_plan)
 
         self.assertTrue(package["ok"])
         self.assertEqual(package["content_form"], "article_explainer_video")
@@ -24,6 +35,16 @@ class ExplainerVideoTests(unittest.TestCase):
         self.assertIn("article_explainer_planner", plan["required_tools"])
         self.assertIn("shotcraft_motion_designer", plan["required_tools"])
         self.assertIn("licensed_background_music", plan["quality_gates"])
+
+    def test_explainer_without_verified_audio_does_not_claim_licensed_bgm(self):
+        package = build_explainer_storyboard("# 标题\n\n这里解释一个真实工作流。")
+
+        self.assertEqual(package["video_toolchain_plan"]["audio_plan"]["route"], "sfx_only")
+        self.assertFalse(package["quality_contract"]["requires_real_instrument_bgm"])
+        self.assertNotIn(
+            "licensed_background_music",
+            package["video_toolchain_plan"]["quality_gates"],
+        )
 
     def test_write_explainer_package_outputs_runner_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:

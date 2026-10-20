@@ -8,7 +8,10 @@ version = "1.0.0"
 description = "Agent-neutral AI self-media workflow toolkit"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["Pillow>=10", "requests>=2.31"]
+
+[project.optional-dependencies]
+test = ["pytest>=9,<10", "openai>=1,<3"]
 
 [project.scripts]
 content-platform = "content_platform.cli:main"

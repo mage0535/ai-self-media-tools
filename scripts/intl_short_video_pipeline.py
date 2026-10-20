@@ -9,7 +9,6 @@ import json, os, random, subprocess, sys, tempfile, urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-CN_PROXY = os.environ.get("CN_PROXY", "socks5://127.0.0.1:1080")
 AITOEARN_KEY = os.environ.get("AITOEARN_INTL_API_KEY", "")
 DATA_DIR = Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.home() / ".ai-self-media-tools")) / "data"
 DRAFT_DIR = DATA_DIR / "intl_video_drafts"
@@ -28,6 +27,8 @@ from script_enhancer import enhance_screencast_call
 
 MANUAL_HANDOFF_ONLY_PLATFORMS = {"youtube", "youtube_shorts", "tiktok", "threads"}
 PUBLISH_BOUNDARY = "manual_handoff_only_no_aitoearn"
+LEGACY_ONLY = True
+PUBLICATION_QUEUE_ELIGIBLE = False
 
 SELF_GEN_TOPICS = [
     "5个免费AI工具提升编码效率","用Python自动化Excel报表","AI写作助手对比评测",
@@ -91,6 +92,8 @@ def _handoff_item(platform, **payload):
         **payload,
         "platform": platform,
         "status": "handoff_pending",
+        "legacy_only": LEGACY_ONLY,
+        "publication_queue_eligible": PUBLICATION_QUEUE_ELIGIBLE,
         "publish_boundary": PUBLISH_BOUNDARY,
         "handoff_policy": {
             "manual_only": True,
@@ -252,6 +255,8 @@ def publish_video(video_path, title, platform="youtube"):
 
 # ── 主流程 ──
 def run_daily_pipeline(strategy=None, dry_run=False):
+    if not dry_run and os.environ.get("VIDEO_ALLOW_LEGACY") != "1" and not os.environ.get("VIDEO_SCENE_CONTRACT_PATH"):
+        raise RuntimeError("scene contract required; use video_toolchain_runner or set VIDEO_SCENE_CONTRACT_PATH")
     os.makedirs(DRAFT_DIR, exist_ok=True)
     topics = strategy or select_topics()
     log(f"📅 {topics['date']} | 自生成: {topics['self_gen']} | 搬运: {topics['cross_kw']}")

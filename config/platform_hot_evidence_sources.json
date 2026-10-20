@@ -1,0 +1,62 @@
+{
+  "platforms": [
+    "bilibili",
+    "douyin",
+    "zhihu"
+  ],
+  "public_work_metadata": {
+    "youtube": [
+      "https://www.youtube.com/watch?v=Uc7jZAoiWwk",
+      "https://www.youtube.com/watch?v=bJ3C9OWOTtY",
+      "https://www.youtube.com/watch?v=ofb5WdOiao4",
+      "https://www.youtube.com/watch?v=yrDkVmfSoQ0",
+      "https://www.youtube.com/watch?v=etrccolcLFA",
+      "https://www.youtube.com/watch?v=YwTWpUl3QS8"
+    ],
+    "tiktok": [
+      "https://www.tiktok.com/@sysnexaauto/video/7683401288243055885",
+      "https://www.tiktok.com/@supplyscienceytb/video/7192995104339152133",
+      "https://www.tiktok.com/@ynteractive/video/7654559217721855246",
+      "https://www.tiktok.com/@karl.yeh_ai_explorer/video/7567433415411223820",
+      "https://www.tiktok.com/@karl.yeh_ai_explorer/video/7568174444364057868",
+      "https://www.tiktok.com/@kdrd1986/video/7389305317009427744"
+    ]
+  },
+  "bilibili_search": {
+    "enabled": true,
+    "limit": 20,
+    "order": "click",
+    "lane": "real_world_ai_implementation"
+  },
+  "bilibili_popular": {
+    "enabled": true,
+    "limit": 50,
+    "lane": "real_world_ai_implementation"
+  },
+  "douyin_hot_page": {
+    "enabled": true,
+    "limit": 50,
+    "lane": "real_world_ai_implementation"
+  },
+  "zhihu_open": {
+    "enabled": true,
+    "hot_limit": 20,
+    "search_limit": 10
+  },
+  "query_policy_profile": "real_world_ai_implementation_v1",
+  "query_source": "content_platform.real_world_ai_policy.build_discovery_queries",
+  "query_language": "zh",
+  "twitter_native_browser": {
+    "enabled": true,
+    "accounts": [
+      "n8n_io",
+      "zapier",
+      "LangChain"
+    ],
+    "performance_collector_config": "/srv/ai-self-media-tools/secrets/performance-collector.json",
+    "raw_response_dir": "/srv/ai-self-media-tools/data/intel/twitter-native-raw",
+    "max_total_seconds": 45,
+    "account_timeout_seconds": 18,
+    "collect_own_account_metrics": false
+  }
+}

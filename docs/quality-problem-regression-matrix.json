@@ -1,0 +1,138 @@
+{
+  "version": "problem-to-regression-matrix-v1",
+  "scope": "all video platforms and all generated-video renderers",
+  "rule": "An issue is closed only when root cause, production fix, failing regression test, and final artifact evidence are all bound. A Kuaishou-only sample cannot close an all-platform issue.",
+  "reference_rejections": [
+    {
+      "attempt": "kuaishou-attempt-1",
+      "evidence": "data/runs/kuaishou/20260917_predictive_maintenance_r1/render_attempt1/manual_visual_review.json",
+      "sha256": "67794b7129e21282fccd78ae67b7818b9f75ac3d163abe7147ce176edf4c7397"
+    },
+    {
+      "attempt": "kuaishou-attempt-2",
+      "evidence": "data/runs/kuaishou/20260917_predictive_maintenance_r1/render_attempt2/user_visual_rejection.json",
+      "sha256": "2a873601ff0e0d97d4c4780e991c6b5850b90507e2f5b8c78c4a91443d1a19ce"
+    }
+  ],
+  "issues": [
+    {
+      "id": "QVR-001",
+      "problem": "outer composition repeats top title, middle panel, bottom subtitle",
+      "root_cause": "template identity and background changes were treated as structural diversity",
+      "status": "partial",
+      "production_fix": ["scripts/visual_contract_gate.py: semantic DOM signatures and public_shell_overuse"],
+      "regression_tests": ["tests/test_visual_contract_gate.py::test_html_gate_rejects_public_shell_overuse"],
+      "missing_closure": ["all generated-video renderers must emit comparable structure fingerprints", "cross-platform recent-work ledger must reject repeated fingerprints"]
+    },
+    {
+      "id": "QVR-002",
+      "problem": "business visual ROI is too small relative to empty space",
+      "root_cause": "DOM presence was mistaken for visible semantic area",
+      "status": "partial",
+      "production_fix": ["scripts/visual_contract_gate.py: browser-computed visible_area_ratio"],
+      "regression_tests": ["tests/test_visual_contract_gate.py::test_html_gate_rejects_invisible_semantic_content_and_background"],
+      "missing_closure": ["threshold must be platform-profile aware", "final MP4 pixel evidence must confirm ROI after composition"]
+    },
+    {
+      "id": "QVR-003",
+      "problem": "CTA exists only in subtitles or narration rather than as an independent visual object",
+      "root_cause": "script CTA and visual CTA were not separate delivery objects",
+      "status": "partial",
+      "production_fix": ["content_platform/generation_quality_contract.py validates CTA semantics", "scripts/visual_contract_gate.py requires a browser-computed independent visible CTA object when the quality contract is active"],
+      "regression_tests": ["tests/test_generation_quality_contract.py::test_quality_contract_rejects_generic_cta_without_specific_question_or_next_value", "tests/test_visual_contract_gate.py::test_html_gate_requires_independent_visible_cta_when_quality_contract_is_active"],
+      "missing_closure": ["all platform runners must enable the quality-contract CTA check", "G3/G6 must verify CTA pixels, collision, OCR, and safe-zone visibility"]
+    },
+    {
+      "id": "QVR-004",
+      "problem": "end-card explanatory copy overlaps labels, repeats information, or lacks contrast",
+      "root_cause": "layout collision and local contrast were not checked in final pixels",
+      "status": "partial",
+      "production_fix": ["scripts/visual_contract_gate.py: browser-computed visual-role geometry collision, local contrast ratio, and semantic-key duplicate checks"],
+      "regression_tests": ["tests/test_visual_contract_gate.py::test_html_gate_rejects_end_card_role_collision", "tests/test_visual_contract_gate.py::test_html_gate_rejects_local_text_background_contrast", "tests/test_visual_contract_gate.py::test_html_gate_rejects_duplicate_semantic_layers", "tests/test_visual_contract_gate.py::test_html_gate_accepts_independent_cta_with_safe_geometry_and_contrast"],
+      "missing_closure": ["all generated-video renderers must emit visual-role and semantic-key markers", "final MP4/PNG pixel evidence must bind collision and contrast results", "OCR/text-layer comparison must cover unmarked legacy renderer output"]
+    },
+    {
+      "id": "QVR-005",
+      "problem": "background is visually attractive but semantically inappropriate",
+      "root_cause": "background provenance and existence were checked without a mandatory claim-to-asset semantic decision",
+      "status": "partial",
+      "production_fix": ["content_platform/generation_quality_contract.py: validate_asset_semantic_contract", "content_platform/video_generation_contract.py: validate and persist asset_semantic_contract when supplied"],
+      "regression_tests": ["tests/test_generation_quality_contract.py::test_asset_semantic_contract_requires_claim_role_subject_reason_and_status"],
+      "missing_closure": ["all platform runners must produce the contract before asset/render work", "VLM or equivalent evidence must bind each beat claim to background and evidence asset", "final candidate evidence must include the exact asset decision and artifact hashes"]
+    },
+    {
+      "id": "QVR-006",
+      "problem": "continuous bidirectional background or full-canvas drift causes discomfort",
+      "root_cause": "aggregate motion was rewarded while motion location, direction reversal, and duration were ignored",
+      "status": "partial",
+      "production_fix": ["content_platform/video_artifact.py spatial motion evidence and transition-burst exclusion"],
+      "regression_tests": ["tests/test_video_artifact.py::test_spatial_motion_never_excludes_sustained_global_motion", "tests/test_video_artifact.py::test_spatial_motion_excludes_only_short_isolated_transition_bursts"],
+      "final_evidence": ["data/runs/kuaishou/20260917_predictive_maintenance_r1/render_attempt3/final_visual_review.json"],
+      "missing_closure": ["all renderers and platform routes must invoke the same final-candidate spatial gate", "direction-reversal regression must use the rejected attempt-2 artifact"]
+    },
+    {
+      "id": "QVR-007",
+      "problem": "single-frame white flash or short black gap escapes sparse contact-sheet review",
+      "root_cause": "sparse frame sampling was used as a substitute for full-frame luminance analysis",
+      "status": "partial",
+      "production_fix": ["final-candidate all-frame luminance evidence in current film renderer path"],
+      "final_evidence": ["data/runs/kuaishou/20260917_predictive_maintenance_r1/render_attempt3/final_visual_review.json"],
+      "missing_closure": ["verify every generated-video renderer routes through the same all-frame gate", "bind failure injection fixtures for one-frame white and black anomalies"]
+    },
+    {
+      "id": "QVR-008",
+      "problem": "cover contract defects are discovered after expensive video composition",
+      "root_cause": "generated cover evidence omitted SHA and semantic fields and cover validation ran too late",
+      "status": "partial",
+      "production_fix": ["scripts/video_toolchain_runner.py writes SHA-bound generated cover evidence", "scripts/gen_cover.py omits empty secondary focal nodes"],
+      "regression_tests": ["tests/test_video_generation_contract.py::test_runner_writes_sha_bound_evidence_for_generated_cover", "tests/test_cover_quality.py::test_cover_gate_binds_evidence_to_exact_cover_sha"],
+      "missing_closure": ["cover contract and low-resolution cover candidate gate must run before full video render for every platform"]
+    },
+    {
+      "id": "QVR-009",
+      "problem": "run directory, revision, attempt_id, and trusted manifest disagree",
+      "root_cause": "attempt identity had multiple defaults",
+      "status": "closed-core",
+      "production_fix": ["content_platform/video_generation_contract.py derives and validates one attempt identity"],
+      "regression_tests": ["tests/test_video_generation_contract.py::test_compile_generation_contract_derives_attempt_identity_from_plan", "tests/test_video_generation_contract.py::test_compile_generation_contract_rejects_conflicting_attempt_identity"],
+      "missing_closure": ["cross-platform entrypoint matrix must prove every runner uses compile_generation_contract"]
+    },
+    {
+      "id": "QVR-010",
+      "problem": "small subtitle or scene changes trigger unnecessary full rerenders",
+      "root_cause": "cache invalidation granularity was final-video wide",
+      "status": "partial",
+      "production_fix": ["scripts/film_renderer.py layered invalidation and scene cache recheck"],
+      "regression_tests": ["tests/test_film_renderer_safety.py::test_subtitle_position_change_only_invalidates_final_composite", "tests/test_film_renderer_safety.py::test_scene_input_change_preserves_shots_for_scene_key_recheck"],
+      "missing_closure": ["shared cache ABI for non-film renderers", "performance manifest proving hit, miss, invalidation reason, encode and decode counts"]
+    },
+    {
+      "id": "QVR-011",
+      "problem": "automatic HANDOFF_READY survives a later user visual NO_GO",
+      "root_cause": "technical release state was treated as stronger than final human visual verdict",
+      "status": "closed-core",
+      "production_fix": ["attempt-1 and attempt-2 rejection evidence records delivery_allowed=false", "content_platform/media.py validates user_visual_rejection.json identity and artifact SHA and rejects NO_GO before accepting HANDOFF_READY"],
+      "regression_tests": ["tests/test_media_trusted_video_manifest.py::test_media_bridge_rejects_user_no_go_even_when_manifest_is_handoff_ready"],
+      "final_evidence": ["real attempt-2 validation returns RuntimeError: user NO_GO supersedes HANDOFF_READY"],
+      "missing_closure": ["publisher scripts that bypass MediaBridge must call the same trusted-candidate guard", "the manifest state itself should gain an atomic SUPERSEDED_BY_USER state rather than retaining stale HANDOFF_READY bytes"]
+    },
+    {
+      "id": "QVR-012",
+      "problem": "targeted test success is reported as repository-wide success",
+      "root_cause": "verification scope was not persisted with the result",
+      "status": "partial",
+      "production_fix": ["content_platform/verification_manifest.py", "data/verification/latest-targeted.json"],
+      "regression_tests": ["tests/test_verification_manifest.py"],
+      "missing_closure": ["verification manifest must record command, selected files, counts, failures, and scope=targeted|full", "completion reporting must read this manifest"]
+    },
+    {
+      "id": "QVR-013",
+      "problem": "complete-work latency cannot be verified against the 30-minute target",
+      "root_cause": "stage timing, cache, render, encode, decode, and review costs are not emitted in one cross-platform manifest",
+      "status": "partial",
+      "production_fix": ["content_platform/performance_aggregate.py", "content_platform/performance_manifest.py", "scripts/video_toolchain_runner.py"],
+      "regression_tests": ["tests/test_performance_aggregate.py", "tests/test_performance_manifest.py"],
+      "missing_closure": ["cross-platform performance_manifest", "P50/P80 aggregation", "quality-preserving SLA classification"]
+    }
+  ]
+}

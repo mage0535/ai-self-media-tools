@@ -123,6 +123,28 @@ def test_unverified_creator_snapshot_is_saved_for_audit_but_excluded_from_strate
         assert report["growth_strategies"]["zhihu"]["data_driven_improvement_plan"]["status"] == "needs_metrics"
 
 
+def test_wechat_backend_snapshot_metadata_is_audit_only():
+    from scripts.wechat_mp_daily_metrics import _has_strategy_eligible_content_records
+
+    collection = {
+        "status": "ok",
+        "records": [
+            {
+                "job_id": "wechat-backend-snapshot-2026-09-15",
+                "platform": "wechat",
+                "views": 69,
+                "metrics": {
+                    "metric_scope": "account_snapshot",
+                    "metric_window": "yesterday",
+                    "strategy_eligible": False,
+                },
+            }
+        ],
+    }
+
+    assert _has_strategy_eligible_content_records(collection) is False
+
+
 def test_metrics_readiness_requires_separate_douyin_account_sources():
     report = metrics_readiness_report(
         ["douyin"],

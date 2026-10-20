@@ -5,7 +5,6 @@ set -euo pipefail
 # 2026-08-15: 持久化发布代理（cron 环境无 .env），国际/国内平台发布必需。
 # 不覆盖外部已注入的值。
 export US_PROXY="${US_PROXY:-http://127.0.0.1:2080}"
-export CN_PROXY="${CN_PROXY:-socks5://127.0.0.1:1080}"
 
 root="${CONTENT_PLATFORM_HOME:?CONTENT_PLATFORM_HOME is required}"
 day="$(date +%F)"

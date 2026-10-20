@@ -10,25 +10,162 @@ from unittest.mock import patch
 
 
 class VideoToolchainRunnerTests(unittest.TestCase):
-    def test_short_video_duration_is_normalized_before_artifact_gate(self):
-        from scripts import video_toolchain_runner as runner
+    def test_rendered_html_gate_is_fail_closed_when_renderer_did_not_emit_html(self):
+        from scripts.video_toolchain_runner import _run_rendered_html_gate
 
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "final.mp4"
-            path.write_bytes(b"original")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = _run_rendered_html_gate(Path(temp_dir), [{"beat_id": "s01"}])
 
-            def fake_ffmpeg(command, **_kwargs):
-                Path(command[-1]).write_bytes(b"trimmed")
-                return type("Result", (), {"returncode": 0, "stderr": ""})()
+        self.assertFalse(result["passed"])
+        self.assertIn("rendered_html_dir_missing", result["failures"])
 
-            with patch.object(runner, "_video_duration", side_effect=[60.8, 59.8]):
-                with patch.object(runner.subprocess, "run", side_effect=fake_ffmpeg):
-                    result = runner._normalize_short_video_duration(path, "kuaishou")
+    def test_rendered_html_gate_rejects_missing_contract(self):
+        from scripts.video_toolchain_runner import _run_rendered_html_gate
 
-            self.assertTrue(result["passed"])
-            self.assertTrue(result["applied"])
-            self.assertEqual(result["duration_seconds"], 59.8)
-            self.assertEqual(path.read_bytes(), b"trimmed")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = _run_rendered_html_gate(Path(temp_dir), [])
+
+        self.assertFalse(result["passed"])
+        self.assertIn("rendered_html_contract_missing", result["failures"])
+
+    def test_renderer_environment_forwards_plan_subtitle_position(self):
+        from scripts.video_toolchain_runner import _renderer_environment
+
+        with patch.dict(os.environ, {"FILM_SUB_Y_UP": "300"}, clear=False):
+            env = _renderer_environment({"subtitle_y_up": 270})
+        self.assertEqual(env["FILM_SUB_Y_UP"], "270")
+
+    def test_load_visual_assets_uses_plan_path_without_extra_environment_variable(self):
+        from scripts.video_toolchain_runner import _load_visual_assets
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "visual_assets.json"
+            payload = {"assignments": [{"scene": 1, "background_image": "/tmp/scene.png"}]}
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("VIDEO_VISUAL_ASSETS_PATH", None)
+                loaded = _load_visual_assets({"visual_assets_path": str(path)})
+
+        self.assertEqual(loaded, payload)
+
+    def test_creative_structure_family_rewrites_scene_contract_into_executable_modes(self):
+        from scripts.video_toolchain_runner import _apply_creative_structure_to_contract
+
+        contract = [
+            {
+                "beat_id": f"s{index:02d}",
+                "visual_mode": "generic_card",
+                "group_motion": ["fade"],
+            }
+            for index in range(1, 9)
+        ]
+        plan = {
+            "creative_structure": {
+                "selected": {
+                    "family": "document_workflow",
+                    "capability_mapping": {
+                        "source_visual_modes": ["generic_card"],
+                        "target_visual_modes": [
+                            "before_after_split",
+                            "terminal_evidence",
+                            "annotation_callout",
+                            "flow_track",
+                            "input_branch",
+                            "checklist_lock",
+                            "failure_rollback",
+                            "result_audit",
+                        ],
+                        "semantic_compatible": True,
+                    },
+                },
+            }
+        }
+
+        rewritten = _apply_creative_structure_to_contract(plan, contract)
+
+        self.assertEqual(
+            [scene["visual_mode"] for scene in rewritten],
+            [
+                "before_after_split",
+                "terminal_evidence",
+                "annotation_callout",
+                "flow_track",
+                "input_branch",
+                "checklist_lock",
+                "failure_rollback",
+                "result_audit",
+            ],
+        )
+        self.assertTrue(all(scene["structure_family"] == "document_workflow" for scene in rewritten))
+        self.assertTrue(all(scene["template_id"].startswith("document_workflow_") for scene in rewritten))
+        from scripts.visual_contract_gate import KNOWN_MOTION_ACTIONS
+        self.assertTrue(
+            all(
+                set(scene["group_motion"]).issubset(KNOWN_MOTION_ACTIONS)
+                for scene in rewritten
+            )
+        )
+
+    def test_creative_structure_preserves_explicit_scene_specific_mode_and_hook(self):
+        from scripts.video_toolchain_runner import (
+            STRUCTURE_SCENE_MODES,
+            _apply_creative_structure_to_contract,
+        )
+
+        contract = [
+            {
+                "beat_id": f"s{index:02d}",
+                "visual_mode": "factory_inspection_closeup" if index == 1 else "generic_card",
+                "visual_hook": "Show the actual defect under inspection" if index == 1 else "",
+                "group_motion": ["focus_shift"],
+            }
+            for index in range(1, 9)
+        ]
+        plan = {
+            "creative_structure": {
+                "selected": {
+                    "family": "timeline_process",
+                    "capability_mapping": {
+                        "source_visual_modes": ["generic_card"],
+                        "target_visual_modes": list(STRUCTURE_SCENE_MODES["timeline_process"]),
+                        "semantic_compatible": True,
+                    },
+                }
+            }
+        }
+
+        rewritten = _apply_creative_structure_to_contract(plan, contract)
+
+        self.assertEqual(rewritten[0]["visual_mode"], "factory_inspection_closeup")
+        self.assertEqual(rewritten[0]["visual_hook"], "Show the actual defect under inspection")
+        self.assertEqual(rewritten[1]["visual_mode"], "evidence_timeline")
+
+    def test_creative_structure_does_not_map_without_semantically_compatible_capability_mapping(self):
+        from scripts.video_toolchain_runner import (
+            STRUCTURE_SCENE_MODES,
+            _apply_creative_structure_to_contract,
+        )
+
+        contract = [
+            {"beat_id": f"s{index:02d}", "visual_mode": "factory_scene", "group_motion": ["focus_shift"]}
+            for index in range(1, 9)
+        ]
+        plan = {
+            "creative_structure": {
+                "selected": {
+                    "family": "timeline_process",
+                    "capability_mapping": {
+                        "source_visual_modes": ["factory_scene"],
+                        "target_visual_modes": list(STRUCTURE_SCENE_MODES["timeline_process"]),
+                        "semantic_compatible": False,
+                    },
+                }
+            }
+        }
+
+        rewritten = _apply_creative_structure_to_contract(plan, contract)
+
+        self.assertEqual([scene["visual_mode"] for scene in rewritten], ["factory_scene"] * 8)
 
     def test_script_structure_gate_requires_distinct_story_beats(self):
         from scripts.video_toolchain_runner import validate_script_structure
@@ -164,6 +301,12 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertTrue(manifest["visual_recipe_gate"]["passed"])
             self.assertTrue(manifest["pre_render_gate"]["passed"])
             self.assertTrue(str(manifest["recipe_fingerprint"]).startswith("sha256:"))
+            self.assertTrue(manifest["dedup_required"])
+            self.assertTrue(manifest["dedup_gate"]["required"])
+            self.assertFalse(
+                manifest["dedup_gate"].get("status") == "not_run"
+                and manifest["dedup_gate"].get("passed") is True
+            )
             self.assertGreaterEqual(manifest["toolchain_contract"]["visual_recipe"]["module_count"], 3)
             self.assertIn("tools_capability_analysis", manifest)
             self.assertIn("tool_selection_plan", manifest)
@@ -286,6 +429,116 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertFalse(manifest["recipe_reuse_gate"]["passed"])
             self.assertEqual(manifest["recipe_reuse_gate"]["duplicate_count"], 1)
 
+    def test_recipe_reuse_gate_allows_failed_same_work_rerender_only_with_material_structure_change(self):
+        from scripts.video_toolchain_runner import _recipe_reuse_gate
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = Path(tmp) / "visual_recipe_registry.json"
+            registry.write_text(
+                json.dumps(
+                    {
+                        "trusted": True,
+                        "coverage_days": 7,
+                        "recipes": [
+                            {
+                                "used_at": "2099-01-01T00:00:00+00:00",
+                                "core_fingerprint": "sha256:same",
+                                "template_family": "industrial_inspection_workflow_v1",
+                                "platforms": ["douyin"],
+                                "work_id": "work-42",
+                                "revision": 3,
+                                "attempt": 1,
+                                "terminal_status": "visual_gate_failed",
+                                "dom_structure_signatures": ["old-title-card", "old-title-card"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            recipe = {
+                "core_fingerprint": "sha256:same",
+                "template_family": "industrial_inspection_workflow_v1",
+                "modules": ["template_theme"],
+                "style_variants": {"color_mood": "clean_blueprint"},
+                "dom_structure_signatures": ["factory-scene", "annotated-defect"],
+            }
+            plan = {
+                "platforms": ["douyin"],
+                "work_id": "work-42",
+                "revision": 3,
+                "attempt": 2,
+            }
+            with patch.dict(os.environ, {"VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
+                result = _recipe_reuse_gate(recipe, plan)
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["duplicate_count"], 0)
+        self.assertEqual(result["same_work_rerender_count"], 1)
+
+    def test_recipe_reuse_gate_rejects_same_work_rerender_after_success_or_without_material_change(self):
+        from scripts.video_toolchain_runner import _recipe_reuse_gate
+
+        recipe = {
+            "core_fingerprint": "sha256:same",
+            "template_family": "industrial_inspection_workflow_v1",
+            "modules": ["template_theme"],
+            "style_variants": {"motion_density": "medium"},
+            "dom_structure_signatures": ["factory-scene", "annotated-defect"],
+        }
+        plan = {"platforms": ["douyin"], "work_id": "work-42", "revision": 3, "attempt": 2}
+        for terminal_status, signatures in (
+            ("handoff_ready", ["old-title-card", "old-title-card"]),
+            ("visual_gate_failed", ["factory-scene", "annotated-defect"]),
+        ):
+            with self.subTest(terminal_status=terminal_status):
+                with tempfile.TemporaryDirectory() as tmp:
+                    registry = Path(tmp) / "visual_recipe_registry.json"
+                    registry.write_text(
+                        json.dumps({
+                            "trusted": True,
+                            "coverage_days": 7,
+                            "recipes": [{
+                                "used_at": "2099-01-01T00:00:00+00:00",
+                                "core_fingerprint": "sha256:same",
+                                "template_family": "industrial_inspection_workflow_v1",
+                                "platforms": ["douyin"],
+                                "work_id": "work-42",
+                                "revision": 3,
+                                "attempt": 1,
+                                "terminal_status": terminal_status,
+                                "dom_structure_signatures": signatures,
+                            }]
+                        }),
+                        encoding="utf-8",
+                    )
+                    with patch.dict(os.environ, {"VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(registry)}, clear=False):
+                        result = _recipe_reuse_gate(recipe, plan)
+
+                self.assertFalse(result["passed"])
+                self.assertEqual(result["duplicate_count"], 1)
+
+    def test_recipe_reuse_gate_fails_closed_without_trusted_seven_day_registry_in_production(self):
+        from scripts.video_toolchain_runner import _recipe_reuse_gate
+
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing-registry.json"
+            with patch.dict(
+                os.environ,
+                {"VISUAL_RECIPE_FINGERPRINT_REGISTRY": str(missing)},
+                clear=False,
+            ):
+                os.environ.pop("VIDEO_TOOLCHAIN_DRY_RUN", None)
+                result = _recipe_reuse_gate(
+                    {"core_fingerprint": "sha256:new", "template_family": "family"},
+                    {"platforms": ["douyin"]},
+                )
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["status"], "not_run")
+        self.assertTrue(result["required"])
+        self.assertIn("trusted_seven_day_registry_missing", result["failures"])
+
     def test_runner_rejects_cross_platform_same_core_visual_recipe(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"
@@ -388,7 +641,7 @@ class VideoToolchainRunnerTests(unittest.TestCase):
             self.assertEqual(manifest["status"], "source_required")
             self.assertIn("refusing original card fallback", manifest["error"])
 
-    def test_localized_repost_accepts_local_source_video_without_card_generation(self):
+    def test_localized_repost_blocks_when_dedup_evidence_is_incomplete(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"
         with tempfile.TemporaryDirectory() as tmp:
@@ -417,15 +670,109 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 check=False,
             )
 
-            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotEqual(proc.returncode, 0)
             self.assertFalse((out / "cards.json").exists())
+            self.assertFalse((out / "final.mp4").exists())
             manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["status"], "rendered")
-            self.assertEqual(manifest["repost_source"]["source_type"], "local_source_video")
-            self.assertIn("autoclip_adapter.run_autoclip_pipeline", manifest["toolchain_contract"]["planned_tools"])
-            self.assertIn("tools_capability_analysis", manifest)
-            self.assertIn("tool_selection_plan", manifest)
-            self.assertIn("tool_invocation_manifest", manifest)
+            self.assertEqual(manifest["status"], "BLOCKED_DEDUP")
+            self.assertFalse(manifest["dedup_evidence"]["passed"])
+            self.assertTrue((out / "dedup_evidence.json").is_file())
+
+    def test_localized_repost_requires_passing_pre_and_post_render_dedup(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / "scripts" / "video_toolchain_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            source = Path(tmp) / "source.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "testsrc=size=96x64:rate=8:duration=1",
+                    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=1",
+                    "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", str(source),
+                ],
+                check=True,
+            )
+            history = Path(tmp) / "history.jsonl"
+            history.write_text("", encoding="utf-8")
+            plan = {
+                "selected_pipeline": "localized_repost_video",
+                "template_family": "pet_repost_real_behavior",
+                "platforms": ["douyin"],
+                "source_video_path": str(source),
+                "source_identity": {
+                    "source_id": "provider:video-1",
+                    "source_uri": "https://example.test/video-1",
+                },
+                "repost_history_index": str(history),
+                "repost_transform": {
+                    "kind": "localized_caption_edit",
+                    "description": "Chinese captions and editorial cuts",
+                },
+                "source_rights": {"basis": "licensed", "reference": "license-42"},
+            }
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            env = {
+                **os.environ,
+                "VIDEO_OUTPUT_DIR": str(out),
+                "VIDEO_TOOLCHAIN_PLAN_PATH": str(plan_path),
+            }
+
+            proc = subprocess.run(
+                [sys.executable, str(script), "Repost source.", "Repost only"],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+                check=False,
+            )
+
+            self.assertNotEqual(proc.returncode, 0, proc.stderr)
+            evidence = json.loads((out / "dedup_evidence.json").read_text(encoding="utf-8"))
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "candidate_gate_failed")
+            self.assertIn("candidate_gate", manifest)
+            self.assertFalse(manifest["candidate_gate"]["passed"])
+            self.assertTrue(evidence["passed"])
+            self.assertEqual(evidence["stage"], "post_render")
+            self.assertTrue(evidence["pre_render_fingerprints"])
+            self.assertTrue(evidence["post_render_verification"]["passed"])
+            self.assertFalse((out / "final.mp4").exists())
+            self.assertFalse((out / "cards.json").exists())
+
+    def test_autoclip_repost_blocks_packaging_without_valid_dedup_evidence(self):
+        from scripts.video_toolchain_runner import _run_autoclip_repost
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            generated = out / "autoclip" / "candidate.mp4"
+            generated.parent.mkdir(parents=True)
+            subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "testsrc=size=96x64:rate=8:duration=1",
+                    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=1",
+                    "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", str(generated),
+                ],
+                check=True,
+            )
+            completed = subprocess.CompletedProcess([], 0, stdout="ok", stderr="")
+            with patch("scripts.video_toolchain_runner.subprocess.run", return_value=completed):
+                result = _run_autoclip_repost(
+                    {"platforms": ["douyin"]},
+                    out,
+                    "title",
+                    "https://example.test/source",
+                    {"ok": False},
+                )
+
+            self.assertEqual(result, 7)
+            self.assertFalse((out / "final.mp4").exists())
+            manifest = json.loads((out / "video_toolchain_runner_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "candidate_manifest_missing")
 
     def test_runner_dry_run_includes_cinema_storyboard_fields(self):
         root = Path(__file__).resolve().parents[1]
@@ -570,6 +917,44 @@ class VideoToolchainRunnerTests(unittest.TestCase):
 
         self.assertIn("--platform", command)
         self.assertEqual(command[command.index("--platform") + 1], "shipinhao")
+
+    def test_runner_honors_explicit_dimensions_tags_and_audio_route(self):
+        from scripts.video_toolchain_runner import _renderer_command
+
+        command = _renderer_command(
+            Path("/tmp/film_renderer.py"),
+            Path("/tmp/out"),
+            "blueprint",
+            "Video title",
+            "A useful script.",
+            {
+                "platforms": ["douyin"],
+                "width": 720,
+                "height": 1280,
+                "tags": ["AI质检", "智能制造", "工业AI"],
+                "audio_plan": {
+                    "route": "sfx_only",
+                    "route_reason": "voice and effects only",
+                    "source_audio_action": "replace_with_voiceover_and_sfx",
+                    "fallback_route": None,
+                },
+            },
+            "muted percussion",
+        )
+
+        self.assertEqual(command[command.index("--width") + 1], "720")
+        self.assertEqual(command[command.index("--height") + 1], "1280")
+        tag_start = command.index("--tags") + 1
+        self.assertEqual(command[tag_start:tag_start + 3], ["AI质检", "智能制造", "工业AI"])
+        self.assertEqual(command[command.index("--audio-route") + 1], "sfx_only")
+        self.assertNotIn("猫咪", command)
+
+    def test_workflow_platform_can_differ_from_delivery_platform(self):
+        from scripts.video_toolchain_runner import _primary_platform, _workflow_platform
+
+        plan = {"platforms": ["douyin"], "workflow_platform": "douyin_ai"}
+        self.assertEqual(_primary_platform(plan), "douyin")
+        self.assertEqual(_workflow_platform(plan), "douyin_ai")
 
     def test_landscape_renderer_uses_separate_background_and_text_layers(self):
         source = (Path(__file__).resolve().parents[1] / "scripts" / "render_landscape_video.py").read_text(encoding="utf-8")
@@ -845,38 +1230,6 @@ class VideoToolchainRunnerTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "online real-instrument BGM unavailable"):
                     download_bgm(root, "lo-fi")
 
-    def test_bgm_download_uses_operator_licensed_local_library_before_network(self):
-        from scripts.kuaishou_render import REAL_BGM_MIN_BYTES, download_bgm
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            library = root / "library" / "track-a"
-            library.mkdir(parents=True)
-            (library / "bgm.mp3").write_bytes(b"licensed" * (REAL_BGM_MIN_BYTES // 8 + 1))
-            (library / "bgm_manifest.json").write_text(
-                json.dumps({
-                    "title": "Licensed piano",
-                    "artist": "Artist",
-                    "license": "CC BY",
-                    "source_url": "https://example.test/license",
-                    "provider": "local_test_library",
-                    "style": "piano instrumental",
-                }),
-                encoding="utf-8",
-            )
-            registry = root / "fingerprints.json"
-            with patch.dict(os.environ, {
-                "BGM_LIBRARY_DIR": str(root / "library"),
-                "BGM_FINGERPRINT_REGISTRY": str(registry),
-            }, clear=False):
-                with patch("scripts.kuaishou_render._online_bgm_candidates", return_value=[]):
-                    result = download_bgm(root, "piano instrumental")
-
-            self.assertEqual(result, str(root / "bgm.mp3"))
-            source = json.loads((root / "bgm_source.json").read_text(encoding="utf-8"))
-            self.assertEqual(source["license"], "CC BY")
-            self.assertEqual(source["source"], "local_test_library")
-
     def test_bgm_download_stops_when_the_global_resolution_budget_is_exhausted(self):
         from scripts.kuaishou_render import download_bgm
 
@@ -1031,6 +1384,24 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertNotIn("SoundHelix", kuaishou_legacy)
         self.assertNotIn("bgm_test", kuaishou_legacy)
         self.assertNotIn("HERMES_ALLOW_LEGACY_RENDER_DEMO", kuaishou_legacy)
+
+    def test_review_required_cover_status_is_a_release_failure(self):
+        from scripts.video_toolchain_runner import _cover_gate_failures
+
+        result = {"status": "review_required", "passed": False, "failures": []}
+        failures = _cover_gate_failures(result)
+        self.assertIn("cover_status_review_required", failures)
+
+    def test_planned_tool_is_not_runtime_success_without_execution_evidence(self):
+        from scripts.video_toolchain_runner import _resolve_tool_invocation_status
+
+        invocations = {
+            "cinema_composition.storyboard": {"status": "planned_internal"},
+            "shotcraft_moves.shot_sequence": {"status": "planned_internal"},
+        }
+        resolved = _resolve_tool_invocation_status(invocations, runtime_evidence={})
+        self.assertEqual(resolved["cinema_composition.storyboard"]["status"], "not_invoked")
+        self.assertEqual(resolved["shotcraft_moves.shot_sequence"]["status"], "not_invoked")
 
 
 if __name__ == "__main__":

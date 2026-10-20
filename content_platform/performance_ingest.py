@@ -20,13 +20,18 @@ NUMERIC_FIELDS = {
     "avg_watch_seconds": float,
 }
 RESERVED_FIELDS = set(NUMERIC_FIELDS) | {"job_id", "platform", "title", "work_title", "metrics", "extra_metrics"}
+PROVENANCE_FIELDS = {
+    "account_id", "internal_account_alias", "raw_response_hash", "metric_scope",
+    "account_key", "article_id", "content_id", "video_id", "bvid", "aid", "platform_content_id",
+    "canonical_url", "published_at", "observed_at", "metric_window", "source",
+}
 
 FIELD_ALIASES = {
     "view_count": "views",
     "read_count": "views",
     "play_count": "views",
     "plays": "views",
-    "impressions": "views",
+    "impressions": "impressions",
     "like_count": "likes",
     "comment_count": "comments",
     "share_count": "shares",
@@ -104,13 +109,16 @@ def _coerce_record(record: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("platform is required")
     normalized: dict[str, Any] = {"job_id": job_id, "platform": platform}
     for key, caster in NUMERIC_FIELDS.items():
-        value = record.get(key, 0)
-        normalized[key] = caster(value or 0)
+        value = record.get(key)
+        normalized[key] = None if value in (None, "") else caster(value)
     metrics = dict(record.get("metrics", record.get("extra_metrics", {})) or {})
     if not isinstance(metrics, dict):
         raise ValueError("metrics must be an object")
     for key, value in record.items():
         if key in RESERVED_FIELDS or value in (None, ""):
+            continue
+        if key in PROVENANCE_FIELDS:
+            metrics[str(key)] = str(value)
             continue
         try:
             metrics[str(key)] = float(value)
@@ -180,10 +188,24 @@ def import_performance_records(store: Any, records: Iterable[dict[str, Any]], *,
     errors = []
     for index, raw in enumerate(records, start=1):
         try:
+            if not isinstance(raw, dict):
+                raise ValueError("metric record must be an object")
+            if raw.get("account_id") and raw.get("platform_content_id") and raw.get("metric_window"):
+                reference = raw.get("raw_ref")
+                metrics = dict(raw.get("metrics") or {})
+                for key in NUMERIC_FIELDS:
+                    if raw.get(key) not in (None, ""):
+                        metrics[key] = NUMERIC_FIELDS[key](raw[key])
+                store.record_bound_metric_observation({**raw, "platform": _normalize_platform(raw.get("platform")),
+                    "metrics": metrics}, raw_ref=reference or {})
+                imported += 1
+                continue
             if not raw.get("job_id"):
                 resolved = _resolve_job_id(store, raw)
                 if resolved:
                     raw = {**raw, "job_id": resolved}
+                elif allow_unknown_job:
+                    raw = {**raw, "job_id": _snapshot_job_for_unknown_import(store, raw)}
             record = _coerce_record(raw)
             if not allow_unknown_job:
                 store.get_job(record["job_id"])
@@ -192,6 +214,8 @@ def import_performance_records(store: Any, records: Iterable[dict[str, Any]], *,
                     store.get_job(record["job_id"])
                 except Exception:
                     record["job_id"] = _snapshot_job_for_unknown_import(store, raw)
+            if any(record[key] is None for key in NUMERIC_FIELDS):
+                raise ValueError("legacy_performance_import_missing_metrics_use_bound_observation")
             store.record_performance(
                 record["job_id"],
                 record["platform"],

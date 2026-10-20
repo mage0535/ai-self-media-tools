@@ -382,19 +382,46 @@ def _is_video(content_type: str) -> bool:
     return any(hint in content for hint in VIDEO_CONTENT_HINTS)
 
 
+def verify_owned_feedback(value, target_scope=None):
+    """Re-read active owned evidence; caller-provided flags never grant trust."""
+    import sqlite3
+    unavailable = {"schema": "owned_feedback_v1", "status": "unavailable", "scope": {},
+                   "sample_count": 0, "observation_ids": [], "rows": [],
+                   "reason": "owned_account_window_evidence_missing_or_untrusted"}
+    if not isinstance(value, dict) or value.get("schema") != "owned_feedback_v1":
+        return unavailable
+    scope = value.get("scope") or {}
+    required = ("platform", "account_id", "internal_account_alias", "window_hours")
+    if any(not scope.get(key) for key in required) or scope["window_hours"] not in {1, 24, 72, 168}:
+        return unavailable
+    if target_scope is not None:
+        canonical = lambda value: "twitter" if str(value) == "x" else str(value)
+        if (not isinstance(target_scope, dict) or any(not target_scope.get(key) for key in required)
+                or canonical(target_scope["platform"]) != canonical(scope["platform"])
+                or any(target_scope[key] != scope[key] for key in required if key != "platform")):
+            return dict(unavailable, reason="owned_feedback_target_scope_mismatch")
+    try:
+        from pathlib import Path
+        from .store import Store
+        reader = object.__new__(Store)
+        reader.path = Path(__file__).resolve().parents[1] / "data" / "state.db"
+        actual = reader.account_window_metrics(scope["platform"], scope["account_id"],
+                    scope["internal_account_alias"], scope["window_hours"])
+        rows = actual.get("rows") or []
+        ids = [row["id"] for row in rows]
+        references = [{"id": row["id"], "raw_ref": row["source"]["raw_ref"]} for row in rows]
+        if (actual.get("status") != "verified" or not ids or value.get("observation_ids") != ids
+                or value.get("observation_refs") != references):
+            return unavailable
+    except (ValueError, TypeError, KeyError, OSError, sqlite3.Error):
+        return unavailable
+    return {"schema": "owned_feedback_v1", "status": "verified", "scope": dict(scope),
+            "sample_count": len(rows), "observation_ids": ids, "observation_refs": references,
+            "rows": rows, "reason": ""}
+
+
 def _has_effective_historical_feedback(historical_feedback: dict[str, Any]) -> bool:
-    if not isinstance(historical_feedback, dict) or not historical_feedback:
-        return False
-    platforms = historical_feedback.get("platforms")
-    if isinstance(platforms, dict) and any(isinstance(item, dict) and item for item in platforms.values()):
-        return True
-    clusters = historical_feedback.get("clusters")
-    if isinstance(clusters, list) and any(isinstance(item, dict) and item for item in clusters):
-        return True
-    return any(
-        key not in {"platforms", "clusters"} and value not in ({}, [], None, "")
-        for key, value in historical_feedback.items()
-    )
+    return verify_owned_feedback(historical_feedback).get("status") == "verified"
 
 
 def _rate(numerator: float, denominator: float) -> float:
@@ -402,76 +429,41 @@ def _rate(numerator: float, denominator: float) -> float:
 
 
 def _feedback_row(historical_feedback: dict[str, Any], platform: str) -> dict[str, Any]:
-    platforms = historical_feedback.get("platforms") if isinstance(historical_feedback, dict) else {}
-    if not isinstance(platforms, dict):
+    trusted = verify_owned_feedback(historical_feedback)
+    canonical = "twitter" if platform == "x" else platform
+    if trusted.get("status") != "verified" or trusted["scope"]["platform"] != canonical:
         return {}
-    row = platforms.get(platform) or platforms.get("x" if platform == "twitter" else platform) or {}
-    return row if isinstance(row, dict) else {}
+    return {"sample_count": trusted["sample_count"], "observations": trusted["rows"],
+            "evidence_observation_ids": trusted["observation_ids"]}
 
 
 def _data_driven_improvement_plan(platform: str, historical_feedback: dict[str, Any], is_video: bool) -> dict[str, Any]:
     row = _feedback_row(historical_feedback, platform)
     if not row:
-        return {
-            "status": "needs_metrics",
-            "diagnosis": ["metrics_missing_or_untrusted"],
-            "required_actions": ["collect_1h_24h_72h_metrics_before_confidence_boost"],
-        }
-    views = float(row.get("views", 0) or 0)
-    engagement = float(row.get("engagement", 0) or 0)
-    saves = float(row.get("saves", 0) or 0)
-    follows = float(row.get("follows", 0) or 0)
-    completion = float(row.get("completion_rate", 0) or 0)
-    three_second = float(row.get("three_second_view_rate", 0) or 0)
-    engagement_rate = _rate(engagement, views)
-    save_rate = _rate(saves, views)
-    follow_rate = _rate(follows, views)
-    diagnosis: list[str] = []
-    actions: list[str] = []
-    if views > 0 and engagement_rate < 0.04:
-        diagnosis.append("low_engagement_rate")
-        actions.append("rebuild_title_cover_hook_and_comment_prompt")
-    if views > 0 and save_rate < 0.02:
-        diagnosis.append("low_save_rate")
-        actions.append("increase_checklist_density_examples_and_embedded_knowledge_cards")
-    if views > 0 and follow_rate < 0.005:
-        diagnosis.append("low_follow_conversion")
-        actions.append("make_series_promise_profile_follow_reason_and_next_episode_explicit")
-    if is_video and completion and completion < 0.35:
-        diagnosis.append("low_completion_rate")
-        actions.append("tighten_pacing_scene_changes_and_midpoint_payoff_density")
-    if is_video and three_second and three_second < 0.45:
-        diagnosis.append("low_three_second_view_rate")
-        actions.append("rewrite_first_second_motion_and_opening_sentence")
-    if not diagnosis:
-        diagnosis.append("no_major_growth_alarm")
-        actions.append("keep_current_lane_and_test_one_variable_only")
-    return {
-        "status": "active",
-        "diagnosis": diagnosis,
-        "required_actions": list(dict.fromkeys(actions)),
-        "metrics": {
-            "views": views,
-            "engagement_rate": engagement_rate,
-            "save_rate": save_rate,
-            "follow_rate": follow_rate,
-            "completion_rate": completion,
-            "three_second_view_rate": three_second,
-        },
-    }
+        return {"status": "needs_metrics", "diagnosis": ["metrics_missing_or_untrusted"],
+                "required_actions": ["collect_verified_owned_account_window_metrics"], "metrics": {}}
+    return {"status": "descriptive_review_only", "diagnosis": ["same_account_same_window_evidence_available"],
+            "required_actions": ["review_observation_fields_with_matching_denominators_before_changes"],
+            "sample_count": row["sample_count"], "evidence_observation_ids": row["evidence_observation_ids"],
+            "metrics": {}, "causal_effect": "unproven"}
 
 
 def build_growth_strategy(
     platforms: list[str] | tuple[str, ...] | str | None,
     content_type: str,
     historical_feedback: dict[str, Any] | None = None,
+    *, target_scope: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the minimum growth brief every generator must carry forward."""
     platform = _normalized_platform(platforms)
     rules = PLATFORM_GROWTH_RULES.get(platform, {})
     is_video = _is_video(content_type)
-    historical_feedback = historical_feedback or {}
-    has_feedback = _has_effective_historical_feedback(historical_feedback)
+    targets = [platforms] if isinstance(platforms, str) else list(platforms or [])
+    actual_scope = dict(target_scope or {})
+    if len(targets) != 1 or actual_scope.get("platform") not in {platform, "x" if platform == "twitter" else platform}:
+        actual_scope = {}
+    historical_feedback = verify_owned_feedback(historical_feedback, target_scope=actual_scope)
+    has_feedback = historical_feedback.get("status") == "verified"
     strategy = {
         "policy_id": GROWTH_POLICY_ID,
         "platform": platform,

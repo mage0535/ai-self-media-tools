@@ -42,6 +42,10 @@ class ZhihuOpenAdapter:
                 f"zhihu-search CLI not found: {self.binary} "
                 "(install it and persist the Access Secret with zhihu-search --save-token)"
             )
+        env = os.environ.copy()
+        for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                     "http_proxy", "https_proxy", "all_proxy"):
+            env.pop(name, None)
         try:
             proc = subprocess.run(
                 [self.binary, *args],
@@ -49,6 +53,7 @@ class ZhihuOpenAdapter:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env=env,
                 timeout=self.timeout,
                 check=False,
             )

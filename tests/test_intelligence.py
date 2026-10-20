@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 import json
 import tempfile
 from pathlib import Path
@@ -101,6 +102,21 @@ class IntelligenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_generation_context_does_not_inject_blocked_viral_policy_prompt():
+    context = build_generation_context(
+        "AI 客服工单分类",
+        {
+            "platform": "youtube",
+            "viral_breakdown": {
+                "status": "ready", "validation": {"passed": True}, "summary": {"accepted_samples": 1},
+                "samples": [{"reference_ids": ["external-work"]}],
+            },
+        },
+    )
+    assert context["viral_execution_policy"]["status"] == "blocked"
+    assert "execute the selected viral reference policy" not in context["video_prompt"]
 
 
 def test_infer_language_uses_platform_when_not_explicit():

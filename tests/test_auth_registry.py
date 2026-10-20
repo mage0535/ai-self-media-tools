@@ -34,7 +34,7 @@ class CookieRegistryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "juejin_main.json").write_text(json.dumps([{"name": "sessionid", "value": "x"}]), encoding="utf-8")
-            with patch("content_platform.auth_registry.DEFAULT_SEARCH_DIRS", [str(root)]), patch.dict("os.environ", {"CN_PROXY": "socks5://127.0.0.1:1080"}):
+            with patch("content_platform.auth_registry.DEFAULT_SEARCH_DIRS", [str(root)]), patch.dict("os.environ", {}, clear=False):
                 result = classify_platform_health("juejin", {"type": "juejin-api", "account": "main", "cookie_dir": str(root / "missing")})
         self.assertTrue(result["can_publish_now"])
         self.assertIn("cookie present", result["reason"])

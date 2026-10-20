@@ -28,8 +28,7 @@
   "resources": {
     "min_available_mb": 1200,
     "warning_disk_used_percent": 84,
-    "max_disk_used_percent": 88,
-    "video_max_disk_used_percent": 87
+    "max_disk_used_percent": 88
   },
   "risk": {
     "legacy_script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/safe_filter.py",
@@ -41,6 +40,7 @@
       "script": "{{CONTENT_PLATFORM_HOME}}/scripts/image_gen.py",
       "method": "auto",
       "provider": "auto",
+      "quality_first": false,
       "model": "",
       "size": "1024x1024",
       "quality": "low",
@@ -51,6 +51,8 @@
       "platforms": ["douyin", "bilibili", "youtube", "tiktok", "kuaishou", "shipinhao"],
       "script": "{{CONTENT_PLATFORM_HOME}}/external/scripts/video_pipeline.py",
       "visual_image_count": 8,
+      "stock_video_provider": "pixabay_video",
+      "stock_video_script": "{{CONTENT_PLATFORM_HOME}}/scripts/pixabay_video_search.py",
       "timeout": 600
     },
     "audio": {

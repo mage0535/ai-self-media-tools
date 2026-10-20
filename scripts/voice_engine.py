@@ -35,6 +35,12 @@ from content_platform.voice_plan import build_voice_plan
 
 def select_tts_provider(requested: str, *, qwen_available: bool, language: str) -> str:
     selected = str(requested or "edge").strip().lower()
+    hojo_ready = (
+        os.environ.get("HOJO_TTS_QUALITY_APPROVED", "false").strip().lower() in {"1", "true", "yes"}
+        and Path(os.environ.get("HOJO_TTS_HOME", str(Path.home() / ".local" / "share" / "hojo-tts-light-40m"))).joinpath(".venv/bin/python").exists()
+    )
+    if selected == "auto" and hojo_ready and language in {"zh", "en"}:
+        return "hojo"
     if selected != "auto":
         return selected
     approved = os.environ.get("TTS_AB_TEST_APPROVED_PROVIDER", "").strip().lower() == "qwen"
@@ -762,12 +768,12 @@ class VoiceEngine:
 
     def synthesize(self, script_text: str, lang: str = "auto",
                    genre: str = "auto", mode: str = "auto",
-                   provider: str | None = None) -> dict:
+                   provider: str | None = None, provider_options=None) -> dict:
         """主入口：文案 → 配音 + 字幕"""
-        return asyncio.run(self._run(script_text, lang, genre, mode, provider))
+        return asyncio.run(self._run(script_text, lang, genre, mode, provider, provider_options))
 
     async def _run(self, script_text: str, lang: str, genre: str, mode: str,
-                   provider_name: str | None = None) -> dict:
+                   provider_name: str | None = None, provider_options=None) -> dict:
         segments = parse_script(script_text)
         if not segments:
             raise ValueError("配音文本为空")
@@ -801,10 +807,12 @@ class VoiceEngine:
         compiler = TTSTextCompiler.from_file(dictionary) if dictionary.is_file() else TTSTextCompiler([])
         platform = os.environ.get("TTS_PLATFORM", "")
         selected_provider = (provider_name or os.environ.get("VOICE_TTS_PROVIDER", "edge")).strip().lower()
+        selected_provider = str((provider_options or {}).get('providers_by_language', {}).get(lang, selected_provider)).strip().lower()
         selected_provider = select_tts_provider(selected_provider, qwen_available=qwen_provider.available, language=lang)
         audio_files, all_timings, segment_texts, all_durations = [], [], [], []
         provider_events = []
         tts_records = []
+        prepared_records = []
         total_dur = 0.0
 
         voice_plan = build_voice_plan([seg.text for seg in segments])
@@ -814,7 +822,29 @@ class VoiceEngine:
             controls = voice_plan[index]
             compiled = compiler.compile(seg.text, context=genre, platform=platform)
             event = {"requested_provider": selected_provider, "provider": "edge-tts", "fallback_used": False}
-            if selected_provider == "qwen":
+            if selected_provider == "kokoro-onnx":
+                from content_platform.kokoro_provider import KokoroProvider
+                local = KokoroProvider(provider_options).synthesize(compiled.tts_text, out, language=lang)
+                event.update(local); voice = local["voice"]
+                timing = self._even_timing(compiled.tts_text, local["duration_seconds"])
+            elif selected_provider == "hojo":
+                try:
+                    import sys as _sys
+                    hermes_scripts = str(Path.home() / ".hermes" / "scripts")
+                    if hermes_scripts not in _sys.path:
+                        _sys.path.insert(0, hermes_scripts)
+                    from tts_generate import last_result as _tts_last_result, tts as _tts
+                    os.environ["HOJO_TTS_QUALITY_APPROVED"] = "true"
+                    _tts(compiled.tts_text, voice=voice, lang=lang, output_path=str(out))
+                    hojo_result = _tts_last_result()
+                    event.update(hojo_result)
+                    event["provider"] = hojo_result.get("provider", "hojo")
+                    dur = EdgeTTSProvider._get_duration(str(out))
+                    timing = self._even_timing(compiled.tts_text, dur)
+                except Exception as exc:
+                    event.update({"provider": "edge-tts", "fallback_used": True, "fallback_reason": str(exc)[:160]})
+                    timing = await self._synthesize_edge(edge_provider, compiled.tts_text, out, voice, controls)
+            elif selected_provider == "qwen":
                 try:
                     qwen_result = qwen_provider.synthesize(
                         compiled.tts_text,
@@ -840,10 +870,21 @@ class VoiceEngine:
                 event["audio_duration"] = dur
                 provider_events.append(event)
                 tts_records.append({"display_text": compiled.display_text, "tts_text": compiled.tts_text, "applied_rules": compiled.applied_rules, "unhandled_latin_tokens": compiled.unhandled_latin_tokens, "provider": event.get("provider"), "voice": voice, "duration_seconds": dur})
+                if event.get('provider') == 'kokoro-onnx':
+                    target=self.output_dir/('segment_%02d.mp3' % (index+1))
+                    shutil.copy2(out,target)
+                    prepared_records.append({'beat_id':'s%02d'%(index+1),'source_text':seg.text,
+                        'source_text_sha256':__import__('hashlib').sha256(seg.text.encode()).hexdigest(),
+                        'tts_text':compiled.tts_text,'path':str(target),'audio_sha256':__import__('hashlib').sha256(target.read_bytes()).hexdigest(),
+                        'duration_seconds':dur,'provider':'kokoro-onnx','voice':voice,'speed':event['speed'],'fallback_used':False})
                 total_dur += dur
 
         if not audio_files:
             raise RuntimeError("所有语音片段合成失败")
+
+        if prepared_records:
+            if len(prepared_records)!=len(segments):raise RuntimeError('kokoro_mixed_provider_not_allowed')
+            (self.output_dir/'prepared_audio_manifest.json').write_text(json.dumps({'provider':'kokoro-onnx','voice':'zf_001','records':prepared_records,'duration_seconds':total_dur},ensure_ascii=False),encoding='utf8')
 
         # 去AI化
         deai_out = self.output_dir / "narration_deai.wav"
@@ -1001,7 +1042,7 @@ if __name__ == "__main__":
                     choices=["auto","tech","pets","finance","emotion","science","default"])
     ap.add_argument("--mode", "-m", default="auto",
                     choices=["auto","single","dialogue"])
-    ap.add_argument("--provider", default=None, choices=["auto", "edge", "qwen"],
+    ap.add_argument("--provider", default=None, choices=["auto", "edge", "hojo", "qwen"],
                     help="TTS provider override; defaults to VOICE_TTS_PROVIDER or edge")
     args = ap.parse_args()
 

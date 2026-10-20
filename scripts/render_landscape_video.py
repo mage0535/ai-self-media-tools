@@ -235,6 +235,10 @@ def _resolve_voice(platform: str, requested: str, script_text: str) -> str:
 
 def render(args: argparse.Namespace) -> dict:
     out_dir = Path(args.out_dir).expanduser().resolve()
+    from scripts.visual_contract_gate import enforce_entry
+    contract_gate = enforce_entry(out_dir, args.platform, require_native=True)
+    if not contract_gate.get("passed"):
+        raise RuntimeError("visual contract failed: " + ", ".join(contract_gate.get("failures", [])))
     render_dir = out_dir / "render"
     render_dir.mkdir(parents=True, exist_ok=True)
     bg_dir = Path(args.bg_dir).expanduser().resolve()
@@ -357,6 +361,8 @@ def main() -> int:
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     result = render(args)
+    from content_platform.standalone_render_state import write_rendered_unverified
+    write_rendered_unverified(Path(args.out_dir), platform=args.platform, renderer="render_landscape_video.py")
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

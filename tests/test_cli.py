@@ -33,6 +33,32 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(result["ok"])
 
+    def test_viral_breakdown_cli_writes_report_and_blocks_unverified_video(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sample_file = root / "samples.json"
+            sample_file.write_text(json.dumps({"samples": [{
+                "platform": "kuaishou",
+                "title": "AI工具实测",
+                "url": "https://www.kuaishou.com/short-video/1",
+                "views": 1000,
+            }]}, ensure_ascii=False), encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main([
+                    "--db", str(root / "state.db"),
+                    "--config", str(root / "missing.json"),
+                    "viral-breakdown", "--platform", "kuaishou",
+                    "--sample-file", str(sample_file),
+                    "--output", str(root / "viral_breakdown.json"),
+                ])
+            result = json.loads(output.getvalue())
+            saved = json.loads((root / "viral_breakdown.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(result["platforms"]["kuaishou"]["status"], "blocked")
+        self.assertEqual(saved["version"], "viral_breakdown_batch_v2")
+
     def test_publish_matrix_live_mode_is_blocked_from_direct_publishers(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -431,29 +457,26 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result["summary"]["strategy_eligible_count"], 0)
         self.assertEqual(result["accounts"]["douyin_pet"]["status"], "account_source_missing")
 
-    def test_private_proxy_env_is_loaded_without_overriding_existing_env(self):
+    def test_private_proxy_env_loads_us_proxy_without_domestic_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             secrets = root / "secrets"
             secrets.mkdir()
             (secrets / "proxy.env").write_text(
-                "CN_PROXY=socks5://127.0.0.1:1080\nUS_PROXY=socks5://127.0.0.1:1091\n",
+                "US_PROXY=socks5://127.0.0.1:1091\n",
                 encoding="utf-8",
             )
 
             with patch("content_platform.cli.project_home", return_value=root), patch.dict(
                 os.environ,
-                {"CN_PROXY": "socks5://already-set:1080"},
-                # The assertion covers precedence for CN_PROXY only. A live
-                # process US_PROXY must not leak into this isolated fixture.
+                {},
+                # A live process US_PROXY must not leak into this isolated fixture.
                 clear=True,
             ):
                 source = _load_env_defaults()
-                cn_proxy = os.environ["CN_PROXY"]
                 us_proxy = os.environ["US_PROXY"]
 
         self.assertTrue(source.endswith("proxy.env"))
-        self.assertEqual(cn_proxy, "socks5://already-set:1080")
         self.assertEqual(us_proxy, "socks5://127.0.0.1:1091")
 
     def test_performance_source_audit_uses_default_private_collector_config(self):

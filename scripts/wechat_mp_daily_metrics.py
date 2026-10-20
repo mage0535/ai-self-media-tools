@@ -12,6 +12,15 @@ from content_platform.store import Store
 from scripts.wechat_mp_backend_collector import DEFAULT_OUTPUT, DEFAULT_PROFILE, collect
 
 
+def _has_strategy_eligible_content_records(collection: dict) -> bool:
+    """Aggregate account snapshots are useful for health monitoring, not content learning."""
+    for record in collection.get("records") or []:
+        metrics = record.get("metrics") if isinstance(record, dict) else {}
+        if isinstance(metrics, dict) and metrics.get("strategy_eligible") is True:
+            return True
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default="data/state.db")
@@ -29,12 +38,15 @@ def main() -> int:
         headless=True,
         state_file=args.state_file,
     )
-    result = {"collection": collection, "import": None, "growth_strategy_refreshed": False}
+    result = {"collection": collection, "import": None, "growth_strategy_refreshed": False, "strategy_refresh_skip_reason": ""}
     if collection.get("status") == "ok" and collection.get("records"):
         store = Store(args.db)
         result["import"] = import_performance_file(store, args.metrics_file, allow_unknown_job=True)
-        _refresh_growth_strategies(store, ["wechat"])
-        result["growth_strategy_refreshed"] = True
+        if _has_strategy_eligible_content_records(collection):
+            _refresh_growth_strategies(store, ["wechat"])
+            result["growth_strategy_refreshed"] = True
+        else:
+            result["strategy_refresh_skip_reason"] = "account_snapshot_or_content_identity_missing"
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False, indent=2))

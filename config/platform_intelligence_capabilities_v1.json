@@ -1,0 +1,427 @@
+{
+  "version": "platform_intelligence_capabilities_v1",
+  "policy_profile": "real_world_ai_implementation_v1",
+  "platforms": {
+    "wechat": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": true,
+          "mode": "limited",
+          "evidence": "public_discovery_only"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorized_export_required",
+          "evidence": "g4_manual_import_only"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "article_level_body_and_metrics_not_available_from_current_authorized_path"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_article_level_truth_missing"
+        }
+      }
+    },
+    "bilibili": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": true,
+          "mode": "official_public_snapshot",
+          "evidence": "popular_api"
+        },
+        "work_level_metrics": {
+          "enabled": true,
+          "mode": "limited",
+          "evidence": "single_public_snapshot_only"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "body_or_video_verification_required"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "no_verified_same_lane_sample_set"
+        }
+      }
+    },
+    "douyin_ai": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": true,
+          "mode": "official_public_topic_board",
+          "evidence": "e1_topic_signal"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "public_board_is_not_video_metric_truth"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "body_or_video_verification_required"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "topic_signal_cannot_train_performance_rules"
+        }
+      }
+    },
+    "zhihu": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": true,
+          "mode": "official_open_search_snapshot",
+          "evidence": "generation_only"
+        },
+        "work_level_metrics": {
+          "enabled": true,
+          "mode": "limited",
+          "evidence": "single_likes_comments_snapshot_not_native_verified"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "body_or_native_page_verification_required",
+          "reason": "public_body_fetch_failed_or_forbidden"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "no_body_verification_or_comparable_time_series"
+        }
+      }
+    },
+    "juejin": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "no_verified_anonymous_public_hot_work_source"
+        },
+        "work_level_metrics": {
+          "enabled": true,
+          "mode": "owned_first_party_import_only"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "owned_content_or_public_body_verification_required"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_evidence_not_collected"
+        }
+      }
+    },
+    "kuaishou": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "no_verified_anonymous_public_hot_work_source"
+        },
+        "work_level_metrics": {
+          "enabled": true,
+          "mode": "owned_first_party_import_only"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "owned_video_transcript_and_frame_verification_required"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_evidence_not_collected"
+        }
+      }
+    },
+    "tiktok": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "research_api_authorization_required"
+        },
+        "work_level_metrics": {
+          "enabled": true,
+          "mode": "owned_first_party_import_only"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "owned_video_transcript_and_frame_verification_required"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "research_api_or_comparable_owned_metrics_missing"
+        }
+      }
+    },
+    "youtube": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "youtube_data_api_key_required"
+        },
+        "work_level_metrics": {
+          "enabled": true,
+          "mode": "owned_first_party_import_or_authorized_api"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "video_transcript_and_frame_verification_required"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "authorized_api_or_comparable_owned_metrics_missing"
+        }
+      }
+    },
+    "shipinhao": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "twitter": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "threads": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "bluesky": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "mastodon": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "nostr": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "devto": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "telegraph": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "writeas": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    },
+    "buttondown": {
+      "capabilities": {
+        "topic_discovery": {
+          "enabled": false,
+          "mode": "unavailable",
+          "reason": "no_verified_native_platform_collector"
+        },
+        "work_level_metrics": {
+          "enabled": false,
+          "mode": "authorization_required",
+          "reason": "no_authorized_work_level_metrics_source"
+        },
+        "deep_content_analysis": {
+          "enabled": false,
+          "mode": "verification_required",
+          "reason": "native_body_or_media_verification_missing"
+        },
+        "automated_learning": {
+          "enabled": false,
+          "mode": "blocked",
+          "reason": "comparable_owned_outcomes_missing"
+        }
+      }
+    }
+  },
+  "policy_revision": "2026-09-16-universal-ai-lane-r2"
+}

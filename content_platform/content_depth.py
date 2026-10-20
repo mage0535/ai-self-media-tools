@@ -9,6 +9,26 @@ from typing import Any
 CONTINUATION = re.compile(r"(?:next (?:episode|part|post)|to be continued|下一[期集篇]|后续.*(?:讲|看|分享))", re.I)
 
 
+def claims_continuation(body: str) -> bool:
+    """An in-document reading direction is not a promise of another release."""
+    text=str(body or "")
+    for match in CONTINUATION.finditer(text):
+        if match.group(0).casefold()!='next part':
+            return True
+        start=max(text.rfind(mark,0,match.start())for mark in ('.','!','?','\n'))+1
+        stops=[position for mark in ('.','!','?','\n')if (position:=text.find(mark,match.end()))>=0]
+        stop=min(stops)if stops else len(text)
+        sentence=text[start:stop].strip()
+        following=text[stop+1:].lstrip()
+        next_stop=re.search(r"[.!?\n]",following)
+        following=following[:next_stop.start()]if next_stop else following
+        same_document=(re.fullmatch(r"(?:read|review)\s+the\s+next\s+part\s+carefully\s+before\s+acting\s+on\s+(?:any\s+of\s+)?it",sentence,re.I)
+            and re.fullmatch(r"\s*what\s+follows\s+is\s+a\s+proposed\s+(?:review\s+)?method(?:,\s*not\s+a\s+deployment\s+log)?\s*",following,re.I))
+        if not same_document:
+            return True
+    return False
+
+
 def build_content_depth_plan(
     title: str,
     body: str,
@@ -18,7 +38,13 @@ def build_content_depth_plan(
     series_plan: dict[str, Any] | None = None,
     platform: str = "",
 ) -> dict[str, Any]:
-    lines = [line.strip(" -#\t") for line in str(body or "").splitlines() if line.strip()]
+    cleaned_body = re.sub(r"var\s+glb[^\n]*", "", str(body or ""))
+    cleaned_body = re.sub(r'\(glb\s*=\s*"undefined"[^\n]*', "", cleaned_body)
+    cleaned_body = re.sub(r"typeof\s+window[^\n]*", "", cleaned_body)
+    lines = [line.strip(" -#\t") for line in cleaned_body.splitlines() if line.strip()]
+    # 过滤纯 JS 残留行
+    js_noise = re.compile(r"^(var|let|const|glb|undefined|typeof|window)\b", re.I)
+    lines = [line for line in lines if not js_noise.search(line) and len(line) > 1]
     action_steps = [str(item).strip() for item in (actions or []) if str(item).strip()]
     if len(action_steps) < 3:
         candidates = [line for line in lines if len(line) >= 12]
@@ -38,7 +64,7 @@ def build_content_depth_plan(
         "interaction_prompt": "Which step would you verify first?",
         "evidence": evidence_rows,
         "platform_style": _platform_style(platform),
-        "continuation_claimed": bool(CONTINUATION.search(str(body or ""))),
+        "continuation_claimed": claims_continuation(body),
         "series_plan": dict(series_plan or {}),
     }
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from content_platform.performance_ingest import import_performance_file, review_performance
 from content_platform.store import Store
+from scripts.wechat_mp_backend_collector import build_account_snapshot_record
 
 
 class PerformanceIngestTests(unittest.TestCase):
@@ -86,6 +87,30 @@ class PerformanceIngestTests(unittest.TestCase):
         self.assertEqual(performance[0]["platform"], "wechat")
         self.assertEqual(performance[0]["follows"], 8)
         self.assertEqual(performance[0]["extra_metrics"]["total_followers"], 43)
+
+    def test_wechat_backend_snapshot_is_explicitly_audit_only(self):
+        record = build_account_snapshot_record(
+            {"yesterday_reads": 69, "yesterday_shares": 2, "total_followers": 74},
+            days=30,
+            begin_date="2026-08-16",
+            end_date="2026-09-14",
+        )
+
+        self.assertEqual(record["views"], 69)
+        self.assertEqual(record["shares"], 2)
+        self.assertEqual(record["metrics"]["metric_scope"], "account_snapshot")
+        self.assertEqual(record["metrics"]["metric_window"], "yesterday")
+        self.assertFalse(record["metrics"]["strategy_eligible"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = Store(root / "state.db")
+            source = root / "wechat_snapshot.json"
+            source.write_text(json.dumps({"records": [record]}), encoding="utf-8")
+            result = import_performance_file(store, source, allow_unknown_job=True)
+
+            self.assertEqual(result["imported"], 1)
+            self.assertEqual(store.historical_performance(["wechat"], "")["platforms"], {})
 
     def test_review_marks_expected_platforms_without_metrics_as_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

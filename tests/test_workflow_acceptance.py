@@ -1,9 +1,23 @@
+import hashlib
+import json
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from content_platform.run_contract import build_run_contract
 from content_platform.store import Store
+
+
+def _valid_cover(path: Path, size: tuple[int, int] = (1080, 1920)) -> Path:
+    image = Image.new("RGB", size, "#071421")
+    draw = ImageDraw.Draw(image)
+    for y in range(0, size[1], 48):
+        draw.rectangle((0, y, size[0], min(size[1] - 1, y + 47)), fill=(10, 30 + y // 96 % 35, 55))
+    draw.ellipse((650, 500, 940, 790), fill="#ef8354", outline="white", width=12)
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 88)
+    draw.text((90, 260), "VERIFY FIRST", font=font, fill="white")
+    image.save(path)
+    return path
 
 
 def _real_matrix(platform: str) -> dict:
@@ -70,8 +84,8 @@ def test_acceptance_uses_registered_video_and_cover_paths(tmp_path: Path):
 
     result = evaluate_job_acceptance(store, job["id"], "douyin_ai")
 
-    assert result["passed"] is True
-    assert Path(result["artifacts_dir"]) == render
+    assert result["passed"] is False
+    assert "video_runtime_gate_failed" in result["failures"]
 
 
 def test_compiled_run_requires_passing_viral_cover_evidence(tmp_path: Path):
@@ -88,19 +102,30 @@ def test_compiled_run_requires_passing_viral_cover_evidence(tmp_path: Path):
     (render / "scene_manifest.json").write_text("{}", encoding="utf-8")
     (render / "tts_config.json").write_text("{}", encoding="utf-8")
     (render / "final.mp4").write_bytes(b"video")
-    Image.new("RGB", (1080, 1920), "navy").save(render / "cover.jpg")
+    cover = _valid_cover(render / "cover.png")
+    background = _valid_cover(render / "background.png")
 
     missing = evaluate_job_acceptance(store, job["id"], "tiktok", artifacts_dir=render)
     assert "cover_quality_gate_failed" in missing["failures"]
 
-    (render / "cover_quality_evidence.json").write_text(
-        '{"platform":"tiktok","layout_key":"hero_conflict","hook":"AI failed?",'
-        '"conflict_or_payoff":"verify first","focal_subjects":["cat","dog"],'
-        '"content_match_reason":"matches the script conflict","safe_zone_verified":true,"degraded":false}',
-        encoding="utf-8",
-    )
+    (render / "cover_quality_evidence.json").write_text(json.dumps({
+        "platform": "tiktok", "layout_key": "hero_conflict", "hook": "VERIFY FIRST",
+        "title_en": "VERIFY FIRST", "conflict_or_payoff": "verify first",
+        "focal_subjects": ["cat", "dog"],
+        "content_match_reason": "matches the script conflict",
+        "background_provenance": {
+            "path": str(background),
+            "source": "test_fixture",
+            "license": "test",
+            "independent_render": True,
+        },
+        "cover_sha256": hashlib.sha256(cover.read_bytes()).hexdigest(),
+        "safe_zone_verified": True, "degraded": False,
+    }), encoding="utf-8")
     passed = evaluate_job_acceptance(store, job["id"], "tiktok", artifacts_dir=render)
-    assert "cover_quality_gate_failed" not in passed["failures"]
+    assert passed["passed"] is False
+    assert "video_runtime_gate_failed" in passed["failures"]
+    assert "asset_provenance_missing" in passed["failures"]
 
 
 def test_compiled_run_rejects_duplicate_asset_provenance(tmp_path: Path):

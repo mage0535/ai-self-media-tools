@@ -16,7 +16,12 @@ except Exception:  # pragma: no cover - script fallback when PYTHONPATH is absen
     def project_home() -> Path:
         import os
 
-        return Path(os.environ.get("CONTENT_PLATFORM_HOME", Path.cwd()))
+        # 2026-08-23 修复：cwd 兜底不得把 registry 写到任意目录。
+        # cwd fallback must stay inside the checked-out repository.
+        env_home = os.environ.get("CONTENT_PLATFORM_HOME", "").strip()
+        if env_home:
+            return Path(env_home)
+        return Path(__file__).resolve().parents[1]
 
 
 def _default_registry() -> Path:

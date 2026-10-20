@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from content_platform.media_quality import (
     _platform_source_matrix_gate,
     validate_article_packet,
@@ -177,6 +179,28 @@ def complete_video_metadata(platform: str = "kuaishou"):
             "source": "licensed_music_manifest",
             "license": "cc-by",
             "fit_reason": "low-volume bed selected to support narration",
+            "sha256": "licensed-bed",
+        },
+        "audio_plan": {
+            "route": "embedded_licensed_bgm",
+            "route_reason": "licensed bed supports narration",
+            "source_audio_action": "replace",
+            "fallback_route": "sfx_only",
+            "license": "cc-by",
+            "source_url": "https://licensed.example/audio/bed.mp3",
+            "fingerprint": "sha256:licensed-bed",
+            "rights_scope": "worldwide_social_video",
+        },
+        "actual_audio": {
+            "route": "embedded_licensed_bgm",
+            "source_audio_action": "replace",
+            "license": "cc-by",
+            "source_url": "https://licensed.example/audio/bed.mp3",
+            "fingerprint": "sha256:licensed-bed",
+            "rights_scope": "worldwide_social_video",
+            "asset_path": "/tmp/audio/bed.mp3",
+            "provenance": "licensed_music_manifest",
+            "sha256": "licensed-bed",
         },
         "first_three_second_value": "the opening states the mistake to avoid before the user scrolls away",
         "differentiation_dimensions": ["diagnostic structure", "checklist visuals", "warning-first opening"],
@@ -1635,6 +1659,7 @@ def test_video_packet_rejects_silent_static_or_unverified_assets():
         "audio_stream",
         "audio_composition",
         "background_music_source",
+        "audio_route_consistency",
         "natural_voice",
         "subtitle_or_readable_cards",
         "lower_third_captions",
@@ -1741,6 +1766,72 @@ def test_video_packet_accepts_complete_narrated_real_footage_cut():
         ],
     }
     assert validate_video_packet(packet)["passed"] is True
+
+
+def test_sfx_only_route_does_not_require_a_bgm_source():
+    packet = complete_video_metadata()
+    packet["audio_plan"] = {
+        "route": "sfx_only",
+        "route_reason": "dialogue and effects carry the edit",
+        "source_audio_action": "replace_with_voiceover_and_sfx",
+        "fallback_route": None,
+        "no_bgm_approved": True,
+        "approval_source": "explicit_user_request",
+    }
+    packet["actual_audio"] = {
+        "route": "sfx_only",
+        "source_audio_action": "replace_with_voiceover_and_sfx",
+        "no_bgm_approved": True,
+        "approval_source": "explicit_user_request",
+    }
+    packet["background_music_present"] = False
+    packet.pop("bgm_source", None)
+
+    gates = validate_video_packet(packet)["gates"]
+
+    assert gates["audio_route_consistency"]["passed"] is True
+    assert gates["audio_composition"]["passed"] is True
+    assert gates["background_music_source"]["passed"] is True
+
+
+@pytest.mark.parametrize(
+    ("missing", "expected_failure"),
+    [
+        ("asset_path", "actual_audio.asset_missing"),
+        ("provenance", "actual_audio.provenance_missing"),
+        ("sha256", "actual_audio.sha256_missing"),
+    ],
+)
+def test_embedded_bgm_actual_audio_requires_asset_provenance_and_hash(missing, expected_failure):
+    packet = complete_video_metadata()
+    packet["actual_audio"].pop(missing)
+
+    gate = validate_video_packet(packet)["gates"]["audio_route_consistency"]
+
+    assert gate["passed"] is False
+    assert expected_failure in gate["failures"]
+
+
+def test_video_packet_rejects_planned_actual_audio_route_mismatch():
+    packet = complete_video_metadata()
+    packet["actual_audio"] = {
+        "route": "platform_native_track",
+        "source_audio_action": "replace_at_publish",
+        "platform": "kuaishou",
+        "track_id": "native-123",
+        "track_url": "https://www.kuaishou.com/music/native-123",
+        "trend_evidence": {"rank": 2},
+        "rights_scope": "kuaishou_native_use",
+        "apply_stage": "platform_publish",
+    }
+
+    result = validate_video_packet(packet)
+
+    assert result["passed"] is False
+    assert "audio_route_consistency" in result["failed_dimensions"]
+    gate = result["gates"]["audio_route_consistency"]
+    assert gate["planned_route"] == "embedded_licensed_bgm"
+    assert gate["actual_route"] == "platform_native_track"
 
 
 def test_video_packet_requires_real_scene_background_for_every_scene():

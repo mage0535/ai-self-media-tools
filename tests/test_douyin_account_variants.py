@@ -22,7 +22,8 @@ class DouyinAccountVariantsTests(unittest.TestCase):
         ai = accounts["douyin_ai"]
 
         self.assertEqual(pet.get("lane"), "pet_healing")
-        self.assertEqual(ai.get("lane"), "ai_efficiency_open_source")
+        self.assertEqual(ai.get("lane"), "real_world_ai_implementation_v1")
+        self.assertEqual(ai.get("account_direction"), "real_world_ai_implementation_v1")
         self.assertNotEqual(pet.get("growth_strategy_key"), ai.get("growth_strategy_key"))
         self.assertNotEqual(pet.get("cookie_account"), ai.get("cookie_account"))
         self.assertIn("douyin_pet", pet.get("output_dir_pattern", ""))

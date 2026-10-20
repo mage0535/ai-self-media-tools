@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -27,11 +28,28 @@ class ReviewTokens:
                 handle.write(os.urandom(32))
         return self.key_path.read_bytes()
 
-    def issue(self, job_id, action, ttl=86400, now=None):
-        if action not in {"approve", "reject"}:
+    def issue(self, job_id, action, ttl=86400, now=None, *, continuation_sha256=None):
+        if action == "original_knowledge":
+            if (getattr(os, "geteuid", lambda: -1)() != 0 or not re.fullmatch("[0-9a-f]{16}", str(job_id))
+                    or job_id in {"7b12e9aae980484b", "f8bb617683914cbe"} or not 0 < int(ttl) <= 1800
+                    or not re.fullmatch("[0-9a-f]{64}", str(continuation_sha256 or ""))):
+                raise PermissionError("root_original_knowledge_scope_or_budget_invalid")
+        elif action == "internal_make":
+            if os.geteuid() != 0 or job_id != "f8bb617683914cbe" or not 0 < int(ttl) <= 1800:
+                raise PermissionError("fixed_root_internal_make_scope_or_budget_invalid")
+        elif action not in {"approve", "reject"}:
             raise ValueError("unsupported review action")
         timestamp = int(time.time() if now is None else now)
-        body = _b64(json.dumps({"job_id": job_id, "action": action, "exp": timestamp + int(ttl)}, separators=(",", ":")).encode())
+        if action in {"internal_make", "original_knowledge"} and not 0 < timestamp + int(ttl) - time.time() <= 1800:
+            raise PermissionError("internal_make_actual_lifetime_invalid")
+        payload = {"job_id": job_id, "action": action, "exp": timestamp + int(ttl)}
+        if continuation_sha256 is not None:
+            if action not in {"internal_make", "original_knowledge"} or not isinstance(continuation_sha256, str) or len(continuation_sha256) != 64 or any(c not in "0123456789abcdef" for c in continuation_sha256):
+                raise PermissionError("fixed_internal_make_continuation_sha_required")
+            payload["continuation_sha256"] = continuation_sha256
+        if action in {"internal_make", "original_knowledge"}:
+            payload["nonce"] = os.urandom(16).hex()
+        body = _b64(json.dumps(payload, separators=(",", ":")).encode())
         signature = _b64(hmac.new(self._key(), body.encode(), hashlib.sha256).digest())
         return body + "." + signature
 
@@ -49,5 +67,7 @@ class ReviewTokens:
             raise ValueError("review token action mismatch")
         if int(payload.get("exp", 0)) < timestamp:
             raise ValueError("review token expired")
+        if expected_action in {"internal_make", "original_knowledge"} and not 0 < int(payload.get("exp", 0)) - time.time() <= 1800:
+            raise ValueError("internal_make_actual_lifetime_invalid")
         return payload
 

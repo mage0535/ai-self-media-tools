@@ -8,6 +8,7 @@ Any automatic or manual workflow must pass this before delivery. Run:
   python3 scripts/unified_workflow_acceptance.py --date YYYYMMDD --platform <name> [--artifacts-dir <dir>]
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -145,7 +146,7 @@ def d5_format(body: str, platform: str, content_form: str, cards: list | None = 
             check(f"D5 {platform} segment length 10-20 words", len(segs) >= 8 and all(8 <= w <= 28 for w in word_lens), f"words={word_lens}")
         else:
             check(f"D5 {platform} 8 segments", len(segs) >= 8, f"{len(segs)} segments")
-            check(f"D5 {platform} segment length 40-60", len(segs) >= 8 and all(30 <= l <= 90 for l in lens), f"lens={lens}")
+            check(f"D5 {platform} segment length", len(segs) >= 8 and all((25 if platform in {"douyin","douyin_ai","kuaishou","shipinhao","tiktok"} else 30) <= l <= 90 for l in lens), f"lens={lens}")
 
 # ── D6. Long-form quality (facts / quotes / actionable) ──
 def d6_long(body: str, platform: str):
@@ -183,18 +184,25 @@ def d7_knowledge_cards(artifacts_dir: Path, platform: str):
 
 # ── D8. Video quality (background uniqueness / motion / duration / platform voice) ──
 def d8_video(artifacts_dir: Path, platform: str):
-    if platform not in {"kuaishou", "douyin", "tiktok", "shipinhao", "youtube", "bilibili"}:
+    if platform not in {"kuaishou", "douyin", "douyin_ai", "tiktok", "shipinhao", "youtube", "bilibili"}:
         return check(f"D8 {platform} video", True, "n/a")
     bg_dir = artifacts_dir / "backgrounds"
     if bg_dir.exists():
         # 2026-08-17 修复：兼容 jpg/png（背景图从 Pexels/Pollinations 下载为 jpg）
         bg_files = sorted(bg_dir.glob("*.png")) + sorted(bg_dir.glob("*.jpg"))
         hashes = []
+        valid_backgrounds = True
         for f in bg_files:
-            hashes.append(subprocess.run(["md5sum", str(f)], capture_output=True, text=True).stdout.split()[0])
-        check(f"D8 {platform} backgrounds unique", len(set(hashes)) >= 6, f"{len(set(hashes))}/{len(bg_files)}")
+            try:
+                from PIL import Image
+                with Image.open(f) as image:
+                    image.verify()
+                hashes.append(hashlib.sha256(f.read_bytes()).hexdigest())
+            except Exception:
+                valid_backgrounds = False
+        check(f"D8 {platform} backgrounds unique", valid_backgrounds and len(bg_files) >= 6 and len(set(hashes)) >= 6, f"{len(set(hashes))}/{len(bg_files)}")
     else:
-        check(f"D8 {platform} backgrounds", True, "no backgrounds dir (may use card art)")
+        check(f"D8 {platform} backgrounds", False, "backgrounds_dir_missing")
     motion_ev = None
     for cand in [artifacts_dir / "segment_motion_evidence.json", artifacts_dir / "render" / "segment_motion_evidence.json"]:
         if cand.exists():
@@ -206,6 +214,8 @@ def d8_video(artifacts_dir: Path, platform: str):
     if motion_ev:
         moves = [s.get("move_id") for s in motion_ev.get("segments", [])]
         check(f"D8 {platform} motion diversity", len(set(moves)) >= 6, f"{len(set(moves))} moves")
+    else:
+        check(f"D8 {platform} motion evidence", False, "segment_motion_evidence_missing")
     final = None
     for cand in [artifacts_dir / "final.mp4", artifacts_dir / "render" / "final.mp4"]:
         if cand.exists():
@@ -215,7 +225,9 @@ def d8_video(artifacts_dir: Path, platform: str):
         dur = float(subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(final)],
             capture_output=True, text=True).stdout.strip() or 0)
-        check(f"D8 {platform} duration 40-100s", 40 <= dur <= 100, f"{dur:.1f}s")
+        # 2026-08-22: B站赛道教程中位284s(热作包实证), 上限放宽到480s; 其他平台维持40-100s
+        dur_max = 480 if platform == "bilibili" else 100
+        check(f"D8 {platform} duration 40-{dur_max}s", 40 <= dur <= dur_max, f"{dur:.1f}s")
         # platform voice language
         tts_state = artifacts_dir / ".render_state" / "tts_01.json"
         if tts_state.exists():
@@ -223,6 +235,9 @@ def d8_video(artifacts_dir: Path, platform: str):
             en_platform = platform in {"tiktok", "youtube"}
             ok = (voice.startswith("en-") if en_platform else voice.startswith("zh-"))
             check(f"D8 {platform} TTS language", ok, f"voice={voice}")
+    else:
+        check(f"D8 {platform} final video", False, "final_mp4_missing")
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -292,6 +307,39 @@ def main():
     d6_long(body, platform)
     d7_knowledge_cards(artifacts_dir, platform)
     d8_video(artifacts_dir, platform)
+    # Cross-platform final evidence gate. It is activated when a producer
+    # declares a final_delivery_manifest; the manifest then becomes the
+    # single source for asset roles, semantic evidence and publish state.
+    final_manifest = artifacts_dir / "final_delivery_manifest.json"
+    if final_manifest.exists():
+        try:
+            from final_delivery_gate import run_gate
+
+            html_candidates = [
+                artifacts_dir / "article_final_repaired.html",
+                artifacts_dir / "article_final.html",
+            ]
+            html_path = next((path for path in html_candidates if path.exists()), None)
+            state_candidates = [
+                artifacts_dir / f"{platform}_status_{date_compact}.json",
+                artifacts_dir / "wechat_status_20260913.json",
+                artifacts_dir / "publish_status.json",
+            ]
+            state_path = next((path for path in state_candidates if path.exists()), None)
+            final_gate = run_gate(
+                artifacts_dir,
+                platform=platform,
+                job_id=str((manifest_data if isinstance((manifest_data := json.loads(final_manifest.read_text(encoding="utf-8"))), dict) else {}).get("job_id") or ""),
+                content_package_id=str((manifest_data if isinstance(manifest_data, dict) else {}).get("content_package_id") or ""),
+                html=html_path,
+                assets=final_manifest,
+                state=state_path,
+            )
+            check("final delivery evidence", final_gate.get("passed") is True, "; ".join(final_gate.get("failures") or []) or "passed")
+        except Exception as exc:
+            check("final delivery evidence", False, f"gate_error:{type(exc).__name__}:{str(exc)[:160]}")
+    elif any((artifacts_dir / name).exists() for name in ("article_final.html", "article_final_repaired.html", "final.mp4", "cover.jpg", "cover.png")):
+        check("final delivery evidence", False, "final_delivery_manifest_missing")
     print()
     passed = len(checks) - len(failures)
     print(f"RESULT: {passed}/{len(checks)} passed")

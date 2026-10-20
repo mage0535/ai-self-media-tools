@@ -1,4 +1,4 @@
-﻿"""Best-effort platform metric collectors.
+"""Best-effort platform metric collectors.
 
 The collector only records data it can actually read. Platforms that require
 creator-center login exports are reported as action-needed instead of returning
@@ -8,6 +8,9 @@ fake zeros.
 from __future__ import annotations
 
 import json
+import hashlib
+import time
+import uuid
 import os
 import subprocess
 import re
@@ -34,7 +37,7 @@ MAX_REASONABLE_VISIBLE_METRIC = 100_000_000
 
 BACKEND_BROWSER_TARGETS: dict[str, dict[str, Any]] = {
     "wechat": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN",
             "https://mp.weixin.qq.com/cgi-bin/appmsg?action=list_ex&begin=0&count=5&type=9&lang=zh_CN",
@@ -43,7 +46,7 @@ BACKEND_BROWSER_TARGETS: dict[str, dict[str, Any]] = {
         ],
     },
     "kuaishou": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://cp.kuaishou.com/profile",
             "https://cp.kuaishou.com/article/manage/video?status=2&from=publish",
@@ -51,21 +54,21 @@ BACKEND_BROWSER_TARGETS: dict[str, dict[str, Any]] = {
         ],
     },
     "douyin": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://creator.douyin.com/creator-micro/content/manage",
             "https://creator.douyin.com/creator-micro/data/overview",
         ],
     },
     "shipinhao": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://channels.weixin.qq.com/platform/post/list",
             "https://channels.weixin.qq.com/platform",
         ],
     },
     "xiaohongshu": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://creator.xiaohongshu.com/creator/notes",
             "https://creator.xiaohongshu.com/creator/data",
@@ -79,7 +82,7 @@ BACKEND_BROWSER_TARGETS: dict[str, dict[str, Any]] = {
         ],
     },
     "zhihu": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://www.zhihu.com/creator/analytics",
             "https://www.zhihu.com/creator/followers",
@@ -88,7 +91,7 @@ BACKEND_BROWSER_TARGETS: dict[str, dict[str, Any]] = {
         ],
     },
     "juejin": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://creator.juejin.cn/content",
             "https://juejin.cn/creator/content",
@@ -149,7 +152,7 @@ def _platform(platform: str) -> str:
 
 
 def _with_public_fallback(platform: str, result: dict[str, Any], config: dict[str, Any], fetcher: Callable[..., str]) -> dict[str, Any]:
-    if result.get("status") in {"ok", "public_signal"}:
+    if result.get("status") in {"ok", "backend_signal", "public_signal"}:
         return result
     public = _public_profile_signal(platform, config, fetcher)
     if public.get("status") != "missing_config":
@@ -202,7 +205,8 @@ def _browser_backend_signal(platform: str, config: dict[str, Any]) -> dict[str, 
         return {"status": "missing_config", "reason": "no browser backend target registered"}
     if isinstance(config.get("backend_urls"), list):
         target["urls"] = [str(item) for item in config["backend_urls"] if str(item).strip()]
-    proxy_env = str(config.get("proxy_env") or target.get("proxy_env") or "")
+    route = str(config.get("route") or target.get("route") or "direct")
+    proxy_env = str(config.get("proxy_env") or target.get("proxy_env") or "") if route != "direct" else ""
     proxy_url = os.environ.get(proxy_env, "") if proxy_env else ""
     try:
         from playwright.sync_api import sync_playwright
@@ -233,6 +237,22 @@ def _browser_backend_signal(platform: str, config: dict[str, Any]) -> dict[str, 
     return {"status": "backend_signal_unavailable", "reason": "; ".join(route_errors)[:300] or "backend metrics not visible"}
 
 
+def _backend_login_required(page, text, config):
+    selector = config.get("login_selector")
+    if selector and page.locator(str(selector)).is_visible():
+        return True
+    # Match authentication prompts, not logout menus or generic QR/help text.
+    prompts = ("登录超时", "登录已失效", "登录状态已失效", "请重新登录", "请先登录",
+               "请扫码登录", "扫码登录", "扫描二维码登录", "请完成安全验证",
+               "请进行身份验证", "请完成身份验证", "请完成滑块验证",
+               "session expired", "please log in", "please sign in", "verify your identity")
+    lines = [line.strip().casefold() for line in text.splitlines() if line.strip()]
+    return any(any(prompt in line for prompt in prompts) or
+               line in {"登录", "立即登录", "账号登录", "密码登录", "手机登录",
+                        "安全验证", "身份验证", "滑块验证", "login", "log in", "sign in"}
+               for line in lines)
+
+
 def _probe_browser_backend_route(
     pw: Any,
     state_file: str,
@@ -246,13 +266,21 @@ def _probe_browser_backend_route(
     if proxy_url and proxy_url.startswith("socks5h://"):
         proxy_url = "socks5://" + proxy_url[len("socks5h://") :]
     try:
+        executable = str(config.get("chromium_executable_path") or os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH") or "/root/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome")
+        if not Path(executable).is_file() or not os.access(executable, os.X_OK):
+            raise FileNotFoundError("collector_chromium_executable_unavailable")
+        browser_env = dict(os.environ, TMPDIR="/tmp")
         browser = pw.chromium.launch(
             headless=True,
+            executable_path=executable,
+            env=browser_env,
             proxy={"server": proxy_url} if proxy_url else None,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
         context = browser.new_context(storage_state=state_file, locale="zh-CN", viewport={"width": 1440, "height": 1200})
         try:
+            from .scoped_history_collector_guard import attach_if_scoped
+            attach_if_scoped(context)
             for url in target.get("urls") or []:
                 page = context.new_page()
                 try:
@@ -260,7 +288,7 @@ def _probe_browser_backend_route(
                     page.wait_for_timeout(int(config.get("settle_ms") or 8000))
                     text = page.locator("body").inner_text(timeout=8000)
                     lower = text.casefold()
-                    if any(pattern in lower for pattern in ["登录", "扫码", "二维码", "验证", "login", "log in", "sign in", "sign up", "verify"]):
+                    if _backend_login_required(page, text, config):
                         errors.append("login_required_or_verification")
                         continue
                     metrics = _extract_public_metrics(text)
@@ -851,8 +879,21 @@ def collect_platform_metrics(
     for requested in platforms:
         platform = _platform(requested)
         pcfg = cfg.get(platform, {}) if isinstance(cfg.get(platform, {}), dict) else {}
+        if platform in {"x", "twitter"} and not pcfg.get("native_account_snapshot"):
+            native_x_config = cfg.get("x") or cfg.get("twitter") or {}
+            if native_x_config.get("native_account_snapshot"):
+                pcfg = native_x_config
+        native_started=None;native_before=set()
         try:
-            if platform == "tiktok" and (pcfg.get("api_url") or pcfg.get("analytics_api_url") or os.environ.get("TIKTOK_METRICS_API_URL")):
+            if platform in {"x", "twitter"} and pcfg.get("native_account_snapshot"):
+                from .twitter_native_source import TwitterNativeBrowserAdapter
+                native_reference=pcfg['native_account_snapshot']
+                native_pointer=Path(native_reference.get('path') if isinstance(native_reference,dict) else native_reference)
+                native_directory=native_pointer.parent/'account-captures'
+                native_before={p.name for p in native_directory.glob('capture-*')}
+                native_started=time.time()
+                result = TwitterNativeBrowserAdapter().collect_account_metrics(pcfg)
+            elif platform == "tiktok" and (pcfg.get("api_url") or pcfg.get("analytics_api_url") or os.environ.get("TIKTOK_METRICS_API_URL")):
                 result = _tiktok_api_metrics(pcfg, http_json)
             elif pcfg.get("metrics_file") or pcfg.get("analytics_file"):
                 result = _metrics_file_signal(platform, pcfg)
@@ -896,13 +937,44 @@ def collect_platform_metrics(
             else:
                 result = {"status": "unsupported", "reason": "no collector registered"}
         except Exception as exc:
-            result = {"status": "failed", "reason": str(exc)[:300]}
-        result = _with_public_fallback(platform, result, pcfg, fetcher)
+            result = {"status": "failed", "reason": str(exc)[:300], "error_type": type(exc).__name__}
+            if platform in {"x", "twitter"} and pcfg.get("native_account_snapshot"):
+                # 仅交给调用方Root600原件，不把完整浏览器异常写到公开stdout。
+                def captured_stream(value):
+                    raw=value if isinstance(value,bytes) else str(value or '').encode()
+                    return {'text':raw[:65536].decode('utf-8',errors='replace'),
+                        'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw),'truncated':len(raw)>65536}
+                diagnostic={'error_type':type(exc).__name__,
+                    'reason':str(exc)[:65536], 'reason_sha256':hashlib.sha256(str(exc).encode()).hexdigest(),
+                    'stdout':captured_stream(getattr(exc,'stdout',None)),
+                    'stderr':captured_stream(getattr(exc,'stderr',None))}
+                reference=pcfg['native_account_snapshot']
+                pointer=Path(reference.get('path') if isinstance(reference,dict) else reference)
+                directory=pointer.parent/'account-captures'
+                if os.geteuid()!=0 or any(p.is_symlink() for p in (directory,*directory.parents)):
+                    raise PermissionError('native_account_private_diagnostic_path_required')
+                directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+                diagnostic.update(schema='native-account-collector-exception-v1',platform=platform,
+                    started_at_unix=native_started,finished_at_unix=time.time(),collector_replayed=False,
+                    capture_references=[{'path':str(p),'mtime_unix':p.stat().st_mtime,
+                        'files':[{'path':str(q),'bytes':q.stat().st_size,'sha256':hashlib.sha256(q.read_bytes()).hexdigest()}
+                            for q in p.iterdir() if q.is_file() and not q.is_symlink() and q.stat().st_size<=2097152]}
+                        for p in directory.glob('capture-*') if p.is_dir() and not p.is_symlink()
+                        and native_started is not None and p.name not in native_before],
+                    capture_attribution='directories_observed_in_this_call_window_not_invented_request_receipts')
+                raw=json.dumps(diagnostic,ensure_ascii=False,sort_keys=True).encode()
+                target=directory/('failure-'+uuid.uuid4().hex+'.private.json')
+                fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+                with os.fdopen(fd,'wb') as stream:stream.write(raw);stream.flush();os.fsync(stream.fileno())
+                result.update(reason='native_account_collection_failed',reason_sha256=diagnostic['reason_sha256'],
+                    private_failure_diagnostic_ref={'path':str(target),'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)})
+        if not (platform in {"x", "twitter"} and pcfg.get("native_account_snapshot")):
+            result = _with_public_fallback(platform, result, pcfg, fetcher)
         report["platforms"][platform] = result
     if output:
         path = Path(output)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_raw_snapshot(path, report)
     return report
 
 
@@ -954,10 +1026,23 @@ def collect_with_hermes_platform_scraper(
     if output:
         path = Path(output)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_raw_snapshot(path, report)
     return report
 
 
 def _run_command(command: list[str]) -> tuple[int, str, str]:
     result = subprocess.run(command, capture_output=True, text=True, timeout=120)
     return result.returncode, result.stdout, result.stderr
+
+
+def _write_raw_snapshot(path, report):
+    """Create once, preserving measured zero and original missing values."""
+    path = Path(path)
+    if any(item.is_symlink() for item in (path, *path.parents)):
+        raise ValueError("raw_snapshot_symlink")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    raw = json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False).encode("utf-8")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+    return {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}

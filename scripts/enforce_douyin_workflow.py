@@ -175,20 +175,117 @@ def command_validate_packet(args: argparse.Namespace) -> int:
     return 0
 
 
+REQUIRED_11_TREND_PLATFORMS = {
+    "douyin",
+    "tiktok",
+    "weibo",
+    "bilibili",
+    "xiaohongshu",
+    "youtube",
+    "kuaishou",
+    "zhihu",
+    "wechat",
+    "baidu",
+    "reddit",
+}
+
+
 def command_step(args: argparse.Namespace) -> int:
     artifacts = json.loads(args.artifacts or "{}")
-    if args.name == "quality_gate":
+    failures: list[str] = []
+
+    if args.name == "trend_analysis":
+        sources = artifacts.get("sources") or []
+        attempted_platforms = {
+            str(src.get("platform") or "").strip().lower()
+            for src in sources
+            if isinstance(src, dict) and src.get("platform")
+        }
+        missing_platforms = REQUIRED_11_TREND_PLATFORMS - attempted_platforms
+        if missing_platforms:
+            failures.append(
+                f"trend_analysis requires full 11-platform scan, missing platforms: {sorted(missing_platforms)}"
+            )
+
+        successful_count = 0
+        for idx, src in enumerate(sources):
+            if not isinstance(src, dict):
+                failures.append(f"trend source [{idx}] is not an object")
+                continue
+            plat = str(src.get("platform") or "").strip().lower()
+            status = str(src.get("status") or "success").lower()
+            ev = str(src.get("evidence") or "").strip()
+            fail_reason = str(src.get("failure_reason") or "").strip()
+
+            if status == "success":
+                if not ev:
+                    failures.append(f"successful trend source '{plat}' must provide non-empty evidence")
+                else:
+                    successful_count += 1
+            else:
+                if not fail_reason:
+                    failures.append(f"failed/blocked trend source '{plat}' must provide documented failure_reason")
+
+        if successful_count < 5:
+            failures.append(f"trend_analysis requires at least 5 successful platform sources, got {successful_count}")
+
+        if failures:
+            print(json.dumps({"passed": False, "failures": failures}, ensure_ascii=False, indent=2))
+            return 1
+
+    elif args.name == "content_decision":
+        cross_sources = artifacts.get("cross_sources") or []
+        if len(cross_sources) < 3:
+            failures.append(f"content_decision requires at least 3 cross-validated sources, got {len(cross_sources)}")
+        if not str(artifacts.get("selected_topic") or "").strip():
+            failures.append("content_decision requires non-empty selected_topic based on cross-validation")
+        if failures:
+            print(json.dumps({"passed": False, "failures": failures}, ensure_ascii=False, indent=2))
+            return 1
+
+    elif args.name == "quality_gate":
         video_path = artifacts.get("video_path")
         packet_path = artifacts.get("packet_path")
-        failures: list[str] = []
+        dedup_evidence_path = artifacts.get("dedup_evidence_path")
+        is_repost = bool(artifacts.get("is_repost", True))
+
         if video_path:
             failures.extend(validate_video_quality(Path(video_path)))
         if packet_path:
             packet = _read_json(Path(packet_path))
             failures.extend(validate_tiktok_repost_packet(packet, require_visual_review=True))
+            if not dedup_evidence_path and packet.get("dedup_evidence_path"):
+                dedup_evidence_path = packet.get("dedup_evidence_path")
+
+        if is_repost:
+            if not dedup_evidence_path or not Path(dedup_evidence_path).is_file():
+                failures.append("quality_gate requires valid dedup_evidence_path for repost content")
+            else:
+                try:
+                    evi_data = _read_json(Path(dedup_evidence_path))
+                    if evi_data.get("passed") is not True:
+                        failures.append(f"dedup_evidence passed is not True: {evi_data.get('failures')}")
+                    if evi_data.get("stage") != "post_render":
+                        failures.append("dedup_evidence stage must be post_render")
+                    transform = evi_data.get("transform") or {}
+                    t_kind = transform.get("kind")
+                    t_desc = transform.get("description", "")
+                    if t_kind != "high_order_multimodal_dedup" and not any(
+                        k in t_desc for k in ("hflip", "zoom_crop", "noise", "jitter", "color_jitter")
+                    ):
+                        failures.append(
+                            "dedup_evidence transform must declare high_order_multimodal_dedup (hflip, zoom_crop, noise, jitter)"
+                        )
+                    post_ver = evi_data.get("post_render_verification") or {}
+                    if post_ver.get("passed") is not True:
+                        failures.append("dedup_evidence post_render_verification must pass")
+                except Exception as exc:
+                    failures.append(f"failed to parse dedup_evidence: {exc}")
+
         if failures:
             print(json.dumps({"passed": False, "failures": failures}, ensure_ascii=False, indent=2))
             return 1
+
     complete_step(args.name, artifacts)
     return 0
 

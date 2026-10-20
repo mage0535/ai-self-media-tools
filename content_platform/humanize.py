@@ -86,7 +86,7 @@ def _score(body, context):
     auth_penalty = sum(text.casefold().count(p) for p in GENERIC_PHRASES) * 0.08
     authenticity = max(0.15, 1.0 - auth_penalty)
     body_lines = [line.strip() for line in text.splitlines() if line.strip()]
-    hook_strength = 0.75 if style.get("opening_patterns") else 0.45
+    hook_strength = 0.45  # Score this body, not the presence of a reference post.
     # English hooks should be judged by concrete problem/payoff signals, not only style samples.
     english_hook_signals = 0
     first_240 = text[:240]
@@ -231,11 +231,7 @@ def naturalize_copy(body, context):
     if em_count > 4:
         updated = updated.replace("—", ", ")
         notes.append(f"reduced {em_count} em-dashes")
-    if context.get("style", {}).get("opening_patterns"):
-        opening = context["style"]["opening_patterns"][0]
-        if opening and opening not in updated[:len(opening) + 12]:
-            updated = f"{opening}\n\n{updated}"
-            notes.append("prepended same-track opening rhythm")
+    # Reference openings constrain writing style; they are never publication copy.
     updated = _sentence_break(updated)
     updated = re.sub(r"\n{3,}", "\n\n", updated).strip()
     term_check = _verify_terms(locked, updated)

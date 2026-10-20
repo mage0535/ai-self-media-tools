@@ -6,6 +6,7 @@ import hashlib
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
 STRUCTURE_POOL = [
@@ -94,16 +95,133 @@ def validate_compiled_strategy(strategy: dict[str, Any] | None) -> dict[str, Any
     return {"passed": not failures, "failures": failures}
 
 
-def compact_compiled_strategy(strategy: dict[str, Any] | None) -> dict[str, Any]:
-    """Keep provider policy bounded while retaining auditable provenance."""
-    if not isinstance(strategy, dict):
+def build_strategy_evidence_contract(
+    *,
+    platform: str,
+    lane: str,
+    viral_collection: dict[str, Any] | None,
+    viral_breakdown: dict[str, Any] | None,
+    keyword_tool: dict[str, Any] | None,
+    prompt_bundle: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Bind observed research outputs to the generation strategy.
+
+    The compiler does not collect network data itself.  It records the
+    outputs of the real collectors and makes their provenance a runtime
+    input, so a caller cannot claim that a strategy used research it never
+    supplied.
+    """
+    return {
+        "version": "strategy_evidence_contract_v1",
+        "platform": str(platform or "").casefold().strip(),
+        "lane": str(lane or "").strip(),
+        "viral_collection": dict(viral_collection or {}),
+        "viral_breakdown": dict(viral_breakdown or {}),
+        "keyword_tool": dict(keyword_tool or {}),
+        "prompt_bundle": dict(prompt_bundle or {}),
+    }
+
+
+def validate_strategy_evidence_contract(contract: dict[str, Any] | None) -> dict[str, Any]:
+    """Fail closed unless collection, analysis, keywords, and prompts exist."""
+    failures: list[str] = []
+    if not isinstance(contract, dict):
+        return {"passed": False, "failures": ["strategy_evidence_contract_missing"]}
+    platform = str(contract.get("platform") or "").casefold().strip()
+    lane = str(contract.get("lane") or "").strip()
+    if not platform:
+        failures.append("strategy_evidence_platform_missing")
+    if not lane:
+        failures.append("strategy_evidence_lane_missing")
+
+    collection = contract.get("viral_collection") or {}
+    if not isinstance(collection, dict) or not collection.get("tool") or not collection.get("collected_at") or int(collection.get("sample_count") or 0) < 1:
+        failures.append("viral_collection_missing_or_not_executed")
+
+    breakdown = contract.get("viral_breakdown") or {}
+    summary = breakdown.get("summary") if isinstance(breakdown, dict) else {}
+    accepted = int((summary or {}).get("accepted_samples") or breakdown.get("accepted_samples", 0)) if isinstance(breakdown, dict) else 0
+    samples = breakdown.get("samples") if isinstance(breakdown, dict) else []
+    if not isinstance(breakdown, dict) or breakdown.get("status") != "ready" or accepted < 1 or not isinstance(samples, list) or not samples:
+        failures.append("viral_breakdown_not_ready")
+    native_roots = {
+        "douyin": ("douyin.com", "iesdouyin.com"),
+        "douyin_ai": ("douyin.com", "iesdouyin.com"),
+        "douyin_pet": ("douyin.com", "iesdouyin.com"),
+        "tiktok": ("tiktok.com",),
+        "youtube": ("youtube.com", "youtu.be"),
+        "bilibili": ("bilibili.com", "b23.tv"),
+        "kuaishou": ("kuaishou.com", "gifshow.com", "kwai.com"),
+        "zhihu": ("zhihu.com",),
+        "juejin": ("juejin.cn",),
+        "xiaohongshu": ("xiaohongshu.com", "xhslink.com"),
+        "wechat": ("mp.weixin.qq.com", "weixin.qq.com"),
+        "shipinhao": ("weixin.qq.com", "channels.weixin.qq.com"),
+        "x": ("x.com", "twitter.com"),
+        "twitter": ("x.com", "twitter.com"),
+    }
+    roots = native_roots.get(platform)
+    if roots and isinstance(samples, list):
+        non_native = []
+        metadata_incomplete = False
+        for sample in samples:
+            url = str(sample.get("canonical_url") or sample.get("url") or "") if isinstance(sample, dict) else ""
+            host = (urlparse(url).hostname or "").casefold()
+            if not any(host == root or host.endswith("." + root) for root in roots):
+                non_native.append(url or "missing_url")
+            if isinstance(sample, dict):
+                required = ("native_id", "canonical_url", "author", "published_at", "captured_at")
+                missing = any(not str(sample.get(field) or "").strip() or str(sample.get(field)).casefold().startswith("unavailable") for field in required)
+                has_metric = any(sample.get(field) not in (None, "") for field in ("views", "likes", "comments", "shares", "points", "metrics"))
+                has_content_evidence = any(sample.get(field) not in (None, "", [], {}) for field in ("visual_evidence", "media_ref", "media_path", "raw_snapshot_ref"))
+                if missing or not has_metric or not has_content_evidence:
+                    metadata_incomplete = True
+        if non_native:
+            failures.append("viral_breakdown_cross_platform_samples")
+        if metadata_incomplete:
+            failures.append("viral_breakdown_sample_metadata_incomplete")
+
+    keyword_tool = contract.get("keyword_tool") or {}
+    queries = keyword_tool.get("queries") if isinstance(keyword_tool, dict) else []
+    keyword_platform = str(keyword_tool.get("platform") or "").casefold() if isinstance(keyword_tool, dict) else ""
+    keyword_lane = str(keyword_tool.get("lane") or "").strip() if isinstance(keyword_tool, dict) else ""
+    if (
+        not isinstance(keyword_tool, dict)
+        or not keyword_tool.get("tool")
+        or not isinstance(queries, list)
+        or not [item for item in queries if str(item).strip()]
+        or keyword_platform != platform
+        or keyword_lane != lane
+    ):
+        failures.append("keyword_tool_missing_or_not_executed")
+
+    prompt = contract.get("prompt_bundle") or {}
+    prompt_validation = prompt.get("validation") if isinstance(prompt, dict) else {}
+    if (
+        not isinstance(prompt, dict)
+        or not isinstance(prompt_validation, dict)
+        or prompt_validation.get("passed") is not True
+        or not prompt.get("fingerprint")
+        or not prompt.get("evidence")
+    ):
+        failures.append("prompt_bundle_missing_or_invalid")
+    return {"passed": not failures, "failures": list(dict.fromkeys(failures))}
+
+
+def compact_compiled_strategy(compiled: dict | None) -> dict:
+    """Return a bounded, JSON-safe excerpt of the compiled strategy for bounded_model_input."""
+    if not isinstance(compiled, dict):
         return {}
-    fields = (
-        "version", "platform", "source_sha256", "content_pillars", "structure_pool",
-        "hook_templates", "cta_pool", "kpi_hypotheses", "evidence_policy", "selection_policy",
-    )
-    compact = {key: strategy[key] for key in fields if key in strategy}
-    for key in ("content_pillars", "structure_pool", "hook_templates", "cta_pool"):
-        if isinstance(compact.get(key), list):
-            compact[key] = compact[key][:8]
-    return compact
+    # Keep only essential wire-safe fields, drop large blobs
+    keep = {"platform", "version", "pillars", "kpis", "phases", "constraints", "compiled_at", "source_path", "source_sha256"}
+    out = {k: v for k, v in compiled.items() if k in keep}
+    # Also keep any small list/dict fields under 1k chars when serialized
+    import json
+    for k, v in compiled.items():
+        if k not in out:
+            try:
+                if len(json.dumps(v, ensure_ascii=False)) < 1024:
+                    out[k] = v
+            except Exception:
+                pass
+    return out

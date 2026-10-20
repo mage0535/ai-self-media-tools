@@ -1,9 +1,12 @@
 import json
+import hashlib
 import tempfile
 import unittest
 import asyncio
 from pathlib import Path
 from unittest.mock import patch
+
+from PIL import Image
 
 
 class PreRenderGateTests(unittest.TestCase):
@@ -13,7 +16,7 @@ class PreRenderGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "backgrounds").mkdir()
-            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            Image.new("RGB", (640, 640), "#224466").save(root / "backgrounds" / "bg_01.jpg")
             cards = [{"layout": "cover", "t": "Useful title", "txt": "Step 1: keep the visual rhythm", "tts": "Step 1: keep the visual rhythm", "items": ["Step 1"]}]
 
             result = validate_render_inputs(root, cards, require_cover_contract=True)
@@ -27,19 +30,63 @@ class PreRenderGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "backgrounds").mkdir()
-            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            Image.new("RGB", (640, 640), "#224466").save(root / "backgrounds" / "bg_01.jpg")
             cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
             bgm = root / "bgm.mp3"
             bgm.write_bytes(b"licensed music")
+            digest = hashlib.sha256(bgm.read_bytes()).hexdigest()
             (root / "bgm_source.json").write_text(
-                '{"source":"pixabay_music","license":"Pixabay Content License","sha256":"new-track"}',
+                json.dumps({"source":"pixabay_music","license":"Pixabay Content License","sha256": digest}),
                 encoding="utf-8",
             )
 
-            result = validate_render_inputs(root, cards, bgm_mean_volume_db=-39.5, require_cover_contract=True)
+            result = validate_render_inputs(
+                root,
+                cards,
+                bgm_mean_volume_db=-39.5,
+                require_cover_contract=True,
+                audio_plan={"route": "embedded_licensed_bgm"},
+            )
 
             self.assertTrue(result["passed"])
             self.assertIn("bgm_requires_auto_gain", result["warnings"])
+
+    def test_embedded_bgm_route_fails_when_asset_or_provenance_is_missing(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cards = [{"layout": "cover", "t": "Useful title"}]
+            result = validate_render_inputs(
+                root,
+                cards,
+                require_backgrounds=False,
+                audio_plan={"route": "embedded_licensed_bgm"},
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn("bgm_asset_or_source_missing", result["failures"])
+
+    def test_embedded_bgm_route_rejects_hash_not_bound_to_asset(self):
+        from scripts.pre_render_gate import validate_render_inputs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cards = [{"layout": "cover", "t": "Useful title"}]
+            (root / "bgm.mp3").write_bytes(b"licensed music")
+            (root / "bgm_source.json").write_text(
+                json.dumps({"source": "licensed", "license": "CC-BY", "sha256": "0" * 64}),
+                encoding="utf-8",
+            )
+            result = validate_render_inputs(
+                root,
+                cards,
+                require_backgrounds=False,
+                audio_plan={"route": "embedded_licensed_bgm"},
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn("bgm_fingerprint_mismatch", result["failures"])
 
     def test_gate_requires_scene_manifest_when_requested(self):
         from scripts.pre_render_gate import validate_render_inputs
@@ -47,7 +94,7 @@ class PreRenderGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "backgrounds").mkdir()
-            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            Image.new("RGB", (640, 640), "#224466").save(root / "backgrounds" / "bg_01.jpg")
             cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
 
             result = validate_render_inputs(root, cards, require_scene_manifest=True, require_backgrounds=False)
@@ -61,7 +108,7 @@ class PreRenderGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "backgrounds").mkdir()
-            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            Image.new("RGB", (640, 640), "#224466").save(root / "backgrounds" / "bg_01.jpg")
             (root / "scene_manifest.json").write_text('{"scenes":[{}]}', encoding="utf-8")
             cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
 
@@ -137,7 +184,7 @@ class PreRenderGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "backgrounds").mkdir()
-            (root / "backgrounds" / "bg_01.jpg").write_bytes(b"background")
+            Image.new("RGB", (640, 640), "#224466").save(root / "backgrounds" / "bg_01.jpg")
             cards = [{"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}]
 
             result = run_pre_render_gate(root, cards)
@@ -145,7 +192,7 @@ class PreRenderGateTests(unittest.TestCase):
             self.assertTrue(result["passed"])
             self.assertTrue((root / "pre_render_gate.json").is_file())
 
-    def test_checkpoint_reuses_only_matching_inputs_and_adopts_legacy_done(self):
+    def test_checkpoint_reuses_only_matching_inputs_and_rejects_legacy_done_by_default(self):
         from scripts.render_checkpoint import mark_complete, stage_current_or_adopt
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -164,8 +211,8 @@ class PreRenderGateTests(unittest.TestCase):
             card.parent.mkdir()
             card.write_bytes(b"card")
             adopted = stage_current_or_adopt(root, "cards", {"card": "v1"}, [card])
-            self.assertTrue(adopted["current"])
-            self.assertEqual(adopted["reason"], "legacy_done_adopted")
+            self.assertFalse(adopted["current"])
+            self.assertEqual(adopted["reason"], "legacy_done_untrusted")
 
     def test_segment_renderer_skips_a_segment_with_matching_checkpoint(self):
         from scripts.kuaishou_render import _segment_checkpoint_inputs, render_segments
@@ -203,13 +250,21 @@ class PreRenderGateTests(unittest.TestCase):
             output.write_bytes(b"voice")
             (root / "tts.done").write_text("ok", encoding="utf-8")
 
-            result = stage_current_or_adopt(root, "tts_01", {"text": "same"}, [output], legacy_marker="tts.done")
+            result = stage_current_or_adopt(
+                root,
+                "tts_01",
+                {"text": "same"},
+                [output],
+                legacy_marker="tts.done",
+                allow_legacy_adoption=True,
+            )
 
             self.assertTrue(result["current"])
             self.assertEqual(result["reason"], "legacy_done_adopted")
 
     def test_card_renderer_does_not_start_browser_when_card_checkpoints_match(self):
-        from scripts.kuaishou_render import THEMES, render_cards
+        from scripts.kuaishou_render import THEMES, _card_checkpoint_inputs, render_cards
+        from scripts.render_checkpoint import mark_complete
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -218,9 +273,17 @@ class PreRenderGateTests(unittest.TestCase):
             cards_dir.mkdir()
             backgrounds.mkdir()
             card = {"layout": "cover", "t": "Useful title", "txt": "A real script beat", "tts": "A real script beat", "items": ["A useful point"]}
+            outputs = []
             for name in ["card_01.png", "card_01_bg.png", "card_01_text.png"]:
-                (cards_dir / name).write_bytes(b"card-layer")
-            (root / "cards.done").write_text("ok", encoding="utf-8")
+                output = cards_dir / name
+                output.write_bytes(b"card-layer")
+                outputs.append(output)
+            mark_complete(
+                root,
+                "card_01",
+                _card_checkpoint_inputs(root, card, 1, THEMES["blueprint"], backgrounds),
+                outputs,
+            )
 
             with patch("scripts.kuaishou_render.async_playwright") as browser:
                 result = asyncio.run(render_cards(root, [card], THEMES["blueprint"], backgrounds, None))

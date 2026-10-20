@@ -139,6 +139,12 @@ python scripts/check_bgm_uniqueness.py /path/to/render_dir --platform kuaishou
 # 平台选题独立性检查
 python scripts/check_platform_topic_independence.py 20260807 --platforms wechat,kuaishou,bilibili
 
+# 同平台同赛道爆款完整拆解（缓存7天；缺真实证据会阻断）
+python -m content_platform.cli viral-breakdown \
+  --platform zhihu --platform juejin \
+  --sample-file /private/native_samples.json \
+  --output data/intel/viral_breakdown_latest.json
+
 # 手工发布后写入跨平台选题账本，避免下一批次重复选题
 python -m content_platform record-manual-publication --platform kuaishou --topic "..." --topic-fingerprint "..." --external-id "..."
 
@@ -170,8 +176,9 @@ Hermes 或其他 Agent 执行自动任务前必须先做：
 2. 运行 `performance-cycle` 刷新真实数据。
 3. 调用能力检查或 MCP `capability_status`。
 4. 每个平台生成独立 `platform_source_matrix`。
-5. 内容包必须包含 `preflight_manifest`、`content_recipe` 或 `visual_recipe`、`tool_invocation_manifest`。
-6. 自动发布平台必须 postcheck；手工平台只能输出 `handoff_pending`。
+5. 同平台同赛道爆款深拆必须进入 `viral_breakdown`；每天轻扫、每周深拆、缓存7天。
+6. 内容包必须包含 `preflight_manifest`、`content_recipe` 或 `visual_recipe`、`tool_invocation_manifest`。
+7. 自动发布平台必须 postcheck；手工平台只能输出 `handoff_pending`。
 
 如果任何门禁失败，先修复并重跑；连续失败则标记 `blocked`，禁止绕过。
 

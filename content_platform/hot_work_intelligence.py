@@ -22,7 +22,6 @@ STRONG_EVIDENCE = {
     "strong_public_transcript",
     "strong_public_detail",
     "strong_cached_native_search",
-    "strong_public_wechat_search",
 }
 
 
@@ -144,7 +143,7 @@ def parse_sogou_wechat_html(raw_html: str, *, query: str, limit: int = 10) -> li
                 url=html.unescape(href_match.group(1)) if href_match else "",
                 author=strip_markup(account_match.group(0)) if account_match else "",
                 excerpt=strip_markup(desc_match.group(0)) if desc_match else "",
-                evidence_strength="strong_public_wechat_search",
+                evidence_strength="discovery_public_wechat_search",
             )
         )
         if len(rows) >= limit:
@@ -425,6 +424,48 @@ def _metric_number(value: Any) -> float:
         return 0.0
 
 
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _sample_rank_value(sample: dict[str, Any]) -> float:
+    """Rank only by an explicit observed metric, never by a sample dict/order."""
+    metrics = _mapping(sample.get("metrics"))
+    ranking = _mapping(sample.get("ranking"))
+    views = metrics.get("views")
+    view_value = views.get("value") if isinstance(views, dict) else views
+    candidates = (
+        ranking.get("value"),
+        view_value,
+        sample.get("views"),
+        sample.get("engagement"),
+        sample.get("likes"),
+        sample.get("favorites"),
+    )
+    return max((_metric_number(value) for value in candidates), default=0.0)
+
+
+def _is_generation_ranked_sample(platform: str, sample: dict[str, Any]) -> bool:
+    if sample.get("evidence_strength") not in STRONG_EVIDENCE:
+        return False
+    if platform != "wechat":
+        return True
+    metrics = _mapping(sample.get("metrics"))
+    ranking = _mapping(sample.get("ranking"))
+    views = metrics.get("views")
+    view_value = views.get("value") if isinstance(views, dict) else views
+    has_observed_metric = any(
+        value not in (None, "")
+        for value in (
+            ranking.get("value"),
+            view_value,
+            sample.get("views"),
+            sample.get("shares"),
+        )
+    )
+    return sample.get("observation_status") == "ranked_candidate" and has_observed_metric
+
+
 def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: list[str] | None = None, min_strong_samples: int = 3) -> dict[str, Any]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sample in samples:
@@ -433,8 +474,9 @@ def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: l
     selected_platforms = platforms or sorted(set(grouped).union(default_platforms))
     output: dict[str, Any] = {"generated_at": datetime.now().isoformat(timespec="seconds"), "platforms": {}}
     for platform in selected_platforms:
-        rows = sorted(grouped.get(platform, []), key=_metric_number, reverse=True)
-        strong = [row for row in rows if row.get("evidence_strength") in STRONG_EVIDENCE]
+        rows = sorted(grouped.get(platform, []), key=_sample_rank_value, reverse=True)
+        strong = [row for row in rows if _is_generation_ranked_sample(platform, row)]
+        discovery = [row for row in rows if row not in strong]
         patterns = Counter()
         for row in strong:
             for key in ("hook_types", "structure_types", "copy_style", "display_style"):
@@ -443,8 +485,10 @@ def build_hot_work_parameter_pack(samples: list[dict[str, Any]], *, platforms: l
         output["platforms"][platform] = {
             "ready": len(strong) >= min_strong_samples,
             "strong_sample_count": len(strong),
+            "discovery_sample_count": len(discovery),
             "sample_count": len(rows),
-            "top_samples": rows[:10],
+            "top_samples": strong[:10],
+            "top_discovery_samples": discovery[:10],
             "recommended_patterns": [name for name, _count in patterns.most_common(10)],
             "generation_requirements": _generation_requirements(platform, patterns),
         }
@@ -493,6 +537,71 @@ def save_hot_work_strategy_report(pack: dict[str, Any], output: str | Path) -> P
     return path
 
 
+def import_platform_hot_evidence_bundle(path: str | Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Translate audited hot evidence into generation-only work-analysis rows.
+
+    External heat helps analyze hooks and structures but does not satisfy the
+    native same-lane performance gate.  The flags are deliberately forced here
+    rather than inherited from an upstream file.
+    """
+    source = Path(path)
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    raw_items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(raw_items, list):
+        raise ValueError("platform hot evidence bundle must contain an items list")
+    rows: list[dict[str, Any]] = []
+    rejected = 0
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            rejected += 1
+            continue
+        platform = str(raw.get("platform") or "").casefold().strip()
+        title = strip_markup(str(raw.get("title") or ""))
+        signal_type = str(raw.get("signal_type") or "").casefold().strip()
+        observed_at = str(raw.get("observed_at") or "").strip()
+        raw_hash = str(raw.get("raw_response_hash") or "").strip()
+        metrics = dict(raw.get("metrics") or {}) if isinstance(raw.get("metrics"), dict) else {}
+        if not all((platform, title, observed_at, raw_hash)):
+            rejected += 1
+            continue
+        buckets = {
+            "ranked_content_candidate": ("third_party_ranked_candidate", "ranked_content_candidates"),
+            "research_content_snapshot": ("research_content_snapshot", "research_content_samples"),
+            "topic_signal": ("third_party_market_signal", "market_signals"),
+        }
+        if signal_type not in buckets:
+            rejected += 1
+            continue
+        evidence_strength, bucket = buckets[signal_type]
+        url = str(raw.get("canonical_url") or "").strip()
+        if bucket != "market_signals" and not url.startswith(("https://", "http://")):
+            rejected += 1
+            continue
+        row = {
+            "platform": platform,
+            "title": title,
+            "author": str(raw.get("author") or ""),
+            "url": url,
+            "captured_at": observed_at,
+            "collector": str(raw.get("collector") or raw.get("source") or "platform_hot_evidence"),
+            "source": str(raw.get("source") or "platform_hot_evidence"),
+            "evidence_strength": evidence_strength,
+            "hot_evidence_bucket": bucket,
+            "rank": _metric_number(raw.get("rank")),
+            "raw_response_hash": raw_hash,
+            "research_only": bool(raw.get("research_only")),
+            "generation_only": True,
+            "native_verified": bool(raw.get("native_verified")),
+            "auto_selection_eligible": False,
+            "analysis": analyze_work(title),
+        }
+        for field in ("views", "likes", "comments", "favorites", "shares", "heat_value"):
+            if metrics.get(field) is not None:
+                row[field] = _metric_number(metrics[field])
+        rows.append(row)
+    return rows, [{"source": f"platform_hot_evidence:{source.name}", "status": "ok", "count": len(rows), "rejected_count": rejected, "path": str(source)}]
+
+
 def load_samples(path: str | Path) -> list[dict[str, Any]]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(data, list):
@@ -522,7 +631,8 @@ def save_collection(items: list[dict[str, Any]], statuses: list[dict[str, Any]],
     pack_path = base / "hot_work_parameter_pack.json"
     pack_path.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
     report_path = save_hot_work_strategy_report(pack, base / "hot_work_strategy_report.md")
-    latest = Path("data/intel/hot_work_parameter_pack_latest.json")
+    runtime_data_dir = Path(os.environ.get("CONTENT_PLATFORM_DATA_DIR") or "data")
+    latest = runtime_data_dir / "intel" / "hot_work_parameter_pack_latest.json"
     latest.parent.mkdir(parents=True, exist_ok=True)
     latest.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"raw": str(raw_path), "pack": str(pack_path), "report": str(report_path), "latest": str(latest)}

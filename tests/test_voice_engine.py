@@ -24,9 +24,9 @@ class _Response:
 
 class QwenTTSProviderTests(unittest.TestCase):
     def test_auto_provider_keeps_edge_until_qwen_quality_is_approved(self):
-        with patch.dict("os.environ", {"QWEN_TTS_QUALITY_APPROVED": "false"}, clear=False):
+        with patch.dict("os.environ", {"QWEN_TTS_QUALITY_APPROVED": "false", "HOJO_TTS_QUALITY_APPROVED": "false"}, clear=False):
             self.assertEqual(select_tts_provider("auto", qwen_available=True, language="zh"), "edge")
-        with patch.dict("os.environ", {"QWEN_TTS_QUALITY_APPROVED": "true", "TTS_AB_TEST_APPROVED_PROVIDER": "qwen"}, clear=False):
+        with patch.dict("os.environ", {"QWEN_TTS_QUALITY_APPROVED": "true", "TTS_AB_TEST_APPROVED_PROVIDER": "qwen", "HOJO_TTS_QUALITY_APPROVED": "false"}, clear=False):
             self.assertEqual(select_tts_provider("auto", qwen_available=True, language="zh"), "qwen")
 
     def test_provider_downloads_audio_url_and_writes_manifest(self):

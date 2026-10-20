@@ -95,6 +95,29 @@ def test_build_hot_work_parameter_pack_requires_strong_platform_samples():
     assert pack["platforms"]["xiaohongshu"]["recommended_patterns"]
 
 
+def test_public_wechat_search_is_discovery_only_not_generation_evidence():
+    samples = [
+        {
+            "platform": "wechat",
+            "title": "AI Agent 智能体落地实践",
+            "author": "AI 观察",
+            "url": "https://mp.weixin.qq.com/s/example",
+            "evidence_strength": "strong_public_wechat_search",
+            "analysis": analyze_work("AI Agent 智能体落地实践"),
+        }
+    ]
+
+    pack = build_hot_work_parameter_pack(samples, platforms=["wechat"])
+
+    wechat = pack["platforms"]["wechat"]
+    assert wechat["ready"] is False
+    assert wechat["strong_sample_count"] == 0
+    assert wechat["discovery_sample_count"] == 1
+    assert wechat["top_samples"] == []
+    assert len(wechat["top_discovery_samples"]) == 1
+    assert wechat["recommended_patterns"] == []
+
+
 def test_load_samples_accepts_platform_grouped_logged_exports(tmp_path):
     path = tmp_path / "samples.json"
     path.write_text('{"xiaohongshu":[{"title":"AI效率卡片","evidence_strength":"strong_logged_search_result"}],"tiktok":[{"title":"AI workflow demo","platform":"tiktok"}]}', encoding="utf-8")

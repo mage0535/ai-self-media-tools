@@ -1,4 +1,5 @@
 import base64
+import copy
 import hashlib
 import hmac
 import json
@@ -49,6 +50,8 @@ class FileDraftPublisher:
         self.outbox = Path(outbox)
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         directory = self.outbox / platform
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{job['id']}.json"
@@ -68,13 +71,27 @@ class FileDraftPublisher:
 class ManualHandoffPublisher:
     """Write a handoff package and make the non-automatic status explicit."""
 
-    def __init__(self, outbox, reason="manual publish required"):
+    def __init__(self, outbox, reason="manual publish required", *, internal_only=False):
         self.outbox = Path(outbox)
         self.reason = reason
+        self.internal_only = internal_only
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
+        if self.internal_only:
+            import re
+            if (not re.fullmatch('[a-f0-9]{16,32}', str(job.get('id') or ''))
+                    or not re.fullmatch('[a-z][a-z0-9_-]{0,63}', str(platform))):
+                return DeliveryResult(False, 'blocked', error='internal_handoff_path_identity_invalid')
         directory = self.outbox / platform
-        directory.mkdir(parents=True, exist_ok=True)
+        if self.internal_only:
+            if any(p.is_symlink() for p in (directory, *directory.parents)):
+                return DeliveryResult(False, 'blocked', error='internal_handoff_symlink_forbidden')
+            self.outbox.mkdir(parents=True, exist_ok=True, mode=0o700)
+            directory.mkdir(exist_ok=True, mode=0o700)
+        else:
+            directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{job['id']}.json"
         payload = {
             "job_id": job["id"],
@@ -87,7 +104,36 @@ class ManualHandoffPublisher:
             "artifacts": job.get("artifacts", []),
             "platform_payload": job.get("platform_payload") or format_for_platform(job, platform),
         }
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if self.internal_only:
+            if os.environ.get('CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH') != '0':
+                return DeliveryResult(False, 'blocked', error='internal_handoff_no_publication_required')
+            binding = job.get('_internal_handoff_binding')
+            if (not isinstance(binding, dict) or binding.get('platform') != platform
+                    or not binding.get('content_revision')):
+                return DeliveryResult(False, 'blocked', error='internal_handoff_current_binding_required')
+            payload.update(delivery_acknowledged=False, internal_handoff=True, quality_binding=copy.deepcopy(binding))
+            raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8')
+            if any(p.is_symlink() for p in (path, *path.parents)):
+                return DeliveryResult(False, 'blocked', error='internal_handoff_symlink_forbidden')
+            for private in (self.outbox, directory):
+                info = private.stat()
+                if info.st_uid != os.geteuid() or info.st_mode & 0o077:
+                    return DeliveryResult(False, 'blocked', error='internal_handoff_private_directory_required')
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            except FileExistsError:
+                info = path.lstat()
+                if (not path.is_file() or info.st_uid != os.geteuid() or info.st_mode & 0o077
+                        or info.st_nlink != 1 or path.read_bytes() != raw):
+                    return DeliveryResult(False, 'blocked', error='internal_handoff_immutable_conflict')
+            else:
+                with os.fdopen(fd, 'wb') as stream:
+                    stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+                fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+                try: os.fsync(fd)
+                finally: os.close(fd)
+        else:
+            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return DeliveryResult(True, "handoff_pending", str(path), error=self.reason)
 
 
@@ -123,6 +169,8 @@ class XiaohongshuManualHandoffPublisher:
         )
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         formatted = job.get("platform_payload") or format_for_platform(job, platform)
         images = self._images(job)
         payload = {
@@ -164,6 +212,8 @@ class RedditDraftPublisher:
         self.default_subreddit = default_subreddit
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         directory = self.outbox / "reddit"
         directory.mkdir(parents=True, exist_ok=True)
         formatted = job.get("platform_payload") or format_for_platform(job, platform)
@@ -200,6 +250,8 @@ class DevtoDraftPublisher:
         self.api_key = api_key
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         key = read_setting(self.api_key_env, self.env_file, self.api_key)
         if not key:
             return DeliveryResult(False, "blocked", error=f"missing environment variable: {self.api_key_env}")
@@ -238,6 +290,8 @@ class WechatDraftPublisher:
         self.app_secret = app_secret
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         app_id = read_setting(self.app_id_env, self.env_file, self.app_id)
         secret = read_setting(self.app_secret_env, self.env_file, self.app_secret)
         if not app_id or not secret:
@@ -305,21 +359,20 @@ class HermesWechatAdapter:
     selection evidence, inline image mapping, and adapter postcheck.
     """
 
-    def __init__(self, data_dir, env_file="", command="", python_bin="", timeout=600, require_cn_proxy=True):
+    def __init__(self, data_dir, env_file="", command="", python_bin="", timeout=600):
         self.data_dir = Path(data_dir)
         self.env_file = env_file
         self.command = command
         self.python_bin = python_bin or os.environ.get("PYTHON") or sys.executable
         self.timeout = int(timeout or 600)
-        self.require_cn_proxy = bool(require_cn_proxy)
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         packet = self._packet(job, platform)
         validation_error = self._validation_error(packet)
         if validation_error:
             return DeliveryResult(False, "blocked", error=validation_error)
-        if self.require_cn_proxy and not read_setting("CN_PROXY", self.env_file):
-            return DeliveryResult(False, "blocked", error="missing CN_PROXY for WeChat Hermes adapter")
         runner = Path(self.command or os.environ.get("HERMES_WECHAT_ADAPTER_COMMAND", ""))
         if not str(runner):
             runner = project_home() / "scripts" / "hermes_wechat_adapter.py"
@@ -420,6 +473,17 @@ class HermesWechatAdapter:
         return ""
 
 
+def _publication_caption(formatted,default='',*,limit=500):
+    caption=formatted.get('caption',default)
+    if formatted.get('music_attribution'):
+        if formatted.get('music_attribution_status')=='pending_native_render':raise ValueError('music_copy_not_render_verified')
+        from .audio_attribution_formatter import assert_music_copy_matches_review
+        assert_music_copy_matches_review(formatted,caption)
+        if len(caption)>limit:raise ValueError('reviewed_music_copy_exceeds_publisher_limit')
+        return caption
+    return caption[:limit]
+
+
 class SocialAutoUploadPublisher:
     def __init__(
         self,
@@ -466,11 +530,19 @@ class SocialAutoUploadPublisher:
         return files
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         if self.platform_name.casefold() in {"xiaohongshu", "xhs", "rednote"}:
             return DeliveryResult(
                 False,
                 "blocked",
                 error="xiaohongshu manual publish only: automatic uploader routes are permanently disabled",
+            )
+        if self.platform_name.casefold() == "kuaishou":
+            return DeliveryResult(
+                False,
+                "blocked",
+                error="Kuaishou requires management-page postcheck; use kuaishou_publish_with_postcheck.py",
             )
         check = self._run(["check", "--account", self.account_name])
         if check.returncode != 0:
@@ -487,7 +559,7 @@ class SocialAutoUploadPublisher:
                 "--account", self.account_name,
                 "--file", video_path,
                 "--title", title,
-                "--desc", formatted.get("caption", job.get("body", ""))[:500],
+                "--desc", _publication_caption(formatted,job.get('body',''),limit=500),
                 "--schedule", self._schedule_at(),
             ]
             if tags:
@@ -522,6 +594,8 @@ class FallbackPublisher:
         self.publishers = list(publishers)
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         errors = []
         for publisher in self.publishers:
             result = publisher.deliver(job, platform)
@@ -550,9 +624,14 @@ class XPlaywrightPublisher:
             or formatted.get("markdown")
             or f"{job.get('title', '')}\n\n{job.get('body', '')}"
         )
-        return str(text).strip()[:280]
+        text = str(text).strip()
+        if len(text) > 275:
+            raise ValueError("X/Twitter post text exceeds safe limit of 275 characters")
+        return text
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         if not self.live:
             return DeliveryResult(False, "blocked", error="X live publishing disabled in publisher config")
         cookie_file = resolve_cookie_file("twitter", self.account, self.cookie_dir)
@@ -584,12 +663,42 @@ class XPlaywrightPublisher:
                 page.goto("https://x.com/compose/post", timeout=self.timeout * 1000, wait_until="domcontentloaded")
                 box = page.locator('[data-testid="tweetTextarea_0"]').first
                 box.wait_for(timeout=30000)
-                box.fill(text)
+                box.click()
+                page.keyboard.type(text, delay=15)
                 button = page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]').first
-                button.click(timeout=30000)
+                button.wait_for(state="visible", timeout=30000)
+                if button.is_disabled() or button.get_attribute("aria-disabled") == "true":
+                    raise RuntimeError("X/Twitter compose button remained disabled after text input")
+                # X compose dialogs can report a successful pointer click while
+                # a fixed overlay prevents React's submit handler. Use the DOM
+                # event path, then verify the published artifact independently.
+                button.evaluate("el => el.click()")
                 page.wait_for_timeout(5000)
+                handle = "magic0535" if self.account == "main" else str(self.account).lstrip("@")
+                needle = text.split("\n", 1)[0][:80]
+                page.goto(f"https://x.com/{handle}", timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                articles = []
+                # X timeline propagation is eventually consistent. Poll the
+                # profile with bounded refreshes before declaring a false
+                # failure; never submit the post again during verification.
+                for attempt in range(12):
+                    page.wait_for_timeout(5000)
+                    articles = page.locator("article").all_inner_texts()
+                    if any(needle in article for article in articles):
+                        break
+                    page.reload(timeout=self.timeout * 1000, wait_until="domcontentloaded")
+                if not any(needle in article for article in articles):
+                    raise RuntimeError("X/Twitter publish returned without profile verification")
+                external_id = ""
+                for article in page.locator("article").all():
+                    if needle in article.inner_text():
+                        link = article.locator('a[href*="/status/"]').first
+                        href = link.get_attribute("href")
+                        if href:
+                            external_id = "https://x.com" + href if href.startswith("/") else href
+                        break
                 browser.close()
-            return DeliveryResult(True, "published", f"x:{job.get('id', '')}", error="X/Twitter post submitted via cookie browser session")
+            return DeliveryResult(True, "published", external_id or f"x:{job.get('id', '')}", error="X/Twitter post verified on profile via cookie browser session")
         except Exception as exc:
             return DeliveryResult(False, "failed", error=f"X/Twitter browser publish failed: {str(exc)[:300]}")
 
@@ -601,6 +710,8 @@ class TelegraphPublisher:
         self.env_file = env_file
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         if not self.live_enabled:
             return DeliveryResult(False, "blocked", error="live publishing is disabled")
         token = read_setting(self.token_env, self.env_file)
@@ -648,6 +759,8 @@ class YouTubePublisher:
             return json.loads(resp.read())["access_token"]
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         try:
             token = self._get_access_token()
         except Exception as exc:
@@ -706,6 +819,8 @@ class BilibiliPublisher:
         self.bili_jct = bili_jct
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         sessdata = read_setting(self.sessdata_env, self.env_file, self.sessdata)
         bili_jct = read_setting(self.bili_jct_env, self.env_file, self.bili_jct)
         if not sessdata:
@@ -828,6 +943,8 @@ class AiToEarnDraftPublisher:
         return AitoEarnClient(self.base_url, key)
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         client = self._client()
         if not client:
             return DeliveryResult(False, "blocked", error=f"missing environment variable: {self.api_key_env}")
@@ -987,6 +1104,8 @@ class AiToEarnFlowPublisher:
             return True, f"⚠️ 检查异常: {exc}"
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         client = self._client()
         if not client:
             return DeliveryResult(False, "blocked", error=f"missing {self.api_key_env}")
@@ -1230,10 +1349,15 @@ class AyrsharePublisher:
     def _fallback(self, job, platform, reason):
         if not self.fallback_outbox:
             return DeliveryResult(False, "blocked", error=reason)
-        result = FileDraftPublisher(self.fallback_outbox).deliver(job, platform)
+        child = FileDraftPublisher(self.fallback_outbox)
+        _bind_adapter_quality_source(child, getattr(self, '_quality_store', None),
+                                     getattr(self, '_quality_data_dir', self.fallback_outbox))
+        result = child.deliver(job, platform)
         return DeliveryResult(result.ok, result.status, result.external_id, error=f"Ayrshare fallback: {reason}")
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         if not self.live_enabled or os.environ.get("CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH") != "1":
             return self._fallback(job, platform, "live publishing is disabled")
         api_platform = _ayrshare_platform(platform)
@@ -1358,7 +1482,7 @@ def international_platforms():
     return [p for p, r in PLATFORM_REGIONS.items() if r == "international"]
 
 
-def build_publisher(platform, config, data_dir):
+def _build_publisher_adapter(platform, config, data_dir):
     publishers = config.get("publishers", {})
     platform_cfg = publishers.get("platforms", {}).get(platform)
     cfg = platform_cfg or default_publisher_config(platform, publishers.get("routing_defaults", {})) or publishers.get("default", {"type": "file"})
@@ -1375,7 +1499,7 @@ def build_publisher(platform, config, data_dir):
         if not options:
             raise ValueError(f"fallback publisher for {platform} requires publishers")
         return FallbackPublisher([
-            build_publisher(platform, {"publishers": {"default": option}}, data_dir)
+            _build_publisher_adapter(platform, {"publishers": {"default": option}}, data_dir)
             for option in options
         ])
     if kind == "file":
@@ -1399,7 +1523,6 @@ def build_publisher(platform, config, data_dir):
             command=cfg.get("adapter_command", ""),
             python_bin=cfg.get("python_bin", os.environ.get("PYTHON", "python3")),
             timeout=cfg.get("timeout", 600),
-            require_cn_proxy=cfg.get("require_cn_proxy", True),
         )
     if kind == "wechat-legacy-draft":
         return WechatDraftPublisher(
@@ -1444,14 +1567,14 @@ def build_publisher(platform, config, data_dir):
         return JuejinPublisher(
             account=cfg.get("account", "main"),
             cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
-            proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
+            proxy=cfg.get("proxy", ""),
             save_as_draft=cfg.get("save_as_draft", True),
         )
     if kind == "zhihu-playwright":
         return ZhihuPublisher(
             account=cfg.get("account", "main"),
             cookie_dir=cfg.get("cookie_dir", str(Path.home() / "social-auto-upload" / "cookies")),
-            proxy=cfg.get("proxy", "socks5://127.0.0.1:1080"),
+            proxy=cfg.get("proxy", ""),
             headless=cfg.get("headless", True),
             save_as_draft=cfg.get("save_as_draft", True),
         )
@@ -1587,6 +1710,8 @@ class MataroaPublisher:
         self.api_key = api_key
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         key = read_setting(self.api_key_env, self.env_file, self.api_key)
         if not key:
             return DeliveryResult(False, "blocked", error=f"missing environment variable: {self.api_key_env}")
@@ -1631,6 +1756,8 @@ class TabnewsPublisher:
         self.password = password
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         email = read_setting(self.email_env, self.env_file, self.email)
         password = read_setting(self.password_env, self.env_file, self.password)
         if not email or not password:
@@ -1692,6 +1819,8 @@ class MastodonPublisher:
         self.env_file = env_file
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         token = read_setting(self.token_env, self.env_file)
         if not token:
             return DeliveryResult(False, "blocked", error=f"missing {self.token_env}")
@@ -1725,6 +1854,8 @@ class BlueskyPublisher:
         self.env_file = env_file
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         identifier = read_setting(self.identifier_env, self.env_file)
         password = read_setting(self.password_env, self.env_file)
         if not identifier or not password:
@@ -1773,6 +1904,8 @@ class NostrPublisher:
             self.RELAYS = relays
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         try:
             from nacl.signing import SigningKey
             from nacl.encoding import HexEncoder, RawEncoder
@@ -1820,6 +1953,8 @@ class WriteAsPublisher:
         self.env_file = env_file
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         token = read_setting(self.token_env, self.env_file)
         if not token:
             return DeliveryResult(False, "blocked", error=f"missing {self.token_env}")
@@ -1846,6 +1981,8 @@ class GitHubDiscussPublisher:
         self.env_file = env_file
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         token = read_setting(self.token_env, self.env_file)
         if not token:
             return DeliveryResult(False, "blocked", error=f"missing {self.token_env}")
@@ -1872,6 +2009,8 @@ class ButtondownPublisher:
         self.env_file = env_file
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         key = read_setting(self.api_key_env, self.env_file)
         if not key:
             return DeliveryResult(False, "blocked", error=f"missing {self.api_key_env}")
@@ -1902,6 +2041,8 @@ class EmailPublisher:
         self.to_addrs = to_addrs
 
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         if not self.smtp_host:
             return DeliveryResult(False, "blocked", error="no smtp host configured")
         import smtplib
@@ -1927,6 +2068,8 @@ class EmailPublisher:
 class CnblogsPublisher:
     """博客园 — connectivity test (XML-RPC publishing requires account config)."""
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         import httpx
         try:
             r = httpx.get("https://www.cnblogs.com/", timeout=10)
@@ -1940,6 +2083,8 @@ class CnblogsPublisher:
 class SteemitPublisher:
     """Steem blockchain — connectivity test (full publish requires account keys)."""
     def deliver(self, job, platform):
+        if not _adapter_current_quality(self, job, platform):
+            return DeliveryResult(False, 'blocked', error='native_adapter_quality_not_qualified')
         import httpx
         try:
             r = httpx.get("https://api.steemit.com", timeout=10)
@@ -1948,3 +2093,101 @@ class SteemitPublisher:
                                   f"HTTP {r.status_code}")
         except Exception as exc:
             return DeliveryResult(False, "unreachable", error=str(exc)[:300])
+
+
+class _QualifiedPublisher:
+    """Consumer creates an adapter only after current Store quality is qualified."""
+    def __init__(self, platform, config, data_dir, store):
+        self.platform, self.config, self.data_dir, self.store = platform, config, Path(data_dir), store
+
+    def deliver(self, job, platform):
+        if os.environ.get('CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH') == '0':
+            routing = self.config.get('publishers', {})
+            cfg = (routing.get('platforms', {}).get(platform)
+                or default_publisher_config(platform, routing.get('routing_defaults', {}))
+                or routing.get('default', {'type': 'file'}))
+            local = is_manual_handoff_platform(platform) or cfg.get('type', 'file') in {'file', 'manual-handoff'}
+            if is_xiaohongshu_platform(platform) or not local:
+                return DeliveryResult(False, 'blocked', error='external_publisher_disabled_by_no_publication')
+        if self.store is None or platform != self.platform or not isinstance(job, dict) or not job.get('id'):
+            return DeliveryResult(False, 'blocked', error='native_quality_store_required')
+        from .mandatory_release_gate import mandatory_release_gate
+        qualified = mandatory_release_gate(self.store, self.data_dir, job['id'], platform, phase='deliver')
+        if qualified.get('passed') is not True:
+            return DeliveryResult(False, 'blocked', error='mandatory_final_quality_not_qualified')
+        from .task_source_inputs import project_task_source_job
+        current = project_task_source_job(self.store.get_job(job['id']), platform)
+        bundle = self.store.platform_output_bundle(job['id'], platform)
+        if not bundle.get('ready') or any(job.get(field) != current.get(field) for field in ('title', 'body')):
+            return DeliveryResult(False, 'blocked', error='delivery_content_not_current_store_revision')
+        actual_copy = (bundle.get('copy') or {}).get('content')
+        if not isinstance(actual_copy, dict) or job.get('platform_payload') != actual_copy:
+            return DeliveryResult(False, 'blocked', error='delivery_copy_not_qualified_revision')
+        allowed = {(row.get('path'), row.get('checksum')) for row in bundle.get('artifacts') or []}
+        provided = {(row.get('path'), row.get('checksum')) for row in job.get('artifacts') or []}
+        if provided != allowed:
+            return DeliveryResult(False, 'blocked', error='delivery_artifacts_not_qualified_revision')
+        if format_for_platform(job, platform) != actual_copy:
+            return DeliveryResult(False, 'blocked', error='delivery_formatter_input_not_qualified_revision')
+        source_artifacts = {row['id']: row for row in self.store.artifacts(job['id'])}
+        verified_artifacts = []
+        for row in bundle.get('artifacts') or []:
+            actual = source_artifacts.get(row.get('artifact_id'))
+            if not actual or (actual['path'], actual['checksum']) != (row['path'], row['checksum']):
+                return DeliveryResult(False, 'blocked', error='delivery_store_artifact_changed')
+            verified_artifacts.append(actual)
+        verified_job = copy.deepcopy(current)
+        verified_job['platform_payload'] = copy.deepcopy(actual_copy)
+        verified_job['artifacts'] = verified_artifacts
+        adapter = _build_publisher_adapter(platform, self.config, self.data_dir)
+        _bind_adapter_quality_source(adapter, self.store, self.data_dir)
+        return adapter.deliver(verified_job, platform)
+
+
+def build_publisher(platform, config, data_dir, *, store=None):
+    return _QualifiedPublisher(platform, config, data_dir, store)
+
+
+def _bind_adapter_quality_source(adapter, store, data_dir):
+    adapter._quality_store, adapter._quality_data_dir = store, Path(data_dir)
+    for child in getattr(adapter, 'publishers', []) or []:
+        _bind_adapter_quality_source(child, store, data_dir)
+
+
+def _adapter_current_quality(adapter, job, platform):
+    if (os.environ.get('CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH') == '0'
+            and type(adapter) not in (FileDraftPublisher, ManualHandoffPublisher)):
+        return False
+    store = getattr(adapter, '_quality_store', None)
+    data_dir = getattr(adapter, '_quality_data_dir', None)
+    if store is None or data_dir is None or not isinstance(job, dict) or not job.get('id'):
+        return False
+    from .mandatory_release_gate import mandatory_release_gate
+    if mandatory_release_gate(store, data_dir, job['id'], platform, phase='deliver').get('passed') is not True:
+        return False
+    from .task_source_inputs import project_task_source_job
+    current = project_task_source_job(store.get_job(job['id']), platform)
+    bundle = store.platform_output_bundle(job['id'], platform)
+    actual_copy = (bundle.get('copy') or {}).get('content')
+    if bundle.get('ready') is not True or not isinstance(actual_copy, dict):
+        return False
+    if any(job.get(field) != current.get(field) for field in ('title', 'body', 'topic', 'brief', 'draft_meta')):
+        return False
+    if job.get('platform_payload') != actual_copy or format_for_platform(job, platform) != actual_copy:
+        return False
+    allowed = {(row.get('path'), row.get('checksum')) for row in bundle.get('artifacts') or []}
+    provided = job.get('artifacts') or []
+    if {(row.get('path'), row.get('checksum')) for row in provided} != allowed:
+        return False
+    source = {row['id']: row for row in store.artifacts(job['id'])}
+    expected = [source.get(row.get('artifact_id')) for row in bundle.get('artifacts') or []]
+    if any(row is None for row in expected) or any(not isinstance(row, dict) or 'id' not in row for row in provided):
+        return False
+    if sorted(provided, key=lambda row: row['id']) != sorted(expected, key=lambda row: row['id']):
+        return False
+    for row in provided:
+        path = Path(row['path'])
+        if (any(p.is_symlink() for p in (path, *path.parents)) or not path.is_file()
+                or hashlib.sha256(path.read_bytes()).hexdigest() != row['checksum']):
+            return False
+    return True

@@ -6,7 +6,7 @@
   python toutiao_uploader.py --file article.md --title "标题" --tags tag1,tag2
 
 环境变量：
-  CN_PROXY — 国内代理地址（默认 socks5://127.0.0.1:1080）
+  国内平台使用显式 direct route；直连失败由健康门禁阻断。
   TOUTIAO_COOKIE — cookie 文件路径
 """
 import argparse
@@ -27,7 +27,6 @@ except ImportError:
     sys.path.insert(0, str(Path.home() / "social-auto-upload"))
     from playwright.async_api import async_playwright
 
-CN_PROXY = os.environ.get("CN_PROXY", "socks5://127.0.0.1:1080")
 COOKIE_PATH = os.environ.get("TOUTIAO_COOKIE", "")
 HEADLESS = os.environ.get("HEADLESS", "1") == "1"
 
@@ -45,7 +44,7 @@ async def cookie_auth(cookie_path: str) -> bool:
         print("❌ Cookie 文件不存在")
         return False
     async with async_playwright() as p:
-        proxy = {"server": CN_PROXY} if CN_PROXY else None
+        proxy = None
         browser = await p.chromium.launch(headless=HEADLESS)
         context = await browser.new_context(
             storage_state=cookie_path,
@@ -75,7 +74,7 @@ async def cookie_gen(cookie_path: str):
         cookie_path = str(Path.home() / ".hermes" / "cookies" / "toutiao.json")
     print(f"🔑 打开浏览器进行头条号登录，cookie 将保存到: {cookie_path}")
     async with async_playwright() as p:
-        proxy = {"server": CN_PROXY} if CN_PROXY else None
+        proxy = None
         browser = await p.chromium.launch(headless=False)
         context = await browser.new_context(
             proxy=proxy,
@@ -128,7 +127,9 @@ async def upload_article(
     cookie_path: str = "",
     save_as_draft: bool = True,
 ) -> dict:
-    """上传文章到头条号"""
+    """上传文章到头条号；直发默认阻断，只允许草稿链路。"""
+    if not save_as_draft and os.environ.get("ALLOW_DIRECT_PUBLISH") != "1":
+        return {"success": False, "url": "", "action": "blocked", "error": "direct publish disabled; use reviewed draft workflow"}
     tags = tags or []
     if not cookie_path:
         cookie_path = COOKIE_PATH
@@ -146,7 +147,7 @@ async def upload_article(
         return {"success": False, "error": "Cookie 失效"}
 
     async with async_playwright() as p:
-        proxy = {"server": CN_PROXY} if CN_PROXY else None
+        proxy = None
         browser = await p.chromium.launch(headless=HEADLESS)
         context = await browser.new_context(
             storage_state=cookie_path,
@@ -330,10 +331,11 @@ async def upload_article(
                     continue
 
             if not clicked:
-                # 检查是否已保存（自动保存）
-                print("ℹ️ 未找到存草稿按钮，可能已自动保存")
-                result["action"] = "auto_save"
-                result["success"] = True
+                # 自动保存无法证明草稿已落盘；必须返回未知/失败，不能自报成功。
+                print("❌ 未找到存草稿按钮，无法验证草稿已保存")
+                result["action"] = "unknown"
+                result["success"] = False
+                result["error"] = "draft save control not found; platform save state unverified"
 
         # 获取当前 URL 作为参考
         result["url"] = page.url

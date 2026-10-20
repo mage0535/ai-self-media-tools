@@ -5,6 +5,12 @@ Screencast 内容增强 — 生成更长的 AI 效率 Shorts 脚本。
 """
 import random
 
+from content_platform.prompt_compiler import compile_prompt_bundle, validate_prompt_bundle
+
+_VIDEO_PLATFORM_ALIASES = {
+    "youtube_shorts": "youtube",
+}
+
 # 预设内容模板（话题 → 分步演示步骤）
 CONTENT_TEMPLATES = {
     "5": [
@@ -56,6 +62,26 @@ def generate_script(topic, duration_target=20):
 
 def enhance_screencast_call(topic, platform="youtube_shorts"):
     """生成增强后的 screencast 命令参数。"""
+    registry_platform = _VIDEO_PLATFORM_ALIASES.get(platform, platform)
+    try:
+        prompt_bundle = compile_prompt_bundle(
+            {
+                "platform": registry_platform,
+                "content_type": "short_video",
+                "topic": topic,
+                "audience": "short-form video viewers",
+                "goal": "make the practical workflow understandable and worth saving",
+                "evidence": ["scripted screencast steps"],
+                "visual_style": "真实操作录屏 + 清晰步骤",
+                "duration": "20-100秒",
+                "constraints": ["每个步骤必须有对应画面", "禁止空洞大字卡"],
+            }
+        )
+    except KeyError as exc:
+        raise ValueError(f"unsupported video platform: {platform}") from exc
+    gate = validate_prompt_bundle(prompt_bundle)
+    if not gate["passed"]:
+        raise ValueError(f"video prompt bundle gate failed: {gate['errors']}")
     script = generate_script(topic)
 
     # 根据平台选择模板
@@ -72,6 +98,9 @@ def enhance_screencast_call(topic, platform="youtube_shorts"):
         "type": template,
         "title": topic,
         "content": script,
+        "prompt_bundle_fingerprint": prompt_bundle["fingerprint"],
+        "quality_contract": prompt_bundle["quality_contract"],
+        "prompt_platform": registry_platform,
     }
 
 

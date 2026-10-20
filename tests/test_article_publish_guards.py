@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -9,16 +10,36 @@ from content_platform.zhihu_publisher import ZhihuPublisher
 def _article_job(tmp_path: Path, *, public_images: bool = True):
     artifacts = []
     if public_images:
-        artifacts.append({"kind": "cover", "url": "https://cdn.example/cover.jpg"})
-        artifacts.extend({"kind": "image", "url": f"https://cdn.example/inline-{i}.jpg"} for i in range(3))
+        cover = {"kind": "cover", "url": "https://cdn.example/cover.jpg"}
+        images = [{"kind": "image", "url": f"https://cdn.example/inline-{i}.jpg"} for i in range(3)]
     else:
-        cover = tmp_path / "cover.jpg"
-        cover.write_bytes(b"\xff\xd8" + b"x" * 2048)
-        artifacts.append({"kind": "cover", "path": str(cover)})
+        payload = b"\xff\xd8" + b"x" * 2048
+        cover_path = tmp_path / "cover.jpg"
+        cover_path.write_bytes(payload)
+        cover = {"kind": "cover", "path": str(cover_path)}
+        images = []
         for i in range(3):
             path = tmp_path / f"inline-{i}.jpg"
-            path.write_bytes(b"\xff\xd8" + b"x" * 2048)
-            artifacts.append({"kind": "image", "path": str(path)})
+            path.write_bytes(payload)
+            images.append({"kind": "image", "path": str(path)})
+
+    for item in [cover, *images]:
+        item.update(
+            {
+                "source": item.get("url") or item["path"],
+                "rights": "fixture-owned-test-asset",
+                "asset_hash": hashlib.sha256(
+                    (item.get("url") or Path(item["path"]).read_bytes()).encode()
+                    if isinstance(item.get("url"), str)
+                    else Path(item["path"]).read_bytes()
+                ).hexdigest(),
+                "semantic_evidence": {
+                    "matched_section": "article visual context",
+                    "reason": "fixture asset directly illustrates the adjacent article section",
+                },
+            }
+        )
+    artifacts = [cover, *images]
     return {
         "id": "article-1",
         "title": "AI 工具越用越乱时，先整理流程再添加工具",

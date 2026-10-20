@@ -32,7 +32,6 @@ def main() -> int:
     )
     env_file = content_home / "secrets" / "wechat.env"
 
-    check("CN_PROXY is configured", bool(os.environ.get("CN_PROXY")), "set CN_PROXY")
     check("wechat.env exists", env_file.exists(), "create secrets/wechat.env")
 
     if env_file.exists():

@@ -14,6 +14,22 @@ HOME = Path.home() / ".ai-self-media-tools"
 DATA = HOME / "data"
 CONFIG = HOME / "config"
 RULEBOOK = json.loads((CONFIG / "channel_content_rulebook.json").read_text())
+CANONICAL_AI_POLICY = json.loads((CONFIG / "real_world_ai_implementation_v1.json").read_text())
+AI_PLATFORMS = frozenset(CANONICAL_AI_POLICY.get("platforms") or [])
+LEGACY_ONLY = True
+PUBLICATION_QUEUE_ELIGIBLE = False
+
+
+def _enforce_legacy_boundary(channels, *, dry_run):
+    requested = {str(channel or "").casefold().strip() for channel in channels or []}
+    canonical_ai = requested & AI_PLATFORMS
+    if canonical_ai:
+        raise RuntimeError(
+            "AI platforms must use the canonical pipeline; legacy unified strategy is blocked: "
+            + ", ".join(sorted(canonical_ai))
+        )
+    if not dry_run:
+        raise RuntimeError("legacy-only strategy cannot enter the publication queue")
 
 # ── 人类化质量门禁 ────────────────────────────
 HUMAN_CHECKLIST = {
@@ -127,7 +143,8 @@ def compose_for_platform(topic_info, platform):
 
 
 def run_strategy(channels=None, dry_run=True):
-    """执行完整策略→内容→发布流程。"""
+    """Run legacy previews only; canonical AI platforms are rejected."""
+    _enforce_legacy_boundary(channels, dry_run=dry_run)
     print(f"\n{'='*60}")
     print(f"📊 统一内容策略引擎 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"{'='*60}")

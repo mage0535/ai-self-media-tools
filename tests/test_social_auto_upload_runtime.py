@@ -50,7 +50,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                 result = evaluate_platform_binding("bilibili", {"account_key": "example"}, readiness)
             self.assertEqual(result["status"], "connected")
 
-    def test_social_auto_upload_kuaishou_video_extra_args_are_config_driven(self):
+    def test_social_auto_upload_kuaishou_blocks_before_any_subprocess(self):
         with tempfile.TemporaryDirectory() as tmp:
             video = Path(tmp) / "demo.mp4"
             video.write_bytes(b"video")
@@ -81,7 +81,7 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
             with patch("content_platform.publishers.subprocess.run", side_effect=fake_run):
                 result = publisher.deliver(
                     {
-                        "id": "job-bili",
+                        "id": "job-kuaishou",
                         "title": "Title",
                         "body": "Body",
                         "platform_payload": {"kind": "video", "title": "Title", "caption": "Desc", "hashtags": ["#AI"]},
@@ -91,9 +91,11 @@ class SocialAutoUploadRuntimeTests(unittest.TestCase):
                 )
 
             self.assertIsInstance(publisher, SocialAutoUploadPublisher)
-            self.assertTrue(result.ok)
-            self.assertIn("--tid", calls[1])
-            self.assertIn("171", calls[1])
+            self.assertEqual(calls, [])
+            self.assertFalse(result.ok)
+            self.assertEqual(result.status, "blocked")
+            self.assertIn("management", result.error.lower())
+            self.assertIn("postcheck", result.error.lower())
 
     def test_fallback_publisher_uses_next_backend_when_primary_is_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:

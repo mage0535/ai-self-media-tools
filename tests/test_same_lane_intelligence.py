@@ -1,158 +1,90 @@
-import io
 import json
-from contextlib import redirect_stdout
 
-from content_platform.cli import main
-from content_platform.store import Store
+from content_platform.same_lane_intelligence import (
+    compact_same_lane_playbook,
+    distill_same_lane_samples,
+    filter_rankable_samples,
+    load_samples_file,
+)
 
 
-def test_filter_samples_rejects_non_native_or_generic_homepage_for_platform():
-    from content_platform.same_lane_intelligence import filter_rankable_samples
+def test_loads_top_level_wechat_articles_as_wechat_samples(tmp_path):
+    source = tmp_path / "wechat_native.json"
+    source.write_text(
+        json.dumps(
+            {
+                "query": "AI 大模型",
+                "articles": [
+                    {
+                        "title": "多模态模型发布后的真实变化",
+                        "source": "AI前线",
+                        "datetime": "2026-09-15 10:00:00",
+                        "summary": "大模型与多模态能力实测。",
+                        "url": "https://mp.weixin.qq.com/s/example",
+                        "url_resolved": True,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
+    loaded = load_samples_file(source)
+
+    assert len(loaded["wechat"]) == 1
+    sample = loaded["wechat"][0]
+    assert sample["account"] == "AI前线"
+    assert sample["published_at"] == "2026-09-15 10:00:00"
+    assert sample["source_query"] == "AI 大模型"
+    assert sample["url_resolved"] is True
+
+
+def test_real_world_ai_application_accepts_concrete_scene_and_rejects_generic_tool_content():
     accepted, rejected = filter_rankable_samples(
         "wechat",
         [
-            {"title": "OpenAI 发布新模型", "url": "https://openai.com/index/gpt", "source": "searxng"},
-            {"title": "AI 工作流提效教程：三步做会议纪要", "url": "https://mp.weixin.qq.com/s/abc", "source": "wechat_search"},
+            {
+                "title": "财务对账：AI 如何标记 ERP 导出中的异常订单，交给专员复核",
+                "summary": "输入为订单和回款数据，输出为待人工确认的差异清单。",
+                "url": "https://mp.weixin.qq.com/s/real-workflow",
+            },
+            {
+                "title": "办公室效率工具合集",
+                "summary": "整理、日程和文件管理技巧。",
+                "url": "https://mp.weixin.qq.com/s/generic-tool",
+            },
         ],
     )
 
-    assert [row["title"] for row in accepted] == ["AI 工作流提效教程：三步做会议纪要"]
-    assert rejected[0]["reject_reason"] == "non_native_domain"
+    assert [row["title"] for row in accepted] == ["财务对账：AI 如何标记 ERP 导出中的异常订单，交给专员复核"]
+    assert accepted[0]["positioning"]["pillar"] == "office_automation"
+    assert rejected[0]["reject_reason"] == "excluded_tool_prompt_or_industry_news"
 
 
-def test_distill_youtube_samples_extracts_tool_workflow_patterns():
-    from content_platform.same_lane_intelligence import distill_same_lane_samples
-
+def test_metricless_native_wechat_ai_article_is_discovery_only():
     report = distill_same_lane_samples(
-        "youtube",
+        "wechat",
         [
             {
-                "title": "Build a Website Chatbot with n8n, Postgres & Groq - No Code AI",
-                "url": "https://www.youtube.com/watch?v=abc",
-                "account": "The AI Workflow",
-                "views": 640,
-                "duration": "17:30",
-            },
-            {
-                "title": "How to Automate Your Entire Social Media With One AI Agent",
-                "url": "https://www.youtube.com/watch?v=def",
-                "account": "Automate with Marc",
-                "views": 1900,
-                "duration": "14:17",
-            },
-        ],
-        own_metrics_readiness={"strategy_eligible_count": 0},
-    )
-
-    assert report["platform"] == "youtube"
-    assert report["own_data_status"] == "insufficient"
-    assert "tool_workflow_tutorial" in report["topic_patterns"]
-    assert "screen_or_tool_stack_demo" in report["proof_requirements"]
-    assert report["top_accounts"][0]["account"] == "Automate with Marc"
-    assert any("concrete tool stack" in move for move in report["recommended_content_moves"])
-
-
-def test_distill_rejects_bad_sources_and_keeps_bilibili_native_samples():
-    from content_platform.same_lane_intelligence import distill_same_lane_samples
-
-    report = distill_same_lane_samples(
-        "bilibili",
-        [
-            {"title": "AI 工具效率教程：自动做周报", "url": "https://www.bilibili.com/video/BV1xx", "account": "LeaderAI", "views": 22000},
-            {"title": "ChatGPT 官网", "url": "https://openai.com/chatgpt", "account": "OpenAI", "views": 999999},
+                "title": "设备运维：AI 识别压缩机振动异常后交给工程师确认",
+                "summary": "输入为设备传感器数据，输出为待人工复核的预测性维护工单。",
+                "url": "https://mp.weixin.qq.com/s/robotics",
+                "published_at": "2026-09-15T10:00:00+08:00",
+            }
         ],
     )
 
-    assert report["accepted_sample_count"] == 1
-    assert report["rejected_sample_count"] == 1
-    assert report["top_works"][0]["account"] == "LeaderAI"
-    assert "platform_native_work" in report["evidence_quality"]
-
-
-def test_cli_same_lane_intel_reads_sample_file_writes_report_and_snapshot(tmp_path):
-    sample_file = tmp_path / "samples.json"
-    sample_file.write_text(
-        json.dumps(
-            {
-                "youtube": [
-                    {
-                        "title": "How to Use Claude Code With Kimi K3 and Ollama",
-                        "url": "https://www.youtube.com/watch?v=yt1",
-                        "account": "Automate with Marc",
-                        "views": 1500,
-                    }
-                ],
-                "bilibili": [
-                    {
-                        "title": "AI 工作流自动化教程",
-                        "url": "https://www.bilibili.com/video/BV123",
-                        "account": "AISolo大西瓜",
-                        "views": 8888,
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    output_path = tmp_path / "same-lane-report.json"
-
-    stdout = io.StringIO()
-    with redirect_stdout(stdout):
-        code = main(
-            [
-                "--db",
-                str(tmp_path / "state.db"),
-                "--config",
-                "",
-                "same-lane-intel",
-                "--sample-file",
-                str(sample_file),
-                "--platform",
-                "youtube",
-                "--platform",
-                "bilibili",
-                "--output",
-                str(output_path),
-            ]
-        )
-
-    assert code == 0
-    result = json.loads(stdout.getvalue())
-    assert result["ok"] is True
-    assert output_path.is_file()
-    report = json.loads(output_path.read_text(encoding="utf-8"))
-    assert sorted(report["platforms"]) == ["bilibili", "youtube"]
-    latest = Store(tmp_path / "state.db").latest_tool_inventory("same_lane_intelligence:latest")
-    assert latest["payload"]["report_path"] == str(output_path)
-
-
-def test_load_samples_file_supports_nested_platform_query_items(tmp_path):
-    from content_platform.same_lane_intelligence import load_samples_file
-
-    sample_file = tmp_path / "nested.json"
-    sample_file.write_text(
-        json.dumps(
-            {
-                "platforms": {
-                    "zhihu": {
-                        "queries": [
-                            {
-                                "query": "AI 工作流",
-                                "items": [
-                                    {"title": "AI 工作流真实案例", "url": "https://www.zhihu.com/question/123/answer/456"}
-                                ],
-                            }
-                        ]
-                    }
-                }
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-
-    samples = load_samples_file(sample_file)
-
-    assert samples["zhihu"][0]["title"] == "AI 工作流真实案例"
+    assert report["radar"]["status"] == "discovery_only"
+    assert report["radar"]["discovery_sample_count"] == 1
+    assert report["radar"]["ranked_sample_count"] == 0
+    assert report["top_works"] == []
+    assert report["generation_status"] == "research_required"
+    assert report["topic_patterns"] == []
+    assert report["recommended_content_moves"] == []
+    assert report["hook_patterns"] == []
+    assert report["structure_patterns"] == []
+    assert report["visual_patterns"] == []
+    compact = compact_same_lane_playbook(report)
+    assert compact["status"] == "discovery_only"
+    assert compact["gate_failures"] == ["metrics_missing", "insufficient_ranked_samples"]

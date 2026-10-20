@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 RULEBOOK_PATH = ROOT / "config" / "channel_content_rulebook.json"
+REAL_WORLD_AI_POLICY_PATH = ROOT / "config" / "real_world_ai_implementation_v1.json"
 GROWTH_POLICY_PATH = ROOT / "config" / "growth_quality_policy.json"
 OPERATIONS_POLICY_PATH = ROOT / "config" / "operations_policy_facts.json"
 OPERATIONS_CONTRACT_PATH = ROOT / "docs" / "OPERATIONS_POLICY_CONTRACT.md"
@@ -131,6 +132,39 @@ DOUYIN_ACCOUNT_ISOLATION_FIELDS = {
     "output_dir",
 }
 DOUYIN_FORBIDDEN_REUSE_MARKERS = {"final.mp4", "template", "bgm", "title", "script", "source_material"}
+REAL_WORLD_AI_PLATFORMS = {
+    "douyin_ai",
+    "kuaishou",
+    "shipinhao",
+    "wechat",
+    "juejin",
+    "zhihu",
+    "bilibili",
+    "tiktok",
+    "youtube",
+    "twitter",
+    "threads",
+    "bluesky",
+    "mastodon",
+    "nostr",
+    "devto",
+    "telegraph",
+    "writeas",
+    "buttondown",
+}
+REAL_WORLD_AI_PILLARS = {
+    "industrial_application",
+    "intelligent_manufacturing",
+    "office_automation",
+    "daily_life_application",
+}
+LEGACY_AI_LANE_MARKERS = {
+    "ai_efficiency_open_source",
+    "international_ai_efficiency",
+    "ai_tool_microcase",
+    "open_source_project_short",
+    "automation_workflow_short",
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -157,9 +191,29 @@ def main() -> None:
         missing = REQUIRED_CHANNEL_FIELDS - set(channel_rules[channel])
         require(not missing, f"missing field for {channel}: {sorted(missing)}")
 
+    serialized_rulebook = json.dumps(rulebook, ensure_ascii=False)
+    for marker in LEGACY_AI_LANE_MARKERS:
+        require(marker not in serialized_rulebook, f"legacy AI lane marker must be removed: {marker}")
+    ai_policy = json.loads(REAL_WORLD_AI_POLICY_PATH.read_text(encoding="utf-8"))
+    ai_platforms = set(ai_policy.get("platforms") or [])
+    require(ai_platforms == REAL_WORLD_AI_PLATFORMS, "canonical AI platform set mismatch")
+    expected_ai_ref = {
+        "source": "config/real_world_ai_implementation_v1.json",
+        "policy_profile": ai_policy.get("policy_profile"),
+        "policy_revision": ai_policy.get("policy_revision"),
+    }
+    require(set(ai_policy.get("pillars") or {}) == REAL_WORLD_AI_PILLARS, "canonical AI pillars mismatch")
+    for channel in sorted(ai_platforms):
+        rule = channel_rules.get(channel) or {}
+        require(rule.get("lane") == ai_policy.get("policy_profile"), f"{channel} must use the canonical versioned real-world AI lane")
+        positioning = rule.get("real_world_ai_positioning") or {}
+        require(set(positioning) == {"canonical_contract", "platform_adaptation"}, f"{channel} must store only canonical ref and adaptation")
+        require(positioning.get("canonical_contract") == expected_ai_ref, f"{channel} canonical AI reference mismatch")
+        require(positioning.get("platform_adaptation") == (ai_policy.get("platform_adaptation") or {}).get(channel), f"{channel} AI adaptation mismatch")
+
     hard_gates = rulebook.get("global_hard_gates") or {}
     require(hard_gates.get("metrics_review_required") is True, "metrics review must be required")
-    require(hard_gates.get("proxy_required_for_hermes_channel_access") is True, "Hermes channel access must require an explicit proxy")
+    require(hard_gates.get("explicit_route_required_for_hermes_channel_access") is True, "Hermes channel access must require an explicit route")
     require(hard_gates.get("anti_platform_spam_similarity") is True, "anti platform spam similarity gate must be required")
     anti_spam = rulebook.get("anti_spam_similarity_policy") or {}
     require(anti_spam.get("policy_id") == "anti_spam_similarity_v1", "anti spam similarity policy id mismatch")
@@ -181,9 +235,9 @@ def main() -> None:
     require(GROWTH_CHANNELS.issubset(set(growth_config.get("applies_to") or [])), "growth quality config must cover real-use channels")
 
     proxy_policy = rulebook.get("proxy_policy") or {}
-    for field in ["domestic_proxy_env", "international_proxy_env", "domestic_channels", "international_channels", "rules"]:
+    for field in ["domestic_route", "international_proxy_env", "domestic_channels", "international_channels", "rules"]:
         require(field in proxy_policy, f"missing proxy_policy field: {field}")
-    require(proxy_policy["domestic_proxy_env"] == "CN_PROXY", "domestic channels must use CN_PROXY")
+    require(proxy_policy["domestic_route"] == "direct", "domestic channels must use the direct route")
     require(proxy_policy["international_proxy_env"] == "US_PROXY", "international channels must use US_PROXY")
 
     domestic = set(proxy_policy.get("domestic_channels") or [])
@@ -387,12 +441,14 @@ def main() -> None:
         require(account.get("publish_boundary") == "manual_handoff_only", f"{key} must be manual handoff only")
         require(key in str(account.get("output_dir_pattern", "")), f"{key} output directory must include account key")
     require(pet_account.get("lane") == "pet_healing", "douyin_pet lane must be pet_healing")
-    require(ai_account.get("lane") == "ai_efficiency_open_source", "douyin_ai lane must be ai_efficiency_open_source")
+    require(ai_account.get("lane") == ai_policy.get("policy_profile"), "douyin_ai lane must use canonical versioned profile")
+    require(ai_account.get("account_direction") == ai_policy.get("policy_profile"), "douyin_ai account direction must use canonical versioned profile")
+    require(ai_account.get("real_world_ai_positioning") == channel_rules["douyin_ai"].get("real_world_ai_positioning"), "douyin_ai account variant canonical reference mismatch")
+    require("required_content_lines" not in ai_account and "weekly_mix" not in ai_account, "douyin_ai account variant must not duplicate canonical pillars")
     pet_weekly = pet_account.get("weekly_mix") or {}
     require(pet_weekly.get("cat_knowledge_or_original") == 3, "douyin_pet weekly cat knowledge quota must be 3")  # 08-16 每日版
     require(pet_weekly.get("tiktok_hot_localized_reposts") == 4, "douyin_pet weekly TikTok repost quota must be 4")  # 08-16 每日版
     require("tiktok_hot_localized_repost" in (pet_account.get("required_content_lines") or []), "douyin_pet must include TikTok localized repost line")
-    require("ai_tool_microcase" in (ai_account.get("required_content_lines") or []), "douyin_ai must include AI tool microcase line")
     require("cat_knowledge_or_original" in (ai_account.get("forbidden_content_lines") or []), "douyin_ai must forbid cat knowledge line")
     require("douyin_ai" in (pet_account.get("must_not_use_rules_from") or []), "douyin_pet must not use douyin_ai rules")
     require("douyin_pet" in (ai_account.get("must_not_use_rules_from") or []), "douyin_ai must not use douyin_pet rules")

@@ -8,6 +8,9 @@ constraints before media generation or delivery is attempted.
 
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
 
@@ -46,6 +49,89 @@ REQUIRED_SKILLS_BY_CHANNEL = {
 KNOWLEDGE_CARD_CONTENT_HINTS = {"knowledge_card", "card", "infographic", "image_card"}
 
 
+def _source_file(path: str | Path) -> dict[str, Any]:
+    source = Path(path).expanduser().resolve()
+    data = source.read_bytes()
+    if not data:
+        raise ValueError(f"preflight source is empty: {source}")
+    return {"path": str(source), "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+
+
+def _load_source_evidence(channel, skills, workflow_context=None):
+    """Read inputs, compile strategy, and retain file evidence rather than names."""
+    from . import platform_workflow_context as loader
+    from . import visual_content_policy as visual
+    from .strategy_compiler import compile_strategy, validate_compiled_strategy
+
+    context = workflow_context or {}
+    rulebook = _source_file((context.get("rulebook") or {}).get("path") or loader.RULEBOOK)
+    rules = json.loads(Path(rulebook["path"]).read_text(encoding="utf-8"))
+    aliases = {"weixin": "wechat", "wechat_official": "wechat", "rednote": "xiaohongshu"}
+    entry = (rules.get("channel_rules") or {}).get(aliases.get(channel, channel))
+    if not isinstance(entry, dict):
+        raise ValueError(f"preflight channel rule missing: {channel}")
+    strategy_path = (context.get("strategy") or {}).get("path")
+    strategy_path = strategy_path or loader._latest_distilled_strategy() or loader._latest_strategy(channel)
+    if not strategy_path:
+        raise FileNotFoundError(f"preflight strategy source missing: {channel}")
+    strategy = _source_file(strategy_path)
+    compiled = compile_strategy(strategy["path"], channel)
+    strategy_gate = validate_compiled_strategy(compiled)
+    if not strategy_gate.get("passed"):
+        raise ValueError("preflight strategy compilation failed")
+    records = []
+    for name in skills:
+        records.append(dict(_source_file(loader._skill_path(name)), name=name))
+    return {
+        "version": "preflight_source_evidence_v1",
+        "rulebook": rulebook,
+        "strategy": dict(strategy, compiled=compiled, compiled_gate=strategy_gate),
+        "skills": records,
+        "visual_policy": _source_file(visual.__file__),
+        "executed_checks": ["read_current_rulebook", "compile_actual_strategy", "read_required_skill_bytes", "read_visual_policy_source"],
+    }
+
+
+def _validate_source_evidence(manifest, channel, required_skills):
+    from . import platform_workflow_context as loader
+    from . import visual_content_policy as visual
+    from .strategy_compiler import compile_strategy, validate_compiled_strategy
+
+    evidence = manifest.get("source_evidence") or {}
+    failures = []
+    if not isinstance(evidence, dict) or evidence.get("version") != "preflight_source_evidence_v1":
+        return ["preflight_manifest.source_evidence_missing"]
+    records = evidence.get("skills") or []
+    if not isinstance(records, list):
+        return ["preflight_manifest.skill_file_evidence_missing"]
+    names = {str(row.get("name") or "") for row in records if isinstance(row, dict)}
+    if not required_skills.issubset(names):
+        failures.append("preflight_manifest.skill_file_evidence_missing")
+    sources = [(key, evidence.get(key)) for key in ("rulebook", "strategy", "visual_policy")]
+    sources.extend(("skill:" + str(row.get("name") or ""), row) for row in records if isinstance(row, dict))
+    canonical = {"rulebook": loader.RULEBOOK, "visual_policy": visual.__file__}
+    canonical.update(("skill:" + name, loader._skill_path(name)) for name in required_skills)
+    for name, row in sources:
+        try:
+            actual = _source_file(row["path"])
+            if actual["sha256"] != row.get("sha256") or actual["bytes"] != row.get("bytes"):
+                failures.append("preflight_manifest.source_changed:" + name)
+            if name in canonical and Path(actual["path"]) != Path(canonical[name]).resolve():
+                failures.append("preflight_manifest.source_path_mismatch:" + name)
+        except (OSError, ValueError, KeyError, TypeError):
+            failures.append("preflight_manifest.source_unreadable:" + name)
+    try:
+        strategy = evidence["strategy"]
+        compiled = compile_strategy(strategy["path"], channel)
+        if compiled != strategy.get("compiled") or not validate_compiled_strategy(compiled).get("passed"):
+            failures.append("preflight_manifest.strategy_recompile_mismatch")
+        if (manifest.get("run_contract") or {}).get("rulebook", {}).get("sha256") != evidence["rulebook"]["sha256"]:
+            failures.append("preflight_manifest.rulebook_contract_mismatch")
+    except (OSError, ValueError, KeyError, TypeError):
+        failures.append("preflight_manifest.strategy_recompile_failed")
+    return failures
+
+
 def manifest_from_packet(packet: dict[str, Any]) -> dict[str, Any]:
     """Return the embedded preflight manifest, accepting legacy aliases."""
     manifest = packet.get("preflight_manifest") or packet.get("content_preflight_manifest") or {}
@@ -68,6 +154,7 @@ def build_preflight_manifest(
     delivery_health_required: bool = True,
     postcheck_required: bool = True,
     extra_skills: list[str] | None = None,
+    workflow_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical manifest that generators should attach to packets."""
     normalized_channel = str(channel or "").casefold()
@@ -77,24 +164,29 @@ def build_preflight_manifest(
     )
     from .run_contract import build_run_contract
 
+    source_evidence = _load_source_evidence(normalized_channel, skills, workflow_context)
+
     return {
         "version": CURRENT_PREFLIGHT_MANIFEST_VERSION,
         "channel": normalized_channel,
         "content_type": content_type,
         "rulebook": {
             "loaded": True,
-            "path": "config/channel_content_rulebook.json",
+            **source_evidence["rulebook"],
             "channel_rules_loaded": True,
         },
         "strategy": {
             "source": strategy_source,
             "result_path": strategy_result_path,
             "summary": strategy_summary,
+            "source_file": source_evidence["strategy"],
         },
         "skills_loaded": skills,
+        "source_evidence": source_evidence,
         "visual_policy": {
             "loaded": True,
             "policy_id": "visual_content_design_policy_v1",
+            **source_evidence["visual_policy"],
         },
         "topic_plan": {
             "selected_topic": selected_topic,
@@ -239,6 +331,7 @@ def validate_preflight_manifest(packet: dict[str, Any], channel: str | None = No
     missing_skills = sorted(required_skills - skills)
     if missing_skills:
         failures.append("preflight_manifest.skills_missing:" + ",".join(missing_skills))
+    failures.extend(_validate_source_evidence(manifest, normalized_channel, required_skills))
 
     visual = manifest.get("visual_policy") or {}
     if not isinstance(visual, dict) or not visual.get("loaded") or not visual.get("policy_id"):

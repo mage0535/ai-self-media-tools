@@ -1,4 +1,4 @@
-﻿"""WeChat professional article toolchain integration.
+"""WeChat professional article toolchain integration.
 
 This module makes the WeWrite article tool a production dependency for WeChat
 Official Account packets instead of relying on prompt-only discipline.
@@ -102,7 +102,8 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
     elif required:
         evidence_path.write_text(json.dumps({"tool_invocations": meta.get("tool_invocations", {})}, ensure_ascii=False, indent=2), encoding="utf-8")
         return draft
-    packet = _build_packet_fields(job, draft, body, invocation, run_dir)
+    packet_invocation = meta["tool_invocations"].get("hermes_writer", invocation) if cfg.get("selected_writer") == "hermes" else invocation
+    packet = _build_packet_fields(job, draft, body, packet_invocation, run_dir)
     packet["tool_invocations"] = meta["tool_invocations"]
     for key, value in packet.items():
         if value not in (None, "", [], {}):
@@ -113,6 +114,8 @@ def prepare_wechat_professional_draft(job_id: str, job: dict[str, Any], draft: d
 
 
 def _invoke_wewrite(cfg: dict[str, Any], brief_path: Path, article_path: Path, topic: str, circuit_path: Path | None = None) -> dict[str, Any]:
+    if cfg.get("selected_writer") == "hermes":
+        return {"tool": "wewrite", "status": "skipped", "reason": "explicit_selected_hermes_route", "commands": []}
     wewrite_bin = os.path.expanduser(str(cfg.get("wewrite_bin") or "~/.local/bin/wewrite"))
     timeout = int(cfg.get("timeout", 180))
     env = os.environ.copy()
@@ -193,6 +196,37 @@ def _record_writer_failure(path: Path | None, invocation: dict[str, Any]) -> Non
         pass
 
 
+def _hermes_writer_route(cfg: dict[str, Any]) -> dict[str, str]:
+    provider, model = cfg.get("hermes_provider"), cfg.get("hermes_model")
+    if (not isinstance(provider, str) or provider not in {"custom:go", "deepseek", "openai-codex"}
+            or not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model)
+            or cfg.get("hermes_bin") != "/srv/hermes-agent/.venv/bin/hermes"):
+        raise ValueError("explicit_pinned_hermes_writer_route_required")
+    return {"provider": provider, "model": model}
+
+
+def writer_evidence_accepted(config: dict[str, Any], draft: dict[str, Any]) -> bool:
+    cfg = config.get("wechat_toolchain", {})
+    invocations = (draft.get("draft_meta") or {}).get("tool_invocations") or {}
+    wewrite = invocations.get("wewrite") or {}
+    if cfg.get("selected_writer") != "hermes":
+        return wewrite.get("status") == "used"
+    try:
+        route = _hermes_writer_route(cfg)
+    except ValueError:
+        return False
+    writer = invocations.get("hermes_writer") or {}
+    commands = writer.get("commands") or []
+    return bool(_hermes_writer_fallback_enabled(cfg)
+                and wewrite.get("status") == "skipped"
+                and wewrite.get("reason") == "explicit_selected_hermes_route"
+                and writer.get("tool") == "hermes_writer"
+                and writer.get("bin") == cfg["hermes_bin"]
+                and writer.get("status") == "used" and writer.get("route") == route
+                and any(isinstance(item, dict) and item.get("name") == "hermes --cli"
+                        and item.get("returncode") == 0 for item in commands))
+
+
 def _invoke_hermes_writer(cfg: dict[str, Any], brief_path: Path, article_path: Path) -> dict[str, Any]:
     """Generate a draft through Hermes when the configured WeWrite model fails.
 
@@ -202,6 +236,11 @@ def _invoke_hermes_writer(cfg: dict[str, Any], brief_path: Path, article_path: P
     hermes_bin = os.path.expanduser(str(cfg.get("hermes_bin") or "hermes"))
     timeout = int(cfg.get("hermes_timeout") or cfg.get("timeout") or 180)
     base = {"tool": "hermes_writer", "bin": hermes_bin, "status": "failed", "commands": []}
+    try:
+        route = _hermes_writer_route(cfg)
+    except ValueError:
+        return {**base, "error": "explicit_pinned_hermes_writer_route_required"}
+    base["route"] = route
     prompt = (
         "请严格依据以下公众号写作简报生成完整 Markdown 正文。只输出文章，不要解释过程；"
         "保留标题和二级标题，避免虚构事实或数据。\n\n"
@@ -210,7 +249,7 @@ def _invoke_hermes_writer(cfg: dict[str, Any], brief_path: Path, article_path: P
     try:
         command_prefix = [sys.executable, hermes_bin] if hermes_bin.endswith(".py") else [hermes_bin]
         completed = subprocess.run(
-            [*command_prefix, "--cli", "-z", prompt],
+            [*command_prefix, "--provider", route["provider"], "--model", route["model"], "--cli", "-z", prompt],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -321,6 +360,9 @@ def _split_article(text: str) -> tuple[str, str]:
 
 
 def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, invocation: dict[str, Any], run_dir: Path) -> dict[str, Any]:
+    hermes_selected = invocation.get("tool") == "hermes_writer"
+    writer_slug = "hermes_writer" if hermes_selected else "wewrite"
+    writer_label = "Hermes writer" if hermes_selected else "WeWrite"
     title = str(draft.get("title") or job.get("topic") or "WeChat article")
     sections = _sections(body)
     policy = visual_content_policy(["wechat"], "long_article")
@@ -335,16 +377,16 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         for i, purpose in enumerate(["open the pain point", "explain the case", "summarize the method"])
     ]
     backgrounds = [
-        {"asset_id": f"wewrite-bg-{i+1}", "asset_type": "photo", "background_kind": "real_scene_photo", "source": "wewrite_visual_prompt", "rights_cleared": True, "real_scene": True, "match_reason": "planned by WeWrite brief for adjacent article section", "section": item["section"], "sections": [item["section"]], "image": item["image"]}
+        {"asset_id": f"{writer_slug}-bg-{i+1}", "asset_type": "photo", "background_kind": "real_scene_photo", "source": f"{writer_slug}_visual_prompt", "rights_cleared": True, "real_scene": True, "match_reason": f"planned by {writer_label} brief for adjacent article section", "section": item["section"], "sections": [item["section"]], "image": item["image"]}
         for i, item in enumerate(section_map)
     ]
-    strategy_reason = "WeWrite long-form article with theme and inline image planning"
+    strategy_reason = f"{writer_label} long-form article with theme and inline image planning"
     growth_strategy = build_growth_strategy(["wechat"], "long_article", (job.get("historical_feedback") or {}))
     return {
         "preflight_manifest": build_preflight_manifest(
             channel="wechat",
             content_type="long_article",
-            strategy_source="wewrite_llm_write",
+            strategy_source="hermes_writer" if hermes_selected else "wewrite_llm_write",
             strategy_result_path=str(run_dir / "brief.md"),
             strategy_summary=strategy_reason,
             selected_topic=str(job.get("topic") or title),
@@ -360,7 +402,7 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
         "opening_hook": _opening_hook(body),
         "hook_type": "case_conflict_reader_payoff",
         "sections": sections[:5] if len(sections) >= 5 else sections + [f"section_{i}" for i in range(len(sections) + 1, 6)],
-        "visual_template_selection": {"selected": "wewrite_case_feature_109_theme", "ranked_scores": [{"template": "wewrite_case_feature_109_theme", "score": 92}], "recent_same_platform_templates": [], "penalties": {}},
+        "visual_template_selection": {"selected": f"{writer_slug}_case_feature_109_theme", "ranked_scores": [{"template": f"{writer_slug}_case_feature_109_theme", "score": 92}], "recent_same_platform_templates": [], "penalties": {}},
         "strategy_brief": {"target_user": "AI operators", "channel_lane": "AI operations", "topic_basis": str(job.get("topic") or title), "click_reason": "specific mistake and repair path", "reader_payoff": "a reusable operational checklist", "chosen_structure": "case-breakdown-method", "content_form": "longform article", "seo_geo_intent": "WeChat search and recommendation intent for AI operations", "selected_theme_reason": strategy_reason, "growth_goal": growth_strategy.get("wechat_growth_playbook", {}).get("primary_goal", "")},
         "growth_strategy": growth_strategy,
         "section_image_map": section_map,
@@ -385,11 +427,11 @@ def _build_packet_fields(job: dict[str, Any], draft: dict[str, Any], body: str, 
             content_goal="increase WeChat open rate, full-read rate, saves, comments, and follow conversion",
         ),
         "cover_design": {"visual_subject": title[:40], "topic_alignment": "matches article promise", "mobile_readable": True, "visual_hierarchy": "title, pain point, method cue", "template_family": "casebook"},
-        "differentiation_dimensions": ["wewrite professional draft", "case-led structure", "inline visual plan"],
+        "differentiation_dimensions": [f"{writer_slug} professional draft", "case-led structure", "inline visual plan"],
         "reader_payoff": "reader can apply the checklist today",
         "concrete_case": str(job.get("topic") or title),
         "actionable_checklist": ["remove duplicate tools", "assign a unique tool role", "set admission rules"],
-        "tool_invocations": {"wewrite": invocation},
+        "tool_invocations": {writer_slug: invocation},
         "wechat_image_post_plan": _wechat_image_post_plan(title, sections),
     }
 

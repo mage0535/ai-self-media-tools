@@ -1,13 +1,24 @@
 import json
+import hashlib
 import sqlite3
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .history_reader import read_history
+
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _performance_has_growth_signal(row):
@@ -41,6 +52,31 @@ def _performance_has_growth_signal(row):
             "avg_watch_seconds",
         )
     )
+
+
+def _unique_bound_raw_metric(payload, expected):
+    """Same exact provenance contract for metric writes and account reads."""
+    canonical = lambda value: "twitter" if str(value) == "x" else str(value)
+    platform = canonical(expected["platform"])
+    candidates = []
+    if isinstance(payload, dict) and isinstance(payload.get("platforms"), dict):
+        for key, item in payload["platforms"].items():
+            if canonical(key) == platform and isinstance(item, dict):
+                for row in item.get("content_observations") or []:
+                    if isinstance(row, dict):
+                        candidates.append(dict(row, platform=row.get("platform", key)))
+    elif isinstance(payload, dict):
+        candidates = payload.get("records") if isinstance(payload.get("records"), list) else [payload]
+    elif isinstance(payload, list):
+        candidates = payload
+    keys = ("account_id", "platform_content_id", "internal_account_alias", "observed_at", "metric_window")
+    matches = [row for row in candidates if isinstance(row, dict)
+        and canonical(row.get("platform", "")) == platform
+        and all(str(row.get(key, "")) == str(expected[key]) for key in keys)
+        and row.get("metrics") == expected["metrics"]]
+    if len(matches) != 1:
+        raise ValueError("metric_values_not_bound_to_unique_raw_observation")
+    return matches[0]
 
 
 class Store:
@@ -101,6 +137,24 @@ class Store:
                     checksum TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     UNIQUE(job_id, kind, path)
+                );
+                CREATE TABLE IF NOT EXISTS platform_outputs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    platform TEXT NOT NULL,
+                    content_revision TEXT NOT NULL,
+                    draft_version_id INTEGER NOT NULL REFERENCES draft_versions(id),
+                    slot TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    artifact_id INTEGER REFERENCES artifacts(id),
+                    path TEXT NOT NULL DEFAULT '',
+                    content_json TEXT NOT NULL DEFAULT '',
+                    provenance_json TEXT NOT NULL,
+                    checksum TEXT NOT NULL,
+                    quality_json TEXT NOT NULL,
+                    quality_checksum TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(job_id, platform, content_revision, slot)
                 );
                 CREATE TABLE IF NOT EXISTS approvals (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -317,6 +371,7 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
                 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job_id, id);
+                CREATE INDEX IF NOT EXISTS idx_platform_outputs_job ON platform_outputs(job_id, platform, content_revision);
                 CREATE INDEX IF NOT EXISTS idx_delivery_queue_state ON delivery_queue(state, id);
                 CREATE INDEX IF NOT EXISTS idx_topic_clusters_key ON topic_clusters(cluster_key, id);
                 CREATE INDEX IF NOT EXISTS idx_draft_versions_job ON draft_versions(job_id, id);
@@ -393,20 +448,26 @@ class Store:
     def init_db(self):
         self.init()
 
-    def create_job(self, topic, platforms, brief=None, profile="default", topic_fingerprint=""):
+    def create_job(self, topic, platforms, brief=None, profile="default", topic_fingerprint="", decision_builder=None):
         topic = str(topic).strip()
         platforms = list(dict.fromkeys(str(p).strip() for p in platforms if str(p).strip()))
         if not topic or not platforms:
             raise ValueError("topic and at least one platform are required")
         job_id = uuid.uuid4().hex[:16]
         now = utc_now()
+        effective_brief = dict(brief or {})
         with self.connect() as conn:
+            if decision_builder is not None:
+                decision = decision_builder(job_id, conn)
+                if not isinstance(decision, dict) or not decision.get("assignment_id"):
+                    raise ValueError("owned_learning_decision_invalid")
+                effective_brief["owned_decision"] = decision
             conn.execute(
                 """INSERT INTO jobs(id,topic,brief_json,platforms_json,state,created_at,updated_at,profile,topic_fingerprint)
                 VALUES(?,?,?,?,?,?,?,?,?)""",
-                (job_id, topic, json.dumps(brief or {}, ensure_ascii=False), json.dumps(platforms, ensure_ascii=False), "created", now, now, profile, topic_fingerprint),
+                (job_id, topic, json.dumps(effective_brief, ensure_ascii=False), json.dumps(platforms, ensure_ascii=False), "created", now, now, profile, topic_fingerprint),
             )
-            self._event(conn, job_id, "job_created", {"platforms": platforms})
+            self._event(conn, job_id, "job_created", {"platforms": platforms, "owned_learning": bool(decision_builder)})
         return self.get_job(job_id)
 
     def get_job(self, job_id):
@@ -428,7 +489,7 @@ class Store:
 
     def content_candidates(self, limit=200, states=None, exclude_job_id=""):
         states = tuple(states or ("review_required", "approved", "published", "partial", "created"))
-        sql = "SELECT * FROM jobs"
+        sql = "SELECT * FROM read_jobs"
         args = []
         if states:
             placeholders = ",".join("?" for _ in states)
@@ -439,8 +500,8 @@ class Store:
             args.append(exclude_job_id)
         sql += " ORDER BY updated_at DESC, created_at DESC LIMIT ?"
         args.append(int(limit))
-        with self.connect() as conn:
-            return [self._job(row) for row in conn.execute(sql, args)]
+        with read_history(self.path, ("jobs",)) as (conn, prefix):
+            return [self._job(row) for row in conn.execute(prefix + sql, args)]
 
     def save_draft(self, job_id, title, body, risk_level, risk, prompt_version="", draft_meta=None):
         with self.connect() as conn:
@@ -484,6 +545,27 @@ class Store:
         return self.get_job(job_id)
 
     def claim(self, job_id, allowed_states, owner, ttl_seconds, new_state):
+        held = self.migration_held(job_id)
+        grant = getattr(self, "_migration_internal_make", None)
+        if grant is not None and job_id == "f8bb617683914cbe" and not held:
+            raise PermissionError("original_internal_make_continuous_hold_missing")
+        if held:
+            import os
+            import threading
+            import time
+            if (not isinstance(grant, dict) or grant.get("job_id") != job_id
+                    or grant.get("store_identity") != id(self)
+                    or grant.get("pid") != os.getpid() or grant.get("thread_id") != threading.get_ident()
+                    or os.geteuid() != 0 or not 0 < grant["expires_at"] - time.time() <= 1800 or grant["claimed"]
+                    or set(allowed_states) != {"created"} or new_state != "generating" or int(ttl_seconds) != 900):
+                return False
+            from .review import ReviewTokens
+            policy = grant.get("policy")
+            if type(policy) is not ReviewTokens:
+                return False
+            verified = policy.verify(grant.get("token", ""), "internal_make")
+            if verified.get("job_id") != job_id or verified.get("nonce") != grant.get("nonce"):
+                return False
         allowed = tuple(set(allowed_states))
         if not allowed or not owner:
             raise ValueError("claim requires states and owner")
@@ -491,71 +573,125 @@ class Store:
         expires = (datetime.now(timezone.utc) + timedelta(seconds=int(ttl_seconds))).isoformat(timespec="seconds")
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            if held:
+                original = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+                original_hold = conn.execute("SELECT original_state FROM media_migration_hold WHERE job_id=?", (job_id,)).fetchone()
+                raw = json.dumps(dict(original), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode() if original else b""
+                if (not original_hold or original_hold["original_state"] != "created"
+                        or hashlib.sha256(raw).hexdigest() != "3594cc2a59e9f3f84cee8fd13fffd44f53182828344bea3107eaf84423954416"):
+                    raise PermissionError("original_internal_make_claim_boundary_changed")
             placeholders = ",".join("?" for _ in allowed)
-            cursor = conn.execute(
-                f"""UPDATE jobs SET state=?,lease_owner=?,lease_expires_at=?,attempts=attempts+1,updated_at=?
-                WHERE id=? AND state IN ({placeholders}) AND (lease_owner='' OR lease_expires_at<=? OR lease_owner=?)""",
-                (new_state, owner, expires, now, job_id, *allowed, now, owner),
-            )
+            sql = f"""UPDATE jobs SET state=?,lease_owner=?,lease_expires_at=?,attempts=attempts+1,updated_at=?
+                WHERE id=? AND state IN ({placeholders}) AND (lease_owner='' OR lease_expires_at<=? OR lease_owner=?)"""
+            args = (new_state, owner, expires, now, job_id, *allowed, now, owner)
+            if held:
+                from .migration_internal_dml import execute_fixed_internal_dml
+                cursor = execute_fixed_internal_dml(self, conn, "claim", sql, args)
+                grant.update(claimed=True, claim_owner=owner, claim_expires=expires, released=False)
+            else:
+                cursor = conn.execute(sql, args)
             if cursor.rowcount == 1:
                 self._event(conn, job_id, "job_claimed", {"owner": owner, "state": new_state, "expires_at": expires})
                 return True
             return False
 
     def release_claim(self, job_id, owner, new_state, event, error="", detail=None):
+        if getattr(self, "_root_source_repair", None) is not None:
+            from .source_repair_runtime import release_source_repair
+            return release_source_repair(self, job_id, owner, new_state, event, error, detail)
+        held = self.migration_held(job_id)
+        if getattr(self, "_migration_internal_make", None) is not None and job_id == "f8bb617683914cbe" and not held:
+            raise PermissionError("original_internal_make_continuous_hold_missing")
         with self.connect() as conn:
-            cursor = conn.execute(
-                """UPDATE jobs SET state=?,lease_owner='',lease_expires_at='',last_error=?,updated_at=?
-                WHERE id=? AND lease_owner=?""",
-                (new_state, str(error), utc_now(), job_id, owner),
-            )
+            if held:
+                conn.execute("BEGIN IMMEDIATE")
+            sql = """UPDATE jobs SET state=?,lease_owner='',lease_expires_at='',last_error=?,updated_at=?
+                WHERE id=? AND lease_owner=?"""
+            args = (new_state, str(error), utc_now(), job_id, owner)
+            if held:
+                from .migration_internal_dml import execute_fixed_internal_dml
+                cursor = execute_fixed_internal_dml(self, conn, "release", sql, args, event=event)
+                self._migration_internal_make["released"] = True
+            else:
+                cursor = conn.execute(sql, args)
             if cursor.rowcount != 1:
                 raise ValueError("job claim is not owned by caller")
             self._event(conn, job_id, event, detail or {"error": str(error)})
         return self.get_job(job_id)
 
-    def recover_stale(self):
+    def recover_stale(self, job_id=None):
+        if job_id is not None and (not isinstance(job_id, str) or not job_id.strip()):
+            raise ValueError("stale recovery requires a nonempty exact job ID")
         now, recovered = utc_now(), 0
+        def expired(value):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed.tzinfo is not None and parsed <= datetime.fromisoformat(now)
+            except (ValueError, TypeError, AttributeError):
+                return False
+        job_scope = " AND id=?" if job_id is not None else ""
+        delivery_scope = " AND job_id=?" if job_id is not None else ""
+        scope_args = (job_id,) if job_id is not None else ()
         with self.connect() as conn:
             rows = conn.execute(
-                "SELECT id,state FROM jobs WHERE state IN ('generating','publishing') AND lease_expires_at<>'' AND lease_expires_at<=?",
-                (now,),
+                "SELECT id,state,lease_owner,lease_expires_at,last_error FROM jobs "
+                "WHERE state IN ('generating','publishing') AND lease_expires_at<>'' "
+                "AND julianday(lease_expires_at)<=julianday(?)" + job_scope,
+                (now, *scope_args),
             ).fetchall()
             for row in rows:
+                if not expired(row["lease_expires_at"]) or self._migration_held(conn, row["id"]):
+                    continue
                 new_state = "failed" if row["state"] == "generating" else "partial"
-                conn.execute(
-                    "UPDATE jobs SET state=?,lease_owner='',lease_expires_at='',last_error='stale lease recovered',updated_at=? WHERE id=?",
-                    (new_state, now, row["id"]),
+                cursor = conn.execute(
+                    "UPDATE jobs SET state=?,lease_owner='',lease_expires_at='',"
+                    "last_error='stale lease recovered',updated_at=? WHERE id=? AND state=? "
+                    "AND lease_owner=? AND lease_expires_at=? "
+                    "AND julianday(lease_expires_at)<=julianday(?)",
+                    (new_state, now, row["id"], row["state"], row["lease_owner"], row["lease_expires_at"], now),
                 )
-                self._event(conn, row["id"], "stale_job_recovered", {"from": row["state"], "to": new_state})
+                if cursor.rowcount != 1:
+                    continue
+                detail = {"from": row["state"], "to": new_state}
+                if job_id is not None:
+                    detail.update(expired_lease_owner=row["lease_owner"],
+                                  expired_lease_expires_at=row["lease_expires_at"],
+                                  previous_error=row["last_error"], automatic_replay=False)
+                self._event(conn, row["id"], "stale_job_recovered", detail)
                 recovered += 1
 
             deliveries = conn.execute(
-                """SELECT id,job_id,state,attempts,error FROM delivery_queue
-                WHERE state='processing' AND lease_expires_at<>'' AND lease_expires_at<=?""",
-                (now,),
+                "SELECT id,job_id,state,attempts,error,lease_owner,lease_expires_at "
+                "FROM delivery_queue WHERE state='processing' AND lease_expires_at<>'' "
+                "AND julianday(lease_expires_at)<=julianday(?)" + delivery_scope,
+                (now, *scope_args),
             ).fetchall()
             for row in deliveries:
+                if not expired(row["lease_expires_at"]) or self._migration_held(conn, row["job_id"]):
+                    continue
                 attempts = int(row["attempts"] or 0)
-                terminal = attempts >= 3
-                new_state = "failed" if terminal else "queued"
-                error = row["error"] or "stale delivery lease recovered"
-                if terminal and "stale delivery failed after max attempts" not in error:
-                    error = f"stale delivery failed after max attempts: {error}"
-                conn.execute(
-                    """UPDATE delivery_queue
-                    SET state=?, lease_owner='', lease_expires_at='', error=?, updated_at=?
-                    WHERE id=?""",
-                    (new_state, error, now, row["id"]),
+                # Expiry cannot prove whether an external submission completed.
+                new_state = "failed"
+                error = row["error"] or "stale delivery outcome uncertain; manual reconciliation required"
+                cursor = conn.execute(
+                    "UPDATE delivery_queue SET state=?,lease_owner='',lease_expires_at='',"
+                    "error=?,updated_at=? WHERE id=? AND job_id=? AND state=? "
+                    "AND lease_owner=? AND lease_expires_at=? "
+                    "AND julianday(lease_expires_at)<=julianday(?)",
+                    (new_state, error, now, row["id"], row["job_id"], row["state"],
+                     row["lease_owner"], row["lease_expires_at"], now),
                 )
-                self._event(
-                    conn,
-                    row["job_id"],
-                    "stale_delivery_recovered",
-                    {"queue_id": row["id"], "from": row["state"], "to": new_state, "attempts": attempts},
-                )
+                if cursor.rowcount != 1:
+                    continue
+                detail = {"queue_id": row["id"], "from": row["state"], "to": new_state, "attempts": attempts}
+                if job_id is not None:
+                    detail.update(expired_lease_owner=row["lease_owner"],
+                                  expired_lease_expires_at=row["lease_expires_at"],
+                                  automatic_replay=False)
+                self._event(conn, row["job_id"], "stale_delivery_recovered", detail)
                 recovered += 1
         return recovered
+
 
     def record_event(self, job_id, event, detail=None):
         with self.connect() as conn:
@@ -628,8 +764,24 @@ class Store:
         finished_at="",
         duration_ms=0,
     ):
+        if job_id == "7b12e9aae980484b":
+            from .normal_source_7b12_case_r2 import assert_step_write, ALIAS
+            assert_step_write(self, workflow_id, job_id, step_name, status)
+            if step_name == ALIAS: attempt = 1
         now = utc_now()
         with self.connect() as conn:
+            if job_id == "f8bb617683914cbe":
+                if step_name in {"initialize_task", "load_platform_workflow_context", "collect_native_source_inputs"} and conn.execute("SELECT 1 FROM events WHERE job_id=? AND event='root_source_repair_registered' LIMIT 1", (job_id,)).fetchone():
+                    raise PermissionError("source_repair_original_three_rows_immutable")
+                if step_name in {"collect_native_source_inputs__root_source_repair", "collect_native_source_inputs__root_history_reobserve"}:
+                    from .source_repair_runtime import active_grant
+                    grant = active_grant(self)
+                    if step_name != grant.get("alias", "collect_native_source_inputs__root_source_repair"):
+                        raise PermissionError("source_alias_write_not_same_signed_scope")
+                    attempt = 1
+                    previous = conn.execute("SELECT status FROM workflow_steps WHERE job_id=? AND step_name=?", (job_id, step_name)).fetchone()
+                    if previous and previous[0] != "RUNNING":
+                        raise PermissionError("source_repair_alias_terminal_row_immutable")
             conn.execute(
                 """INSERT INTO workflow_steps(
                     workflow_id,job_id,platform,step_name,status,required,depends_on_json,attempt,reason_code,message,
@@ -761,6 +913,205 @@ class Store:
     def artifacts(self, job_id):
         return self._rows("SELECT * FROM artifacts WHERE job_id=? ORDER BY id", (job_id,))
 
+    def record_platform_output(self, job_id, platform, content_revision, draft_version_id, slot, role, *,
+                               artifact_id=None, content=None, provenance=None, quality_evidence=None):
+        """Append an explicit owner binding; legacy artifacts are never inferred."""
+        job = self.get_job(job_id)
+        if platform not in job["platforms"] or not content_revision or not slot or not role:
+            raise ValueError("invalid_platform_output_owner")
+        versions = self.draft_versions(job_id)
+        if not versions or versions[-1]["id"] != draft_version_id:
+            raise ValueError("platform_output_draft_version_not_current")
+        quality = quality_evidence or {}
+        if not isinstance(quality, dict) or quality.get("passed") is not True:
+            raise ValueError("passing_final_quality_evidence_required")
+        quality_json = json.dumps(quality, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        quality_checksum = hashlib.sha256(quality_json.encode("utf-8")).hexdigest()
+        if not isinstance(provenance, dict) or not provenance.get("producer_step"):
+            raise ValueError("platform_output_provenance_required")
+        provenance_json = json.dumps(provenance, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if (artifact_id is None) == (content is None):
+            raise ValueError("exactly_one_artifact_or_content_required")
+        path = ""
+        content_json = ""
+        if artifact_id is not None:
+            with self.connect() as conn:
+                artifact = conn.execute(
+                    "SELECT * FROM artifacts WHERE id=? AND job_id=?", (artifact_id, job_id)
+                ).fetchone()
+            if artifact is None:
+                raise ValueError("artifact_not_owned_by_job")
+            path = artifact["path"]
+            file = Path(path)
+            if not file.is_file():
+                raise ValueError("platform_output_file_missing")
+            checksum = sha256_file(file)
+            if artifact["checksum"] and artifact["checksum"] != checksum:
+                raise ValueError("platform_output_artifact_checksum_mismatch")
+        else:
+            if not isinstance(content, dict) or not content:
+                raise ValueError("platform_output_content_required")
+            content_json = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            checksum = hashlib.sha256(content_json.encode("utf-8")).hexdigest()
+        values = (job_id, platform, content_revision, draft_version_id, slot, role, artifact_id, path,
+                  content_json, provenance_json, checksum, quality_json, quality_checksum, utc_now())
+        with self.connect() as conn:
+            previous = conn.execute(
+                "SELECT * FROM platform_outputs WHERE job_id=? AND platform=? AND content_revision=? AND slot=?",
+                (job_id, platform, content_revision, slot),
+            ).fetchone()
+            if previous:
+                if any(previous[key] != value for key, value in {
+                    "draft_version_id": draft_version_id, "role": role, "artifact_id": artifact_id, "path": path, "content_json": content_json,
+                    "checksum": checksum, "quality_json": quality_json, "provenance_json": provenance_json,
+                }.items()):
+                    raise ValueError("immutable_platform_output_conflict")
+                return dict(previous)
+            conn.execute(
+                """INSERT INTO platform_outputs
+                (job_id,platform,content_revision,draft_version_id,slot,role,artifact_id,path,content_json,provenance_json,
+                 checksum,quality_json,quality_checksum,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", values,
+            )
+            row = conn.execute("SELECT * FROM platform_outputs WHERE id=last_insert_rowid()").fetchone()
+        return dict(row)
+
+    def platform_outputs(self, job_id, platform=None, content_revision=None):
+        sql = "SELECT * FROM platform_outputs WHERE job_id=?"
+        args = [job_id]
+        if platform is not None:
+            sql += " AND platform=?"
+            args.append(platform)
+        if content_revision is not None:
+            sql += " AND content_revision=?"
+            args.append(content_revision)
+        rows = self._rows(sql + " ORDER BY id", tuple(args))
+        versions = self.draft_versions(job_id)
+        current_version = versions[-1]["id"] if versions else None
+        for row in rows:
+            row["content"] = json.loads(row.pop("content_json")) if row["content_json"] else None
+            row["provenance"] = json.loads(row.pop("provenance_json"))
+            row["quality_evidence"] = json.loads(row.pop("quality_json"))
+            quality_payload = json.dumps(row["quality_evidence"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            quality_valid = (row["draft_version_id"] == current_version and
+                             row["quality_evidence"].get("passed") is True and
+                             hashlib.sha256(quality_payload.encode("utf-8")).hexdigest() == row["quality_checksum"])
+            if row["path"]:
+                file = Path(row["path"])
+                row["valid"] = quality_valid and file.is_file() and sha256_file(file) == row["checksum"]
+            else:
+                payload = json.dumps(row["content"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                row["valid"] = quality_valid and hashlib.sha256(payload.encode("utf-8")).hexdigest() == row["checksum"]
+        return rows
+
+    def platform_output_bundle(self, job_id, platform):
+        job = self.get_job(job_id)
+        if platform not in job["platforms"]:
+            raise ValueError("platform_not_in_job")
+        rows = self.platform_outputs(job_id, platform)
+        if not rows:
+            return {"ready": False, "reason": "unowned_legacy_or_missing", "platform": platform}
+        versions = self.draft_versions(job_id)
+        current_version = versions[-1]["id"] if versions else None
+        current = [row for row in rows if row["draft_version_id"] == current_version]
+        revisions = {row["content_revision"] for row in current}
+        copies = [row for row in current if row["role"] == "copy"]
+        manifests = [row for row in current if row["role"] == "manifest"]
+        if len(revisions) != 1 or len(copies) != 1 or len(manifests) != 1 or not all(row["valid"] for row in current):
+            return {"ready": False, "reason": "stale_or_invalid_output", "platform": platform}
+        declared = manifests[0]["content"].get("slots")
+        actual = {row["slot"]: row["checksum"] for row in current if row["role"] != "manifest"}
+        if not isinstance(declared, dict) or declared != actual:
+            return {"ready": False, "reason": "incomplete_or_changed_output", "platform": platform}
+        copy = copies[0]
+        quality = copy["quality_evidence"]
+        if any(row["quality_evidence"] != quality for row in current):
+            return {"ready": False, "reason": "quality_binding_mismatch", "platform": platform}
+        if quality.get("final_gate_checksum"):
+            gate = (job.get("draft_meta") or {}).get("quality_gate") or {}
+            gate_checksum = hashlib.sha256(json.dumps(gate, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+            if gate_checksum != quality["final_gate_checksum"]:
+                accepted = job.get("acceptance") or {}
+                final_gate = accepted.get("final_gate") or {}
+                gates = final_gate.get("gates") or {}
+                required = {"G1_risk_compliance", "G2_geo", "G3_anti_generic", "G4_media_assets",
+                            "G5_format", "G6_platform_quality", "G7_growth_recipe"}
+                actual_checksum = hashlib.sha256(json.dumps(final_gate, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+                if (accepted.get("version") != "final_platform_output_acceptance_v1"
+                        or accepted.get("job_id") != job_id or accepted.get("draft_version_id") != current_version
+                        or accepted.get("passed") is not True or final_gate.get("passed") is not True
+                        or set(gates) != required or any(not isinstance(value, dict) or value.get("passed") is not True for value in gates.values())
+                        or accepted.get("final_gate_checksum") != actual_checksum
+                        or actual_checksum != quality["final_gate_checksum"]
+                        or (accepted.get("content_revisions") or {}).get(platform) != next(iter(revisions))):
+                    return {"ready": False, "reason": "quality_binding_mismatch", "platform": platform}
+        source_checksum = copy["provenance"].get("source_checksum")
+        if source_checksum:
+            current_sources = {
+                "brief_sources": (job.get("brief") or {}).get("sources") or [],
+                "draft_source_catalog": (job.get("draft_meta") or {}).get("source_catalog") or [],
+            }
+            if hashlib.sha256(json.dumps(current_sources, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest() != source_checksum:
+                return {"ready": False, "reason": "source_binding_mismatch", "platform": platform}
+        bound = [(row["role"], row["artifact_id"], row["checksum"], row["provenance"])
+                 for row in current if row["role"] not in {"copy", "manifest"}]
+        revision_payload = {
+            "draft_version_id": current_version,
+            "copy": copy["content"],
+            "copy_provenance": copy["provenance"],
+            "artifacts": bound,
+            "quality": quality,
+        }
+        revision = hashlib.sha256(json.dumps(revision_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        if str(copy["content_revision"]).startswith("source-"):
+            # Native source revisions bind immutable bytes before qualification.
+            # Never replace that identity with a hash containing its later verdict.
+            try:
+                from .mandatory_release_gate import _scoped_store, _resolve_current_policy
+                from .mandatory_quality_context import _pin, _object, current_draft_source_sha256
+                from .task_source_inputs import project_task_source_job
+                scoped = _scoped_store(self, platform)
+                policy = _resolve_current_policy(scoped, self.path.parent, job_id, platform)
+                source = _object(_pin(policy.get("artifact_manifest"), "bundle_current_source"), "bundle_current_source")
+                source_copies = [row for row in source.get("artifacts") or [] if row.get("role") == "copy"]
+                source_parts = [(row.get("role"), row.get("artifact_id"), row.get("path"), row.get("checksum"))
+                                for row in source.get("artifacts") or [] if row.get("role") != "copy"]
+                current_parts = [(row["role"], row["artifact_id"], row["path"], row["checksum"])
+                                 for row in current if row["role"] not in {"copy", "manifest"}]
+                expected_source = current_draft_source_sha256(project_task_source_job(job, platform), current_version)
+                valid_source = (source.get("version") == "native_render_artifact_binding_v1"
+                    and source.get("job_id") == job_id and source.get("platform") == platform
+                    and source.get("draft_version_id") == current_version and source.get("revision_id") == copy["content_revision"]
+                    and len(source_copies) == 1 and source_copies[0].get("content") == copy["content"]
+                    and (source_copies[0].get("provenance") or {}).get("draft_source_sha256") == expected_source
+                    and len(set(source_parts)) == len(source_parts) and sorted(source_parts) == sorted(current_parts))
+                if not valid_source:
+                    return {"ready": False, "reason": "content_revision_mismatch", "platform": platform}
+                revision = source["revision_id"]
+            except (OSError, ValueError, TypeError, KeyError, ImportError):
+                return {"ready": False, "reason": "content_revision_mismatch", "platform": platform}
+        elif revision != copy["content_revision"]:
+            return {"ready": False, "reason": "content_revision_mismatch", "platform": platform}
+        # Historical passed/hash bindings are necessary, but current rules and actual
+        # native quality evidence must still qualify the same revision before ready.
+        try:
+            from .mandatory_release_gate import mandatory_release_gate
+            current_quality = mandatory_release_gate(self, self.path.parent, job_id, platform, phase="deliver")
+        except (OSError, ValueError, TypeError, KeyError, ImportError) as exc:
+            current_quality = {"passed": False, "failures": [str(exc) or type(exc).__name__]}
+        if current_quality.get("passed") is not True:
+            return {"ready": False, "reason": "current_quality_unverified", "platform": platform,
+                    "failures": current_quality.get("failures") or ["current_native_quality_not_qualified"]}
+        return {
+            "ready": True,
+            "reason": "",
+            "platform": platform,
+            "content_revision": revision,
+            "draft_version_id": current_version,
+            "copy": copy,
+            "artifacts": [row for row in current if row["role"] not in {"copy", "manifest"}],
+        }
+
     def deliveries(self, job_id):
         return self._rows("SELECT * FROM deliveries WHERE job_id=? ORDER BY id", (job_id,))
 
@@ -772,6 +1123,177 @@ class Store:
         for row in rows:
             row["draft_meta"] = json.loads(row.pop("draft_meta_json", "{}"))
         return rows
+
+    def account_window_metrics(self, platform, account_id, internal_account_alias, hours):
+        """Read only owned evidence for one account and one publication-age window."""
+        if (not all(isinstance(value, str) and value.strip() for value in (platform, account_id, internal_account_alias))
+                or hours not in {1, 24, 72, 168}):
+            raise ValueError("exact_account_window_required")
+        platform = "twitter" if platform == "x" else platform
+        uri = self.path.resolve().as_uri() + "?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+        try:
+            rows = conn.execute("""SELECT o.*,w.hours,w.due_at,p.account_id,p.published_at,p.verification_level,
+                p.canonical_url,p.platform AS identity_platform,p.platform_content_id AS identity_content_id,
+                p.internal_account_alias AS identity_alias FROM metric_observations o JOIN metric_windows w ON w.id=o.window_id
+                JOIN publication_identities p ON p.id=w.identity_id WHERE p.platform=? AND p.account_id=?
+                AND p.internal_account_alias=? AND w.hours=? AND w.state='observed'
+                AND w.invalidated_reason='' AND o.state='observed' ORDER BY o.observed_at,o.id""",
+                (platform, account_id, internal_account_alias, hours)).fetchall()
+        finally:
+            conn.close()
+        import math
+        valid, rejected = [], []
+        for row in rows:
+            value = dict(row)
+            try:
+                if (value["platform"] != value["identity_platform"]
+                        or value["platform_content_id"] != value["identity_content_id"]
+                        or value["internal_account_alias"] != value["identity_alias"]):
+                    raise ValueError("metric_observation_identity_row_mismatch")
+                source = json.loads(value["source"])
+                raw = source["raw_ref"]
+                path = Path(raw["path"])
+                if (not path.is_absolute() or any(item.is_symlink() for item in (path, *path.parents))
+                        or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != raw["sha256"]
+                        or source.get("account_id") != account_id
+                        or value["verification_level"] not in {"verified", "platform_verified", "native_verified"}):
+                    raise ValueError("owned_metric_provenance_invalid")
+                observed = datetime.fromisoformat(value["observed_at"].replace("Z", "+00:00"))
+                published = datetime.fromisoformat(value["published_at"].replace("Z", "+00:00"))
+                if observed.tzinfo is None or published.tzinfo is None or observed < published + timedelta(hours=hours):
+                    raise ValueError("metric_window_not_mature")
+                value["metrics"] = json.loads(value.pop("metrics_json"))
+                if not value["metrics"] or any(isinstance(v, bool) or not isinstance(v, (int, float))
+                        or not math.isfinite(v) or v < 0 for v in value["metrics"].values()):
+                    raise ValueError("observed_metric_must_be_finite_nonnegative")
+                _unique_bound_raw_metric(json.loads(path.read_bytes()), {
+                    "platform": platform, "account_id": account_id,
+                    "platform_content_id": value["platform_content_id"],
+                    "internal_account_alias": internal_account_alias,
+                    "observed_at": value["observed_at"], "metric_window": str(hours) + "h",
+                    "metrics": value["metrics"]})
+                value["source"] = source
+                valid.append(value)
+            except (ValueError, KeyError, TypeError, OSError) as exc:
+                rejected.append({"observation_id": value["id"], "reason": str(exc)})
+        return {"status": "verified" if valid else "unavailable", "platform": platform,
+            "account_id": account_id, "internal_account_alias": internal_account_alias, "window_hours": hours,
+            "sample_count": len(valid), "rows": valid, "rejected": rejected,
+            "reason": "" if valid else "no_verified_owned_account_window_observations"}
+
+    def record_native_publication_history(self, platform, internal_account_alias, snapshot_ids, *,
+                                          account_response_metadata_ref, page_commit_refs=(), native_work_evidence=None):
+        """只追加已有认证历史作品身份；不造localjob、publisher ACK或观察窗口。"""
+        import os,re
+        from .owned_performance_audit import audit_native_publication_history
+        if os.geteuid()!=0 or os.environ.get('CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH')!='0':
+            raise PermissionError('native_history_root_NoPub_required')
+        if (platform not in{'mastodon','bilibili'}or not isinstance(internal_account_alias,str)
+                or not re.fullmatch('[A-Za-z0-9_-]{1,80}',internal_account_alias)
+                or not isinstance(snapshot_ids,list)or not 1<=len(snapshot_ids)<=1000
+                or any(type(value)is not int or value<=0 for value in snapshot_ids)
+                or len(set(snapshot_ids))!=len(snapshot_ids)):
+            raise ValueError('native_history_exact_existing_snapshot_scope_required')
+        with self.connect() as conn:
+            if not conn.in_transaction:conn.execute('BEGIN IMMEDIATE')
+            cols={r[1]for r in conn.execute('PRAGMA table_info(publication_identities)')}
+            required={'id','platform','account_id','internal_account_alias','platform_content_id','canonical_url',
+                      'published_at','verification_level','identity_source','metadata_json'}
+            if not required<=cols or conn.execute("SELECT 1 FROM sqlite_master WHERE type='trigger' AND tbl_name='publication_identities' LIMIT 1").fetchone():
+                raise ValueError('native_history_existing_identity_schema_without_effect_triggers_required')
+            row=conn.execute('SELECT * FROM platform_accounts WHERE platform=? AND account_key=?',
+                             (platform,internal_account_alias)).fetchone()
+            if row is None:raise ValueError('native_history_original_platform_binding_required')
+            binding=dict(row);binding['config']=json.loads(binding['config_json'])
+            snapshots=[]
+            for snapshot_id in snapshot_ids:
+                row=conn.execute('SELECT * FROM account_snapshots WHERE id=?',(snapshot_id,)).fetchone()
+                if row is None:raise ValueError('native_history_original_snapshot_missing')
+                snapshots.append(dict(row))
+            audited=audit_native_publication_history(binding,snapshots,
+                account_response_metadata_ref=account_response_metadata_ref,page_commit_refs=page_commit_refs,
+                native_work_evidence=native_work_evidence)
+            inserts=[];existing=[]
+            columns=('platform','account_id','internal_account_alias','platform_content_id','canonical_url',
+                     'published_at','verification_level','identity_source')
+            for identity in audited['identities']:
+                metadata=json.dumps(identity['metadata'],ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False)
+                value=tuple(identity[key]for key in columns)+(metadata,)
+                prior=conn.execute('SELECT * FROM publication_identities WHERE platform=? AND account_id=? AND platform_content_id=?',
+                    (identity['platform'],identity['account_id'],identity['platform_content_id'])).fetchone()
+                if prior is not None:
+                    if (any(prior[key]!=identity[key]for key in columns)
+                            or json.loads(prior['metadata_json'])!=identity['metadata']):
+                        raise ValueError('native_history_existing_identity_conflict_no_overwrite')
+                    existing.append(prior['id'])
+                else:inserts.append(value)
+            if existing:
+                if inserts:raise ValueError('native_history_partial_existing_batch_requires_readonly_reconciliation')
+                return {'state':'already_recorded_readonly_reconciliation','identity_ids':existing,'inserted':0,
+                        'publisher_receipts_written':0,'local_published_jobs_created':0,'metric_windows_created':0,
+                        'learning_eligible':False,'strategy_eligible':False}
+            result=[]
+            for value in inserts:
+                cursor=conn.execute('INSERT INTO publication_identities(platform,account_id,internal_account_alias,platform_content_id,canonical_url,published_at,verification_level,identity_source,metadata_json) VALUES(?,?,?,?,?,?,?,?,?)',value)
+                result.append(cursor.lastrowid)
+            return {'state':'native_history_identities_recorded','identity_ids':result,'inserted':len(result),
+                    'publisher_receipts_written':0,'local_published_jobs_created':0,'metric_windows_created':0,
+                    'learning_eligible':False,'strategy_eligible':False}
+
+    def record_bound_metric_observation(self, record, *, raw_ref):
+        """Append to an existing verified publication/window; never invent identity."""
+        import math
+        required = ("platform", "account_id", "platform_content_id", "internal_account_alias", "observed_at", "metric_window")
+        if not isinstance(record, dict) or any(not str(record.get(key) or "").strip() for key in required):
+            raise ValueError("metric_identity_and_window_required")
+        platform = "twitter" if record["platform"] == "x" else record["platform"]
+        hours_text = str(record["metric_window"]).removesuffix("h")
+        if hours_text not in {"1", "24", "72", "168"}:
+            raise ValueError("registered_metric_window_required")
+        hours = int(hours_text)
+        observed = datetime.fromisoformat(record["observed_at"].replace("Z", "+00:00"))
+        if observed.tzinfo is None:
+            raise ValueError("metric_observation_timezone_required")
+        reference = Path(raw_ref.get("path", ""))
+        if (not reference.is_absolute() or any(path.is_symlink() for path in (reference, *reference.parents))
+                or not reference.is_file() or hashlib.sha256(reference.read_bytes()).hexdigest() != raw_ref.get("sha256")):
+            raise ValueError("metric_raw_response_hash_mismatch")
+        metrics = record.get("metrics")
+        if not isinstance(metrics, dict) or not metrics:
+            raise ValueError("observed_metrics_required")
+        _unique_bound_raw_metric(json.loads(reference.read_bytes()), record)
+        for key, value in metrics.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                raise ValueError("observed_metric_must_be_finite_nonnegative")
+        with self.connect() as conn:
+            identity = conn.execute("""SELECT * FROM publication_identities WHERE platform=? AND account_id=?
+                AND platform_content_id=? AND internal_account_alias=?""",
+                (platform, record["account_id"], record["platform_content_id"], record["internal_account_alias"])).fetchone()
+            if identity is None or identity["verification_level"] not in {"verified", "platform_verified", "native_verified"}:
+                raise ValueError("verified_publication_identity_required")
+            published = datetime.fromisoformat(identity["published_at"].replace("Z", "+00:00"))
+            if published.tzinfo is None or observed < published + timedelta(hours=hours):
+                raise ValueError("metric_window_not_mature")
+            window = conn.execute("SELECT * FROM metric_windows WHERE identity_id=? AND hours=?", (identity["id"], hours)).fetchone()
+            if window is None or window["invalidated_reason"] or window["state"] != "pending":
+                raise ValueError("existing_pending_metric_window_required")
+            if conn.execute("SELECT 1 FROM metric_observations WHERE window_id=?", (window["id"],)).fetchone():
+                raise ValueError("metric_window_already_observed_no_replay")
+            source = json.dumps({"raw_ref": raw_ref, "scope": "owned_content", "account_id": record["account_id"],
+                "metric_window": str(hours) + "h", "window_due_at": window["due_at"],
+                "lag_seconds": (observed - (published + timedelta(hours=hours))).total_seconds()}, sort_keys=True)
+            attempt = conn.execute("INSERT INTO metric_collection_attempts(window_id,state,error,attempted_at,finished_at) VALUES(?,?,?,?,?)",
+                (window["id"], "completed", "", record["observed_at"], record["observed_at"]))
+            observation = conn.execute("""INSERT INTO metric_observations(window_id,platform,internal_account_alias,
+                platform_content_id,state,metrics_json,source,confidence,observed_at) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (window["id"], platform, record["internal_account_alias"], record["platform_content_id"], "observed",
+                 json.dumps(metrics, sort_keys=True, allow_nan=False), source, "verified_identity", record["observed_at"]))
+            conn.execute("UPDATE metric_windows SET state='observed' WHERE id=? AND state='pending'", (window["id"],))
+            return {"identity_id": identity["id"], "window_id": window["id"], "observation_id": observation.lastrowid,
+                    "attempt_id": attempt.lastrowid, "state": "observed", "raw_sha256": raw_ref["sha256"]}
 
     def record_performance(
         self,
@@ -1028,7 +1550,7 @@ class Store:
     def historical_performance(self, platforms=None, topic=None):
         summary = {"platforms": {}, "clusters": []}
         platforms = [str(platform) for platform in (platforms or []) if str(platform).strip()]
-        with self.connect() as conn:
+        with read_history(self.path, ("jobs", "performance")) as (conn, prefix):
             args = []
             sql = """SELECT p.platform,
                 AVG(p.views) avg_views,
@@ -1039,8 +1561,8 @@ class Store:
                 AVG(p.three_second_view_rate) avg_three_second_view_rate,
                 AVG(p.avg_watch_seconds) avg_watch_seconds,
                 COUNT(*) sample_count
-                FROM performance p
-                JOIN jobs j ON j.id = p.job_id"""
+                FROM read_performance p
+                JOIN read_jobs j ON j.id = p.job_id"""
             clauses = []
             clauses.append(
                 "(p.views > 0 OR p.likes > 0 OR p.comments > 0 OR p.shares > 0 OR p.saves > 0 OR p.follows > 0 OR "
@@ -1072,7 +1594,7 @@ class Store:
             if clauses:
                 sql += " WHERE " + " AND ".join(clauses)
             sql += " GROUP BY p.platform ORDER BY p.platform"
-            for row in conn.execute(sql, tuple(args)):
+            for row in conn.execute(prefix + sql, tuple(args)):
                 summary["platforms"][row["platform"]] = {
                     "views": round(float(row["avg_views"] or 0), 3),
                     "engagement": round(float(row["avg_engagement"] or 0), 3),
@@ -1204,6 +1726,10 @@ class Store:
 
     def save_publish_receipt(self, content_package_id, platform, receipt, job_id=""):
         payload = receipt.to_dict() if hasattr(receipt, "to_dict") else dict(receipt)
+        # Publisher output is never a postcheck authority. Verified receipts are
+        # sealed by the separate verifier path, not by this mutable convenience API.
+        if payload.get("postcheck_verified") is True or payload.get("verifier_signature") or payload.get("verified_at"):
+            raise ValueError("publish_receipt_verifier_only")
         package_id = str(content_package_id or "")
         platform_name = str(platform or payload.get("platform") or "")
         status = str(payload.get("status") or "")
@@ -1271,6 +1797,11 @@ class Store:
     def create_review_tasks(self, content_package_id, platform, schedule, job_id=""):
         created = []
         with self.connect() as conn:
+            if not job_id:
+                linked = conn.execute("SELECT job_id FROM content_packages WHERE content_package_id=?", (content_package_id,)).fetchone()
+                job_id = linked[0] if linked else ""
+            if self._migration_held(conn, job_id):
+                return []
             for item in schedule:
                 hours = int(item.get("hours", item.get("review_point_hours", item.get("after_publish_hours", 0))))
                 purpose = str(item.get("purpose") or f"status review at {hours}h")
@@ -1302,32 +1833,49 @@ class Store:
         return self._rows(sql, tuple(args))
 
     def enqueue_delivery(self, job_id, platform, action, payload=None):
+        if self.migration_held(job_id):
+            raise PermissionError("historical_delivery_requires_signed_resolution")
         now = utc_now()
         with self.connect() as conn:
             conn.execute(
                 """INSERT INTO delivery_queue(job_id,platform,action,state,payload_json,created_at,updated_at)
                 VALUES(?,?,?,?,?,?,?)
                 ON CONFLICT(job_id,platform,action) DO UPDATE SET
-                state=CASE WHEN delivery_queue.state IN ('completed', 'handoff_ready') THEN delivery_queue.state ELSE 'queued' END,
+                state=CASE WHEN delivery_queue.state IN ('completed', 'handoff_ready', 'failed', 'processing') THEN delivery_queue.state ELSE 'queued' END,
                 payload_json=excluded.payload_json,
                 updated_at=excluded.updated_at""",
                 (job_id, platform, action, "queued", json.dumps(payload or {}, ensure_ascii=False), now, now),
             )
             self._event(conn, job_id, "delivery_enqueued", {"platform": platform, "action": action})
 
-    def claim_delivery(self, owner, ttl_seconds=300):
+    def claim_delivery(self, owner, ttl_seconds=300, job_id=None, platform=None, action=None):
         owner = str(owner or "").strip()
         if not owner:
             raise ValueError("delivery claim requires owner")
         now = utc_now()
         expires = (datetime.now(timezone.utc) + timedelta(seconds=int(ttl_seconds))).isoformat(timespec="seconds")
+        filters = [" AND action!='publish_scoped'"] if action is None else []
+        with self.connect() as guard:
+            if self._migration_table(guard):
+                filters.append(" AND NOT EXISTS (SELECT 1 FROM media_migration_hold h WHERE h.job_id=delivery_queue.job_id)")
+        args = [now]
+        for field, value in (("job_id", job_id), ("platform", platform), ("action", action)):
+            if value is not None:
+                filters.append(f" AND {field}=?")
+                args.append(str(value))
+        if action == "publish_scoped":
+            filters.append(
+                " AND EXISTS (SELECT 1 FROM jobs AS j WHERE j.id=delivery_queue.job_id "
+                "AND j.state='publishing' AND j.lease_owner=? AND j.lease_expires_at>?)"
+            )
+            args.extend((owner, now))
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 """SELECT * FROM delivery_queue
-                WHERE state='queued' AND (lease_owner='' OR lease_expires_at='' OR lease_expires_at<=?)
-                ORDER BY id LIMIT 1""",
-                (now,),
+                WHERE state='queued' AND (lease_owner='' OR lease_expires_at='' OR lease_expires_at<=?)"""
+                + "".join(filters) + " ORDER BY id LIMIT 1",
+                tuple(args),
             ).fetchone()
             if not row:
                 return {}
@@ -1346,7 +1894,7 @@ class Store:
             return result
 
     def complete_delivery(self, queue_id, owner, state, error=""):
-        if state not in {"completed", "failed", "queued", "handoff_ready"}:
+        if state not in {"completed", "failed", "queued", "blocked", "handoff_ready"}:
             raise ValueError("invalid delivery queue state")
         with self.connect() as conn:
             cursor = conn.execute(
@@ -1380,8 +1928,8 @@ class Store:
             clauses.append("datetime(used_at) >= datetime(?)")
             args.append(cutoff)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        with self.connect() as conn:
-            return {row[0] for row in conn.execute("SELECT fingerprint FROM topic_history" + where, tuple(args))}
+        with read_history(self.path, ("topic_history",)) as (conn, prefix):
+            return {row[0] for row in conn.execute(prefix + "SELECT fingerprint FROM read_topic_history" + where, tuple(args))}
 
     def mark_topic_used(self, fingerprint, title, source, job_id, platform=""):
         if not fingerprint:
@@ -1454,6 +2002,139 @@ class Store:
                 conn.execute("UPDATE schedules SET next_run=? WHERE id=?", (next_run, schedule_id))
             if last_run is not None:
                 conn.execute("UPDATE schedules SET last_run=? WHERE id=?", (last_run, schedule_id))
+
+    @staticmethod
+    def _migration_table(conn):
+        return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='media_migration_hold'").fetchone() is not None
+
+    @classmethod
+    def _migration_held(cls, conn, job_id):
+        return bool(job_id and cls._migration_table(conn) and conn.execute(
+            "SELECT 1 FROM media_migration_hold WHERE job_id=?", (job_id,)).fetchone())
+
+    def migration_held(self, job_id):
+        with self.connect() as conn:
+            return self._migration_held(conn, job_id)
+
+    def automatic_jobs(self, limit=50, state=None):
+        # Explicit list_jobs/get_job/history APIs remain unchanged.
+        with self.connect() as conn:
+            where, args = ["1=1"], []
+            if state:
+                where.append("state=?"); args.append(state)
+            if self._migration_table(conn):
+                where.append("NOT EXISTS (SELECT 1 FROM media_migration_hold h WHERE h.job_id=jobs.id)")
+            return [self._job(row) for row in conn.execute(
+                "SELECT * FROM jobs WHERE " + " AND ".join(where) + " ORDER BY created_at DESC LIMIT ?",
+                (*args, int(limit)))]
+
+    @contextmanager
+    def authorized_migration_internal_make(self, review_tokens, token, *, continuation=None):
+        import os
+        import threading
+        from .review import ReviewTokens
+        if os.geteuid() != 0 or type(review_tokens) is not ReviewTokens:
+            raise PermissionError("root_native_internal_make_policy_required")
+        verified = review_tokens.verify(token, "internal_make")
+        job_id = verified["job_id"]
+        nonce = verified.get("nonce")
+        if job_id != "f8bb617683914cbe" or not isinstance(nonce, str) or len(nonce) != 32 or any(c not in "0123456789abcdef" for c in nonce):
+            raise PermissionError("fixed_original_created_internal_make_only")
+        if getattr(self, "_migration_internal_make", None) is not None:
+            raise PermissionError("native_internal_make_scope_already_active")
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            job = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+            held = conn.execute("SELECT job_id,original_state FROM media_migration_hold WHERE job_id=?", (job_id,)).fetchone()
+            if not job or not held or held["original_state"] != "created":
+                raise PermissionError("original_created_migration_hold_required")
+            raw = json.dumps(dict(job), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+            if hashlib.sha256(raw).hexdigest() != "3594cc2a59e9f3f84cee8fd13fffd44f53182828344bea3107eaf84423954416":
+                raise PermissionError("original_created_row_cas_changed")
+            if job["state"] != "created" or job["attempts"] != 0 or job["lease_owner"] or job["lease_expires_at"]:
+                raise PermissionError("original_created_no_native_attempt_required")
+            consumed = conn.execute("SELECT 1 FROM events WHERE job_id=? AND event='migration_internal_make_admitted' LIMIT 1", (job_id,)).fetchone()
+            continuation_sha256 = None
+            if consumed:
+                if not isinstance(continuation, tuple) or len(continuation) != 2:
+                    raise PermissionError("original_internal_make_admission_already_consumed")
+                from .continuation_receipt import verify_receipt
+                verify_receipt(conn, continuation[0], continuation[1], verified)
+                continuation_sha256 = continuation[1]
+            elif continuation is not None or verified.get("continuation_sha256"):
+                raise PermissionError("continuation_requires_actual_consumed_original_admission")
+            if conn.execute("SELECT 1 FROM workflow_locks WHERE owner!='' AND lease_expires_at>? LIMIT 1", (utc_now(),)).fetchone():
+                raise PermissionError("foreign_native_workflow_still_active")
+            if hashlib.sha256(job["brief_json"].encode()).hexdigest() != "4da2a2084dd8e8a14d34bdad09d6b2feb4a351e1fd01dc47ed9fc46eccbaa4d2":
+                raise PermissionError("original_created_brief_changed")
+            for table in ("artifacts", "approvals", "deliveries", "delivery_queue", "workflow_steps",
+                          "workflow_reports", "platform_outputs", "review_tasks", "delivery_intents",
+                          "publish_receipts", "gate_results", "source_items"):
+                if conn.execute("SELECT 1 FROM " + table + " WHERE job_id=? LIMIT 1", (job_id,)).fetchone():
+                    raise PermissionError("retained_created_existing_effect_forbidden")
+            if conn.execute("SELECT 1 FROM media_migration_conversion LIMIT 1").fetchone():
+                raise PermissionError("retained_created_conversion_requires_reconciliation")
+            for table, column in (("media_migration_effect_hold", "original_json"),
+                                  ("media_migration_orphan_records", "record_typed_json")):
+                if conn.execute("SELECT 1 FROM " + table + " WHERE instr(" + column + ",?)>0 LIMIT 1", (job_id,)).fetchone():
+                    raise PermissionError("retained_created_original_effect_or_orphan_forbidden")
+            self._event(conn, job_id, "migration_internal_make_continuation_admitted" if continuation_sha256 else "migration_internal_make_admitted",
+                        {"action": "internal_make", "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
+                         "nonce_sha256": hashlib.sha256(nonce.encode()).hexdigest(), "original_state": "created",
+                         "continuation_receipt_sha256": continuation_sha256,
+                         "original_hold_kept": True, "publication_authorized": False, "approval_authorized": False})
+        grant = {"job_id": job_id, "store_identity": id(self), "pid": os.getpid(), "thread_id": threading.get_ident(),
+                 "expires_at": int(verified["exp"]), "claimed": False, "policy": review_tokens,
+                 "token": token, "nonce": nonce}
+        self._migration_internal_make = grant
+        try:
+            yield job_id
+        finally:
+            if getattr(self, "_migration_internal_make", None) is grant:
+                del self._migration_internal_make
+            self.record_event(job_id, "migration_internal_make_scope_closed",
+                              {"action": "internal_make", "original_hold_kept": True,
+                               "publication_authorized": False, "approval_authorized": False})
+
+    @contextmanager
+    def authorized_migration_review(self, review_tokens, token, action):
+        from .review import ReviewTokens
+        if action not in {"approve", "reject"}:
+            raise PermissionError("native_signed_review_action_required")
+        if type(review_tokens) is not ReviewTokens:
+            raise PermissionError("native_signed_review_policy_required")
+        verified = review_tokens.verify(token, action)
+        job_id = verified["job_id"]
+        held = None
+        with self.connect() as conn:
+            if self._migration_held(conn, job_id):
+                job = conn.execute("SELECT state FROM jobs WHERE id=?", (job_id,)).fetchone()
+                if not job or job["state"] != "review_required":
+                    raise PermissionError("retained_job_requires_fresh_review_required_state")
+                if conn.execute("SELECT 1 FROM delivery_queue WHERE job_id=? LIMIT 1", (job_id,)).fetchone():
+                    raise PermissionError("retained_effect_requires_explicit_reconciliation")
+                held = tuple(conn.execute("SELECT job_id,original_state FROM media_migration_hold WHERE job_id=?", (job_id,)).fetchone())
+                conn.execute("DELETE FROM media_migration_hold WHERE job_id=?", (job_id,))
+        try:
+            yield job_id
+        except BaseException:
+            if held:
+                with self.connect() as conn:
+                    conn.execute("INSERT OR IGNORE INTO media_migration_hold(job_id,original_state) VALUES(?,?)", held)
+            raise
+        if held:
+            self.record_event(job_id, "migration_explicit_signed_review", {"action": action, "token_sha256": hashlib.sha256(token.encode()).hexdigest()})
+
+    def issue_source_repair(self, review_tokens, evidence_path, evidence_sha256):
+        from .source_repair_runtime import issue_source_repair
+        return issue_source_repair(self, review_tokens, evidence_path, evidence_sha256)
+
+    def resolve_source_repair_step(self, job_id, name):
+        if job_id == "7b12e9aae980484b":
+            from .normal_source_7b12_case_r2 import resolve
+            return resolve(self, job_id, name)
+        from .source_repair_runtime import resolve_source_repair_step
+        return resolve_source_repair_step(self, job_id, name)
 
     def _rows(self, sql, args):
         with self.connect() as conn:

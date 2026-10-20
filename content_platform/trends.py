@@ -1,4 +1,5 @@
 import json
+import hashlib
 import math
 import os
 import re
@@ -14,32 +15,38 @@ from .paths import agent_home, project_home, trend_cache_dir
 from .source_quality import source_is_rankable
 
 
+def _fetch_provenance():
+    return {'version':'native_trend_fetch_v1','attempts':[],'result_kind':'unverified','fresh_item_count':0}
+
+
+def _read_http(request,timeout,provenance):
+    url=request.full_url;parsed=urllib.parse.urlsplit(url)
+    record={'transport':'http','request_sha256':hashlib.sha256(url.encode()).hexdigest(),
+        'host':str(parsed.hostname or ''),'request_path_sha256':hashlib.sha256(parsed.path.encode()).hexdigest(),'status':'started'}
+    provenance['attempts'].append(record)
+    try:
+        with urllib.request.urlopen(request,timeout=timeout) as response:body=response.read()
+        record.update(status='ok',response_sha256=hashlib.sha256(body).hexdigest(),bytes=len(body),
+            captured_at=datetime.now(timezone.utc).isoformat(timespec='microseconds'))
+        return body
+    except Exception as exc:
+        record.update(status='failed',error_type=type(exc).__name__)
+        raise
+
+
+def _finish_fetch(provenance,items):
+    if provenance['result_kind']=='unverified' and any(row.get('transport')=='http' and row.get('status')=='ok' for row in provenance['attempts']):
+        provenance['result_kind']='live_http'
+    captured=[row['captured_at'] for row in provenance['attempts'] if row.get('transport')=='http' and row.get('status')=='ok' and row.get('captured_at')]
+    if provenance['result_kind']=='live_http' and captured:provenance['captured_at']=min(captured)
+    provenance['fresh_item_count']=len(items) if provenance['result_kind']=='live_http' else 0
+    provenance['source_url_sha256s']=sorted({hashlib.sha256(urllib.parse.urldefrag(str(item.get('canonical_url') or item.get('url') or '').strip())[0].encode()).hexdigest()
+        for item in items if provenance['result_kind']=='live_http' and urllib.parse.urlsplit(str(item.get('canonical_url') or item.get('url') or '').strip()).scheme in {'http','https'}})
+    return json.loads(json.dumps(provenance))
+
+
 def normalize_topic(title):
     return " ".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", str(title).casefold()))
-
-
-NATIVE_SEARCH_DOMAINS = {
-    "wechat": ("mp.weixin.qq.com", "weixin.qq.com"),
-    "kuaishou": ("kuaishou.com", "gifshow.com"),
-    "juejin": ("juejin.cn",),
-    "shipinhao": ("channels.weixin.qq.com", "weixin.qq.com"),
-    "xiaohongshu": ("xiaohongshu.com", "xhslink.com"),
-    "youtube": ("youtube.com", "youtu.be"),
-    "tiktok": ("tiktok.com",),
-    "twitter": ("x.com", "twitter.com"),
-}
-
-
-def _has_native_result(source: str, items: list[dict]) -> bool:
-    domains = NATIVE_SEARCH_DOMAINS.get(str(source or "").casefold(), ())
-    if not domains:
-        return True
-    for item in items:
-        host = urllib.parse.urlparse(str(item.get("url") or "")).hostname or ""
-        host = host.casefold()
-        if any(host == domain or host.endswith("." + domain) for domain in domains):
-            return True
-    return False
 
 
 def rank_trends(items, profile=None, used=None, limit=10, learned=None):
@@ -116,38 +123,50 @@ class TrendCollector:
         report = self.collect_with_report(refresh=refresh)
         return report["items"]
 
-    def collect_with_report(self, refresh=False):
+    def collect_with_report(self, refresh=False, *, priority_sources=()):
         started_all = time.time()
         max_total_seconds = float(self.config.get("max_total_seconds", 45))
         sources = []
         items = []
         reddit_items = []
+        direct_sources=self._direct_sources()
+        if not isinstance(priority_sources,(tuple,list)) or any(not isinstance(name,str) for name in priority_sources):
+            raise ValueError('target_source_priority_schema_invalid')
+        priority=tuple(dict.fromkeys(priority_sources))
+        if any(name not in direct_sources for name in priority):raise ValueError('target_source_not_enabled')
+        def collect_direct(direct_rows):
+            for source_name, source_cfg in direct_rows:
+                if time.time() - started_all >= max_total_seconds:
+                    sources.append(_source_report(source_name, "skipped", 0, time.time(), "trend collection time budget exhausted"))
+                    continue
+                started = time.time()
+                collector=DirectTrendSource(source_name,source_cfg)
+                try:
+                    source_items = collector.collect()
+                    items.extend(source_items)
+                    if source_items and all(row.get("source_unavailable") for row in source_items):
+                        status = "degraded"
+                    else:
+                        status = "ok" if source_items else "empty"
+                    source=_source_report(source_name,status,len(source_items),started)
+                    source['fetch_provenance']=_finish_fetch(collector.fetch_provenance,source_items);sources.append(source)
+                except Exception as exc:  # noqa: BLE001
+                    source=_source_report(source_name,"failed",0,started,str(exc)[:240])
+                    source['fetch_provenance']=_finish_fetch(collector.fetch_provenance,[]);sources.append(source)
+        collect_direct([(name,direct_sources[name]) for name in priority])
         reddit_cfg = self.config.get("reddit", {})
         if reddit_cfg.get("enabled"):
             started = time.time()
+            collector=RedditTrendCollector(reddit_cfg)
             try:
-                reddit_items = RedditTrendCollector(reddit_cfg).collect()
-                sources.append(_source_report("reddit", "ok" if reddit_items else "empty", len(reddit_items), started))
+                reddit_items = collector.collect()
+                source=_source_report("reddit", "ok" if reddit_items else "empty", len(reddit_items), started)
+                source['fetch_provenance']=_finish_fetch(collector.fetch_provenance,reddit_items);sources.append(source)
             except Exception as exc:  # noqa: BLE001 - source failures must be reported, not hidden.
                 reddit_items = []
-                sources.append(_source_report("reddit", "failed", 0, started, str(exc)[:240]))
-        for source_name, source_cfg in self._direct_sources().items():
-            if time.time() - started_all >= max_total_seconds:
-                sources.append(_source_report(source_name, "skipped", 0, time.time(), "trend collection time budget exhausted"))
-                continue
-            started = time.time()
-            try:
-                source_items = DirectTrendSource(source_name, source_cfg).collect()
-                items.extend(source_items)
-                if source_items and all(row.get("source_unavailable") for row in source_items):
-                    status = "degraded"
-                elif source_items and not _has_native_result(source_name, source_items):
-                    status = "degraded"
-                else:
-                    status = "ok" if source_items else "empty"
-                sources.append(_source_report(source_name, status, len(source_items), started))
-            except Exception as exc:  # noqa: BLE001
-                sources.append(_source_report(source_name, "failed", 0, started, str(exc)[:240]))
+                source=_source_report("reddit", "failed", 0, started, str(exc)[:240])
+                source['fetch_provenance']=_finish_fetch(collector.fetch_provenance,[]);sources.append(source)
+        collect_direct([(name,cfg) for name,cfg in direct_sources.items() if name not in priority])
         data_dir = Path(self.config.get("legacy_data_dir", str(trend_cache_dir())))
         legacy_items = []
         if refresh:
@@ -175,6 +194,7 @@ class TrendCollector:
             rows = payload if isinstance(payload, list) else payload.get("trends", payload.get("items", []))
             legacy_items = self._normalize_rows(rows, "legacy_cache")
             sources.append(_source_report("legacy_cache", "ok" if legacy_items else "empty", len(legacy_items), started, metadata={"file": str(files[0])}))
+            sources[-1]['fetch_provenance']={**_fetch_provenance(),'result_kind':'local_cache'}
         items.extend(legacy_items)
         items.extend(reddit_items)
         deduped = self._dedupe(items)
@@ -183,6 +203,11 @@ class TrendCollector:
             fallback_used = True
             deduped = self._fallback_items()
             sources.append(_source_report("fallback", "ok", len(deduped), time.time()))
+            sources[-1]['fetch_provenance']={**_fetch_provenance(),'result_kind':'synthetic_fallback'}
+        for source in sources:
+            provenance=source.get('fetch_provenance') or {}
+            if provenance.get('result_kind')=='live_http' and provenance.get('captured_at'):
+                source['collected_at']=provenance['captured_at']
         return {
             "items": deduped,
             "sources": sources,
@@ -233,6 +258,9 @@ class TrendCollector:
             for cfg in defaults.values():
                 if isinstance(cfg, dict):
                     cfg["searxng_url"] = searxng_url
+        github_trends_file = self.config.get("github_trends_file")
+        if github_trends_file:
+            defaults["github"]["github_trends_file"] = github_trends_file
         return {name: cfg for name, cfg in defaults.items() if cfg.get("enabled", True)}
 
     @staticmethod
@@ -253,7 +281,7 @@ class TrendCollector:
         seen, result = set(), []
         for item in rows:
             title = str(item.get("title", "")).strip()
-            key = title.casefold()
+            key = (str(item.get("source") or "").casefold().strip(), title.casefold())
             if title and key not in seen:
                 seen.add(key)
                 result.append(item)
@@ -310,8 +338,15 @@ class DirectTrendSource:
         self.config = config or {}
         self.limit = int(self.config.get("limit", 20))
         self.timeout = int(self.config.get("timeout", 15))
+        self.fetch_provenance=_fetch_provenance()
 
     def collect(self):
+        self.fetch_provenance=_fetch_provenance()
+        items=self._collect()
+        _finish_fetch(self.fetch_provenance,items)
+        return items
+
+    def _collect(self):
         if self.name == "hackernews":
             return self._hackernews()
         if self.name == "github":
@@ -328,7 +363,7 @@ class DirectTrendSource:
             "tiktok": "AI workflow automation productivity site:tiktok.com",
         }
         if self.name in platform_queries:
-            return self._web_search_source(self.name, self._native_query(platform_queries[self.name]))
+            return self._web_search_source(self.name, platform_queries[self.name])
         if self.name == "bilibili":
             return self._bilibili()
         if self.name == "zhihu":
@@ -349,23 +384,6 @@ class DirectTrendSource:
             return self._agent_reach()
         raise ValueError(f"unknown direct trend source: {self.name}")
 
-    def _native_query(self, query: str) -> str:
-        """Constrain web-search transport to the target platform domain."""
-        if "site:" in query.casefold():
-            return query
-        domains = {
-            "wechat": "mp.weixin.qq.com",
-            "kuaishou": "kuaishou.com",
-            "juejin": "juejin.cn",
-            "shipinhao": "channels.weixin.qq.com",
-            "xiaohongshu": "xiaohongshu.com",
-            "youtube": "youtube.com",
-            "tiktok": "tiktok.com",
-            "twitter": "x.com",
-        }
-        domain = domains.get(self.name)
-        return f"{query} site:{domain}" if domain else query
-
     def _request_json(self, url, headers=None):
         request = urllib.request.Request(
             url,
@@ -375,8 +393,7 @@ class DirectTrendSource:
                 **(headers or {}),
             },
         )
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            return json.loads(response.read())
+        return json.loads(_read_http(request,self.timeout,self.fetch_provenance))
 
     def _hackernews(self):
         payload = self._request_json("https://hn.algolia.com/api/v1/search?tags=front_page")
@@ -507,7 +524,9 @@ class DirectTrendSource:
 
     def _github_local_cache(self):
         """Fallback: read the locally cached GitHub trending snapshot (Hermes)."""
-        candidates = [
+        self.fetch_provenance['result_kind']='local_cache'
+        explicit = self.config.get("github_trends_file") or os.environ.get("HERMES_GITHUB_TRENDS_FILE")
+        candidates = [Path(explicit)] if explicit else [
             Path(os.environ.get("HERMES_DATA_DIR", str(agent_home() / "data"))) / "github_trending.json",
             agent_home() / "data" / "github_trending.json",
         ]
@@ -517,6 +536,7 @@ class DirectTrendSource:
                 continue
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
+                self.fetch_provenance['cache']={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
             except Exception:
                 continue
             rows = payload.get("ranked") if isinstance(payload.get("ranked"), list) else None
@@ -538,14 +558,14 @@ class DirectTrendSource:
                         "language": detail.get("language", ""),
                     })
                     continue
-                title = str(row.get("title") or row.get("name") or row.get("full_name") or "").strip()
+                title = str(row.get("title") or row.get("name") or row.get("full_name") or row.get("repo") or "").strip()
                 if not title:
                     continue
                 items.append({
                     "title": title,
                     "source": "github",
-                    "url": row.get("url") or row.get("html_url") or f"https://github.com/{row.get('full_name') or row.get('name')}",
-                    "points": int(row.get("stars") or row.get("stargazers_count") or row.get("points") or 0),
+                    "url": row.get("url") or row.get("html_url") or f"https://github.com/{row.get('full_name') or row.get('name') or row.get('repo')}",
+                    "points": int(row.get("stars") or row.get("stargazers_count") or row.get("points") or row.get("count") or 0),
                     "language": row.get("language", ""),
                 })
             if items:
@@ -642,8 +662,7 @@ class DirectTrendSource:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                html = response.read().decode("utf-8", errors="ignore")
+            html=_read_http(request,self.timeout,self.fetch_provenance).decode('utf-8',errors='ignore')
         except Exception:
             return []
         rows = []
@@ -667,8 +686,7 @@ class DirectTrendSource:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                html = response.read().decode("utf-8", errors="ignore")
+            html=_read_http(request,self.timeout,self.fetch_provenance).decode('utf-8',errors='ignore')
         except Exception:
             return []
         rows = []
@@ -691,8 +709,7 @@ class DirectTrendSource:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                html = response.read().decode("utf-8", errors="ignore")
+            html=_read_http(request,self.timeout,self.fetch_provenance).decode('utf-8',errors='ignore')
         except Exception:
             return []
         rows = []
@@ -716,6 +733,7 @@ class DirectTrendSource:
             items.append({
                 "title": title,
                 "source": f"{source}:web_search",
+                "summary": str(row.get("summary") or row.get("excerpt") or row.get("content") or ""),
                 "url": row.get("url", ""),
                 "points": int(row.get("score") or row.get("points") or 1),
                 "fallback_source": True,
@@ -723,6 +741,7 @@ class DirectTrendSource:
         return items
 
     def _source_fallback_items(self, source, query):
+        self.fetch_provenance['result_kind']='synthetic_fallback'
         keywords = [item for item in re.split(r"\s+", query) if item and not item.startswith("site:")]
         if not keywords:
             keywords = [source, "AI", "workflow"]
@@ -753,6 +772,7 @@ class RedditTrendCollector:
 
     def __init__(self, config=None):
         self.config = config or {}
+        self.fetch_provenance=_fetch_provenance()
 
     def _setting(self, key, env_name, default=""):
         explicit = self.config.get(key, "")
@@ -806,8 +826,7 @@ class RedditTrendCollector:
                 "User-Agent": self.config.get("user_agent", "ai-self-media-tools/1.0.0 by configured-operator"),
             },
         )
-        with urllib.request.urlopen(request, timeout=int(self.config.get("timeout", 20))) as response:
-            return json.loads(response.read())
+        return json.loads(_read_http(request,int(self.config.get('timeout',20)),self.fetch_provenance))
 
     def collect(self):
         if not self.config.get("enabled", False):

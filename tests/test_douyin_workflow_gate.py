@@ -1,4 +1,6 @@
 import argparse
+import json
+from pathlib import Path
 import unittest
 
 from scripts.enforce_douyin_workflow import command_validate_packet, validate_tiktok_repost_packet
@@ -83,6 +85,89 @@ class DouyinWorkflowGateTests(unittest.TestCase):
                 argparse.Namespace(packet=str(packet_path), require_visual_review=True, require_final_video=True)
             )
         self.assertEqual(rc, 1)
+
+
+    def test_trend_analysis_requires_11_sources_and_repost_dedup(self):
+        from scripts.enforce_douyin_workflow import command_step, REQUIRED_11_TREND_PLATFORMS
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            status_file = f.name
+        old_env = os.environ.get("DOUYIN_WORKFLOW_STATUS")
+        os.environ["DOUYIN_WORKFLOW_STATUS"] = status_file
+        try:
+            # 1. ops_strategy
+            command_step(argparse.Namespace(name="ops_strategy", artifacts=json.dumps({"lane": "pet"})))
+
+            # 2. trend_analysis with only 5 sources -> must fail (not covering 11 platforms)
+            incomplete_sources = [{"platform": p, "status": "success", "evidence": "ok"} for p in list(REQUIRED_11_TREND_PLATFORMS)[:5]]
+            rc = command_step(argparse.Namespace(name="trend_analysis", artifacts=json.dumps({"sources": incomplete_sources})))
+            self.assertEqual(rc, 1)
+
+            # 3. trend_analysis with all 11 platforms -> must succeed
+            full_sources = []
+            for idx, p in enumerate(REQUIRED_11_TREND_PLATFORMS):
+                if idx < 6:
+                    full_sources.append({"platform": p, "status": "success", "evidence": f"verified data for {p}"})
+                else:
+                    full_sources.append({"platform": p, "status": "failed", "failure_reason": f"WAF 403 on {p}"})
+            rc_full = command_step(argparse.Namespace(name="trend_analysis", artifacts=json.dumps({"sources": full_sources})))
+            self.assertEqual(rc_full, 0)
+
+            # 4. content_decision
+            rc_dec = command_step(argparse.Namespace(name="content_decision", artifacts=json.dumps({
+                "cross_sources": ["douyin", "tiktok", "weibo"],
+                "selected_topic": "打工猫周末被迫开机"
+            })))
+            self.assertEqual(rc_dec, 0)
+
+            # 5. content_generation
+            rc_gen = command_step(argparse.Namespace(name="content_generation", artifacts=json.dumps({"script": "ok"})))
+            self.assertEqual(rc_gen, 0)
+
+            # 6. quality_gate without dedup_evidence -> must fail for repost
+            rc_qg_fail = command_step(argparse.Namespace(name="quality_gate", artifacts=json.dumps({
+                "is_repost": True,
+                "video_path": None,
+                "packet_path": None,
+                "dedup_evidence_path": "/nonexistent/dedup.json"
+            })))
+            self.assertEqual(rc_qg_fail, 1)
+
+            # 7. quality_gate with valid high-order dedup evidence -> must pass
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as ef:
+                evi_path = ef.name
+            evi_payload = {
+                "version": "repost_dedup_v1",
+                "stage": "post_render",
+                "passed": True,
+                "transform": {
+                    "kind": "high_order_multimodal_dedup",
+                    "description": "hflip+zoom_crop+color_jitter+noise_injection+audio_replacement"
+                },
+                "post_render_verification": {
+                    "required": True,
+                    "passed": True
+                }
+            }
+            Path(evi_path).write_text(json.dumps(evi_payload), encoding="utf-8")
+
+            rc_qg_ok = command_step(argparse.Namespace(name="quality_gate", artifacts=json.dumps({
+                "is_repost": True,
+                "dedup_evidence_path": evi_path
+            })))
+            self.assertEqual(rc_qg_ok, 0)
+            if os.path.exists(evi_path):
+                os.unlink(evi_path)
+
+        finally:
+            if old_env:
+                os.environ["DOUYIN_WORKFLOW_STATUS"] = old_env
+            else:
+                os.environ.pop("DOUYIN_WORKFLOW_STATUS", None)
+            if os.path.exists(status_file):
+                os.unlink(status_file)
 
 
 if __name__ == "__main__":

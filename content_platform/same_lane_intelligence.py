@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from .real_world_ai_policy import classify_discovery_text
+
+
+REAL_WORLD_AI_PLATFORMS = {"wechat", "douyin_ai", "kuaishou", "tiktok", "youtube", "bilibili", "zhihu", "juejin"}
 
 NATIVE_DOMAINS: dict[str, tuple[str, ...]] = {
     "wechat": ("mp.weixin.qq.com",),
@@ -38,6 +42,8 @@ GENERIC_OR_WRONG_LANE_DOMAINS = {
 
 AI_LANE_TERMS = (
     "ai",
+    "aigc",
+    "agi",
     "agent",
     "workflow",
     "automation",
@@ -45,21 +51,51 @@ AI_LANE_TERMS = (
     "chatbot",
     "n8n",
     "claude",
+    "chatgpt",
     "gpt",
     "qwen",
+    "deepseek",
     "kimi",
+    "gemini",
+    "copilot",
+    "cursor",
     "ollama",
-    "groq",
+    "llama",
+    "mistral",
+    "sora",
+    "midjourney",
+    "stable diffusion",
+    "comfyui",
+    "rag",
+    "mcp",
+    "llm",
+    "multimodal",
+    "inference",
+    "embedding",
     "智能体",
-    "自动化",
-    "工作流",
-    "效率",
-    "教程",
-    "工具",
-    "提示词",
+    "人工智能",
+    "生成式",
     "大模型",
-    "办公",
-    "提效",
+    "多模态",
+    "机器学习",
+    "深度学习",
+    "模型推理",
+    "算力",
+    "芯片",
+    "具身智能",
+    "机器人",
+    "自动驾驶",
+    "视频生成",
+    "图像生成",
+    "语音生成",
+    "ai编程",
+    "ai coding",
+    "ai安全",
+    "ai治理",
+    "ai合规",
+    "模型评测",
+    "开源模型",
+    "智能制造",
 )
 
 PET_LANE_TERMS = ("猫", "狗", "宠物", "治愈", "喵", "汪", "pet", "cat", "dog")
@@ -125,6 +161,19 @@ def _sample_views(sample: dict[str, Any]) -> int:
     return 0
 
 
+def _rank_basis(sample: dict[str, Any]) -> tuple[str, int] | None:
+    """Return only a directly observed numeric field; missing metrics are never zero-filled."""
+    for key in ("views", "view_count", "play", "plays", "points", "likes", "comments", "shares", "favorites", "engagement"):
+        value = sample.get(key)
+        if value is None or str(value).strip() == "":
+            continue
+        try:
+            return key, int(float(str(value).replace(",", "")))
+        except ValueError:
+            continue
+    return None
+
+
 def filter_rankable_samples(platform: str, samples: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Keep platform-native, lane-relevant samples and record explicit rejection reasons."""
     accepted: list[dict[str, Any]] = []
@@ -150,17 +199,29 @@ def filter_rankable_samples(platform: str, samples: list[dict[str, Any]]) -> tup
             sample["reject_reason"] = "generic_or_wrong_lane_domain"
             rejected.append(sample)
             continue
-        if _lane_score(platform, f"{title} {sample.get('summary', '')} {sample.get('description', '')}") <= 0:
+        lane_text = f"{title} {sample.get('summary', '')} {sample.get('description', '')}"
+        if str(platform).casefold() in REAL_WORLD_AI_PLATFORMS:
+            classification = classify_discovery_text(title, f"{sample.get('summary', '')} {sample.get('description', '')}")
+            if not classification["accepted"]:
+                sample["reject_reason"] = str(classification["reason"])
+                rejected.append(sample)
+                continue
+            sample["positioning"] = classification
+        elif _lane_score(platform, lane_text) <= 0:
             sample["reject_reason"] = "lane_mismatch"
             rejected.append(sample)
             continue
         sample["title"] = title
         sample["url"] = url
         sample["account"] = _sample_account(sample)
+        rank = _rank_basis(sample)
         sample["views"] = _sample_views(sample)
+        sample["observation_status"] = "ranked_candidate" if rank else "discovery_only"
+        sample["rank_basis"] = rank[0] if rank else ""
+        sample["rank_value"] = rank[1] if rank else None
         sample["evidence_quality"] = "platform_native_work"
         accepted.append(sample)
-    accepted.sort(key=lambda row: (_sample_views(row), str(row.get("title") or "")), reverse=True)
+    accepted.sort(key=lambda row: (row.get("observation_status") == "ranked_candidate", _sample_views(row), str(row.get("title") or "")), reverse=True)
     return accepted, rejected
 
 
@@ -226,15 +287,19 @@ def _top_accounts(samples: list[dict[str, Any]], limit: int = 3) -> list[dict[st
 
 def _top_works(samples: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
     works = []
-    for sample in samples[:limit]:
+    for sample in (row for row in samples if row.get("observation_status") == "ranked_candidate"):
         works.append(
             {
                 "title": sample.get("title", ""),
                 "url": sample.get("url", ""),
                 "account": _sample_account(sample),
                 "views": _sample_views(sample),
+                "rank_basis": sample.get("rank_basis", ""),
+                "rank_value": sample.get("rank_value"),
             }
         )
+        if len(works) >= limit:
+            break
     return works
 
 
@@ -251,8 +316,26 @@ def distill_same_lane_samples(
 ) -> dict[str, Any]:
     accepted, rejected = filter_rankable_samples(platform, samples)
     own_status = _own_data_status(own_metrics_readiness)
-    patterns = _detect_topic_patterns(accepted)
-    proof = _proof_requirements(patterns)
+    ranked = [row for row in accepted if row.get("observation_status") == "ranked_candidate"]
+    discovery = [row for row in accepted if row.get("observation_status") == "discovery_only"]
+    radar_failures = []
+    if not accepted:
+        radar_failures.append("no_native_ai_observations")
+    if not ranked:
+        radar_failures.append("metrics_missing")
+    if len(ranked) < 3:
+        radar_failures.append("insufficient_ranked_samples")
+    if not accepted:
+        radar_status = "blocked"
+    elif not ranked:
+        radar_status = "discovery_only"
+    elif radar_failures:
+        radar_status = "insufficient_ranked_evidence"
+    else:
+        radar_status = "ready"
+    patterns = _detect_topic_patterns(ranked) if radar_status == "ready" else []
+    proof = _proof_requirements(patterns) if radar_status == "ready" else []
+    generation_status = "ready" if radar_status == "ready" else "research_required"
     return {
         "version": "same_lane_playbook_v1",
         "platform": platform,
@@ -263,14 +346,21 @@ def distill_same_lane_samples(
         "own_data_status": own_status,
         "strategy_claim_boundary": "own_metrics_data_driven" if own_status == "usable" else "competitor_inspired_not_auto_tuned",
         "evidence_quality": sorted({row.get("evidence_quality", "") for row in accepted if row.get("evidence_quality")}),
+        "radar": {
+            "status": radar_status,
+            "discovery_sample_count": len(discovery),
+            "ranked_sample_count": len(ranked),
+            "gate_failures": radar_failures,
+        },
+        "generation_status": generation_status,
         "top_accounts": _top_accounts(accepted),
         "top_works": _top_works(accepted),
         "topic_patterns": patterns,
-        "hook_patterns": ["result-first hook", "specific tool plus outcome", "pain point before method"],
-        "structure_patterns": ["result -> pain -> stack -> steps -> boundary -> CTA"],
-        "visual_patterns": ["screen demo", "before/after", "chapter cards only as support"],
+        "hook_patterns": ["result-first hook", "specific tool plus outcome", "pain point before method"] if generation_status == "ready" else [],
+        "structure_patterns": ["result -> pain -> stack -> steps -> boundary -> CTA"] if generation_status == "ready" else [],
+        "visual_patterns": ["screen demo", "before/after", "chapter cards only as support"] if generation_status == "ready" else [],
         "proof_requirements": proof,
-        "recommended_content_moves": _recommended_moves(platform, patterns, own_status),
+        "recommended_content_moves": _recommended_moves(platform, patterns, own_status) if generation_status == "ready" else [],
         "rejected_examples": [
             {"title": row.get("title", ""), "url": row.get("url", ""), "reject_reason": row.get("reject_reason", "")}
             for row in rejected[:8]
@@ -280,7 +370,7 @@ def distill_same_lane_samples(
             "do not generate if every accepted same-lane sample is missing visible proof",
             "if own metrics are insufficient, label output as competitor-inspired guidance",
             "if samples are rejected for duplicate or wrong-lane assets, re-search before blocking the platform",
-        ],
+        ] + (["do not claim same-lane viral evidence or auto-generate from discovery-only samples"] if generation_status != "ready" else []),
     }
 
 
@@ -291,6 +381,21 @@ def _flatten_platform_samples(platform: str, payload: Any) -> list[dict[str, Any
         return []
     if isinstance(payload.get(platform), list):
         return [dict(row) for row in payload[platform] if isinstance(row, dict)]
+    if platform == "wechat" and isinstance(payload.get("articles"), list):
+        query = str(payload.get("query") or "")
+        rows: list[dict[str, Any]] = []
+        for article in payload["articles"]:
+            if not isinstance(article, dict):
+                continue
+            rows.append(
+                {
+                    **article,
+                    "account": article.get("account") or article.get("source") or "",
+                    "published_at": article.get("published_at") or article.get("datetime") or "",
+                    "source_query": article.get("source_query") or query,
+                }
+            )
+        return rows
     if isinstance(payload.get("samples"), list):
         return [dict(row) for row in payload["samples"] if isinstance(row, dict)]
     if isinstance(payload.get("recent_works"), list):
@@ -323,8 +428,12 @@ def _flatten_platform_samples(platform: str, payload: Any) -> list[dict[str, Any
                     if isinstance(row, dict):
                         rows.append(row)
         return rows
-    if isinstance(payload.get("platforms"), dict) and isinstance(payload["platforms"].get(platform), dict):
-        return _flatten_platform_samples(platform, payload["platforms"][platform])
+    if isinstance(payload.get("platforms"), dict) and platform in payload["platforms"]:
+        nested = payload["platforms"][platform]
+        if isinstance(nested, list):
+            return [dict(row) for row in nested if isinstance(row, dict)]
+        if isinstance(nested, dict):
+            return _flatten_platform_samples(platform, nested)
     return []
 
 
@@ -361,11 +470,14 @@ def compact_same_lane_playbook(playbook: dict[str, Any] | None) -> dict[str, Any
         return {"version": "same_lane_playbook_compact_v1", "status": "missing"}
     return {
         "version": "same_lane_playbook_compact_v1",
-        "status": "available" if int(source.get("accepted_sample_count") or 0) > 0 else "insufficient_samples",
+        "status": str((source.get("radar") or {}).get("status") or "missing"),
+        "generation_status": source.get("generation_status", "research_required"),
         "own_data_status": source.get("own_data_status", "unknown"),
         "strategy_claim_boundary": source.get("strategy_claim_boundary", ""),
         "accepted_sample_count": int(source.get("accepted_sample_count") or 0),
         "rejected_sample_count": int(source.get("rejected_sample_count") or 0),
+        "ranked_sample_count": int((source.get("radar") or {}).get("ranked_sample_count") or 0),
+        "gate_failures": list((source.get("radar") or {}).get("gate_failures") or []),
         "topic_patterns": list(source.get("topic_patterns") or [])[:6],
         "proof_requirements": list(source.get("proof_requirements") or [])[:6],
         "recommended_content_moves": list(source.get("recommended_content_moves") or [])[:6],

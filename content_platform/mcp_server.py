@@ -3,6 +3,7 @@ MCP Server — Model Context Protocol interface for content_platform.
 Exposes pipeline capabilities as MCP tools for external AI agents.
 Provides stdio and SSE transports. Requires `mcp` package (pip install mcp).
 """
+import asyncio
 import json
 import os
 import sys
@@ -114,7 +115,7 @@ def _tools():
         output_dir.mkdir(parents=True, exist_ok=True)
         from scripts.voice_engine import VoiceEngine
         engine = VoiceEngine(str(output_dir))
-        result = engine.synthesize(text, lang=lang, genre=genre)
+        result = await asyncio.to_thread(engine.synthesize, text, lang=lang, genre=genre)
         return {"audio": result.get("audio", ""), "subtitle": result.get("subtitle", "")}
 
     async def mcp_capability_status() -> dict:

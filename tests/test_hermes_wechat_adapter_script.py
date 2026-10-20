@@ -151,7 +151,6 @@ def test_publish_license_gate_fails_closed_when_script_missing(tmp_path):
 
 
 def test_publish_packet_blocks_before_wechat_when_license_fails(tmp_path, monkeypatch):
-    monkeypatch.setenv("CN_PROXY", "socks5://127.0.0.1:1080")
     calls = [
         SimpleNamespace(returncode=0, stdout="", stderr=""),
         SimpleNamespace(returncode=1, stdout='{"passed": false, "failures": ["test_failure"]}', stderr=""),

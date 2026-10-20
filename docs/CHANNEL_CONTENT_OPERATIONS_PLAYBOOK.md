@@ -26,7 +26,7 @@ Every channel job must run this sequence. Skipping a step means the job is incom
 - Communicate with the user in Chinese. Code and paths may remain English.
 - Do not print, commit, or document cookie/API/key plaintext.
 - Zero-cost tools are preferred. Do not change `model.provider` or `model.default`.
-- Hermes domestic-channel traffic must use `socks5h://127.0.0.1:1080`.
+- Hermes domestic-channel traffic uses the explicit `direct` route. A failed direct health probe blocks access.
 - Paused ai-self-media cron jobs remain paused unless the user explicitly asks to restore them.
 - `today_promo.json`, outbox files, generated text, and post-processing logs are strategy or draft evidence only. They are not publishing evidence.
 - Domestic article/community channels default to draft or review state. Public publication requires explicit current approval plus postcheck.

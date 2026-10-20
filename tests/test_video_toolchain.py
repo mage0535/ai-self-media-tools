@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -8,9 +9,163 @@ from content_platform.media import MediaBridge
 from content_platform.generator import DraftGenerator
 from content_platform.strategy_router import choose_content_strategy
 from content_platform.video_recipe import build_visual_recipe
+from content_platform.video_toolchain import build_video_toolchain_plan
 
 
 class VideoToolchainTests(unittest.TestCase):
+    def test_embedded_licensed_bgm_is_the_only_route_loading_generic_bgm_resolver(self):
+        embedded = build_video_toolchain_plan(
+            {
+                "primary_platforms": ["tiktok"],
+                "content_form": "short_video",
+                "audio_plan": {
+                    "route": "embedded_licensed_bgm",
+                    "route_reason": "licensed bed supports narration",
+                    "source_audio_action": "replace",
+                    "fallback_route": "sfx_only",
+                    "license": "Pixabay Content License",
+                    "source_url": "https://pixabay.com/music/bed",
+                    "fingerprint": "sha256:bed",
+                    "rights_scope": "worldwide_social_video",
+                },
+            },
+            {"topic": "AI workflow"},
+        )
+        native = build_video_toolchain_plan(
+            {
+                "primary_platforms": ["tiktok"],
+                "content_form": "short_video",
+                "audio_plan": {
+                    "route": "platform_native_track",
+                    "route_reason": "native trend evidence",
+                    "source_audio_action": "replace_at_publish",
+                    "fallback_route": None,
+                    "platform": "tiktok",
+                    "track_id": "track-123",
+                    "track_url": "https://www.tiktok.com/music/track-123",
+                    "trend_evidence": {"rank": 4},
+                    "rights_scope": "tiktok_native_use",
+                    "apply_stage": "platform_publish",
+                },
+            },
+            {"topic": "AI workflow"},
+        )
+
+        self.assertIn("online_real_instrument_bgm_resolver", embedded["required_tools"])
+        self.assertNotIn("online_real_instrument_bgm_resolver", native["required_tools"])
+        self.assertIn("platform_native_track_applicator", native["required_tools"])
+        self.assertNotIn("download_bgm", native["renderer_steps"])
+        self.assertNotIn("licensed_bgm_mix", native["effect_stack"])
+        self.assertEqual(native["audio_plan"]["route"], "platform_native_track")
+
+    def test_original_video_without_audio_plan_records_resolution_required(self):
+        plan = build_video_toolchain_plan(
+            {"primary_platforms": ["tiktok"], "content_form": "short_video"},
+            {"topic": "AI workflow"},
+        )
+
+        self.assertEqual(plan["audio_plan"]["route"], "resolution_required")
+        self.assertEqual(plan["audio_plan"]["status"], "resolution_required")
+        self.assertIn("audio_plan_resolver", plan["required_tools"])
+        self.assertIn("resolve_audio_plan", plan["renderer_steps"])
+
+    def test_original_ai_workflow_rejects_even_approved_sfx_only(self):
+        with self.assertRaisesRegex(ValueError, "sfx_only_conflicts_with_bgm_requirement"):
+            build_video_toolchain_plan(
+                {
+                    "primary_platforms": ["tiktok"],
+                    "content_form": "short_video",
+                    "audio_plan": {
+                        "route": "sfx_only",
+                        "route_reason": "explicit no-music request",
+                        "source_audio_action": "replace_with_voiceover_and_sfx",
+                        "fallback_route": None,
+                        "no_bgm_approved": True,
+                        "approval_source": "explicit_user_request",
+                    },
+                },
+                {"topic": "AI workflow", "content_line": "original AI explainer"},
+            )
+
+    def test_approved_sfx_only_repost_does_not_claim_bgm_download_or_mix(self):
+        plan = build_video_toolchain_plan(
+            {
+                "primary_platforms": ["douyin"],
+                "content_form": "short_video",
+                "asset_plan": ["source_video"],
+                "audio_plan": {
+                    "route": "sfx_only",
+                    "route_reason": "explicit no-music request",
+                    "source_audio_action": "replace_with_voiceover_and_sfx",
+                    "fallback_route": None,
+                    "no_bgm_approved": True,
+                    "approval_source": "explicit_user_request",
+                },
+            },
+            {"topic": "cat behavior", "content_line": "localized repost"},
+        )
+
+        self.assertNotIn("download_bgm", plan["renderer_steps"])
+        self.assertNotIn("mix_audio", plan["renderer_steps"])
+        self.assertNotIn("audio_mixer", plan["required_tools"])
+        self.assertNotIn("licensed_bgm_mix", plan["effect_stack"])
+
+    def test_platform_alone_does_not_force_original_tiktok_ai_video_into_repost(self):
+        plan = build_video_toolchain_plan(
+            {
+                "primary_platforms": ["tiktok"],
+                "content_form": "short_video",
+                "asset_plan": ["short_video", "knowledge_cards"],
+            },
+            {
+                "topic": "Power Automate invoice matching",
+                "content_line": "real world AI implementation",
+            },
+        )
+
+        self.assertEqual(plan["selected_pipeline"], "knowledge_card_video")
+        self.assertNotIn("source_video_discovery", plan["required_tools"])
+
+    def test_douyin_platform_alone_never_forces_ai_content_into_pet_template(self):
+        plan = build_video_toolchain_plan(
+            {
+                "primary_platforms": ["douyin"],
+                "content_form": "short_video",
+                "asset_plan": ["short_video", "knowledge_cards"],
+                "audio_plan": {
+                    "route": "embedded_licensed_bgm",
+                    "route_reason": "licensed bed supports narration",
+                    "source_audio_action": "replace",
+                    "fallback_route": "sfx_only",
+                    "license": "Pixabay Content License",
+                    "source_url": "https://pixabay.com/music/bed",
+                    "fingerprint": "sha256:bed",
+                    "rights_scope": "worldwide_social_video",
+                },
+            },
+            {
+                "topic": "AI 自动核对重复发票",
+                "content_line": "real world AI implementation",
+                "primary_track": "finance operations",
+                "audience": "invoice reviewers",
+            },
+        )
+
+        self.assertEqual(plan["template_family"], "knowledge_card_motion_case")
+
+    def test_explicit_source_video_still_routes_douyin_pet_work_to_repost(self):
+        plan = build_video_toolchain_plan(
+            {
+                "primary_platforms": ["douyin"],
+                "content_form": "short_video",
+                "asset_plan": ["source_video"],
+            },
+            {"topic": "cat behavior", "content_line": "localized repost"},
+        )
+
+        self.assertEqual(plan["selected_pipeline"], "localized_repost_video")
+        self.assertIn("source_video_discovery", plan["required_tools"])
+
     def test_strategy_router_adds_auto_video_toolchain_plan_for_short_video_platform(self):
         strategy = choose_content_strategy(
             "Cat behavior warning signs",
@@ -65,7 +220,7 @@ class VideoToolchainTests(unittest.TestCase):
             "audio_mixer",
         ]:
             self.assertIn(ref, plan["tool_refs"])
-        for step in ["cinema_storyboard", "shotcraft_motion_plan", "render_cards", "gen_tts", "mix_audio", "encode_final", "visual_gate_cinema"]:
+        for step in ["cinema_storyboard", "shotcraft_motion_plan", "render_cards", "gen_tts", "resolve_audio_plan", "encode_final", "visual_gate_cinema"]:
             self.assertIn(step, plan["renderer_steps"])
         self.assertIn("cinema_color_css", plan["effect_stack"])
         self.assertIn("shotcraft_motion_css", plan["effect_stack"])
@@ -156,6 +311,7 @@ class VideoToolchainTests(unittest.TestCase):
                 "topic": "Cat topic",
                 "title": "Cat title",
                 "body": "Body",
+                "platforms": ["douyin_pet"],
                 "draft_meta": {
                     "video_toolchain_plan": {
                         "required": True,
@@ -173,6 +329,7 @@ class VideoToolchainTests(unittest.TestCase):
                 output_dir.mkdir(parents=True, exist_ok=True)
                 video = output_dir / "generated.mp4"
                 video.write_bytes(b"video")
+                _write_trusted_manifest(video)
                 (output_dir / "video_toolchain_runner_manifest.json").write_text(
                     json.dumps(_valid_repost_video_manifest(video), ensure_ascii=False),
                     encoding="utf-8",
@@ -205,6 +362,7 @@ class VideoToolchainTests(unittest.TestCase):
                 "topic": "AI workflow",
                 "title": "AI workflow video",
                 "body": "Scene one explains the problem.\n\nScene two explains the method.\n\nScene three gives the checklist.",
+                "platforms": ["douyin_ai"],
                 "draft_meta": {
                     "video_toolchain_plan": {
                         "required": True,
@@ -226,6 +384,7 @@ class VideoToolchainTests(unittest.TestCase):
                 self.assertEqual(len(assets["assignments"]), 4)
                 video = output_dir / "generated.mp4"
                 video.write_bytes(b"video")
+                _write_trusted_manifest(video)
                 manifest = _valid_video_manifest(video)
                 manifest["visual_assets"] = assets
                 (output_dir / "video_toolchain_runner_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -469,3 +628,63 @@ def _valid_repost_video_manifest(video):
             ]
         },
     }
+
+
+def _write_trusted_manifest(video):
+    cover = video.parent / "cover.png"
+    cover.write_bytes(b"cover")
+    gate_to_checker = {
+        "DEDUP_GATED": "dedup",
+        "MEDIA_GATED": "media",
+        "VISUAL_GATED": "visual",
+        "AUDIO_GATED": "audio",
+        "COVER_GATED": "cover",
+        "PACKAGE_GATED": "package",
+    }
+    checker_hashes = {}
+    for gate, checker in gate_to_checker.items():
+        payload = {"checker": checker, "status": "ok"}
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        (video.parent / f"{checker}_checker_evidence.json").write_text(
+            json.dumps({**payload, "evidence_sha256": digest}), encoding="utf-8"
+        )
+        checker_hashes[gate] = digest
+    hashes = {
+        "video": hashlib.sha256(video.read_bytes()).hexdigest(),
+        "cover": hashlib.sha256(cover.read_bytes()).hexdigest(),
+    }
+    identity = {
+        "run_id": "test-video-toolchain",
+        "revision": 1,
+        "attempt_id": "attempt-1",
+    }
+    manifest = {
+        **identity,
+        "state": "HANDOFF_READY",
+        "artifacts": [
+            {"name": "video", "path": str(video), "role": "OUTPUT"},
+            {"name": "cover", "path": str(cover), "role": "OUTPUT"},
+        ],
+        "artifact_sha256": hashes,
+        "gate_evidence": [
+            {
+                **identity,
+                "gate": gate,
+                "artifact_sha256": hashes,
+                "evidence_sha256": checker_hashes[gate],
+            }
+            for gate in (
+                "DEDUP_GATED",
+                "MEDIA_GATED",
+                "VISUAL_GATED",
+                "AUDIO_GATED",
+                "COVER_GATED",
+                "PACKAGE_GATED",
+            )
+        ],
+    }
+    (video.parent / "trusted_run_manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )

@@ -65,9 +65,18 @@ class ContentPackage:
 
 @dataclass
 class PublishReceipt:
+    """Common receipt schema used by WeChat, X, Zhihu and other channels."""
     status: str = ""
     verification_level: str = ""
     platform_content_id: str = ""
+    job_id: str = ""
+    platform: str = ""
+    content_package_id: str = ""
+    content_hash: str = ""
+    asset_hashes: list = field(default_factory=list)
+    evidence_path: str = ""
+    postcheck_verified: bool = False
+    live_publish: bool = False
 
     def to_dict(self):
         return asdict(self)

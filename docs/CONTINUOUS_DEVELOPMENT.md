@@ -12,7 +12,7 @@
 
 ### Verification
 - Focused regression passed locally: `python -m pytest tests/test_content_quality_reference.py tests/test_reference_pack_runtime_wiring.py tests/test_content_blueprint.py tests/test_platform_workflow_context.py tests/test_generator_evidence.py tests/test_overnight_batch.py -q` => `58 passed`.
-- Server follow-up still required after sync: verify `$AGENT_HOME` can load `content_quality_reference_pack` inside a real `overnight-prepare` or isolated canary, and confirm no private evidence files were copied into the public repository.
+- Server follow-up still required after sync: verify `$CONTENT_PLATFORM_HOME` can load `content_quality_reference_pack` inside a real `overnight-prepare` or isolated canary, and confirm no private evidence files were copied into the public repository.
 
 ## 2026-08-16: bounded video narration and renderer budget guard
 
@@ -3676,52 +3676,3 @@ Other international traffic remains on the existing proxy. Direct Telegram
 Bot API and webhook checks passed after restart; the content-platform timer
 failure was a separate stale batch acceptance result and was reset, not
 treated as a gateway failure.
-
-## 2026-08-21: pre-generation tool selection and production consistency
-
-- The overnight planner now builds the executable tool-selection evidence before the generate stage and includes it in `bounded_model_input`; an empty raw slot plan is no longer carried into provider input.
-- Runtime capability snapshots preserve nested TTS provider availability without exposing paths, endpoints, credentials, or cookies. Unavailable tools are recorded as rejected with a reason instead of being silently presented as usable.
-- A generation-stage `tool_invocation_manifest` records selected tools as `planned`; renderer output promotes its real manifest into draft metadata. Planned work is not treated as executed work, and final gates require terminal execution evidence after rendering.
-- Generation-stage quality checks only require planning evidence. Rendered-stage checks require terminal tool execution and measured media evidence, avoiding both premature failure and false success.
-- Public documentation must use `$AGENT_HOME` or other neutral placeholders. Production databases, cookies, secrets, generated media, and licensed runtime assets remain outside the public release tree.
-- A production release must be built from the public release tree, then validated with a fresh prepare plan and no-publish canaries. A historical overnight plan generated before a later fix is not evidence for the later code.
-
-### Release acceptance
-
-- `python -m pytest -q` passes with the current baseline or higher.
-- `python -m content_platform project-audit` returns `ok: true` with no issues.
-- Every queued task has all six generate-stage fields, a non-empty executable tool selection, and a matching invocation ledger.
-- Native trend evidence is timestamped and source-specific; external search is never relabeled as native evidence.
-- Video and card canaries contain renderer-written manifests and measured output evidence; manual channels remain `handoff_ready`.
-- Local, GitHub, and server public code resolve to the same release tree; private production assets are not committed.
-- When network BGM providers are unavailable, the renderer may use `BGM_LIBRARY_DIR` only when each local track has an adjacent `bgm_manifest.json` with a license, source URL, and fingerprint; the global BGM fingerprint registry still forbids reuse.
-- Video preparation deduplicates image files by checksum before scene assignment and never cycles a smaller image set to fill missing scenes. Missing unique assets remain a blocking condition until approved retrieval or generation supplies them.
-- Renderer sidecar recovery reads `ffprobe`, BGM, subtitle, caption, and background evidence from the actual artifact directory. Optional later media failures cannot erase already-rendered evidence, and cannot turn a failed artifact into a pass.
-- Vertical short videos are normalized to 59.8 seconds when the measured output exceeds the 60-second platform limit; the artifact and scene-duration gates run again after normalization.
-- Video rendering uses `video_max_disk_used_percent` (87% in the production template) separately from the general 88% disk limit, leaving room for temporary FFmpeg/browser files. The timer must remain disabled during a failed or manually stopped batch until a fresh canary passes.
-- Production deployment must rewrite private `config.json` script/data paths to the active versioned release directory; changing `CONTENT_PLATFORM_HOME` alone is insufficient because media adapter paths may be absolute. Verify the child process command line before accepting a batch.
-- Visual recipe reuse compares core fingerprint first, then template family plus modules and style variants. Different style variants are allowed; identical core recipes remain blocked.
-
-## 2026-08-22: same-lane intelligence evidence layer
-
-- Added `content_platform.same_lane_intelligence` and CLI command `same-lane-intel`.
-  It ingests same-lane account/work samples collected by Hermes or direct
-  platform tools, rejects non-native/generic evidence, and distills platform
-  playbooks for topic, hook, structure, visual proof, and generation rules.
-- The command writes a JSON report and stores `same_lane_intelligence:latest`
-  in `tool_inventory`, so scheduled workflows can load the latest competitor
-  distillation before choosing topics or generating copy.
-- `Pipeline.run` and `overnight-prepare` now inject a compact
-  `same_lane_intelligence` playbook into the generate-stage
-  `bounded_model_input`. If the snapshot is missing, the field is explicitly
-  marked `status=missing`; it is never silently omitted.
-- Native work evidence is mandatory. Generic pages such as model homepages,
-  GitHub projects, Baidu answers, or external search results cannot be counted
-  as Bilibili/WeChat/Zhihu/YouTube/TikTok same-lane evidence.
-- When own content-level metrics are not strategy-eligible, the report marks
-  the guidance as `competitor_inspired_not_auto_tuned`. This prevents account
-  snapshots or malformed platform counters from being used as automatic
-  strategy feedback.
-- Minimum verification: `python -m pytest tests/test_same_lane_intelligence.py
-  tests/test_pipeline.py tests/test_overnight_batch.py
-  tests/test_trend_intelligence.py tests/test_performance_cycle.py -q`.

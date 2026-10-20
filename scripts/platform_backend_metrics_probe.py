@@ -19,21 +19,21 @@ from typing import Any
 
 DEFAULT_TARGETS: dict[str, dict[str, Any]] = {
     "douyin": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://creator.douyin.com/creator-micro/content/manage",
             "https://creator.douyin.com/creator-micro/data/overview",
         ],
     },
     "shipinhao": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://channels.weixin.qq.com/platform/post/list",
             "https://channels.weixin.qq.com/platform",
         ],
     },
     "xiaohongshu": {
-        "proxy_env": "CN_PROXY",
+        "route": "direct",
         "urls": [
             "https://creator.xiaohongshu.com/creator/notes",
             "https://creator.xiaohongshu.com/creator/data",
@@ -119,8 +119,9 @@ def probe_platforms(platforms: list[str], config: dict[str, Any], out_dir: Path)
             state_file = str(target.get("state_file") or target.get("cookie_file") or "")
             item: dict[str, Any] = {
                 "state_file_present": bool(state_file and Path(state_file).is_file()),
+                "route": target.get("route", "direct"),
                 "proxy_env": target.get("proxy_env", ""),
-                "proxy_configured": bool(os.environ.get(str(target.get("proxy_env") or ""))),
+                "proxy_configured": bool(os.environ.get(str(target.get("proxy_env") or ""))) if target.get("route") != "direct" else True,
                 "pages": [],
             }
             if not item["state_file_present"]:
@@ -130,7 +131,7 @@ def probe_platforms(platforms: list[str], config: dict[str, Any], out_dir: Path)
             try:
                 browser = pw.chromium.launch(
                     headless=True,
-                    proxy=_proxy_config(os.environ.get(str(target.get("proxy_env") or ""))),
+                    proxy=_proxy_config(os.environ.get(str(target.get("proxy_env") or ""))) if target.get("route") != "direct" else None,
                     args=["--no-sandbox", "--disable-dev-shm-usage"],
                 )
                 context = browser.new_context(storage_state=state_file, locale="zh-CN", viewport={"width": 1440, "height": 1200})

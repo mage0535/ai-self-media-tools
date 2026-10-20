@@ -18,7 +18,8 @@
     "before_after",
     "checklist_poster",
     "magazine_story",
-    "result_reveal"
+    "result_reveal",
+    "premium_fintech"
   ],
   "forbidden": [
     "screenshot_plus_caption",

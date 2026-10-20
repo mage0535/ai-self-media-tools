@@ -104,7 +104,7 @@ def _read_setting(name, env_file, default=""):
 class JuejinPublisher:
     """掘金文章发布器 — 基于 API，支持 Markdown + 封面."""
     def __init__(self, account="main", cookie_dir=str(Path.home() / "social-auto-upload" / "cookies"),
-                 proxy="socks5://127.0.0.1:1080", save_as_draft=True):
+                 proxy="", save_as_draft=True):
         self.account = account
         self.cookie_dir = cookie_dir
         self.proxy = proxy

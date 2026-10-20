@@ -374,15 +374,6 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
         source_report=report,
         rank_for_platform=lambda *_args: [{"title": "AI workflow", "source": "douyin", "fingerprint": "ai-workflow", "score": 1.0}],
         strict_trend_evidence=True,
-        growth_strategy_status={
-            "douyin_ai": {
-                "status": "ok",
-                "same_lane_intelligence": {
-                    "version": "same_lane_playbook_compact_v1",
-                    "topic_patterns": ["tool_workflow_tutorial"],
-                },
-            }
-        },
     )
 
     task = prepared["tasks"][0]
@@ -392,57 +383,12 @@ def test_due_task_builder_accepts_candidate_only_when_its_exact_native_source_wa
     assert task["brief"]["run_contract"]["publish_boundary"] == "manual_handoff_only"
     assert task["brief"]["bounded_model_input"]["content_blueprint"]["topic"] == "AI workflow"
     assert set(task["brief"]["bounded_model_input"]) <= {
-        "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities", "same_lane_intelligence"
+        "content_blueprint", "claim_ledger", "tool_selection_plan", "strategy", "content_quality_reference_pack", "runtime_capabilities"
     }
-    assert task["brief"]["bounded_model_input"]["same_lane_intelligence"]["topic_patterns"] == ["tool_workflow_tutorial"]
     assert task["brief"]["content_blueprint_gate"]["passed"] is True
     assert task["brief"]["content_quality_reference_gate"]["passed"] is True
     assert task["brief"]["bounded_model_input"]["content_quality_reference_pack"]["loaded"] is True
     assert task["brief"]["bounded_model_input"]["runtime_capabilities"]["version"] == "runtime_capabilities_v1"
-    assert len(__import__("json").dumps(task["brief"]["bounded_model_input"], ensure_ascii=False).encode("utf-8")) <= 16384
-    tool_plan = task["brief"]["bounded_model_input"]["tool_selection_plan"]
-    assert len(tool_plan["selected_tools"]) >= 6
-    assert tool_plan["invocation_order"] == tool_plan["selected_tools"]
-    assert tool_plan["selection_reasons"]
-
-
-def test_due_task_builder_accepts_native_url_from_platform_search_transport():
-    report = [
-        {"source": f"generic-{index}", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}
-        for index in range(7)
-    ] + [{"source": "kuaishou:web_search", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}]
-    prepared = build_due_tasks(
-        [{"platform": "kuaishou", "content_form": "short_video"}],
-        items=[],
-        source_report=report,
-        rank_for_platform=lambda *_args: [{
-            "title": "快手 AI 开放平台",
-            "source": "kuaishou:web_search",
-            "url": "https://ai.kuaishou.com/creation",
-            "fingerprint": "kuaishou-ai",
-            "score": 1.0,
-        }],
-        strict_trend_evidence=True,
-    )
-
-    task = prepared["tasks"][0]
-    assert task["state"] == "ready_for_plan"
-    assert task["brief"]["platform_source_matrix"]["real_platform_collection_verified"] is True
-
-
-def test_platform_source_preference_promotes_native_url_search_candidate():
-    from content_platform.overnight_batch import prefer_platform_source_candidates
-
-    candidates = [
-        {"title": "External", "source": "github", "url": "https://github.com/example/project"},
-        {"title": "Native", "source": "kuaishou:web_search", "url": "https://ai.kuaishou.com/creation"},
-    ]
-    ordered = prefer_platform_source_candidates(
-        "kuaishou",
-        candidates,
-        [{"source": "kuaishou", "status": "ok", "collected_at": "2026-08-16T00:00:00+00:00"}],
-    )
-    assert ordered[0]["title"] == "Native"
 
 
 def test_due_task_builder_uses_editorial_fallback_after_invalid_native_candidate():

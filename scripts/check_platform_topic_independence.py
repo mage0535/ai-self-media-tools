@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Check that each platform used independent source evidence before topic selection."""
 
 from __future__ import annotations
@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 try:
@@ -188,22 +189,57 @@ def _matrix_result(data: dict) -> dict:
         matrix = {}
     attempted = matrix.get("attempted_sources") or data.get("attempted_sources") or []
     successful = matrix.get("successful_sources") or data.get("successful_sources") or []
-    platform_internal = matrix.get("platform_internal_verified") or matrix.get("platform_internal_failure_reason")
+    # A failure reason is evidence that collection was attempted, not evidence
+    # that platform-native trend data was actually verified.
+    platform_internal = matrix.get("platform_internal_verified") is True
     shared_only = bool(matrix.get("shared_trend_only") or data.get("shared_trend_only"))
+    collected_at = str(matrix.get("collected_at") or data.get("collected_at") or "")
+    trend_evidence = matrix.get("trend_evidence") or data.get("trend_evidence") or {}
+    platform_samples = (
+        matrix.get("platform_internal_samples")
+        or matrix.get("same_lane_evidence")
+        or matrix.get("platform_hot_samples")
+        or data.get("platform_internal_samples")
+        or data.get("same_lane_evidence")
+        or data.get("platform_hot_samples")
+        or []
+    )
+    multi_source_samples = trend_evidence.get("samples") if isinstance(trend_evidence, dict) else []
+    viral_breakdown = matrix.get("viral_breakdown") or data.get("viral_breakdown") or {}
+    viral_breakdown_present = bool(matrix.get("viral_breakdown") is not None or data.get("viral_breakdown") is not None)
+    viral_summary = (viral_breakdown.get("summary") or {}) if isinstance(viral_breakdown, dict) else {}
+    accepted_samples = viral_summary.get("accepted_samples", viral_breakdown.get("accepted_samples", 0)) if isinstance(viral_breakdown, dict) else 0
+    viral_sample_count = len(viral_breakdown.get("samples") or []) if isinstance(viral_breakdown, dict) else 0
+    viral_breakdown_ready = (
+        isinstance(viral_breakdown, dict)
+        and viral_breakdown.get("status") == "ready"
+        and int(accepted_samples or 0) > 0
+        and viral_sample_count > 0
+    )
     return {
         "attempted_count": len(attempted) if isinstance(attempted, list) else int(attempted or 0),
         "successful_count": len(successful) if isinstance(successful, list) else int(successful or 0),
         "platform_internal_evidence": bool(platform_internal),
+        "platform_internal_sample_count": len(platform_samples) if isinstance(platform_samples, list) else 0,
+        "multi_source_sample_count": len(multi_source_samples) if isinstance(multi_source_samples, list) else 0,
+        "viral_breakdown_ready": viral_breakdown_ready,
+        "viral_breakdown_present": viral_breakdown_present,
+        "viral_breakdown_sample_count": viral_sample_count,
+        "viral_breakdown_accepted_samples": int(accepted_samples or 0),
+        "collected_at": collected_at,
         "shared_trend_only": shared_only,
     }
 
 
 def check(date: str, platforms: list[str] | None = None, root: Path | None = None) -> dict:
-    root = root or project_home()
+    root = root or Path(__file__).resolve().parents[1]
     platforms = platforms or list(PLATFORM_DIRS)
     records = {}
     failures = []
     topics = {}
+    today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d")
+    strict_today = date >= today
+    date_iso = f"{date[:4]}-{date[4:6]}-{date[6:]}" if len(date) == 8 and date.isdigit() else date
     for platform in platforms:
         loaded = _load_analysis(root / PLATFORM_DIRS.get(platform, f"data/local_ops_{platform}"), date)
         data = loaded["data"]
@@ -218,6 +254,17 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
             platform_failures.append("successful_sources_lt_3")
         if not matrix["platform_internal_evidence"]:
             platform_failures.append("platform_internal_verification_missing")
+        if strict_today:
+            if not any(matrix["collected_at"].startswith(prefix) for prefix in (date, date_iso)):
+                platform_failures.append("platform_evidence_not_collected_today")
+            if matrix["platform_internal_sample_count"] < 1:
+                platform_failures.append("platform_hot_samples_missing")
+            if matrix["multi_source_sample_count"] < 3:
+                platform_failures.append("multi_source_trend_samples_lt_3")
+        if matrix["viral_breakdown_present"] and not matrix["viral_breakdown_ready"]:
+            platform_failures.append("viral_breakdown_missing_or_not_ready")
+        elif strict_today and not matrix["viral_breakdown_ready"]:
+            platform_failures.append("viral_breakdown_missing_or_not_ready")
         if matrix["shared_trend_only"]:
             platform_failures.append("shared_trend_only")
         if not selected:
@@ -242,6 +289,17 @@ def check(date: str, platforms: list[str] | None = None, root: Path | None = Non
         from content_platform.ops_run import direction_register_issues
 
         failures.extend(direction_register_issues(root, date))
+    except ImportError:
+        # 2026-08-23 修复: 从任意 cwd 运行时仓库根不在 sys.path → 注入后重试一次
+        try:
+            import sys as _sys
+            repo_root = str(Path(__file__).resolve().parents[1])
+            if repo_root not in _sys.path:
+                _sys.path.insert(0, repo_root)
+            from content_platform.ops_run import direction_register_issues
+            failures.extend(direction_register_issues(root, date))
+        except Exception:
+            failures.append({"failed_dimensions": ["direction_register_check_failed"]})
     except Exception:
         failures.append({"failed_dimensions": ["direction_register_check_failed"]})
 

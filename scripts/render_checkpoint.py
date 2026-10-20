@@ -56,8 +56,9 @@ def stage_current_or_adopt(
     outputs: list[Path],
     *,
     legacy_marker: str = "",
+    allow_legacy_adoption: bool = False,
 ) -> dict[str, Any]:
-    """Return whether a stage is reusable; adopt valid legacy done markers once."""
+    """Return whether a stage is reusable; legacy adoption requires explicit opt-in."""
     video_dir = Path(video_dir)
     output_paths = [Path(path) for path in outputs]
     if not output_paths or not all(path.is_file() for path in output_paths):
@@ -78,6 +79,8 @@ def stage_current_or_adopt(
 
     marker = video_dir / (legacy_marker or f"{stage}.done")
     if marker.is_file():
+        if not allow_legacy_adoption:
+            return {"current": False, "reason": "legacy_done_untrusted", "stage": stage}
         state = mark_complete(video_dir, stage, inputs, output_paths)
         return {"current": True, "reason": "legacy_done_adopted", "stage": stage, "checkpoint": str(_state_path(video_dir, stage)), "state": state}
     return {"current": False, "reason": "checkpoint_missing", "stage": stage}

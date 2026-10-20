@@ -369,7 +369,7 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(data["cookies"][0]["name"], "sid")
         self.assertEqual(data["cookies"][0]["sameSite"], "Lax")
 
-    def test_backend_browser_direct_diagnostic_route_is_explicit(self):
+    def test_backend_browser_direct_route_is_explicit(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp) / "state.json"
             state.write_text(json.dumps({"cookies": [], "origins": []}), encoding="utf-8")
@@ -377,7 +377,7 @@ class PerformanceCollectorTests(unittest.TestCase):
 
             def fake_probe(pw, state_file, target, config, route_name, proxy_url, diagnostic_only):
                 calls.append((route_name, proxy_url, diagnostic_only))
-                if route_name == "direct_diagnostic":
+                if route_name == "direct":
                     return {"status": "backend_signal", "account_metrics": {"views": 1}, "reason": "ok"}
                 return {"status": "browser_probe_failed", "reason": "ERR_NO_SUPPORTED_PROXIES"}
 
@@ -394,14 +394,14 @@ class PerformanceCollectorTests(unittest.TestCase):
             with patch.dict(
                 sys.modules,
                 {"playwright": fake_playwright, "playwright.sync_api": fake_sync_api},
-            ), patch.dict("os.environ", {"CN_PROXY": "socks5://127.0.0.1:1080"}, clear=False), patch(
+            ), patch.dict("os.environ", {}, clear=False), patch(
                 "content_platform.performance_collectors._probe_browser_backend_route", side_effect=fake_probe
             ):
                 result = _browser_backend_signal("douyin", {"state_file": str(state), "diagnose_direct_without_proxy": True})
 
         self.assertEqual(result["status"], "backend_signal")
-        self.assertEqual([item[0] for item in calls], ["CN_PROXY", "direct_diagnostic"])
-        self.assertTrue(calls[1][2])
+        self.assertEqual([item[0] for item in calls], ["direct"])
+        self.assertFalse(calls[0][2])
 
     def test_backend_browser_route_normalizes_socks5h_for_playwright(self):
         launched = {}
@@ -449,13 +449,13 @@ class PerformanceCollectorTests(unittest.TestCase):
             state_file="state.json",
             target={"urls": ["https://example.test"]},
             config={"timeout_ms": 1000, "settle_ms": 1},
-            route_name="CN_PROXY",
-            proxy_url="socks5h://127.0.0.1:1080",
+            route_name="US_PROXY",
+            proxy_url="socks5h://127.0.0.1:2080",
             diagnostic_only=False,
         )
 
         self.assertEqual(result["status"], "backend_signal")
-        self.assertEqual(launched["proxy"]["server"], "socks5://127.0.0.1:1080")
+        self.assertEqual(launched["proxy"]["server"], "socks5://127.0.0.1:2080")
 
     def test_metrics_file_collects_shipinhao_eval_rows(self):
         with tempfile.TemporaryDirectory() as tmp:

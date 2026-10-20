@@ -143,8 +143,6 @@ def _proxy_decision(platform, cfg, action):
     if not cfg.get("require_proxy_by_region", False):
         return None
     region = platform_region(platform)
-    if region == "domestic" and not os.environ.get("CN_PROXY"):
-        return DeliveryHealthDecision(False, platform, "proxy_unavailable", "domestic channel publish requires CN_PROXY", "built_in_policy")
     if region == "international" and not os.environ.get("US_PROXY"):
         return DeliveryHealthDecision(False, platform, "proxy_unavailable", "international channel publish requires US_PROXY", "built_in_policy")
     return None

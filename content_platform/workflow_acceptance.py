@@ -149,6 +149,14 @@ def _check_video_artifacts(directory: Path, artifacts: list[dict[str, Any]], fai
         hashes = [_file_sha256(path) for path in image_paths]
         if len(set(hashes)) < 4:
             failures.append("duplicate_visual_assets")
+    # A hand-written cards/segment metadata packet is not a render proof.
+    try:
+        from scripts.final_delivery_gate import validate_video_runtime
+        runtime = validate_video_runtime(directory)
+    except Exception as exc:
+        runtime = {"passed": False, "failures": [f"video_runtime_gate_error:{type(exc).__name__}"]}
+    if not runtime.get("passed"):
+        failures.append("video_runtime_gate_failed")
 
 
 def _file_sha256(path: Path) -> str:

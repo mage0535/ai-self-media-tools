@@ -76,6 +76,12 @@ def check_segments(segments: list[str], lang: str) -> dict:
     return {"passed": len(issues) == 0, "issues": issues}
 
 
+def check_subtitle_line_budget(subtitles: list[str], max_chars: int = 19) -> dict:
+    """2026-09-21 固化：竖屏字幕单行不超过 19 字（1080p 屏幕安全区 ≤ 650px，防止手机裁切越界）"""
+    overflows = [s.strip() for s in subtitles if len(s.strip()) > max_chars]
+    return {"passed": len(overflows) == 0, "overflows": overflows, "max_allowed": max_chars}
+
+
 def check_info_density(segments: list[str], min_points: int = 3) -> dict:
     """每 10 秒应有新信息点 → 8 段至少 3 段含具体数字/工具名/结果"""
     dense = 0
@@ -140,6 +146,41 @@ def validate_script(script_text: str, lang: str = "zh") -> dict:
     }
 
 
+
+def validate_original_knowledge_script(script_text: str) -> dict:
+    """Operational tutorials use action and evidence; no forced emotion/comment bait."""
+    segments=[s.strip() for s in re.split(r"\n\s*\n",script_text) if s.strip()]
+    tail=segments[-1] if segments else ""
+    numeric=r"(?:\d+|[一二三四五六七八九十]+)(?:条|份|次|类|行)|B\d+"
+    dense=sum(bool(re.search(numeric,s)) for s in segments)
+    steps=sum(bool(re.search(r"(?:按.*计数|比较.*集合|分别.*编号|核对.*(?:原始|业务)|保存.*(?:基准|原表|清单))",s)) for s in segments)
+    actions=bool(re.search(r"保存.*基准.*原表.*清单",tail) and re.search(r"(?:负责人|人工).*检查.*再.*确认",tail))
+    boundary=bool(re.search(r"公开自制|公开.*示例|样例",script_text) and re.search(r"不要直接删除|先.*核对.*再.*判断",script_text))
+    false_success=bool(re.search(r"(?:已|已经)(?:确认|完成|交付)|核对通过(?:了|！|。|，|$)|保证.*(?:成功|无误)",script_text))
+    checks={"hook_3s":check_hook(script_text),"ai_cliches":check_ai_cliches(script_text),
+        "cta":{"passed":actions,"kind":"save_materials_and_human_confirmation"},
+        "segments":{"passed":len(segments)==8 and check_segments(segments,'zh')['passed'] and 280<=len(script_text)<=420},
+        "info_density":{"passed":dense>=3,"dense_segments":dense,"required":3,"chinese_quantity_words_included":True},
+        "operational_steps":{"passed":steps>=3,"concrete_step_count":steps},
+        "risk_and_boundary":{"passed":boundary and not false_success,"false_completed_claim":false_success},
+        "save_value":check_save_value(segments)}
+    failed=[k for k,v in checks.items() if not v['passed']]
+    return {"passed":not failed,"profile":"original_knowledge_operational_tutorial","segment_count":len(segments),"checks":checks,"failed":failed}
+
+
+def _bound_original_profile(text):
+    import os
+    scope=os.environ.get('MEDIA_QUALIFIED_VISION_SCOPE_PATH')
+    if not scope:return None
+    from content_platform.original_knowledge import _bytes,read_original_inputs
+    from content_platform.store import Store
+    ref=json.loads(_bytes(scope,private=True));store=Path(os.environ.get('NATIVE_VIDEO_STORE_PATH',''))
+    if store!=Path('/srv/ai-self-media-tools/data/state.db'):raise ValueError('script_original_actual_store_required')
+    proof=read_original_inputs(Store(store),ref['job_id'],ref)
+    if text!='\n\n'.join(proof['beats']):raise ValueError('script_original_frozen_narration_changed')
+    return validate_original_knowledge_script(text)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="短视频脚本质量门禁")
     ap.add_argument("script", help="脚本文件路径")
@@ -148,9 +189,10 @@ def main() -> int:
     args = ap.parse_args()
 
     text = Path(args.script).read_text(encoding="utf-8")
-    result = validate_script(text, args.lang)
+    result = _bound_original_profile(text) or validate_script(text, args.lang)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result.get("passed") else 1
     else:
         print(f"脚本质量: {'✅ PASS' if result['passed'] else '❌ FAIL'}")
         print(f"  段数: {result['segment_count']}")

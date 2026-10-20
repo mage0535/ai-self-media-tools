@@ -42,6 +42,26 @@ Every new content package should record:
 Hot topics are not enough. The topic must fit the account lane, platform
 audience, and current account stage.
 
+### S2.1 Dynamic Keyword And Viral Evidence Contract
+
+No channel may rely on a permanently fixed tag list. Before generation, the
+workflow must call the keyword tool with the current platform, lane, content
+form, current trend window, and recent-topic dedup context. Each platform gets
+its own query set; cross-platform terms are supplementary signals only.
+
+The workflow must also collect and analyze platform-native same-lane viral
+works before selecting a topic. The runtime evidence contract must retain:
+
+- the collection tool, timestamp, and sample count;
+- a `viral_breakdown` with status `ready` and accepted samples;
+- the keyword tool, platform/lane, and generated queries;
+- a validated prompt bundle fingerprint and evidence references.
+
+Strict generation fails closed when any of these inputs is missing, stale, or
+from the wrong platform/lane. The final script or visual plan must be able to
+map each adopted viral mechanism to a concrete implementation decision; a
+plain “参考爆款” note is not evidence of use.
+
 ## S3 Topic Scoring And Production Decision
 
 Topic scoring is a P1 strategy gate. It informs automated production, but does
@@ -106,6 +126,12 @@ footage, or generic static card loops are quality failures.
 Cat or animal knowledge videos must use real or verified behavior visuals that
 match the narrated behavior. Cards can explain; unrelated footage cannot be the
 main evidence.
+
+For pet channels, asset selection is ordered: matching real pet video first,
+matching real-world still image only when video is unsuitable, and generated
+imagery only when neither real option can support the topic. The downgrade
+reason and source evidence must be recorded; generated imagery must never be
+presented as a real event.
 
 ## R1 Cross-Platform Reuse
 

@@ -1,4 +1,5 @@
 from .content_policy import SHORT_VIDEO_PLATFORMS
+from .strategy_compiler import validate_strategy_evidence_contract
 from .video_toolchain import build_video_toolchain_plan
 
 NOTE_PLATFORMS = {"xiaohongshu", "rednote", "instagram", "threads"}
@@ -11,6 +12,18 @@ def choose_content_strategy(topic, brief, viral_score, niche_report, viral_growt
     viral_score = viral_score or {"dimensions": {}, "total_score": 0.0}
     niche_report = niche_report or {}
     viral_growth_report = viral_growth_report or {}
+    strategy_evidence = brief.get("strategy_evidence") or {}
+    strategy_evidence_gate = validate_strategy_evidence_contract(strategy_evidence) if strategy_evidence else {
+        "passed": False,
+        "failures": ["strategy_evidence_contract_missing"],
+    }
+    run_contract = brief.get("run_contract") or {}
+    strict_strategy = bool(brief.get("require_live_strategy_evidence") or run_contract.get("enforce_strategy_evidence"))
+    if strict_strategy and not strategy_evidence_gate["passed"]:
+        raise ValueError(
+            "strategy evidence contract invalid: "
+            + ", ".join(strategy_evidence_gate["failures"])
+        )
     requested = [str(item).casefold() for item in brief.get("platforms", [])]
     primary_platforms = requested or list(niche_report.get("platform_distribution", {}).keys())[:2] or ["wechat"]
     secondary_platforms = [platform for platform in niche_report.get("platform_distribution", {}) if platform not in primary_platforms][:3]
@@ -87,6 +100,8 @@ def choose_content_strategy(topic, brief, viral_score, niche_report, viral_growt
         "recommended_next_step": recommendation,
         "confidence": round((viral_score.get("total_score", 0.0) + utility + visual) / 3, 3),
         "warnings": warnings,
+        "strategy_evidence": strategy_evidence,
+        "strategy_evidence_gate": strategy_evidence_gate,
         "reason": {
             "score": viral_score.get("total_score", 0.0),
             "trend_stage": viral_score.get("trend_stage", "emerging"),

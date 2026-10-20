@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import hashlib
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .growth_policy import build_growth_strategy
-from .performance_collectors import collect_platform_metrics, collect_with_hermes_platform_scraper
+from .performance_collectors import collect_platform_metrics, collect_with_hermes_platform_scraper, _write_raw_snapshot
 from .performance_ingest import review_performance
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,19 +49,36 @@ def run_performance_cycle(
     """
     selected = _normalize_platforms(platforms or DEFAULT_GROWTH_PLATFORMS)
     out_dir = Path(output_dir or os.environ.get("CONTENT_PLATFORM_PERFORMANCE_DIR", "data/performance"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    collected = collect_platform_metrics(selected, collector_config or {}, output=out_dir / "raw_collect.json")
+    if any(item.is_symlink() for item in (out_dir, *out_dir.parents)):
+        raise ValueError("performance_output_symlink")
+    out_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    attempt_dir = out_dir / "attempts" / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex)
+    attempt_dir.mkdir(parents=True, exist_ok=False, mode=0o700)
+    _write_raw_snapshot(attempt_dir / "attempt-started.json", {
+        "schema": "performance_attempt_v1", "state": "started",
+        "platforms": selected, "started_at": datetime.now(timezone.utc).isoformat(),
+        "identity_policy": "existing_verified_publication_and_mature_window_only"})
+    collected = collect_platform_metrics(selected, collector_config or {}, output=attempt_dir / "raw_collect.json")
     if use_hermes_scraper:
-        hermes_collected = collect_with_hermes_platform_scraper(selected, output=out_dir / "raw_collect_hermes.json")
+        hermes_collected = collect_with_hermes_platform_scraper(selected, output=attempt_dir / "raw_collect_hermes.json")
         collected = _merge_collection_reports(collected, hermes_collected)
-    persisted = _persist_collection(store, collected)
-    review = review_performance(store, expected_platforms=selected)
-    strategies = _refresh_growth_strategies(store, selected)
+    if use_hermes_scraper:
+        raw_ref = _write_raw_snapshot(attempt_dir / "raw_collect_merged.json", collected)
+    else:
+        raw_ref = {"path": str(attempt_dir / "raw_collect.json"),
+                   "sha256": hashlib.sha256((attempt_dir / "raw_collect.json").read_bytes()).hexdigest()}
+    persisted = _persist_collection(store, collected, raw_ref=raw_ref)
+    review = _review_verified_accounts(store, selected, collector_config or {})
+    strategies = {key: {"status": value["status"], "strategy_eligible": value["strategy_eligible"],
+        "reason": value["reason"], "account_id": value.get("account_id"),
+        "window_hours": value.get("window_hours"), "sample_count": value.get("sample_count", 0),
+        "evidence_observation_ids": value.get("evidence_observation_ids", []),
+        "recommended_focus": value.get("recommended_focus", [])} for key, value in review["accounts"].items()}
     source_coverage = _source_coverage(selected, collector_config or {})
     metrics_readiness = metrics_readiness_report(selected, collector_config or {})
     full_cycle = _is_full_cycle(selected)
     report = {
-        "status": "ok",
+        "status": "observed" if persisted["saved"] else "unverified",
         "cycle_scope": "full" if full_cycle else "partial",
         "collected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "platforms": selected,
@@ -71,9 +90,17 @@ def run_performance_cycle(
         "metrics_readiness": metrics_readiness,
         "activity": _activity_summary(collected, persisted, review),
     }
-    report_path = out_dir / ("performance_cycle_report.json" if full_cycle else f"performance_cycle_{_platform_slug(selected)}.json")
+    report_path = attempt_dir / ("performance_cycle_report.json" if full_cycle else f"performance_cycle_{_platform_slug(selected)}.json")
     report["output"] = str(report_path)
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_ref = _write_raw_snapshot(report_path, report)
+    pointer = out_dir / ("performance_latest.json" if full_cycle else f"performance_latest_{_platform_slug(selected)}.json")
+    temporary = pointer.with_name(pointer.name + "." + uuid.uuid4().hex + ".tmp")
+    _write_raw_snapshot(temporary, {"schema": "performance_latest_pointer_v1", "report": report_ref, "raw": raw_ref})
+    os.replace(temporary, pointer)
+    _write_raw_snapshot(attempt_dir / "attempt-completed.json", {
+        "schema": "performance_attempt_v1", "state": "completed", "raw": raw_ref,
+        "report": report_ref, "observations_saved": persisted["saved"],
+        "unavailable": persisted["unavailable"], "platforms": selected})
     store.save_tool_inventory("performance_cycle_latest", {"report_path": str(report_path), **report})
     if full_cycle:
         store.save_tool_inventory("performance_cycle_full_latest", {"report_path": str(report_path), **report})
@@ -130,56 +157,29 @@ def _platform_slug(platforms: list[str]) -> str:
     return slug[:120] or "partial"
 
 
-def _persist_collection(store: Any, collected: dict[str, Any]) -> dict[str, Any]:
+def _persist_collection(store: Any, collected: dict[str, Any], *, raw_ref=None) -> dict[str, Any]:
+    # Account aggregates and unverified identities remain in immutable raw only.
+    # The legacy numeric NOT NULL table cannot represent an unobserved metric.
     result = {"saved": 0, "unavailable": 0, "items": []}
-    date_key = datetime.now(timezone.utc).date().isoformat()
     for platform, item in (collected.get("platforms") or {}).items():
-        metrics = _flatten_metrics(item.get("account_metrics") or item.get("metrics") or {})
-        status = str(item.get("status") or "")
-        if status in {"ok", "backend_signal", "public_signal"} and metrics and _has_core_metrics(platform, metrics) and not _is_suspicious_platform_metrics(platform, metrics):
-            if status != "ok":
-                metrics.setdefault("extra_metrics", {})["metric_status"] = status
-            job = _snapshot_job(store, platform, date_key)
-            store.record_performance(
-                job["id"],
-                platform,
-                views=int(metrics.get("views", 0)),
-                likes=int(metrics.get("likes", 0)),
-                comments=int(metrics.get("comments", 0)),
-                shares=int(metrics.get("shares", 0)),
-                saves=int(metrics.get("saves", 0)),
-                follows=int(metrics.get("follows", 0)),
-                completion_rate=float(metrics.get("completion_rate", 0.0)),
-                three_second_view_rate=float(metrics.get("three_second_view_rate", 0.0)),
-                avg_watch_seconds=float(metrics.get("avg_watch_seconds", 0.0)),
-                extra_metrics=metrics.get("extra_metrics", {}),
-            )
-            strategy_eligible = metrics.get("extra_metrics", {}).get("strategy_eligible") is not False
-            result["saved"] += 1
-            result["items"].append(
-                {
-                    "platform": platform,
-                    "status": "saved" if strategy_eligible else "saved_snapshot_only",
-                    "job_id": job["id"],
-                    "metrics": metrics,
-                }
-            )
-        else:
+        rows = item.get("content_observations") or []
+        if not rows:
             result["unavailable"] += 1
-            reason = str(item.get("reason") or item.get("next_action") or "")[:300]
-            if status in {"ok", "backend_signal", "public_signal"} and metrics and not _has_core_metrics(platform, metrics):
-                status = "metrics_insufficient"
-                reason = "collector returned only weak/non-growth metrics; not persisted to strategy"
-            elif status in {"ok", "backend_signal", "public_signal"} and metrics and _is_suspicious_platform_metrics(platform, metrics):
-                status = "metrics_suspicious"
-                reason = "collector returned platform-known placeholder or page chrome numbers; not persisted to strategy"
-            result["items"].append(
-                {
-                    "platform": platform,
-                    "status": status or "unavailable",
-                    "reason": reason,
-                }
-            )
+            result["items"].append({"platform": platform, "status": "raw_snapshot_only",
+                "reason": item.get("reason") or "verified_content_identity_and_window_not_provided",
+                "collector_status": item.get("status", "unavailable"), "raw_ref": raw_ref})
+            continue
+        for row in rows:
+            try:
+                record = dict(row, platform=platform)
+                observation = store.record_bound_metric_observation(record, raw_ref=raw_ref or {})
+            except (ValueError, KeyError, TypeError) as exc:
+                result["unavailable"] += 1
+                result["items"].append({"platform": platform, "status": "unverified",
+                    "reason": str(exc), "raw_ref": raw_ref})
+                continue
+            result["saved"] += 1
+            result["items"].append({"platform": platform, "status": "observed", **observation})
     return result
 
 
@@ -197,18 +197,8 @@ def _snapshot_job(store: Any, platform: str, date_key: str) -> dict[str, Any]:
 
 
 def _flatten_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
-    flat: dict[str, Any] = {
-        "views": 0,
-        "likes": 0,
-        "comments": 0,
-        "shares": 0,
-        "saves": 0,
-        "follows": 0,
-        "completion_rate": 0.0,
-        "three_second_view_rate": 0.0,
-        "avg_watch_seconds": 0.0,
-        "extra_metrics": {},
-    }
+    # Only observed fields exist; an absent metric is never a measured zero.
+    flat: dict[str, Any] = {"extra_metrics": {}}
     aliases = {
         "views": "views",
         "view_count": "views",
@@ -216,9 +206,11 @@ def _flatten_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "plays": "views",
         "read_count": "views",
         "reads": "views",
-        "subscribers": "follows",
-        "followers": "follows",
-        "fans": "follows",
+        "subscribers": "followers_total",
+        "followers": "followers_total",
+        "fans": "followers_total",
+        "new_follows": "follows",
+        "follower_gain": "follows",
         "likes": "likes",
         "comments": "comments",
         "shares": "shares",
@@ -232,10 +224,17 @@ def _flatten_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         if key == "extra_metrics" and isinstance(value, dict):
             flat["extra_metrics"].update(value)
             continue
+        if value is None or value == "":
+            continue
         target = aliases.get(str(key))
-        numeric = _number(value)
+        try:
+            numeric = _number(value)
+        except (TypeError, ValueError):
+            continue
         if target in {"views", "likes", "comments", "shares", "saves", "follows"}:
-            flat[target] += int(numeric)
+            flat[target] = flat.get(target, 0) + int(numeric)
+        elif target == "followers_total":
+            flat["extra_metrics"]["followers_total"] = int(numeric)
         elif target in {"completion_rate", "three_second_view_rate", "avg_watch_seconds"}:
             flat[target] = float(numeric)
         elif numeric or isinstance(value, (int, float)):
@@ -475,3 +474,41 @@ def _activity_summary(collected: dict[str, Any], persisted: dict[str, Any], revi
         "review_platform_count": len(review.get("platforms") or {}),
         "healthy": collected.get("status") == "ok" and len(platforms) > 0,
     }
+
+
+
+
+def _review_verified_accounts(store, platforms, collector_config):
+    """A missing account binding is unavailable, never a platform-wide fallback."""
+    accounts = {}
+    for platform in platforms:
+        cfg = collector_config.get(platform) or {}
+        account_id = cfg.get("account_id")
+        alias = cfg.get("internal_account_alias")
+        hours = cfg.get("review_window_hours")
+        if not account_id or not alias or hours not in {1, 24, 72, 168}:
+            accounts[platform] = {"status": "unavailable", "strategy_eligible": False,
+                "reason": "verified_account_and_window_binding_missing", "sample_count": 0}
+            continue
+        evidence = store.account_window_metrics(platform, account_id, alias, hours)
+        samples = evidence["rows"]
+        metrics = {}
+        for row in samples:
+            for key, value in row["metrics"].items():
+                metrics.setdefault(key, []).append(value)
+        summary = {}
+        for key, values in metrics.items():
+            if key.endswith("_rate") or key in {"ctr", "completion_rate", "avg_watch_seconds"}:
+                summary[key] = {"observed_samples": len(values), "values": values,
+                    "aggregation": "unavailable_without_matching_denominators"}
+            else:
+                summary[key] = {"observed_samples": len(values), "mean": sum(values) / len(values),
+                    "aggregation": "same_account_same_window_descriptive_mean"}
+        count = len(samples)
+        eligible = evidence["status"] == "verified" and count >= 3
+        accounts[platform + ":" + str(alias)] = {**evidence, "metrics_summary": summary,
+            "strategy_eligible": eligible, "reason": "" if eligible else
+                ("insufficient_same_account_same_window_samples" if samples else evidence["reason"]),
+            "evidence_observation_ids": [row["id"] for row in samples],
+            "recommended_focus": ["只比较本账号同周期的描述指标；样本不能证明因果。"] if eligible else []}
+    return {"schema": "owned_account_window_review_v1", "accounts": accounts}

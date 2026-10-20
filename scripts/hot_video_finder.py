@@ -13,7 +13,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from source_dedup_db import SourceDedupDB
 
-CN_PROXY = os.environ.get("CN_PROXY", "socks5://127.0.0.1:1080")
 
 # TikTok 搜索关键词（AI/效率类）
 TIKTOK_TREND_QUERIES = [

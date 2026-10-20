@@ -2349,3 +2349,29 @@ _register('wall-reveal-moves', {
         ]
     },
 })
+
+
+# ═══════════════════════════════════════════
+# v2/v3 增量镜头卡合并（video-shotcraft 2026-08 新增）
+# 自动导入同目录下 shotcraft_core_v2/v3 + transition/typography/ui 增量文件
+# ═══════════════════════════════════════════
+def _load_v2_extensions():
+    """合并 video-shotcraft 新增镜头卡到主注册表（幂等）。"""
+    import importlib
+    for mod_name in (
+        "scripts.shotcraft_core_v2",
+        "scripts.shotcraft_core_v3",
+        "scripts.shotcraft_transition_v2",
+        "scripts.shotcraft_typography_v2",
+        "scripts.shotcraft_ui_v2",
+    ):
+        try:
+            mod = importlib.import_module(mod_name)
+        except ImportError:
+            continue
+        for name, meta in getattr(mod, "SHOT_CARD_REGISTRY", {}).items():
+            if name not in SHOT_CARD_REGISTRY:
+                SHOT_CARD_REGISTRY[name] = meta
+
+
+_load_v2_extensions()

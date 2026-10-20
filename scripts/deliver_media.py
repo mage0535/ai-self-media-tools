@@ -69,6 +69,49 @@ def _cover_preflight(paths: list[str]) -> dict | None:
     return None
 
 
+def _trusted_video_preflight(paths: list[str]) -> dict | None:
+    from content_platform.media import MediaBridge
+
+    for raw in paths:
+        video = Path(raw).expanduser().resolve()
+        if video.suffix.casefold() != ".mp4":
+            continue
+        manifest_path = video.parent / "trusted_run_manifest.json"
+        if not manifest_path.is_file():
+            return {
+                "passed": False,
+                "error": "trusted_video_manifest_missing",
+                "video": str(video),
+                "sent": [],
+            }
+        try:
+            manifest = MediaBridge._validate_trusted_video_manifest(video.parent)
+        except RuntimeError as exc:
+            return {
+                "passed": False,
+                "error": "trusted_video_preflight_failed",
+                "detail": str(exc),
+                "video": str(video),
+                "sent": [],
+            }
+        bound_video = next(
+            (
+                Path(item["path"]).expanduser().resolve()
+                for item in manifest.get("artifacts") or []
+                if item.get("name") == "video" and item.get("role") == "OUTPUT"
+            ),
+            None,
+        )
+        if bound_video != video:
+            return {
+                "passed": False,
+                "error": "trusted_video_path_mismatch",
+                "video": str(video),
+                "sent": [],
+            }
+    return None
+
+
 def _send(target: str, message: str) -> tuple[bool, str]:
     try:
         result = subprocess.run(["hermes", "send", "-t", target], input=message, capture_output=True, text=True, timeout=180)
@@ -85,6 +128,9 @@ def deliver(text: str, paths: list[str], target: str = "", platform: str = "medi
     target = resolve_target(target)
     if not target:
         return {"passed": False, "error": "HERMES_DELIVERY_TARGET_missing", "sent": []}
+    video_failure = _trusted_video_preflight(paths)
+    if video_failure:
+        return video_failure
     text_sent, text_error = _send(target, text.strip())
     if not text_sent:
         return {"passed": False, "error": "operator_text_delivery_failed", "detail": text_error, "sent": []}

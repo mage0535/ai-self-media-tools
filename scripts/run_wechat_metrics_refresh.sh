@@ -10,7 +10,7 @@ notify "started" "metrics_refresh_started"
 set +e
 python3 "$root/scripts/wechat_mp_daily_metrics.py" \
   --db "$root/data/state.db" \
-  --state-file "$root/secrets/wechat_mp_uploaded_state.json" \
+  --state-file "$root/secrets/wechat_mp_cookie_import_20260915.json" \
   --metrics-file "$root/data/performance/wechat_mp_metrics.json" \
   --report "$report"
 status=$?
