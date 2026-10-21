@@ -3,7 +3,7 @@ from pathlib import Path
 
 from content_platform.overnight_batch import (
     BatchEventJournal,
-    build_due_tasks,
+    build_due_tasks as _build_due_tasks,
     build_batch_plan,
     execute_batch,
     growth_strategy_snapshot_status,
@@ -14,6 +14,23 @@ from content_platform.overnight_batch import (
     topic_keywords_for_slot,
 )
 from content_platform.store import Store
+
+# Blueprints compile from each task's own analysis; real slots carry it from the work plan.
+SLOT_ANALYSIS = {
+    "scenario_contract": {
+        "actor": "an operations lead",
+        "inputs": "this week's support tickets",
+        "process": "sort tickets by risk before replying",
+        "outcome": "high-risk tickets reach a human first",
+        "boundaries": "the model never sends refunds on its own",
+        "human_handoff": "a human approves every high-risk reply",
+    },
+    "subtitle_and_pacing_plan": {"segments": [{"start": 0, "end": 3, "text": "Which ticket needs a human?"}]},
+}
+
+
+def build_due_tasks(slots, **kwargs):
+    return _build_due_tasks([{**SLOT_ANALYSIS, **slot} for slot in slots], **kwargs)
 
 
 def test_platform_source_preference_keeps_real_platform_candidates_first():
