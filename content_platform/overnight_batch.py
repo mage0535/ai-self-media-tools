@@ -30,6 +30,9 @@ MANUAL_HANDOFF_PLATFORMS = {
     "xiaohongshu",
     "youtube",
     "tiktok",
+    # Owner 10-20: short-lived cookies, posted by hand. WeChat MP is manual too, but its
+    # articles are text, so it is handled in content_policy, not in this video/image handoff set.
+    "kuaishou",
 }
 
 # Publishing keeps the historical ``twitter`` identifier, while analytics and

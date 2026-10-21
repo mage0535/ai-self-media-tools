@@ -45,7 +45,8 @@ XIAOHONGSHU_PLATFORMS = {"xiaohongshu", "rednote"}
 # config, routing defaults, and health data must never re-enable an uploader.
 STRICT_MANUAL_HANDOFF_PLATFORMS = frozenset(XIAOHONGSHU_PLATFORMS)
 DOUYIN_PLATFORMS = {"douyin", *DOUYIN_ACCOUNT_VARIANTS}
-MANUAL_HANDOFF_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu", "rednote", *DOUYIN_ACCOUNT_VARIANTS}
+# Owner 10-20: Kuaishou and WeChat MP set short-lived cookies, so they are posted by hand like the video platforms.
+MANUAL_HANDOFF_PLATFORMS = {"bilibili", "douyin", "shipinhao", "tiktok", "youtube", "xiaohongshu", "rednote", "kuaishou", "wechat", "wechat_official", "weixin", *DOUYIN_ACCOUNT_VARIANTS}
 
 
 def normalize_platform(platform):

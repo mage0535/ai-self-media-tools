@@ -106,7 +106,8 @@ def test_batch_event_journal_persists_recoverable_redacted_events(tmp_path: Path
 def test_manual_handoff_platform_cannot_be_normalized_to_published():
     assert normalize_delivery_boundary("youtube", "published") == "handoff_ready"
     assert normalize_delivery_boundary("douyin", "drafted") == "handoff_ready"
-    assert normalize_delivery_boundary("kuaishou", "published") == "published"
+    assert normalize_delivery_boundary("kuaishou", "published") == "handoff_ready"
+    assert normalize_delivery_boundary("toutiao", "published") == "published"
 
 
 def test_due_task_builder_selects_a_distinct_topic_for_each_due_platform():

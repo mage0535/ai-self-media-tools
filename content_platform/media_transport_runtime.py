@@ -21,6 +21,8 @@ SNAPSHOT='hermes-media-access-snapshot-v1'
 SHA=re.compile(r'[a-f0-9]{64}\Z')
 JOB=re.compile(r'[a-f0-9]{32}\Z')
 TOKEN_FIELDS={'access_token','expires_in','expiry_timestamp','project_id'}
+# An account whose token cannot cover a child window is left out of the task scope instead of capping it.
+MIN_ACCOUNT_SECONDS=1200
 ACCOUNT_FIELDS={'id','email','priority','disabled','proxy_disabled','protected_models','validation_blocked',
                 'validation_blocked_until','validation_url','live_limited_models','quota'}
 QUOTA_FIELDS={'models','last_updated','is_forbidden','forbidden_reason','subscription_tier','model_forwarding_rules','quota_groups'}
@@ -174,6 +176,10 @@ def capture_private_snapshot(runtime,request,config_ref,*,deadline,reader=read_p
         rows.append({'source_ref':{'path':selected['path'],'sha256':sha(raw)},'account':account})
         ids.add(selected['id']);paths.add(selected['path'])
     if type(deadline)not in(int,float)or not math.isfinite(deadline)or deadline<=now:_fail('media_transport_original_deadline_expired')
+    def live(r):return not r['account'].get('disabled',False)and not r['account'].get('proxy_disabled',False)
+    # 10-20: one of 4 tokens had 891 s left, so the whole scope got 591 s and the observer child was refused.
+    usable=[r for r in rows if not live(r)or r['account']['token']['expiry_timestamp']-300-now>=MIN_ACCOUNT_SECONDS]
+    if any(live(r)for r in usable):rows=usable
     snapshot={'schema':SNAPSHOT,'source_config_ref':dict(config_ref),'adapter_ref':dict(config['adapter_ref']),
               'source_id':config['source_id'],'task_id':job,'captured_at_unix':now,
               'expires_at_unix':min([deadline]+[r['account']['token']['expiry_timestamp']-300 for r in rows if not r['account'].get('disabled',False)and not r['account'].get('proxy_disabled',False)]),'accounts':rows}

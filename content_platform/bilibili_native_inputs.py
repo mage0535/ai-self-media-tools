@@ -288,7 +288,9 @@ def _strict_json(text):
 
 
 def decode_observation_response(text,identities):
-    value=_strict_json(text)
+    # The model sometimes wraps the exact JSON object in one Markdown fence; unwrap only that outer fence.
+    fenced=re.fullmatch(r'\s*```(?:json)?[ \t]*\r?\n(.*?)\r?\n[ \t]*```\s*',text,re.S)
+    value=_strict_json(fenced.group(1)if fenced else text)
     if(not isinstance(value,dict)or set(value)!={'items'}or not isinstance(value['items'],list)
             or [row.get('opaque_id')for row in value['items']if isinstance(row,dict)]!=identities):
         raise BiliInputsBlocked('bili_source_all_complete_inputs_required_in_original_order')
@@ -862,7 +864,7 @@ def _read_completed_capture_intent(intent,row):
     video=material['video_ref'];video_path=Path(video['path'])
     if not video_path.is_relative_to(clip)or type(video.get('bytes'))is not int or video['bytes']!=video_path.stat().st_size:
         raise BiliSourceExcluded('bili_source_prior_complete_video_size_changed')
-    if 4*((video['bytes']+2)//3)+len('data:video/mp4;base64,')>50*1024*1024:
+    if 4*((video['bytes']+2)//3)+len('data:video/mp4;base64,')>50*1024*1024 and video['bytes']<VIDEO_TRANSPORT_MIN_BYTES:
         raise BiliSourceExcluded('bili_source_original_single_video_cap_exceeded')
     for pin in(material['video_ref'],material['audio_ref'],material['source_metadata_ref'],material['native_scope_ref'],material['actual_pagelist_ref']):
         if not Path(pin['path']).is_relative_to(clip):raise BiliSourceExcluded('bili_source_prior_capture_cross_scope_file')
@@ -1145,6 +1147,10 @@ async def _observe_packets(guard,directory,materials,deadline):
     guard['source_context_ref']=context
     for material in materials:material['video_wire']=vision_tools._video_to_base64_data_url(Path(material.get('transport_video_ref',material['video_ref'])['path']))
     groups=grouped_complete_media_packets(materials,vision_tools._MAX_VIDEO_BASE64_BYTES)
+    # B05: the byte-scaled video window (180 s for ~20 MB) timed out on 10-20 with 818 s left; give the video
+    # group the remaining budget minus the audio call and a 60 s margin, never less than its own window, max 600 s.
+    spare=int(deadline-time.time())-sum(group[3]for group in groups if group[0]!='video')-60
+    groups=[(name,ids,packet,min(600,max(maximum,spare))if name=='video'else maximum)for name,ids,packet,maximum in groups]
     outputs={'video':[],'blind-audio':[]};evidence=[];prepared=[]
     # Every complete file and every packet is constructed/pinned before the first model request.
     for index,(name,identities,packet,maximum)in enumerate(groups,1):
@@ -1224,7 +1230,12 @@ def observe_bilibili_sources_child(store,control,rows,directory,deadline,native_
             # Exact byte length of the pinned SDK data URL, without retaining another full base64 copy.
             mime=vision_tools._detect_video_mime_type(Path(material['video_ref']['path']))or'video/mp4'
             wire_bytes=len('data:'+mime+';base64,')+4*((len(read_ref(material['video_ref']))+2)//3)
-            if wire_bytes>vision_tools._MAX_VIDEO_BASE64_BYTES:
+            # B05: originals >= VIDEO_TRANSPORT_MIN_BYTES are sent as a verified full-duration transport copy;
+            # the SDK cap is then enforced on that actual wire (grouped_complete_media_packets).
+            # Smallest possible transport copy: 80 kbps video + 32 kbps audio for the full duration, base64-encoded.
+            floor_wire=int(material['video_duration_seconds']*(80+32)*1000/8*4/3)
+            if wire_bytes>vision_tools._MAX_VIDEO_BASE64_BYTES and (material['video_ref']['bytes']<VIDEO_TRANSPORT_MIN_BYTES
+                    or floor_wire>vision_tools._MAX_VIDEO_BASE64_BYTES):
                 decisions.append({'content_id':row['content_id'],'state':'excluded_after_complete_capture',
                     'reason':'bili_source_original_single_video_cap_exceeded','video_ref':material['video_ref'],
                     'audio_ref':material['audio_ref'],'native_scope_ref':material['native_scope_ref'],

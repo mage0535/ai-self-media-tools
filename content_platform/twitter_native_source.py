@@ -359,7 +359,9 @@ class TwitterNativeBrowserAdapter:
             "collect_own_account_metrics": True,
             "own_account_snapshot_output": options["path"],
             "raw_response_dir": str(Path(options["path"]).parent / "account-captures"),
-            "max_total_seconds": 25, "account_timeout_seconds": 18,
+            # A cold browser through the slow egress timed out at 18 s twice (10-20 00:05Z, 04:26Z); the owned-account
+            # caller already requires >= 75 s left before this capture.
+            "max_total_seconds": 60, "account_timeout_seconds": 45,
         }
         report = self.collect(config)
         if not report.get("own_account_snapshot"):
@@ -394,7 +396,7 @@ class TwitterNativeBrowserAdapter:
             raise ValueError("distinct_configured_x_accounts_required")
         total = float(config.get("max_total_seconds", 45))
         timeout = float(config.get("account_timeout_seconds", 18))
-        if not 10 <= total <= 60 or not 5 <= timeout <= 25:
+        if not 10 <= total <= 60 or not 5 <= timeout <= 45:
             raise ValueError("bounded_x_source_budget_required")
         if config.get("account_only") is True or query is not None:
             account_config = config["account_config"]

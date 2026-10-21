@@ -19,12 +19,12 @@ class HealthRefreshTests(unittest.TestCase):
     def test_domestic_direct_route_probes_before_auth_check(self):
         with patch.dict(os.environ, {}, clear=True):
             entry = classify_platform_health(
-                "kuaishou",
+                "toutiao",
                 {
                     "type": "social-auto-upload",
                     "project_dir": "/missing",
                     "python_bin": "/missing/python",
-                    "platform_name": "kuaishou",
+                    "platform_name": "toutiao",
                     "account_name": "main",
                 },
             )
@@ -66,12 +66,12 @@ class HealthRefreshTests(unittest.TestCase):
             with patch.dict(os.environ, {}, clear=True):
                 with patch("content_platform.health_refresh.subprocess.run", side_effect=fake_run):
                     entry = classify_platform_health(
-                        "kuaishou",
+                        "toutiao",
                         {
                             "type": "social-auto-upload",
                             "project_dir": str(root),
                             "python_bin": str(python_bin),
-                            "platform_name": "kuaishou",
+                            "platform_name": "toutiao",
                             "account_name": "main",
                             "postcheck_command": "postcheck.py",
                         },

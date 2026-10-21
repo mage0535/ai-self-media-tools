@@ -73,7 +73,9 @@ def _observation(reference,expected_profile_url,expected_account_id):
         registered_expired_pair=(program.get('path')==str(program_path)
             and(program.get('sha256'),actual_sha)in{
                 ('567b715fc5046bf7a0541d7b12ca225298922f63c2c0801223681c2c6b457b5e','4706b67ca595b7f668cae993d1131bfaebe51ff0780e45107a65dc7448ffc3ff'),
-                ('4706b67ca595b7f668cae993d1131bfaebe51ff0780e45107a65dc7448ffc3ff','9745d9200fb6524a0885338933e59befaf950760f0b71ef2bea6c9140a94311a')})
+                ('4706b67ca595b7f668cae993d1131bfaebe51ff0780e45107a65dc7448ffc3ff','9745d9200fb6524a0885338933e59befaf950760f0b71ef2bea6c9140a94311a'),
+                # 2026-10-20 capture budget 18->45 s (account timeouts through the slow egress); sampler unchanged.
+                ('9745d9200fb6524a0885338933e59befaf950760f0b71ef2bea6c9140a94311a','14b562864ad979681d114f2c77b170c155759e067bb8712b13aee55716070dac')})
         if not registered_expired_pair:raise ValueError('owned_account_capture_program_changed')
         try:
             native.read_native_account_snapshot(reference,expected_profile_url=expected_profile_url)
