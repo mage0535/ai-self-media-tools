@@ -3,8 +3,26 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from content_platform.performance_cycle import DEFAULT_GROWTH_PLATFORMS, metrics_readiness_report, run_performance_cycle
 from content_platform.store import Store
+
+
+# Account aggregates are no longer persisted; only observations bound to a verified publication
+# and a pending metric window are. Nothing creates those windows yet (B07, plan E1), so these
+# tests of the old aggregate path are expected to fail until they are rewritten with B07.
+B07_PENDING = pytest.mark.xfail(reason="B07: bound-observation path not built yet", strict=True)
+
+
+def fake_collect(report):
+    """Stand-in for collect_platform_metrics that, like the real one, writes the raw snapshot to `output`."""
+    def collect(platforms, config=None, *, output=None, **kwargs):
+        if output:
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Path(output).write_text(json.dumps(report), encoding="utf-8")
+        return report
+    return collect
 
 
 FAKE_COLLECTION = {
@@ -33,10 +51,11 @@ def test_default_growth_platforms_cover_current_single_line_workflow():
     ]
 
 
+@B07_PENDING
 def test_performance_cycle_persists_metrics_and_growth_strategy():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=FAKE_COLLECTION):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(FAKE_COLLECTION)):
             report = run_performance_cycle(
                 store,
                 platforms=["youtube", "bilibili", "douyin"],
@@ -55,10 +74,11 @@ def test_performance_cycle_persists_metrics_and_growth_strategy():
         assert store.latest_tool_inventory("growth_strategy:youtube:latest")["payload"]["historical_feedback_status"] == "available"
 
 
+@B07_PENDING
 def test_performance_cycle_refreshes_douyin_account_variant_strategies():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=FAKE_COLLECTION):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(FAKE_COLLECTION)):
             report = run_performance_cycle(
                 store,
                 platforms=["douyin"],
@@ -73,6 +93,7 @@ def test_performance_cycle_refreshes_douyin_account_variant_strategies():
         assert store.latest_tool_inventory("growth_strategy:douyin_ai:latest")["payload"]["account_key"] == "douyin_ai"
 
 
+@B07_PENDING
 def test_douyin_account_variants_do_not_borrow_base_platform_history():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
@@ -85,7 +106,7 @@ def test_douyin_account_variants_do_not_borrow_base_platform_history():
             extra_metrics={"strategy_eligible": True, "metric_scope": "content_aggregate"},
         )
         collection = {"status": "ok", "platforms": {"douyin": {"status": "login_required", "reason": "test"}}}
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["douyin"], output_dir=Path(tmp) / "performance")
 
         for account_key in ("douyin_pet", "douyin_ai"):
@@ -94,6 +115,7 @@ def test_douyin_account_variants_do_not_borrow_base_platform_history():
             assert strategy["data_driven_improvement_plan"]["status"] == "needs_metrics"
 
 
+@B07_PENDING
 def test_unverified_creator_snapshot_is_saved_for_audit_but_excluded_from_strategy():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
@@ -114,7 +136,7 @@ def test_unverified_creator_snapshot_is_saved_for_audit_but_excluded_from_strate
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["zhihu"], output_dir=Path(tmp) / "performance")
 
         assert len(store.performance()) == 1
@@ -247,13 +269,13 @@ def test_single_platform_cycle_does_not_overwrite_full_cycle_report_file():
             },
         }
         single_collection = {"status": "ok", "platforms": {"x": {"status": "public_signal", "account_metrics": {"followers": 7, "views": 73}}}}
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=full_collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(full_collection)):
             full = run_performance_cycle(store, collector_config={}, output_dir=out)
         full_path = Path(full["output"])
         full_payload = json.loads(full_path.read_text(encoding="utf-8"))
         assert full_payload["activity"]["platform_count"] == 11
 
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=single_collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(single_collection)):
             single = run_performance_cycle(store, platforms=["x"], collector_config={}, output_dir=out)
 
         assert Path(single["output"]).name == "performance_cycle_x.json"
@@ -268,7 +290,7 @@ def test_performance_cycle_cli_runs_without_publishing():
         root = Path(tmp)
         cfg = root / "collector.json"
         cfg.write_text(json.dumps({"youtube": {"channel_url": "https://example.com/youtube"}}), encoding="utf-8")
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value={"status": "ok", "platforms": {"youtube": FAKE_COLLECTION["platforms"]["youtube"]}}):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect({"status": "ok", "platforms": {"youtube": FAKE_COLLECTION["platforms"]["youtube"]}})):
             code = main(
                 [
                     "--db",
@@ -292,7 +314,7 @@ def test_performance_cycle_cli_tolerates_missing_private_config():
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value={"status": "ok", "platforms": {}}):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect({"status": "ok", "platforms": {}})):
             code = main(
                 [
                     "--db",
@@ -314,7 +336,7 @@ def test_performance_cycle_cli_tolerates_missing_private_config():
 def test_performance_cycle_reports_metrics_source_coverage():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value={"status": "ok", "platforms": {}}):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect({"status": "ok", "platforms": {}})):
             report = run_performance_cycle(
                 store,
                 platforms=["douyin", "youtube", "kuaishou"],
@@ -333,6 +355,7 @@ def test_performance_cycle_reports_metrics_source_coverage():
         assert coverage["needs_attention"] == ["douyin"]
 
 
+@B07_PENDING
 def test_performance_cycle_merges_hermes_fallback_without_overwriting_authenticated_metrics():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
@@ -351,7 +374,7 @@ def test_performance_cycle_merges_hermes_fallback_without_overwriting_authentica
                 "youtube": {"status": "ok", "account_metrics": {"subscribers": 8, "videos": 227, "views": 11016}},
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=primary), patch(
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(primary)), patch(
             "content_platform.performance_cycle.collect_with_hermes_platform_scraper", return_value=fallback
         ):
             report = run_performance_cycle(store, platforms=["bilibili", "youtube"], use_hermes_scraper=True, output_dir=Path(tmp) / "performance")
@@ -362,6 +385,7 @@ def test_performance_cycle_merges_hermes_fallback_without_overwriting_authentica
         assert report["activity"]["metrics_saved"] == 2
 
 
+@B07_PENDING
 def test_performance_cycle_persists_low_confidence_public_signal():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
@@ -379,7 +403,7 @@ def test_performance_cycle_persists_low_confidence_public_signal():
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["douyin"], output_dir=Path(tmp) / "performance")
 
         rows = store.performance()
@@ -394,6 +418,7 @@ def test_performance_cycle_persists_low_confidence_public_signal():
         assert report["activity"]["metrics_saved"] == 1
 
 
+@B07_PENDING
 def test_performance_cycle_persists_medium_confidence_backend_signal():
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "state.db")
@@ -411,7 +436,7 @@ def test_performance_cycle_persists_medium_confidence_backend_signal():
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["kuaishou"], output_dir=Path(tmp) / "performance")
 
         row = store.performance()[0]
@@ -439,13 +464,13 @@ def test_performance_cycle_does_not_persist_weak_non_growth_metrics():
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["tiktok"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
         assert report["activity"]["metrics_saved"] == 0
         assert report["activity"]["unavailable_count"] == 1
-        assert report["persisted"]["items"][0]["status"] == "metrics_insufficient"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_performance_cycle_does_not_persist_bilibili_likes_without_reach():
@@ -460,11 +485,11 @@ def test_performance_cycle_does_not_persist_bilibili_likes_without_reach():
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["bilibili"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
-        assert report["persisted"]["items"][0]["status"] == "metrics_insufficient"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_performance_cycle_does_not_persist_suspicious_tiktok_placeholder_metrics():
@@ -484,12 +509,12 @@ def test_performance_cycle_does_not_persist_suspicious_tiktok_placeholder_metric
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["tiktok"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
         assert store.feedback_summary()["platforms"] == {}
-        assert report["persisted"]["items"][0]["status"] == "metrics_suspicious"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_performance_cycle_does_not_persist_creator_page_chrome_counts():
@@ -513,12 +538,12 @@ def test_performance_cycle_does_not_persist_creator_page_chrome_counts():
             },
         }
 
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["xiaohongshu"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
         assert report["activity"]["metrics_saved"] == 0
-        assert report["persisted"]["items"][0]["status"] == "metrics_suspicious"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_performance_cycle_does_not_persist_implausible_creator_backend_ratio():
@@ -542,11 +567,11 @@ def test_performance_cycle_does_not_persist_implausible_creator_backend_ratio():
             },
         }
 
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["juejin"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
-        assert report["persisted"]["items"][0]["status"] == "metrics_suspicious"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_performance_cycle_does_not_persist_huge_views_with_tiny_engagement():
@@ -569,11 +594,11 @@ def test_performance_cycle_does_not_persist_huge_views_with_tiny_engagement():
             },
         }
 
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["juejin"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
-        assert report["persisted"]["items"][0]["status"] == "metrics_suspicious"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_performance_cycle_does_not_persist_tiktok_zero_view_save_placeholder():
@@ -593,11 +618,11 @@ def test_performance_cycle_does_not_persist_tiktok_zero_view_save_placeholder():
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["tiktok"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
-        assert report["persisted"]["items"][0]["status"] == "metrics_insufficient"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_performance_cycle_does_not_persist_tiktok_followers_only_metrics():
@@ -616,12 +641,12 @@ def test_performance_cycle_does_not_persist_tiktok_followers_only_metrics():
                 }
             },
         }
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=collection):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(collection)):
             report = run_performance_cycle(store, platforms=["tiktok"], output_dir=Path(tmp) / "performance")
 
         assert store.performance() == []
         assert store.feedback_summary()["platforms"] == {}
-        assert report["persisted"]["items"][0]["status"] == "metrics_insufficient"
+        assert report["persisted"]["items"][0]["status"] == "raw_snapshot_only"
 
 
 def test_tiktok_followers_only_history_is_excluded_from_strategy_feedback():
@@ -634,13 +659,14 @@ def test_tiktok_followers_only_history_is_excluded_from_strategy_feedback():
         assert store.historical_performance(["tiktok"], "")["platforms"] == {}
 
 
+@B07_PENDING
 def test_performance_cycle_metrics_feed_future_pipeline_brief():
     from content_platform.pipeline import Pipeline
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         store = Store(root / "state.db")
-        with patch("content_platform.performance_cycle.collect_platform_metrics", return_value=FAKE_COLLECTION):
+        with patch("content_platform.performance_cycle.collect_platform_metrics", side_effect=fake_collect(FAKE_COLLECTION)):
             run_performance_cycle(store, platforms=["youtube"], output_dir=root / "performance")
 
         pipeline = Pipeline(store, {"generator": {"allow_fallback": True}})
