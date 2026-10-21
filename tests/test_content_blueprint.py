@@ -1,20 +1,38 @@
 from content_platform.content_blueprint import build_content_blueprint, validate_content_blueprint
 
+# Blueprints are compiled from the task's own analysis, so each test slot carries a scenario contract.
+SCENARIO = {
+    "actor": "busy teams",
+    "inputs": "meeting transcript",
+    "process": "turn the summary into owned action items",
+    "outcome": "every decision has an owner and a date",
+    "boundaries": "summaries do not become actions",
+    "human_handoff": "the team lead confirms owners before sending",
+}
 
-def test_ai_blueprint_assigns_non_decorative_cat_and_dog_roles():
-    blueprint = build_content_blueprint(
+
+def _video_blueprint():
+    return build_content_blueprint(
         "tiktok",
         "AI meeting notes",
-        {"audience": "busy teams", "user_pain": "summaries do not become actions", "content_form": "short_video", "topic_keywords": ["AI"]},
+        {
+            "audience": "busy teams", "user_pain": "summaries do not become actions", "content_form": "short_video",
+            "topic_keywords": ["AI"], "scenario_contract": SCENARIO,
+            "subtitle_and_pacing_plan": {"segments": [{"start": 0, "end": 3, "text": "Who owns this decision?"}]},
+        },
         {"trend_evidence": {"samples": [{"url": "https://example.test/trend"}]}},
     )
+
+
+def test_ai_blueprint_assigns_non_decorative_cat_and_dog_roles():
+    blueprint = _video_blueprint()
     assert validate_content_blueprint(blueprint)["passed"] is True
     assert blueprint["mascot_roles"]["cat"]["narrative_function"]
     assert blueprint["mascot_roles"]["dog"]["narrative_function"]
 
 
 def test_blueprint_rejects_generic_platform_style_and_missing_value():
-    blueprint = build_content_blueprint("tiktok", "topic", {}, {})
+    blueprint = _video_blueprint()
     blueprint["platform_style"] = "generic"
     blueprint["user_pain"] = ""
     result = validate_content_blueprint(blueprint)
