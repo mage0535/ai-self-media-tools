@@ -18,7 +18,10 @@ from content_platform.publishers import (
     RedditDraftPublisher,
     SocialAutoUploadPublisher,
     HermesWechatAdapter,
+    ManualHandoffPublisher,
     WechatDraftPublisher,
+    FileDraftPublisher,
+    _build_publisher_adapter,
     build_publisher,
 )
 
@@ -38,6 +41,12 @@ class FakeResponse:
 
 
 class PublisherV2Tests(unittest.TestCase):
+    # These tests cover adapter routing and behavior; the Store quality gate is covered by QualityGateTests.
+    def setUp(self):
+        gate = patch("content_platform.publishers._adapter_current_quality", return_value=True)
+        gate.start()
+        self.addCleanup(gate.stop)
+
     def test_devto_always_creates_private_draft(self):
         with patch("content_platform.publishers.urllib.request.urlopen", return_value=FakeResponse({"id": 12})) as call:
             result = DevtoDraftPublisher(api_key="key").deliver({"title": "T", "body": "B"}, "devto")
@@ -72,14 +81,15 @@ class PublisherV2Tests(unittest.TestCase):
         draft_request = call.call_args_list[-1].args[0]
         self.assertEqual(json.loads(draft_request.data)["articles"][0]["thumb_media_id"], "thumb-1")
 
-    def test_build_publisher_uses_hermes_wechat_adapter_for_wechat_draft(self):
+    def test_wechat_is_manual_handoff_even_with_wechat_draft_config(self):
+        # Owner 10-20: WeChat MP sets short-lived cookies, so it is posted by hand.
         with tempfile.TemporaryDirectory() as tmp:
-            publisher = build_publisher(
+            publisher = _build_publisher_adapter(
                 "wechat",
                 {"publishers": {"platforms": {"wechat": {"type": "wechat-draft", "adapter_command": str(Path(tmp) / "missing.py")}}}},
                 tmp,
             )
-        self.assertIsInstance(publisher, HermesWechatAdapter)
+        self.assertIsInstance(publisher, ManualHandoffPublisher)
 
     def test_hermes_wechat_adapter_blocks_incomplete_packet_before_runner(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -310,7 +320,7 @@ class PublisherV2Tests(unittest.TestCase):
                     }
                 }
             }
-            publisher = build_publisher("bluesky", config, tmp)
+            publisher = _build_publisher_adapter("bluesky", config, tmp)
             with patch.dict(os.environ, {"CONTENT_PLATFORM_ENABLE_LIVE_PUBLISH": "1"}, clear=True):
                 with patch("content_platform.publishers.urllib.request.urlopen", return_value=FakeResponse({"status": "success", "id": "post1"})) as call:
                     result = publisher.deliver({"id": "job5", "title": "T", "body": "B"}, "bluesky")
@@ -331,10 +341,10 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertEqual(result.status, "drafted")
         self.assertEqual(result.external_id, "draft-1")
 
-    def test_routing_defaults_send_kuaishou_to_social_auto_upload(self):
+    def test_routing_defaults_send_toutiao_to_social_auto_upload(self):
         with tempfile.TemporaryDirectory() as tmp:
-            publisher = build_publisher(
-                "kuaishou",
+            publisher = _build_publisher_adapter(
+                "toutiao",
                 {
                     "publishers": {
                         "routing_defaults": {
@@ -347,8 +357,19 @@ class PublisherV2Tests(unittest.TestCase):
             )
 
         self.assertIsInstance(publisher, SocialAutoUploadPublisher)
-        self.assertEqual(publisher.platform_name, "kuaishou")
+        self.assertEqual(publisher.platform_name, "toutiao")
         self.assertEqual(publisher.account_name, "example")
+
+    def test_kuaishou_is_manual_handoff_even_with_routing_defaults(self):
+        # Owner 10-20: Kuaishou sets short-lived cookies, so it is posted by hand.
+        with tempfile.TemporaryDirectory() as tmp:
+            publisher = _build_publisher_adapter(
+                "kuaishou",
+                {"publishers": {"routing_defaults": {"enabled": True, "domestic": {"account_name": "example", "project_dir": tmp, "python_bin": "python"}}}},
+                tmp,
+            )
+
+        self.assertIsInstance(publisher, ManualHandoffPublisher)
 
     def test_social_auto_upload_auto_schedule_resolves_to_cli_time(self):
         publisher = SocialAutoUploadPublisher(
@@ -364,7 +385,7 @@ class PublisherV2Tests(unittest.TestCase):
 
     def test_x_playwright_publisher_is_explicit_cookie_route(self):
         with tempfile.TemporaryDirectory() as tmp:
-            publisher = build_publisher(
+            publisher = _build_publisher_adapter(
                 "twitter",
                 {
                     "publishers": {
@@ -385,7 +406,7 @@ class PublisherV2Tests(unittest.TestCase):
 
     def test_routing_defaults_send_international_to_manual_handoff(self):
         with tempfile.TemporaryDirectory() as tmp:
-            publisher = build_publisher(
+            publisher = _build_publisher_adapter(
                 "tiktok",
                 {"publishers": {"routing_defaults": {"enabled": True}}},
                 tmp,
@@ -399,7 +420,7 @@ class PublisherV2Tests(unittest.TestCase):
     def test_manual_only_platforms_override_any_auto_publisher_config(self):
         with tempfile.TemporaryDirectory() as tmp:
             for platform in ["douyin", "shipinhao", "tiktok", "xiaohongshu"]:
-                publisher = build_publisher(
+                publisher = _build_publisher_adapter(
                     platform,
                     {
                         "publishers": {
@@ -430,7 +451,7 @@ class PublisherV2Tests(unittest.TestCase):
             for kind in ["aitoearn-draft", "aitoearn-flow"]:
                 for platform in ["youtube", "tiktok", "twitter", "x", "threads"]:
                     with self.subTest(kind=kind, platform=platform):
-                        publisher = build_publisher(
+                        publisher = _build_publisher_adapter(
                             platform,
                             {
                                 "publishers": {
@@ -445,7 +466,7 @@ class PublisherV2Tests(unittest.TestCase):
                             },
                             tmp,
                         )
-                        result = publisher.deliver({"id": "job7", "title": "T", "body": "B"}, platform)
+                        result = publisher.deliver({"id": "job7", "title": "T", "body": "B", "content_form": "short_post", "draft_meta": {"hashtags": ["AI"]}}, platform)
 
                         self.assertEqual(publisher.__class__.__name__, "ManualHandoffPublisher")
                         self.assertEqual(result.status, "handoff_pending")
@@ -477,7 +498,7 @@ class PublisherV2Tests(unittest.TestCase):
                 return {"status": 1, "publish_record_id": "record-1", "work_link": "https://example.com/work"}
 
         publisher = AiToEarnFlowPublisher(client=FakeClient(), account_id="bili-1", delivery_status="drafted")
-        result = publisher.deliver({"id": "job8", "title": "T", "body": "B"}, "bilibili")
+        result = publisher.deliver({"id": "job8", "title": "T", "body": "B", "brief": {"content_form": "edited_short_video"}}, "bilibili")
         self.assertTrue(result.ok)
         self.assertEqual(result.status, "drafted")
         self.assertEqual(result.external_id, "record-1")
@@ -537,12 +558,28 @@ class PublisherV2Tests(unittest.TestCase):
 
     def test_build_publisher_supports_reddit_draft_type(self):
         with tempfile.TemporaryDirectory() as tmp:
-            publisher = build_publisher(
+            publisher = _build_publisher_adapter(
                 "reddit",
                 {"publishers": {"platforms": {"reddit": {"type": "reddit-draft", "outbox": str(Path(tmp) / "reddit")}}}},
                 tmp,
             )
         self.assertIsInstance(publisher, RedditDraftPublisher)
+
+
+class QualityGateTests(unittest.TestCase):
+    def test_build_publisher_without_store_is_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = build_publisher("zhihu", {}, tmp).deliver({"id": "job7", "title": "T", "body": "B"}, "zhihu")
+
+        self.assertEqual(result.status, "blocked")
+        self.assertEqual(result.error, "native_quality_store_required")
+
+    def test_adapter_without_quality_source_is_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = FileDraftPublisher(tmp).deliver({"id": "job7", "title": "T", "body": "B"}, "zhihu")
+
+        self.assertEqual(result.status, "blocked")
+        self.assertEqual(result.error, "native_adapter_quality_not_qualified")
 
 
 if __name__ == "__main__":
