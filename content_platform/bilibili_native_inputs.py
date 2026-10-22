@@ -434,14 +434,18 @@ def _prepare_video_transport(material,directory,deadline):
     stderr=once(directory/'video-transport.stderr.private.bin',result.stderr,raw=True)
     if result.returncode:raise BiliInputsBlocked('bili_source_video_transport_encode_failed')
     os.chmod(target,0o600)
-    probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','json',str(target)],stdin=subprocess.DEVNULL,
-        capture_output=True,timeout=60,check=False)
-    derived=float(_strict_json(probe.stdout.decode('utf8'))['format']['duration'])if probe.returncode==0 else -1
-    if abs(derived-duration)>0.5:raise BiliInputsBlocked('bili_source_video_transport_duration_changed')
+    def container_seconds(path):
+        probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','json',str(path)],stdin=subprocess.DEVNULL,
+            capture_output=True,timeout=60,check=False)
+        return float(_strict_json(probe.stdout.decode('utf8'))['format']['duration'])if probe.returncode==0 else -1
+    # B05 2026-10-21: compare container with container; a source's video stream can end ~1 s before its audio
+    # (1888.14 s video vs 1889.22 s audio/container), which made a faithful copy look shortened.
+    derived=container_seconds(target);original=container_seconds(source)
+    if original<=0 or abs(derived-original)>0.5:raise BiliInputsBlocked('bili_source_video_transport_duration_changed')
     transport_ref=reference(target);read_ref(material['video_ref'])
     proof={'version':'bilibili_full_duration_video_transport_v1','original_video_ref':material['video_ref'],'transport_video_ref':transport_ref,
         'current_native_scope_ref':material['native_scope_ref'],'producer_source_ref':fingerprint(Path(__file__)),'argv':argv,'stderr_ref':stderr,
-        'original_duration_seconds':duration,'transport_duration_seconds':derived,'video_kbps':video_kbps}
+        'original_duration_seconds':original,'transport_duration_seconds':derived,'video_kbps':video_kbps}
     material=dict(material,transport_video_ref=transport_ref,transport_video_proof_ref=once(directory/'video-transport-proof.private.json',proof))
     return material
 
