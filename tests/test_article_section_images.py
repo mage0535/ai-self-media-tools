@@ -19,3 +19,23 @@ def test_legacy_sections_use_titles_not_dict_repr():
 def test_article_requirements_ask_for_section_headings():
     text, _ = DraftGenerator._generation_requirements({"strategy": {"content_form": "article", "primary_platforms": ["juejin"]}})
     assert "## " in text
+
+
+def test_auto_image_chain_reports_why_earlier_providers_were_skipped(tmp_path, monkeypatch):
+    from content_platform import image_provider as ip
+
+    def fail(*a, **k):
+        raise ip.ImageProviderError("no usable image payload")
+
+    def ok(prompt, output, **k):
+        output.write_bytes(b"x" * 4096)
+        return {"provider": "cloudflare"}
+
+    monkeypatch.setenv("IMAGE_PROVIDER_DISABLE_CACHE", "1")
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "go_gemini,cloudflare")
+    monkeypatch.setattr(ip, "_go_gemini_image", fail)
+    monkeypatch.setattr(ip, "_cloudflare_image", ok)
+    monkeypatch.setattr(ip, "_write_cache", lambda *a, **k: None)
+    result = ip.generate_image("p", tmp_path / "o.png")
+    assert result["provider"] == "cloudflare"
+    assert result["fallback_errors"] == ["go_gemini: ImageProviderError: no usable image payload"]

@@ -127,6 +127,9 @@ def generate_image(
             result["path"] = str(output_path)
             result["bytes"] = output_path.stat().st_size
             _write_cache(prompt, output_path, name, result, model=model, size=size, input_image=input_image)
+            if errors:
+                # Not cached: keep why earlier providers were skipped; a silent fallback hides quota or format failures.
+                result["fallback_errors"] = list(errors)
             # auto 修图分支：stock 首图按需 AI 修图
             if provider == "auto" and name in ("stock", "pexels", "pixabay"):
                 edited = _try_auto_retouch(output_path, prompt, result)
