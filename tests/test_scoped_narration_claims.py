@@ -96,3 +96,20 @@ def test_humanizer_output_is_refit_to_article_length(monkeypatch):
     Pipeline._humanize_draft(pipeline, "job", draft)
 
     assert len("".join(draft["body"].split())) <= 3000
+
+
+def test_humanizer_rewrite_that_drops_most_of_an_article_is_rejected(monkeypatch):
+    article = ("值得注意的是，这一节说明分层记忆如何赋能写入、检索和过期，总而言之给出复核清单与具体步骤。" * 12 + "\n\n") * 6
+    monkeypatch.setattr("content_platform.humanizer._hermes_llm_call",
+                        lambda prompt, system="", timeout=60: __import__("json").dumps(
+                            {"title": "改写标题", "body": "只剩一小段概括。" * 20, "changes": [], "score": 40}, ensure_ascii=False))
+    events = []
+    pipeline = SimpleNamespace(config={"generator": {"timeout": 600}},
+                               store=SimpleNamespace(record_event=lambda *a: events.append(a)),
+                               _validate_draft_structure=lambda item: None)
+    draft = {"title": "原标题", "body": article, "draft_meta": {"strategy": {"content_form": "technical_article"}}}
+
+    Pipeline._humanize_draft(pipeline, "job", draft)
+
+    assert draft["body"] == article and draft["title"] == "原标题"
+    assert [e[1] for e in events] == ["humanize_rejected_short"]

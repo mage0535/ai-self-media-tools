@@ -1790,9 +1790,15 @@ class Pipeline:
                 self.store.record_event(job_id,'humanize_failed',{'error':str(result.get('error') or 'invalid_response')})
                 raise RuntimeError('required_text_transformation_failed')
             before_chars=len(re.sub(r'\s+','',str(item.get('body') or '')))
+            content_form=str(((item.get('draft_meta') or {}).get('strategy') or {}).get('content_form') or '')
+            after_chars=len(re.sub(r'\s+','',str(result['body'])))
+            # A rewrite that drops most of an article (r30: 2554 -> 811) loses content, not just AI tone;
+            # keep the original and let the later gates judge it.
+            if 'article' in content_form and (after_chars<before_chars*0.7 or (before_chars>=1200>after_chars)):
+                self.store.record_event(job_id,'humanize_rejected_short',{'body_chars':{'before':before_chars,'after':after_chars}})
+                continue
             item['title']=result['title'];item['body']=result['body']
             # The rewrite has no length bound; apply the generator's article fit again.
-            content_form=str(((item.get('draft_meta') or {}).get('strategy') or {}).get('content_form') or '')
             item['body']=DraftGenerator._fit_article_length(item['body'],{'strategy':{'content_form':content_form}})
             self._validate_draft_structure(item)
             if result.get('patterns_detected'):
