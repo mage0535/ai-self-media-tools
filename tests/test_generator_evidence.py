@@ -165,3 +165,10 @@ def test_generation_selection_uses_runtime_capability_snapshot():
     analysis = draft["draft_meta"]["tools_capability_analysis"]
     assert "ffmpeg" in analysis["analyzed_tool_groups"]["runtime_probe"]
     assert "hero-card" in analysis["analyzed_tool_groups"]["video_effect_modules"]
+
+
+def test_model_written_remote_images_are_removed_but_local_markers_kept():
+    from content_platform.generator import strip_model_image_links
+
+    body = "## 分层记忆\n\n![架构示意图](https://cdn.example.com/a.png)\n正文一\n\n![](/srv/assets/section-01.png)\n正文二"
+    assert strip_model_image_links(body) == "## 分层记忆\n\n正文一\n\n![](/srv/assets/section-01.png)\n正文二"

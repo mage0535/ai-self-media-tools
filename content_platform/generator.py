@@ -45,6 +45,12 @@ WEB_RESIDUE_PATTERNS = (
 )
 
 
+def strip_model_image_links(text: str) -> str:
+    """Drop remote markdown images the model wrote (e.g. cdn.example.com): it cannot know our asset
+    URLs, so they would ship as broken images. Publishers insert uploaded images after section headings."""
+    return re.sub(r"!\[[^\]]*\]\(\s*https?://[^)]*\)[ \t]*\n?", "", text)
+
+
 def strip_web_residue(text: str) -> str:
     """移除 AI 生成内容中的网页抓取残留（JS 代码 + 导航文本）。
 
@@ -878,6 +884,7 @@ class DraftGenerator:
             body = body.rstrip() + f"\n\n{cta}"
         # 2026-08-17 新增：先清网页残留再 humanize，防止 JS/导航文本混入成稿
         body = strip_web_residue(body)
+        body = strip_model_image_links(body)
         rewrite = naturalize_copy(body, context)
         body = self._fit_article_length(rewrite["body"], context)
         strategy = context["strategy"]
