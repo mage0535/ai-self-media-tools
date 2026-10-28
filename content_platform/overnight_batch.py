@@ -388,8 +388,13 @@ def build_due_tasks(
                 try:
                     bounded_model_input = planning_bound_payload(run_contract, "generate", compact)
                 except RunContractError as again:
-                    sizes = {key: len(json.dumps(value, ensure_ascii=False)) for key, value in compact.items()}
-                    row.update({"topic": selected["title"], "state": "blocked", "reason": f"{again} {sizes}"[:300]})
+                    def utf8_size(value: Any) -> int:
+                        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+                    sizes = {key: utf8_size(value) for key, value in compact.items()}
+                    blueprint_sizes = {key: utf8_size(value) for key, value in content_blueprint.items()}
+                    row.update({"topic": selected["title"], "state": "blocked", "reason": f"{again} {sizes}"[:300],
+                                "payload_bytes": {"fields": sizes, "content_blueprint": blueprint_sizes}})
                     tasks.append(row)
                     continue
             selected_topics.setdefault(
