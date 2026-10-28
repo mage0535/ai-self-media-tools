@@ -196,8 +196,12 @@ def humanize_text(
             clean = clean.split("\n", 1)[-1]
             clean = clean.rsplit("```", 1)[0]
         clean = clean.strip()
+        # Long article bodies often come back with raw newlines inside the JSON string or a sentence around the object.
+        start, end = clean.find("{"), clean.rfind("}")
+        if start != -1 and end > start:
+            clean = clean[start:end + 1]
 
-        data = json.loads(clean)
+        data = json.loads(clean, strict=False)
         if (not isinstance(data, dict) or not isinstance(data.get('title'), str) or not data['title'].strip()
                 or not isinstance(data.get('body'), str) or not data['body'].strip()
                 or isinstance(data.get('score'), bool) or not isinstance(data.get('score'), (int, float))
@@ -211,7 +215,7 @@ def humanize_text(
             "changes": data.get("changes", []),
             "score": data.get("score", 35),
         }
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
         # 解析失败，保留原文本
         return {
             "ok": False,
@@ -219,5 +223,5 @@ def humanize_text(
             "body": body,
             "patterns_detected": combined_hits,
             "score": 0,
-            "error": "failed to parse LLM response",
+            "error": f"failed to parse LLM response: {type(exc).__name__}: {str(exc)[:120]}",
         }
