@@ -194,13 +194,21 @@ def quality_gate(scores):
 
 
 def _sentence_break(text):
-    return re.sub(r"([。！？.!?])\s*", r"\1\n", str(text))
+    # Keep existing newlines: Markdown paragraph breaks must survive.
+    return re.sub(r"([。！？.!?])[ \t]*", r"\1\n", str(text))
+
+
+CODE_FENCE_BLOCK = re.compile(r"```.*?```", re.S)
 
 
 def naturalize_copy(body, context):
     updated = str(body or "")
     notes = []
     locked = _lock_terms(body)
+    # Fenced code is copied verbatim; copy edits below must not reflow it.
+    code_blocks = CODE_FENCE_BLOCK.findall(updated)
+    for index, block in enumerate(code_blocks):
+        updated = updated.replace(block, f"\n\n\x00CODE{index}\x00\n\n", 1)
     # Strip web-page residue that LLMs sometimes copy from source articles:
     # JS function stubs, cookie-banner wrappers, HTML tags, and asset URLs.
     before_strip = updated
@@ -225,7 +233,7 @@ def naturalize_copy(body, context):
             updated = re.sub(pattern, replacement, updated, flags=re.I).strip()
             notes.append("replaced hedging language")
             break
-    updated = re.sub(r"\s{2,}", " ", updated)
+    updated = re.sub(r"[ \t]{2,}", " ", updated)
     updated = re.sub(r"(-{2,}|—{2,})(?!-)", "—", updated)
     em_count = updated.count("—")
     if em_count > 4:
@@ -234,6 +242,8 @@ def naturalize_copy(body, context):
     # Reference openings constrain writing style; they are never publication copy.
     updated = _sentence_break(updated)
     updated = re.sub(r"\n{3,}", "\n\n", updated).strip()
+    for index, block in enumerate(code_blocks):
+        updated = updated.replace(f"\x00CODE{index}\x00", block, 1)
     term_check = _verify_terms(locked, updated)
     if not term_check["intact"]:
         notes.append(f"term integrity: {term_check['preserved']}/{term_check['total']}")

@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import re
 import subprocess
 import urllib.request
 from datetime import datetime, timezone
@@ -1127,14 +1128,22 @@ class DraftGenerator:
         if compact_len <= 3000:
             return text
         target_raw = max(1200, int(len(text) * (2850 / max(compact_len, 1))))
+        def outside_code(value):
+            # Never end inside a fenced code block.
+            return value[:value.rfind("```")].rstrip() if value.count("```") % 2 else value
+
         candidate = text[:target_raw].rstrip()
         boundary = max(candidate.rfind("\n## "), candidate.rfind("\n# "), candidate.rfind("\n\n"))
         if boundary > 1200:
             candidate = candidate[:boundary].rstrip()
-        conclusion = "\n\n## Practical takeaway\n\nKeep the core idea, one concrete workflow, and one review checklist. Remove anything that does not help the reader decide or act."
+        candidate = outside_code(candidate)
+        if re.search(r"[\u4e00-\u9fff]", text):
+            conclusion = "\n\n## 落地要点\n\n保留核心思路、一个具体流程和一份复核清单；与读者决策或行动无关的内容可以删去。"
+        else:
+            conclusion = "\n\n## Practical takeaway\n\nKeep the core idea, one concrete workflow, and one review checklist. Remove anything that does not help the reader decide or act."
         fitted = candidate + conclusion
         while len("".join(fitted.split())) > 3000 and len(candidate) > 1200:
-            candidate = candidate[: int(len(candidate) * 0.9)].rstrip()
+            candidate = outside_code(candidate[: int(len(candidate) * 0.9)].rstrip())
             fitted = candidate + conclusion
         return fitted
 

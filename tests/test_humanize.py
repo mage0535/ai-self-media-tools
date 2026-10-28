@@ -216,3 +216,13 @@ class QualityGateG3IntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_naturalize_copy_keeps_code_blocks_and_paragraphs():
+    code = "```python\nclass Pipeline:\n    def run(self):\n        return 1\n```"
+    body = "第一段说明。\n\n" + code + "\n\n第二段说明。"
+
+    result = naturalize_copy(body, {"strategy": {"content_form": "technical_article"}, "style": {"cta": ""}})
+
+    assert code in result["body"]
+    assert "第一段说明。\n\n" in result["body"]

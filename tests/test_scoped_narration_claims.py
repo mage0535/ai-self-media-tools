@@ -55,3 +55,16 @@ def test_humanizer_uses_generator_timeout(monkeypatch):
     Pipeline._humanize_draft(pipeline, "job", draft)
 
     assert seen["timeout"] == 600
+
+
+def test_fit_article_length_never_ends_inside_code_and_keeps_language():
+    from content_platform.generator import DraftGenerator
+
+    para = "这是一段较长的中文说明，用于测试截断。" * 20
+    code = "```python\n" + "\n\n".join(f"x{i} = {i}" for i in range(400)) + "\n```"
+    body = "\n\n".join([para] * 6) + "\n\n" + code + "\n\n" + para
+
+    fitted = DraftGenerator._fit_article_length(body, {"strategy": {"content_form": "technical_article"}})
+
+    assert fitted.count("```") % 2 == 0
+    assert "## 落地要点" in fitted and "Practical takeaway" not in fitted
