@@ -871,56 +871,8 @@ class MediaBridge:
         if (job.get('brief') or {}).get('content_mode')=='original_knowledge':
             from .original_knowledge import validate_original_asset_inputs
             validate_original_asset_inputs(job)
-        # ── visual-router 自动适配：结构化/知识内容 → 内容驱动知识图块系列 ──
-        # 仅对图文平台（非视频8场景）生效，且路由首选 content-driven-cards 时
-        vr = job.get("visual_route") or {}
-        platforms = {str(item).lower() for item in job.get("platforms", [])}
-        video_platforms = platforms.intersection(
-            {"kuaishou", "douyin", "douyin_ai", "douyin_pet", "tiktok", "shipinhao", "youtube", "youtube_shorts", "bilibili"}
-        )
-        if (not semantic_requirements and not video_platforms and vr.get("auto") and vr.get("route_order")
-                and vr["route_order"][0] == "content-driven-cards"):
-            try:
-                scripts_dir = agent_scripts_dir()
-                sys.path.insert(0, str(scripts_dir))
-                import subprocess as _sp
-                card_dir = output_dir / "cards"
-                card_dir.mkdir(parents=True, exist_ok=True)
-                # 用内容驱动卡片生成器（8 卡系列，每卡按内容选视觉）
-                title = job.get("title") or job.get("topic") or "AI"
-                body = str(job.get("body") or "")[:2000]
-                _sp.run([sys.executable, str(scripts_dir / "diagram_knowledge_cards_v2.py"),
-                         str(card_dir), title, body],
-                        capture_output=True, text=True, timeout=120)
-                # 脚本产出 HTML → 渲染 PNG（diagram_html2png）
-                htmls = sorted(card_dir.glob("dcard_*.html"))
-                for hidx, hp in enumerate(htmls, 1):
-                    png_path = card_dir / f"card_{hidx:02d}.png"
-                    _sp.run([sys.executable, str(scripts_dir / "diagram_html2png.py"),
-                             str(hp), str(png_path), "--width", "1080", "--height", "1920"],
-                            capture_output=True, text=True, timeout=90)
-                pngs = sorted(card_dir.glob("*.png"))
-                if pngs:
-                    images = []
-                    for idx, png in enumerate(pngs):
-                        images.append({
-                            "kind": "image",
-                            "role": "cover" if idx == 0 else "section",
-                            "section": "",
-                            "purpose": f"内容驱动知识图块卡 {idx+1}",
-                            "path": str(png),
-                            "checksum": hashlib.sha256(png.read_bytes()).hexdigest(),
-                        })
-                    cover_design = self._compose_wechat_cover(output_dir, images, job)
-                    self._persist_asset_provenance(output_dir, images, [], "diagram_knowledge_cards_v2", job)
-                    return {"kind": "image", "path": images[0]["path"],
-                            "checksum": images[0]["checksum"],
-                            "images": images, "section_image_map": [], "auto_route": "content-driven-cards",
-                            "measured_cover_design": cover_design}
-            except Exception as e:
-                # Degrade explicitly; do not hide that the content-driven route failed.
-                job.setdefault("visual_route", {})["degraded"] = True
-                job["visual_route"]["fallback_reason"] = str(e)[:180]
+        # The former content-driven-cards route rendered a fixed MCP Memory demo deck
+        # (only the title was swapped), so its images could not depict the article.
         provider = self.registry.choose_provider("image")
         if not provider:
             raise FileNotFoundError("image script not configured")
