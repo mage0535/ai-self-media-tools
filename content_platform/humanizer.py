@@ -64,17 +64,27 @@ AI_PATTERNS = {
 }
 
 
+# Why the last Hermes call returned nothing (exit code and redacted stderr tail); empty on success.
+LAST_CALL_ERROR = ""
+
+
 def _hermes_llm_call(prompt: str, system: str = "", timeout: int = 60) -> str:
     """Use Hermes' current configured route without a provider/model default."""
     if os.environ.get("CONTENT_PLATFORM_NO_MODEL_CALLS") == "1":
         return ""
     command = [os.environ.get("HERMES_COMMAND") or "hermes", "-z",
                system + "\n\n" + prompt, "--cli"]
+    global LAST_CALL_ERROR
+    LAST_CALL_ERROR = ""
     try:
         result = subprocess.run(command, capture_output=True, text=True,
                                 timeout=timeout, check=False)
+        if result.returncode != 0 or not result.stdout.strip():
+            from .risk import redact_secrets
+            LAST_CALL_ERROR = f"rc={result.returncode} stderr={redact_secrets((result.stderr or '')[-300:])}"
         return result.stdout.strip() if result.returncode == 0 else ""
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        LAST_CALL_ERROR = type(exc).__name__
         return ""
 
 
@@ -185,7 +195,7 @@ def humanize_text(
             "body": body,
             "patterns_detected": combined_hits,
             "score": 0,
-            "error": "LLM call failed, returning original",
+            "error": "LLM call failed, returning original" + (f" ({LAST_CALL_ERROR})" if LAST_CALL_ERROR else ""),
         }
 
     # 3. 解析 LLM 返回

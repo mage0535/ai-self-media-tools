@@ -14,3 +14,14 @@ def test_unparseable_reply_reports_the_reason_and_keeps_the_original():
     result = humanize_text("标题", BODY, llm_call=lambda prompt, system: "not json")
     assert result["ok"] is False and result["body"] == BODY
     assert result["error"].startswith("failed to parse LLM response: ")
+
+
+def test_failed_hermes_call_reports_exit_code_and_stderr(monkeypatch, tmp_path):
+    fake = tmp_path / "hermes"
+    fake.write_text("#!/bin/sh\necho 'provider unavailable' >&2\nexit 3\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("HERMES_COMMAND", str(fake))
+    monkeypatch.delenv("CONTENT_PLATFORM_NO_MODEL_CALLS", raising=False)
+    result = humanize_text("标题", BODY)
+    assert result["ok"] is False
+    assert "rc=3" in result["error"] and "provider unavailable" in result["error"]
