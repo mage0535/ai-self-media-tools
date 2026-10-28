@@ -2,6 +2,7 @@ import hashlib
 import copy
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -1788,10 +1789,15 @@ class Pipeline:
             if result.get('ok') is not True or result.get('error'):
                 self.store.record_event(job_id,'humanize_failed',{'error':str(result.get('error') or 'invalid_response')})
                 raise RuntimeError('required_text_transformation_failed')
+            before_chars=len(re.sub(r'\s+','',str(item.get('body') or '')))
             item['title']=result['title'];item['body']=result['body']
+            # The rewrite has no length bound; apply the generator's article fit again.
+            content_form=str(((item.get('draft_meta') or {}).get('strategy') or {}).get('content_form') or '')
+            item['body']=DraftGenerator._fit_article_length(item['body'],{'strategy':{'content_form':content_form}})
             self._validate_draft_structure(item)
             if result.get('patterns_detected'):
                 self.store.record_event(job_id,'humanized',{'patterns_found':list(result['patterns_detected']),'score':result['score'],
+                    'body_chars':{'before':before_chars,'after':len(re.sub(r'\s+','',item['body']))},
                     'revalidation_required':True,'output_sha256':hashlib.sha256((item['title']+'\n'+item['body']).encode()).hexdigest()})
 
     def _media_generation_job(self,job_id,draft=None):

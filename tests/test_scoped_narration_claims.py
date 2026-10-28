@@ -80,3 +80,19 @@ def test_deferred_tool_needs_a_named_step_under_required_execution():
 
     assert validate_tool_invocation_manifest(named, require_execution=True)["passed"]
     assert not validate_tool_invocation_manifest(unnamed, require_execution=True)["passed"]
+
+
+def test_humanizer_output_is_refit_to_article_length(monkeypatch):
+    long_body = ("这是一段较长的中文说明，用于测试润色后的长度。" * 30 + "\n\n") * 8
+    monkeypatch.setattr("content_platform.humanizer._hermes_llm_call",
+                        lambda prompt, system="", timeout=60: __import__("json").dumps(
+                            {"title": "工作流拆解", "body": long_body, "changes": [], "score": 40}, ensure_ascii=False))
+    events = []
+    pipeline = SimpleNamespace(config={"generator": {"timeout": 600}},
+                               store=SimpleNamespace(record_event=lambda *a: events.append(a)),
+                               _validate_draft_structure=lambda item: None)
+    draft = {"title": "工作流拆解", "body": BODY, "draft_meta": {"strategy": {"content_form": "technical_article"}}}
+
+    Pipeline._humanize_draft(pipeline, "job", draft)
+
+    assert len("".join(draft["body"].split())) <= 3000
