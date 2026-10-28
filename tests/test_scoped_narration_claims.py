@@ -68,3 +68,15 @@ def test_fit_article_length_never_ends_inside_code_and_keeps_language():
 
     assert fitted.count("```") % 2 == 0
     assert "## 落地要点" in fitted and "Practical takeaway" not in fitted
+
+
+def test_deferred_tool_needs_a_named_step_under_required_execution():
+    from content_platform.content_recipe import build_tool_invocation_manifest, validate_tool_invocation_manifest
+
+    planned = {"a": "x", "b": "x", "c": "x"}
+    ok = {"a": {"status": "ok"}, "b": {"status": "ok"}}
+    named = build_tool_invocation_manifest(planned_tools=planned, invocations=dict(ok, c={"status": "deferred", "step": "render"}))
+    unnamed = build_tool_invocation_manifest(planned_tools=planned, invocations=dict(ok, c={"status": "deferred"}))
+
+    assert validate_tool_invocation_manifest(named, require_execution=True)["passed"]
+    assert not validate_tool_invocation_manifest(unnamed, require_execution=True)["passed"]

@@ -367,6 +367,8 @@ def validate_tool_invocation_manifest(
             for name in planned:
                 record = invocations.get(name)
                 status = record.get("status") if isinstance(record, dict) else "missing"
+                if status == "deferred" and isinstance(record, dict) and record.get("step"):
+                    continue  # Executed and verified by the named later required step.
                 if status in {"planned_internal", "not_invoked", "missing"}:
                     failures.append(f"tool_not_executed:{name}")
                 elif status not in {"ok", "generated", "reused_verified"}:

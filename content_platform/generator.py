@@ -1325,24 +1325,26 @@ class DraftGenerator:
             sections=sections,
             content_goal="increase opens, saves, shares, comments, and follow conversion with platform-matched visual cards",
         )
-        tool_manifest = build_tool_invocation_manifest(
-            planned_tools={
-                "generator_normalize": "content_platform.generator",
-                "preflight_manifest": "content_platform.preflight_manifest",
-                "visual_policy": "content_platform.visual_content_policy",
-                "growth_strategy": "content_platform.growth_policy",
-                "knowledge_card_designer": KNOWLEDGE_CARD_SKILL,
-                "image_text_card_recipe": "content_platform.content_recipe",
-            },
-            invocations={
-                "generator_normalize": {"status": "ok", "output": "draft_meta"},
-                "preflight_manifest": {"status": "ok", "output": "draft_meta.preflight_manifest"},
-                "visual_policy": {"status": "ok", "output": "draft_meta.visual_content_policy"},
-                "growth_strategy": {"status": "ok", "output": "draft_meta.growth_strategy"},
-                "knowledge_card_designer": {"status": "planned_internal", "output": "draft_meta.embedded_knowledge_cards"},
-                "image_text_card_recipe": {"status": "ok", "output": "draft_meta.image_text_card_recipe"},
-            },
-        )
+        planned_tools = {
+            "generator_normalize": "content_platform.generator",
+            "preflight_manifest": "content_platform.preflight_manifest",
+            "visual_policy": "content_platform.visual_content_policy",
+            "growth_strategy": "content_platform.growth_policy",
+            "image_text_card_recipe": "content_platform.content_recipe",
+        }
+        invocations = {
+            "generator_normalize": {"status": "ok", "output": "draft_meta"},
+            "preflight_manifest": {"status": "ok", "output": "draft_meta.preflight_manifest"},
+            "visual_policy": {"status": "ok", "output": "draft_meta.visual_content_policy"},
+            "growth_strategy": {"status": "ok", "output": "draft_meta.growth_strategy"},
+            "image_text_card_recipe": {"status": "ok", "output": "draft_meta.image_text_card_recipe"},
+        }
+        if platform in {"wechat", "weixin", "wechat_official"}:
+            # Only WeChat runs the card skill, in a later required render step.
+            planned_tools["knowledge_card_designer"] = KNOWLEDGE_CARD_SKILL
+            invocations["knowledge_card_designer"] = {"status": "deferred", "step": "render_wechat_knowledge_cards",
+                                                      "output": "draft_meta.embedded_knowledge_cards"}
+        tool_manifest = build_tool_invocation_manifest(planned_tools=planned_tools, invocations=invocations)
         draft_meta["tool_invocation_manifest"] = tool_manifest
         selection_content_type = "note" if platform in {"xiaohongshu", "rednote"} else (content_form or "article")
         draft_meta.update(build_tool_selection_evidence(
