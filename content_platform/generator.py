@@ -866,7 +866,8 @@ class DraftGenerator:
                 "Use exactly eight short paragraphs separated by blank lines: hook, problem, three concrete steps, "
                 "case or caution, takeaway, and CTA. Do not write an article."
             ), 1800
-        return "Body must be 1200-2200 Chinese characters for Chinese articles or 900-1600 English words for English articles.", 5000
+        # The article gate counts characters without whitespace and needs 1200-3000; aim inside it with margin.
+        return "Body must be 1600-2600 Chinese characters (not counting spaces or line breaks) for Chinese articles or 900-1600 English words for English articles.", 5000
 
     def _normalize(self, draft, context, provider, topic="", brief=None):
         brief = brief or {}
