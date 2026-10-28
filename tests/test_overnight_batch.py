@@ -556,7 +556,10 @@ def test_growth_strategy_snapshot_status_reads_store_inventory(tmp_path: Path):
     assert status["wechat"]["status"] == "ok"
     assert status["wechat"]["compiled_strategy"]["version"] == "compiled_strategy_v1"
     assert status["wechat"]["runtime_growth_strategy"]["primary_metric"] == "click_through_rate"
-    assert status["zhihu"] == {"status": "missing", "key": "growth_strategy:zhihu:latest"}
+    # No snapshot: falls back to the compiled rulebook strategy with no runtime hints.
+    assert status["zhihu"]["status"] == "ok"
+    assert status["zhihu"]["runtime_snapshot"] == "missing"
+    assert status["zhihu"]["runtime_growth_strategy"] == {}
 
 
 def test_growth_strategy_snapshot_status_maps_twitter_to_the_x_strategy_snapshot(tmp_path: Path):

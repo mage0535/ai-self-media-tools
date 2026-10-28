@@ -739,7 +739,12 @@ def _source_matches(candidate_source: str, collected_source: str) -> bool:
 
 
 def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age_hours: int = 30) -> dict[str, dict[str, Any]]:
-    """Return per-platform strategy freshness for overnight fail-closed checks."""
+    """Return per-platform strategy freshness for overnight fail-closed checks.
+
+    performance-cycle no longer rebuilds platform-wide snapshots (verified-account
+    evidence only), so a missing or stale snapshot falls back to the compiled
+    rulebook strategy when its gate passes, as the normal channel cycle does.
+    """
     result: dict[str, dict[str, Any]] = {}
     for platform in platforms:
         normalized = str(platform or "").casefold()
@@ -748,32 +753,35 @@ def growth_strategy_snapshot_status(store: Any, platforms: list[str], *, max_age
         strategy_platform = STRATEGY_PLATFORM_ALIASES.get(normalized, normalized)
         key = f"growth_strategy:{strategy_platform}:latest"
         row = store.latest_tool_inventory(key)
-        if not row:
-            result[normalized] = {"status": "missing", "key": key}
-            continue
-        age_hours = _age_hours(row.get("created_at"))
-        if age_hours is not None and age_hours > max_age_hours:
-            result[normalized] = {"status": "stale", "key": key, "age_hours": round(age_hours, 2)}
-        else:
-            from .platform_workflow_context import load_platform_workflow_context
+        age_hours = _age_hours(row.get("created_at")) if row else None
+        snapshot = "missing" if not row else "stale" if age_hours is not None and age_hours > max_age_hours else "fresh"
+        from .platform_workflow_context import load_platform_workflow_context
 
+        try:
             context = load_platform_workflow_context(normalized)
-            compiled = context.get("strategy", {}).get("compiled")
-            if not isinstance(compiled, dict):
-                result[normalized] = {"status": "invalid", "key": key, "reason": "compiled growth strategy unavailable"}
-                continue
-            runtime_strategy = _runtime_growth_strategy(row.get("payload"))
-            compiled = {**compiled, "runtime_growth_strategy": runtime_strategy}
-            from .same_lane_intelligence import latest_same_lane_playbook
+        except Exception as exc:  # One platform's context must not abort the batch.
+            result[normalized] = {"status": "invalid", "key": key, "reason": str(exc)[:240]}
+            continue
+        compiled = context.get("strategy", {}).get("compiled")
+        if snapshot != "fresh" and not (context.get("strategy", {}).get("compiled_gate") or {}).get("passed"):
+            result[normalized] = {"status": snapshot, "key": key, "age_hours": round(age_hours, 2) if age_hours is not None else None}
+            continue
+        if not isinstance(compiled, dict):
+            result[normalized] = {"status": "invalid", "key": key, "reason": "compiled growth strategy unavailable"}
+            continue
+        runtime_strategy = _runtime_growth_strategy(row.get("payload")) if snapshot == "fresh" else {}
+        compiled = {**compiled, "runtime_growth_strategy": runtime_strategy}
+        from .same_lane_intelligence import latest_same_lane_playbook
 
-            result[normalized] = {
-                "status": "ok",
-                "key": key,
-                "age_hours": round(age_hours, 2) if age_hours is not None else None,
-                "compiled_strategy": compiled,
-                "runtime_growth_strategy": runtime_strategy,
-                "same_lane_intelligence": latest_same_lane_playbook(store, normalized),
-            }
+        result[normalized] = {
+            "status": "ok",
+            "key": key,
+            "age_hours": round(age_hours, 2) if age_hours is not None else None,
+            "runtime_snapshot": snapshot,
+            "compiled_strategy": compiled,
+            "runtime_growth_strategy": runtime_strategy,
+            "same_lane_intelligence": latest_same_lane_playbook(store, normalized),
+        }
     return result
 
 
