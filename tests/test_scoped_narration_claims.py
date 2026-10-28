@@ -38,3 +38,20 @@ def test_short_body_after_cleanup_still_blocks():
 
     assert runner.blocked == ["validate_factual_claims"]
     assert draft["body"] == "节省 3 小时。"
+
+
+def test_humanizer_uses_generator_timeout(monkeypatch):
+    seen = {}
+
+    def fake_call(prompt, system="", timeout=60):
+        seen["timeout"] = timeout
+        return '{"title": "工作流拆解", "body": "' + BODY + '", "changes": [], "score": 40}'
+
+    monkeypatch.setattr("content_platform.humanizer._hermes_llm_call", fake_call)
+    pipeline = SimpleNamespace(config={"generator": {"timeout": 600}}, store=SimpleNamespace(record_event=lambda *a: None),
+                               _validate_draft_structure=lambda item: None)
+    draft = {"title": "工作流拆解", "body": BODY}
+
+    Pipeline._humanize_draft(pipeline, "job", draft)
+
+    assert seen["timeout"] == 600

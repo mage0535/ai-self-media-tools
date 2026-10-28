@@ -1774,14 +1774,17 @@ class Pipeline:
             raise RuntimeError("content generator produced no body")
 
     def _humanize_draft(self, job_id, draft):
-        from .humanizer import humanize_text
+        from .humanizer import _hermes_llm_call, humanize_text
+        # The 60 s helper default is shorter than one Hermes call; use the generator's budget.
+        timeout=int((self.config.get('generator') or {}).get('timeout') or 600)
+        llm_call=lambda prompt,system:_hermes_llm_call(prompt,system,timeout=timeout)
         variants=[draft]+list((draft.get('draft_meta',{}).get('platform_drafts') or {}).values())
         visited=set()
         for item in variants:
             if id(item) in visited:continue
             visited.add(id(item))
             style_hint=item.get('draft_meta',{}).get('strategy',{}).get('tone','')
-            result=humanize_text(item['title'],item['body'],style_hint=style_hint)
+            result=humanize_text(item['title'],item['body'],style_hint=style_hint,llm_call=llm_call)
             if result.get('ok') is not True or result.get('error'):
                 self.store.record_event(job_id,'humanize_failed',{'error':str(result.get('error') or 'invalid_response')})
                 raise RuntimeError('required_text_transformation_failed')
