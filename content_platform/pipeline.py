@@ -2012,7 +2012,8 @@ class Pipeline:
         # Global optional audio capability is not a text/image delivery requirement.
         # Explicit audio/video/unknown plans retain the original required-source gate.
         if ('audio' in kinds and not audio_cfg.get('required')
-                and meta.get('content_form') in {'text','short_post','image_text','image_text_post'}
+                and meta.get('content_form') in {'text','short_post','image_text','image_text_post',
+                                                 'article','long_article','technical_article','evidence_answer'}
                 and isinstance(plan,list) and plan and all(isinstance(x,str) for x in plan)
                 and set(plan)<={'cover','content_images','image','images','caption','article','text'}
                 and not meta.get('voice_plan') and not meta.get('audio_plan')

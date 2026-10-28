@@ -39,3 +39,12 @@ def test_auto_image_chain_reports_why_earlier_providers_were_skipped(tmp_path, m
     result = ip.generate_image("p", tmp_path / "o.png")
     assert result["provider"] == "cloudflare"
     assert result["fallback_errors"] == ["go_gemini: ImageProviderError: no usable image payload"]
+
+
+def test_text_image_article_does_not_require_global_optional_audio():
+    from content_platform.pipeline import Pipeline
+
+    draft = {"title": "t", "body": "b", "draft_meta": {"content_form": "technical_article", "media_plan": ["cover", "article", "caption"]}}
+    assert Pipeline._execution_media_kinds({"audio", "image", "article"}, draft, {"media": {"audio": {"enabled": True}}}) == {"image"}
+    draft["draft_meta"]["voice_plan"] = [{"text": "x"}]
+    assert "audio" in Pipeline._execution_media_kinds({"audio", "image"}, draft, {})
