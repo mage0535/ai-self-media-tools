@@ -48,3 +48,11 @@ def test_text_image_article_does_not_require_global_optional_audio():
     assert Pipeline._execution_media_kinds({"audio", "image", "article"}, draft, {"media": {"audio": {"enabled": True}}}) == {"image"}
     draft["draft_meta"]["voice_plan"] = [{"text": "x"}]
     assert "audio" in Pipeline._execution_media_kinds({"audio", "image"}, draft, {})
+
+
+def test_release_context_reads_article_body_from_formatter_markdown():
+    from content_platform.mandatory_quality_context import _current_copy_components
+
+    job = {"title": "t", "body": "store body"}
+    assert _current_copy_components({"kind": "article", "title": "t", "markdown": "## 正文"}, job) == ("t", "## 正文")
+    assert _current_copy_components({"kind": "article", "title": "t", "html": "<p>x</p>"}, job) == ("t", "store body")

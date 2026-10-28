@@ -297,6 +297,10 @@ def _current_copy_components(content, job):
             title = job.get('title')
         if body is None:
             body = job.get('body')
+    if content.get('kind') == 'article' and body is None:
+        # Article formatters deliver the body as markdown (Juejin/Zhihu) or html (WeChat), never as "body".
+        markdown = content.get('markdown')
+        body = markdown if isinstance(markdown, str) and markdown.strip() else job.get('body')
     return title, body
 
 
