@@ -313,6 +313,7 @@ def build_due_tasks(
                             "trend_evidence_gate": {"mode": trend_evidence_mode, "passed": False, "reason": early_evidence_failure}})
                 tasks.append(row)
                 continue
+            analyzed_brief: dict[str, Any] = {}
             if topic_analyzer is not None and not any(
                 isinstance(value, dict) and value.get("scenario_contract")
                 for value in (raw, raw.get("dual_lane_work_plan"), raw.get("production_intent"))
@@ -327,7 +328,17 @@ def build_due_tasks(
                     row.update({"topic": selected["title"], "state": "blocked", "reason": analysis_error})
                     tasks.append(row)
                     continue
-                content_slot["scenario_contract"] = scenario
+                from .overnight_topic_analysis import flatten_scenario
+
+                content_slot["scenario_contract"] = flatten_scenario(scenario)
+                # The prompt compiler reads the structured scenario from the brief.
+                analyzed_brief = {
+                    "lane": "real_world_ai_implementation",
+                    "policy_profile": "real_world_ai_implementation_v1",
+                    "scenario": scenario,
+                    "real_world_ai_package": {"policy_profile": "real_world_ai_implementation_v1",
+                                              "scenario_count": 1, "scenario": scenario},
+                }
             quality_reference_pack = load_content_quality_reference_pack(
                 platform,
                 content_form=str(content_slot.get("content_form") or content_slot.get("stage") or ""),
@@ -403,6 +414,7 @@ def build_due_tasks(
                     "content_blueprint_gate": blueprint_gate,
                     "content_quality_reference_gate": quality_reference_gate,
                     "selection_mode": selection_mode,
+                    **analyzed_brief,
                     **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
                     **({"original_knowledge_intent": str(raw["original_knowledge_intent"]), "source_collection_required": True}
                        if selection_mode == "editorial_calendar" and raw.get("original_knowledge_intent") else {}),
@@ -442,6 +454,7 @@ def _candidate_has_native_source(platform: str, candidate: dict[str, Any]) -> bo
     """
     source = str(candidate.get("source") or "").casefold().strip()
     canonical = {str(platform or "").casefold().strip()}
+    canonical.update(CROSS_PLATFORM_EVIDENCE.get(next(iter(canonical)), set()))
     if platform in {"douyin_ai", "douyin_pet", "douyin"}:
         canonical.add("douyin")
     if platform in {"x", "twitter"}:
@@ -758,9 +771,14 @@ def prefer_platform_source_candidates(
     return native + other
 
 
+# WeChat MP has no collectable native hot feed (Sogou WeChat search is captcha-gated);
+# a topic verified on another domestic platform's native feed may be adapted for it.
+CROSS_PLATFORM_EVIDENCE = {"wechat": {"juejin", "bilibili", "douyin"}}
+
+
 def _platform_source_aliases(platform: str) -> set[str]:
     normalized = str(platform).casefold()
-    aliases = {normalized}
+    aliases = {normalized, *CROSS_PLATFORM_EVIDENCE.get(normalized, set())}
     if normalized == "x":
         aliases.add("twitter")
     if normalized == "xiaohongshu":

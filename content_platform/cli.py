@@ -967,6 +967,8 @@ def execute(args):
             reserved_topic_fingerprints=store.used_topics(lookback_days=7),
             topic_analyzer=lambda platform, candidate, slot: analyze_topic(config.get("generator", {}), platform, candidate, slot),
         )
+        from .overnight_benchmarks import attach_breakdowns
+        attach_breakdowns(prepared, report.get("items", []), Path(args.output).parent / "same-lane-benchmarks")
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(prepared, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")

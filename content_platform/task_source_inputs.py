@@ -104,6 +104,10 @@ def _observed_strategy_inputs(platform, public, *, now=None, normal_native_query
                 if len(exact)!=1 or any(exact[0].get(field)!=row.get(field) for field in
                         ('canonical_url','author','title','published_at','metrics','raw_response_hash')):
                     raise SourceInputsBlocked('source_strategy_observed_content_changed',{'platform':platform})
+            elif row.get('source')=='native.juejin_article':
+                from .juejin_native_article import verify_sample
+                if not verify_sample(row,raw):
+                    raise SourceInputsBlocked('source_strategy_observed_content_changed',{'platform':platform})
             else:
                 # 尚无该平台 typed 完整正文 parser，hash不能替代业务字段验证。
                 continue
