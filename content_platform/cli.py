@@ -874,6 +874,7 @@ def execute(args):
             prefer_platform_source_candidates,
             topic_keywords_for_slot,
         )
+        from .overnight_topic_analysis import analyze_topic
         raw_slots = json.loads(Path(args.slots).read_text(encoding="utf-8"))
         slots = raw_slots.get("slots", raw_slots.get("tasks", [])) if isinstance(raw_slots, dict) else raw_slots
         if not isinstance(slots, list):
@@ -964,6 +965,7 @@ def execute(args):
             trend_evidence_mode=(args.trend_evidence_mode or str(config.get("feature_flags", {}).get("real_platform_trend_evidence_mode", "shadow"))).casefold(),
             report_path=str(snapshot_path),
             reserved_topic_fingerprints=store.used_topics(lookback_days=7),
+            topic_analyzer=lambda platform, candidate, slot: analyze_topic(config.get("generator", {}), platform, candidate, slot),
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)

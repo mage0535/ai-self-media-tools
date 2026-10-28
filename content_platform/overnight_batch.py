@@ -180,8 +180,13 @@ def build_due_tasks(
     reserved_topic_fingerprints: set[str] | None = None,
     runtime_capabilities: dict[str, Any] | None = None,
     stage_payload_binder: Any | None = None,
+    topic_analyzer: Any | None = None,
 ) -> dict[str, Any]:
-    """Turn due-channel slots into independent, source-evidenced work rows."""
+    """Turn due-channel slots into independent, source-evidenced work rows.
+
+    ``topic_analyzer(platform, candidate, slot)`` returns the selected topic's
+    scenario contract when the slot carries none (overnight slots never do).
+    """
     def planning_bound_payload(contract,stage,payload):
         from .run_contract import bound_stage_payload
         prepared=stage_payload_binder(contract,stage,payload)if stage_payload_binder is not None else payload
@@ -282,7 +287,7 @@ def build_due_tasks(
             )
             trend_gate = validate_trend_candidate(trend_candidate)
             matrix = selected_matrix or _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
-            from .run_contract import bound_stage_payload, build_run_contract
+            from .run_contract import RunContractError, bound_stage_payload, build_run_contract
             from .content_blueprint import build_content_blueprint, validate_content_blueprint
             from .content_quality_reference import (
                 load_content_quality_reference_pack,
@@ -297,6 +302,32 @@ def build_due_tasks(
             content_slot = dict(raw)
             if isinstance(compiled_strategy, dict):
                 content_slot["strategy_compiled"] = compiled_strategy
+            early_evidence_failure = ""
+            if topic_analyzer is not None and selection_mode != "editorial_calendar" and trend_evidence_mode == "enforce":
+                if not trend_gate.get("passed"):
+                    early_evidence_failure = "trend candidate evidence below 8-attempt/5-success threshold"
+                elif not matrix["real_platform_collection_verified"]:
+                    early_evidence_failure = "platform-specific real trend collection missing"
+            if early_evidence_failure:
+                row.update({"topic": selected["title"], "state": "blocked", "reason": early_evidence_failure,
+                            "trend_evidence_gate": {"mode": trend_evidence_mode, "passed": False, "reason": early_evidence_failure}})
+                tasks.append(row)
+                continue
+            if topic_analyzer is not None and not any(
+                isinstance(value, dict) and value.get("scenario_contract")
+                for value in (raw, raw.get("dual_lane_work_plan"), raw.get("production_intent"))
+            ):
+                try:
+                    scenario = topic_analyzer(platform, selected, raw)
+                except Exception as exc:  # The row is blocked with the reason; other channels continue.
+                    scenario, analysis_error = None, f"topic analysis failed: {str(exc)[:200]}"
+                else:
+                    analysis_error = "" if scenario else "topic analysis returned no eligible scenario"
+                if not scenario:
+                    row.update({"topic": selected["title"], "state": "blocked", "reason": analysis_error})
+                    tasks.append(row)
+                    continue
+                content_slot["scenario_contract"] = scenario
             quality_reference_pack = load_content_quality_reference_pack(
                 platform,
                 content_form=str(content_slot.get("content_form") or content_slot.get("stage") or ""),
@@ -313,26 +344,43 @@ def build_due_tasks(
                 video_effect_registry=runtime_capabilities.get("video_effect_modules") or {},
                 planned_manifest=raw.get("tool_invocation_manifest") or {},
             )
-            content_blueprint = build_content_blueprint(
-                platform,
-                str(selected["title"]),
-                content_slot,
-                matrix,
-                quality_reference_pack=quality_reference_pack,
-            )
+            try:
+                content_blueprint = build_content_blueprint(
+                    platform,
+                    str(selected["title"]),
+                    content_slot,
+                    matrix,
+                    quality_reference_pack=quality_reference_pack,
+                )
+            except ValueError as exc:  # BLD1: a failed blueprint blocks this row only.
+                row.update({"topic": selected["title"], "state": "blocked", "reason": str(exc)[:300]})
+                tasks.append(row)
+                continue
             blueprint_gate = validate_content_blueprint(content_blueprint)
-            bounded_model_input = planning_bound_payload(
-                run_contract,
-                "generate",
-                {
-                    "content_blueprint": content_blueprint,
-                    "claim_ledger": list(raw.get("claim_ledger") or []),
-                    "tool_selection_plan": tool_evidence["tool_selection_plan"],
-                    "strategy": compact_compiled_strategy(compiled_strategy),
-                    "content_quality_reference_pack": quality_reference_pack,
-                    "runtime_capabilities": build_runtime_capability_snapshot(),
-                },
-            )
+            planning_payload = {
+                "content_blueprint": content_blueprint,
+                "claim_ledger": list(raw.get("claim_ledger") or []),
+                "tool_selection_plan": tool_evidence["tool_selection_plan"],
+                "strategy": compact_compiled_strategy(compiled_strategy),
+                "content_quality_reference_pack": quality_reference_pack,
+                "runtime_capabilities": build_runtime_capability_snapshot(),
+            }
+            try:
+                bounded_model_input = planning_bound_payload(run_contract, "generate", planning_payload)
+            except RunContractError as exc:
+                if stage_payload_binder is not None or "payload exceeds" not in str(exc):
+                    raise
+                # Pipeline.run rebinds the full payload per job (by reference when large);
+                # the planning copy keeps only the task-specific parts.
+                compact = {key: value for key, value in planning_payload.items()
+                           if key not in {"content_quality_reference_pack", "runtime_capabilities", "tool_selection_plan"}}
+                try:
+                    bounded_model_input = planning_bound_payload(run_contract, "generate", compact)
+                except RunContractError as again:
+                    sizes = {key: len(json.dumps(value, ensure_ascii=False)) for key, value in compact.items()}
+                    row.update({"topic": selected["title"], "state": "blocked", "reason": f"{again} {sizes}"[:300]})
+                    tasks.append(row)
+                    continue
             selected_topics.setdefault(
                 _topic_identity(selected),
                 {"platform": platform, "adaptation": adaptation, "signal": signal, "stage": str(raw.get("stage") or "")},

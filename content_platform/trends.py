@@ -362,6 +362,8 @@ class DirectTrendSource:
             "youtube": "AI workflow automation productivity site:youtube.com",
             "tiktok": "AI workflow automation productivity site:tiktok.com",
         }
+        if self.name == "juejin":
+            return self._juejin_hot(platform_queries["juejin"])
         if self.name in platform_queries:
             return self._web_search_source(self.name, platform_queries[self.name])
         if self.name == "bilibili":
@@ -592,6 +594,28 @@ class DirectTrendSource:
                 "author": (row.get("owner") or {}).get("name", ""),
             })
         return items
+
+    def _juejin_hot(self, fallback_query):
+        """Juejin's public AI-category hot ranking (no login); web search only as fallback."""
+        category = str(self.config.get("category_id") or "6809637773935378440")
+        try:
+            payload = self._request_json(f"https://api.juejin.cn/content_api/v1/content/article_rank?category_id={category}&type=hot")
+        except Exception:
+            return self._web_search_source("juejin", fallback_query)
+        items = []
+        for row in (payload.get("data") or [])[: self.limit]:
+            content = row.get("content") or {}
+            title = str(content.get("title") or "").strip()
+            if not title or not content.get("content_id"):
+                continue
+            items.append({
+                "title": title,
+                "source": "juejin",
+                "url": f"https://juejin.cn/post/{content['content_id']}",
+                "points": int((row.get("content_counter") or {}).get("hot_rank") or 0),
+                "author": (row.get("author") or {}).get("name", ""),
+            })
+        return items or self._web_search_source("juejin", fallback_query)
 
     def _zhihu_cli_hot(self):
         """Zhihu hot list via official open-platform CLI first, then cookie CLI."""
