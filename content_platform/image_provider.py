@@ -460,6 +460,14 @@ def _extract_go_gemini_image(body: dict) -> bytes:
                 return base64.b64decode(b64, validate=True)
             except (ValueError, binascii.Error) as exc:
                 raise ImageProviderError("go Gemini returned invalid base64 image data") from exc
+    # Some gateways (e.g. Antigravity) return the image as a markdown data URL in content.
+    content = body["choices"][0]["message"].get("content")
+    match = re.search(r"!\[[^\]]*\]\((data:image/[\w.+-]+;base64,[A-Za-z0-9+/=\s]+)\)", content) if isinstance(content, str) else None
+    if match:
+        try:
+            return base64.b64decode(re.sub(r"\s", "", match.group(1).split(",", 1)[1]), validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ImageProviderError("go Gemini returned invalid image data URL") from exc
     raise ImageProviderError("go Gemini response contained no usable image payload")
 
 

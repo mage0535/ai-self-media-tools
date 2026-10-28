@@ -160,6 +160,15 @@ def test_go_gemini_chat_completions_supports_generation_and_edit(tmp_path, monke
     assert requests[1]["messages"][0]["content"][0]["type"] == "image_url"
 
 
+def test_go_gemini_reads_markdown_data_url_from_content():
+    from content_platform.image_provider import _extract_go_gemini_image
+
+    image_bytes = b"\xff\xd8" + b"x" * 3000
+    body = {"choices": [{"message": {"content": "![image](data:image/jpeg;base64," + base64.b64encode(image_bytes).decode() + ")"}}]}
+
+    assert _extract_go_gemini_image(body) == image_bytes
+
+
 def test_auto_provider_chain_assigns_generation_and_edit_tasks(monkeypatch):
     monkeypatch.delenv("IMAGE_PROVIDER_CHAIN", raising=False)
     monkeypatch.delenv("IMAGE_PROVIDER_ALLOW_PAID", raising=False)
