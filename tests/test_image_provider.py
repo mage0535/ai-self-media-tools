@@ -169,6 +169,17 @@ def test_go_gemini_reads_markdown_data_url_from_content():
     assert _extract_go_gemini_image(body) == image_bytes
 
 
+def test_sensenova_key_falls_back_to_hermes_provider_key_env(tmp_path, monkeypatch):
+    from content_platform.image_provider import _hermes_provider_secret
+
+    (tmp_path / "config.yaml").write_text("custom_providers:\n  - name: sensenova\n    key_env: SN_TEST_KEY\n", encoding="utf-8")
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("SN_TEST_KEY", "sn-value")
+
+    assert _hermes_provider_secret("sensenova") == "sn-value"
+    assert _hermes_provider_secret("missing") == ""
+
+
 def test_auto_provider_chain_assigns_generation_and_edit_tasks(monkeypatch):
     monkeypatch.delenv("IMAGE_PROVIDER_CHAIN", raising=False)
     monkeypatch.delenv("IMAGE_PROVIDER_ALLOW_PAID", raising=False)

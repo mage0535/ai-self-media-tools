@@ -335,6 +335,19 @@ def _go_channel_config() -> tuple[str, str]:
     return base_url.rstrip("/"), key_env
 
 
+def _hermes_provider_secret(name: str) -> str:
+    """Read the key of a named Hermes custom provider through its key_env, never its value."""
+    config_path = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))) / "config.yaml"
+    try:
+        import yaml
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        provider = next(item for item in config.get("custom_providers", []) if item.get("name") == name)
+    except (OSError, StopIteration, TypeError, ValueError, ImportError):
+        return ""
+    key_env = str(provider.get("key_env") or "").strip()
+    return load_secret(key_env) if key_env else ""
+
+
 def _go_urlopen(request, timeout: int):
     """Use direct networking unless the operator explicitly opts into proxying."""
     if os.environ.get("GO_GEMINI_USE_SYSTEM_PROXY") == "1":
@@ -774,7 +787,7 @@ def _sensenova_image(
     input_image: str | Path | None = None,
 ) -> dict:
     """SenseNova U1.5 Lite (primary) / U1 Fast (fallback) via OpenAI-compatible API."""
-    api_key = load_secret("SN_API_KEY")
+    api_key = load_secret("SN_API_KEY") or _hermes_provider_secret("sensenova")
     if not api_key:
         raise ImageProviderError("SN_API_KEY is not configured")
     base_url = (
@@ -800,7 +813,8 @@ def _sensenova_image(
         if m.strip()
     ]
     if not models:
-        models = ["sensenova-u1.5-lite", "sensenova-u1-fast"]
+        # sensenova-u1-fast is no longer listed by token.sensenova.cn (checked 2026-10-28).
+        models = ["sensenova-u1.5-lite"]
 
     last_error: Exception | None = None
     for model_name in models:
