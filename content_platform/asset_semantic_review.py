@@ -185,6 +185,11 @@ def route_config():
     raw = path.read_bytes()
     cfg = strict_json(raw.decode('utf-8'))['generator']
     route = {key: str(cfg.get(key) or '').strip() for key in ('hermes_command', 'hermes_provider', 'hermes_model')}
+    # A pixel review needs a route Hermes declares as native vision; it may differ from the text route.
+    if str(cfg.get('vision_provider') or '').strip() and str(cfg.get('vision_model') or '').strip():
+        route.update(hermes_provider=str(cfg['vision_provider']).strip(), hermes_model=str(cfg['vision_model']).strip())
+        # Hermes records a named custom provider under its canonical billing name.
+        route['billing_provider'] = str(cfg.get('vision_billing_provider') or 'custom').strip()
     if not all(route.values()):
         raise ValueError('pinned_generator_route_missing')
     role = Path(os.environ.get('HERMES_HOME', '/unavailable'))/'node-role.json'
@@ -241,7 +246,7 @@ def verify_session(session, route, path):
         if not identity:
             raise ValueError('semantic_session_schema_missing')
         row=db.execute('SELECT model,billing_provider,billing_mode,tool_call_count,api_call_count FROM sessions WHERE '+identity+'=?',(session,)).fetchone()
-    if not row or row[0] != route['model'] or row[1] != route['provider'] or row[3] != 0 or row[4] != 1:
+    if not row or row[0] != route['model'] or row[1] != route.get('billing_provider', route['provider']) or row[3] != 0 or row[4] != 1:
         raise ValueError('semantic_session_execution_mismatch')
     return {'session_id':session,'model':row[0],'provider':row[1],'billing_mode':row[2],
             'tool_call_count':row[3],'api_call_count':row[4]}
@@ -353,7 +358,8 @@ def review_asset(path, topic, section, provider_result=None, *, invoke=None, che
             from .video_asset_semantics import digest as context_digest
             audit['context_sha256']=context_digest(context)
             audit['current_policy_sources']=current_policy_sources
-        audit['route'] = {'provider':route['hermes_provider'], 'model':route['hermes_model']}
+        audit['route'] = {'provider':route['hermes_provider'], 'model':route['hermes_model'],
+                          **({'billing_provider':route['billing_provider']} if route.get('billing_provider') else {})}
         audit['image_input_mode'] = (check_native or native_mode)(route)
         if audit['image_input_mode'] != 'native':
             raise ValueError('pinned_route_not_native_vision')

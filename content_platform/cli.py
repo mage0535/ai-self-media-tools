@@ -1258,6 +1258,9 @@ def main(argv=None):
         raw_argv = tuple(sys.argv[1:] if argv is None else argv)
         args = parser().parse_args(raw_argv)
         args._raw_argv = raw_argv
+        if getattr(args, "config", None):
+            # Pixel review reads its pinned route from the trusted task config this command runs with.
+            os.environ.setdefault("CONTENT_PLATFORM_CONFIG", str(Path(args.config).resolve()))
         result = execute(args)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 2 if isinstance(result, _RoutedResult) and result.get('ok') is False else 0
