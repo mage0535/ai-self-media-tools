@@ -920,6 +920,8 @@ class MediaBridge:
         input_image = job.get("draft_meta", {}).get("image_reference") or job.get("draft_meta", {}).get("input_image")
         if input_image:
             extra_args.extend(["--input-image", str(input_image)])
+        chain = str(cfg.get("provider_chain") or "").strip()
+        run_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": chain}} if chain else {}
         images = []
         used_checksums = set()
         used_visual_signatures = []
@@ -928,7 +930,7 @@ class MediaBridge:
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
             prompt = item["prompt"]
             for attempt in range(4):
-                provider_result = provider.run(prompt, output, extra_args)
+                provider_result = provider.run(prompt, output, extra_args, **run_kwargs)
                 if not isinstance(provider_result, dict):
                     raise RuntimeError("image provider returned invalid metadata")
                 if not output.is_file():
@@ -1716,7 +1718,7 @@ class MediaBridge:
                 encoding="utf-8",
             )
         image_paths = self._existing_image_paths(job, output_dir)
-        image_cfg = dict(self.config.get("image", {}))
+        image_cfg = self._video_image_cfg()
         required_count = max(1, int(self.config.get("video", {}).get("visual_image_count", 8)))
         if not image_paths and image_cfg.get("enabled", False):
             image_cfg.setdefault("min_count", required_count)
@@ -1787,6 +1789,15 @@ class MediaBridge:
             result["stock_video_source"] = "pixabay_video"
         return result
 
+    def _video_image_cfg(self):
+        # Video needs 8 backgrounds per job; config can give it its own provider chain so it does not
+        # drain the Antigravity (Gemini) quota that articles and Kiki share.
+        cfg = dict(self.config.get("image") or {})
+        chain = str((self.config.get("video") or {}).get("image_provider_chain") or "").strip()
+        if chain:
+            cfg["provider_chain"] = chain
+        return cfg
+
     def _prepare_semantic_video_assets(self,job,output_dir,plan):
         from .video_asset_semantics import validate_requirement,validate_assignments
         requirements=[validate_requirement(req) for req in plan['video_asset_requirements']]
@@ -1808,7 +1819,7 @@ class MediaBridge:
                 assignments.append(row)
             validate_assignments(scenes,assignments)
             return {'source':'media.verified_revision_assets','image_count':8,'scene_count':8,'assignments':assignments}
-        self._generate_image(job,directory,dict(self.config.get('image') or {}),semantic_requirements=requirements)
+        self._generate_image(job,directory,self._video_image_cfg(),semantic_requirements=requirements)
         provenance=json.loads((directory/'asset_provenance.json').read_text(encoding='utf-8'))
         records={row.get('beat_id'):row for row in provenance.get('assets') or []}
         backgrounds=output_dir/'backgrounds';backgrounds.mkdir(parents=True,exist_ok=True)

@@ -44,8 +44,8 @@ class ScriptAnalyzerProvider(_BaseScriptProvider):
 
 
 class ScriptImageProvider(_BaseScriptProvider):
-    def run(self, prompt, output, extra_args=None):
-        result = self._run(prompt, ["--output", str(output), *(extra_args or [])])
+    def run(self, prompt, output, extra_args=None, env=None):
+        result = self._run(prompt, ["--output", str(output), *(extra_args or [])], env=env)
         if not isinstance(result, dict):
             raise RuntimeError("image provider returned a non-object result")
         result.setdefault("path", str(output))
