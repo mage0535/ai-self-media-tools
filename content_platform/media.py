@@ -1163,8 +1163,9 @@ class MediaBridge:
     @staticmethod
     def _strict_article_images(job):
         platforms = {str(p).casefold() for p in job.get("platforms", [])}
+        # Matches the article completion gate, which requires reviewed, section-bound images on these platforms.
         return bool((job.get("brief") or {}).get("run_contract")) and bool(
-            platforms & {"wechat", "wechat_official"})
+            platforms & {"wechat", "wechat_official", "zhihu", "juejin"})
 
     @staticmethod
     def _article_image_sections(job):
@@ -1303,7 +1304,8 @@ class MediaBridge:
     def _article_sections(job):
         meta_sections = (job.get("draft_meta") or {}).get("sections") or []
         if isinstance(meta_sections, list) and meta_sections:
-            return [str(item)[:80] for item in meta_sections if str(item).strip()]
+            titles = [str(item.get("title") or "") if isinstance(item, dict) else str(item) for item in meta_sections]
+            return [title[:80] for title in titles if title.strip()]
         body = str(job.get("body") or "")
         parts = [part.strip().replace("\n", " ") for part in body.split("\n\n") if len(part.strip()) > 40]
         return [part[:80] for part in parts[:6]]
