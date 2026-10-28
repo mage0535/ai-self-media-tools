@@ -109,7 +109,7 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(task["platform"], "wechat")
         self.assertEqual(task["topic"], "AI workflow")
 
-    def test_overnight_prepare_blocks_due_slot_without_growth_strategy_snapshot(self):
+    def test_overnight_prepare_uses_compiled_strategy_without_growth_strategy_snapshot(self):
         slots = self.root / "slots.json"
         output = self.root / "prepared.json"
         slots.write_text(json.dumps([{"platform": "zhihu", "estimate_minutes": 15}]), encoding="utf-8")
@@ -118,13 +118,16 @@ class CliV2Tests(unittest.TestCase):
             "sources": [{"source": "github", "status": "ok", "count": 1}],
             "summary": {"items": 1},
         }
-        with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report):
+        with patch("content_platform.cli.TrendCollector.collect_with_report", return_value=report), \
+                patch("content_platform.overnight_topic_analysis.analyze_topic", return_value=None) as analyzer:
             code, result = self.call("overnight-prepare", "--slots", str(slots), "--output", str(output))
         self.assertEqual(code, 0)
         self.assertEqual(result["status"], "prepared")
         task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
+        # The snapshot gate now falls back to the compiled strategy; the row reaches topic analysis.
+        analyzer.assert_called_once()
         self.assertEqual(task["state"], "blocked")
-        self.assertEqual(task["reason"], "growth strategy snapshot missing")
+        self.assertEqual(task["reason"], "topic analysis returned no eligible scenario")
 
     def test_overnight_prepare_shadows_missing_real_platform_evidence_before_enforcement(self):
         slots = self.root / "slots.json"
@@ -196,7 +199,7 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(result["completed"], 1)
 
-    def test_auto_command_blocks_platform_without_growth_strategy_snapshot(self):
+    def test_auto_command_without_snapshot_blocks_on_trend_evidence(self):
         report = {
             "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
             "sources": [{"source": "github", "status": "ok", "count": 1}],
@@ -206,7 +209,7 @@ class CliV2Tests(unittest.TestCase):
             code, result = self.call("auto", "--platform", "zhihu", "--limit", "1")
         self.assertEqual(code, 0)
         self.assertEqual(result[0]["state"], "blocked")
-        self.assertEqual(result[0]["last_error"], "growth strategy snapshot missing")
+        self.assertEqual(result[0]["last_error"], "platform-specific real trend collection missing")
 
     def test_delivery_readiness_command_returns_tool_summary(self):
         fake_result = {"publishers": {"wechat": {"type": "wechat-draft"}}, "tools": {"social_auto_upload": {"project_dir_exists": True}}}
