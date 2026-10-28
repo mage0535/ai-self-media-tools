@@ -48,6 +48,19 @@ def test_flatten_scenario_gives_the_six_blueprint_strings():
     assert "抽取用户偏好" in flat["process"] and "写入知识库并检索" in flat["process"]
 
 
+def test_flatten_scenario_is_bounded_for_the_payload_limit():
+    long = "很长的说明" * 40
+    steps = [{"action": long, "ai_function": "x", "output": long} for _ in range(6)]
+    flat = flatten_scenario(parse_scenario(_scenario(
+        inputs=[{"type": long, "source": "s", "example_or_schema": long}] * 5,
+        process={"steps": steps}, boundaries=[{"detail": long}] * 5)))
+
+    weights = {"actor": 4, "inputs": 5, "process": 7, "outcome": 6, "boundaries": 9, "human_handoff": 3}
+    assert flat["process"].count("→") == 3
+    # Blueprint reuse weights: worst case must stay well inside the 16 KB generate payload.
+    assert sum(len(flat[key].encode("utf-8")) * weight for key, weight in weights.items()) <= 7000
+
+
 def test_analyze_topic_sends_source_as_untrusted_observation():
     seen = {}
 

@@ -48,7 +48,7 @@ def build_prompt(platform: str, candidate: dict[str, Any], slot: dict[str, Any])
         + json.dumps(source, ensure_ascii=False)
         + "\nDefine one practical scenario that this source supports. Do not invent facts, numbers, results or quotes; "
         "anything the source does not show is a boundary or a step the reader verifies. Nothing here was measured by us. "
-        f"Write every value as a concrete {language} phrase of at most 80 characters about this topic (not generic advice). "
+        f"Write every value as a concrete {language} phrase of at most 36 characters about this topic (not generic advice). "
         f"DOMAINS: {json.dumps(_pillars())}. Return ONLY one JSON object of this shape:\n{SCHEMA}\n"
         'If the source cannot support a practical scenario, return {"eligible": false}.'
     )
@@ -75,16 +75,26 @@ def parse_scenario(text: str) -> dict[str, Any] | None:
     return scenario
 
 
+def _clip(value: Any, limit: int = 36) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def flatten_scenario(scenario: dict[str, Any]) -> dict[str, str]:
-    """The six plain strings the content blueprint compiles its plan from."""
+    """The six plain strings the content blueprint compiles its plan from.
+
+    The blueprint repeats these strings ~34 times (boundaries 9x, process 7x),
+    so each part is bounded to keep the generate payload inside the
+    run-contract limit.  The full structured scenario stays in the brief.
+    """
     actor, outcome, handoff = scenario["actor"], scenario["outcome"], scenario["human_handoff"]
     return {
-        "actor": f"{actor['role']}（{actor['context']}）",
-        "inputs": "；".join(f"{row['type']}：{row['example_or_schema']}" for row in scenario["inputs"]),
-        "process": "；".join(f"{row['action']} → {row['output']}" for row in scenario["process"]["steps"]),
-        "outcome": f"{outcome['deliverable']}：{outcome['value_or_verification']}",
-        "boundaries": "；".join(row["detail"] for row in scenario["boundaries"]),
-        "human_handoff": f"{handoff['responsible_role']}：{handoff['review_or_action']}（{handoff['acceptance_or_escalation_rule']}）",
+        "actor": f"{_clip(actor['role'], 16)}（{_clip(actor['context'], 24)}）",
+        "inputs": "；".join(f"{_clip(row['type'], 12)}：{_clip(row['example_or_schema'], 24)}" for row in scenario["inputs"][:2]),
+        "process": "；".join(f"{_clip(row['action'], 20)} → {_clip(row['output'], 20)}" for row in scenario["process"]["steps"][:3]),
+        "outcome": f"{_clip(outcome['deliverable'], 24)}：{_clip(outcome['value_or_verification'], 30)}",
+        "boundaries": _clip(scenario["boundaries"][0]["detail"], 30),
+        "human_handoff": f"{_clip(handoff['responsible_role'], 12)}：{_clip(handoff['review_or_action'], 24)}（{_clip(handoff['acceptance_or_escalation_rule'], 24)}）",
     }
 
 
