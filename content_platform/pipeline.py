@@ -1937,6 +1937,10 @@ class Pipeline:
                     mapping_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
             if mapping_path.is_file():
                 self._register_auxiliary_artifact(job_id, "section_image_map", mapping_path)
+            # Generated article images carry their source/license per asset in this file; it is their rights record.
+            provenance_path = mapping_path.parent / "asset_provenance.json"
+            if not artifact.get("auxiliary_artifacts") and provenance_path.is_file():
+                self._register_auxiliary_artifact(job_id, "rights", provenance_path)
             return artifact
         self.store.add_artifact(job_id, artifact["kind"], artifact["path"], artifact.get("checksum", ""))
         return artifact
@@ -2265,6 +2269,10 @@ class Pipeline:
                 file_record(manifest['plan_ref']['path'],manifest['plan_ref']['sha256'])
                 for row in auxiliary:
                     owned.append((row['kind'],row['kind'],row['path'],row,'generate_or_collect_images'))
+            elif produced_images:
+                provenance_path=str(Path(self.data_dir)/'artifacts'/str(job_id)/'asset_provenance.json')
+                if ('rights',provenance_path) in artifact_by_identity:
+                    owned.append(('rights','rights',provenance_path,{},'generate_or_collect_images'))
             if normalized == 'wechat':
                 root=Path(self.data_dir)/'artifacts'/str(job_id)
                 article_rows=[row for row in artifacts if row['kind']=='wechat_format' and Path(row['path']).name=='wechat_review.html']
