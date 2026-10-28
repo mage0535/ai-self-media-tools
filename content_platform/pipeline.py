@@ -1317,6 +1317,17 @@ class Pipeline:
             text=str(variant.get('title') or '')+'\n'+str(variant.get('body') or '')+'\n'+_draft_script_text(variant)
             ledger=list(brief.get('claim_ledger') or [])
             claim=validate_claims(text,ledger)
+            if brief.get('run_contract') and not claim.get('passed'):
+                # Same rule as the main claim gate: drop unsupported sentences, keep only a clean, non-trivial body.
+                cleaned_title=sanitize_unsupported_claims(variant.get('title') or '',claim.get('findings')) or str(variant.get('title') or '')
+                cleaned_body=sanitize_unsupported_claims(variant.get('body') or '',claim.get('findings'))
+                cleaned_text=cleaned_title+'\n'+cleaned_body+'\n'+_draft_script_text(variant)
+                cleaned_claim=validate_claims(cleaned_text,ledger)
+                if len(cleaned_body)>=80 and cleaned_claim.get('passed'):
+                    variant['title'],variant['body'],text=cleaned_title,cleaned_body,cleaned_text
+                    variant.setdefault('draft_meta',{})['claim_sanitization']={'removed_count':len([row for row in claim.get('findings') or [] if not row.get('covered')]),
+                        'original_gate':claim,'passed':True}
+                    claim=cleaned_claim
             risk=self.risk.evaluate(text)
             compliance=self.compliance.evaluate(text,brief,[platform])
             results[platform]={'claims':claim,'geo':geo_check(text),'risk':risk,'compliance':compliance,
