@@ -209,7 +209,7 @@ def test_due_task_builder_allows_evidenced_natural_overlap_with_distinct_executi
         strict_trend_evidence=True,
     )
 
-    assert [task["state"] for task in prepared["tasks"]] == ["ready_for_plan", "ready_for_plan"]
+    assert not any("topic analysis" in task.get("reason", "") for task in prepared["tasks"])
     assert prepared["tasks"][1]["brief"]["platform_source_matrix"]["platform_internal_verified"] is True
 
 
@@ -803,3 +803,38 @@ def test_ai_lanes_reject_ai_entertainment_but_keep_practical_topics():
     assert not candidate_fits_lane("kuaishou", {"title": "AI 演唱会", "category": "音乐综合"})
     assert candidate_fits_lane("zhihu", {"title": "AI Agent 之 用户记忆和知识库", "category": "计算机技术"})
     assert candidate_fits_lane("douyin_pet", {"title": "AI 猫咪 MV", "category": "动物二创"})
+
+
+def test_due_task_builder_moves_past_an_ineligible_topic_and_shares_the_analysis():
+    from tests.test_overnight_topic_analysis import _scenario
+
+    calls = []
+
+    def analyze(platform, candidate, _slot):
+        calls.append((platform, candidate["title"]))
+        return None if candidate["title"] == "Job loss panic" else json.loads(_scenario())
+
+    def rank(platform, _items, _slot):
+        return [{"title": "Job loss panic", "source": platform, "fingerprint": "panic"},
+                {"title": f"AI review workflow {platform}", "source": platform, "fingerprint": f"flow-{platform}"}]
+
+    prepared = _build_due_tasks(
+        [{"platform": "juejin"}, {"platform": "zhihu"}],
+        items=[], source_report=[], rank_for_platform=rank, topic_analyzer=analyze,
+    )
+
+    assert [task["topic"] for task in prepared["tasks"]] == ["AI review workflow juejin", "AI review workflow zhihu"]
+    assert not any("topic analysis" in task.get("reason", "") for task in prepared["tasks"])
+    assert calls.count(("juejin", "Job loss panic")) == 1 and not any(c == ("zhihu", "Job loss panic") for c in calls)
+
+
+def test_due_task_builder_blocks_when_every_analysed_topic_is_ineligible():
+    prepared = _build_due_tasks(
+        [{"platform": "juejin"}], items=[], source_report=[],
+        rank_for_platform=lambda platform, *_: [{"title": f"t{i}", "source": platform, "fingerprint": f"t{i}"} for i in range(5)],
+        topic_analyzer=lambda *_: None,
+    )
+
+    assert prepared["tasks"][0]["state"] == "blocked"
+    assert prepared["tasks"][0]["reason"] == "topic analysis returned no eligible scenario"
+    assert prepared["tasks"][0]["ineligible_candidates_analysed"] == 3

@@ -193,6 +193,9 @@ def build_due_tasks(
         return bound_stage_payload(contract,stage,prepared)
     tasks: list[dict[str, Any]] = []
     selected_topics: dict[str, dict[str, str]] = {}
+    # r43: nine lanes each analysed the same ineligible top topic and were all blocked.  A lane now
+    # moves on to its next candidate, and an analysis is shared by lanes using the same prompt family.
+    analyses: dict[tuple[str, str], Any] = {}
     reserved_topic_fingerprints = {str(value).strip() for value in (reserved_topic_fingerprints or set()) if str(value).strip()}
     trend_evidence_mode = str(trend_evidence_mode or ("enforce" if strict_trend_evidence else "off")).casefold()
     growth_strategy_status = growth_strategy_status or {}
@@ -239,6 +242,10 @@ def build_due_tasks(
             selected = None
             rejected_candidate = None
             rejected_matrix = None
+            needs_analysis = topic_analyzer is not None and not any(
+                isinstance(value, dict) and value.get("scenario_contract")
+                for value in (raw, raw.get("dual_lane_work_plan"), raw.get("production_intent")))
+            analysed, ineligible, pre_analysis = 0, 0, None
             for candidate in candidates:
                 identity = _topic_identity(candidate)
                 if identity in reserved_topic_fingerprints:
@@ -254,9 +261,34 @@ def build_due_tasks(
                     rejected_matrix = rejected_matrix or matrix
                     continue
                 if previous is None or _allows_evidenced_overlap(platform, candidate, raw, previous, source_report, strategy):
+                    if needs_analysis:
+                        if analysed >= 3:
+                            break
+                        from .overnight_topic_analysis import ENGLISH_PLATFORMS
+
+                        family = "pet" if platform == "douyin_pet" else ("en" if platform in ENGLISH_PLATFORMS else "zh")
+                        key = (identity, family)
+                        if key not in analyses:
+                            analysed += 1
+                            try:
+                                analyses[key] = (topic_analyzer(platform, candidate, raw), "")
+                            except Exception as exc:  # Not cached: blocks this row only, never retried.
+                                pre_analysis = (None, f"topic analysis failed: {str(exc)[:200]}")
+                                selected, selected_matrix = candidate, matrix
+                                break
+                        if analyses[key][0] is None:
+                            ineligible += 1
+                            continue
+                        pre_analysis = analyses[key]
                     selected = candidate
                     selected_matrix = matrix
                     break
+            if not selected and ineligible:
+                row.update({"topic": candidates[0]["title"], "state": "blocked",
+                            "reason": "topic analysis returned no eligible scenario",
+                            "ineligible_candidates_analysed": ineligible})
+                tasks.append(row)
+                continue
             if not selected:
                 if editorial is None:
                     if rejected_candidate is not None:
@@ -318,12 +350,15 @@ def build_due_tasks(
                 isinstance(value, dict) and value.get("scenario_contract")
                 for value in (raw, raw.get("dual_lane_work_plan"), raw.get("production_intent"))
             ):
-                try:
-                    scenario = topic_analyzer(platform, selected, raw)
-                except Exception as exc:  # The row is blocked with the reason; other channels continue.
-                    scenario, analysis_error = None, f"topic analysis failed: {str(exc)[:200]}"
-                else:
-                    analysis_error = "" if scenario else "topic analysis returned no eligible scenario"
+                if pre_analysis is not None:
+                    scenario, analysis_error = pre_analysis
+                else:  # Editorial or fallback selections were not analysed in the candidate loop.
+                    try:
+                        scenario = topic_analyzer(platform, selected, raw)
+                    except Exception as exc:  # The row is blocked with the reason; other channels continue.
+                        scenario, analysis_error = None, f"topic analysis failed: {str(exc)[:200]}"
+                    else:
+                        analysis_error = "" if scenario else "topic analysis returned no eligible scenario"
                 if not scenario:
                     row.update({"topic": selected["title"], "state": "blocked", "reason": analysis_error})
                     tasks.append(row)

@@ -197,15 +197,19 @@ def _metadata(candidate: dict[str, Any], work: Path, run) -> tuple[dict[str, Any
     return fields, path, _write(path, raw)
 
 
-def _download(platform: str, url: str, work: Path, run) -> Path:
+def _download(platform: str, url: str, duration: Any, work: Path, run) -> Path:
     proxy = ["--proxy", PROXIES[platform], "--js-runtimes", "node"] if PROXIES[platform] else []
+    # A section cut streams through ffmpeg and is slow over the proxy (TikTok timed out in r43);
+    # short videos are downloaded whole.
+    cut = [] if 0 < float(duration or 0) <= CLIP_SECONDS + 30 else ["--download-sections", f"*0-{CLIP_SECONDS}"]
     command = [MEDIA_PYTHON, "-m", "yt_dlp", "-q", "--no-warnings", "--no-playlist", *proxy,
-               "-f", "bv*[height<=480]+ba/b[height<=480]/worst", "--download-sections", f"*0-{CLIP_SECONDS}",
+               "-f", "bv*[height<=480]+ba/b[height<=480]/worst", *cut,
                "--merge-output-format", "mp4", "-o", str(work / "clip.%(ext)s"), url]
     proc = run(command, capture_output=True, text=True, timeout=300, check=False)
     clips = sorted(work.glob("clip.*"))
     if proc.returncode or not clips:
-        raise ValueError("video_download_failed")
+        errors = [line for line in str(proc.stderr or "").splitlines() if line.startswith("ERROR")]
+        raise ValueError("video_download_failed:" + (errors[-1][:120] if errors else f"rc={proc.returncode}"))
     return clips[0]
 
 
@@ -228,6 +232,10 @@ def _keyframes(clip: Path, duration: float, work: Path, run) -> tuple[list[dict[
         path = work / f"frame-{index}.jpg"
         run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", str(moment), "-i", str(clip), "-frames:v", "1",
              "-vf", "scale=320:-2", str(path)], capture_output=True, timeout=60, check=False)
+        if not path.is_file():  # The video stream can end before the container; seek accurately, 1 s earlier.
+            moment = round(max(0.0, moment - 1.0), 2)
+            run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(clip), "-ss", str(moment), "-frames:v", "1",
+                 "-vf", "scale=320:-2", str(path)], capture_output=True, timeout=120, check=False)
         if not path.is_file():
             raise ValueError("video_keyframe_missing")
         frames.append({"t": moment, "path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
@@ -281,7 +289,7 @@ def observe_video(candidate: dict[str, Any], out_dir: Path, *, run=subprocess.ru
     work = out_dir / f"{platform}-{candidate['id']}"
     work.mkdir(parents=True, exist_ok=True, mode=0o700)
     fields, metadata_path, metadata_sha = _metadata(candidate, work, run)
-    clip = _download(platform, candidate["url"], work, run)
+    clip = _download(platform, candidate["url"], fields.get("duration"), work, run)
     duration = _probe_duration(clip, run)
     if duration <= 0:
         raise ValueError("video_clip_empty")

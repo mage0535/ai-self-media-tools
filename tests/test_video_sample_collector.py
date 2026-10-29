@@ -45,7 +45,7 @@ def _fake_pipeline(tmp_path, monkeypatch, language="zh"):
         {"title": "AI 剪辑实战", "author": "up", "published_at": published, "duration": 300,
          "metrics": {"view": 10}}, meta, hashlib.sha256(b"{}").hexdigest()))
     clip = tmp_path / "clip.mp4"
-    monkeypatch.setattr(videos, "_download", lambda platform, url, work, run: (clip.write_bytes(b"x"), clip)[1])
+    monkeypatch.setattr(videos, "_download", lambda platform, url, duration, work, run: (clip.write_bytes(b"x"), clip)[1])
     monkeypatch.setattr(videos, "_probe_duration", lambda clip, run: 120.0)
     monkeypatch.setattr(videos, "_scene_cuts", lambda clip, run: [3.0, 9.5])
     sheet = tmp_path / "sheet.jpg"
@@ -113,3 +113,16 @@ def test_bilibili_risk_control_code_is_an_error_not_an_empty_feed(monkeypatch):
     with pytest.raises(ValueError, match="bilibili_api_code_-352"):
         videos._get_json("https://api.bilibili.com/x/web-interface/ranking/v2?rid=188&type=all")
     assert opener.urls[0] == "https://www.bilibili.com/"
+
+
+def test_short_videos_are_downloaded_whole_and_long_ones_cut(tmp_path):
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        (tmp_path / "clip.mp4").write_bytes(b"x")
+        return __import__("types").SimpleNamespace(returncode=0, stderr="")
+
+    videos._download("tiktok", "u", 61, tmp_path, run)
+    videos._download("bilibili", "u", 900, tmp_path, run)
+    assert "--download-sections" not in commands[0] and "--download-sections" in commands[1]
