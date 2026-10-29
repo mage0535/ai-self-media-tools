@@ -1294,7 +1294,10 @@ class MediaBridge:
         base = cls._image_prompt(job)
         return (
             f"{base} Layout: {design.get('layout_key') or 'hero_conflict'}. "
-            f"Hook: {design.get('hook') or job.get('title') or job.get('topic') or ''}. "
+            # The title is the cover's headline; the opening paragraph is only the story behind it
+            # (passing it as the hook made the model paint a paragraph onto the poster).
+            f"Headline text on the cover: {job.get('title') or job.get('topic') or ''}. "
+            f"Story behind it, not to be written out: {str(design.get('hook') or '')[:120]}. "
             f"Conflict or payoff: {design.get('conflict_or_payoff') or 'show problem and result'}. "
             f"Focal subjects: {', '.join(str(item) for item in design.get('focal_subjects') or [])}. "
             "Create a high-click narrative poster with strong focal hierarchy and mobile-safe text, not a screenshot plus caption."

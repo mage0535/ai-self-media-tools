@@ -113,3 +113,17 @@ def test_humanizer_rewrite_that_drops_most_of_an_article_is_rejected(monkeypatch
 
     assert draft["body"] == article and draft["title"] == "原标题"
     assert [e[1] for e in events] == ["humanize_rejected_short"]
+
+
+def test_failed_humanizer_call_keeps_the_original_draft(monkeypatch):
+    monkeypatch.setattr("content_platform.humanizer._hermes_llm_call", lambda prompt, system="", timeout=60: "not json")
+    events = []
+    pipeline = SimpleNamespace(config={"generator": {"timeout": 600}},
+                               store=SimpleNamespace(record_event=lambda *a: events.append(a)),
+                               _validate_draft_structure=lambda item: None)
+    draft = {"title": "原标题", "body": BODY, "draft_meta": {"strategy": {"content_form": "technical_article"}}}
+
+    Pipeline._humanize_draft(pipeline, "job", draft)
+
+    assert draft["body"] == BODY and draft["title"] == "原标题"
+    assert events[0][1] == "humanize_failed" and events[0][2]["kept_original"] is True

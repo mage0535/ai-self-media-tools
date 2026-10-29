@@ -579,9 +579,14 @@ class DirectTrendSource:
             payload = self._request_json(f"https://api.bilibili.com/x/web-interface/popular?ps={min(self.limit, 50)}&pn=1")
         except Exception:
             return self._web_search_source("bilibili", "AI 工具 效率 工作流 site:bilibili.com")
-        rows = payload.get("data", {}).get("list", [])
+        rows = payload.get("data", {}).get("list", [])[: self.limit]
+        try:  # The tech ranking carries the AI-practice videos the popular list rarely has.
+            tech = self._request_json("https://api.bilibili.com/x/web-interface/ranking/v2?rid=188&type=all")
+            rows += (tech.get("data") or {}).get("list", [])[: self.limit]
+        except Exception:
+            pass
         items = []
-        for row in rows[: self.limit]:
+        for row in rows:
             title = str(row.get("title") or "").strip()
             if not title:
                 continue
@@ -592,6 +597,7 @@ class DirectTrendSource:
                 "url": row.get("short_link_v2") or row.get("short_link") or row.get("uri", ""),
                 "points": int(stat.get("view") or 0) + int(stat.get("like") or 0) * 2 + int(stat.get("danmaku") or 0),
                 "author": (row.get("owner") or {}).get("name", ""),
+                "category": str(row.get("tname") or ""),
             })
         return items
 

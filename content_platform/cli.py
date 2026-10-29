@@ -870,6 +870,7 @@ def execute(args):
             build_due_tasks,
             candidate_matches_topic_keywords,
             candidate_matches_platform_language,
+            candidate_fits_lane,
             growth_strategy_snapshot_status,
             prefer_platform_source_candidates,
             topic_keywords_for_slot,
@@ -940,6 +941,7 @@ def execute(args):
                 for candidate in ranked
                 if candidate_matches_topic_keywords(candidate, keywords)
                 and candidate_matches_platform_language(platform, candidate)
+                and candidate_fits_lane(platform, candidate)
             ]
             return prefer_platform_source_candidates(platform, candidates, report.get("sources", []))
 
@@ -948,6 +950,7 @@ def execute(args):
             return (
                 candidate_matches_topic_keywords(candidate, keywords)
                 and candidate_matches_platform_language(platform, candidate)
+                and candidate_fits_lane(platform, candidate)
             )
 
         prepared = build_due_tasks(

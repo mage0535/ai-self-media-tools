@@ -127,6 +127,17 @@ class TrendTests(unittest.TestCase):
 
         self.assertEqual(items[0]["source"], "bilibili:web_search")
 
+    def test_bilibili_adds_the_tech_ranking_and_records_the_category(self):
+        def fake(self, url, **kwargs):
+            row = {"title": "Popular" if "popular" in url else "AI 工作流", "tname": "搞笑" if "popular" in url else "计算机技术",
+                   "stat": {"view": 1}, "uri": url}
+            return {"data": {"list": [row]}}
+
+        with patch.object(DirectTrendSource, "_request_json", fake):
+            items = DirectTrendSource("bilibili", {"limit": 5}).collect()
+
+        self.assertEqual([(item["title"], item["category"]) for item in items], [("Popular", "搞笑"), ("AI 工作流", "计算机技术")])
+
     def test_zhihu_uses_cli_hot_and_douyin_uses_native_hot_board(self):
         with patch.object(DirectTrendSource, "_zhihu_cli_hot", return_value=[{"title": "AI tool topic", "source": "zhihu", "points": 1}]) as hot:
             items = DirectTrendSource("zhihu", {"limit": 5}).collect()

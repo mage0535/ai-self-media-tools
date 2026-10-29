@@ -742,6 +742,25 @@ def candidate_matches_topic_keywords(candidate: dict[str, Any], keywords: list[s
     )
 
 
+# Bilibili categories and title markers of AI *entertainment* (AI music videos, AI-made dramas):
+# they match "AI" but cannot support a practical AI-workflow post (r42 picked an AI MV for Zhihu).
+ENTERTAINMENT_CATEGORIES = ("音乐", "鬼畜", "影视", "舞蹈", "动画", "游戏", "电子竞技", "搞笑", "娱乐", "综艺", "明星", "番剧", "国创")
+ENTERTAINMENT_MARKERS = ("ai mv", "mv大赛", "ai翻唱", "ai全民制作人", "ai短剧", "ai漫剧", "续集", "现场版")
+
+
+def candidate_fits_lane(platform: str, candidate: dict[str, Any]) -> bool:
+    """AI lanes need a practical AI subject, not AI-generated entertainment; the pet lane is exempt."""
+    if str(platform).casefold() == "douyin_pet":
+        return True
+    category = str(candidate.get("category") or "")
+    title = re.sub(r"\s+", " ", str(candidate.get("title") or "").casefold())
+    if any(word in category for word in ENTERTAINMENT_CATEGORIES):
+        return False
+    if any(marker in title or marker.replace(" ", "") in title for marker in ENTERTAINMENT_MARKERS):
+        return False
+    return re.search(r"第[0-9一二三四五六七八九十百]+[回集话]", title) is None  # serial episodes
+
+
 def candidate_matches_platform_language(platform: str, candidate: dict[str, Any]) -> bool:
     """Prevent Chinese domestic headlines from being routed into English lanes."""
     if str(platform).casefold() not in {"twitter", "youtube", "tiktok"}:

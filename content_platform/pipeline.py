@@ -1787,8 +1787,11 @@ class Pipeline:
             style_hint=item.get('draft_meta',{}).get('strategy',{}).get('tone','')
             result=humanize_text(item['title'],item['body'],style_hint=style_hint,llm_call=llm_call)
             if result.get('ok') is not True or result.get('error'):
-                self.store.record_event(job_id,'humanize_failed',{'error':str(result.get('error') or 'invalid_response')})
-                raise RuntimeError('required_text_transformation_failed')
+                # Owner-delegated policy 10-29: a failed rewrite call (~2/9 runs: timeout, unparseable reply)
+                # keeps the original draft; the later quality gates (authenticity, burstiness...) judge it. No retry.
+                self.store.record_event(job_id,'humanize_failed',{'error':str(result.get('error') or 'invalid_response'),
+                    'kept_original':True})
+                continue
             before_chars=len(re.sub(r'\s+','',str(item.get('body') or '')))
             content_form=str(((item.get('draft_meta') or {}).get('strategy') or {}).get('content_form') or '')
             after_chars=len(re.sub(r'\s+','',str(result['body'])))

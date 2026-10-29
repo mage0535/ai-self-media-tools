@@ -793,3 +793,13 @@ def test_manual_video_handoff_is_blocked_when_the_pipeline_returns_no_video_or_c
     assert summary["status"] == "partial"
     assert summary["tasks"][0]["state"] == "blocked"
     assert summary["tasks"][0]["reason"] == "handoff_media_missing"
+
+
+def test_ai_lanes_reject_ai_entertainment_but_keep_practical_topics():
+    from content_platform.overnight_batch import candidate_fits_lane
+
+    assert not candidate_fits_lane("zhihu", {"title": "⚡赵本山《Smooth Criminal》⚡现场版【AI MV大赛】"})
+    assert not candidate_fits_lane("bilibili", {"title": "武林外传续集：第八十五回【AI全民制作人】"})
+    assert not candidate_fits_lane("kuaishou", {"title": "AI 演唱会", "category": "音乐综合"})
+    assert candidate_fits_lane("zhihu", {"title": "AI Agent 之 用户记忆和知识库", "category": "计算机技术"})
+    assert candidate_fits_lane("douyin_pet", {"title": "AI 猫咪 MV", "category": "动物二创"})

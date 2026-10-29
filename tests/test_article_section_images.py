@@ -56,3 +56,12 @@ def test_release_context_reads_article_body_from_formatter_markdown():
     job = {"title": "t", "body": "store body"}
     assert _current_copy_components({"kind": "article", "title": "t", "markdown": "## 正文"}, job) == ("t", "## 正文")
     assert _current_copy_components({"kind": "article", "title": "t", "html": "<p>x</p>"}, job) == ("t", "store body")
+
+
+def test_cover_prompt_puts_the_title_on_the_cover_and_only_summarises_the_opening():
+    opening = "为什么很多号称具备长期记忆的 AI Agent，总在跨会话行程规划的关键节点上翻车？" * 4
+    job = {"title": "别把向量库当记忆", "topic": "AI Agent 记忆", "body": BODY,
+           "draft_meta": {"cover_design": {"hook": opening, "layout_key": "hero_conflict"}}}
+    prompt = MediaBridge._cover_prompt(job)
+    assert "Headline text on the cover: 别把向量库当记忆." in prompt
+    assert opening not in prompt and opening[:120] in prompt
