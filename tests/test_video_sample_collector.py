@@ -16,7 +16,7 @@ def test_pet_feed_keeps_cats_and_dogs_but_not_pandas():
                 {"bvid": "BV2", "title": "巴啦啦小熊猫", "tname": "电子竞技"},
                 {"bvid": "BV3", "title": "大熊猫吃竹子", "tname": "野生动物"},
                 {"bvid": "BV4", "title": "今日份", "tname": "汪星人"})
-    assert [row["id"] for row in videos.bilibili_candidates("pet", get=get)] == ["BV1", "BV4"] * 4
+    assert [row["id"] for row in videos.bilibili_candidates("pet", get=get)] == ["BV1", "BV4"]
 
 
 def test_ai_feed_matches_whole_ascii_words_only():
@@ -94,3 +94,22 @@ def test_feed_keeps_recent_ai_videos_most_viewed_first():
     rows = videos._ranked("tiktok", [dict(row, uploader="openai") for row in entries], "feed", "0" * 64)
     assert [row["id"] for row in rows] == ["b", "a"]
     assert rows[0]["url"] == "https://www.tiktok.com/@openai/video/b" and rows[0]["platform"] == "tiktok"
+
+
+def test_bilibili_risk_control_code_is_an_error_not_an_empty_feed(monkeypatch):
+    import io
+
+    class Opener:
+        def __init__(self):
+            self.urls = []
+
+        def open(self, request, timeout):
+            self.urls.append(request.full_url)
+            return io.BytesIO(b"<html>" if request.full_url.endswith(".com/") else b'{"code": -352, "data": null}')
+
+    opener = Opener()
+    monkeypatch.setattr(videos.urllib.request, "build_opener", lambda *handlers: opener)
+    monkeypatch.setattr(videos, "_VISITOR", videos.http.cookiejar.CookieJar())
+    with pytest.raises(ValueError, match="bilibili_api_code_-352"):
+        videos._get_json("https://api.bilibili.com/x/web-interface/ranking/v2?rid=188&type=all")
+    assert opener.urls[0] == "https://www.bilibili.com/"

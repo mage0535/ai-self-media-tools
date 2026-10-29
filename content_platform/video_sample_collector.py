@@ -10,6 +10,7 @@ raw observation is stored so the breakdown can be re-verified from bytes.
 from __future__ import annotations
 
 import hashlib
+import http.cookiejar
 import json
 import os
 import re
@@ -68,12 +69,24 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+_VISITOR = http.cookiejar.CookieJar()
+
+
 def _get_json(url: str, *, proxy: str | None = None, referer: str = "") -> tuple[bytes, Any]:
     handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {})
+    opener = urllib.request.build_opener(handler, urllib.request.HTTPCookieProcessor(_VISITOR))
+    if "bilibili.com" in url and not any(cookie.name == "buvid3" for cookie in _VISITOR):
+        # Bilibili answers anonymous API calls with -352 (risk control) until the visitor holds the
+        # anonymous buvid3 cookie the homepage sets; no login is involved.
+        with opener.open(urllib.request.Request("https://www.bilibili.com/", headers={"User-Agent": UA}), timeout=20) as page:
+            page.read(1000)
     request = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": referer})
-    with urllib.request.build_opener(handler).open(request, timeout=20) as response:
+    with opener.open(request, timeout=20) as response:
         raw = response.read(5_000_000)
-    return raw, json.loads(raw)
+    data = json.loads(raw)
+    if "bilibili.com" in url and data.get("code") not in (0, None):
+        raise ValueError(f"bilibili_api_code_{data.get('code')}")
+    return raw, data
 
 
 def _write(path: Path, data: bytes) -> str:
@@ -92,10 +105,10 @@ def _matches(text: str, words: tuple[str, ...]) -> bool:
 # ---- feeds: public popularity lists, no login ----
 
 def bilibili_candidates(feed: str, *, get=_get_json) -> list[dict[str, Any]]:
-    """Bilibili tech ranking (feed "ai") or the popular list (feed "pet"), filtered by title/category words."""
+    """Bilibili tech ranking (feed "ai", rid 188) or animal ranking (feed "pet", rid 217), filtered by
+    title/category words."""
     referer = "https://www.bilibili.com/"
-    urls = (["https://api.bilibili.com/x/web-interface/ranking/v2?rid=188&type=all"] if feed == "ai" else
-            [f"https://api.bilibili.com/x/web-interface/popular?ps=50&pn={page}" for page in (1, 2, 3, 4)])
+    urls = [f"https://api.bilibili.com/x/web-interface/ranking/v2?rid={188 if feed == 'ai' else 217}&type=all"]
     rows = []
     for url in urls:
         raw, data = get(url, referer=referer)
