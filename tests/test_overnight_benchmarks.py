@@ -40,3 +40,16 @@ def test_video_lanes_share_one_bilibili_observation_and_keep_its_platform(tmp_pa
 
     assert calls == [1] and platforms == ["bilibili"] * 3
     assert all(task["brief"]["cross_platform_source"] == "bilibili" for task in prepared["tasks"])
+
+
+def test_xiaohongshu_takes_the_juejin_article_reference_without_reading_xiaohongshu(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "juejin", lambda items, out: calls.append(1) or ["row"])
+    monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
+                        lambda platform, public: {"viral_breakdown": {"platform": platform}})
+    prepared = {"tasks": [{"platform": "xiaohongshu", "state": "ready_for_plan"}]}
+
+    overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
+
+    assert calls == [1] and prepared["tasks"][0]["state"] == "ready_for_plan"
+    assert prepared["tasks"][0]["brief"]["cross_platform_source"] == "juejin"

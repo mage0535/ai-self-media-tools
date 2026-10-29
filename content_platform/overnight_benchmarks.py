@@ -38,6 +38,8 @@ COLLECTORS = {
 # and is marked cross_platform_source.
 LANE_COLLECTORS = {
     "juejin": ("juejin", "juejin"), "zhihu": ("juejin", "juejin"), "wechat": ("juejin", "juejin"),
+    # Xiaohongshu is never read automatically (owner rule); its carousel takes the article reference.
+    "xiaohongshu": ("juejin", "juejin"),
     **{lane: ("bilibili_ai", "bilibili") for lane in ("bilibili", "douyin", "douyin_ai", "kuaishou", "shipinhao")},
     "douyin_pet": ("bilibili_pet", "bilibili"),
     "tiktok": ("tiktok_ai", "tiktok"),
