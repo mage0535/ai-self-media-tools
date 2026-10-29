@@ -34,7 +34,7 @@ def test_video_lanes_share_one_bilibili_observation_and_keep_its_platform(tmp_pa
     monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "bilibili_ai", lambda items, out: calls.append(1) or ["row"])
     monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
                         lambda platform, public: platforms.append(platform) or {"viral_breakdown": {}})
-    prepared = {"tasks": [{"platform": lane, "state": "ready_for_plan"} for lane in ("kuaishou", "tiktok", "douyin_ai")]}
+    prepared = {"tasks": [{"platform": lane, "state": "ready_for_plan"} for lane in ("kuaishou", "shipinhao", "douyin_ai")]}
 
     overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
 

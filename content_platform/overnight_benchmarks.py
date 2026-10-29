@@ -18,24 +18,30 @@ def _juejin(items: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
     return collect_samples(hot, out_dir / "juejin")
 
 
-def _bilibili(feed: str):
+def _videos(name: str, feed):
     def collect(items: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
-        from .video_sample_collector import bilibili_candidates, collect_samples
+        from . import video_sample_collector as videos
 
-        return collect_samples(bilibili_candidates(feed), out_dir / f"bilibili-{feed}")
+        return videos.collect_samples(feed(videos), out_dir / name)
     return collect
 
 
-COLLECTORS = {"juejin": _juejin, "bilibili_ai": _bilibili("ai"), "bilibili_pet": _bilibili("pet")}
+COLLECTORS = {
+    "juejin": _juejin,
+    "bilibili_ai": _videos("bilibili_ai", lambda videos: videos.bilibili_candidates("ai")),
+    "bilibili_pet": _videos("bilibili_pet", lambda videos: videos.bilibili_candidates("pet")),
+    "tiktok_ai": _videos("tiktok_ai", lambda videos: videos.tiktok_candidates()),
+    "youtube_ai": _videos("youtube_ai", lambda videos: videos.youtube_candidates()),
+}
 # Owner 10-28: lanes without their own typed collector use another platform's real public samples.
 # lane -> (collector, platform the samples were observed on); the breakdown keeps that platform
 # and is marked cross_platform_source.
 LANE_COLLECTORS = {
     "juejin": ("juejin", "juejin"), "zhihu": ("juejin", "juejin"), "wechat": ("juejin", "juejin"),
-    # YouTube asks a datacenter IP to sign in (10-29), so YouTube/TikTok also use Bilibili samples.
-    **{lane: ("bilibili_ai", "bilibili") for lane in
-       ("bilibili", "douyin", "douyin_ai", "kuaishou", "shipinhao", "youtube", "tiktok")},
+    **{lane: ("bilibili_ai", "bilibili") for lane in ("bilibili", "douyin", "douyin_ai", "kuaishou", "shipinhao")},
     "douyin_pet": ("bilibili_pet", "bilibili"),
+    "tiktok": ("tiktok_ai", "tiktok"),
+    "youtube": ("youtube_ai", "youtube"),
 }
 
 

@@ -1,4 +1,4 @@
-"""Typed public video samples for same-lane breakdowns (Bilibili).
+"""Typed public video samples for same-lane breakdowns (Bilibili, TikTok, YouTube).
 
 A few popular public videos per night are observed without login: the first
 two minutes are downloaded, scene cuts are measured with ffmpeg, the speech is
@@ -14,19 +14,28 @@ import json
 import os
 import re
 import subprocess
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SOURCE = "native.bilibili_video"
 MEDIA_PYTHON = "/srv/media-runtime/venv/bin/python3"  # has yt_dlp
 ASR_PYTHON = "/srv/media-runtime/asr-venv/bin/python3"  # has faster_whisper
 ASR_MODEL = "/srv/media-runtime/asr-models/faster-whisper-small"
+# TikTok answers NEW's US proxy; YouTube asks that IP to sign in, so it goes out through OLD's
+# US proxy (OLD hermes-video-egress.service: NetBird 21080, NEW peer only).
+PROXIES = {"bilibili": None, "tiktok": "http://127.0.0.1:2080", "youtube": "http://100.93.72.152:21080"}
+# Public AI-product accounts verified 10-29 (posting within 30 days); hashtag pages need login.
+TIKTOK_ACCOUNTS = ("openai", "chatgpt", "microsoft", "google", "capcut", "canva")
+YOUTUBE_QUERIES = ("AI tools tutorial", "AI agent workflow")
+# Samples must match the lane's audience language (a Hindi masterclass topped "AI tools tutorial").
+LANGUAGES = {"bilibili": "zh", "tiktok": "en", "youtube": "en"}
+RECENT_DAYS = 30
 CLIP_SECONDS = 120
 FRAMES = 9
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-AI_WORDS = ("ai", "agent", "gpt", "claude", "gemini", "deepseek", "llm", "大模型", "人工智能", "智能体", "模型", "机器人", "自动化")
+AI_WORDS = ("ai", "agent", "gpt", "chatgpt", "openai", "codex", "copilot", "claude", "gemini", "deepseek", "llm", "大模型", "人工智能", "智能体", "模型", "机器人", "自动化")
 PET_WORDS = ("猫", "狗", "喵", "汪", "柯基", "柴犬", "布偶", "金毛")
 PET_CATEGORIES = ("喵星人", "汪星人")
 
@@ -37,7 +46,7 @@ from faster_whisper import WhisperModel
 w = wave.open(sys.argv[2])
 audio = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
 model = WhisperModel(sys.argv[1], device="cpu", compute_type="int8", cpu_threads=8)
-segments, info = model.transcribe(audio, vad_filter=True, initial_prompt=sys.argv[3])
+segments, info = model.transcribe(audio, vad_filter=True, initial_prompt=sys.argv[3] or None)
 rows = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()} for s in segments]
 print(json.dumps({"language": info.language, "probability": round(info.language_probability, 3), "segments": rows}, ensure_ascii=False))
 """
@@ -97,31 +106,87 @@ def bilibili_candidates(feed: str, *, get=_get_json) -> list[dict[str, Any]]:
             else:  # cats and dogs only; "熊猫" (panda) is not a pet
                 wanted = category in PET_CATEGORIES or ("动物" in category and _matches(title.replace("熊猫", ""), PET_WORDS))
             if wanted and item.get("bvid"):
-                rows.append({"id": item["bvid"], "url": f"https://www.bilibili.com/video/{item['bvid']}",
+                rows.append({"platform": "bilibili", "id": item["bvid"], "url": f"https://www.bilibili.com/video/{item['bvid']}",
                              "feed_url": url, "feed_sha256": hashlib.sha256(raw).hexdigest()})
+    return rows
+
+
+def _yt_dlp_json(platform: str, url: str, run, *extra: str) -> str:
+    proc = run([MEDIA_PYTHON, "-m", "yt_dlp", "--proxy", PROXIES[platform], "--js-runtimes", "node", "-J", *extra, url],
+               capture_output=True, text=True, timeout=180, check=False)
+    if proc.returncode:
+        raise ValueError(f"{platform}_metadata_unavailable")
+    return proc.stdout
+
+
+def _ranked(platform: str, entries: list[dict[str, Any]], feed_url: str, feed_sha256: str) -> list[dict[str, Any]]:
+    """Recent AI videos of a flat feed, most viewed first."""
+    oldest = datetime.now(timezone.utc).timestamp() - RECENT_DAYS * 86400
+    kept = [entry for entry in entries if entry.get("id") and (entry.get("timestamp") or oldest) >= oldest
+            and _matches(f"{entry.get('title') or ''} {entry.get('description') or ''}", AI_WORDS)]
+    kept.sort(key=lambda entry: entry.get("view_count") or 0, reverse=True)
+    urls = {"tiktok": "https://www.tiktok.com/@{uploader}/video/{id}", "youtube": "https://www.youtube.com/watch?v={id}"}
+    return [{"platform": platform, "id": entry["id"], "feed_url": feed_url, "feed_sha256": feed_sha256,
+             "url": urls[platform].format(uploader=entry.get("uploader") or "_", id=entry["id"])} for entry in kept]
+
+
+def tiktok_candidates(*, run=subprocess.run) -> list[dict[str, Any]]:
+    rows = []
+    for account in TIKTOK_ACCOUNTS:
+        url = f"https://www.tiktok.com/@{account}"
+        try:
+            raw = _yt_dlp_json("tiktok", url, run, "--flat-playlist", "--playlist-end", "15")
+        except ValueError:
+            continue
+        rows += _ranked("tiktok", json.loads(raw).get("entries") or [], url, hashlib.sha256(raw.encode()).hexdigest())
+    return rows
+
+
+def youtube_candidates(*, run=subprocess.run) -> list[dict[str, Any]]:
+    """Most-viewed uploads of this week for a few AI queries (YouTube search sp: views, this week)."""
+    rows = []
+    for query in YOUTUBE_QUERIES:
+        url = "https://www.youtube.com/results?" + urllib.parse.urlencode({"search_query": query, "sp": "CAMSAggD"})
+        try:
+            raw = _yt_dlp_json("youtube", url, run, "--flat-playlist", "--playlist-end", "10")
+        except ValueError:
+            continue
+        rows += _ranked("youtube", json.loads(raw).get("entries") or [], url, hashlib.sha256(raw.encode()).hexdigest())
     return rows
 
 
 # ---- per-video observation ----
 
-def _metadata(candidate: dict[str, Any], work: Path) -> tuple[dict[str, Any], Path, str]:
+def _metadata(candidate: dict[str, Any], work: Path, run) -> tuple[dict[str, Any], Path, str]:
     """Official metadata response (stored) and the fields read from it."""
-    raw, data = _get_json(f"https://api.bilibili.com/x/web-interface/view?bvid={candidate['id']}",
-                          referer="https://www.bilibili.com/")
-    view = data.get("data") or {}
-    stat = view.get("stat") or {}
-    fields = {"title": view.get("title"), "author": (view.get("owner") or {}).get("name"),
-              "published_at": datetime.fromtimestamp(int(view["pubdate"]), timezone.utc).isoformat(),
-              "description": view.get("desc") or "", "duration": view.get("duration"),
-              "metrics": {key: stat.get(key) for key in ("view", "like", "coin", "favorite", "share", "reply", "danmaku")}}
+    if candidate["platform"] == "bilibili":
+        raw, data = _get_json(f"https://api.bilibili.com/x/web-interface/view?bvid={candidate['id']}",
+                              referer="https://www.bilibili.com/")
+        view = data.get("data") or {}
+        stat = view.get("stat") or {}
+        fields = {"title": view.get("title"), "author": (view.get("owner") or {}).get("name"),
+                  "published_at": datetime.fromtimestamp(int(view["pubdate"]), timezone.utc).isoformat(),
+                  "description": view.get("desc") or "", "duration": view.get("duration"),
+                  "metrics": {key: stat.get(key) for key in ("view", "like", "coin", "favorite", "share", "reply", "danmaku")}}
+    else:
+        text = _yt_dlp_json(candidate["platform"], candidate["url"], run, "--skip-download", "--no-playlist")
+        raw, view = text.encode("utf-8"), json.loads(text)
+        stamp = view.get("timestamp") or datetime.strptime(str(view.get("upload_date")), "%Y%m%d").replace(tzinfo=timezone.utc).timestamp()
+        fields = {"title": view.get("title"), "author": view.get("channel") or view.get("uploader"),
+                  "published_at": datetime.fromtimestamp(int(stamp), timezone.utc).isoformat(),
+                  "description": str(view.get("description") or "")[:2000], "duration": view.get("duration"),
+                  "metrics": {key: view.get(f"{key}_count") for key in ("view", "like", "comment", "repost")}}
+        if view.get("language") and not str(view["language"]).startswith(LANGUAGES[candidate["platform"]]):
+            raise ValueError("video_language_mismatch:" + str(view["language"])[:8])
     if not fields["title"] or not fields["author"] or not any(fields["metrics"].values()):
         raise ValueError("video_metadata_fields_missing")
     path = work / "metadata.json"
     return fields, path, _write(path, raw)
 
 
-def _download(url: str, work: Path, run) -> Path:
-    command = [MEDIA_PYTHON, "-m", "yt_dlp", "-q", "--no-warnings", "--no-playlist",
+def _download(platform: str, url: str, work: Path, run) -> Path:
+    proxy = ["--proxy", PROXIES[platform], "--js-runtimes", "node"] if PROXIES[platform] else []
+    command = [MEDIA_PYTHON, "-m", "yt_dlp", "-q", "--no-warnings", "--no-playlist", *proxy,
                "-f", "bv*[height<=480]+ba/b[height<=480]/worst", "--download-sections", f"*0-{CLIP_SECONDS}",
                "--merge-output-format", "mp4", "-o", str(work / "clip.%(ext)s"), url]
     proc = run(command, capture_output=True, text=True, timeout=300, check=False)
@@ -161,14 +226,15 @@ def _keyframes(clip: Path, duration: float, work: Path, run) -> tuple[list[dict[
     return frames, sheet
 
 
-def _transcribe(clip: Path, work: Path, run) -> dict[str, Any]:
+def _transcribe(platform: str, clip: Path, work: Path, run) -> dict[str, Any]:
     audio = work / "audio.wav"
     run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(clip), "-vn", "-ac", "1", "-ar", "16000", str(audio)],
         capture_output=True, timeout=120, check=False)
     if not audio.is_file():
         return {"language": "", "segments": [], "reason": "no_audio_track"}
-    # The prompt steers Chinese output to simplified characters.
-    proc = run([ASR_PYTHON, "-c", ASR_SCRIPT, ASR_MODEL, str(audio), "以下是普通话的句子。"],
+    # The prompt steers Chinese output to simplified characters; other platforms detect the language.
+    hint = "以下是普通话的句子。" if platform == "bilibili" else ""
+    proc = run([ASR_PYTHON, "-c", ASR_SCRIPT, ASR_MODEL, str(audio), hint],
                capture_output=True, text=True, timeout=600, check=False)
     if proc.returncode:
         raise ValueError("video_asr_failed")
@@ -198,17 +264,20 @@ def observe_video(candidate: dict[str, Any], out_dir: Path, *, run=subprocess.ru
     """One complete observation; raises when any dimension cannot be observed."""
     from .hot_work_intelligence import analyze_work
 
-    work = out_dir / f"bilibili-{candidate['id']}"
+    platform = candidate["platform"]
+    work = out_dir / f"{platform}-{candidate['id']}"
     work.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fields, metadata_path, metadata_sha = _metadata(candidate, work)
-    clip = _download(candidate["url"], work, run)
+    fields, metadata_path, metadata_sha = _metadata(candidate, work, run)
+    clip = _download(platform, candidate["url"], work, run)
     duration = _probe_duration(clip, run)
     if duration <= 0:
         raise ValueError("video_clip_empty")
     cuts = _scene_cuts(clip, run)
     frames, sheet = _keyframes(clip, duration, work, run)
-    speech = _transcribe(clip, work, run)
+    speech = _transcribe(platform, clip, work, run)
     transcript = "".join(row["text"] for row in speech["segments"]).strip()
+    if transcript and speech.get("language") != LANGUAGES[platform]:
+        raise ValueError("video_language_mismatch:" + str(speech.get("language"))[:8])
     vision = _describe(sheet, {"title": fields["title"], "transcript": transcript[:1500]}, run)
     on_screen = str(vision.get("on_screen_text") or "").strip()
     script = transcript or on_screen
@@ -217,7 +286,7 @@ def observe_video(candidate: dict[str, Any], out_dir: Path, *, run=subprocess.ru
     patterns = analyze_work(str(fields["title"]), script)
     observed_at = _now()
     record = {
-        "platform": "bilibili", "source": SOURCE, "content_id": candidate["id"],
+        "platform": platform, "source": f"native.{platform}_video", "content_id": candidate["id"],
         "canonical_url": candidate["url"], "url": candidate["url"], "title": fields["title"], "author": fields["author"],
         "published_at": fields["published_at"], "observed_at": observed_at, "metrics": fields["metrics"],
         "feed": {"url": candidate["feed_url"], "sha256": candidate["feed_sha256"]},

@@ -1,5 +1,7 @@
 import hashlib
 import json
+
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from content_platform import video_sample_collector as videos
@@ -35,32 +37,39 @@ def test_unobservable_video_is_skipped_with_its_reason(tmp_path):
     assert "video_download_failed" in (tmp_path / "skipped-BV1.txt").read_text()
 
 
-def test_observation_passes_the_video_breakdown_gate(tmp_path, monkeypatch):
-    from content_platform.task_source_inputs import _observed_strategy_inputs
-
+def _fake_pipeline(tmp_path, monkeypatch, language="zh"):
     published = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
     meta = tmp_path / "meta.json"
     meta.write_bytes(b"{}")
-    monkeypatch.setattr(videos, "_metadata", lambda candidate, work: (
+    monkeypatch.setattr(videos, "_metadata", lambda candidate, work, run: (
         {"title": "AI 剪辑实战", "author": "up", "published_at": published, "duration": 300,
          "metrics": {"view": 10}}, meta, hashlib.sha256(b"{}").hexdigest()))
     clip = tmp_path / "clip.mp4"
-    monkeypatch.setattr(videos, "_download", lambda url, work, run: (clip.write_bytes(b"x"), clip)[1])
+    monkeypatch.setattr(videos, "_download", lambda platform, url, work, run: (clip.write_bytes(b"x"), clip)[1])
     monkeypatch.setattr(videos, "_probe_duration", lambda clip, run: 120.0)
     monkeypatch.setattr(videos, "_scene_cuts", lambda clip, run: [3.0, 9.5])
     sheet = tmp_path / "sheet.jpg"
     sheet.write_bytes(b"jpg")
     frames = [{"t": float(i), "path": str(tmp_path / f"f{i}.jpg"), "sha256": "0" * 64} for i in range(videos.FRAMES)]
     monkeypatch.setattr(videos, "_keyframes", lambda clip, duration, work, run: (frames, sheet))
-    monkeypatch.setattr(videos, "_transcribe", lambda clip, work, run: {
-        "language": "zh", "segments": [{"start": 0, "end": 2, "text": "今天教你用AI剪辑"}]})
+    monkeypatch.setattr(videos, "_transcribe", lambda platform, clip, work, run: {
+        "language": language, "segments": [{"start": 0, "end": 2, "text": "今天教你用AI剪辑"}]})
     monkeypatch.setattr(videos, "_describe", lambda sheet, context, run: {
         "frames": ["剪辑软件界面"] * videos.FRAMES, "motion": ["鼠标拖动时间线"], "transitions": ["hard cut"],
         "content_structure": ["开场演示"], "writing_style": "口语", "topic_direction": "AI剪辑", "assets": ["screen recording"],
         "theme_template": "暗色界面"})
-    candidate = {"id": "BV1", "url": "https://www.bilibili.com/video/BV1", "feed_url": "f", "feed_sha256": "0" * 64}
+    return clip
 
-    row = videos.observe_video(candidate, tmp_path)
+
+CANDIDATE = {"platform": "bilibili", "id": "BV1", "url": "https://www.bilibili.com/video/BV1",
+             "feed_url": "f", "feed_sha256": "0" * 64}
+
+
+def test_observation_passes_the_video_breakdown_gate(tmp_path, monkeypatch):
+    from content_platform.task_source_inputs import _observed_strategy_inputs
+
+    clip = _fake_pipeline(tmp_path, monkeypatch)
+    row = videos.observe_video(CANDIDATE, tmp_path)
 
     assert row["voiceover"]["status"] == "verified" and row["copy_or_script"] == "今天教你用AI剪辑"
     assert row["transition_combination"]["cuts_per_minute"] == 1.0 and not clip.exists()
@@ -68,3 +77,20 @@ def test_observation_passes_the_video_breakdown_gate(tmp_path, monkeypatch):
     assert stored["visual_evidence"] == row["visual_evidence"]
     result = _observed_strategy_inputs("bilibili", {"items": [row]})
     assert result["viral_breakdown"]["status"] == "ready"
+
+
+def test_speech_in_another_language_than_the_lane_is_rejected(tmp_path, monkeypatch):
+    _fake_pipeline(tmp_path, monkeypatch, language="hi")
+    with pytest.raises(ValueError, match="video_language_mismatch:hi"):
+        videos.observe_video(dict(CANDIDATE, platform="youtube"), tmp_path)
+
+
+def test_feed_keeps_recent_ai_videos_most_viewed_first():
+    now = datetime.now(timezone.utc).timestamp()
+    entries = [{"id": "old", "title": "AI agent", "timestamp": now - 40 * 86400, "view_count": 9e6},
+               {"id": "dance", "title": "dance trend", "timestamp": now, "view_count": 8e6},
+               {"id": "a", "title": "Codex builds a board", "description": "#ai", "timestamp": now, "view_count": 10},
+               {"id": "b", "title": "ChatGPT tips", "timestamp": now, "view_count": 500}]
+    rows = videos._ranked("tiktok", [dict(row, uploader="openai") for row in entries], "feed", "0" * 64)
+    assert [row["id"] for row in rows] == ["b", "a"]
+    assert rows[0]["url"] == "https://www.tiktok.com/@openai/video/b" and rows[0]["platform"] == "tiktok"
