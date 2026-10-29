@@ -152,6 +152,24 @@ class TrendTests(unittest.TestCase):
 
         self.assertEqual(items[0]["title"], "owner/repo: " + "x" * 100)
 
+    def test_youtube_trends_come_from_the_native_video_feed_with_provenance(self):
+        rows = [{"feed_url": "https://www.youtube.com/results?q", "feed_sha256": "f" * 64, "url": "https://www.youtube.com/watch?v=a",
+                 "title": "AI agent demo", "views": 900}]
+        with patch("content_platform.video_sample_collector.youtube_candidates", return_value=rows):
+            source = DirectTrendSource("youtube", {"limit": 5})
+            items = source.collect()
+
+        self.assertEqual(items, [{"title": "AI agent demo", "source": "youtube", "url": "https://www.youtube.com/watch?v=a", "points": 900}])
+        self.assertEqual(source.fetch_provenance["result_kind"], "live_http")
+        self.assertTrue(source.fetch_provenance["captured_at"])
+
+    def test_youtube_falls_back_to_web_search_when_the_native_feed_is_empty(self):
+        with patch("content_platform.video_sample_collector.youtube_candidates", return_value=[]), \
+                patch.object(DirectTrendSource, "_web_search_source", return_value=[{"title": "w", "source": "youtube:web_search"}]):
+            items = DirectTrendSource("youtube", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["source"], "youtube:web_search")
+
     def test_zhihu_falls_back_to_the_public_hot_list_before_web_search(self):
         payload = {"data": [{"detail_text": "1846 万热度", "target": {
             "title": "如何看待 DeepSeek 的新模型？", "url": "https://api.zhihu.com/questions/123", "excerpt": "摘要"}}]}
@@ -183,7 +201,7 @@ class TrendTests(unittest.TestCase):
         for platform in ("wechat", "xiaohongshu", "youtube", "tiktok"):
             with self.subTest(platform=platform):
                 source = DirectTrendSource(platform, {"limit": 5})
-                with patch.object(source, "_duckduckgo_html_search", return_value=[{"title": f"{platform} AI topic", "source": f"{platform}:web_search", "points": 1}]) as search:
+                with patch.object(source, "_native_video_feed", return_value=[]), patch.object(source, "_duckduckgo_html_search", return_value=[{"title": f"{platform} AI topic", "source": f"{platform}:web_search", "points": 1}]) as search:
                     items = source.collect()
                 self.assertEqual(items[0]["source"], f"{platform}:web_search")
                 self.assertTrue(search.called)

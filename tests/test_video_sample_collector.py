@@ -94,6 +94,7 @@ def test_feed_keeps_recent_ai_videos_most_viewed_first():
     rows = videos._ranked("tiktok", [dict(row, uploader="openai") for row in entries], "feed", "0" * 64)
     assert [row["id"] for row in rows] == ["b", "a"]
     assert rows[0]["url"] == "https://www.tiktok.com/@openai/video/b" and rows[0]["platform"] == "tiktok"
+    assert (rows[0]["title"], rows[0]["views"]) == ("ChatGPT tips", 500)
 
 
 def test_bilibili_risk_control_code_is_an_error_not_an_empty_feed(monkeypatch):

@@ -914,12 +914,16 @@ def execute(args):
                         or os.environ.get("SEARXNG_BASE_URL")
                         or ""
                     ).rstrip("/")
-                    targeted = DirectTrendSource("douyin", pet_cfg).collect()
+                    pet_source = DirectTrendSource("douyin", pet_cfg)
+                    targeted = pet_source.collect()
                     if targeted and not all(item.get("source_unavailable") for item in targeted):
                         break
                 report.setdefault("items", []).extend(targeted)
                 status = "ok" if targeted and not all(item.get("source_unavailable") for item in targeted) else "unavailable"
-                report.setdefault("sources", []).append({"source": "douyin_pet_targeted", "status": status, "count": len(targeted), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000)})
+                # r45: without collected_at no pet candidate could pass the evidence matrix.
+                captured = pet_source.fetch_provenance.get("captured_at")
+                report.setdefault("sources", []).append({"source": "douyin_pet_targeted", "status": status, "count": len(targeted), "elapsed_ms": int((datetime.now() - started).total_seconds() * 1000),
+                                                         **({"collected_at": captured} if captured else {})})
             except Exception as exc:  # Preserve failed evidence; selection remains fail-closed.
                 report.setdefault("sources", []).append({"source": "douyin_pet_targeted", "status": "failed", "count": 0, "error": str(exc)[:240]})
         strategy_status = growth_strategy_snapshot_status(

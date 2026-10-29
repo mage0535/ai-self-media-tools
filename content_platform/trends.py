@@ -362,6 +362,10 @@ class DirectTrendSource:
             "youtube": "AI workflow automation productivity site:youtube.com",
             "tiktok": "AI workflow automation productivity site:tiktok.com",
         }
+        if self.name in ("youtube", "tiktok"):
+            items = self._native_video_feed()
+            if items:
+                return items
         if self.name == "juejin":
             return self._juejin_hot(platform_queries["juejin"])
         if self.name in platform_queries:
@@ -613,6 +617,26 @@ class DirectTrendSource:
                 "category": str(row.get("tname") or ""),
             })
         return items
+
+    def _native_video_feed(self):
+        """Recent most-viewed AI videos from the platform itself (yt-dlp public feeds).
+
+        r45: the web-search fallback returned encyclopedia and tool-directory pages for both lanes.
+        """
+        from . import video_sample_collector as videos
+
+        try:
+            rows = videos.youtube_candidates() if self.name == "youtube" else videos.tiktok_candidates()
+        except Exception:
+            return []
+        captured = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        for feed_url, feed_sha256 in sorted({(row["feed_url"], row["feed_sha256"]) for row in rows}):
+            self.fetch_provenance["attempts"].append({
+                "transport": "http", "status": "ok", "via": "yt-dlp", "captured_at": captured,
+                "host": str(urllib.parse.urlsplit(feed_url).hostname or ""),
+                "request_sha256": hashlib.sha256(feed_url.encode()).hexdigest(), "response_sha256": feed_sha256})
+        return [{"title": row["title"], "source": self.name, "url": row["url"], "points": row["views"]}
+                for row in rows if row["title"]][: self.limit]
 
     def _juejin_hot(self, fallback_query):
         """Juejin's public AI-category hot ranking (no login); web search only as fallback."""
