@@ -374,6 +374,12 @@ class DirectTrendSource:
             except Exception as exc:
                 if not self.config.get("source_fallback_enabled", True):
                     raise
+                try:  # The public hot list needs no login; web search results are not a hot list.
+                    hot = self._zhihu_public_hot()
+                    if hot:
+                        return hot
+                except Exception:
+                    pass
                 fallback = self._web_search_source("zhihu", "AI 工具 效率 工作流 site:zhihu.com")
                 if fallback:
                     return fallback
@@ -637,6 +643,27 @@ class DirectTrendSource:
         from .zhihu_cli_adapter import ZhihuCliAdapter
         adapter = ZhihuCliAdapter(timeout=int(self.config.get("timeout", 15)) + 30)
         return adapter.fetch_hot(limit=self.limit)
+
+    def _zhihu_public_hot(self):
+        """Zhihu's public hot list (no login), with the observed heat value."""
+        payload = self._request_json("https://api.zhihu.com/topstory/hot-lists/total?limit=50",
+                                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0"})
+        items = []
+        for row in (payload.get("data") or [])[: self.limit]:
+            target = row.get("target") or {}
+            title = str(target.get("title") or "").strip()
+            match = re.search(r"/questions/(\d+)", str(target.get("url") or ""))
+            if not title or not match:
+                continue
+            heat = re.search(r"([\d.]+)\s*万", str(row.get("detail_text") or ""))
+            items.append({
+                "title": title,
+                "source": "zhihu",
+                "url": f"https://www.zhihu.com/question/{match.group(1)}",
+                "points": int(float(heat.group(1)) * 10000) if heat else 0,
+                "summary": str(target.get("excerpt") or "")[:300],
+            })
+        return items
 
     def _douyin_hot_board(self):
         """Collect the native Douyin hot board with observed heat values."""

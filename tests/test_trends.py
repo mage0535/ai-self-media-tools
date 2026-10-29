@@ -138,6 +138,17 @@ class TrendTests(unittest.TestCase):
 
         self.assertEqual([(item["title"], item["category"]) for item in items], [("Popular", "搞笑"), ("AI 工作流", "计算机技术")])
 
+    def test_zhihu_falls_back_to_the_public_hot_list_before_web_search(self):
+        payload = {"data": [{"detail_text": "1846 万热度", "target": {
+            "title": "如何看待 DeepSeek 的新模型？", "url": "https://api.zhihu.com/questions/123", "excerpt": "摘要"}}]}
+        with patch.object(DirectTrendSource, "_zhihu_cli_hot", side_effect=RuntimeError("cli down")), \
+                patch.object(DirectTrendSource, "_request_json", return_value=payload), \
+                patch.object(DirectTrendSource, "_web_search_source", side_effect=AssertionError("web search used")):
+            items = DirectTrendSource("zhihu", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["url"], "https://www.zhihu.com/question/123")
+        self.assertEqual((items[0]["source"], items[0]["points"]), ("zhihu", 18460000))
+
     def test_zhihu_uses_cli_hot_and_douyin_uses_native_hot_board(self):
         with patch.object(DirectTrendSource, "_zhihu_cli_hot", return_value=[{"title": "AI tool topic", "source": "zhihu", "points": 1}]) as hot:
             items = DirectTrendSource("zhihu", {"limit": 5}).collect()
@@ -164,7 +175,8 @@ class TrendTests(unittest.TestCase):
                 self.assertTrue(search.called)
 
     def test_zhihu_falls_back_to_web_search_when_cli_fails(self):
-        with patch.object(DirectTrendSource, "_zhihu_cli_hot", side_effect=RuntimeError("cli missing")):
+        with patch.object(DirectTrendSource, "_zhihu_cli_hot", side_effect=RuntimeError("cli missing")), \
+                patch.object(DirectTrendSource, "_zhihu_public_hot", side_effect=RuntimeError("hot list down")):
             with patch.object(DirectTrendSource, "_duckduckgo_html_search", return_value=[{"title": "AI tool topic", "source": "zhihu:web_search", "points": 1}]):
                 items = DirectTrendSource("zhihu", {"limit": 5}).collect()
 
@@ -173,6 +185,7 @@ class TrendTests(unittest.TestCase):
     def test_web_search_source_degrades_with_explicit_unavailable_marker(self):
         source = DirectTrendSource("zhihu", {"limit": 5, "source_fallback_enabled": True})
         with patch.object(source, "_zhihu_cli_hot", side_effect=RuntimeError("cli missing")), \
+            patch.object(source, "_zhihu_public_hot", return_value=[]), \
             patch.object(source, "_searxng_search", return_value=[]), \
             patch.object(source, "_duckduckgo_html_search", return_value=[]), \
             patch.object(source, "_bing_html_search", return_value=[]), \
