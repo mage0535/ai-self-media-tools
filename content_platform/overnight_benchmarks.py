@@ -18,24 +18,46 @@ def _juejin(items: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
     return collect_samples(hot, out_dir / "juejin")
 
 
-COLLECTORS = {"juejin": _juejin}
+def _bilibili(feed: str):
+    def collect(items: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
+        from .video_sample_collector import bilibili_candidates, collect_samples
+
+        return collect_samples(bilibili_candidates(feed), out_dir / f"bilibili-{feed}")
+    return collect
+
+
+COLLECTORS = {"juejin": _juejin, "bilibili_ai": _bilibili("ai"), "bilibili_pet": _bilibili("pet")}
+# Owner 10-28: lanes without their own typed collector use another platform's real public samples.
+# lane -> (collector, platform the samples were observed on); the breakdown keeps that platform
+# and is marked cross_platform_source.
+LANE_COLLECTORS = {
+    "juejin": ("juejin", "juejin"), "zhihu": ("juejin", "juejin"), "wechat": ("juejin", "juejin"),
+    # YouTube asks a datacenter IP to sign in (10-29), so YouTube/TikTok also use Bilibili samples.
+    **{lane: ("bilibili_ai", "bilibili") for lane in
+       ("bilibili", "douyin", "douyin_ai", "kuaishou", "shipinhao", "youtube", "tiktok")},
+    "douyin_pet": ("bilibili_pet", "bilibili"),
+}
 
 
 def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out_dir: str | Path) -> dict[str, Any]:
     from .task_source_inputs import _observed_strategy_inputs
 
     cache: dict[str, Any] = {}
+    rows_by_collector: dict[str, Any] = {}
     for task in prepared.get("tasks") or []:
         platform = str(task.get("platform") or "")
         if task.get("state") != "ready_for_plan":
             continue
         if platform not in cache:
-            collector = COLLECTORS.get(platform)
+            name, source_platform = LANE_COLLECTORS.get(platform, (platform, platform))
             try:
-                if collector is None:
+                if name not in COLLECTORS:
                     raise ValueError("no typed public same-lane collector for this platform")
-                rows = collector(items, Path(out_dir))
-                cache[platform] = _observed_strategy_inputs(platform, {"items": rows})
+                if name not in rows_by_collector:  # Lanes sharing a collector observe once.
+                    rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
+                cache[platform] = _observed_strategy_inputs(source_platform, {"items": rows_by_collector[name]})
+                if source_platform != platform:
+                    cache[platform]["cross_platform_source"] = source_platform
             except Exception as exc:  # One platform's benchmark must not abort the batch.
                 cache[platform] = {"error": f"same-lane breakdown unavailable: {str(exc)[:200]}"}
         strategy = cache[platform]

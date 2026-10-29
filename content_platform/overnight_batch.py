@@ -328,11 +328,14 @@ def build_due_tasks(
                     row.update({"topic": selected["title"], "state": "blocked", "reason": analysis_error})
                     tasks.append(row)
                     continue
-                from .overnight_topic_analysis import flatten_scenario
+                from .overnight_topic_analysis import flatten_scenario, video_pacing_plan
 
                 content_slot["scenario_contract"] = flatten_scenario(scenario)
+                # Read by the blueprint only for video forms.
+                content_slot.setdefault("subtitle_and_pacing_plan_when_video",
+                                        video_pacing_plan(platform, str(selected["title"]), scenario))
                 # The prompt compiler reads the structured scenario from the brief.
-                analyzed_brief = {
+                analyzed_brief = {"lane": "pet_healing", "scenario": scenario} if platform == "douyin_pet" else {
                     "lane": "real_world_ai_implementation",
                     "policy_profile": "real_world_ai_implementation_v1",
                     "scenario": scenario,
@@ -606,6 +609,8 @@ def _platform_evidence_matrix(
     # but neither can validate an unrelated candidate.  The candidate must
     # come from the timestamped platform source recorded above.
     verified = candidate_source_ok
+    candidate_prefix = candidate_source.partition(":")[0]
+    native_names = {str(platform).casefold(), *({"douyin"} if str(platform).casefold().startswith("douyin") else set())}
     platform_fit_reason = str(candidate.get("platform_fit_reason") or "").strip()
     if verified and not platform_fit_reason:
         platform_fit_reason = f"candidate source {candidate.get('source') or platform} matches the {platform} evidence lane"
@@ -620,6 +625,7 @@ def _platform_evidence_matrix(
         "platform_strategy_verified": strategy_ok,
         "shared_trend_only": not verified,
         "candidate_source": str(candidate.get("source") or ""),
+        "evidence_scope": "" if not verified else ("native" if candidate_prefix in native_names else "cross_platform"),
         "platform_fit_reason": platform_fit_reason,
         "report_path": str(report_path),
         "trend_evidence": {
@@ -778,7 +784,16 @@ def prefer_platform_source_candidates(
 
 # WeChat MP has no collectable native hot feed (Sogou WeChat search is captcha-gated);
 # a topic verified on another domestic platform's native feed may be adapted for it.
-CROSS_PLATFORM_EVIDENCE = {"wechat": {"juejin", "bilibili", "douyin"}}
+# Owner 10-28: a platform without a usable native trend feed may take its topic from another REAL
+# collected feed (never web search); the evidence matrix labels it cross_platform.
+_REAL_AI_FEEDS = {"juejin", "bilibili", "douyin", "hackernews", "hn", "techcrunch", "github"}
+CROSS_PLATFORM_EVIDENCE = {
+    **{platform: _REAL_AI_FEEDS for platform in (
+        "wechat", "zhihu", "kuaishou", "douyin_ai", "xiaohongshu", "shipinhao", "bilibili")},
+    "youtube": _REAL_AI_FEEDS,
+    "tiktok": _REAL_AI_FEEDS | {"youtube"},
+    "douyin_pet": {"douyin_pet_targeted", "bilibili"},
+}
 
 
 def _platform_source_aliases(platform: str) -> set[str]:

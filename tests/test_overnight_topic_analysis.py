@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from content_platform.overnight_topic_analysis import FIELDS, analyze_topic, flatten_scenario, parse_scenario
+from content_platform.overnight_topic_analysis import FIELDS, analyze_topic, flatten_scenario, parse_scenario, video_pacing_plan
 
 
 def _scenario(**overrides):
@@ -77,5 +77,43 @@ def test_analyze_topic_sends_source_as_untrusted_observation():
     assert seen["brief"] == {"platform": "juejin", "topic": "AI Agent 记忆"}
 
 
-def test_pet_lane_is_not_analysed_as_an_ai_scenario():
-    assert analyze_topic({}, "douyin_pet", {"title": "猫"}, {}, call=lambda *a: pytest.fail("called")) is None
+PET = {
+    "domain": "cat_care_avoidance_manual",
+    "actor": {"role": "新手猫主人", "context": "第一次给猫换粮"},
+    "inputs": [{"type": "视频观察", "source": "热门视频", "example_or_schema": "猫闻粮后走开"}],
+    "process": {"steps": [{"action": "新旧粮按比例混合", "output": "七天换粮表"},
+                          {"action": "观察便便和食欲", "output": "每日记录"}]},
+    "outcome": {"deliverable": "换粮避坑清单", "value_or_verification": "主人对照记录自查"},
+    "boundaries": [{"detail": "持续腹泻须就医"}],
+    "human_handoff": {"trigger": "呕吐或拒食", "responsible_role": "宠物医生",
+                      "review_or_action": "检查肠胃", "acceptance_or_escalation_rule": "两天无改善即就诊"},
+}
+
+
+def test_pet_lane_uses_the_pet_prompt_and_its_own_domains():
+    prompts = []
+    scenario = analyze_topic({}, "douyin_pet", {"title": "猫换粮"}, {},
+                             call=lambda prompt, meta: prompts.append(prompt) or json.dumps(PET, ensure_ascii=False))
+    assert "healing cat-and-dog account" in prompts[0] and "office_automation" not in prompts[0]
+    assert scenario["outcome"]["status"] == "verification_required"
+    assert set(flatten_scenario(scenario)) == set(FIELDS)
+
+
+def test_pet_scenario_outside_the_pet_domains_is_rejected():
+    with pytest.raises(ValueError, match="domain_out_of_scope"):
+        analyze_topic({}, "douyin_pet", {"title": "猫"}, {},
+                      call=lambda *a: json.dumps(dict(PET, domain="office_automation")))
+
+
+def test_video_pacing_plan_lets_a_video_blueprint_pass():
+    from content_platform.content_blueprint import build_content_blueprint
+
+    scenario = parse_scenario(_scenario())
+    plan = video_pacing_plan("douyin_ai", "AI 记忆", scenario)
+    assert plan["timing_status"] == "unmeasured_until_actual_full_track_render"
+    assert [row["role"] for row in plan["segments"]] == ["hook", "problem", "method", "method", "result", "handoff"]
+    slot = {"stage": "handoff_video", "scenario_contract": flatten_scenario(scenario),
+            "subtitle_and_pacing_plan_when_video": plan}
+    matrix = {"trend_evidence": {"samples": [{"url": "https://www.bilibili.com/video/BV1"}]}}
+    blueprint = build_content_blueprint("douyin_ai", "AI 记忆", slot, matrix)
+    assert blueprint["subtitle_and_pacing_plan_when_video"] == plan
