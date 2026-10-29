@@ -31,6 +31,19 @@ def test_route_config_without_vision_keys_keeps_text_route(tmp_path, monkeypatch
     assert route == {"hermes_command": "hermes", "hermes_provider": "custom", "hermes_model": "m1"}
 
 
+def test_task_role_is_checked_against_the_text_route_when_vision_is_declared(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_CONFIG", str(_config(tmp_path, vision_provider="media-vision", vision_model="m1")))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    role = tmp_path / "node-role.json"
+    role.write_text(json.dumps({"route": {"provider": "custom", "model": "m1"}}), encoding="utf-8")
+
+    assert review.route_config()[2]["hermes_provider"] == "media-vision"
+
+    role.write_text(json.dumps({"route": {"provider": "other", "model": "m1"}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="task_profile_route_mismatch"):
+        review.route_config()
+
+
 def _stream(text, model="m1"):
     events = [{"type": "system", "subtype": "init", "model": model, "session_id": "s1"},
               {"type": "result", "exit_code": 0, "text": text}]

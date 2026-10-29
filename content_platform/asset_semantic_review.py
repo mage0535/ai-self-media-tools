@@ -185,6 +185,7 @@ def route_config():
     raw = path.read_bytes()
     cfg = strict_json(raw.decode('utf-8'))['generator']
     route = {key: str(cfg.get(key) or '').strip() for key in ('hermes_command', 'hermes_provider', 'hermes_model')}
+    text_route = (route['hermes_provider'], route['hermes_model'])
     # A pixel review needs a route Hermes declares as native vision; it may differ from the text route.
     if str(cfg.get('vision_provider') or '').strip() and str(cfg.get('vision_model') or '').strip():
         route.update(hermes_provider=str(cfg['vision_provider']).strip(), hermes_model=str(cfg['vision_model']).strip())
@@ -195,7 +196,8 @@ def route_config():
     role = Path(os.environ.get('HERMES_HOME', '/unavailable'))/'node-role.json'
     if role.is_file():
         expected = strict_json(role.read_text(encoding='utf-8')).get('route') or {}
-        if expected.get('provider') != route['hermes_provider'] or expected.get('model') != route['hermes_model']:
+        # The task role pins the text route; a declared vision route is pinned by this same trusted config.
+        if (expected.get('provider'), expected.get('model')) != text_route:
             raise ValueError('task_profile_route_mismatch')
     return path, raw, route
 
