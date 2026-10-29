@@ -587,11 +587,17 @@ class DirectTrendSource:
         except Exception:
             return self._web_search_source("bilibili", "AI 工具 效率 工作流 site:bilibili.com")
         rows = payload.get("data", {}).get("list", [])[: self.limit]
-        try:  # The tech ranking carries the AI-practice videos the popular list rarely has.
-            tech = self._request_json("https://api.bilibili.com/x/web-interface/ranking/v2?rid=188&type=all")
-            rows += (tech.get("data") or {}).get("list", [])[: self.limit]
-        except Exception:
-            pass
+        from .video_sample_collector import _get_json
+
+        # The tech (188) and animal (217) rankings carry the AI-practice and pet videos the popular list
+        # rarely has.  They answer -352 without the anonymous visitor cookie _get_json obtains (r44).
+        for rid in (188, 217):
+            try:
+                ranking = _get_json(f"https://api.bilibili.com/x/web-interface/ranking/v2?rid={rid}&type=all",
+                                    referer="https://www.bilibili.com/")[1]
+                rows += (ranking.get("data") or {}).get("list", [])[: self.limit]
+            except Exception:
+                pass
         items = []
         for row in rows:
             title = str(row.get("title") or "").strip()

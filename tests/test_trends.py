@@ -133,10 +133,17 @@ class TrendTests(unittest.TestCase):
                    "stat": {"view": 1}, "uri": url}
             return {"data": {"list": [row]}}
 
-        with patch.object(DirectTrendSource, "_request_json", fake):
+        def ranking(url, **kwargs):
+            rid = url.split("rid=")[1].split("&")[0]
+            row = {"title": f"rank {rid}", "tname": {"188": "计算机技术", "217": "喵星人"}[rid], "stat": {"view": 1}, "uri": url}
+            return b"", {"code": 0, "data": {"list": [row]}}
+
+        with patch.object(DirectTrendSource, "_request_json", fake), \
+                patch("content_platform.video_sample_collector._get_json", ranking):
             items = DirectTrendSource("bilibili", {"limit": 5}).collect()
 
-        self.assertEqual([(item["title"], item["category"]) for item in items], [("Popular", "搞笑"), ("AI 工作流", "计算机技术")])
+        self.assertEqual([(item["title"], item["category"]) for item in items],
+                         [("Popular", "搞笑"), ("rank 188", "计算机技术"), ("rank 217", "喵星人")])
 
     def test_github_titles_keep_the_repo_name_and_a_short_description(self):
         row = {"full_name": "owner/repo", "description": "x" * 300, "html_url": "u", "stargazers_count": 3}
