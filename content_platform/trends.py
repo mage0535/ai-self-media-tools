@@ -515,7 +515,8 @@ class DirectTrendSource:
         items = []
         for row in payload.get("items", [])[: self.limit]:
             name = str(row.get("full_name") or row.get("name") or "").strip()
-            desc = str(row.get("description") or "").strip()
+            # r44: a 233-char description title pushed every lane's generate payload past 16 KB.
+            desc = str(row.get("description") or "").strip()[:100]
             if not name:
                 continue
             items.append({

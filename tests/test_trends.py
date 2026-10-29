@@ -138,6 +138,13 @@ class TrendTests(unittest.TestCase):
 
         self.assertEqual([(item["title"], item["category"]) for item in items], [("Popular", "搞笑"), ("AI 工作流", "计算机技术")])
 
+    def test_github_titles_keep_the_repo_name_and_a_short_description(self):
+        row = {"full_name": "owner/repo", "description": "x" * 300, "html_url": "u", "stargazers_count": 3}
+        with patch.object(DirectTrendSource, "_request_json", return_value={"items": [row]}):
+            items = DirectTrendSource("github", {"limit": 5}).collect()
+
+        self.assertEqual(items[0]["title"], "owner/repo: " + "x" * 100)
+
     def test_zhihu_falls_back_to_the_public_hot_list_before_web_search(self):
         payload = {"data": [{"detail_text": "1846 万热度", "target": {
             "title": "如何看待 DeepSeek 的新模型？", "url": "https://api.zhihu.com/questions/123", "excerpt": "摘要"}}]}
