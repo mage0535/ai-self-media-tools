@@ -231,6 +231,8 @@ class TrendCollector:
             "hackernews": {"enabled": True, "limit": 20, "timeout": 8},
             "github": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI workflow automation content operations"},
             "bilibili": {"enabled": True, "limit": 20, "timeout": 8},
+            # The account's scenario searches (real_world_ai_implementation_v1) on Bilibili's native search.
+            "bilibili:scenario": {"enabled": True, "limit": 20, "timeout": 8},
             "zhihu": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:zhihu.com"},
             "douyin": {"enabled": True, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891 \u6296\u97f3"},
             "wechat": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u516c\u4f17\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387"},
@@ -372,6 +374,8 @@ class DirectTrendSource:
             return self._web_search_source(self.name, platform_queries[self.name])
         if self.name == "bilibili":
             return self._bilibili()
+        if self.name == "bilibili:scenario":
+            return self._bilibili_scenario()
         if self.name == "zhihu":
             try:
                 return self._zhihu_cli_hot()
@@ -585,6 +589,24 @@ class DirectTrendSource:
                 break
         return items
 
+    def _bilibili_scenario(self):
+        """General hot feeds are mostly model/tool news (10-30: 0 of 44 AI headlines on-policy); search the
+        account's capability + scene + outcome queries on Bilibili instead (3 rounds, one query per pillar)."""
+        from .platform_hot_adapters import BilibiliSearchAdapter
+        from .real_world_ai_policy import build_discovery_queries
+        from .video_sample_collector import _get_json
+
+        day = datetime.now().date().isoformat()
+        queries = list(dict.fromkeys(q for round_ in ("", "b", "c") for q in build_discovery_queries(seed=day + round_)))
+        found = BilibiliSearchAdapter(fetch_json=lambda url: _get_json(url)[1]).collect(queries=queries, limit=self.limit)
+        items = [{"title": row["title"], "source": "bilibili:scenario", "url": row["canonical_url"],
+                  "summary": row.get("excerpt", ""), "points": (row.get("metrics") or {}).get("views", 0),
+                  "query": row.get("query", "")} for row in found["items"]]
+        if not items:
+            failed = [row.get("error") for row in found["sources"] if row.get("status") != "ok"]
+            raise RuntimeError(f"bilibili scenario search returned nothing ({len(failed)} of {len(queries)} queries failed)")
+        return items
+
     def _bilibili(self):
         try:
             payload = self._request_json(f"https://api.bilibili.com/x/web-interface/popular?ps={min(self.limit, 50)}&pn=1")
@@ -626,7 +648,8 @@ class DirectTrendSource:
         from . import video_sample_collector as videos
 
         try:
-            rows = videos.youtube_candidates() if self.name == "youtube" else videos.tiktok_candidates()
+            # Topic feed: the account's scenario searches (format benchmarks keep the most-viewed AI queries).
+            rows = videos.youtube_candidates(scenario=True) if self.name == "youtube" else videos.tiktok_candidates()
         except Exception:
             return []
         captured = datetime.now(timezone.utc).isoformat(timespec="microseconds")

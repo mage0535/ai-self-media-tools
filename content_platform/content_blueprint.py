@@ -20,6 +20,17 @@ PLATFORM_DEFAULTS = {
 }
 
 
+AI_LANE_PLATFORMS = {"kuaishou", "bilibili", "youtube", "tiktok", "xiaohongshu", "wechat", "douyin_ai", "shipinhao", "juejin", "zhihu", "twitter", "douyin"}
+AI_TOPIC_WORDS = ("ai", "agent", "llm", "人工智能", "智能体", "大模型")
+
+
+def _is_ai_lane(platform: str, text: str) -> bool:
+    """douyin_pet is the pet_healing lane; every other AI platform, or an AI topic, is an AI lane."""
+    if platform == "douyin_pet":
+        return False
+    return platform in AI_LANE_PLATFORMS or any(word in text.casefold() for word in AI_TOPIC_WORDS)
+
+
 def build_content_blueprint(
     platform: str,
     topic: str,
@@ -31,7 +42,8 @@ def build_content_blueprint(
     normalized = str(platform or "").casefold()
     default_form, default_style = PLATFORM_DEFAULTS.get(normalized, ("article", "platform_specific_practical_explanation"))
     keywords = [str(item) for item in slot.get("topic_keywords") or []]
-    ai_lane = any(value in (str(topic) + " " + " ".join(keywords)).casefold() for value in ("ai", "agent", "llm", "人工智能", "智能体", "大模型"))
+    # Same rule as validate_content_blueprint: r51 "Claude Code vs Codex" on juejin got no roles, then failed validation.
+    ai_lane = _is_ai_lane(normalized, str(topic) + " " + " ".join(keywords))
     samples = _blueprint_evidence_samples(matrix)
     evidence_refs = [str(row.get("url") or row.get("source") or "") for row in samples if isinstance(row, dict)]
     blueprint = {
@@ -134,13 +146,8 @@ def validate_content_blueprint(blueprint: dict[str, Any] | None) -> dict[str, An
     # scope: kuaishou/bilibili/youtube/tiktok/xiaohongshu/wechat/douyin_ai/shipinhao/juejin/zhihu 等所有AI知识形态，douyin_pet 治愈赛道豁免
     topic_text = str(blueprint.get("topic") or "")
     platform_norm = str(blueprint.get("platform") or "").casefold()
-    AI_LANE_PLATFORMS = {"kuaishou", "bilibili", "youtube", "tiktok", "xiaohongshu", "wechat", "douyin_ai", "shipinhao", "juejin", "zhihu", "twitter", "douyin"}
     # douyin_pet 为 pet_healing 赛道，永不触发AI猫狗门禁
-    if platform_norm == "douyin_pet":
-        is_ai_lane = False
-    else:
-        is_ai_lane = any(kw in topic_text.casefold() or kw in topic_text for kw in ("ai", "agent", "llm", "人工智能", "智能体", "大模型")) or platform_norm in AI_LANE_PLATFORMS
-    if is_ai_lane:
+    if _is_ai_lane(platform_norm, topic_text):
         if not roles or len(roles) < 1:
             failures.append("ai_lane_cat_dog_role_missing")
         for cat_key in ("cat", "dog"):

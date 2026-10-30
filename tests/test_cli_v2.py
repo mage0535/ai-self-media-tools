@@ -97,7 +97,7 @@ class CliV2Tests(unittest.TestCase):
         slots.write_text(json.dumps([{"platform": "wechat", "estimate_minutes": 15}]), encoding="utf-8")
         Store(self.db).save_tool_inventory("growth_strategy:wechat:latest", {"policy_id": "growth_quality_policy_v1"})
         report = {
-            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "items": [{"title": "AI meeting notes workflow", "source": "github", "points": 10, "url": "https://example.test"}],
             "sources": [{"source": "github", "status": "ok", "count": 1}],
             "summary": {"items": 1},
         }
@@ -107,14 +107,14 @@ class CliV2Tests(unittest.TestCase):
         self.assertEqual(result["status"], "prepared")
         task = json.loads(output.read_text(encoding="utf-8"))["tasks"][0]
         self.assertEqual(task["platform"], "wechat")
-        self.assertEqual(task["topic"], "AI workflow")
+        self.assertEqual(task["topic"], "AI meeting notes workflow")
 
     def test_overnight_prepare_uses_compiled_strategy_without_growth_strategy_snapshot(self):
         slots = self.root / "slots.json"
         output = self.root / "prepared.json"
         slots.write_text(json.dumps([{"platform": "zhihu", "estimate_minutes": 15}]), encoding="utf-8")
         report = {
-            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "items": [{"title": "AI meeting notes workflow", "source": "github", "points": 10, "url": "https://example.test"}],
             "sources": [{"source": "github", "status": "ok", "count": 1}],
             "summary": {"items": 1},
         }
@@ -137,7 +137,7 @@ class CliV2Tests(unittest.TestCase):
         config.write_text(json.dumps({"feature_flags": {"real_platform_trend_evidence_mode": "shadow"}}), encoding="utf-8")
         Store(self.db).save_tool_inventory("growth_strategy:zhihu:latest", {"policy_id": "growth_quality_policy_v1"})
         report = {
-            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "items": [{"title": "AI meeting notes workflow", "source": "github", "points": 10, "url": "https://example.test"}],
             "sources": [{"source": "github", "status": "ok", "count": 1}],
             "summary": {"items": 1},
         }
@@ -201,7 +201,7 @@ class CliV2Tests(unittest.TestCase):
 
     def test_auto_command_without_snapshot_blocks_on_trend_evidence(self):
         report = {
-            "items": [{"title": "AI workflow", "source": "github", "points": 10, "url": "https://example.test"}],
+            "items": [{"title": "AI meeting notes workflow", "source": "github", "points": 10, "url": "https://example.test"}],
             "sources": [{"source": "github", "status": "ok", "count": 1}],
             "summary": {"items": 1},
         }

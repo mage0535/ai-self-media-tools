@@ -579,6 +579,19 @@ def test_pet_lane_rejects_an_unrelated_general_news_candidate():
     assert candidate_matches_topic_keywords({"title": "Three signs your cat is stressed"}, keywords) is True
 
 
+def test_ai_lane_keeps_concrete_scenarios_and_rejects_model_news_and_tool_lists():
+    from content_platform.overnight_batch import ai_topic_case_first, candidate_fits_lane
+
+    for title in ("GPT-6.1 Terra上线：更便宜了，干活到底怎么样？", "2026 十大 AI 工具推荐合集", "DeepSeek v5 来了"):
+        assert candidate_fits_lane("xiaohongshu", {"title": title}) is False
+    scene = {"title": "工业机器视觉与晶圆表面缺陷检测 AI 实战"}
+    plain = {"title": "AI 预测性维护进入设备运维现场"}
+    assert candidate_fits_lane("juejin", scene) is True and candidate_fits_lane("juejin", plain) is True
+    assert candidate_fits_lane("douyin_pet", {"title": "DeepSeek v5 来了"}) is True  # pet lane has its own gate
+    assert ai_topic_case_first("zhihu", [plain, scene]) == [scene, plain]
+    assert candidate_fits_lane("zhihu", {"title": "【全748集】Agent智能体开发系统教程，手把手教会你知识库落地"}) is False
+
+
 def test_ai_keyword_does_not_match_a_substring_inside_an_unrelated_word():
     assert candidate_matches_topic_keywords({"title": "Facebook pays rage-bait creators"}, ["ai"]) is False
     assert candidate_matches_topic_keywords({"title": "AI agents change workflows"}, ["ai"]) is True

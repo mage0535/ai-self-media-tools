@@ -870,6 +870,7 @@ def execute(args):
             build_due_tasks,
             candidate_matches_topic_keywords,
             candidate_matches_platform_language,
+            ai_topic_case_first,
             candidate_fits_lane,
             growth_strategy_snapshot_status,
             prefer_platform_source_candidates,
@@ -947,7 +948,7 @@ def execute(args):
                 and candidate_matches_platform_language(platform, candidate)
                 and candidate_fits_lane(platform, candidate)
             ]
-            return prefer_platform_source_candidates(platform, candidates, report.get("sources", []))
+            return ai_topic_case_first(platform, prefer_platform_source_candidates(platform, candidates, report.get("sources", [])))
 
         def candidate_filter(platform, candidate, slot):
             keywords = topic_keywords_for_slot(platform, slot, profile)

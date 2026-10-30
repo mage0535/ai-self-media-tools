@@ -793,7 +793,22 @@ def candidate_fits_lane(platform: str, candidate: dict[str, Any]) -> bool:
         return False
     if any(marker in title or marker.replace(" ", "") in title for marker in ENTERTAINMENT_MARKERS):
         return False
-    return re.search(r"第[0-9一二三四五六七八九十百]+[回集话]", title) is None  # serial episodes
+    if re.search(r"第[0-9一二三四五六七八九十百]+[回集话]", title) is not None:  # serial episodes
+        return False
+    # Account positioning (config/real_world_ai_implementation_v1.json): one real task in one concrete
+    # scene; model releases, rankings, funding, news and tool/prompt lists are not topics.
+    from .real_world_ai_policy import overnight_topic_fit
+
+    return overnight_topic_fit(str(candidate.get("title") or "")) is not None
+
+
+def ai_topic_case_first(platform: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Stable: candidates whose headline already shows an outcome/case signal come first."""
+    if str(platform).casefold() == "douyin_pet":
+        return candidates
+    from .real_world_ai_policy import overnight_topic_fit
+
+    return sorted(candidates, key=lambda c: overnight_topic_fit(str(c.get("title") or "")) != "case")
 
 
 def candidate_matches_platform_language(platform: str, candidate: dict[str, Any]) -> bool:

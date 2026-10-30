@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -30,7 +31,10 @@ ASR_MODEL = "/srv/media-runtime/asr-models/faster-whisper-small"
 PROXIES = {"bilibili": None, "tiktok": "http://127.0.0.1:2091", "youtube": "http://127.0.0.1:2091"}
 # Public AI-product accounts verified 10-29 (posting within 30 days); hashtag pages need login.
 TIKTOK_ACCOUNTS = ("openai", "chatgpt", "microsoft", "google", "capcut", "canva")
-YOUTUBE_QUERIES = ("AI tools tutorial", "AI agent workflow")
+YOUTUBE_QUERIES = ("AI tools tutorial", "AI agent workflow")  # format benchmarks: most viewed this week
+# Topic feed: the account's scenario queries (real_world_ai_implementation_v1), uploads of this year
+# (the this-week view sort returned 0 for most scenario queries on 10-30).
+YOUTUBE_SCENARIO_FILTER = "EgIIBA%3D%3D"
 # Samples must match the lane's audience language (a Hindi masterclass topped "AI tools tutorial").
 LANGUAGES = {"bilibili": "zh", "tiktok": "en", "youtube": "en"}
 RECENT_DAYS = 30
@@ -73,7 +77,7 @@ def _now() -> str:
 _VISITOR = http.cookiejar.CookieJar()
 
 
-def _get_json(url: str, *, proxy: str | None = None, referer: str = "") -> tuple[bytes, Any]:
+def _get_json(url: str, *, proxy: str | None = None, referer: str = "", _reread: bool = True) -> tuple[bytes, Any]:
     handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {})
     opener = urllib.request.build_opener(handler, urllib.request.HTTPCookieProcessor(_VISITOR))
     if "bilibili.com" in url and not any(cookie.name == "buvid3" for cookie in _VISITOR):
@@ -85,6 +89,12 @@ def _get_json(url: str, *, proxy: str | None = None, referer: str = "") -> tuple
     with opener.open(request, timeout=20) as response:
         raw = response.read(5_000_000)
     data = json.loads(raw)
+    if "bilibili.com" in url and data.get("code") == -352 and _reread:
+        # -352 also comes in short bursts with a valid buvid3 (r52: 5 lanes, all fine minutes later): one
+        # network-level re-read of the public page with a fresh visitor cookie, never a job retry.
+        _VISITOR.clear()
+        time.sleep(3)
+        return _get_json(url, proxy=proxy, referer=referer, _reread=False)
     if "bilibili.com" in url and data.get("code") not in (0, None):
         raise ValueError(f"bilibili_api_code_{data.get('code')}")
     return raw, data
@@ -160,11 +170,18 @@ def tiktok_candidates(*, run=subprocess.run) -> list[dict[str, Any]]:
     return rows
 
 
-def youtube_candidates(*, run=subprocess.run) -> list[dict[str, Any]]:
-    """Most-viewed uploads of this week for a few AI queries (YouTube search sp: views, this week)."""
+def youtube_candidates(*, run=subprocess.run, scenario: bool = False) -> list[dict[str, Any]]:
+    """Most-viewed uploads of this week for a few AI queries (YouTube search sp: views, this week);
+    scenario=True searches the account's scenario queries instead (uploads of this year)."""
     rows = []
-    for query in YOUTUBE_QUERIES:
-        url = "https://www.youtube.com/results?" + urllib.parse.urlencode({"search_query": query, "sp": "CAMSAggD"})
+    if scenario:
+        from .real_world_ai_policy import build_discovery_queries
+
+        searches = [(query, YOUTUBE_SCENARIO_FILTER) for query in build_discovery_queries(language="en")]
+    else:
+        searches = [(query, "CAMSAggD") for query in YOUTUBE_QUERIES]
+    for query, sp in searches:
+        url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(query) + "&sp=" + sp
         try:
             raw = _yt_dlp_json("youtube", url, run, "--flat-playlist", "--playlist-end", "10")
         except ValueError:

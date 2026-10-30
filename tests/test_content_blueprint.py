@@ -31,6 +31,18 @@ def test_ai_blueprint_assigns_non_decorative_cat_and_dog_roles():
     assert blueprint["mascot_roles"]["dog"]["narrative_function"]
 
 
+def test_ai_platform_topic_naming_only_a_product_still_gets_cat_and_dog_roles():
+    blueprint = build_content_blueprint(
+        "juejin",
+        "Claude Code vs Codex：Computer Use 实现原理深度拆解",
+        {"audience": "developers", "user_pain": "unclear tool choice", "content_form": "technical_article",
+         "scenario_contract": SCENARIO},
+        {"trend_evidence": {"samples": [{"url": "https://example.test/trend"}]}},
+    )
+    assert {"cat", "dog"} <= set(blueprint["mascot_roles"])
+    assert "ai_lane_cat_dog_role_missing" not in validate_content_blueprint(blueprint)["failures"]
+
+
 def test_blueprint_rejects_generic_platform_style_and_missing_value():
     blueprint = _video_blueprint()
     blueprint["platform_style"] = "generic"

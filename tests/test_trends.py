@@ -104,10 +104,10 @@ class TrendTests(unittest.TestCase):
         with patch("content_platform.trends.DirectTrendSource.collect", side_effect=RuntimeError("source unavailable")):
             report = TrendCollector({"direct_sources": {"hackernews": {"enabled": True}}, "fallback_enabled": True}).collect_with_report()
 
-        self.assertEqual(report["summary"]["failed_sources"], 5)
+        self.assertEqual(report["summary"]["failed_sources"], 6)  # 5 feeds + bilibili:scenario
         self.assertTrue(report["summary"]["fallback_used"])
         self.assertGreaterEqual(len(report["items"]), 1)
-        self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:5]))
+        self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:6]))
 
     def test_refresh_legacy_script_timeout_is_reported_not_blocking_collection(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -233,7 +233,7 @@ class TrendTests(unittest.TestCase):
             report = TrendCollector({"direct_sources": {"zhihu": {"enabled": True}}}).collect_with_report()
 
         self.assertEqual(report["sources"][0]["status"], "degraded")
-        self.assertEqual(report["summary"]["degraded_sources"], 5)
+        self.assertEqual(report["summary"]["degraded_sources"], 6)
 
     def test_wewrite_hotspots_source_normalizes_cli_output(self):
         payload = [{"title": "公众号热点选题", "heat": 42, "url": "https://example.com/w"}]

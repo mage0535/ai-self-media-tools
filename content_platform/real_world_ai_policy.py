@@ -282,6 +282,28 @@ def classify_discovery_text(title: str, summary: str = "") -> dict[str, Any]:
     return {"accepted": False, "reason": "concrete_application_scene_missing"}
 
 
+COURSE_AD_SHAPE = re.compile(r"全\s*\d+\s*[集讲节]|系统教程|全套教程|零基础|入门到精通|小白|面试")
+
+
+def overnight_topic_fit(title: str) -> str | None:
+    """Overnight AI-lane topic gate: "case" (scene + outcome/case signal), "scene" (AI capability + one
+    concrete pillar scene; the topic analysis must still find the outcome), or None (excluded or no scene).
+
+    Headlines rarely carry outcome words (10-30: 0 of 44 feed AI headlines passed classify_discovery_text),
+    so "scene" keeps scenario-bearing titles while model news, rankings and tool lists stay out. Headline
+    only: long video descriptions matched scene words by accident (r54 test: a 748-episode course ad).
+    """
+    if COURSE_AD_SHAPE.search(str(title or "")):
+        return None
+    result = classify_discovery_text(title)
+    if result["accepted"]:
+        return "case"
+    if result.get("reason") != "outcome_or_case_signal_missing":
+        return None
+    pillars = (load_real_world_ai_positioning().get("pillars") or {}).values()
+    return "scene" if any(_contains(str(title or ""), list(terms or [])) for terms in pillars) else None
+
+
 def validate_real_world_ai_package(package: dict[str, Any] | None) -> dict[str, Any]:
     """Validate publishable scenario metadata; missing proof fails closed."""
     payload = package if isinstance(package, dict) else {}

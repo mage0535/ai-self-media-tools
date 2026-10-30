@@ -117,3 +117,11 @@ def test_video_pacing_plan_lets_a_video_blueprint_pass():
     matrix = {"trend_evidence": {"samples": [{"url": "https://www.bilibili.com/video/BV1"}]}}
     blueprint = build_content_blueprint("douyin_ai", "AI 记忆", slot, matrix)
     assert blueprint["subtitle_and_pacing_plan_when_video"] == plan
+
+
+def test_topic_analysis_prompt_carries_account_positioning_and_exclusions():
+    from content_platform.overnight_topic_analysis import build_prompt
+
+    prompt = build_prompt("zhihu", {"title": "AI 质检落地复盘"}, {})
+    assert "一篇只解决一个主场景" in prompt and "Never dress such a source up as a case" in prompt
+    assert "model release" in prompt and "tool or prompt list" in prompt

@@ -34,6 +34,20 @@ def _pillars() -> list[str]:
     return list((load_real_world_ai_positioning().get("pillars") or {}).keys())
 
 
+def _positioning_rules() -> str:
+    from .real_world_ai_policy import load_real_world_ai_positioning
+
+    policy = load_real_world_ai_positioning()
+    contract = policy.get("content_contract") or {}
+    return (
+        f"ACCOUNT POSITIONING: {policy.get('positioning')}\n"
+        f"RULES: {json.dumps(contract.get('prompt_constraints') or [], ensure_ascii=False)}\n"
+        "Return {\"eligible\": false} when the source is a model release, parameters, benchmark, funding, valuation, "
+        "earnings, ranking, pure news, opinion or general trend, a tool or prompt list, or anything that does not show "
+        "one real task of a specific role in one concrete scene. Never dress such a source up as a case.\n"
+    )
+
+
 def build_prompt(platform: str, candidate: dict[str, Any], slot: dict[str, Any]) -> str:
     language = "English" if platform in ENGLISH_PLATFORMS else "Simplified Chinese"
     source = {
@@ -49,7 +63,8 @@ def build_prompt(platform: str, candidate: dict[str, Any], slot: dict[str, Any])
         + "\nDefine one practical scenario that this source supports. Do not invent facts, numbers, results or quotes; "
         "anything the source does not show is a boundary or a step the reader verifies. Nothing here was measured by us. "
         f"Write every value as a concrete {language} phrase of at most 36 characters about this topic (not generic advice). "
-        f"DOMAINS: {json.dumps(_pillars())}. Return ONLY one JSON object of this shape:\n{SCHEMA}\n"
+        f"DOMAINS: {json.dumps(_pillars())}.\n" + _positioning_rules()
+        + f"Return ONLY one JSON object of this shape:\n{SCHEMA}\n"
         'If the source cannot support a practical scenario, return {"eligible": false}.'
     )
 

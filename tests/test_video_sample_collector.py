@@ -111,9 +111,26 @@ def test_bilibili_risk_control_code_is_an_error_not_an_empty_feed(monkeypatch):
     opener = Opener()
     monkeypatch.setattr(videos.urllib.request, "build_opener", lambda *handlers: opener)
     monkeypatch.setattr(videos, "_VISITOR", videos.http.cookiejar.CookieJar())
+    monkeypatch.setattr(videos.time, "sleep", lambda seconds: None)
     with pytest.raises(ValueError, match="bilibili_api_code_-352"):
         videos._get_json("https://api.bilibili.com/x/web-interface/ranking/v2?rid=188&type=all")
     assert opener.urls[0] == "https://www.bilibili.com/"
+    assert sum("ranking" in url for url in opener.urls) == 2  # one network-level re-read, then the error
+
+
+def test_bilibili_short_risk_control_burst_is_read_again_once(monkeypatch):
+    import io
+
+    answers = [b'{"code": -352, "data": null}', b'{"code": 0, "data": {"list": []}}']
+
+    class Opener:
+        def open(self, request, timeout):
+            return io.BytesIO(b"<html>" if request.full_url.endswith(".com/") else answers.pop(0))
+
+    monkeypatch.setattr(videos.urllib.request, "build_opener", lambda *handlers: Opener())
+    monkeypatch.setattr(videos, "_VISITOR", videos.http.cookiejar.CookieJar())
+    monkeypatch.setattr(videos.time, "sleep", lambda seconds: None)
+    assert videos._get_json("https://api.bilibili.com/x/web-interface/popular?ps=5&pn=1")[1]["code"] == 0
 
 
 def test_short_videos_are_downloaded_whole_and_long_ones_cut(tmp_path):
