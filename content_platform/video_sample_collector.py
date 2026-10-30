@@ -26,7 +26,9 @@ ASR_PYTHON = "/srv/media-runtime/asr-venv/bin/python3"  # has faster_whisper
 ASR_MODEL = "/srv/media-runtime/asr-models/faster-whisper-small"
 # TikTok answers NEW's US proxy; YouTube asks that IP to sign in, so it goes out through OLD's
 # US proxy (OLD hermes-video-egress.service: NetBird 21080, NEW peer only).
-PROXIES = {"bilibili": None, "tiktok": "http://127.0.0.1:2080", "youtube": "http://100.93.72.152:21080"}
+# YouTube and TikTok read public pages through OLD's video-only egress (NEW peer only): NEW's own US exit
+# gets YouTube's bot check, and on 10-29 answered 0/6 TikTok video pages (OLD's exit 6/6).
+PROXIES = {"bilibili": None, "tiktok": "http://100.93.72.152:21080", "youtube": "http://100.93.72.152:21080"}
 # Public AI-product accounts verified 10-29 (posting within 30 days); hashtag pages need login.
 TIKTOK_ACCOUNTS = ("openai", "chatgpt", "microsoft", "google", "capcut", "canva")
 YOUTUBE_QUERIES = ("AI tools tutorial", "AI agent workflow")
@@ -125,7 +127,9 @@ def bilibili_candidates(feed: str, *, get=_get_json) -> list[dict[str, Any]]:
 
 
 def _yt_dlp_json(platform: str, url: str, run, *extra: str) -> str:
-    proc = run([MEDIA_PYTHON, "-m", "yt_dlp", "--proxy", PROXIES[platform], "--js-runtimes", "node", "-J", *extra, url],
+    # Public page reads can stall; yt-dlp re-reads them itself (network level, not a model or job retry).
+    proc = run([MEDIA_PYTHON, "-m", "yt_dlp", "--proxy", PROXIES[platform], "--js-runtimes", "node",
+                "--socket-timeout", "30", "--extractor-retries", "3", "-J", *extra, url],
                capture_output=True, text=True, timeout=180, check=False)
     if proc.returncode:
         raise ValueError(f"{platform}_metadata_unavailable")
