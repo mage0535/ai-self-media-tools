@@ -400,6 +400,10 @@ def _bounded_native_text_run(prompt, route, *, budget_seconds, usage_path, stage
             _close_agent(agent, db)
 
 
+# Toolset with no side effects for text-only Hermes calls (the CLI has no top-level turn limit).
+TEXT_CALL_TOOLSETS = ["todo"]
+
+
 class DraftGenerator:
     PROMPT_VERSION = "v4.0"
 
@@ -1603,12 +1607,15 @@ class DraftGenerator:
             command.extend(["--provider", provider])
         if model:
             command.extend(["--model", model])
-        toolsets=self.config.get('hermes_toolsets')
+        # r47: with no limit every text call ran as a full agent — topic analysis ran terminal/web/browser
+        # tools on the worker for the whole 600 s budget.  Text calls get one harmless toolset and no
+        # auto-injected rules unless the config names its own.
+        toolsets=self.config.get('hermes_toolsets') or TEXT_CALL_TOOLSETS
         if toolsets is not None:
             if not isinstance(toolsets,list) or not toolsets or any(not isinstance(value,str) or not value.strip() for value in toolsets):
                 raise ValueError('explicit_text_toolsets_required')
             command.extend(['--toolsets',','.join(toolsets)])
-        if self.config.get('hermes_text_ignore_auto_rules') is True:
+        if self.config.get('hermes_text_ignore_auto_rules') is not False:
             command.append('--ignore-rules')
         if self.config.get('hermes_text_max_turns') is not None:
             turns=int(self.config['hermes_text_max_turns'])

@@ -249,7 +249,7 @@ def _invoke_hermes_writer(cfg: dict[str, Any], brief_path: Path, article_path: P
     try:
         command_prefix = [sys.executable, hermes_bin] if hermes_bin.endswith(".py") else [hermes_bin]
         completed = subprocess.run(
-            [*command_prefix, "--provider", route["provider"], "--model", route["model"], "--cli", "-z", prompt],
+            [*command_prefix, "--provider", route["provider"], "--model", route["model"], "--toolsets", "todo", "--ignore-rules", "--cli", "-z", prompt],
             capture_output=True,
             text=True,
             encoding="utf-8",

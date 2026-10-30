@@ -57,7 +57,7 @@ def platform_llm_analysis(config, payload):
                 + json.dumps(payload, ensure_ascii=False)
             )
             proc = subprocess.run(
-                [config.get("hermes_command", "hermes"), "-z", prompt, "--cli"],
+                [config.get("hermes_command", "hermes"), "--toolsets", "todo", "--ignore-rules", "-z", prompt, "--cli"],
                 capture_output=True,
                 text=True,
                 timeout=int(config.get("timeout", 20)),

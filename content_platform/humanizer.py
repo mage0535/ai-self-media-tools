@@ -72,7 +72,8 @@ def _hermes_llm_call(prompt: str, system: str = "", timeout: int = 60) -> str:
     """Use Hermes' current configured route without a provider/model default."""
     if os.environ.get("CONTENT_PLATFORM_NO_MODEL_CALLS") == "1":
         return ""
-    command = [os.environ.get("HERMES_COMMAND") or "hermes", "-z",
+    # Text only: no terminal/web tools, no auto-injected rules (r47: unrestricted calls ran tools for minutes).
+    command = [os.environ.get("HERMES_COMMAND") or "hermes", "--toolsets", "todo", "--ignore-rules", "-z",
                system + "\n\n" + prompt, "--cli"]
     global LAST_CALL_ERROR
     LAST_CALL_ERROR = ""
