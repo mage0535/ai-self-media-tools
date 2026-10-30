@@ -159,7 +159,8 @@ class TrendTests(unittest.TestCase):
             source = DirectTrendSource("youtube", {"limit": 5})
             items = source.collect()
 
-        self.assertEqual(items, [{"title": "AI agent demo", "source": "youtube", "url": "https://www.youtube.com/watch?v=a", "points": 900}])
+        self.assertEqual(items, [{"title": "AI agent demo", "source": "youtube", "url": "https://www.youtube.com/watch?v=a", "points": 900,
+                                  "metrics": {"views": 900, "likes": None, "comments": None}}])
         self.assertEqual(source.fetch_provenance["result_kind"], "live_http")
         self.assertTrue(source.fetch_provenance["captured_at"])
 

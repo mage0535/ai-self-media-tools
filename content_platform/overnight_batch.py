@@ -448,6 +448,7 @@ def build_due_tasks(
                     "platform_source_matrix": matrix,
                     "topic_decision": {
                         "score": selected.get("score", 0),
+                        "engagement_quality": selected.get("engagement_quality"),
                         "growth_signals": ["timeliness", "user_benefit"],
                     },
                     "trend_candidate": trend_candidate,

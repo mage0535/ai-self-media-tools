@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .paths import agent_home, project_home, trend_cache_dir
 from .source_quality import source_is_rankable
+from .topic_engagement import engagement_quality
 
 
 def _fetch_provenance():
@@ -100,6 +101,7 @@ def rank_trends(items, profile=None, used=None, limit=10, learned=None):
             "trend_angle": angle,
             "learned_source_score": round(learned_source_score, 3),
             "learned_cluster_score": round(learned_cluster_score, 3),
+            "engagement_quality": engagement_quality(item),  # shadow only (MED3 P1)
         }
         if normalized not in unique or candidate["score"] > unique[normalized]["score"]:
             unique[normalized] = candidate
@@ -601,7 +603,7 @@ class DirectTrendSource:
         found = BilibiliSearchAdapter(fetch_json=lambda url: _get_json(url)[1]).collect(queries=queries, limit=self.limit)
         items = [{"title": row["title"], "source": "bilibili:scenario", "url": row["canonical_url"],
                   "summary": row.get("excerpt", ""), "points": (row.get("metrics") or {}).get("views", 0),
-                  "query": row.get("query", "")} for row in found["items"]]
+                  "query": row.get("query", ""), "metrics": row.get("metrics") or {}} for row in found["items"]]
         if not items:
             failed = [row.get("error") for row in found["sources"] if row.get("status") != "ok"]
             raise RuntimeError(f"bilibili scenario search returned nothing ({len(failed)} of {len(queries)} queries failed)")
@@ -637,6 +639,8 @@ class DirectTrendSource:
                 "points": int(stat.get("view") or 0) + int(stat.get("like") or 0) * 2 + int(stat.get("danmaku") or 0),
                 "author": (row.get("owner") or {}).get("name", ""),
                 "category": str(row.get("tname") or ""),
+                "metrics": {"views": stat.get("view"), "likes": stat.get("like"), "coins": stat.get("coin"),
+                            "favorites": stat.get("favorite"), "shares": stat.get("share"), "comments": stat.get("reply")},
             })
         return items
 
@@ -658,7 +662,8 @@ class DirectTrendSource:
                 "transport": "http", "status": "ok", "via": "yt-dlp", "captured_at": captured,
                 "host": str(urllib.parse.urlsplit(feed_url).hostname or ""),
                 "request_sha256": hashlib.sha256(feed_url.encode()).hexdigest(), "response_sha256": feed_sha256})
-        return [{"title": row["title"], "source": self.name, "url": row["url"], "points": row["views"]}
+        return [{"title": row["title"], "source": self.name, "url": row["url"], "points": row["views"],
+                 "metrics": {"views": row["views"], "likes": row.get("likes"), "comments": row.get("comments")}}
                 for row in rows if row["title"]][: self.limit]
 
     def _juejin_hot(self, fallback_query):

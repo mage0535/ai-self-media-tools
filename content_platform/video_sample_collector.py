@@ -155,7 +155,8 @@ def _ranked(platform: str, entries: list[dict[str, Any]], feed_url: str, feed_sh
     return [{"platform": platform, "id": entry["id"], "feed_url": feed_url, "feed_sha256": feed_sha256,
              "url": urls[platform].format(uploader=entry.get("uploader") or "_", id=entry["id"]),
              "title": str(entry.get("title") or entry.get("description") or "").strip()[:150],
-             "views": int(entry.get("view_count") or 0)} for entry in kept]
+             "views": int(entry.get("view_count") or 0),
+             "likes": entry.get("like_count"), "comments": entry.get("comment_count")} for entry in kept]
 
 
 def tiktok_candidates(*, run=subprocess.run) -> list[dict[str, Any]]:
