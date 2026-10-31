@@ -65,3 +65,10 @@ def test_cover_prompt_puts_the_title_on_the_cover_and_only_summarises_the_openin
     prompt = MediaBridge._cover_prompt(job)
     assert "Headline text on the cover: 别把向量库当记忆." in prompt
     assert opening not in prompt and opening[:120] in prompt
+
+
+def test_xiaohongshu_card_carousel_does_not_require_global_optional_audio():
+    from content_platform.pipeline import Pipeline
+
+    draft = {"title": "t", "body": "b", "draft_meta": {"content_form": "manual_carousel", "media_plan": ["cover", "content_images", "caption"]}}
+    assert Pipeline._execution_media_kinds({"audio", "image", "cover", "caption"}, draft, {"media": {"audio": {"enabled": True}}}) == {"image", "cover"}

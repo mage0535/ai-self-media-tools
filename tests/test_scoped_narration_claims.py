@@ -57,6 +57,21 @@ def test_humanizer_uses_generator_timeout(monkeypatch):
     assert seen["timeout"] == 600
 
 
+def test_humanizer_keeps_short_video_script_when_rewrite_merges_paragraphs(monkeypatch):
+    script = "猫为什么会拆家？\n\n第一步，换锁扣。\n\n第二步，加益智玩具。\n\n你家猫会合作吗？"
+    merged = "猫为什么会拆家。原因很多。第一步换锁扣。第二步加益智玩具。第三步分开喂。你家猫会合作吗。"
+    monkeypatch.setattr("content_platform.humanizer.humanize_text",
+                        lambda title, body, **_: {"ok": True, "title": title, "body": merged, "score": 40, "patterns_detected": ["x"]})
+    events = []
+    pipeline = SimpleNamespace(config={}, store=SimpleNamespace(record_event=lambda *a: events.append(a[1])),
+                               _validate_draft_structure=lambda item: None)
+    draft = {"title": "t", "body": script, "draft_meta": {"strategy": {"primary_platforms": ["douyin_pet"]}}}
+
+    Pipeline._humanize_draft(pipeline, "job", draft)
+
+    assert draft["body"] == script and "humanize_rejected_structure" in events
+
+
 def test_fit_article_length_never_ends_inside_code_and_keeps_language():
     from content_platform.generator import DraftGenerator
 

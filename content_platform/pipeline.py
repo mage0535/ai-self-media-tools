@@ -1800,6 +1800,12 @@ class Pipeline:
             if 'article' in content_form and (after_chars<before_chars*0.7 or (before_chars>=1200>after_chars)):
                 self.store.record_event(job_id,'humanize_rejected_short',{'body_chars':{'before':before_chars,'after':after_chars}})
                 continue
+            # Video narration is gated on short paragraphs (G2); r58: the rewrite merged a pet script into long lines.
+            platforms={str(p).casefold() for p in ((item.get('draft_meta') or {}).get('strategy') or {}).get('primary_platforms') or []}
+            if platforms&SHORT_VIDEO_PLATFORMS and geo_check(str(item.get('body') or ''))['checks'].get('short_paragraphs') \
+                    and not geo_check(str(result['body']))['checks'].get('short_paragraphs'):
+                self.store.record_event(job_id,'humanize_rejected_structure',{'body_chars':{'before':before_chars,'after':after_chars}})
+                continue
             item['title']=result['title'];item['body']=result['body']
             # The rewrite has no length bound; apply the generator's article fit again.
             item['body']=DraftGenerator._fit_article_length(item['body'],{'strategy':{'content_form':content_form}})
@@ -2019,7 +2025,7 @@ class Pipeline:
         # Global optional audio capability is not a text/image delivery requirement.
         # Explicit audio/video/unknown plans retain the original required-source gate.
         if ('audio' in kinds and not audio_cfg.get('required')
-                and meta.get('content_form') in {'text','short_post','image_text','image_text_post',
+                and meta.get('content_form') in {'text','short_post','image_text','image_text_post','manual_carousel',
                                                  'article','long_article','technical_article','evidence_answer'}
                 and isinstance(plan,list) and plan and all(isinstance(x,str) for x in plan)
                 and set(plan)<={'cover','content_images','image','images','caption','article','text'}
