@@ -844,10 +844,10 @@ def test_due_task_builder_moves_past_an_ineligible_topic_and_shares_the_analysis
 def test_due_task_builder_blocks_when_every_analysed_topic_is_ineligible():
     prepared = _build_due_tasks(
         [{"platform": "juejin"}], items=[], source_report=[],
-        rank_for_platform=lambda platform, *_: [{"title": f"t{i}", "source": platform, "fingerprint": f"t{i}"} for i in range(8)],
+        rank_for_platform=lambda platform, *_: [{"title": f"t{i}", "source": platform, "fingerprint": f"t{i}"} for i in range(12)],
         topic_analyzer=lambda *_: None,
     )
 
     assert prepared["tasks"][0]["state"] == "blocked"
     assert prepared["tasks"][0]["reason"] == "topic analysis returned no eligible scenario"
-    assert prepared["tasks"][0]["ineligible_candidates_analysed"] == 5
+    assert prepared["tasks"][0]["ineligible_candidates_analysed"] == 8
