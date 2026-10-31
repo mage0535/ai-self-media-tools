@@ -29,7 +29,10 @@ else
   route=()
 fi
 
-output="$(env -i HOME="$HOME" PATH="$PATH" PYTHONPATH="$root" "$command" "${route[@]}" -z 'Return only JSON: {"title":"provider smoke","body":"provider smoke"}' --cli)"
+# Keep the role's Hermes home: the media lane's own $HOME/.hermes is read-only (10-31 window failed here).
+# One harmless toolset and no auto-injected rules, like every text call (d5409d0).
+output="$(env -i HOME="$HOME" PATH="$PATH" PYTHONPATH="$root" ${HERMES_HOME:+HERMES_HOME="$HERMES_HOME"} \
+  "$command" "${route[@]}" --toolsets todo --ignore-rules -z 'Return only JSON: {"title":"provider smoke","body":"provider smoke"}' --cli)"
 python3 - "$output" <<'PY'
 import json
 import re
