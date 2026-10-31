@@ -51,7 +51,8 @@ def _generation_contract_fields(
     statuses = value("hot_viral_source_statuses", {})
     canonical_output_name = str(value("canonical_output_name", "final.mp4"))
     supplied_audio_plan = value("audio_plan", None)
-    audio_plan = deepcopy(supplied_audio_plan) if isinstance(supplied_audio_plan, dict) else None
+    # Bound stage payloads carry an unresolved plan as {}; treat it like an absent plan.
+    audio_plan = deepcopy(supplied_audio_plan) if isinstance(supplied_audio_plan, dict) and supplied_audio_plan else None
     if audio_plan is None:
         audio_plan = {
             "status": "resolution_required",
@@ -95,6 +96,7 @@ def _generation_contract_fields(
         "revision": int(value("revision", 1)),
         "attempt_id": str(value("attempt_id", "attempt-1")),
         "lane": lane,
+        **{key: str(value(key, "")) for key in ("account_key", "content_line") if value(key, "")},
         "content_type": content_type,
         "evidence_shapes": deepcopy(evidence_shapes),
         "viewer_job": viewer_job,

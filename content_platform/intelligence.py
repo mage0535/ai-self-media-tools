@@ -322,7 +322,9 @@ def prepare_generation_strategy_inputs(topic, brief, *, content_form=None):
         'queries':list((bundle.get('keywords') or {}).get('topic') or []),'fingerprint':bundle.get('fingerprint')}
     breakdown=scoped.get('viral_breakdown') or {}
     strict=bool(scoped.get('require_live_strategy_evidence') or (scoped.get('run_contract') or {}).get('enforce_strategy_evidence'))
-    if strict and (breakdown.get('platform')!=platform or not validate_breakdown_report(breakdown)['passed'] or not cache_is_fresh(breakdown)):
+    # Lanes without their own public collector observe a declared sibling platform (overnight_benchmarks).
+    source_platform=str(scoped.get('cross_platform_source') or platform).casefold()
+    if strict and (breakdown.get('platform')!=source_platform or not validate_breakdown_report(breakdown)['passed'] or not cache_is_fresh(breakdown)):
         raise ValueError('strategy_evidence_breakdown_platform_or_freshness_invalid')
     if strict:
         from datetime import datetime,timezone
@@ -335,12 +337,13 @@ def prepare_generation_strategy_inputs(topic, brief, *, content_form=None):
         if maximum!=expected or not timestamps or any(value.tzinfo is None or not 0<=(current-value).total_seconds()<=maximum for value in timestamps):
             raise ValueError('strategy_evidence_sample_observation_expired')
         from .task_source_inputs import _observed_strategy_inputs
-        actual=_observed_strategy_inputs(platform,{'items':breakdown['samples']},now=current)['viral_breakdown']
+        actual=_observed_strategy_inputs(source_platform,{'items':breakdown['samples']},now=current)['viral_breakdown']
         if actual['samples']!=breakdown['samples']:
             raise ValueError('strategy_evidence_observed_breakdown_changed')
     contract=build_strategy_evidence_contract(platform=platform,lane=lane,
         viral_collection=scoped.get('viral_collection'),viral_breakdown=breakdown,keyword_tool=keywords,
-        prompt_bundle={'validation':bundle_gate,'fingerprint':bundle.get('fingerprint'),'evidence':evidence})
+        prompt_bundle={'validation':bundle_gate,'fingerprint':bundle.get('fingerprint'),'evidence':evidence},
+        reference_platform=source_platform)
     gate=validate_strategy_evidence_contract(contract)
     if strict and not gate['passed']:
         raise ValueError('strategy evidence contract invalid: '+', '.join(gate['failures']))

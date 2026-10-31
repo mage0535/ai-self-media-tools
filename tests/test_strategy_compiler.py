@@ -86,6 +86,24 @@ def test_strategy_evidence_contract_rejects_cross_platform_viral_samples():
     assert "viral_breakdown_cross_platform_samples" in result["failures"]
 
 
+def test_strategy_evidence_contract_accepts_samples_of_a_declared_reference_platform():
+    from content_platform.strategy_compiler import build_strategy_evidence_contract, validate_strategy_evidence_contract
+
+    sample = {"canonical_url": "https://www.bilibili.com/video/BV1x", "native_id": "BV1x", "author": "a",
+              "published_at": "2026-10-30", "captured_at": "2026-10-30T00:00:00+00:00", "views": 10, "media_ref": "m"}
+    args = dict(platform="douyin_pet", lane="pet_healing",
+                viral_collection={"tool": "bilibili-collector", "collected_at": "2026-10-30T00:00:00+00:00", "sample_count": 1},
+                viral_breakdown={"status": "ready", "summary": {"accepted_samples": 1}, "samples": [sample]},
+                keyword_tool={"tool": "keyword_strategy", "platform": "douyin_pet", "lane": "pet_healing", "queries": ["猫咪治愈"]},
+                prompt_bundle={"validation": {"passed": True}, "fingerprint": "p", "evidence": [sample["canonical_url"]]})
+
+    undeclared = validate_strategy_evidence_contract(build_strategy_evidence_contract(**args))
+    declared = build_strategy_evidence_contract(**args, reference_platform="bilibili")
+    assert "viral_breakdown_cross_platform_samples" in undeclared["failures"]
+    assert declared["reference_platform"] == "bilibili"
+    assert "viral_breakdown_cross_platform_samples" not in validate_strategy_evidence_contract(declared)["failures"]
+
+
 def test_strategy_evidence_contract_requires_content_level_sample_metadata():
     from content_platform.strategy_compiler import validate_strategy_evidence_contract
 

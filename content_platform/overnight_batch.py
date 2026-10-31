@@ -21,6 +21,10 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Model calls per lane for new candidates.  r57: with the strict real-world positioning 3 left two of
+# five lanes without an eligible topic; each analysis takes about a minute of the prepare step.
+MAX_TOPIC_ANALYSES = 5
+
 MANUAL_HANDOFF_PLATFORMS = {
     "bilibili",
     "douyin",
@@ -262,7 +266,7 @@ def build_due_tasks(
                     continue
                 if previous is None or _allows_evidenced_overlap(platform, candidate, raw, previous, source_report, strategy):
                     if needs_analysis:
-                        if analysed >= 3:
+                        if analysed >= MAX_TOPIC_ANALYSES:
                             break
                         from .overnight_topic_analysis import ENGLISH_PLATFORMS
 
@@ -370,7 +374,10 @@ def build_due_tasks(
                 content_slot.setdefault("subtitle_and_pacing_plan_when_video",
                                         video_pacing_plan(platform, str(selected["title"]), scenario))
                 # The prompt compiler reads the structured scenario from the brief.
-                analyzed_brief = {"lane": "pet_healing", "scenario": scenario} if platform == "douyin_pet" else {
+                # The pet render's account gate needs the account and its content line (the scenario domain).
+                analyzed_brief = {"lane": "pet_healing", "account_key": "douyin_pet",
+                                  "content_line": str(scenario.get("domain") or ""),
+                                  "scenario": scenario} if platform == "douyin_pet" else {
                     "lane": "real_world_ai_implementation",
                     "policy_profile": "real_world_ai_implementation_v1",
                     "scenario": scenario,
@@ -458,6 +465,8 @@ def build_due_tasks(
                     "content_blueprint_gate": blueprint_gate,
                     "content_quality_reference_gate": quality_reference_gate,
                     "selection_mode": selection_mode,
+                    **({"publishing_plan": {"mode": "manual_handoff_package", "manual_review_required": True}}
+                       if platform in MANUAL_HANDOFF_PLATFORMS else {}),
                     **analyzed_brief,
                     **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
                     **({"original_knowledge_intent": str(raw["original_knowledge_intent"]), "source_collection_required": True}

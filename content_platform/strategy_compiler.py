@@ -103,6 +103,7 @@ def build_strategy_evidence_contract(
     viral_breakdown: dict[str, Any] | None,
     keyword_tool: dict[str, Any] | None,
     prompt_bundle: dict[str, Any] | None,
+    reference_platform: str | None = None,
 ) -> dict[str, Any]:
     """Bind observed research outputs to the generation strategy.
 
@@ -111,7 +112,7 @@ def build_strategy_evidence_contract(
     input, so a caller cannot claim that a strategy used research it never
     supplied.
     """
-    return {
+    contract = {
         "version": "strategy_evidence_contract_v1",
         "platform": str(platform or "").casefold().strip(),
         "lane": str(lane or "").strip(),
@@ -120,6 +121,11 @@ def build_strategy_evidence_contract(
         "keyword_tool": dict(keyword_tool or {}),
         "prompt_bundle": dict(prompt_bundle or {}),
     }
+    reference = str(reference_platform or "").casefold().strip()
+    if reference and reference != contract["platform"]:
+        # A lane without its own public collector names the sibling platform it observed.
+        contract["reference_platform"] = reference
+    return contract
 
 
 def validate_strategy_evidence_contract(contract: dict[str, Any] | None) -> dict[str, Any]:
@@ -160,7 +166,8 @@ def validate_strategy_evidence_contract(contract: dict[str, Any] | None) -> dict
         "x": ("x.com", "twitter.com"),
         "twitter": ("x.com", "twitter.com"),
     }
-    roots = native_roots.get(platform)
+    # Samples must be native to the lane, or to the sibling platform the contract declares.
+    roots = native_roots.get(str(contract.get("reference_platform") or platform).casefold())
     if roots and isinstance(samples, list):
         non_native = []
         metadata_incomplete = False

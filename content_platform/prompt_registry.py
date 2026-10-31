@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 REGISTRY_VERSION = "prompt_registry_v1"
+# Lanes that share another platform's prompt profile (the compiler already mapped this one).
+PROFILE_ALIASES = {"douyin_pet": "douyin_ai"}
 _DEFAULT_PATH = Path(__file__).resolve().parents[1] / "config" / "prompt_registry.json"
 
 
@@ -44,7 +46,7 @@ class PromptRegistry:
 
     def platform(self, platform_id: str) -> dict[str, Any]:
         try:
-            profile = self._platforms[platform_id]
+            profile = self._platforms[PROFILE_ALIASES.get(platform_id, platform_id)]
         except KeyError:
             raise KeyError(f"unknown platform profile: {platform_id}") from None
         if not isinstance(profile, dict):

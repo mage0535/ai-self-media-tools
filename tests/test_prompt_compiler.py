@@ -150,6 +150,14 @@ def test_prompt_registry_loads_versioned_platform_profiles():
     assert zhihu["aspect_ratio"] is None
 
 
+def test_overnight_card_and_pet_lanes_have_prompt_profiles():
+    from content_platform.prompt_registry import PromptRegistry
+
+    registry = PromptRegistry.from_default()
+    assert registry.platform("xiaohongshu")["aspect_ratio"] == "3:4"
+    assert registry.platform("douyin_pet") == registry.platform("douyin_ai")
+
+
 def test_prompt_registry_rejects_unknown_platform_and_bad_snapshot(tmp_path):
     import json
     import pytest

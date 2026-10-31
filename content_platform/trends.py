@@ -241,6 +241,8 @@ class TrendCollector:
             "wewrite_hotspots": {"enabled": False, "limit": 20, "timeout": 8},
             "kuaishou": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u5feb\u624b \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 \u77ed\u89c6\u9891"},
             "juejin": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI \u5de5\u5177 \u6548\u7387 \u5de5\u4f5c\u6d41 site:juejin.cn"},
+            # Same scenario searches on Juejin's public search: its hot list is mostly model news (10-31 r55).
+            "juejin:scenario": {"enabled": True, "limit": 20, "timeout": 8},
             "shipinhao": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u89c6\u9891\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387"},
             "xiaohongshu": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u5c0f\u7ea2\u4e66 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 site:xiaohongshu.com"},
             "youtube": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI workflow automation productivity site:youtube.com"},
@@ -378,6 +380,8 @@ class DirectTrendSource:
             return self._bilibili()
         if self.name == "bilibili:scenario":
             return self._bilibili_scenario()
+        if self.name == "juejin:scenario":
+            return self._juejin_scenario()
         if self.name == "zhihu":
             try:
                 return self._zhihu_cli_hot()
@@ -607,6 +611,50 @@ class DirectTrendSource:
         if not items:
             failed = [row.get("error") for row in found["sources"] if row.get("status") != "ok"]
             raise RuntimeError(f"bilibili scenario search returned nothing ({len(failed)} of {len(queries)} queries failed)")
+        return items
+
+    def _juejin_scenario(self):
+        """Juejin articles for the account's scenario queries (public search, no login), last 365 days.
+
+        Each query keeps its own best on-policy headlines: one merged views ranking let generic
+        "AI 大模型" posts crowd out the scenario cases (r56).
+        """
+        from concurrent.futures import ThreadPoolExecutor
+        from .real_world_ai_policy import build_discovery_queries, overnight_topic_fit
+
+        day = datetime.now().date().isoformat()
+        queries = list(dict.fromkeys(q for round_ in ("", "b", "c") for q in build_discovery_queries(seed=day + round_)))
+        oldest = time.time() - 365 * 86400
+
+        def search(query):
+            try:
+                return query, self._request_json("https://api.juejin.cn/search_api/v1/search?aid=2608&spider=0&id_type=2"
+                                                  f"&cursor=0&limit=20&search_type=0&sort_type=0&version=1&query={urllib.parse.quote(query)}")
+            except Exception:
+                return query, None
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            answers = list(pool.map(search, queries))
+        found, failed = {}, sum(1 for _, payload in answers if payload is None)
+        for query, payload in answers:
+            kept = 0
+            for row in (payload or {}).get("data") or []:
+                model = row.get("result_model") or {}
+                info = model.get("article_info") or {}
+                article_id, title = str(info.get("article_id") or ""), str(info.get("title") or "").strip()
+                if (kept >= 3 or not article_id or not title or article_id in found
+                        or int(info.get("ctime") or 0) < oldest or overnight_topic_fit(title) is None):
+                    continue
+                kept += 1
+                found[article_id] = {
+                    "title": title, "source": "juejin:scenario", "url": f"https://juejin.cn/post/{article_id}",
+                    "points": int(info.get("view_count") or 0), "author": (model.get("author_user_info") or {}).get("user_name", ""),
+                    "query": query, "metrics": {"views": info.get("view_count"), "likes": info.get("digg_count"),
+                                                "favorites": info.get("collect_count"), "comments": info.get("comment_count")},
+                }
+        items = list(found.values())[: max(self.limit, 30)]
+        if not items:
+            raise RuntimeError(f"juejin scenario search returned nothing on-policy ({failed} of {len(queries)} queries failed)")
         return items
 
     def _bilibili(self):

@@ -42,6 +42,11 @@
       "language": "zh-CN", "content_type": "article", "aspect_ratio": null, "duration_seconds": null,
       "required_constraints": ["决策上下文", "流程理由", "局限与来源"], "forbidden": ["低于主题所需深度", "空泛经验总结"]
     },
+    "xiaohongshu": {
+      "prompt_profile": "xiaohongshu_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
+      "language": "zh-CN", "content_type": "image_text", "aspect_ratio": "3:4", "duration_seconds": null,
+      "required_constraints": ["首图写清场景与结果", "每张卡一个步骤或要点", "真实场景证据"], "forbidden": ["泛工具清单", "无来源量化结论"]
+    },
     "bilibili": {
       "prompt_profile": "bilibili_real_world_ai_v1", "policy_profile": "real_world_ai_implementation_v1", "policy_revision": "2026-09-16-universal-ai-lane-r2",
       "language": "zh-CN", "content_type": "video", "aspect_ratio": "16:9", "duration_seconds": {"min": 40, "max": 600},

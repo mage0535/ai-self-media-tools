@@ -1136,7 +1136,7 @@ class DraftGenerator:
     def _fit_article_length(body, context):
         text = str(body or "").strip()
         content_form = str((context.get("strategy") or {}).get("content_form") or "")
-        if "article" not in content_form:
+        if "article" not in content_form and content_form != "evidence_answer":  # zhihu answers use the article gate
             return text
         compact_len = len("".join(text.split()))
         if compact_len <= 3000:

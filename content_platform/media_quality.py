@@ -453,6 +453,9 @@ def validate_platform_article_packet(packet: dict[str, Any], platform: str) -> d
     return _result(gates)
 
 
+XIAOHONGSHU_CAROUSEL_FORMS = {"manual_carousel"}
+
+
 def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     """Validate Xiaohongshu mixed manual-handoff packages before user review."""
     content_type = str(packet.get("content_type") or packet.get("content_form") or "").casefold()
@@ -460,7 +463,14 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
     images = packet.get("section_image_map") or packet.get("image_text_plan") or []
     cover = packet.get("cover_design") or {}
     strict_cover_gate = packet.get("strict_cover_gate") is True
-    source_assets = packet.get("source_assets") or packet.get("authentic_source_evidence") or []
+    # A manual carousel (cover + cards + copy, the blueprint form for this lane)
+    # has no short video; its rights-cleared real-scene backgrounds are its source assets.
+    carousel = content_type in XIAOHONGSHU_CAROUSEL_FORMS
+    background_plan = packet.get("real_scene_background_plan") or {}
+    carousel_assets = (
+        background_plan.get("per_slide_backgrounds") or background_plan.get("backgrounds") or []
+    ) if carousel and isinstance(background_plan, dict) else []
+    source_assets = packet.get("source_assets") or packet.get("authentic_source_evidence") or carousel_assets
     disclosure = str(packet.get("ai_assisted_disclosure") or packet.get("disclosure") or packet.get("body") or "")
     video_plan = packet.get("video_plan") or packet.get("short_video_plan") or {}
     mixed_plan = packet.get("mixed_content_plan") or {}
@@ -478,6 +488,7 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
                 "image_text_knowledge_card_short_video_mix",
                 "xiaohongshu_mixed_note",
                 "note_knowledge_card_short_video",
+                *XIAOHONGSHU_CAROUSEL_FORMS,
             },
             "actual": content_type,
         },
@@ -509,7 +520,8 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "section_real_scene_mapping": _section_real_scene_mapping_gate(packet, images),
         "short_video_component": {
-            "passed": all(video_plan.get(key) for key in ["theme", "opening_hook", "visual_alignment_plan"])
+            "passed": carousel
+            or all(video_plan.get(key) for key in ["theme", "opening_hook", "visual_alignment_plan"])
             or all(mixed_plan.get(key) for key in ["short_video", "image_text_note", "knowledge_cards"]),
         },
         "authentic_source_evidence": {

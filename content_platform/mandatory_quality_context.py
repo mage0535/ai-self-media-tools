@@ -24,8 +24,9 @@ VIDEO_FORMS = {"short_video", "edited_short_video", "microcase_video", "cat_know
     "visual_card_voiceover", "tutorial_video", "short_viral_video", "long_form_tutorial",
     "shorts_tip", "practical_workflow_demo"}
 ARTICLE_FORMS = {"long_form_article", "image_text_article", "technical_longform", "tutorial",
-    "reasoned_longform", "column_article", "technical_article", "short_article", "email_newsletter"}
-IMAGE_FORMS = {"image_text_note", "knowledge_card_block", "carousel", "image_text_post"}
+    "reasoned_longform", "column_article", "technical_article", "short_article", "email_newsletter",
+    "long_article", "evidence_answer"}  # overnight slot forms (10-31)
+IMAGE_FORMS = {"image_text_note", "knowledge_card_block", "carousel", "image_text_post", "manual_carousel"}
 TEXT_FORMS = {"short_post", "thread_post", "short_anonymous_post"}
 PIECE_FORMS = {"title", "body", "image", "cover", "article_card", "knowledge_card",
     "voiceover", "tts", "subtitle", "subtitles", "bgm", "rewrite", "translation"}

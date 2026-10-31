@@ -104,10 +104,23 @@ class TrendTests(unittest.TestCase):
         with patch("content_platform.trends.DirectTrendSource.collect", side_effect=RuntimeError("source unavailable")):
             report = TrendCollector({"direct_sources": {"hackernews": {"enabled": True}}, "fallback_enabled": True}).collect_with_report()
 
-        self.assertEqual(report["summary"]["failed_sources"], 6)  # 5 feeds + bilibili:scenario
+        self.assertEqual(report["summary"]["failed_sources"], 7)  # 5 feeds + bilibili:scenario + juejin:scenario
         self.assertTrue(report["summary"]["fallback_used"])
         self.assertGreaterEqual(len(report["items"]), 1)
-        self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:6]))
+        self.assertTrue(all(row["status"] == "failed" for row in report["sources"][:7]))
+
+    def test_juejin_scenario_search_keeps_recent_articles_with_counts(self):
+        import time as _time
+        now = int(_time.time())
+        rows = [{"result_model": {"article_info": {"article_id": "1", "title": "AI 客服实战：退款工单自动分类，人工复核率降到 20%", "ctime": str(now - 86400),
+                                                    "view_count": 300, "digg_count": 5, "collect_count": 9, "comment_count": 2},
+                                   "author_user_info": {"user_name": "a"}}},
+                {"result_model": {"article_info": {"article_id": "2", "title": "三年前的旧文", "ctime": str(now - 900 * 86400),
+                                                    "view_count": 9000}}}]
+        with patch.object(DirectTrendSource, "_request_json", return_value={"err_no": 0, "data": rows}):
+            items = DirectTrendSource("juejin:scenario", {"limit": 5}).collect()
+        self.assertEqual([row["url"] for row in items], ["https://juejin.cn/post/1"])
+        self.assertEqual(items[0]["metrics"], {"views": 300, "likes": 5, "favorites": 9, "comments": 2})
 
     def test_refresh_legacy_script_timeout_is_reported_not_blocking_collection(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -234,7 +247,7 @@ class TrendTests(unittest.TestCase):
             report = TrendCollector({"direct_sources": {"zhihu": {"enabled": True}}}).collect_with_report()
 
         self.assertEqual(report["sources"][0]["status"], "degraded")
-        self.assertEqual(report["summary"]["degraded_sources"], 6)
+        self.assertEqual(report["summary"]["degraded_sources"], 7)  # default sources incl. both scenario searches
 
     def test_wewrite_hotspots_source_normalizes_cli_output(self):
         payload = [{"title": "公众号热点选题", "heat": 42, "url": "https://example.com/w"}]

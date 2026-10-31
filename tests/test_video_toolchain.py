@@ -69,6 +69,24 @@ class VideoToolchainTests(unittest.TestCase):
         self.assertIn("audio_plan_resolver", plan["required_tools"])
         self.assertIn("resolve_audio_plan", plan["renderer_steps"])
 
+    def test_empty_bound_audio_plan_records_resolution_required(self):
+        plan = build_video_toolchain_plan(
+            {"primary_platforms": ["douyin_pet"], "content_form": "short_video", "audio_plan": {}},
+            {"topic": "cat nap", "audio_plan": {}},
+        )
+
+        self.assertEqual(plan["audio_plan"]["route"], "resolution_required")
+
+    def test_pet_plan_carries_the_account_lane_for_the_render_gate(self):
+        from content_platform.account_lane_gate import validate_account_lane
+
+        plan = build_video_toolchain_plan(
+            {"primary_platforms": ["douyin_pet"], "content_form": "short_video"},
+            {"topic": "cat nap", "lane": "pet_healing", "account_key": "douyin_pet", "content_line": "healing_moments"},
+        )
+
+        self.assertTrue(validate_account_lane(plan)["passed"])
+
     def test_original_ai_workflow_rejects_even_approved_sfx_only(self):
         with self.assertRaisesRegex(ValueError, "sfx_only_conflicts_with_bgm_requirement"):
             build_video_toolchain_plan(

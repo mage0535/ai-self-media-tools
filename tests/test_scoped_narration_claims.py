@@ -70,6 +70,16 @@ def test_fit_article_length_never_ends_inside_code_and_keeps_language():
     assert "## 落地要点" in fitted and "Practical takeaway" not in fitted
 
 
+def test_fit_article_length_also_bounds_zhihu_evidence_answers():
+    from content_platform.generator import DraftGenerator
+
+    body = "\n\n".join(["## 判断\n\n" + "条件化判断与案例说明。" * 40] * 10)
+
+    fitted = DraftGenerator._fit_article_length(body, {"strategy": {"content_form": "evidence_answer"}})
+
+    assert 1200 <= len("".join(fitted.split())) <= 3000
+
+
 def test_deferred_tool_needs_a_named_step_under_required_execution():
     from content_platform.content_recipe import build_tool_invocation_manifest, validate_tool_invocation_manifest
 
