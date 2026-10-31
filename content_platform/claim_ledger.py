@@ -72,3 +72,9 @@ def sanitize_unsupported_claims(text: str, findings: list[dict[str, Any]] | None
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def strip_numeric_claims(title: str) -> str:
+    """A title whose only sentence is an unsourced numeric claim keeps its words without the number phrase."""
+    cleaned = NUMERIC_CLAIM.sub("", str(title or ""))
+    return re.sub(r"\s{2,}", " ", cleaned).strip(" ，,：:")

@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from .compliance import ComplianceChecker
-from .claim_ledger import sanitize_unsupported_claims, validate_claims
+from .claim_ledger import sanitize_unsupported_claims, strip_numeric_claims, validate_claims
 from .content_depth import validate_content_depth_plan
 from .content_hygiene import audit_topic
 from .content_policy import SHORT_VIDEO_PLATFORMS, generated_media_kinds_for_job
@@ -427,7 +427,8 @@ class Pipeline:
         draft.setdefault("draft_meta", {})["claim_gate"] = claim_gate
         strict_claims = bool((job.get("brief") or {}).get("run_contract")) or str((job.get("brief") or {}).get("selection_mode") or "") == "editorial_calendar"
         if not claim_gate.get("passed") and strict_claims:
-            cleaned_title = sanitize_unsupported_claims(draft["title"], claim_gate.get("findings")) or str(job.get("topic") or "Verified workflow")
+            cleaned_title = (sanitize_unsupported_claims(draft["title"], claim_gate.get("findings"))
+                             or strip_numeric_claims(draft["title"]) or str(job.get("topic") or "Verified workflow"))
             cleaned_body = sanitize_unsupported_claims(draft["body"], claim_gate.get("findings"))
             cleaned_gate = validate_claims(cleaned_title + "\n" + cleaned_body + ('\n'+script_text if script_text else ''), claim_ledger)
             if len(cleaned_body) >= 80 and cleaned_gate.get("passed"):
@@ -1320,7 +1321,9 @@ class Pipeline:
             claim=validate_claims(text,ledger)
             if brief.get('run_contract') and not claim.get('passed'):
                 # Same rule as the main claim gate: drop unsupported sentences, keep only a clean, non-trivial body.
-                cleaned_title=sanitize_unsupported_claims(variant.get('title') or '',claim.get('findings')) or str(variant.get('title') or '')
+                # r59: a Zhihu title was one numeric sentence; falling back to it re-failed the gate.
+                cleaned_title=(sanitize_unsupported_claims(variant.get('title') or '',claim.get('findings'))
+                               or strip_numeric_claims(variant.get('title') or '') or str(variant.get('title') or ''))
                 cleaned_body=sanitize_unsupported_claims(variant.get('body') or '',claim.get('findings'))
                 cleaned_text=cleaned_title+'\n'+cleaned_body+'\n'+_draft_script_text(variant)
                 cleaned_claim=validate_claims(cleaned_text,ledger)

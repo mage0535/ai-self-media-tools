@@ -30,6 +30,17 @@ def test_unsupported_sentence_is_removed_when_the_rest_passes():
     assert draft["draft_meta"]["claim_sanitization"]["removed_count"] == 1
 
 
+def test_numeric_only_title_keeps_its_words_without_the_number():
+    body = "这是一段足够长的正文，说明多 Agent 协同编辑的架构推演与人工复核边界，没有任何数字结论。" * 3
+    draft = {"title": "实测避坑：10年前端带AI做在线协同文档的架构推演", "body": body}
+    runner = Runner()
+
+    Pipeline._validate_scoped_narrations(_pipeline(), "job", draft, {"zhihu": {"run_contract": {"id": 1}}}, runner)
+
+    assert runner.blocked == []
+    assert draft["title"] == "实测避坑：前端带AI做在线协同文档的架构推演"
+
+
 def test_short_body_after_cleanup_still_blocks():
     draft = {"title": "工作流拆解", "body": "节省 3 小时。"}
     runner = Runner()

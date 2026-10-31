@@ -14,6 +14,9 @@ from .tool_registry import ToolRegistry
 from .paths import agent_scripts_dir
 from .delivery_manifest import validate_attempt_bundle
 
+# Article artifact contract threshold (pipeline validate_article_completion / quality_gates).
+SEMANTIC_RETRY_THRESHOLD = 0.72
+
 
 class MediaBridge:
     VIDEO_SCRIPT_MAX_SEGMENTS = 8
@@ -957,10 +960,28 @@ class MediaBridge:
                 )
             else:
                 raise RuntimeError(f"image provider repeated an exact visual for scene {idx + 1}")
+            # r59: one Juejin section image scored 0.68 < 0.72 and failed the article artifact contract.
+            # A low semantic score gets one regeneration; the kept review is reused by the provenance record.
+            review = None if semantic_requirements else self._semantic_review(output, job, item, provider_result)
+            if review is not None and (review.get("score") or 0) < SEMANTIC_RETRY_THRESHOLD:
+                retry_prompt = (f"{item['prompt']} Show exactly this section's concrete subject: "
+                                f"{str(item.get('purpose') or '')[:200]} {str(item.get('adjacent_text') or '')[:300]}")
+                retry_result = provider.run(retry_prompt, output, extra_args, **run_kwargs)
+                if isinstance(retry_result, dict) and output.is_file():
+                    retry_checksum = hashlib.sha256(output.read_bytes()).hexdigest()
+                    retry_signature = self._visual_signature(output)
+                    if retry_checksum not in used_checksums and not any(
+                        self._visual_distance(retry_signature, previous) <= 6 for previous in used_visual_signatures
+                    ):
+                        provider_result, checksum, visual_signature = retry_result, retry_checksum, retry_signature
+                        review = self._semantic_review(output, job, item, provider_result)
+                if hashlib.sha256(output.read_bytes()).hexdigest() != checksum:
+                    raise RuntimeError(f"image retry left an unrecorded file for scene {idx + 1}")
             used_checksums.add(checksum)
             used_visual_signatures.append(visual_signature)
             images.append(
                 {
+                    **({"semantic_review": review} if review is not None else {}),
                     "kind": "image",
                     "role": item["role"],
                     "section": item.get("section", ""),
@@ -1013,6 +1034,15 @@ class MediaBridge:
         return (int(left, 16) ^ int(right, 16)).bit_count()
 
     @staticmethod
+    def _semantic_review(path, job, item, provider_result):
+        """Same inputs as the provenance record, so the kept review is the recorded one."""
+        from .asset_semantic_review import review_asset
+        section = str(item.get("section") or item.get("role") or "")
+        purpose = str(item.get("purpose") or "topic-matched visual")
+        return review_asset(path, job.get("topic") or job.get("title") or "",
+                            section + ": " + purpose + "\n" + str(item.get("adjacent_text") or ""), provider_result)
+
+    @staticmethod
     def _persist_asset_provenance(output_dir, images, prompts, provider_name, job):
         records = []
         for index, image in enumerate(images):
@@ -1044,7 +1074,7 @@ class MediaBridge:
                     dimensions = None
             from .asset_semantic_review import review_asset
             requirement=image.get('semantic_requirement')
-            semantic_review = review_asset(path, job.get("topic") or job.get("title") or "", section + ": " + purpose + "\n" + str(image.get("adjacent_text") or ""), provider_result,
+            semantic_review = image.get("semantic_review") if isinstance(image.get("semantic_review"), dict) else review_asset(path, job.get("topic") or job.get("title") or "", section + ": " + purpose + "\n" + str(image.get("adjacent_text") or ""), provider_result,
                 **({'semantic_requirement':requirement} if requirement else {}))
             semantic_score = semantic_review["score"]
             record = {
