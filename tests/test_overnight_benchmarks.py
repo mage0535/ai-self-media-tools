@@ -32,6 +32,8 @@ def test_breakdown_is_collected_once_per_platform_and_attached(tmp_path, monkeyp
 def test_video_lanes_share_one_bilibili_observation_and_keep_its_platform(tmp_path, monkeypatch):
     calls, platforms = [], []
     monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "bilibili_ai", lambda items, out: calls.append(1) or ["row"])
+    for name in overnight_benchmarks.REFERENCE_COLLECTORS["kuaishou"]:
+        monkeypatch.setitem(overnight_benchmarks.COLLECTORS, name, lambda items, out: [])
     monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
                         lambda platform, public: platforms.append(platform) or {"viral_breakdown": {}})
     prepared = {"tasks": [{"platform": lane, "state": "ready_for_plan"} for lane in ("kuaishou", "shipinhao", "douyin_ai")]}
@@ -115,3 +117,23 @@ def test_pet_reference_with_one_source_stays_blocked(tmp_path, monkeypatch):
     result = build_hot_viral_intelligence(target_platform="douyin_pet", lane="pet_healing",
                                           samples=brief["hot_viral_samples"], source_statuses=brief["hot_viral_source_statuses"])
     assert result["status"] == "blocked"
+
+
+def test_kuaishou_ai_reference_samples_use_tiktok_and_youtube_scenarios(tmp_path, monkeypatch):
+    from content_platform.hot_viral_intelligence import build_hot_viral_intelligence
+
+    lane = "real_world_ai_implementation"
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "bilibili_ai", lambda items, out: [])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "tiktok_ai", lambda items, out: [_observed_row("tiktok", "tt9")])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "youtube_ai_scenario", lambda items, out: [_observed_row("youtube", "yt9")])
+    monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
+                        lambda platform, public: {"viral_breakdown": {"platform": platform}})
+    prepared = {"tasks": [{"platform": "kuaishou", "state": "ready_for_plan", "brief": {"lane": lane}}]}
+
+    overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
+
+    brief = prepared["tasks"][0]["brief"]
+    assert [s["content_id"] for s in brief["hot_viral_samples"]] == ["tt9", "yt9"]
+    result = build_hot_viral_intelligence(target_platform="kuaishou", lane=lane,
+                                          samples=brief["hot_viral_samples"], source_statuses=brief["hot_viral_source_statuses"])
+    assert result["status"] == "fallback_ready"

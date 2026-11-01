@@ -33,6 +33,7 @@ COLLECTORS = {
     "tiktok_ai": _videos("tiktok_ai", lambda videos: videos.tiktok_candidates()),
     "youtube_ai": _videos("youtube_ai", lambda videos: videos.youtube_candidates()),
     "youtube_pet": _videos("youtube_pet", lambda videos: videos.youtube_candidates(pet=True)),
+    "youtube_ai_scenario": _videos("youtube_ai_scenario", lambda videos: videos.youtube_candidates(scenario=True)),
 }
 # Owner 10-28: lanes without their own typed collector use another platform's real public samples.
 # lane -> (collector, platform the samples were observed on); the breakdown keeps that platform
@@ -50,7 +51,8 @@ LANE_COLLECTORS = {
 
 # Owner 10-31: other platforms' pet videos are analysed for learning only; our videos are original.
 # Lanes whose video plan needs cross-platform reference works from >= 2 sources.
-REFERENCE_COLLECTORS = {"douyin_pet": ("bilibili_pet", "youtube_pet")}
+# Kuaishou counts only adjacent short-video platforms; its AI references are real-world scenarios (owner 10-30).
+REFERENCE_COLLECTORS = {"douyin_pet": ("bilibili_pet", "youtube_pet"), "kuaishou": ("tiktok_ai", "youtube_ai_scenario")}
 
 
 # Collector metric names -> the names hot_viral_intelligence reads; values are copied unchanged.
