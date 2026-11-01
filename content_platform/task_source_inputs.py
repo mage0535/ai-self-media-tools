@@ -518,12 +518,23 @@ def collect_task_source_inputs(store,config,job,contexts):
                 for row in cached.get('samples',[]):
                     metric=metric_names.get(str(row.get('metric_name') or '').lower())
                     if metric:observations.append(dict(row,url=row.get('canonical_url') or '',author=row.get('account_name') or '',**{metric:row.get('metric_value')}))
+            # WeChat delivers to the draft box; without paid exports, public discovery names peer accounts (owner 11-01).
+            from .wechat_discovery import collect_wechat_discovery
+            discovery,discovery_error=[],''
+            try:discovery=collect_wechat_discovery([job['topic'][:30],'AI 落地 案例'])
+            except (OSError,ValueError) as error:discovery_error=str(error)[:120]
+            observations.extend(discovery)
         if normal_inputs is not None and platform=='twitter'and normal_inputs.get('semantic_benchmarks'):
             current_benchmarks=normal_inputs['semantic_benchmarks']
             observations=current_benchmarks['observations'];same_lane=current_benchmarks['same_lane']
         else:same_lane=distill_same_lane_samples(platform,observations)
-        if same_lane.get('generation_status')!='ready' or len(same_lane.get('top_accounts') or [])<3:
-            raise SourceInputsBlocked('source_same_lane_benchmark_unavailable',{'platform':platform,'radar':same_lane.get('radar')})
+        accepted_status={'ready'}
+        if platform=='wechat' and same_lane.get('generation_status')!='ready':
+            from .wechat_discovery import discovery_reference
+            same_lane=discovery_reference(same_lane,discovery);accepted_status.add('discovery_reference')
+        if same_lane.get('generation_status') not in accepted_status or len(same_lane.get('top_accounts') or [])<3:
+            raise SourceInputsBlocked('source_same_lane_benchmark_unavailable',{'platform':platform,'radar':same_lane.get('radar'),
+                **({'discovery_samples':len(discovery),'discovery_error':discovery_error} if platform=='wechat' else {})})
         external=[row for row in public.get('items',[]) if row.get('platform')!=platform and row.get('canonical_url') and row.get('raw_response_hash')]
         if platform=='wechat' and len(external)<3:
             raise SourceInputsBlocked('source_cross_platform_snapshots_unavailable',{'count':len(external)})
