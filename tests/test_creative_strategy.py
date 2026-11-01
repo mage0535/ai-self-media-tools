@@ -155,3 +155,8 @@ def test_beat_framing_puts_the_three_chosen_shots_on_opening_middle_and_closing_
     article = select_combination("wechat", "会计月结用AI核对凭证", content_form="long_article")
     assert MediaBridge._beat_framing({"brief": {"content_blueprint": {"creative_combination": article}}}, 8) == {}
     assert MediaBridge._beat_framing({}, 8) == {}
+
+
+def test_slot_without_form_takes_the_platform_native_form():
+    assert select_combination("douyin_pet", "猫咪为什么总踩奶")["form"] == "video"
+    assert select_combination("zhihu", "医生用AI整理病历摘要")["form"] == "article"

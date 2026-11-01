@@ -22,6 +22,7 @@ FORBIDDEN_RULE_WORDS = ("搬运", "去重", "repost", "re-upload", "刷量", "�
 VIDEO_FORMS = {"short_video", "landscape_video", "video"}
 CAROUSEL_FORMS = {"manual_carousel", "image_text", "carousel", "image_text_card"}
 POST_FORMS = {"short_post", "post", "thread"}
+VIDEO_PLATFORMS = {"douyin_ai", "douyin_pet", "kuaishou", "tiktok", "shipinhao", "bilibili", "youtube"}
 
 
 def _sha256(data: bytes) -> str:
@@ -73,7 +74,8 @@ def validate_catalog(catalog: dict[str, Any]) -> dict[str, Any]:
 
 def content_form_kind(content_form: str, platform: str) -> str:
     form = str(content_form or "").casefold()
-    if form in VIDEO_FORMS:
+    # A slot without an explicit form takes its platform's native form (douyin_pet slots carry none).
+    if form in VIDEO_FORMS or (not form and platform in VIDEO_PLATFORMS):
         return "video"
     if form in CAROUSEL_FORMS or platform == "xiaohongshu":
         return "carousel"
