@@ -71,3 +71,36 @@ def test_low_semantic_article_image_is_regenerated_once_and_the_kept_review_reco
 
     assert len(calls) == 3 and "工单分类流程" in calls[2]
     assert [image["semantic_review"]["score"] for image in recorded["images"]] == [0.9, 0.8]
+
+
+def test_rejected_semantic_beat_is_regenerated_once_with_its_claim_first(tmp_path):
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j3", "title": "两只猫", "body": "正文", "platforms": ["douyin_pet"]}
+    calls = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            calls.append(prompt)
+            rng = random.Random(len(calls))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(rng.randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "fake"}
+
+    requirements = [{"intent": {"beat_id": f"s0{i}", "claim": claim, "content_match_reason": "illustrate"}, "sha256": str(i)}
+                    for i, claim in enumerate(["两只猫并排睡觉", "一只猫望风另一只开柜门"], 1)]
+    reviews = iter([{"score": 0.8, "requirement_match": True}, {"score": 0.8, "requirement_match": False},
+                    {"score": 0.8, "requirement_match": True}])
+    recorded = {}
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch("content_platform.video_asset_semantics.validate_requirement", side_effect=lambda r: r), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: next(reviews)), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"}, semantic_requirements=requirements)
+
+    assert len(calls) == 3
+    assert calls[0].startswith("Scene to show: 两只猫并排睡觉") and "一只猫望风另一只开柜门" in calls[2]
+    assert [image["semantic_review"]["requirement_match"] for image in recorded["images"]] == [True, True]
