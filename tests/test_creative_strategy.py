@@ -143,3 +143,15 @@ def test_cover_prompt_uses_the_chosen_cover_rule_and_drops_it_for_a_changed_cata
     stale = {"brief": {"content_blueprint": {"creative_combination": dict(combination, catalog_sha256="0" * 64)}}}
     assert MediaBridge._cover_style_rule(stale) == ""
     assert MediaBridge._cover_style_rule({}) == ""
+
+
+def test_beat_framing_puts_the_three_chosen_shots_on_opening_middle_and_closing_beats():
+    from content_platform.media import MediaBridge
+
+    combination = select_combination("douyin_pet", "猫咪为什么总踩奶", content_form="short_video")
+    shots = [row["rule"] for row in resolve_combination(combination)["shot"]]
+    job = {"brief": {"content_blueprint": {"creative_combination": combination}}}
+    assert MediaBridge._beat_framing(job, 8) == {0: shots[0], 4: shots[1], 7: shots[2]}
+    article = select_combination("wechat", "会计月结用AI核对凭证", content_form="long_article")
+    assert MediaBridge._beat_framing({"brief": {"content_blueprint": {"creative_combination": article}}}, 8) == {}
+    assert MediaBridge._beat_framing({}, 8) == {}
