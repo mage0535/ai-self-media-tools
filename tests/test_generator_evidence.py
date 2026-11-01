@@ -172,3 +172,21 @@ def test_model_written_remote_images_are_removed_but_local_markers_kept():
 
     body = "## 分层记忆\n\n![架构示意图](https://cdn.example.com/a.png)\n正文一\n\n![](/srv/assets/section-01.png)\n正文二"
     assert strip_model_image_links(body) == "## 分层记忆\n\n正文一\n\n![](/srv/assets/section-01.png)\n正文二"
+
+
+def test_empty_bound_audio_plan_keeps_resolved_library_bgm(monkeypatch):
+    import content_platform.generator as module
+    seen = {}
+
+    def capture(topic, brief):
+        seen.update(brief)
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(module, "has_stage_refs", lambda value: True)
+    monkeypatch.setattr(module, "resolve_stage_payload", lambda *args: {"audio_plan": {}, "strategy": {"version": "v1"}})
+    monkeypatch.setattr(module, "build_generation_context", capture)
+    resolved = {"status": "resolved", "route": "embedded_licensed_bgm"}
+    with pytest.raises(RuntimeError):
+        DraftGenerator().generate("cats", {"run_contract": {}, "bounded_model_input": {"x": {}}, "audio_plan": resolved})
+    assert seen["audio_plan"] == resolved
+    assert seen["strategy"] == {"version": "v1"}

@@ -419,7 +419,11 @@ class DraftGenerator:
         self._stage_job_id = stage_job_id
         if has_stage_refs(brief.get("bounded_model_input")):
             full = resolve_stage_payload(self.stage_store, stage_job_id, brief["run_contract"], "generate", brief["bounded_model_input"])
+            # Inputs are bound before the pet lane resolves its BGM; an empty bound plan must not erase it.
+            resolved_audio = brief.get("audio_plan") if not full.get("audio_plan") else None
             brief.update(full)
+            if isinstance(resolved_audio, dict) and resolved_audio.get("status") == "resolved":
+                brief["audio_plan"] = resolved_audio
             brief["_resolved_stage_inputs"] = full
             self._stage_job_id = stage_job_id
         blueprint = brief.get("content_blueprint") if isinstance(brief.get("content_blueprint"), dict) else {}
