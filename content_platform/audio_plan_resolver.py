@@ -239,7 +239,9 @@ def resolve_audio_plan(config, job, data_dir) -> dict:
         sources = settings.get('sources') or []
         if not isinstance(sources, list) or len(sources) > 16:
             raise AudioInputError('bounded_audio_sources_required')
-        for source in sources:
+        # Rotate the library start per job so consecutive videos do not reuse one track.
+        start = int(digest, 16) % len(sources) if sources else 0
+        for source in sources[start:] + sources[:start]:
             try:
                 return _resolve_record(source, settings, platform, output)
             except (AudioInputError, OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
