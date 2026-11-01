@@ -2128,3 +2128,20 @@ def test_delivery_result_cannot_treat_local_preparation_as_platform_delivery():
         "postcheck": {"passed": True, "evidence_path": ".codex-server-runtime/private/evidence.png"},
     }
     assert validate_delivery_result(delivered)["passed"] is True
+
+
+def test_xiaohongshu_generation_packet_carries_ai_disclosure_when_body_lacks_ai():
+    # 11-01 window: the humanized XHS body had no "AI" token, so the disclosure gate
+    # (which falls back to the body) blocked an otherwise passing package.
+    from content_platform.pipeline import Pipeline
+    from content_platform.xiaohongshu_policy import AI_ASSISTED_DISCLOSURE
+
+    draft = {"title": "质检工位怎么省下复核时间", "body": "工位相机拍照，模型标出缺陷，质检员只看可疑件。", "draft_meta": {}}
+    packet = Pipeline._generation_platform_packet("a" * 16, draft, ["xiaohongshu"], "xiaohongshu")
+    assert packet["ai_assisted_disclosure"] == AI_ASSISTED_DISCLOSURE
+    result = validate_xiaohongshu_auto_packet(packet)
+    assert result["gates"]["ai_assisted_disclosure"]["passed"] is True
+
+    kept = Pipeline._generation_platform_packet(
+        "a" * 16, dict(draft, draft_meta={"ai_assisted_disclosure": "AI 辅助生成"}), ["xiaohongshu"], "xiaohongshu")
+    assert kept["ai_assisted_disclosure"] == "AI 辅助生成"

@@ -2960,6 +2960,9 @@ class Pipeline:
         packet.setdefault("body", draft.get("body", ""))
         packet.setdefault("platform", platform)
         packet.setdefault("platforms", platforms)
+        if str(platform).casefold() in {"xiaohongshu", "rednote"} and not packet.get("ai_assisted_disclosure"):
+            from .xiaohongshu_policy import AI_ASSISTED_DISCLOSURE
+            packet["ai_assisted_disclosure"] = AI_ASSISTED_DISCLOSURE
         if (str(platform).casefold() in {"twitter", "x"}
                 and (job_id == "25110343c3354385" or draft_meta.get("target_adaptation_ref"))):
             from .target_adaptation import read_target_adaptation

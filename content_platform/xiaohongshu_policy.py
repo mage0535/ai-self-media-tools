@@ -7,6 +7,8 @@ STRATEGY_ID = "xiaohongshu_recovery_v1"
 CONTENT_PILLAR = "ai_efficiency_workflow_system"
 MIN_PUBLISH_INTERVAL_HOURS = 36
 POST_PUBLISH_REVIEW_HOURS = [1, 24, 72]
+# Required by the rulebook output package; the operator turns on the platform's AI-content label when posting.
+AI_ASSISTED_DISCLOSURE = "本笔记由 AI 辅助整理，发布时请开启「内容由AI生成」声明"
 
 
 def build_recovery_strategy(job: dict, formatted: dict) -> dict:

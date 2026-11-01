@@ -24,7 +24,7 @@ from .models import DeliveryResult
 from .paths import project_home, social_auto_upload_home
 from .visual_content_policy import KNOWLEDGE_CARD_SKILL, packet_uses_current_policy
 from .wechat_toolchain import TOOLCHAIN_META_KEYS
-from .xiaohongshu_policy import build_recovery_strategy
+from .xiaohongshu_policy import AI_ASSISTED_DISCLOSURE, build_recovery_strategy
 from .zhihu_publisher import ZhihuPublisher
 from scripts.deliver_media import deliver_xiaohongshu_package
 
@@ -185,6 +185,7 @@ class XiaohongshuManualHandoffPublisher:
             "cover": images[0] if images else "",
             "images": images,
             "manual_publish_guide": self._guide(),
+            "ai_assisted_disclosure": AI_ASSISTED_DISCLOSURE,
             "postcheck": "user_manual_publish_confirmation",
             "growth_strategy": build_recovery_strategy(job, formatted),
         }
