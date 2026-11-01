@@ -131,3 +131,15 @@ def test_video_planning_payload_carries_story_direction_for_our_own_script():
     assert blueprint["story_beats"] == story_beats(combination)
     assert set(combination["picks"]) <= set(blueprint["creative_rules"])
     assert "replaces any generic" in blueprint["creative_rules"]["use"]
+
+
+def test_cover_prompt_uses_the_chosen_cover_rule_and_drops_it_for_a_changed_catalog():
+    from content_platform.media import MediaBridge
+
+    combination = select_combination("wechat", "会计月结用AI核对凭证", content_form="long_article")
+    rule = resolve_combination(combination)["cover"]["rule"]
+    job = {"brief": {"content_blueprint": {"creative_combination": combination}}}
+    assert MediaBridge._cover_style_rule(job) == f"Cover style: {rule}. "
+    stale = {"brief": {"content_blueprint": {"creative_combination": dict(combination, catalog_sha256="0" * 64)}}}
+    assert MediaBridge._cover_style_rule(stale) == ""
+    assert MediaBridge._cover_style_rule({}) == ""

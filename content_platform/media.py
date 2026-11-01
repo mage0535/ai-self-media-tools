@@ -1336,8 +1336,21 @@ class MediaBridge:
             f"Story behind it, not to be written out: {str(design.get('hook') or '')[:120]}. "
             f"Conflict or payoff: {design.get('conflict_or_payoff') or 'show problem and result'}. "
             f"Focal subjects: {', '.join(str(item) for item in design.get('focal_subjects') or [])}. "
+            f"{cls._cover_style_rule(job)}"
             "Create a high-click narrative poster with strong focal hierarchy and mobile-safe text, not a screenshot plus caption."
         )
+
+    @staticmethod
+    def _cover_style_rule(job):
+        """The task's chosen cover rule (MED12); a hint only, so a changed catalog drops it."""
+        combination = (((job.get("brief") or {}).get("content_blueprint") or {}).get("creative_combination"))
+        if not isinstance(combination, dict) or not (combination.get("picks") or {}).get("cover"):
+            return ""
+        from .creative_strategy import resolve_combination
+        try:
+            return f"Cover style: {resolve_combination(combination)['cover']['rule']}. "
+        except ValueError:
+            return ""
 
     @staticmethod
     def _article_sections(job):
