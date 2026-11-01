@@ -45,6 +45,10 @@ MANUAL_HANDOFF_PLATFORMS = {
 # without changing the publisher-facing platform name.
 STRATEGY_PLATFORM_ALIASES = {"twitter": "x"}
 
+# WeChat's platform gate (account/same-lane/GitHub inputs) and Kuaishou's video preflight
+# are produced only by generation-time native source collection.
+SOURCE_COLLECTED_PLATFORMS = {"wechat", "kuaishou"}
+
 # A source's popularity is not enough to make it a channel topic.  These
 # defaults prevent a general-news item from being turned into an AI or pet
 # account post when a private slot does not provide narrower keywords.
@@ -427,10 +431,10 @@ def build_due_tasks(
             except RunContractError as exc:
                 if stage_payload_binder is not None or "payload exceeds" not in str(exc):
                     raise
-                # Pipeline.run rebinds the full payload per job (by reference when large);
-                # the planning copy keeps only the task-specific parts.
+                # Pipeline.run rebinds the full payload per job (by reference when large, with the
+                # live compiled strategy); the planning copy keeps only the task-specific parts.
                 compact = {key: value for key, value in planning_payload.items()
-                           if key not in {"content_quality_reference_pack", "runtime_capabilities", "tool_selection_plan"}}
+                           if key not in {"content_quality_reference_pack", "runtime_capabilities", "tool_selection_plan", "strategy"}}
                 try:
                     bounded_model_input = planning_bound_payload(run_contract, "generate", compact)
                 except RunContractError as again:
@@ -470,6 +474,7 @@ def build_due_tasks(
                        if platform in MANUAL_HANDOFF_PLATFORMS else {}),
                     **analyzed_brief,
                     **({"editorial_evidence": editorial_evidence} if selection_mode == "editorial_calendar" else {}),
+                    **({"source_collection_required": True} if platform in SOURCE_COLLECTED_PLATFORMS else {}),
                     **({"original_knowledge_intent": str(raw["original_knowledge_intent"]), "source_collection_required": True}
                        if selection_mode == "editorial_calendar" and raw.get("original_knowledge_intent") else {}),
                 },

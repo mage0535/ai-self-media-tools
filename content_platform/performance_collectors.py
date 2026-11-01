@@ -7,6 +7,7 @@ fake zeros.
 
 from __future__ import annotations
 
+import functools
 import json
 import hashlib
 import time
@@ -127,6 +128,7 @@ def _http_json(
     data: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     timeout: int = 15,
+    proxy: str = "",
 ) -> dict[str, Any]:
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
@@ -137,7 +139,8 @@ def _http_json(
         payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
         request_headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=payload, headers=request_headers, method=method.upper())
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({"https": proxy})) if proxy else urllib.request.build_opener()
+    with opener.open(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8", errors="replace") or "{}")
 
 
@@ -266,13 +269,14 @@ def _probe_browser_backend_route(
     if proxy_url and proxy_url.startswith("socks5h://"):
         proxy_url = "socks5://" + proxy_url[len("socks5h://") :]
     try:
-        executable = str(config.get("chromium_executable_path") or os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH") or "/root/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome")
-        if not Path(executable).is_file() or not os.access(executable, os.X_OK):
+        # Without an explicit path, Playwright launches the build matching its own version.
+        executable = str(config.get("chromium_executable_path") or os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH") or "")
+        if executable and (not Path(executable).is_file() or not os.access(executable, os.X_OK)):
             raise FileNotFoundError("collector_chromium_executable_unavailable")
         browser_env = dict(os.environ, TMPDIR="/tmp")
         browser = pw.chromium.launch(
             headless=True,
-            executable_path=executable,
+            executable_path=executable or None,
             env=browser_env,
             proxy={"server": proxy_url} if proxy_url else None,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
@@ -705,6 +709,9 @@ def _bilibili_cookie_header(cookie_file: str) -> dict[str, Any]:
 
 
 def _wechat_datacube(config: dict[str, Any], http_json: Callable[..., dict[str, Any]]) -> dict[str, Any]:
+    if config.get("api_proxy") and http_json is _http_json:
+        # The official account API only answers whitelisted IPs; NEW reaches it via OLD's egress.
+        http_json = functools.partial(_http_json, proxy=str(config["api_proxy"]))
     private_env = _load_env_file(str(config.get("env_file") or ""))
     app_id = str(config.get("app_id") or private_env.get("WECHAT_APP_ID") or private_env.get("WECHAT_APPID") or os.environ.get("WECHAT_APP_ID") or os.environ.get("WECHAT_APPID") or "").strip()
     app_secret = str(config.get("app_secret") or private_env.get("WECHAT_APP_SECRET") or private_env.get("WECHAT_SECRET") or os.environ.get("WECHAT_APP_SECRET") or os.environ.get("WECHAT_SECRET") or "").strip()

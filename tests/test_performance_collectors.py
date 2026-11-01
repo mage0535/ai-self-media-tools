@@ -228,6 +228,25 @@ class PerformanceCollectorTests(unittest.TestCase):
         self.assertEqual(report["platforms"]["wechat"]["status"], "api_permission_blocked")
         self.assertIn("backend", report["platforms"]["wechat"]["next_action"])
 
+    def test_wechat_datacube_uses_configured_api_proxy(self):
+        from content_platform import performance_collectors
+
+        proxies = []
+
+        def opener(handler):
+            proxies.append(handler.proxies.get("https"))
+            raise OSError("stop after proxy selection")
+
+        with patch.object(performance_collectors.urllib.request, "build_opener", side_effect=opener):
+            report = collect_platform_metrics(
+                ["wechat"],
+                {"wechat": {"app_id": "configured", "app_secret": "configured", "datacube": True,
+                            "api_proxy": "http://100.93.72.152:21081"}},
+            )
+
+        self.assertEqual(proxies[:1], ["http://100.93.72.152:21081"])
+        self.assertNotEqual(report["platforms"]["wechat"]["status"], "ok")
+
     def test_wechat_datacube_blocked_uses_backend_browser_when_state_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp) / "wechat_state.json"
