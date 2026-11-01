@@ -29,6 +29,12 @@ def claims_continuation(body: str) -> bool:
     return False
 
 
+def strip_continuation_claims(body: str) -> str:
+    """Drop the sentences of a single post that promise another release."""
+    parts=re.split(r"(?<=[。！？!?\n])", str(body or ""))
+    return "".join(part for part in parts if not claims_continuation(part))
+
+
 def build_content_depth_plan(
     title: str,
     body: str,

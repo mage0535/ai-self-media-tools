@@ -478,6 +478,21 @@ class Pipeline:
                     evidence=_evidence,
                     platform=str((job.get("platforms") or [""])[0]),
                 )
+            depth_plan = (draft.get("draft_meta") or {}).get("content_depth_plan")
+            series = (depth_plan.get("series_plan") if isinstance(depth_plan, dict) else None) or {}
+            if (isinstance(depth_plan, dict) and depth_plan.get("continuation_claimed")
+                    and not (str(series.get("next_topic") or "").strip() and str(series.get("delivery_window") or "").strip())):
+                # A single post without a series plan must not promise another release; drop those sentences.
+                from .content_depth import claims_continuation, strip_continuation_claims
+                holders = [draft] + list(((draft.get("draft_meta") or {}).get("platform_drafts") or {}).values())
+                before = sum(len(str(item.get("body") or "")) for item in holders if isinstance(item, dict))
+                for item in holders:
+                    if isinstance(item, dict) and isinstance(item.get("body"), str):
+                        item["body"] = strip_continuation_claims(item["body"])
+                if not any(isinstance(item, dict) and claims_continuation(item.get("body") or "") for item in holders):
+                    depth_plan["continuation_claimed"] = False
+                    after = sum(len(str(item.get("body") or "")) for item in holders if isinstance(item, dict))
+                    self.store.record_event(job_id, "continuation_claims_removed", {"body_chars": {"before": before, "after": after}})
             depth_gate = validate_content_depth_plan((draft.get("draft_meta") or {}).get("content_depth_plan"))
             draft["draft_meta"]["content_depth_gate"] = depth_gate
             if not depth_gate.get("passed"):

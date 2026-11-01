@@ -24,3 +24,15 @@ def test_depth_plan_requires_three_knowledge_points_and_a_case():
     result = validate_content_depth_plan(plan)
     assert "knowledge_points_insufficient" in result["failures"]
     assert "case_or_demo_missing" in result["failures"]
+
+
+def test_strip_continuation_claims_keeps_the_rest_of_a_single_post():
+    # r63: a copied "-01" course title led the model to promise a next episode with no series plan.
+    from content_platform.content_depth import claims_continuation, strip_continuation_claims
+
+    body = "先看工位怎么拍。\n模型标出可疑件。下一期我们讲标注流程！最后复核一遍。\n后续再分享部署细节。"
+    cleaned = strip_continuation_claims(body)
+    assert cleaned == "先看工位怎么拍。\n模型标出可疑件。最后复核一遍。\n"
+    assert not claims_continuation(cleaned)
+    plan = build_content_depth_plan("质检工位复核", cleaned, evidence=["https://example.com/case"])
+    assert plan["continuation_claimed"] is False
