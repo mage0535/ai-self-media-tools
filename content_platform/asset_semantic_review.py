@@ -114,7 +114,8 @@ def session_database(native_context=None, evidence_ref=None):
     if not home.is_absolute() or '..' in home.parts:
         raise ValueError('trusted_hermes_home_invalid')
     authority_parent=Path('/srv/hermes-worker/authority-runtime-homes')
-    if home.parent==authority_parent and re.fullmatch(r'media-[a-f0-9]{32}',home.name):
+    media_home=home.parent==authority_parent and re.fullmatch(r'media-[a-f0-9]{32}',home.name)
+    if media_home and os.environ.get('MEDIA_QUALIFIED_VISION_SCOPE_PATH'):
         from .store import Store
         from .original_knowledge import read_original_inputs,_bytes
         ref_path=Path(os.environ.get('MEDIA_QUALIFIED_VISION_SCOPE_PATH',''))
@@ -138,6 +139,18 @@ def session_database(native_context=None, evidence_ref=None):
                 or verified.get('network_attempts')!=0 or verified.get('canonical_auth_reads')!=0
                 or verified.get('refresh_grant_present') is not False or verified.get('official_sdk_global_fallback_none') is not True):
             raise ValueError('semantic_native_authority_proof_invalid')
+    elif media_home:
+        # Ordinary media jobs run in the worker's role home (media_worker checks it the same way);
+        # the vision session is recorded in that home's state.db.
+        st=home.stat()
+        if home.is_symlink() or not home.is_dir() or st.st_uid!=0 or st.st_mode&0o077:
+            raise ValueError('trusted_media_role_home_unsafe')
+        role=home/'node-role.json'
+        if role.is_symlink() or not role.is_file():
+            raise ValueError('trusted_profile_role_missing')
+        record=strict_json(role.read_text(encoding='utf-8'))
+        if record.get('role')!='worker' or record.get('job_id')!=home.name[6:] or record.get('authority_home')!=str(home):
+            raise ValueError('trusted_profile_identity_mismatch')
     elif home != root:
         if home.parent != root/'profiles'  or not re.fullmatch(r'worker-[a-f0-9]{32}',home.name):
             raise ValueError('trusted_hermes_home_outside_task_profiles')
