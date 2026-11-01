@@ -164,7 +164,8 @@ def _with_creative_rules(payload):
 
     rules = {layer: ([row["rule"] for row in value] if isinstance(value, list) else value["rule"])
              for layer, value in resolve_combination(combination).items()}
-    rules["use"] = ("Apply one rule per layer together. Tell the piece in story_beats order while every fact "
+    rules["use"] = ("Apply one rule per layer together. Tell the piece in story_beats order (it replaces any generic "
+                    "hook→pain→demo→proof→CTA template) while every fact "
                     "from content_structure keeps its source; dramatised scenes are labelled as such; "
                     "facts and outcomes come only from evidence.")
     return dict(payload, content_blueprint=dict(blueprint, creative_rules=rules))
@@ -660,7 +661,7 @@ class DraftGenerator:
                     payload = _compact_provider_payload(payload)
                 payload = bound_stage_payload(brief["run_contract"], "generate", payload)
             return provider_context(payload)
-        payload = {"topic": topic, "brief": brief}
+        payload = {"topic": topic, "brief": _with_creative_rules(brief)}
         fields = (
             "language", "trend_stage", "trend_angle", "reference_titles", "style",
             "source_summary", "evidence", "topic_clusters", "niche_report",

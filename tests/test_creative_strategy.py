@@ -116,3 +116,18 @@ def test_short_post_platforms_get_post_form_without_shots():
     combination = select_combination("twitter", "AI meeting notes", content_form="short_post")
     assert combination["form"] == "post" and "shot" not in combination["picks"]
     assert {"angle", "hook", "voice"} <= set(combination["picks"])
+
+
+def test_video_planning_payload_carries_story_direction_for_our_own_script():
+    from content_platform.run_contract import build_run_contract
+    from content_platform.video_planning_producer import analysis_payload
+
+    combination = select_combination("kuaishou", "律师用AI整理尽调材料", content_form="short_video")
+    contract = build_run_contract("kuaishou")
+    plain = analysis_payload(contract, "律师用AI整理尽调材料", [])
+    directed = analysis_payload(contract, "律师用AI整理尽调材料", [], combination)
+    assert "creative_rules" not in plain["content_blueprint"]
+    blueprint = directed["content_blueprint"]
+    assert blueprint["story_beats"] == story_beats(combination)
+    assert set(combination["picks"]) <= set(blueprint["creative_rules"])
+    assert "replaces any generic" in blueprint["creative_rules"]["use"]
