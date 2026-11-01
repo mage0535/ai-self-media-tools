@@ -327,6 +327,9 @@ def build_due_tasks(
                 freshness_score=float(selected.get("freshness_score") or 0),
                 platform_fit_score=float(selected.get("platform_fit_score") or selected.get("score") or 0),
             )
+            if "freshness_score" not in selected:
+                # No collector reported freshness: unknown, not stale (same as the normal cycle).
+                trend_candidate.pop("freshness_score")
             trend_gate = validate_trend_candidate(trend_candidate)
             matrix = selected_matrix or _platform_evidence_matrix(platform, selected, source_report, strategy, report_path=report_path)
             from .run_contract import RunContractError, bound_stage_payload, build_run_contract

@@ -421,8 +421,8 @@ def collect_task_source_inputs(store,config,job,contexts):
     profile.update({key:value for key,value in (job.get('brief') or {}).items() if key in {'audience','language','tone','content_form'}})
     slots=[{'platform':platform,'content_form':profile.get('content_form') or ('long_article' if platform=='wechat' else 'short_video'),
             'topic_keywords':(profile.get('keywords')or[]) if normal_inputs is not None else request_source_keywords(job,store), 'audience':profile.get('audience') or 'operators',
-            # Re-planning keeps the scenario and creative combination chosen at prepare (MED12).
-            **{key:deepcopy(value) for key in ('scenario_contract','creative_combination')
+            # Re-planning keeps the scenario, video timing plan and creative combination chosen at prepare (MED12).
+            **{key:deepcopy(value) for key in ('scenario_contract','subtitle_and_pacing_plan_when_video','creative_combination')
                if isinstance(value:=((job.get('brief') or {}).get('content_blueprint') or {}).get(key),dict)}}
            for platform in job['platforms']]
     if normal_inputs is not None:
