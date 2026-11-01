@@ -32,6 +32,7 @@ COLLECTORS = {
     "bilibili_pet": _videos("bilibili_pet", lambda videos: videos.bilibili_candidates("pet")),
     "tiktok_ai": _videos("tiktok_ai", lambda videos: videos.tiktok_candidates()),
     "youtube_ai": _videos("youtube_ai", lambda videos: videos.youtube_candidates()),
+    "youtube_pet": _videos("youtube_pet", lambda videos: videos.youtube_candidates(pet=True)),
 }
 # Owner 10-28: lanes without their own typed collector use another platform's real public samples.
 # lane -> (collector, platform the samples were observed on); the breakdown keeps that platform
@@ -45,6 +46,66 @@ LANE_COLLECTORS = {
     "tiktok": ("tiktok_ai", "tiktok"),
     "youtube": ("youtube_ai", "youtube"),
 }
+
+
+# Owner 10-31: other platforms' pet videos are analysed for learning only; our videos are original.
+# Lanes whose video plan needs cross-platform reference works from >= 2 sources.
+REFERENCE_COLLECTORS = {"douyin_pet": ("bilibili_pet", "youtube_pet")}
+
+
+# Collector metric names -> the names hot_viral_intelligence reads; values are copied unchanged.
+METRIC_NAMES = {"view": "view_count", "like": "like_count", "comment": "comment_count", "reply": "comment_count",
+                "share": "share_count", "repost": "repost_count", "favorite": "favorite_count", "danmaku": "danmaku"}
+
+
+def _metrics(observed: Any) -> dict[str, Any]:
+    observed = observed if isinstance(observed, dict) else {}
+    named = {METRIC_NAMES[key]: value for key, value in observed.items() if key in METRIC_NAMES and value is not None}
+    return {**observed, **named}
+
+
+def _dimension(observed: Any, field: str) -> dict[str, Any] | None:
+    return {"observed": observed, "field": field} if observed not in (None, "", [], {}) else None
+
+
+def reference_samples(rows: list[dict[str, Any]], lane: str) -> list[dict[str, Any]]:
+    """Hot/viral reference samples whose nine dimensions cite observed collector fields only.
+
+    A row missing any dimension is left out; nothing is inferred from a title.
+    """
+    samples = []
+    for row in rows:
+        frames = [frame.get("description") for frame in row.get("visual_evidence") or [] if frame.get("description")]
+        segments = [seg.get("text") for seg in (row.get("voiceover") or {}).get("segments") or [] if seg.get("text")]
+        structure = row.get("content_structure") or {}
+        transition = row.get("transition_combination") or {}
+        breakdown = {
+            "copy": _dimension(str(row.get("copy_or_script") or "")[:300], "copy_or_script"),
+            "hook": _dimension(segments[0] if segments else (frames[0] if frames else ""),
+                               "voiceover.segments[0]" if segments else "visual_evidence[0].description"),
+            "writing_style": _dimension((row.get("writing_style") or {}).get("observed") or (row.get("writing_style") or {}).get("patterns"), "writing_style"),
+            "illustration": _dimension(frames[:3], "visual_evidence[:3].description"),
+            "cover": _dimension(frames[0] if frames else "", "visual_evidence[0].description"),
+            "video_structure": _dimension(structure.get("observed") or structure.get("patterns"), "content_structure"),
+            "motion": _dimension((row.get("motion_combination") or {}).get("observed"), "motion_combination.observed"),
+            "transition": _dimension({"cuts_per_minute": transition.get("cuts_per_minute"), "observed": transition.get("observed")}
+                                     if transition.get("cuts_per_minute") is not None else None, "transition_combination"),
+            # The observed ending; it records what the work did, not a claimed CTA effect.
+            "CTA": _dimension(segments[-1] if segments else (frames[-1] if frames else ""),
+                              "voiceover.segments[-1]" if segments else "visual_evidence[-1].description"),
+        }
+        if any(value is None for value in breakdown.values()):
+            continue
+        samples.append({
+            **{key: row.get(key) for key in ("platform", "source", "content_id", "canonical_url", "author", "published_at",
+                                             "observed_at", "raw_response_hash")},
+            "metrics": _metrics(row.get("metrics")),
+            "lane": lane, "signal_type": "reference_work", "reference_use": "analysis_only_no_reuse",
+            "content_evidence": {key: row.get(key) for key in ("title", "copy_or_script", "visual_evidence", "voiceover",
+                                                               "content_structure", "motion_combination", "transition_combination")},
+            "breakdown": breakdown,
+        })
+    return samples
 
 
 def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out_dir: str | Path) -> dict[str, Any]:
@@ -71,6 +132,17 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
         strategy = cache[platform]
         if "error" in strategy:
             task.update(state="blocked", reason=strategy["error"])
-        else:
-            task.setdefault("brief", {}).update(strategy)
+            continue
+        task.setdefault("brief", {}).update(strategy)
+        if platform in REFERENCE_COLLECTORS:
+            samples = []
+            for name in REFERENCE_COLLECTORS[platform]:
+                if name not in rows_by_collector:
+                    try:
+                        rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
+                    except Exception:  # A missing reference source shows up as fewer sources, not a crash.
+                        rows_by_collector[name] = []
+                samples += reference_samples(rows_by_collector[name], str(task["brief"].get("lane") or ""))
+            task["brief"].update(hot_viral_samples=samples,
+                                 hot_viral_source_statuses={sample["source"]: "ready" for sample in samples})
     return prepared

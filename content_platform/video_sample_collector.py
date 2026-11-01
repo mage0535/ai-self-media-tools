@@ -32,6 +32,7 @@ PROXIES = {"bilibili": None, "tiktok": "http://127.0.0.1:2091", "youtube": "http
 # Public AI-product accounts verified 10-29 (posting within 30 days); hashtag pages need login.
 TIKTOK_ACCOUNTS = ("openai", "chatgpt", "microsoft", "google", "capcut", "canva")
 YOUTUBE_QUERIES = ("AI tools tutorial", "AI agent workflow")  # format benchmarks: most viewed this week
+YOUTUBE_PET_QUERIES = ("funny cats", "cute dogs")  # pet lane reference works: most viewed this week
 # Topic feed: the account's scenario queries (real_world_ai_implementation_v1), uploads of this year
 # (the this-week view sort returned 0 for most scenario queries on 10-30).
 YOUTUBE_SCENARIO_FILTER = "EgIIBA%3D%3D"
@@ -44,6 +45,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 AI_WORDS = ("ai", "agent", "gpt", "chatgpt", "openai", "codex", "copilot", "claude", "gemini", "deepseek", "llm", "大模型", "人工智能", "智能体", "模型", "机器人", "自动化")
 PET_WORDS = ("猫", "狗", "喵", "汪", "柯基", "柴犬", "布偶", "金毛")
 PET_CATEGORIES = ("喵星人", "汪星人")
+PET_WORDS_EN = ("cat", "cats", "kitten", "kittens", "dog", "dogs", "puppy", "puppies", "pet", "pets", "corgi", "shiba")
 
 ASR_SCRIPT = r"""
 import json, sys, wave
@@ -145,11 +147,12 @@ def _yt_dlp_json(platform: str, url: str, run, *extra: str) -> str:
     return proc.stdout
 
 
-def _ranked(platform: str, entries: list[dict[str, Any]], feed_url: str, feed_sha256: str) -> list[dict[str, Any]]:
-    """Recent AI videos of a flat feed, most viewed first."""
+def _ranked(platform: str, entries: list[dict[str, Any]], feed_url: str, feed_sha256: str,
+            words: tuple[str, ...] = AI_WORDS) -> list[dict[str, Any]]:
+    """Recent lane videos (AI by default) of a flat feed, most viewed first."""
     oldest = datetime.now(timezone.utc).timestamp() - RECENT_DAYS * 86400
     kept = [entry for entry in entries if entry.get("id") and (entry.get("timestamp") or oldest) >= oldest
-            and _matches(f"{entry.get('title') or ''} {entry.get('description') or ''}", AI_WORDS)]
+            and _matches(f"{entry.get('title') or ''} {entry.get('description') or ''}", words)]
     kept.sort(key=lambda entry: entry.get("view_count") or 0, reverse=True)
     urls = {"tiktok": "https://www.tiktok.com/@{uploader}/video/{id}", "youtube": "https://www.youtube.com/watch?v={id}"}
     return [{"platform": platform, "id": entry["id"], "feed_url": feed_url, "feed_sha256": feed_sha256,
@@ -171,11 +174,14 @@ def tiktok_candidates(*, run=subprocess.run) -> list[dict[str, Any]]:
     return rows
 
 
-def youtube_candidates(*, run=subprocess.run, scenario: bool = False) -> list[dict[str, Any]]:
+def youtube_candidates(*, run=subprocess.run, scenario: bool = False, pet: bool = False) -> list[dict[str, Any]]:
     """Most-viewed uploads of this week for a few AI queries (YouTube search sp: views, this week);
-    scenario=True searches the account's scenario queries instead (uploads of this year)."""
+    scenario=True searches the account's scenario queries instead (uploads of this year);
+    pet=True searches cat/dog queries for the pet lane's reference works."""
     rows = []
-    if scenario:
+    if pet:
+        searches = [(query, "CAMSAggD") for query in YOUTUBE_PET_QUERIES]
+    elif scenario:
         from .real_world_ai_policy import build_discovery_queries
 
         searches = [(query, YOUTUBE_SCENARIO_FILTER) for query in build_discovery_queries(language="en")]
@@ -187,7 +193,8 @@ def youtube_candidates(*, run=subprocess.run, scenario: bool = False) -> list[di
             raw = _yt_dlp_json("youtube", url, run, "--flat-playlist", "--playlist-end", "10")
         except ValueError:
             continue
-        rows += _ranked("youtube", json.loads(raw).get("entries") or [], url, hashlib.sha256(raw.encode()).hexdigest())
+        rows += _ranked("youtube", json.loads(raw).get("entries") or [], url, hashlib.sha256(raw.encode()).hexdigest(),
+                        PET_WORDS_EN if pet else AI_WORDS)
     return rows
 
 

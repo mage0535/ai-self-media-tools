@@ -289,6 +289,13 @@ class Pipeline:
             platform_briefs={platform:self._bind_platform_source_inputs(job_id,
                 prepare_generation_strategy_inputs(job['topic'],project_task_source_brief(brief,platform)),platform,context,owner)
                 for platform,context in platform_contexts.items()}
+            for platform,scoped in platform_briefs.items():
+                # Kuaishou resolves its BGM with its source inputs; the pet lane embeds a licensed library track.
+                if platform=='douyin_pet' and not scoped.get('audio_plan'):
+                    from .audio_plan_resolver import resolve_audio_plan
+                    audio=resolve_audio_plan(self.config,dict(job,platforms=[platform]),self.store.path.parent)
+                    self.store.record_event(job_id,'audio_plan_resolved',{'platform':platform,'status':audio.get('status'),'failures':audio.get('failures') or []})
+                    if audio.get('status')=='resolved':scoped['audio_plan']=audio
             if len(platform_briefs)==1:brief=dict(next(iter(platform_briefs.values())))
             brief['platform_workflow_inputs']=copy.deepcopy(platform_briefs)
             if brief.get('source_collection_audit'):

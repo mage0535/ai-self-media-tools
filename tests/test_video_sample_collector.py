@@ -144,3 +144,17 @@ def test_short_videos_are_downloaded_whole_and_long_ones_cut(tmp_path):
     videos._download("tiktok", "u", 61, tmp_path, run)
     videos._download("bilibili", "u", 900, tmp_path, run)
     assert "--download-sections" not in commands[0] and "--download-sections" in commands[1]
+
+
+def test_youtube_pet_feed_keeps_cat_and_dog_videos_only():
+    now = datetime.now(timezone.utc).timestamp()
+    payload = json.dumps({"entries": [
+        {"id": "c1", "title": "Funny cats compilation", "timestamp": now, "view_count": 900},
+        {"id": "g1", "title": "This Wall Is Full of Gum!", "timestamp": now, "view_count": 5000},
+        {"id": "d1", "title": "Puppy meets mirror #dogs", "timestamp": now, "view_count": 1200}]})
+
+    class Proc:
+        returncode, stdout = 0, payload
+
+    rows = videos.youtube_candidates(run=lambda *a, **k: Proc(), pet=True)
+    assert [row["id"] for row in rows] == ["d1", "c1"] * len(videos.YOUTUBE_PET_QUERIES)
