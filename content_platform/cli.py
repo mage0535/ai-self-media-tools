@@ -958,6 +958,8 @@ def execute(args):
                 and candidate_fits_lane(platform, candidate)
             )
 
+        from .creative_strategy import recent_combinations
+
         prepared = build_due_tasks(
             slots,
             items=report.get("items", []),
@@ -974,6 +976,8 @@ def execute(args):
             report_path=str(snapshot_path),
             reserved_topic_fingerprints=store.used_topics(lookback_days=7),
             topic_analyzer=lambda platform, candidate, slot: analyze_topic(config.get("generator", {}), platform, candidate, slot),
+            creative_history={platform: recent_combinations(store, platform)
+                              for platform in {str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)}},
         )
         from .overnight_benchmarks import attach_breakdowns
         attach_breakdowns(prepared, report.get("items", []), Path(args.output).parent / "same-lane-benchmarks")

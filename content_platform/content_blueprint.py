@@ -88,6 +88,13 @@ def build_content_blueprint(
             "motion_discipline_gate": "motion_discipline_gate" in sections,
             "compliance_gate": "compliance_gate" in sections,
         }
+    combination = slot.get("creative_combination")
+    if isinstance(combination, dict):
+        from .creative_strategy import story_beats
+
+        # Story beats order the telling; narrative_structure stays the fact skeleton mapped to the scenario.
+        blueprint["creative_combination"] = dict(combination)
+        blueprint["story_beats"] = story_beats(combination)
     if ai_lane:
         blueprint["mascot_roles"] = {
             "cat": {"tone": "cute_playful", "narrative_function": f"explore or draft the {topic} workflow", "decorative_only": False},

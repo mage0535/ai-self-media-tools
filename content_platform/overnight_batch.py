@@ -190,6 +190,7 @@ def build_due_tasks(
     runtime_capabilities: dict[str, Any] | None = None,
     stage_payload_binder: Any | None = None,
     topic_analyzer: Any | None = None,
+    creative_history: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Turn due-channel slots into independent, source-evidenced work rows.
 
@@ -397,6 +398,16 @@ def build_due_tasks(
             content_type = str(content_slot.get("content_form") or content_slot.get("stage") or "")
             if not content_type and platform in MANUAL_HANDOFF_PLATFORMS:
                 content_type = "short_video" if str(raw.get("action") or "").casefold() != "handoff_card" else "manual_carousel"
+            if creative_history is not None and not isinstance(content_slot.get("creative_combination"), dict):
+                # MED12: one rule per creative layer, chosen per task; newest first so later rows in this batch differ.
+                from .creative_strategy import select_combination
+
+                history = creative_history.setdefault(platform, [])
+                content_slot["creative_combination"] = select_combination(
+                    platform, str(selected["title"]), content_form=content_type,
+                    evidence_text=str(selected.get("summary") or selected.get("description") or ""), history=history,
+        strategy=content_slot.get("strategy_compiled"))
+                history.insert(0, content_slot["creative_combination"])
             tool_evidence = build_tool_selection_evidence(
                 platform=platform,
                 content_type=content_type or "article",

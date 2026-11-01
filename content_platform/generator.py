@@ -153,6 +153,22 @@ def _hermes_failure_fields(stdout, stderr, finished_unix):
             'automatic_replay': False, 'api_count_is_not_http_count': True}
 
 
+
+def _with_creative_rules(payload):
+    """Expand the chosen creative combination (ids in the blueprint) into rule text for the model."""
+    blueprint = payload.get("content_blueprint") if isinstance(payload.get("content_blueprint"), dict) else {}
+    combination = blueprint.get("creative_combination")
+    if not isinstance(combination, dict) or blueprint.get("creative_rules"):
+        return payload
+    from .creative_strategy import resolve_combination
+
+    rules = {layer: ([row["rule"] for row in value] if isinstance(value, list) else value["rule"])
+             for layer, value in resolve_combination(combination).items()}
+    rules["use"] = ("Apply one rule per layer together. Tell the piece in story_beats order while every fact "
+                    "from content_structure keeps its source; dramatised scenes are labelled as such; "
+                    "facts and outcomes come only from evidence.")
+    return dict(payload, content_blueprint=dict(blueprint, creative_rules=rules))
+
 def _compact_provider_payload(payload):
     """Lossless model-view deduplication; full workflow evidence stays untouched."""
     result = json.loads(json.dumps(payload, ensure_ascii=False))
@@ -611,6 +627,7 @@ class DraftGenerator:
                     if factual:
                         blueprint['factual_reference_posts'] = factual
                     full = dict(full, content_blueprint=blueprint)
+                full = _with_creative_rules(full)
                 # This is the final model-input freeze point, not a relaxed resolver.
                 bounded = bind_stage_payload(self.stage_store, self._stage_job_id, brief["run_contract"], "generate", full, force_reference=True)
                 brief['_final_bounded_model_input'] = bounded
@@ -636,7 +653,7 @@ class DraftGenerator:
                 }
                 if factual:
                     blueprint['factual_reference_posts'] = factual
-                payload = dict(payload, content_blueprint=blueprint)
+                payload = _with_creative_rules(dict(payload, content_blueprint=blueprint))
                 from .run_contract import bound_stage_payload
                 limit = int((brief['run_contract'].get('bounds') or {}).get('stage_payload_bytes') or 16384)
                 if len(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')) > limit:

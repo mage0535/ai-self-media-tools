@@ -1413,6 +1413,16 @@ class Pipeline:
                 brief['content_blueprint']=dict(brief.get('content_blueprint') or {},native_video_research_ref=research_ref)
             brief["strategy_compiled"] = compiled
             brief["strategy"] = compiled
+            blueprint=brief.get('content_blueprint') or {}
+            if not isinstance(blueprint.get('creative_combination'),dict):
+                # MED12: every platform and path weighs rules, strategy, platform and form together per task.
+                from .creative_strategy import recent_combinations, select_combination, story_beats
+                evidence=json.dumps([platform_context.get(key) or {} for key in
+                    ('viral_breakdown','same_lane_intelligence','hot_work_parameter_pack')],ensure_ascii=False)
+                combination=select_combination(platform,str((self.store.get_job(job_id) or {}).get('topic') or brief.get('topic') or ''),
+                    content_form=str(blueprint.get('content_form') or brief.get('content_form') or ''),
+                    evidence_text=evidence,history=recent_combinations(self.store,platform),strategy=compiled)
+                brief['content_blueprint']=dict(blueprint,creative_combination=combination,story_beats=story_beats(combination))
             contract = brief.get("run_contract")
             if isinstance(contract,dict) and contract.get('platform')!=platform:
                 raise ValueError('source_platform_contract_mismatch:'+platform)
