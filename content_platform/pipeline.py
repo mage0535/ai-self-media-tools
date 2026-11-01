@@ -415,6 +415,7 @@ class Pipeline:
                 if job['platforms'][0]=='wechat':draft=copy.deepcopy(writer_result)
                 draft.setdefault('draft_meta',{})['platform_drafts']=variants
             else:draft=writer_result
+        self._freeze_pet_video_beats(draft,platform_briefs)
         self._validate_scoped_narrations(job_id,draft,platform_briefs,runner)
         if self.config.get('humanizer', {}).get('enabled', True):
             self._humanize_draft(job_id, draft)
@@ -1370,11 +1371,21 @@ class Pipeline:
         draft.setdefault('draft_meta',{})['claim_ledger']=ledgers
         self.store.record_event(job_id,'native_platform_narrations_validated',results)
 
+    @staticmethod
+    def _freeze_pet_video_beats(draft,briefs):
+        """Fix the pet narration to the 8 rendered beats before the factual/safety receipt covers it."""
+        if 'douyin_pet' not in briefs:return
+        variant=((draft.get('draft_meta') or {}).get('platform_drafts') or {}).get('douyin_pet') or draft
+        meta=variant.setdefault('draft_meta',{})
+        if not (meta.get('video_toolchain_plan') or {}).get('required'):return
+        script=MediaBridge.compile_video_script(variant)['script']
+        meta['video_script']=meta['narration_script']=script
+
     def _bind_video_asset_semantics(self,job_id,draft,briefs,owner):
         from .video_asset_semantics import bind_requirements,requirement_tag
         variants=(draft.get('draft_meta') or {}).get('platform_drafts') or {}
         for platform,brief in briefs.items():
-            if brief.get('lane')!='real_world_ai_implementation':continue
+            if brief.get('lane')!='real_world_ai_implementation' and platform!='douyin_pet':continue
             variant=variants.get(platform) or draft;meta=variant.get('draft_meta') or {}
             plan=meta.get('video_toolchain_plan') or {}
             if not plan.get('required') or not meta.get('video_script'):continue

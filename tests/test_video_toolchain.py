@@ -706,3 +706,27 @@ def _write_trusted_manifest(video):
     (video.parent / "trusted_run_manifest.json").write_text(
         json.dumps(manifest), encoding="utf-8"
     )
+
+
+def test_douyin_pet_scene_contract_uses_pet_beats_not_ai_tutorial_layouts():
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from visual_contract_gate import validate_scene_contract
+    from content_platform.video_toolchain import PET_SCENE_MODES, _build_scene_contract
+    scenes = _build_scene_contract("douyin_pet", {"topic": "两只猫"})
+    assert [scene["visual_mode"] for scene in scenes] == list(PET_SCENE_MODES)
+    assert validate_scene_contract(scenes, strict_runtime=True)["passed"]
+    assert not {"prompt_typewriter", "error_fix_compare"} & {scene["visual_mode"] for scene in scenes}
+
+
+def test_pet_video_narration_is_frozen_to_the_rendered_beats():
+    from content_platform.pipeline import Pipeline
+    body = "你是不是也以为家里养两只高智商猫是双倍省心？其实这很可能是灾难级的翻车现场。" * 6
+    draft = {"body": body, "draft_meta": {"video_toolchain_plan": {"required": True}}}
+    Pipeline._freeze_pet_video_beats(draft, {"douyin_pet": {}})
+    meta = draft["draft_meta"]
+    assert meta["video_script"] == meta["narration_script"] == MediaBridge.compile_video_script(draft)["script"]
+    assert len([line for line in meta["video_script"].splitlines() if line.strip()]) == 8
+    untouched = {"body": body, "draft_meta": {}}
+    Pipeline._freeze_pet_video_beats(untouched, {"xiaohongshu": {}})
+    assert "video_script" not in untouched["draft_meta"]

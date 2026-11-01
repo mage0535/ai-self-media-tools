@@ -1128,6 +1128,11 @@ def build_original_order_shot(idx, bg_path, mode, template_id, group_motion, pla
     """+'</style></head><body '+attrs+'><div class="bg"></div><div class="veil"></div><div class="order-title" data-visual-role="title" data-semantic-key="s'+str(idx)+'-title">'+esc(labels[idx-1])+'</div><div class="example-label">公开自制反例 · 非真实客户数据</div><div class="contract-motion" data-motion="'+esc((group_motion or ['focus_shift'])[0])+'">'+layouts[idx]+'</div>'+role_sprite+'<div class="role" data-visual-role="annotation" data-semantic-key="functional-cat-dog-role">'+esc(role)+'</div>'+('<div class="order-cta" data-role="visual-cta" data-visual-role="cta">保存四份材料 · 交负责人检查再确认</div>' if idx==8 else '')+'''<script>window.renderFrame=function(t){var sprite=document.querySelector('.functional-role-sprite');sprite.style.transform='translateY('+(-Math.abs(Math.sin(t*1.5))*9)+'px) rotate('+(Math.sin(t*1.2)*2)+'deg)';document.querySelectorAll('.field-row').forEach(function(el,i){el.style.borderColor=t>=i*.5&&t<i*.5+.9?'#fde047':'rgba(255,255,255,.24)';el.style.transform='translateX('+('''+('Math.sin(t*1.8+i)*5' if detail else '0')+''')+'px)';});};window.renderFrame(0);</script></body></html>'''
 
 
+# General pet beats from content_platform.video_toolchain.PET_SCENE_MODES.
+PET_GENERAL_MODES = {"pet_hook", "pet_moment", "pet_behavior", "pet_cause",
+                     "pet_care_step", "pet_home_setup", "pet_watch_signal", "pet_save_cta"}
+
+
 def build_prompt_lab_shot(idx: int, title: str, text: str, bg_path: str, mode: str, kicker: str, template_id: str = "", group_motion=None, platform_reason: str = "", contract_mode: str = "", shot_purpose: str = "", body_copy=None) -> str:
     """Build a mode-specific shot with stable background and local motion."""
     if isinstance(body_copy,dict) and body_copy.get('original_order_id_profile'):
@@ -1141,7 +1146,7 @@ def build_prompt_lab_shot(idx: int, title: str, text: str, bg_path: str, mode: s
     if template_id.startswith("predictive_maintenance_") and mode.endswith("_detail"):
         effective_mode = mode
     pet_base_mode = mode.removesuffix("_detail")
-    if template_id.startswith("cat_") or pet_base_mode in {"sleep_pose_hook", "curled_sleep_pose", "side_sleep_pose", "back_sleep_pose", "loaf_alert_pose", "hidden_sleep_pose", "observe_not_diagnose", "sleep_pose_checklist"}:
+    if template_id.startswith("cat_") or pet_base_mode in {"sleep_pose_hook", "curled_sleep_pose", "side_sleep_pose", "back_sleep_pose", "loaf_alert_pose", "hidden_sleep_pose", "observe_not_diagnose", "sleep_pose_checklist"} | PET_GENERAL_MODES:
         effective_mode = mode
     predictive_layout = template_id.startswith("predictive_maintenance_") and bool(
         _predictive_maintenance_body(effective_mode, title)
@@ -1171,6 +1176,8 @@ def build_prompt_lab_shot(idx: int, title: str, text: str, bg_path: str, mode: s
         kicker = str(body_copy.get("kicker")).strip()
     if effective_mode in {"sleep_pose_hook", "curled_sleep_pose", "side_sleep_pose", "back_sleep_pose", "loaf_alert_pose", "hidden_sleep_pose", "observe_not_diagnose", "sleep_pose_checklist"}:
         kicker = "猫咪睡姿观察"
+    elif effective_mode in PET_GENERAL_MODES:
+        kicker = "萌宠日常观察"
     narrative_copy = {
         "decision_interrupt_detail": (
             "AI一旦犹豫，先停工件，再交权。",
@@ -1227,9 +1234,9 @@ def build_prompt_lab_shot(idx: int, title: str, text: str, bg_path: str, mode: s
     pet_modes = {
         "sleep_pose_hook", "curled_sleep_pose", "side_sleep_pose", "back_sleep_pose",
         "loaf_alert_pose", "hidden_sleep_pose", "observe_not_diagnose", "sleep_pose_checklist",
-    }
+    } | PET_GENERAL_MODES
     if effective_mode in pet_modes or (effective_mode.endswith("_detail") and effective_mode.removesuffix("_detail") in pet_modes):
-        labels = ("姿势", "先观察", "不要强行打扰")
+        labels = ("先观察", "再行动", "必要时问兽医") if pet_base_mode in PET_GENERAL_MODES else ("姿势", "先观察", "不要强行打扰")
         chips = "".join(f'<span class="chip">{esc(x)}</span>' for x in labels)
         body = (
             f'<div class="pet-observation reveal-item">'

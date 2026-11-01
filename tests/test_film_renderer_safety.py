@@ -863,3 +863,17 @@ def test_scene_cache_is_committed_before_final_composition_gates():
     composition = source.index("# Industrial explainer: text survives only when temporal ownership is exclusive.")
     assert local_commit < composition
 
+
+
+def test_general_pet_beats_use_pet_observation_layout(tmp_path):
+    background = tmp_path / "bg.jpg"
+    background.write_bytes(b"image")
+    for mode in sorted(film_renderer.PET_GENERAL_MODES):
+        for shot_mode in (mode, mode + "_detail"):
+            html = film_renderer.build_prompt_lab_shot(
+                1, "两只猫一起开柜门", "两只猫一起开柜门", str(background), shot_mode, "宠物",
+                template_id=f"{mode}_v1", group_motion=["push_in"],
+            )
+            assert "pet-observation" in html
+            assert "萌宠日常观察" in html or shot_mode.endswith("_detail")
+            assert "流程要点" not in html and "SUBJECT" not in html

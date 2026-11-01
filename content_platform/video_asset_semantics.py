@@ -114,8 +114,10 @@ def bind_requirements(store,job_id,brief,script,scenes,platform,owner):
     from .video_planning_producer import read_bound_video_planning
     from .stage_input_refs import resolve_stage_payload,bind_stage_payload
     from .workflow_runtime import STEP_SUCCEEDED
-    planned=read_bound_video_planning(store,job_id,brief)
-    if script!=planned['video_script']:raise ValueError('semantic_script_not_frozen')
+    # The pet lane has no source video planning; its 8 beats are frozen by the receipt check below.
+    if platform!='douyin_pet':
+        planned=read_bound_video_planning(store,job_id,brief)
+        if script!=planned['video_script']:raise ValueError('semantic_script_not_frozen')
     receipt=None
     for event in store.events(job_id):
         if event['event']=='native_platform_narrations_validated':

@@ -112,6 +112,8 @@ def _generation_contract_fields(
 def _build_scene_contract(platform: str, brief: dict[str, Any]) -> list[dict[str, Any]]:
     """Create executable, platform-aware visual decisions before rendering."""
     platform = str(platform or "video").casefold()
+    if platform == "douyin_pet":
+        return _build_pet_scene_contract(brief)
     if platform in {"bilibili", "youtube", "youtube_long"}:
         modes = ["terminal_evidence", "before_after_split", "prompt_typewriter", "annotation_callout", "error_fix_compare", "timeline_reveal", "checklist_stamp", "result_hold"]
     elif platform in {"douyin", "douyin_ai", "kuaishou", "shipinhao", "tiktok", "youtube_shorts"}:
@@ -130,6 +132,28 @@ def _build_scene_contract(platform: str, brief: dict[str, Any]) -> list[dict[str
         "evidence_asset": f"pending:evidence_asset:{platform}:s{i:02d}",
         "group_motion": [motions[i - 1]],
         "platform_reason": f"{platform}平台适配：{jobs[i - 1]}服务于{topic}",
+        "reading_hold_seconds": 2.0 if i < 8 else 3.0,
+    } for i in range(1, 9)]
+
+
+PET_SCENE_MODES = ("pet_hook", "pet_moment", "pet_behavior", "pet_cause",
+                   "pet_care_step", "pet_home_setup", "pet_watch_signal", "pet_save_cta")
+
+
+def _build_pet_scene_contract(brief: dict[str, Any]) -> list[dict[str, Any]]:
+    """Pet beats illustrate the narration itself; never reuse AI-tutorial screen layouts."""
+    jobs = ["开场提问", "真实瞬间", "行为表现", "背后原因", "照护做法", "家居布置", "观察信号", "收藏行动"]
+    motions = ["push_in", "focus_shift", "callout_draw", "split_reveal", "check_each", "frame_draw", "local_highlight", "stamp_lock"]
+    topic = str(brief.get("topic") or brief.get("title") or "当前宠物话题")
+    return [{
+        "beat_id": f"s{i:02d}",
+        "content_job": jobs[i - 1],
+        "visual_hook": f"{jobs[i - 1]}：画面呈现这句旁白里的宠物",
+        "visual_mode": PET_SCENE_MODES[i - 1],
+        "template_id": f"{PET_SCENE_MODES[i - 1]}_v1",
+        "evidence_asset": f"pending:evidence_asset:douyin_pet:s{i:02d}",
+        "group_motion": [motions[i - 1]],
+        "platform_reason": f"douyin_pet平台适配：{jobs[i - 1]}服务于{topic}",
         "reading_hold_seconds": 2.0 if i < 8 else 3.0,
     } for i in range(1, 9)]
 
