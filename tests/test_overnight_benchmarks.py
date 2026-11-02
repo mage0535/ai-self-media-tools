@@ -169,3 +169,25 @@ def test_zhihu_falls_back_to_the_labelled_juejin_reference_when_its_own_data_is_
     brief = prepared["tasks"][0]["brief"]
     assert prepared["tasks"][0]["state"] == "ready_for_plan" and brief["cross_platform_source"] == "juejin"
     assert brief["native_source_error"] == "zhihu_mc: mediacrawler_login_required"
+
+
+def test_pet_lane_falls_back_to_youtube_when_bilibili_refuses_and_asks_bilibili_once(tmp_path, monkeypatch):
+    calls = []
+    def refused(items, out):
+        calls.append("bilibili_pet")
+        raise ValueError("bilibili_api_code_-352")
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "bilibili_pet", refused)
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "youtube_pet", lambda items, out: [_observed_row("youtube", "yt1")])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "tiktok_pet", lambda items, out: [_observed_row("tiktok", "tt1")])
+    monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
+                        lambda platform, public: {"viral_breakdown": {"platform": platform}})
+    prepared = {"tasks": [{"platform": "douyin_pet", "state": "ready_for_plan", "brief": {"lane": "pet_healing"}}]}
+
+    overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
+
+    task = prepared["tasks"][0]; brief = task["brief"]
+    assert task["state"] == "ready_for_plan" and brief["viral_breakdown"] == {"platform": "youtube"}
+    assert brief["cross_platform_source"] == "youtube"
+    assert brief["native_source_error"] == "bilibili_pet: bilibili_api_code_-352"
+    assert calls == ["bilibili_pet"]
+    assert [s["content_id"] for s in brief["hot_viral_samples"]] == ["yt1", "tt1"]

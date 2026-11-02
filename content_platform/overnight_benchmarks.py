@@ -57,6 +57,9 @@ LANE_COLLECTORS = {
     "tiktok": ("tiktok_ai", "tiktok"),
     "youtube": ("youtube_ai", "youtube"),
 }
+# 11-03: Bilibili answered -352 (risk control; never worked around), which blocked douyin_pet outright.
+# Further same-genre sources are tried in order before a lane is blocked.
+FALLBACK_COLLECTORS = {"douyin_pet": (("youtube_pet", "youtube"), ("tiktok_pet", "tiktok"))}
 
 
 # Owner 10-31: other platforms' pet videos are analysed for learning only; our videos are original.
@@ -125,6 +128,7 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
 
     cache: dict[str, Any] = {}
     rows_by_collector: dict[str, Any] = {}
+    failed: dict[str, str] = {}  # A collector that failed is not asked again in the same batch.
     for task in prepared.get("tasks") or []:
         platform = str(task.get("platform") or "")
         if task.get("state") != "ready_for_plan":
@@ -132,12 +136,19 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
         if platform not in cache:
             errors = []
             for name, source_platform in [*filter(None, [NATIVE_COLLECTORS.get(platform)]),
-                                          LANE_COLLECTORS.get(platform, (platform, platform))]:
+                                          LANE_COLLECTORS.get(platform, (platform, platform)),
+                                          *FALLBACK_COLLECTORS.get(platform, ())]:
                 try:
                     if name not in COLLECTORS:
                         raise ValueError("no typed public same-lane collector for this platform")
+                    if name in failed:
+                        raise ValueError(failed[name])
                     if name not in rows_by_collector:  # Lanes sharing a collector observe once.
-                        rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
+                        try:
+                            rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
+                        except Exception as exc:
+                            failed[name] = str(exc)[:200]
+                            raise
                     cache[platform] = _observed_strategy_inputs(source_platform, {"items": rows_by_collector[name]})
                 except Exception as exc:  # One platform's benchmark must not abort the batch.
                     errors.append(f"{name}: {str(exc)[:200]}")
@@ -158,6 +169,8 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
             samples = []
             for name in REFERENCE_COLLECTORS[platform]:
                 if name not in rows_by_collector:
+                    if name in failed:
+                        continue
                     try:
                         rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
                     except Exception:  # A missing reference source shows up as fewer sources, not a crash.

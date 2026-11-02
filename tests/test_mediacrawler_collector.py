@@ -41,6 +41,7 @@ def test_search_passes_the_cookie_file_by_environment_and_reads_stored_rows(tmp_
     cookies = tmp_path / "zhihu.json"
     cookies.write_text("{}")
     monkeypatch.setitem(mc.COOKIE_FILES, "zhihu", cookies)
+    monkeypatch.setenv("ALL_PROXY", "socks5://127.0.0.1:1"); monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
     seen = {}
 
     def run(command, **kwargs):
@@ -53,6 +54,7 @@ def test_search_passes_the_cookie_file_by_environment_and_reads_stored_rows(tmp_
     rows = mc.search("zhihu", tmp_path / "out", run=run)
 
     assert seen["env"]["MC_COOKIE_FILE"] == str(cookies) and seen["env"]["MC_UNATTENDED"] == "1"
+    assert not {"ALL_PROXY", "all_proxy", "HTTPS_PROXY"} & set(seen["env"])
     assert seen["command"][seen["command"].index("--lt") + 1] == "cookie"
     assert "--get_comment" in seen["command"] and seen["command"][seen["command"].index("--get_comment") + 1] == "no"
     assert len(rows) == 1 and len(rows[0]["raw_response_hash"]) == 64

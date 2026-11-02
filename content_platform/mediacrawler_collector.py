@@ -25,6 +25,7 @@ KEYWORDS = {"zhihu": ("AI 落地 案例",)}
 EXIT_REASONS = {3: "mediacrawler_login_required", 4: "mediacrawler_verification_required"}
 MIN_BODY_CHARS = 300
 MIN_UPVOTES = 5  # a reference must show some audience response, not just exist
+PROXY_VARS = {"all_proxy", "http_proxy", "https_proxy"}
 
 
 def search(platform: str, out_dir: str | Path, *, keywords: tuple[str, ...] | None = None, limit: int = 15,
@@ -34,7 +35,9 @@ def search(platform: str, out_dir: str | Path, *, keywords: tuple[str, ...] | No
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True, mode=0o700)
     cookie_file = COOKIE_FILES.get(platform)
-    env = dict(os.environ, MC_UNATTENDED="1" if unattended else "0")
+    # Domestic platforms are read directly, as verified; the batch's SOCKS ALL_PROXY breaks its httpx (no socksio).
+    env = {key: value for key, value in os.environ.items() if key.lower() not in PROXY_VARS}
+    env["MC_UNATTENDED"] = "1" if unattended else "0"
     if cookie_file and cookie_file.is_file():
         env["MC_COOKIE_FILE"] = str(cookie_file)
     if qr_png:
