@@ -15,6 +15,16 @@ import shutil
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 SIZE=(1880,800)  # Exact 2.35:1, with enough pixels for Chinese title OCR.
+# Per output size: white title panel, title start x, max line width, allowed title-box bounds, vertical band
+# the lines are centred in, max total text height. Bounds sit inside cover_quality's safe zone (4%/5%/82%).
+LAYOUTS={
+    SIZE:{'panel':(0,0,950,800),'x':70,'width':810,'bounds':(40,40,910,760),'band':(0,800),'text_height':580},
+    # Juejin/Zhihu (16:9) and Xiaohongshu (3:4): a top title band of ~30%, so the background stays the main
+    # picture (cover_quality fails >45% flat near-white pixels as background_crushed_to_solid).
+    (1920,1080):{'panel':(0,0,1920,330),'x':96,'width':1728,'bounds':(78,56,1842,322),'band':(56,322),'text_height':260},
+    (1200,1600):{'panel':(0,0,1200,500),'x':60,'width':1080,'bounds':(50,82,1150,492),'band':(82,492),'text_height':400},
+}
+PLATFORM_SIZES={'wechat':SIZE,'juejin':(1920,1080),'zhihu':(1920,1080),'xiaohongshu':(1200,1600)}
 FONT_FACE=2  # Installed Noto Sans CJK TTC: SC face, not default JP face 0.
 
 
@@ -31,20 +41,21 @@ def _owned_file(path,root):
     return path.resolve()
 
 
-def _layout(title,font_path):
-    probe=ImageDraw.Draw(Image.new('RGB',SIZE))
+def _layout(title,font_path,size_key=SIZE):
+    layout=LAYOUTS[size_key];width=layout['width']
+    probe=ImageDraw.Draw(Image.new('RGB',size_key))
     for size in range(96,47,-2):
         font=ImageFont.truetype(str(font_path),size,index=FONT_FACE)
         lines=[];line='';fits=True
         for phrase in re.findall(r'[^:：,，;；。.!！?？、]+[:：,，;；。.!！?？、]*',title):
-            if probe.textbbox((0,0),phrase,font=font)[2]>810:
+            if probe.textbbox((0,0),phrase,font=font)[2]>width:
                 fits=False;break
-            if probe.textbbox((0,0),line+phrase,font=font)[2]>810:
+            if probe.textbbox((0,0),line+phrase,font=font)[2]>width:
                 lines.append(line);line=phrase
             else:line+=phrase
         if line:lines.append(line)
         height=size+28
-        if fits and len(lines)<=4 and len(lines)*height<=580:return font,lines,height
+        if fits and len(lines)<=4 and len(lines)*height<=layout['text_height']:return font,lines,height
     raise ValueError('wechat_cover_title_overflow')
 
 
@@ -102,6 +113,11 @@ def _ocr(line_paths,title):
     return evidence
 
 
+def _top(layout,lines,line_height):
+    start,end=layout['band']
+    return start+(end-start-len(lines)*line_height)//2
+
+
 def verify_cover_title(path,expected,proof,*,diagnostic_dir=None):
     """For trusted native render proof only; independently remeasure boxes and OCR ROI."""
     path=Path(path)
@@ -112,14 +128,17 @@ def verify_cover_title(path,expected,proof,*,diagnostic_dir=None):
     font_path=Path(proof.get('font_path') or '')
     if not font_path.is_file() or _sha(font_path)!=proof.get('font_sha256') or proof.get('font_face')!=FONT_FACE:
         raise ValueError('wechat_cover_font_binding_invalid')
-    face,lines,line_height=_layout(expected,font_path)
-    top=(800-len(lines)*line_height)//2
+    size_key=tuple(proof.get('dimensions') or ())
+    if size_key not in LAYOUTS:raise ValueError('wechat_cover_dimensions_invalid')
+    layout=LAYOUTS[size_key];left,upper,right,lower=layout['bounds']
+    face,lines,line_height=_layout(expected,font_path,size_key)
+    top=_top(layout,lines,line_height)
     with Image.open(path) as source:
-        if source.size!=SIZE or proof.get('dimensions')!=list(SIZE):raise ValueError('wechat_cover_dimensions_invalid')
+        if source.size!=size_key:raise ValueError('wechat_cover_dimensions_invalid')
         draw=ImageDraw.Draw(source)
-        boxes=[list(draw.textbbox((70,top+index*line_height),line,font=face)) for index,line in enumerate(lines)]
+        boxes=[list(draw.textbbox((layout['x'],top+index*line_height),line,font=face)) for index,line in enumerate(lines)]
         if boxes!=proof.get('title_boxes') or lines!=proof.get('title_lines') or any(
-            box[0]<40 or box[1]<40 or box[2]>910 or box[3]>760 or box[0]>=box[2] or box[1]>=box[3] for box in boxes):
+            box[0]<left or box[1]<upper or box[2]>right or box[3]>lower or box[0]>=box[2] or box[1]>=box[3] for box in boxes):
             raise ValueError('wechat_cover_title_box_invalid')
         roi=[min(box[0] for box in boxes)-20,min(box[1] for box in boxes)-20,
              max(box[2] for box in boxes)+20,max(box[3] for box in boxes)+20]
@@ -151,7 +170,7 @@ def verify_cover_title(path,expected,proof,*,diagnostic_dir=None):
 
 
 def render_wechat_cover(background_path,output_path,*,artifact_root,draft_title,
-                        cover_design=None,provider_result=None,font_path=None,diagnostic_dir=None):
+                        cover_design=None,provider_result=None,font_path=None,diagnostic_dir=None,platform='wechat'):
     """Caller supplies validated draft/config and invokes only for WeChat cover.
 
     Return a new path/provider result and measured cover-design facts. Caller must
@@ -177,10 +196,12 @@ def render_wechat_cover(background_path,output_path,*,artifact_root,draft_title,
     if not title or any(ord(char)<32 for char in title):raise ValueError('wechat_cover_title_invalid')
     font=Path(font_path or '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc')
     if not font.is_file():raise ValueError('wechat_cover_local_font_missing')
-    face,lines,line_height=_layout(title,font)
+    size_key=PLATFORM_SIZES[platform];layout=LAYOUTS[size_key];left,upper,right,lower=layout['bounds']
+    face,lines,line_height=_layout(title,font,size_key)
     background_sha=_sha(background)
     input_sha=hashlib.sha256(json.dumps({'background_sha256':background_sha,'title':title,
-        'font_sha256':_sha(font),'font_face':FONT_FACE,'renderer_sha256':_sha(__file__)},ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+        'font_sha256':_sha(font),'font_face':FONT_FACE,'renderer_sha256':_sha(__file__),
+        **({} if size_key==SIZE else {'dimensions':list(size_key)})},ensure_ascii=False,sort_keys=True).encode()).hexdigest()
     proof=output.with_suffix('.render.json')
     reused=False
     if output.exists() or proof.exists():
@@ -190,16 +211,16 @@ def render_wechat_cover(background_path,output_path,*,artifact_root,draft_title,
         evidence['ocr']=verify_cover_title(output,title,evidence,diagnostic_dir=diagnostic_dir)
         reused=True
     with Image.open(background) as source:
-        image=ImageOps.fit(ImageOps.exif_transpose(source).convert('RGB'),SIZE,method=Image.Resampling.LANCZOS)
+        image=ImageOps.fit(ImageOps.exif_transpose(source).convert('RGB'),size_key,method=Image.Resampling.LANCZOS)
     draw=ImageDraw.Draw(image)
     # A solid high-contrast local title panel, not a substituted AI background.
-    draw.rectangle((0,0,950,800),fill='#ffffff')
-    top=(800-len(lines)*line_height)//2
+    draw.rectangle(layout['panel'],fill='#ffffff')
+    top=_top(layout,lines,line_height)
     boxes=[]
     for index,line in enumerate(lines):
-        position=(70,top+index*line_height)
+        position=(layout['x'],top+index*line_height)
         box=draw.textbbox(position,line,font=face)
-        if box[0]<40 or box[1]<40 or box[2]>910 or box[3]>760:
+        if box[0]<left or box[1]<upper or box[2]>right or box[3]>lower:
             raise ValueError('wechat_cover_title_overflow')
         draw.text(position,line,font=face,fill='#132b3c');boxes.append(list(box))
     output.parent.mkdir(parents=True,exist_ok=True)
@@ -207,7 +228,7 @@ def render_wechat_cover(background_path,output_path,*,artifact_root,draft_title,
         with tempfile.TemporaryDirectory(prefix='.cover-render-',dir=output.parent) as temporary:
             candidate=Path(temporary)/'cover.png';image.save(candidate,format='PNG')
             evidence={'version':'wechat_cover_render_v2','background_path':str(background),
-                'background_sha256':background_sha,'output_sha256':_sha(candidate),'dimensions':list(SIZE),
+                'background_sha256':background_sha,'output_sha256':_sha(candidate),'dimensions':list(size_key),
                 'font_path':str(font.resolve()),'font_sha256':_sha(font),'font_face':FONT_FACE,'title_text':title,
                 'title_boxes':boxes,'title_lines':lines,'input_sha256':input_sha,'renderer_sha256':_sha(__file__)}
             evidence['ocr']=verify_cover_title(candidate,title,evidence,diagnostic_dir=diagnostic_dir)
@@ -222,7 +243,7 @@ def render_wechat_cover(background_path,output_path,*,artifact_root,draft_title,
     for key in ('semantic_match_score','semantic_match','checksum','sha256','dimensions'):
         result.pop(key,None)
     result.update({'path':str(output),'checksum':evidence['output_sha256'],
-        'dimensions':list(SIZE),'cover_render_evidence':evidence,
+        'dimensions':list(size_key),'cover_render_evidence':evidence,
         'cover_render_evidence_path':str(proof),'requires_semantic_review':True})
     design.update({'title_text':title,'title_present':True,'title_readable':True,
                    'title_no_overflow':True,'cover_sha256':evidence['output_sha256'],

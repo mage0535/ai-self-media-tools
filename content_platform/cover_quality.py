@@ -298,6 +298,49 @@ def _base_result(path: Path, failures: list[str], *, status: str = "fail") -> di
     return {"passed": False, "status": status, "cover": str(path), "failures": failures, "review_reasons": []}
 
 
+def _rendered_title_reads(path: Path, image: Image.Image, expected_title: str, evidence: dict[str, Any],
+                          thumb_size: tuple[int, int]) -> dict[str, Any] | None:
+    """Line-level OCR at the renderer's own geometry, bound to this cover by the render proof.
+
+    11-03: whole-image sparse OCR (psm 11) misread clean 72-120px CJK titles even on a white canvas, so a
+    readable rendered title failed. Without a valid proof the caller keeps the whole-image reading.
+    """
+    ref = evidence.get("title_render_proof")
+    if not isinstance(ref, dict):
+        return None
+    proof_path = Path(str(ref.get("path") or ""))
+    if proof_path.is_symlink() or not proof_path.is_file() or _file_sha256(proof_path) != ref.get("sha256"):
+        return None
+    from .wechat_cover_render import CoverTitleOCRError, _ocr, verify_cover_title
+    proof = json.loads(proof_path.read_text(encoding="utf-8"))
+    if proof.get("title_text") != expected_title:
+        return None
+    try:
+        full = bool(verify_cover_title(path, expected_title, proof).get("matched"))
+    except CoverTitleOCRError:
+        full = False
+    except ValueError:  # proof does not bind this cover
+        return None
+    width, height = image.size
+    thumb_w, thumb_h = thumb_size
+    small = image.resize((thumb_w, thumb_h), Image.Resampling.LANCZOS)
+    with tempfile.TemporaryDirectory(prefix=".thumb-title-") as temporary:
+        line_paths = []
+        for index, (box, line) in enumerate(zip(proof["title_boxes"], proof["title_lines"])):
+            crop = small.crop((max(0, int(box[0] * thumb_w / width) - 6), max(0, int(box[1] * thumb_h / height) - 6),
+                               min(thumb_w, int(box[2] * thumb_w / width) + 6), min(thumb_h, int(box[3] * thumb_h / height) + 6)))
+            # Enlarging adds no detail; it only fits Tesseract's expected glyph size.
+            crop = crop.resize((crop.width * 3, crop.height * 3), Image.Resampling.LANCZOS)
+            line_path = Path(temporary) / f"line-{index}.png"
+            crop.save(line_path, format="PNG")
+            line_paths.append((line_path, line))
+        try:
+            thumbnail = bool(_ocr(line_paths, expected_title).get("matched"))
+        except CoverTitleOCRError:
+            thumbnail = False
+    return {"full": full, "thumbnail": thumbnail, "boxes": proof["title_boxes"]}
+
+
 def validate_cover(
     cover: str | Path,
     evidence: dict[str, Any] | str | Path | None,
@@ -436,19 +479,34 @@ def validate_cover(
         thumbnail = image.resize((thumb_w, thumb_h), Image.Resampling.LANCZOS)
         thumbnail_ocr = _run_ocr(thumbnail, scale="thumbnail", expected_text=expected_title)
         thumbnail_metrics = _ocr_metrics(thumbnail_ocr, expected_title, thumb_w, thumb_h)
+        rendered = _rendered_title_reads(path, image, expected_title, evidence_payload, (thumb_w, thumb_h))
+        if rendered is not None:
+            # The title is read line by line where the proof says it is; background text counts still
+            # come from the whole-image OCR above.
+            # Sparse OCR splits a misread title into fragments that each looked like another focal point or block;
+            # the title counts once, everything outside its boxes is counted as before.
+            def in_title(word):
+                x, y = word["left"] + word["width"] / 2, word["top"] + word["height"] / 2
+                return any(box[0] - 24 <= x <= box[2] + 24 and box[1] - 24 <= y <= box[3] + 24 for box in rendered["boxes"])
+            outside = _ocr_metrics(dict(full_ocr, words=[word for word in full_ocr.get("words") or [] if not in_title(word)]),
+                                   expected_title, width, height)
+            ocr_metrics.update({key: outside[key] + 1 for key in ("text_block_count", "information_module_count", "competing_focal_point_count")})
+            ocr_metrics.update(title_recall=1.0 if rendered["full"] else 0.0, title_reader="render_proof_line_ocr")
+            thumbnail_metrics.update(title_recall=1.0 if rendered["thumbnail"] else 0.0, title_reader="render_proof_line_ocr")
+            safe_zone = _safe_zone(width, height, rendered["boxes"])
 
         if not full_ocr.get("available") or not thumbnail_ocr.get("available"):
             review_reasons.append("ocr_unavailable")
         else:
             if ocr_metrics["title_recall"] < MIN_TITLE_RECALL:
                 failures.append("title_ocr_recall_too_low")
-            elif ocr_metrics["title_confidence"] < MIN_OCR_CONFIDENCE:
+            elif rendered is None and ocr_metrics["title_confidence"] < MIN_OCR_CONFIDENCE:
                 review_reasons.append("ocr_confidence_low")
             if thumbnail_metrics["title_recall"] < MIN_TITLE_RECALL:
                 failures.append("thumbnail_title_unreadable")
-            elif thumbnail_metrics["title_confidence"] < MIN_OCR_CONFIDENCE:
+            elif rendered is None and thumbnail_metrics["title_confidence"] < MIN_OCR_CONFIDENCE:
                 review_reasons.append("thumbnail_ocr_confidence_low")
-            if ocr_metrics["title_boxes"] and not safe_zone["title_inside"]:
+            if (rendered or ocr_metrics["title_boxes"]) and not safe_zone["title_inside"]:
                 failures.append("title_outside_safe_zone")
             if ocr_metrics["duplicate_title_count"] > 1 or ocr_metrics["background_residual_suspected"]:
                 failures.append("duplicate_or_background_text")

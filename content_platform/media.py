@@ -19,6 +19,9 @@ SEMANTIC_RETRY_THRESHOLD = 0.72
 SEMANTIC_BEAT_RETRIES = 2
 
 
+# Article covers whose title we render over a text-free background (wechat_cover_render).
+TITLED_COVER_PLATFORMS = ('wechat', 'juejin', 'zhihu', 'xiaohongshu')
+
 class MediaBridge:
     VIDEO_SCRIPT_MAX_SEGMENTS = 8
     VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT = 40
@@ -1015,18 +1018,26 @@ class MediaBridge:
 
     @staticmethod
     def _compose_wechat_cover(output_dir, images, job):
-        if 'wechat' not in {str(value).casefold() for value in job.get('platforms', [])}:
+        # 11-03: Juejin/Zhihu/XHS covers were raw AI images with no title, so the cover gate
+        # (independent render over a preserved background) could never pass; they get the same render.
+        platforms = {str(value).casefold() for value in job.get('platforms', [])}
+        platform = next((name for name in TITLED_COVER_PLATFORMS if name in platforms), None)
+        if platform is None:
             return None
         covers = [item for item in images if item.get('role') == 'cover']
         if len(covers) != 1:
             raise ValueError('wechat_unique_cover_required')
         from .wechat_cover_render import render_wechat_cover
         cover = covers[0]
+        title = job.get('title') or job.get('topic') or ''
+        design = (job.get('draft_meta') or {}).get('cover_design')
+        if platform == 'xiaohongshu':  # The cover shows the same 20-character title as the note.
+            from .formatters import _note_title
+            title = _note_title(title); design = dict(design or {}, title_text=title)
         result = render_wechat_cover(
             cover['path'], Path(output_dir) / 'cover-titled.png', artifact_root=output_dir,
-            draft_title=job.get('title') or job.get('topic') or '',
-            cover_design=(job.get('draft_meta') or {}).get('cover_design'),
-            provider_result=cover.get('provider_result'))
+            draft_title=title, cover_design=design,
+            provider_result=cover.get('provider_result'), platform=platform)
         cover.update(path=result['path'], provider_result=result['provider_result'],
                      checksum=hashlib.sha256(Path(result['path']).read_bytes()).hexdigest())
         return result['cover_design']
@@ -1161,6 +1172,15 @@ class MediaBridge:
                 "cover_sha256": hashlib.sha256(cover_path.read_bytes()).hexdigest() if cover_path.is_file() else "",
                 "degraded": design.get("degraded") is True,
             }
+            render = (cover_image.get("provider_result") or {}).get("cover_render_evidence") or {}
+            if render.get("background_path"):
+                # The cover gate checks the rendered title against this and the background it was laid over.
+                evidence.update(independent_render=True, title=render.get("title_text") or evidence["title"],
+                                background_provenance={"path": render["background_path"], "sha256": render.get("background_sha256"),
+                                                       "visible_required": True})
+                proof = Path(str((cover_image.get("provider_result") or {}).get("cover_render_evidence_path") or ""))
+                if proof.is_file():
+                    evidence["title_render_proof"] = {"path": str(proof), "sha256": hashlib.sha256(proof.read_bytes()).hexdigest()}
             (output_dir / "cover_quality_evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
 
     @staticmethod
@@ -1338,6 +1358,20 @@ class MediaBridge:
         meta = job.get("draft_meta") or {}
         design = meta.get("cover_design") if isinstance(meta.get("cover_design"), dict) else {}
         base = cls._image_prompt(job)
+        platforms = {str(value).casefold() for value in job.get("platforms") or []}
+        if platforms.intersection(TITLED_COVER_PLATFORMS):
+            # These covers get our own rendered title band (_compose_wechat_cover). 11-03: asking the model to
+            # paint the headline gave garbled pseudo-Chinese on screens and notes, which OCR counted as competing
+            # text and readers see as obviously AI; the background must carry no text at all.
+            return (
+                f"{base} A photographic background for an article cover; the title is added later in a band across the top. "
+                f"Story behind it: {str(design.get('hook') or '')[:120]}. "
+                f"Conflict or payoff: {design.get('conflict_or_payoff') or 'show problem and result'}. "
+                f"Focal subjects: {', '.join(str(item) for item in design.get('focal_subjects') or [])}. "
+                f"{cls._cover_style_rule(job)}"
+                "One clear real-world focal subject in the lower two thirds, calm uncluttered top third. "
+                "Absolutely no text: no words, letters, numbers, captions, labels, signs, and no screens, papers or cards with writing."
+            )
         return (
             f"{base} Layout: {design.get('layout_key') or 'hero_conflict'}. "
             # The title is the cover's headline; the opening paragraph is only the story behind it

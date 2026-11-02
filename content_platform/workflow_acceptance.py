@@ -168,13 +168,12 @@ def _file_sha256(path: Path) -> str:
 
 
 def _check_cover_quality(directory: Path, artifacts: list[dict[str, Any]], platform: str, failures: list[str]) -> None:
-    candidates = [path for pattern in ("cover.png", "cover.jpg", "cover.jpeg", "cover*.png", "cover*.jpg", "cover*.jpeg") for path in directory.glob(pattern)]
-    for item in artifacts:
-        if not isinstance(item, dict):
-            continue
-        path = Path(str(item.get("path") or ""))
-        if str(item.get("kind") or "").casefold() == "cover" or path.stem.casefold().startswith("cover"):
-            candidates.append(path)
+    # The registered cover comes first: a titled cover keeps its untitled background as cover.png.
+    rows = [item for item in artifacts if isinstance(item, dict)]
+    candidates = [Path(str(item.get("path") or "")) for item in rows if str(item.get("kind") or "").casefold() == "cover"]
+    candidates += [Path(str(item.get("path") or "")) for item in rows
+                   if Path(str(item.get("path") or "")).stem.casefold().startswith("cover")]
+    candidates += [path for pattern in ("cover.png", "cover.jpg", "cover.jpeg", "cover*.png", "cover*.jpg", "cover*.jpeg") for path in directory.glob(pattern)]
     cover = next((path for path in candidates if path.is_file()), None)
     if cover is None:
         failures.append("cover_missing")

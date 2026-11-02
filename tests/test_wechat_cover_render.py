@@ -32,3 +32,33 @@ def test_rendered_cover_title_passes_real_ocr(tmp_path, title):
     Image.new("RGB", W.SIZE, "#4a7aa0").save(tmp_path / "bg.png")
     result = W.render_wechat_cover(tmp_path / "bg.png", tmp_path / "cover.png", artifact_root=tmp_path, draft_title=title)
     assert result["provider_result"]["cover_render_evidence"]["ocr"]["matched"]
+
+
+@pytest.mark.skipif(not shutil.which("tesseract") or not FONT.is_file(), reason="needs tesseract + Noto CJK")
+@pytest.mark.parametrize("platform,size,title", [("juejin", (1920, 1080), "微信AI客服搭建避坑指南：从知识库切分到转人工分流的落地规范"),
+                                                 ("xiaohongshu", (1200, 1600), "非研发背景做智能告警")])
+def test_article_platform_cover_uses_its_own_size_and_passes_the_cover_gate(tmp_path, platform, size, title):
+    # 11-03: Juejin/Zhihu/XHS covers had no rendered title; the gate reads the title through the render proof.
+    import hashlib
+    from content_platform.cover_quality import validate_cover
+    rng = __import__("random").Random(7)
+    background = Image.new("RGB", (1024, 1024))
+    background.putdata([(rng.randrange(40, 200), rng.randrange(60, 160), rng.randrange(80, 220)) for _ in range(1024 * 1024)])
+    background = background.resize((64, 64)).resize((1024, 1024))  # soft texture, no text
+    background.save(tmp_path / "bg.png")
+    result = W.render_wechat_cover(tmp_path / "bg.png", tmp_path / "cover.png", artifact_root=tmp_path,
+                                   draft_title=title, platform=platform)
+    proof = result["provider_result"]["cover_render_evidence"]
+    assert proof["dimensions"] == list(size) and Image.open(tmp_path / "cover.png").size == size
+    evidence = {"platform": platform, "layout_key": "checklist_poster", "hook": "h", "conflict_or_payoff": "c",
+                "content_match_reason": "m", "focal_subjects": ["s"], "title": title, "independent_render": True,
+                "cover_sha256": hashlib.sha256((tmp_path / "cover.png").read_bytes()).hexdigest(),
+                "background_provenance": {"path": str(tmp_path / "bg.png"), "visible_required": True},
+                "title_render_proof": {"path": result["evidence_path"], "sha256": result["evidence_sha256"]}}
+    gate = validate_cover(tmp_path / "cover.png", evidence, platform)
+    assert gate["ocr"]["title_reader"] == "render_proof_line_ocr" and gate["ocr"]["title_recall"] == 1.0
+    assert gate["thumbnail_ocr"]["title_recall"] == 1.0
+    assert not {"title_ocr_recall_too_low", "thumbnail_title_unreadable", "independent_cover_render_missing",
+                "background_provenance_missing", "xiaohongshu_cover_aspect_invalid", "background_crushed_to_solid"} & set(gate["failures"])
+    evidence["title_render_proof"]["sha256"] = "0" * 64  # an unbound proof falls back to whole-image OCR
+    assert validate_cover(tmp_path / "cover.png", evidence, platform)["ocr"].get("title_reader") is None
