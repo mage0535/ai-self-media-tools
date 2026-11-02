@@ -459,6 +459,10 @@ def collect_task_source_inputs(store,config,job,contexts):
         if normal_inputs is not None and normal_inputs.get('continuation_intent'):
             target=normal_inputs['continuation_intent']['target_content_id']
             eligible=[item for item in eligible if item.get('content_id')==target and item.get('title')==job['topic']]
+        if normal_inputs is None and not manual:
+            # Overnight prepare already chose this task's topic; collection re-verifies that candidate, not a new pick.
+            pinned=[item for item in eligible if item.get('title')==job['topic']]
+            if pinned:eligible=pinned
         native_eligible=list(eligible)
         evidence=[]
         if manual:
