@@ -18,6 +18,12 @@ def _juejin(items: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
     return collect_samples(hot, out_dir / "juejin")
 
 
+def _zhihu_mediacrawler(items: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
+    from . import mediacrawler_collector as mc
+
+    return mc.zhihu_samples(mc.search("zhihu", out_dir / "zhihu_mc"))
+
+
 def _videos(name: str, feed):
     def collect(items: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
         from . import video_sample_collector as videos
@@ -28,6 +34,7 @@ def _videos(name: str, feed):
 
 COLLECTORS = {
     "juejin": _juejin,
+    "zhihu_mc": _zhihu_mediacrawler,
     "bilibili_ai": _videos("bilibili_ai", lambda videos: videos.bilibili_candidates("ai")),
     "bilibili_pet": _videos("bilibili_pet", lambda videos: videos.bilibili_candidates("pet")),
     "tiktok_ai": _videos("tiktok_ai", lambda videos: videos.tiktok_candidates()),
@@ -35,6 +42,8 @@ COLLECTORS = {
     "youtube_pet": _videos("youtube_pet", lambda videos: videos.youtube_candidates(pet=True)),
     "youtube_ai_scenario": _videos("youtube_ai_scenario", lambda videos: videos.youtube_candidates(scenario=True)),
 }
+# Owner 11-02: a lane's own platform data (MediaCrawler) comes first; LANE_COLLECTORS is the labelled fallback.
+NATIVE_COLLECTORS = {"zhihu": ("zhihu_mc", "zhihu")}
 # Owner 10-28: lanes without their own typed collector use another platform's real public samples.
 # lane -> (collector, platform the samples were observed on); the breakdown keeps that platform
 # and is marked cross_platform_source.
@@ -120,17 +129,25 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
         if task.get("state") != "ready_for_plan":
             continue
         if platform not in cache:
-            name, source_platform = LANE_COLLECTORS.get(platform, (platform, platform))
-            try:
-                if name not in COLLECTORS:
-                    raise ValueError("no typed public same-lane collector for this platform")
-                if name not in rows_by_collector:  # Lanes sharing a collector observe once.
-                    rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
-                cache[platform] = _observed_strategy_inputs(source_platform, {"items": rows_by_collector[name]})
+            errors = []
+            for name, source_platform in [*filter(None, [NATIVE_COLLECTORS.get(platform)]),
+                                          LANE_COLLECTORS.get(platform, (platform, platform))]:
+                try:
+                    if name not in COLLECTORS:
+                        raise ValueError("no typed public same-lane collector for this platform")
+                    if name not in rows_by_collector:  # Lanes sharing a collector observe once.
+                        rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
+                    cache[platform] = _observed_strategy_inputs(source_platform, {"items": rows_by_collector[name]})
+                except Exception as exc:  # One platform's benchmark must not abort the batch.
+                    errors.append(f"{name}: {str(exc)[:200]}")
+                    continue
                 if source_platform != platform:
                     cache[platform]["cross_platform_source"] = source_platform
-            except Exception as exc:  # One platform's benchmark must not abort the batch.
-                cache[platform] = {"error": f"same-lane breakdown unavailable: {str(exc)[:200]}"}
+                if errors:
+                    cache[platform]["native_source_error"] = errors[0]
+                break
+            else:
+                cache[platform] = {"error": "same-lane breakdown unavailable: " + "; ".join(errors)}
         strategy = cache[platform]
         if "error" in strategy:
             task.update(state="blocked", reason=strategy["error"])

@@ -118,6 +118,10 @@ def _observed_strategy_inputs(platform, public, *, now=None, normal_native_query
                 from .juejin_native_article import verify_sample
                 if not verify_sample(row,raw):
                     raise SourceInputsBlocked('source_strategy_observed_content_changed',{'platform':platform})
+            elif row.get('source')=='native.zhihu_mediacrawler':
+                from .mediacrawler_collector import verify_sample
+                if not verify_sample(row,raw):
+                    raise SourceInputsBlocked('source_strategy_observed_content_changed',{'platform':platform})
             else:
                 # 尚无该平台 typed 完整正文 parser，hash不能替代业务字段验证。
                 continue

@@ -137,3 +137,33 @@ def test_kuaishou_ai_reference_samples_use_tiktok_and_youtube_scenarios(tmp_path
     result = build_hot_viral_intelligence(target_platform="kuaishou", lane=lane,
                                           samples=brief["hot_viral_samples"], source_statuses=brief["hot_viral_source_statuses"])
     assert result["status"] == "fallback_ready"
+
+
+def test_zhihu_uses_its_own_platform_data_first(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "zhihu_mc", lambda items, out: calls.append("zhihu") or ["row"])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "juejin", lambda items, out: calls.append("juejin") or ["row"])
+    monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
+                        lambda platform, public: {"viral_breakdown": {"platform": platform}})
+    prepared = {"tasks": [{"platform": "zhihu", "state": "ready_for_plan"}]}
+
+    overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
+
+    assert calls == ["zhihu"]
+    assert prepared["tasks"][0]["brief"] == {"viral_breakdown": {"platform": "zhihu"}}
+
+
+def test_zhihu_falls_back_to_the_labelled_juejin_reference_when_its_own_data_is_unavailable(tmp_path, monkeypatch):
+    def unavailable(items, out):
+        raise ValueError("mediacrawler_login_required")
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "zhihu_mc", unavailable)
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "juejin", lambda items, out: ["row"])
+    monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
+                        lambda platform, public: {"viral_breakdown": {"platform": platform}})
+    prepared = {"tasks": [{"platform": "zhihu", "state": "ready_for_plan"}]}
+
+    overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
+
+    brief = prepared["tasks"][0]["brief"]
+    assert prepared["tasks"][0]["state"] == "ready_for_plan" and brief["cross_platform_source"] == "juejin"
+    assert brief["native_source_error"] == "zhihu_mc: mediacrawler_login_required"
