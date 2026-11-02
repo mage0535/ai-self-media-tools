@@ -38,6 +38,7 @@ COLLECTORS = {
     "bilibili_ai": _videos("bilibili_ai", lambda videos: videos.bilibili_candidates("ai")),
     "bilibili_pet": _videos("bilibili_pet", lambda videos: videos.bilibili_candidates("pet")),
     "tiktok_ai": _videos("tiktok_ai", lambda videos: videos.tiktok_candidates()),
+    "tiktok_pet": _videos("tiktok_pet", lambda videos: videos.tiktok_candidates(pet=True)),
     "youtube_ai": _videos("youtube_ai", lambda videos: videos.youtube_candidates()),
     "youtube_pet": _videos("youtube_pet", lambda videos: videos.youtube_candidates(pet=True)),
     "youtube_ai_scenario": _videos("youtube_ai_scenario", lambda videos: videos.youtube_candidates(scenario=True)),
@@ -61,7 +62,7 @@ LANE_COLLECTORS = {
 # Owner 10-31: other platforms' pet videos are analysed for learning only; our videos are original.
 # Lanes whose video plan needs cross-platform reference works from >= 2 sources.
 # Kuaishou counts only adjacent short-video platforms; its AI references are real-world scenarios (owner 10-30).
-REFERENCE_COLLECTORS = {"douyin_pet": ("bilibili_pet", "youtube_pet"), "kuaishou": ("tiktok_ai", "youtube_ai_scenario")}
+REFERENCE_COLLECTORS = {"douyin_pet": ("bilibili_pet", "youtube_pet", "tiktok_pet"), "kuaishou": ("tiktok_ai", "youtube_ai_scenario")}
 
 
 # Collector metric names -> the names hot_viral_intelligence reads; values are copied unchanged.

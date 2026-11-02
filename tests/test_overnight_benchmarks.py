@@ -80,6 +80,7 @@ def test_pet_reference_samples_from_two_sources_reach_fallback_ready(tmp_path, m
         _observed_row("bilibili", "BV1"), _observed_row("bilibili", "BV2", motion_combination={"observed": []})])
     monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "youtube_pet", lambda items, out: [
         _observed_row("youtube", "yt1", metrics={"view": 9, "like": 2, "comment": None, "repost": None})])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "tiktok_pet", lambda items, out: [])
     monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
                         lambda platform, public: {"viral_breakdown": {"platform": platform}})
     prepared = {"tasks": [{"platform": "douyin_pet", "state": "ready_for_plan", "brief": {"lane": "pet_healing"}}]}
@@ -107,6 +108,7 @@ def test_pet_reference_with_one_source_stays_blocked(tmp_path, monkeypatch):
     def unavailable(items, out):
         raise ValueError("youtube_metadata_unavailable")
     monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "youtube_pet", unavailable)
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "tiktok_pet", unavailable)
     monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
                         lambda platform, public: {"viral_breakdown": {}})
     prepared = {"tasks": [{"platform": "douyin_pet", "state": "ready_for_plan", "brief": {"lane": "pet_healing"}}]}

@@ -31,6 +31,8 @@ ASR_MODEL = "/srv/media-runtime/asr-models/faster-whisper-small"
 PROXIES = {"bilibili": None, "tiktok": "http://127.0.0.1:2091", "youtube": "http://127.0.0.1:2091"}
 # Public AI-product accounts verified 10-29 (posting within 30 days); hashtag pages need login.
 TIKTOK_ACCOUNTS = ("openai", "chatgpt", "microsoft", "google", "capcut", "canva")
+# Public pet accounts posting within 30 days, checked 11-02 (views 10^4-10^6); pubity is general viral, kept to its pet posts.
+TIKTOK_PET_ACCOUNTS = ("tuckerbudzyn", "crusoe_dachshund", "pubity")
 YOUTUBE_QUERIES = ("AI tools tutorial", "AI agent workflow")  # format benchmarks: most viewed this week
 YOUTUBE_PET_QUERIES = ("funny cats", "cute dogs")  # pet lane reference works: most viewed this week
 # Topic feed: the account's scenario queries (real_world_ai_implementation_v1), uploads of this year
@@ -162,15 +164,17 @@ def _ranked(platform: str, entries: list[dict[str, Any]], feed_url: str, feed_sh
              "likes": entry.get("like_count"), "comments": entry.get("comment_count")} for entry in kept]
 
 
-def tiktok_candidates(*, run=subprocess.run) -> list[dict[str, Any]]:
+def tiktok_candidates(*, run=subprocess.run, pet: bool = False) -> list[dict[str, Any]]:
+    """Recent most-viewed uploads of a few public accounts; pet=True reads the pet accounts, cat/dog posts only."""
     rows = []
-    for account in TIKTOK_ACCOUNTS:
+    for account in TIKTOK_PET_ACCOUNTS if pet else TIKTOK_ACCOUNTS:
         url = f"https://www.tiktok.com/@{account}"
         try:
             raw = _yt_dlp_json("tiktok", url, run, "--flat-playlist", "--playlist-end", "15")
         except ValueError:
             continue
-        rows += _ranked("tiktok", json.loads(raw).get("entries") or [], url, hashlib.sha256(raw.encode()).hexdigest())
+        rows += _ranked("tiktok", json.loads(raw).get("entries") or [], url, hashlib.sha256(raw.encode()).hexdigest(),
+                        PET_WORDS_EN if pet else AI_WORDS)
     return rows
 
 
