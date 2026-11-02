@@ -24,6 +24,7 @@ COOKIE_FILES = {"zhihu": COOKIE_DIR / "zhihu_main.json"}
 KEYWORDS = {"zhihu": ("AI 落地 案例",)}
 EXIT_REASONS = {3: "mediacrawler_login_required", 4: "mediacrawler_verification_required"}
 MIN_BODY_CHARS = 300
+MIN_UPVOTES = 5  # a reference must show some audience response, not just exist
 
 
 def search(platform: str, out_dir: str | Path, *, keywords: tuple[str, ...] | None = None, limit: int = 15,
@@ -63,6 +64,7 @@ def zhihu_samples(rows: list[dict[str, Any]], *, limit: int = 3) -> list[dict[st
 
     observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     kept = [row for row in rows if len(str(row.get("content_text") or "")) >= MIN_BODY_CHARS and row.get("content_url")
+            and int(row.get("voteup_count") or 0) >= MIN_UPVOTES
             and classify_discovery_text(str(row.get("title") or ""), str(row["content_text"])[:800])["accepted"]]
     kept.sort(key=lambda row: int(row.get("voteup_count") or 0), reverse=True)
     return [{

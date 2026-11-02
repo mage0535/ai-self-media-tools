@@ -51,7 +51,10 @@ def admit_review(path,topic,requirement,review):
     score=review.get('score')
     if (review.get('status')!='evaluated' or review.get('requirement_match') is not True
             or type(score) not in (int,float) or not math.isfinite(score) or score<MIN_SEMANTIC_SCORE
-            or review.get('image_observed') is not True):raise ValueError('semantic_asset_match_rejected')
+            or review.get('image_observed') is not True):
+        # The evidence travels with the block so a run report can tell a strict gate from a bad image.
+        raise ValueError(f"semantic_asset_match_rejected:beat={requirement['intent']['beat_id']}:score={score}"
+                         f":match={review.get('requirement_match')}:observed={review.get('image_observed')}")
     context=review_context(topic,requirement)
     if review.get('native_context'):
         identity=review['native_context']

@@ -15,11 +15,11 @@ def _row(content_id, votes, text_len=400, **extra):
 
 def test_zhihu_samples_keep_full_text_works_most_upvoted_first(monkeypatch):
     monkeypatch.setattr("content_platform.real_world_ai_policy.classify_discovery_text", lambda *a: {"accepted": True})
-    rows = [_row(1, 3), _row(2, 555), _row(3, 900, text_len=50), _row(4, 10)]
+    rows = [_row(1, 3), _row(2, 555), _row(3, 900, text_len=50), _row(4, 10), _row(5, 7)]
 
-    samples = mc.zhihu_samples(rows, limit=2)
+    samples = mc.zhihu_samples(rows, limit=3)
 
-    assert [s["content_id"] for s in samples] == ["2", "4"]
+    assert [s["content_id"] for s in samples] == ["2", "4", "5"]  # 3 upvotes is below the floor
     assert samples[0]["metrics"] == {"like": 555, "comment": 2}
     assert samples[0]["platform"] == "zhihu" and samples[0]["body"] == "字" * 400
     assert samples[0]["raw_response_hash"] == "h" and samples[0]["published_at"].startswith("2026-")
@@ -72,4 +72,4 @@ def test_zhihu_samples_drop_works_outside_the_real_world_ai_genre(monkeypatch):
     monkeypatch.setattr("content_platform.real_world_ai_policy.classify_discovery_text",
                         lambda title, text: {"accepted": title != "t2"})
 
-    assert [s["content_id"] for s in mc.zhihu_samples([_row(1, 3), _row(2, 555)])] == ["1"]
+    assert [s["content_id"] for s in mc.zhihu_samples([_row(1, 30), _row(2, 555)])] == ["1"]

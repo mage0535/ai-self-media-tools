@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .block_diagnosis import diagnose_block
 from .history_reader import read_history
 
 
@@ -830,6 +831,7 @@ class Store:
                 "required": bool(required),
                 "reason_code": reason_code or "",
                 "message": message or "",
+                **({"diagnosis": diagnose_block(reason_code)} if status.lower() == "blocked" else {}),
             })
 
     def workflow_steps(self, job_id, platform=None):
