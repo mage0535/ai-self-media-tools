@@ -143,6 +143,13 @@ def _batch_slots(settings):
     return slots
 
 
+def _prepared_batch_binding(binding):
+    return (isinstance(binding,dict) and binding.get('source')=='native.overnight_batch'
+            and type(binding.get('expected_count')) is int and binding['expected_count']>=2
+            and type(binding.get('item_index')) is int and 1<=binding['item_index']<=binding['expected_count']
+            and bool(binding.get('batch_state_file')))
+
+
 def _batch_requested(job):
     binding=(job.get('brief') or {}).get('batch_plan')
     return isinstance(binding,dict) and binding.get('source')=='native.overnight_batch'
@@ -570,15 +577,22 @@ def collect_task_source_inputs(store,config,job,contexts):
             ai=[row for row in repositories if re.search(r'\b(ai|agent|llm|gpt)\b|\u4eba\u5de5\u667a\u80fd|\u5927\u6a21\u578b',row.get('title',''),re.I)]
             other=[row for row in repositories if row not in ai]
             if not ai or not other:raise SourceInputsBlocked('source_github_dual_channel_evidence_unavailable',{'ai_count':len(ai),'non_ai_count':len(other)})
-            selected=ai[0]
-            page=_fetch_url(selected['url'])
-            visual=re.search(r'<meta\b[^>]*property=["\x27]og:image["\x27][^>]*content=["\x27]([^"\x27]+)',page,re.I)
-            if not visual:raise SourceInputsBlocked('source_github_project_visual_unavailable')
+            # One slow GitHub page must not fail the job; the next AI project is an equal candidate.
+            for selected in ai[:3]:
+                try:page=_fetch_url(selected['url'])
+                except OSError:continue
+                visual=re.search(r'<meta\b[^>]*property=["\x27]og:image["\x27][^>]*content=["\x27]([^"\x27]+)',page,re.I)
+                if visual:break
+            else:raise SourceInputsBlocked('source_github_project_visual_unavailable')
             brief['selected_project']=dict(selected,og_image=visual[1],source_page_sha256=hashlib.sha256(page.encode()).hexdigest())
             brief['source_data']={'github_projects':repositories,'github_ai_projects':ai,'github_non_ai_projects':other,
                                   'hot_content_items':public.get('items') or []}
             brief['content_channels']={'github_selection':True,'hot_content_generation':True}
-            if _batch_requested(job):
+            bound=(job.get('brief') or {}).get('batch_plan')
+            if _batch_requested(job) and not _batch_slots(settings) and _prepared_batch_binding(bound):
+                # Overnight prepare already bound this job into its batch; re-ranking here would pick other topics.
+                brief['batch_plan']=deepcopy(bound)
+            elif _batch_requested(job):
                 batch_slots=_batch_slots(settings)
                 if len(batch_slots)<2:raise SourceInputsBlocked('source_native_batch_plan_unavailable',{'required_minimum':2})
                 from .overnight_batch import build_batch_plan
