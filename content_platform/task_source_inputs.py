@@ -20,6 +20,16 @@ def _digest(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
+def _prepared_snapshot_items(topic):
+    """Items titled `topic` from the newest prepare trend snapshot, tagged with the snapshot they came from."""
+    from .paths import trend_cache_dir
+    for path in sorted(Path(trend_cache_dir()).glob('trend_snapshot_*.json'),reverse=True):
+        try:items=json.loads(path.read_text(encoding='utf-8')).get('items') or []
+        except (OSError,ValueError,AttributeError):continue
+        return [dict(item,prepared_snapshot_ref=str(path)) for item in items if isinstance(item,dict) and item.get('title')==topic]
+    return []
+
+
 def _account_evidence_available(observed):
     if observed.get('status') not in {'ok','backend_signal','public_signal'}:return False
     if isinstance(observed.get('account_metrics'),dict) and observed['account_metrics']:return True
@@ -398,6 +408,10 @@ def collect_task_source_inputs(store,config,job,contexts):
             trends=TrendCollector(config.get('trends') or {}).collect_with_report(refresh=False,priority_sources=('twitter',))
         else:
             trends=TrendCollector(config.get('trends') or {}).collect_with_report(refresh=False)
+    if normal_inputs is None and not manual and not any(item.get('title')==job['topic'] for item in trends.get('items') or []):
+        # Live search results move within minutes; overnight jobs run hours after prepare. Re-verify the
+        # exact candidate prepare observed (r82) instead of failing or picking a different topic.
+        trends=dict(trends,items=list(trends.get('items') or [])+_prepared_snapshot_items(job['topic']))
     collected_at=datetime.now(timezone.utc).isoformat(timespec='seconds')
     if observation is not None:source_capture_ref=observation.save('trends',{'job_id':job['id'],'trends':trends,'real_responses':observation.responses})
     hot_cfg_path=settings.get('hot_source_config')
