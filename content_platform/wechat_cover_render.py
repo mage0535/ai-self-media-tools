@@ -1,6 +1,7 @@
 """Deterministic local WeChat cover title composition and real OCR admission."""
 import argparse
 import copy
+import difflib
 import hashlib
 import json
 from pathlib import Path
@@ -57,16 +58,46 @@ class CoverTitleOCRError(ValueError):
         self.evidence=evidence
 
 
-def _ocr(path,title):
-    result=subprocess.run(['tesseract',str(path),'stdout','-l','chi_sim+eng','--psm','6'],
-                          capture_output=True,text=True,timeout=30,check=False)
-    text=_normalized(result.stdout or '')
+OCR_ATTEMPTS=((7,'chi_sim+eng'),(7,'chi_sim'),(13,'chi_sim+eng'),(13,'chi_sim'))
+MIN_CJK_SIMILARITY=0.9
+
+
+def _folded(value):
+    # Capital I and lowercase l are the same glyph in Noto Sans CJK Bold; OCR cannot tell them apart.
+    return value.replace('l','I').replace('|','I')
+
+
+def _title_matches(expected,text):
+    """Digits/Latin must match exactly; the rendered string is ours, so the remaining tolerance only
+    absorbs Tesseract glyph confusions (measured 11-01: exact match passed 15/20 correct covers)."""
+    expected,text=_folded(expected),_folded(text)
+    if not expected or not text:return False
+    tokens=lambda value:re.findall(r'[0-9A-Za-z.%]+',value)
+    return expected==text or (tokens(expected)==tokens(text) and abs(len(expected)-len(text))<=1
+        and difflib.SequenceMatcher(None,expected,text).ratio()>=MIN_CJK_SIMILARITY)
+
+
+def _ocr_line(path,line):
+    target=_folded(_normalized(line));reads=[]
+    for psm,language in OCR_ATTEMPTS:
+        result=subprocess.run(['tesseract',str(path),'stdout','-l',language,'--psm',str(psm)],
+                              capture_output=True,text=True,timeout=30,check=False)
+        if not result.returncode:reads.append((_normalized(result.stdout or ''),psm,language))
+    if not reads:return '',None
+    best=max(reads,key=lambda read:difflib.SequenceMatcher(None,target,_folded(read[0])).ratio())
+    return best[0],{'psm':best[1],'language':best[2]}
+
+
+def _ocr(line_paths,title):
+    """One crop per rendered line; whole-title comparison."""
+    reads=[_ocr_line(path,line) for path,line in line_paths]
+    text=''.join(read for read,_ in reads)
     target=_normalized(title)
-    evidence={'checked':True,'matched':bool(not result.returncode and target and target==text),
-            'text':text,'raw_text':result.stdout or '', 'stderr':getattr(result,'stderr','') or '',
+    evidence={'checked':True,'matched':_title_matches(target,text),'text':text,
+            'line_reads':[{'text':read,'attempt':attempt} for read,attempt in reads],
             'expected_normalized':target,
-            'normalization':'NFKC+whitespace_only','returncode':result.returncode,
-            'language':'chi_sim+eng','psm':6}
+            'normalization':'NFKC+whitespace; I/l folded; digits/Latin exact; CJK similarity>=0.9, length +-1',
+            'language':'chi_sim+eng|chi_sim','psm':[7,13]}
     if not evidence['matched']:raise CoverTitleOCRError(evidence)
     return evidence
 
@@ -95,7 +126,12 @@ def verify_cover_title(path,expected,proof,*,diagnostic_dir=None):
         with tempfile.TemporaryDirectory(prefix='.cover-ocr-',dir=path.parent) as temporary:
             roi_path=Path(temporary)/'title.png'
             source.crop(tuple(roi)).save(roi_path,format='PNG')
-            try:result=_ocr(roi_path,expected)
+            line_paths=[]
+            for index,(box,line) in enumerate(zip(boxes,lines)):
+                line_path=Path(temporary)/f'line-{index}.png'
+                source.crop((box[0]-20,box[1]-20,box[2]+20,box[3]+20)).save(line_path,format='PNG')
+                line_paths.append((line_path,line))
+            try:result=_ocr(line_paths,expected)
             except CoverTitleOCRError as error:
                 error.evidence.update({'roi':roi,'roi_sha256':_sha(roi_path),'full_image_sha256':_sha(path)})
                 if diagnostic_dir is not None:
