@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import html as html_lib
+import json
 import re
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from .real_world_ai_policy import classify_discovery_text
@@ -20,6 +23,7 @@ from .same_lane_intelligence import _top_accounts
 SEARCH_URL = "https://weixin.sogou.com/weixin?"
 MAX_QUERIES = 2
 MIN_ACCOUNTS = 3
+CACHE_SECONDS = 24 * 3600
 CLAIM_BOUNDARY = "discovery_only_no_performance_claim"
 TITLE_PATTERNS = (
     ("案例/实战/复盘式标题", re.compile(r"案例|实战|复盘|实测|落地")),
@@ -66,13 +70,36 @@ def parse_search_page(raw: bytes, observed_at: str) -> list[dict[str, Any]]:
     return samples
 
 
-def collect_wechat_discovery(queries: list[str], *, timeout: int = 15,
+def collect_wechat_discovery(queries: list[str], *, timeout: int = 15, cache_dir: Path | None = None,
                              fetch: Callable[[str, int], bytes] = _fetch) -> list[dict[str, Any]]:
+    """A day-old answer per query is reused so the site sees about one request per query a day.
+
+    A timeout skips that query; a verification page stops all further queries (never retried).
+    Raises only when nothing was collected.
+    """
     samples: list[dict[str, Any]] = []
+    error: Exception | None = None
     for query in [str(item).strip() for item in queries if str(item).strip()][:MAX_QUERIES]:
+        cached = Path(cache_dir) / (hashlib.sha256(query.encode()).hexdigest()[:24] + ".json") if cache_dir else None
+        if cached and cached.is_file() and time.time() - cached.stat().st_mtime < CACHE_SECONDS:
+            samples.extend(json.loads(cached.read_text(encoding="utf-8")))
+            continue
         observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        raw = fetch(SEARCH_URL + urllib.parse.urlencode({"type": 2, "query": query}), timeout)
-        samples.extend(parse_search_page(raw, observed_at))
+        try:
+            found = parse_search_page(fetch(SEARCH_URL + urllib.parse.urlencode({"type": 2, "query": query}), timeout),
+                                      observed_at)
+        except OSError as exc:
+            error = exc
+            continue
+        except ValueError as exc:
+            error = exc
+            break
+        if cached:
+            cached.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            cached.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
+        samples.extend(found)
+    if not samples and error:
+        raise error
     return samples
 
 

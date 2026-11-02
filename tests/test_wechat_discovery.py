@@ -42,3 +42,29 @@ def test_reference_needs_three_in_lane_accounts_and_never_claims_performance():
     assert reference["structure_patterns"] and all("同赛道样本" in item for item in reference["structure_patterns"])
     assert "never claim performance" in reference["generation_rules"][-1]
     assert discovery_reference(base, samples[:2]) is base
+
+
+def test_verification_stops_further_queries_and_timeout_skips_one(tmp_path):
+    calls = []
+
+    def blocked(url, timeout):
+        calls.append(url)
+        return b"<html>antispider</html>"
+    with pytest.raises(ValueError, match="verification_required"):
+        collect_wechat_discovery(["a", "b"], fetch=blocked)
+    assert len(calls) == 1
+
+    def first_times_out(url, timeout):
+        calls.append(url)
+        if len(calls) == 2:
+            raise TimeoutError("timed out")
+        return _page(ROWS)
+    assert len(collect_wechat_discovery(["a", "b"], fetch=first_times_out)) == 3
+
+
+def test_day_old_answer_is_reused_instead_of_requesting_again(tmp_path):
+    calls = []
+    fetch = lambda url, timeout: calls.append(url) or _page(ROWS)
+    first = collect_wechat_discovery(["AI 落地 案例"], cache_dir=tmp_path, fetch=fetch)
+    again = collect_wechat_discovery(["AI 落地 案例"], cache_dir=tmp_path, fetch=fetch)
+    assert len(calls) == 1 and again == first

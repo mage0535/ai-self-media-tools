@@ -532,7 +532,7 @@ def collect_task_source_inputs(store,config,job,contexts):
             # WeChat delivers to the draft box; without paid exports, public discovery names peer accounts (owner 11-01).
             from .wechat_discovery import collect_wechat_discovery
             discovery,discovery_error=[],''
-            try:discovery=collect_wechat_discovery([job['topic'][:30],'AI 落地 案例'])
+            try:discovery=collect_wechat_discovery(['AI 落地 案例',job['topic'][:30]],cache_dir=store.path.parent/'wechat-discovery-cache')
             except (OSError,ValueError) as error:discovery_error=str(error)[:120]
             observations.extend(discovery)
         if normal_inputs is not None and platform=='twitter'and normal_inputs.get('semantic_benchmarks'):
