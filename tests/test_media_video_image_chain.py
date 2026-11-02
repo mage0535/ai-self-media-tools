@@ -104,3 +104,38 @@ def test_rejected_semantic_beat_is_regenerated_once_with_its_claim_first(tmp_pat
     assert len(calls) == 3
     assert calls[0].startswith("Video topic: 两只猫\nScene to show: 两只猫并排睡觉") and "一只猫望风另一只开柜门" in calls[2]
     assert [image["semantic_review"]["requirement_match"] for image in recorded["images"]] == [True, True]
+
+
+def test_rejected_semantic_beat_gets_a_second_retry_told_what_the_reviewer_saw(tmp_path):
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j4", "title": "两只聪明猫", "body": "正文", "platforms": ["douyin_pet"]}
+    calls = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            calls.append(prompt)
+            rng = random.Random(len(calls))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(rng.randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "fake"}
+
+    requirements = [{"intent": {"beat_id": "s01", "claim": "第一步，全面排查开锁隐患。", "content_match_reason": "illustrate"},
+                     "sha256": "1"}]
+    reviews = iter([{"score": 0.65, "requirement_match": True, "observed_subject": "Two cats on an office desk"},
+                    {"score": 0.68, "requirement_match": True, "observed_subject": "A man at a desk with a cat"},
+                    {"score": 0.74, "requirement_match": True, "observed_subject": "Cat pawing a cabinet latch"}])
+    recorded = {}
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch("content_platform.video_asset_semantics.validate_requirement", side_effect=lambda r: r), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: next(reviews)), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"}, semantic_requirements=requirements)
+
+    assert len(calls) == 3
+    assert "The previous image showed: Two cats on an office desk" in calls[1]
+    assert "The previous image showed: A man at a desk with a cat" in calls[2]
+    assert recorded["images"][0]["semantic_review"]["score"] == 0.74

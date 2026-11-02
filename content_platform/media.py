@@ -16,6 +16,7 @@ from .delivery_manifest import validate_attempt_bundle
 
 # Article artifact contract threshold (pipeline validate_article_completion / quality_gates).
 SEMANTIC_RETRY_THRESHOLD = 0.72
+SEMANTIC_BEAT_RETRIES = 2
 
 
 class MediaBridge:
@@ -967,11 +968,18 @@ class MediaBridge:
             # r59: one Juejin section image scored 0.68 < 0.72 and failed the article artifact contract.
             # A low semantic score gets one regeneration; the kept review is reused by the provenance record.
             review = self._semantic_review(output, job, item, provider_result)
-            # A beat bound to a semantic requirement is rejected unless the pixels match it; give it the same one regeneration.
-            if (review.get("score") or 0) < SEMANTIC_RETRY_THRESHOLD or (
-                    item.get("semantic_requirement") and review.get("requirement_match") is not True):
+            # A beat bound to a semantic requirement is rejected unless the pixels match it; it gets two
+            # regenerations (11-02: abstract hook/step beats drew generic topic scenes, 0.65-0.70), each told
+            # what the reviewer saw. The gate itself is unchanged.
+            for _ in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else 1):
+                if (review.get("score") or 0) >= SEMANTIC_RETRY_THRESHOLD and (
+                        not item.get("semantic_requirement") or review.get("requirement_match") is True):
+                    break
+                seen = str(review.get("observed_subject") or "")[:200]
                 retry_prompt = (f"{item['prompt']} Show exactly this section's concrete subject: "
-                                f"{str(item.get('purpose') or '')[:200]} {str(item.get('adjacent_text') or '')[:300]}")
+                                f"{str(item.get('purpose') or '')[:200]} {str(item.get('adjacent_text') or '')[:300]}"
+                                + (f" The previous image showed: {seen}. That fits only the general topic; depict the "
+                                   "concrete situation this exact sentence describes instead." if seen else ""))
                 retry_result = provider.run(retry_prompt, output, extra_args, **run_kwargs)
                 if isinstance(retry_result, dict) and output.is_file():
                     retry_checksum = hashlib.sha256(output.read_bytes()).hexdigest()
