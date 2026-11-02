@@ -41,6 +41,58 @@ def _plain(text):
     return re.sub(r"[#*_`>]+", "", str(text)).strip()
 
 
+XHS_TITLE_LIMIT, XHS_TEXT_LIMIT = 20, 950
+XHS_AI_DISCLOSURE = "本笔记由AI辅助创作，配图含AI生成内容。"
+_CLAUSE_END = "：:，,；;。！!？?、|｜"
+
+
+def _note_title(title):
+    """Xiaohongshu allows 20 characters: keep whole clauses, never cut inside a word (11-03 '低代码+Agen')."""
+    title = _plain(title)
+    if len(title) <= XHS_TITLE_LIMIT:
+        return title
+    for mark in "：:｜|":
+        head = title.split(mark, 1)[0].strip()
+        if mark in title and 6 <= len(head) <= XHS_TITLE_LIMIT:
+            return head
+    cut = max(title.rfind(mark, 0, XHS_TITLE_LIMIT + 1) for mark in _CLAUSE_END)
+    if cut >= 6:
+        return title[:cut].strip()
+    head = title[:XHS_TITLE_LIMIT]
+    return re.sub(r"[A-Za-z0-9+._-]+$", "", head).strip() or head
+
+
+def _note_blocks(body):
+    """Paragraph blocks of plain text; a Markdown table (not rendered by Xiaohongshu) becomes one line per row."""
+    blocks = []
+    for block in re.split(r"\n\s*\n", str(body)):
+        lines = [line.strip() for line in block.strip().splitlines() if line.strip()]
+        if lines and all(line.startswith("|") for line in lines):
+            rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in lines]
+            rows = [row for row in rows if not all(re.fullmatch(r":?-{2,}:?", cell) for cell in row if cell)]
+            lines = ["· " + "｜".join(_plain(cell) for cell in row if cell) for row in rows]
+        text = "\n".join(_plain(line) for line in lines).strip()
+        if text:
+            blocks.append(text)
+    return blocks
+
+
+def _note_text(hook, body):
+    """Whole paragraphs only, the closing paragraph always kept, plus the AI-assisted disclosure."""
+    blocks = _note_blocks(body)
+    if hook and (not blocks or _plain(hook) not in blocks[0]):
+        blocks.insert(0, _plain(hook))
+    closing = blocks.pop() if len(blocks) > 1 else ""
+    tail = [part for part in (closing, XHS_AI_DISCLOSURE) if part]
+    budget = XHS_TEXT_LIMIT - sum(len(part) + 2 for part in tail)
+    kept = []
+    for block in blocks:
+        if len(block) + 2 <= budget:
+            kept.append(block); budget -= len(block) + 2
+    text = "\n\n".join(kept + tail)
+    return text if len(text) <= XHS_TEXT_LIMIT else text[:XHS_TEXT_LIMIT - len(XHS_AI_DISCLOSURE) - 2].rsplit("\n", 1)[0] + "\n\n" + XHS_AI_DISCLOSURE
+
+
 def _hashtags(job):
     draft_meta = job.get("draft_meta", {})
     if draft_meta.get("hashtags"):
@@ -157,8 +209,8 @@ def format_for_platform(job, platform,*,audio_phase='rendered'):
         html_body = _html_anything(body) or _html_article(body)
         return {**base, "kind": "article", "title": title[:64], "summary": _plain(body)[:120], "html": html_body}
     if platform in {"xiaohongshu", "rednote"}:
-        hook = (draft_meta.get("hook", "") + "\n\n") if draft_meta.get("hook") else ""
-        return {**base, "kind": "note", "title": _plain(title)[:20], "text": (hook + _plain(body))[:950], "hashtags": _hashtags(job)}
+        return {**base, "kind": "note", "title": _note_title(title), "text": _note_text(draft_meta.get("hook", ""), body),
+                "hashtags": _hashtags(job), "ai_assisted_disclosure": XHS_AI_DISCLOSURE}
     if platform in {"youtube"}:
         desc = _plain(body)[:5000]
         return {**base, "kind": "video", "title": title[:100], "caption": desc, "hashtags": _hashtags(job)}

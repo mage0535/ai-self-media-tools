@@ -37,6 +37,26 @@ class FormatterTests(unittest.TestCase):
         self.assertIn("html", wechat)
         self.assertEqual({xhs["kind"], douyin["kind"], short["kind"], wechat["kind"]}, {"note", "video", "short", "article"})
 
+    def test_xiaohongshu_note_keeps_whole_clauses_paragraphs_and_closing(self):
+        # 11-03 CST: [:20]/[:950] slicing cut the title to '...低代码+Agen' and the body inside a table.
+        table = "| 评估维度 | 传统工单 | Agent工单 |\n| --- | --- | --- |\n| 告警归并 | 人工 | 自动 |"
+        body = "\n\n".join(["## 背景"] + ["这是一段关于告警归并的正文内容，" * 12] * 6 + [table, "最后一段：动手拼个验证流试试看。"])
+        job = dict(self.job, title="非研发背景做智能告警：用低代码+Agent搭建数字孪生原型踩坑记录", body=body)
+        xhs = format_for_platform(job, "xiaohongshu")
+        self.assertEqual(xhs["title"], "非研发背景做智能告警")
+        self.assertLessEqual(len(xhs["text"]), 950)
+        self.assertTrue(xhs["text"].endswith("最后一段：动手拼个验证流试试看。\n\n" + xhs["ai_assisted_disclosure"]))
+        self.assertNotIn("| ---", xhs["text"])
+        for block in xhs["text"].split("\n\n")[:-2]:
+            self.assertIn(block, ["先看结果：", "背景", "这是一段关于告警归并的正文内容，" * 12,
+                                  "· 评估维度｜传统工单｜Agent工单\n· 告警归并｜人工｜自动"])
+
+    def test_xiaohongshu_title_without_clause_never_ends_inside_a_word(self):
+        job = dict(self.job, title="用低代码和Agent搭建数字孪生原型的完整踩坑记录")
+        title = format_for_platform(job, "xiaohongshu")["title"]
+        self.assertLessEqual(len(title), 20)
+        self.assertFalse(title.endswith(("Agen", "Age", "Ag", "A")))
+
 
 if __name__ == "__main__":
     unittest.main()
