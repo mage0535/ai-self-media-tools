@@ -637,8 +637,19 @@ def collect_task_source_inputs(store,config,job,contexts):
         strategy_public=public
         if normal_inputs is not None and platform=='twitter'and normal_inputs.get('semantic_benchmarks'):
             strategy_public=dict(public,items=normal_inputs['semantic_benchmarks']['observations'])
-        brief.update(_observed_strategy_inputs(platform,strategy_public,
-            normal_native_query=normal_inputs is not None and platform=='twitter'and bool(normal_inputs.get('semantic_benchmarks'))))
+        try:
+            brief.update(_observed_strategy_inputs(platform,strategy_public,
+                normal_native_query=normal_inputs is not None and platform=='twitter'and bool(normal_inputs.get('semantic_benchmarks'))))
+        except SourceInputsBlocked as error:
+            if platform!='wechat' or error.code!='source_strategy_breakdown_unavailable':raise
+            # Public WeChat pages show no numbers (owner 11-01: no paid data); same-lane Juejin hot articles with
+            # rank + full text are the labelled reference, as overnight_benchmarks already maps wechat -> juejin.
+            from .juejin_native_article import collect_samples
+            hot=[item for item in trends.get('items') or [] if item.get('source')=='juejin']
+            strategy_public={'items':collect_samples(hot,store.path.parent/'jobs'/job['id']/'strategy-juejin'),'sources':[]}
+            brief.update(_observed_strategy_inputs('juejin',strategy_public))
+            brief['viral_collection'].update(reference_use='adjacent_platform_reference_not_wechat_verified',
+                reference_platform='juejin',target_platform='wechat',verified_viral_effect=False)
         if normal_inputs is not None and platform=='twitter'and normal_inputs.get('semantic_benchmarks'):
             brief['viral_collection'].update(reference_use='current_native_top_title_and_structure_reference',verified_viral_effect=False)
         observed_ref=_NativeSourceObservation(store,job).save('strategy-'+platform,{
