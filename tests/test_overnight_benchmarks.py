@@ -44,17 +44,34 @@ def test_video_lanes_share_one_bilibili_observation_and_keep_its_platform(tmp_pa
     assert all(task["brief"]["cross_platform_source"] == "bilibili" for task in prepared["tasks"])
 
 
-def test_xiaohongshu_takes_the_juejin_article_reference_without_reading_xiaohongshu(tmp_path, monkeypatch):
+def test_xiaohongshu_takes_the_labelled_zhihu_reference_without_reading_xiaohongshu(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "juejin", lambda items, out: calls.append(1) or ["row"])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "zhihu_mc", lambda items, out: calls.append("zhihu_mc") or ["row"])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "juejin", lambda items, out: calls.append("juejin") or ["row"])
     monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
                         lambda platform, public: {"viral_breakdown": {"platform": platform}})
     prepared = {"tasks": [{"platform": "xiaohongshu", "state": "ready_for_plan"}]}
 
     overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
 
-    assert calls == [1] and prepared["tasks"][0]["state"] == "ready_for_plan"
-    assert prepared["tasks"][0]["brief"]["cross_platform_source"] == "juejin"
+    assert calls == ["zhihu_mc"] and prepared["tasks"][0]["state"] == "ready_for_plan"
+    assert prepared["tasks"][0]["brief"]["cross_platform_source"] == "zhihu"
+
+
+def test_xiaohongshu_falls_back_to_juejin_when_zhihu_is_unavailable(tmp_path, monkeypatch):
+    def unavailable(items, out):
+        raise ValueError("mediacrawler_login_required")
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "zhihu_mc", unavailable)
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "juejin", lambda items, out: ["row"])
+    monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
+                        lambda platform, public: {"viral_breakdown": {"platform": platform}})
+    prepared = {"tasks": [{"platform": "xiaohongshu", "state": "ready_for_plan"}]}
+
+    overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
+
+    brief = prepared["tasks"][0]["brief"]
+    assert brief["cross_platform_source"] == "juejin"
+    assert brief["native_source_error"] == "zhihu_mc: mediacrawler_login_required"
 
 
 def _observed_row(platform, content_id, **overrides):

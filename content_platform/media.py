@@ -21,6 +21,7 @@ SEMANTIC_BEAT_RETRIES = 2
 
 # Article covers whose title we render over a text-free background (wechat_cover_render).
 TITLED_COVER_PLATFORMS = ('wechat', 'juejin', 'zhihu', 'xiaohongshu')
+STOCK_PROVIDERS = {'stock', 'pexels', 'pixabay'}
 
 class MediaBridge:
     VIDEO_SCRIPT_MAX_SEGMENTS = 8
@@ -940,8 +941,10 @@ class MediaBridge:
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
             prompt = item["prompt"]
+            item_chain = self._article_image_chain(job, item)
+            item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": item_chain}} if item_chain else run_kwargs
             for attempt in range(4):
-                provider_result = provider.run(prompt, output, extra_args, **run_kwargs)
+                provider_result = provider.run(prompt, output, extra_args, **item_kwargs)
                 if not isinstance(provider_result, dict):
                     raise RuntimeError("image provider returned invalid metadata")
                 if not output.is_file():
@@ -983,7 +986,12 @@ class MediaBridge:
                                 f"{str(item.get('purpose') or '')[:200]} {str(item.get('adjacent_text') or '')[:300]}"
                                 + (f" The previous image showed: {seen}. That fits only the general topic; depict the "
                                    "concrete situation this exact sentence describes instead." if seen else ""))
-                retry_result = provider.run(retry_prompt, output, extra_args, **run_kwargs)
+                retry_kwargs = item_kwargs
+                if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS:
+                    # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
+                    retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
+                        name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
+                retry_result = provider.run(retry_prompt, output, extra_args, **retry_kwargs)
                 if isinstance(retry_result, dict) and output.is_file():
                     retry_checksum = hashlib.sha256(output.read_bytes()).hexdigest()
                     retry_signature = self._visual_signature(output)
@@ -1015,6 +1023,18 @@ class MediaBridge:
         self._persist_asset_provenance(output_dir, images, prompts, type(provider).__name__, job)
         section_map = [] if semantic_requirements else self._bound_section_image_map(output_dir, images, job)
         return {"kind": "image", "path": images[0]["path"], "checksum": images[0]["checksum"], "images": images, "section_image_map": section_map, "measured_cover_design": cover_design}
+
+    @staticmethod
+    def _article_image_chain(job, item):
+        """Provider order for titled-cover article lanes (11-03): SenseNova stamps a visible logo, so it is the
+        last resort; the Xiaohongshu main visual tries a licensed real photo first (XHS flags AI main visuals)."""
+        platforms = {str(value).casefold() for value in job.get("platforms") or []}
+        if item.get("semantic_requirement") or not platforms.intersection(TITLED_COVER_PLATFORMS):
+            return ""
+        chain = ["go_gemini", "cloudflare", "pollinations", "sense_nova"]
+        if "xiaohongshu" in platforms and item.get("role") == "cover":
+            chain.insert(0, "stock")
+        return ",".join(chain)
 
     @staticmethod
     def _compose_wechat_cover(output_dir, images, job):

@@ -50,8 +50,9 @@ NATIVE_COLLECTORS = {"zhihu": ("zhihu_mc", "zhihu")}
 # and is marked cross_platform_source.
 LANE_COLLECTORS = {
     "juejin": ("juejin", "juejin"), "zhihu": ("juejin", "juejin"), "wechat": ("juejin", "juejin"),
-    # Xiaohongshu is never read automatically (owner rule); its carousel takes the article reference.
-    "xiaohongshu": ("juejin", "juejin"),
+    # Xiaohongshu is never read automatically (owner rule). 11-03: the Juejin hot list (model news) was off-lane
+    # for its AI-scenario notes; Zhihu's upvote-sorted "AI 落地 案例" answers are the closer reference.
+    "xiaohongshu": ("zhihu_mc", "zhihu"),
     **{lane: ("bilibili_ai", "bilibili") for lane in ("bilibili", "douyin", "douyin_ai", "kuaishou", "shipinhao")},
     "douyin_pet": ("bilibili_pet", "bilibili"),
     "tiktok": ("tiktok_ai", "tiktok"),
@@ -59,7 +60,8 @@ LANE_COLLECTORS = {
 }
 # 11-03: Bilibili answered -352 (risk control; never worked around), which blocked douyin_pet outright.
 # Further same-genre sources are tried in order before a lane is blocked.
-FALLBACK_COLLECTORS = {"douyin_pet": (("youtube_pet", "youtube"), ("tiktok_pet", "tiktok"))}
+FALLBACK_COLLECTORS = {"douyin_pet": (("youtube_pet", "youtube"), ("tiktok_pet", "tiktok")),
+                       "xiaohongshu": (("juejin", "juejin"),)}
 
 
 # Owner 10-31: other platforms' pet videos are analysed for learning only; our videos are original.

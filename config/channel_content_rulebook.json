@@ -1157,6 +1157,17 @@
         "topic_max_count": 6,
         "operator_delivery_required": true,
         "copy_delivery": "direct_chat_text_no_attachment"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-02/03，所有者授权）：小红书从不自动读取，客户自行运营账号且不提供后台数据。以下为这些门禁的判定标准；审核按此判定，不得以“缺少小红书站内样本/账号后台数据”本身判失败。",
+        "same_lane_account_benchmark": "通过：≥3条真实、可核验、带来源标注的同赛道参考样本（可来自知乎/掘金/B站/YouTube等跨平台，必须标明 cross_platform_source、仅作分析不复用），且与本笔记赛道（AI真实落地场景）相关，并提炼出可借鉴的结构/钩子/清单模式。失败：样本伪造、未标注来源、与赛道无关，或冒充小红书站内数据。",
+        "account_data_analysis": "通过：如实给出账号赛道、目标人群画像与当前数据状态；客户账号暂无可用数据时，明确标注冷启动（needs_metrics/unavailable）并给出发布后回收指标的计划。失败：编造账号数据、或缺少赛道/人群定义。",
+        "growth_quality_plan": "通过：有可执行的增长目标与收藏/互动提升手段；冷启动账号允许以行业通用基线加回收计划代替历史基线。失败：无计划，或编造历史数据。",
+        "current_source_and_strategy": "跨平台参考需与本笔记赛道相关并带来源标注即可；不因参考来自其他平台而判失败。资产来源声明必须与 asset_provenance 实际记录一致。",
+        "asset_mix_plan": "通过：计划声明的素材类型与 asset_provenance 实际记录一致（例如：封面为图库实拍或无文字写实生成图、正文图为生成插图），无需每篇覆盖全部素材类型。失败：声明与实际不符（如声称图库实拍但实际全为生成图）。",
+        "no_obvious_ai_generated_images_as_main_visual": "通过：主视觉（封面）为有授权的真实图库照片；或在无匹配实拍时为写实、无文字、无乱码、无水印、无明显AI畸形的生成图，且文案含AI辅助创作声明（符合小红书AI内容标注要求）。失败：主图含乱码伪文字、水印、明显畸形或卡通海报式AI图，或缺少AI声明。",
+        "ai_assisted_disclosure_when_required": "通过：publication_copy 正文含AI辅助创作声明，或包内 ai_assisted_disclosure 字段存在且文案中可见。",
+        "first_image_carries_information": "通过：封面带有我方排版、可读的标题信息层（结果/问题/清单承诺），与正文承诺一致。"
       }
     },
     "juejin": {
