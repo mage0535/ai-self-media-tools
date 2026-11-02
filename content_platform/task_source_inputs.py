@@ -557,6 +557,16 @@ def collect_task_source_inputs(store,config,job,contexts):
         if platform=='wechat' and same_lane.get('generation_status')!='ready':
             from .wechat_discovery import discovery_reference
             same_lane=discovery_reference(same_lane,discovery);accepted_status.add('discovery_reference')
+        if platform=='wechat' and same_lane.get('generation_status') not in accepted_status:
+            # Owner 11-01: same-lane Juejin hot articles (public rank + author) are the labelled reference when
+            # WeChat discovery is unavailable (e.g. a search verification page, which is never worked around).
+            adjacent=distill_same_lane_samples('juejin',[item for item in trends.get('items') or [] if str(item.get('source') or '').startswith('juejin')])
+            if adjacent.get('generation_status')=='ready':
+                same_lane=dict(adjacent,generation_status='adjacent_reference',reference_platform='juejin',target_platform='wechat',
+                    strategy_claim_boundary='adjacent_platform_reference_not_wechat_verified',
+                    generation_rules=list(adjacent.get('generation_rules') or [])+['same-lane samples are Juejin articles, not WeChat: '
+                        'learn topics and structure, never claim WeChat performance'])
+                accepted_status.add('adjacent_reference')
         if same_lane.get('generation_status') not in accepted_status or len(same_lane.get('top_accounts') or [])<3:
             raise SourceInputsBlocked('source_same_lane_benchmark_unavailable',{'platform':platform,'radar':same_lane.get('radar'),
                 **({'discovery_samples':len(discovery),'discovery_error':discovery_error} if platform=='wechat' else {})})

@@ -68,3 +68,12 @@ def test_day_old_answer_is_reused_instead_of_requesting_again(tmp_path):
     first = collect_wechat_discovery(["AI 落地 案例"], cache_dir=tmp_path, fetch=fetch)
     again = collect_wechat_discovery(["AI 落地 案例"], cache_dir=tmp_path, fetch=fetch)
     assert len(calls) == 1 and again == first
+
+
+def test_verification_page_pauses_the_site_for_six_hours(tmp_path):
+    calls = []
+    with pytest.raises(ValueError, match="verification_required"):
+        collect_wechat_discovery(["a"], cache_dir=tmp_path, fetch=lambda url, timeout: calls.append(url) or b"antispider")
+    with pytest.raises(ValueError, match="paused_after_verification"):
+        collect_wechat_discovery(["b"], cache_dir=tmp_path, fetch=lambda url, timeout: calls.append(url) or _page(ROWS))
+    assert len(calls) == 1

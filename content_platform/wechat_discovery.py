@@ -24,6 +24,7 @@ SEARCH_URL = "https://weixin.sogou.com/weixin?"
 MAX_QUERIES = 2
 MIN_ACCOUNTS = 3
 CACHE_SECONDS = 24 * 3600
+PAUSE_SECONDS = 6 * 3600  # after a verification page the site is left alone for 6 h
 CLAIM_BOUNDARY = "discovery_only_no_performance_claim"
 TITLE_PATTERNS = (
     ("案例/实战/复盘式标题", re.compile(r"案例|实战|复盘|实测|落地")),
@@ -79,6 +80,9 @@ def collect_wechat_discovery(queries: list[str], *, timeout: int = 15, cache_dir
     """
     samples: list[dict[str, Any]] = []
     error: Exception | None = None
+    pause = Path(cache_dir) / "verification-pause" if cache_dir else None
+    if pause and pause.is_file() and time.time() - pause.stat().st_mtime < PAUSE_SECONDS:
+        raise ValueError("wechat_discovery_paused_after_verification")
     for query in [str(item).strip() for item in queries if str(item).strip()][:MAX_QUERIES]:
         cached = Path(cache_dir) / (hashlib.sha256(query.encode()).hexdigest()[:24] + ".json") if cache_dir else None
         if cached and cached.is_file() and time.time() - cached.stat().st_mtime < CACHE_SECONDS:
@@ -93,6 +97,9 @@ def collect_wechat_discovery(queries: list[str], *, timeout: int = 15, cache_dir
             continue
         except ValueError as exc:
             error = exc
+            if pause:
+                pause.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                pause.touch()
             break
         if cached:
             cached.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
