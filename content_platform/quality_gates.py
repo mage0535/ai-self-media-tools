@@ -110,13 +110,19 @@ def render_wechat_knowledge_cards(store,data_dir,job_id,draft,config):
     if not mapping.is_file():mapping=root/'cards/section_image_map.json'
     rows=json.loads(mapping.read_text(encoding='utf-8'))
     images={row['checksum']:row for row in store.artifacts(job_id) if row['kind']=='image'}
-    sections=dict(renderer.split_sections(str(draft.get('body') or ''),str(draft.get('title') or '')))
+    # Same parser that bound the images to sections, so heading forms cannot diverge (r81).
+    from .media import MediaBridge
+    sections={item['section']:item for item in MediaBridge._article_image_sections({'body':str(draft.get('body') or '')})}
     plans=[]
     for row in rows[:3]:
-        section=str(row.get('section') or '')
-        paragraphs=sections.get(section)
+        section=sections.get(str(row.get('section') or ''))
         artifact=images.get(row.get('asset_hash'))
-        if not paragraphs or not artifact:raise ValueError('knowledge_card_section_binding_missing')
+        if not section:raise ValueError('knowledge_card_section_binding_missing')
+        if row.get('section_text_sha256') and row['section_text_sha256']!=section['section_text_sha256']:
+            raise ValueError('knowledge_card_section_text_changed')
+        if not artifact:raise ValueError('knowledge_card_image_artifact_missing')
+        paragraphs=[line.strip() for line in section['adjacent_text'].splitlines()
+                    if line.strip() and not re.match(r'^[-*]\s*$',line.strip())]
         background=Path(artifact['path'])
         if background.is_symlink() or any(p.is_symlink() for p in background.parents):raise ValueError('knowledge_card_background_untrusted')
         background=background.resolve(strict=True)
