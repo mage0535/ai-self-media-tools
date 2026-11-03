@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+from .body_visual_gate import evaluate_body_visual, motion_blocks_delivery
 from .scene_manifest import validate_rendered_duration, validate_scene_manifest
 
 
@@ -13,6 +15,9 @@ def validate_cinema_delivery(
     bgm_source: dict[str, Any],
     motion_evidence: dict[str, Any] | None = None,
     subtitle_evidence: dict[str, Any] | None = None,
+    *,
+    video_path: Any = None,
+    motion_fallback: str | None = None,
 ) -> dict[str, Any]:
     """Reject externally rendered media that lacks the same delivery proof as the main pipeline."""
     failures: list[str] = []
@@ -42,8 +47,23 @@ def validate_cinema_delivery(
         failures.append("motion evidence failed")
     if not isinstance(subtitle_evidence, dict) or not subtitle_evidence.get("passed"):
         failures.append("subtitle evidence failed")
+    if motion_blocks_delivery(scene_manifest) or motion_blocks_delivery(
+        {"motion_evidence": motion_evidence, "MOTION_FALLBACK": motion_fallback}
+    ):
+        failures.append("MOTION_FALLBACK_BLOCKS_QUALIFIED")
+    candidate = video_path or (video_probe.get("path") if isinstance(video_probe, dict) else None) or (
+        video_probe.get("output") if isinstance(video_probe, dict) else None
+    )
+    if candidate:
+        visual = evaluate_body_visual(Path(candidate), platform=_cinema_platform(scene_manifest))
+        for code in visual.get("failed_codes") or []:
+            if code not in failures:
+                failures.append(code)
+    passed = not failures
     return {
-        "passed": not failures,
+        "passed": passed,
+        "delivery_verdict": "pass" if passed else "fail",
+        "qualified": passed,
         "failures": failures,
         "scene_manifest_gate": scene_gate,
         "duration_gate": duration_gate,
@@ -51,3 +71,14 @@ def validate_cinema_delivery(
         "motion_evidence": motion_evidence or {},
         "subtitle_evidence": subtitle_evidence or {},
     }
+
+
+def _cinema_platform(scene_manifest: dict[str, Any]) -> str:
+    if not isinstance(scene_manifest, dict):
+        return "bilibili"
+    if scene_manifest.get("platform"):
+        return str(scene_manifest.get("platform"))
+    platforms = scene_manifest.get("platforms") or []
+    if isinstance(platforms, list) and platforms:
+        return str(platforms[0])
+    return "bilibili"

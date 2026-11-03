@@ -9,6 +9,13 @@ import re
 import subprocess
 from pathlib import Path
 
+from .body_visual_gate import (
+    BODY_VISUAL_FAIL_CODES,
+    evaluate_body_visual,
+    motion_blocks_delivery,
+    platform_requires_body_visual,
+)
+
 
 VERTICAL_SHORT_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "tiktok", "youtube"}
 VERTICAL_RESOLUTION_OPTIONS = {
@@ -404,8 +411,19 @@ def verify_artifact(video_path: Path, render_manifest: dict, platform: str, *, p
             failures.append("motion_evidence_insufficient")
     final_pixel_gate = verify_final_pixels(video_path) if video_path.is_file() else {"passed": False, "failures": ["video_missing"]}
     failures.extend(str(item) for item in final_pixel_gate.get("failures") or [])
-    return {
-        "passed": not failures,
+    body_visual = None
+    if platform_requires_body_visual(normalized_platform):
+        body_visual = evaluate_body_visual(video_path, platform=normalized_platform)
+        for code in body_visual.get("failed_codes") or []:
+            if code not in failures:
+                failures.append(code)
+        if motion_blocks_delivery(render_manifest) and "MOTION_FALLBACK_BLOCKS_QUALIFIED" not in failures:
+            failures.append("MOTION_FALLBACK_BLOCKS_QUALIFIED")
+    elif motion_blocks_delivery(render_manifest):
+        failures.append("MOTION_FALLBACK_BLOCKS_QUALIFIED")
+    passed = not failures
+    result = {
+        "passed": passed,
         "platform": normalized_platform,
         "video_path": str(video_path),
         "probe": media,
@@ -414,3 +432,9 @@ def verify_artifact(video_path: Path, render_manifest: dict, platform: str, *, p
         "final_pixel_gate": final_pixel_gate,
         "failed_dimensions": failures,
     }
+    if platform_requires_body_visual(normalized_platform) or any(code in BODY_VISUAL_FAIL_CODES for code in failures):
+        result["body_visual"] = body_visual
+        result["delivery_verdict"] = "pass" if passed else "fail"
+        result["qualified"] = passed
+        result["preflight_status"] = "PASS" if passed else "FAIL"
+    return result

@@ -302,8 +302,11 @@ def validate_preflight_manifest(packet: dict[str, Any], channel: str | None = No
     normalized_channel = str(channel or packet.get("platform") or manifest.get("channel") or "").casefold()
     failures: list[str] = []
 
+    from .body_visual_gate import preflight_handoff_failures
+
+    handoff_failures = preflight_handoff_failures(packet)
     if not manifest:
-        return _result(["preflight_manifest_missing"])
+        return _result(["preflight_manifest_missing", *handoff_failures])
 
     for key in COMMON_REQUIRED_KEYS:
         if not _present(manifest.get(key)):
@@ -357,6 +360,7 @@ def validate_preflight_manifest(packet: dict[str, Any], channel: str | None = No
 
     contract_gate = validate_run_contract(manifest.get("run_contract"))
     failures.extend(contract_gate.get("failures") or [])
+    failures.extend(handoff_failures)
 
     return _result(failures, manifest)
 

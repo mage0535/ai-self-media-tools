@@ -257,7 +257,11 @@
       "same_topic_cross_platform_video_must_be_independently_rendered",
       "bgm_fingerprint_must_be_checked_against_recent_and_same_batch_registry",
       "manual_handoff_media_must_be_sent_as_independent_MEDIA_message",
-      "long_text_report_must_not_contain_media_path_only_at_message_tail"
+      "long_text_report_must_not_contain_media_path_only_at_message_tail",
+      "body_frame_background_must_not_be_empty_or_solid",
+      "body_text_must_not_overflow_frame",
+      "subtitle_layout_must_be_readable_vo_captions",
+      "motion_exemption_cannot_alone_justify_delivery_pass"
     ],
     "required_evidence_fields": [
       "platform_render_identity.output_path",
@@ -279,8 +283,48 @@
       "reuse_other_platform_final_mp4_as_current_platform_final",
       "reuse_same_bgm_fingerprint_without_current_ops_exception",
       "append_MEDIA_line_to_long_report_message",
-      "mark_handoff_pending_as_published"
-    ]
+      "mark_handoff_pending_as_published",
+      "preflight_pass_for_kf_freeze_delivery_candidate",
+      "delivery_pass_when_body_visual_gate_fails",
+      "qualified_from_motion_exemption_alone"
+    ],
+    "body_visual_hard_gates": {
+      "policy_id": "body_visual_hard_gates_v1",
+      "enforced_by": [
+        "content_platform.body_visual_gate",
+        "content_platform.video_artifact.verify_artifact",
+        "content_platform.pipeline._rendered_video_platform_gate",
+        "content_platform.cinema_delivery.validate_cinema_delivery"
+      ],
+      "applies_to": [
+        "douyin",
+        "shipinhao",
+        "kuaishou",
+        "xiaohongshu",
+        "youtube",
+        "tiktok",
+        "bilibili"
+      ],
+      "douyin_account_variants": [
+        "douyin_pet",
+        "douyin_ai"
+      ],
+      "xiaohongshu_alias": "rednote",
+      "bilibili_scope": "knowledge_short_and_long_packs",
+      "fail_codes": [
+        "BACKGROUND_EMPTY_OR_SOLID",
+        "TEXT_OVERFLOW_FRAME",
+        "SUBTITLE_LAYOUT_UNREADABLE",
+        "MOTION_FALLBACK_BLOCKS_QUALIFIED",
+        "BODY_VISUAL_EVIDENCE_MISSING"
+      ],
+      "rules": [
+        "任一失败码则交审 PREFLIGHT 不得为 PASS，delivery_verdict 不得为 pass，qualified 必须为 false",
+        "MOTION 豁免或 MOTION_FALLBACK/kf_freeze* 不能单独构成 qualified 或 delivery_pass；kf_freeze* 只允许内部草稿",
+        "缺正文抽帧证据按 BODY_VISUAL_EVIDENCE_MISSING 失败，不得放行",
+        "Bilibili 知识短视频和知识长视频成片与竖屏短视频使用同一正文观感门"
+      ]
+    }
   },
   "content_lanes": {
     "pet_healing": {

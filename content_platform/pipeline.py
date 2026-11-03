@@ -2952,8 +2952,32 @@ class Pipeline:
         gates["visual_policy_release"] = validate_visual_policy_release(
             meta, platform, video_path=output, render_manifest=manifest
         )
+        from .body_visual_gate import evaluate_body_visual, motion_blocks_delivery, platform_requires_body_visual
+
+        if platform_requires_body_visual(str(platform)):
+            if output.is_file():
+                visual = evaluate_body_visual(output, platform=str(platform))
+            else:
+                visual = {"passed": False, "failed_codes": ["BODY_VISUAL_EVIDENCE_MISSING"]}
+            gates["body_visual"] = {"passed": visual.get("passed") is True, "failed_codes": list(visual.get("failed_codes") or [])}
+            if visual.get("passed") is not True:
+                for code in visual.get("failed_codes") or ["BODY_VISUAL_EVIDENCE_MISSING"]:
+                    gates[str(code)] = {"passed": False}
+            motion_blocked = motion_blocks_delivery(manifest) or motion_blocks_delivery(meta)
+            gates["motion_fallback_blocks_qualified"] = {"passed": not motion_blocked, "code": "MOTION_FALLBACK_BLOCKS_QUALIFIED"}
+            if motion_blocked:
+                gates["MOTION_FALLBACK_BLOCKS_QUALIFIED"] = {"passed": False}
         failures = [name for name, value in gates.items() if not value["passed"]]
-        return {"passed": not failures, "phase": "rendered", "gates": gates, "failed_dimensions": failures}
+        passed = not failures
+        return {
+            "passed": passed,
+            "phase": "rendered",
+            "gates": gates,
+            "failed_dimensions": failures,
+            "delivery_verdict": "pass" if passed else "fail",
+            "qualified": passed,
+            "preflight_status": "PASS" if passed else "FAIL",
+        }
 
     @staticmethod
     def _attach_video_render_evidence(draft, artifact):
