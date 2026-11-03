@@ -134,7 +134,9 @@ class PlatformQualityGateRuntimeTests(unittest.TestCase):
     def test_rendered_video_gate_accepts_complete_measured_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "final.mp4"
-            output.write_bytes(b"video")
+            from tests.scene_fixture import write_color_scene_mp4
+
+            write_color_scene_mp4(output)
             planned_tools = [
                 "cinema_composition.storyboard", "shotcraft_moves.shot_plan_for_text",
                 "kuaishou_render.render_cards", "kuaishou_render.download_bgm",
