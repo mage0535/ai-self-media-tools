@@ -1,5 +1,85 @@
 # Continuous Development
 
+## 2026-10-19 to 2026-11-03: overnight automation repair (takeover)
+
+Goal set by the owner: grow the customer accounts' views, likes and interactions with a fully automated
+overnight batch. Every blocked slot is diagnosed by type (data access, retrieval design, integrity,
+content quality, gate measurement) and fixed at the cause; no gate is lowered to make a run pass.
+The server-side runbook (hosts, deploy procedure, window checks, incident log) lives in the private
+ops repository; this entry covers the code.
+
+### Overnight batch, end to end
+- `overnight_batch` builds due tasks from the slot schedule. Each task carries a topic chosen by
+  `overnight_topic_analysis` under the account's real-world-AI positioning (AI lanes are real
+  scenario cases, never model/tool news) and a shadow engagement signal (interactions per view).
+- `overnight_benchmarks.attach_breakdowns` attaches a same-lane breakdown observed within 24 h.
+  Order: the platform's own data (`NATIVE_COLLECTORS`, e.g. Zhihu via MediaCrawler) -> the lane's
+  labelled cross-platform source (`LANE_COLLECTORS`) -> further fallbacks (`FALLBACK_COLLECTORS`).
+  A cross-platform breakdown is marked `cross_platform_source`; a failed collector is not asked again
+  in the same batch. Xiaohongshu is never read automatically (owner rule): it uses labelled Zhihu
+  samples, then Juejin. douyin_pet uses Bilibili, then YouTube pet, then TikTok pet (Bilibili `-352`
+  risk control is never worked around).
+- `REFERENCE_COLLECTORS` add cross-platform reference works (analysis only, never reuse) for video
+  lanes. `video_sample_collector` observes each video (metadata, clip, 9 keyframes, ASR, vision
+  description); a clip that cannot be fully observed is skipped.
+- `mediacrawler_collector` runs the upstream MediaCrawler unmodified through
+  `scripts/mediacrawler_launch.py`; proxy variables are stripped (the batch's SOCKS proxy broke its
+  httpx client), logs are discarded so cookies never reach output, captchas stop the run.
+- Block events carry a `diagnosis` (`block_diagnosis.py`) so a report names the cause type.
+
+### Generation and media
+- MED12 layered creative combination: each task picks a story, cover rule and shot plan that the
+  script, cover prompt and beat images follow.
+- Articles: 1600-2600 characters, humanizer keeps content (rejects rewrites that drop most of it),
+  Markdown code blocks/tables survive copy edits, images bind to real `##` sections.
+- Images (`image_provider`): providers are tried in a chain and every skip reason is recorded.
+  Article platforms use a per-item chain (`MediaBridge._article_image_chain`): Xiaohongshu covers
+  try licensed stock first (Pexels, then Pixabay), then text-free AI (go_gemini, cloudflare,
+  pollinations, sense_nova last because it adds a visible watermark); a stock image rejected by
+  semantic review retries on AI providers only.
+- Covers: Juejin/Zhihu (1920x1080), Xiaohongshu (1200x1600) and WeChat (1880x800) get a rendered
+  title over a text-free background (`wechat_cover_render.LAYOUTS`/`PLATFORM_SIZES`). The cover gate
+  reads the title line by line through a hash-bound render proof; words inside the title boxes are
+  not counted as extra text blocks or focal points.
+- Xiaohongshu note: title <= 20 characters cut at a clause, whole paragraphs up to 950 characters,
+  tables as lines, closing kept, AI-assisted disclosure appended (`formatters._note_title/_note_text`).
+- Semantic review: images and video beats are checked by a vision model; video beats get up to two
+  feedback-guided regenerations before the gate rejects.
+- Rulebook `channel_rules.xiaohongshu.quality_gate_definitions` tells the native reviewer how to
+  judge each Xiaohongshu gate under the owner rules (labelled cross-platform samples, cold-start
+  account data, real photo or disclosed text-free AI main visual, declared asset mix = provenance).
+
+### Body-visual video gate (11-03)
+- `body_visual_gate` (contributed in PR #1) samples final video frames and fails closed on
+  near-solid backgrounds, text clipped at the frame edge, unreadable slogan "subtitles", missing
+  frame evidence, and `kf_freeze`/motion-exemption fallbacks. It is wired into `verify_artifact`,
+  `Pipeline._rendered_video_platform_gate`, `media_quality.validate_video_packet`,
+  `preflight_manifest` and `cinema_delivery`.
+- 315ed60 narrowed `TEXT_OVERFLOW_FRAME`: a band counts only if its ink (the minority tone, light or
+  dark) reaches the edge with text-like stroke density (>= 0.09 transitions per pixel of width).
+  Measured: rejected cards 0.13-0.20, real footage edges 0.004-0.08. Before this, every real clip
+  tried (dashboard rims, light screen recordings) failed the gate.
+
+### Lessons for the next developer
+- Always branch from current `main`. On 11-03 a change built on the August `main` was deployed over
+  95 newer commits and removed `proxy_policy.domestic_route`, which the batch admission check
+  requires; that night's window was refused. `main` now carries the production code.
+- Production files may differ from git only by CRLF; compare with `diff --strip-trailing-cr`.
+- A probe of a collector needs the batch's `CONTENT_PLATFORM_CONFIG` and role `HERMES_HOME`;
+  without them every video is skipped with `trusted_task_config_missing`.
+- A model HTTP 503 can be a dead proxy node or gateway image quota (`all_accounts_limited`): read
+  the error body's `code` first; never work around a provider quota.
+
+### Verification
+- Each change shipped with focused tests (`tests/test_overnight_benchmarks.py`,
+  `test_formatters.py`, `test_wechat_cover_render.py`, `test_cover_quality*.py`,
+  `test_body_visual_gate.py`, ...). Related suites are run with and without the change; the change
+  must add no failure. Known pre-existing failures (unchanged by this period's work): 9 in
+  `test_overnight_batch.py` (due-task builder fixtures), 1 in `test_media_quality.py`, 1 in
+  `test_cover_quality.py`, 5 in `test_platform_quality_gate_runtime.py`.
+- Real-output checks: generated covers run through the cover gate; collectors run with the batch
+  configuration; the body-visual gate was evaluated on 20 real clips and past finals.
+
 ## 2026-08-21: executable content-quality reference pack
 
 ### Implemented
