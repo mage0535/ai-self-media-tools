@@ -60,6 +60,8 @@ Quality gates must return structured results with:
 Initial enhanced quality gates may run in shadow mode, but P0 safety gates are
 enforced for new content.
 
+正文观感门（`body_visual_hard_gates_v1`）对抖音、视频号、快手、小红书、YouTube、TikTok 和 Bilibili 知识短/长视频成片是 P0，不是 shadow。纯色或近纯色主背景、文字出画、口号贴片冒充字幕、抽帧证据缺失，以及 `kf_freeze*` / MOTION 豁免，都不能单独形成 `PREFLIGHT=PASS` 或 `delivery_verdict=pass`。
+
 ## D1 Basic Deduplication
 
 The first-pass deduplication gate is deterministic and checks:
