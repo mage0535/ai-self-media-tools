@@ -80,6 +80,7 @@ Every channel job must run this sequence. Skipping a step means the job is incom
 - Voiceover must sound human: pauses, emotion changes, breath intervals, and natural pacing.
 - Subtitles default to lower third, readable font, no overflow, and no main-subject blockage.
 - Visuals must change with narration. Repeating one clip or one card with new subtitles is a quality failure.
+- 正文观感是交审硬门，覆盖抖音、视频号、快手、小红书、YouTube、TikTok，以及 Bilibili 知识短视频/知识长视频成片。`BACKGROUND_EMPTY_OR_SOLID`、`TEXT_OVERFLOW_FRAME`、`SUBTITLE_LAYOUT_UNREADABLE`、`MOTION_FALLBACK_BLOCKS_QUALIFIED`、`BODY_VISUAL_EVIDENCE_MISSING` 任一命中，PREFLIGHT 不得为 PASS，`delivery_verdict` 不得为 pass。`kf_freeze*` 或 MOTION 豁免不能单独抬 qualified。
 
 ### Kuaishou Scheduling
 

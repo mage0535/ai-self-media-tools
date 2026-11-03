@@ -62,9 +62,10 @@ def test_video_artifact_rejects_static_or_wrong_vertical_spec(tmp_path: Path):
 
 def test_video_artifact_accepts_complete_short_video_evidence(tmp_path: Path):
     from content_platform.video_artifact import verify_artifact
+    from tests.scene_fixture import write_color_scene_mp4
 
     video = tmp_path / "valid.mp4"
-    video.write_bytes(b"fixture")
+    write_color_scene_mp4(video)
     result = verify_artifact(
         video,
         {

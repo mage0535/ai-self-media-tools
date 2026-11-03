@@ -7,6 +7,13 @@ import re
 import subprocess
 from pathlib import Path
 
+from .body_visual_gate import (
+    BODY_VISUAL_FAIL_CODES,
+    evaluate_body_visual,
+    motion_blocks_delivery,
+    platform_requires_body_visual,
+)
+
 
 VERTICAL_SHORT_PLATFORMS = {"douyin", "kuaishou", "shipinhao", "tiktok", "youtube"}
 MOTION_EVIDENCE_VERSION = "sustained-v2"
@@ -136,11 +143,28 @@ def verify_artifact(video_path: Path, render_manifest: dict, platform: str, *, p
         failures.append("motion_measurement_failed")
     if motion_score is not None and motion_score < MOTION_THRESHOLD:
         failures.append("motion_evidence_insufficient")
-    return {
-        "passed": not failures,
+    body_visual = None
+    if platform_requires_body_visual(normalized_platform):
+        body_visual = evaluate_body_visual(video_path, platform=normalized_platform)
+        for code in body_visual.get("failed_codes") or []:
+            if code not in failures:
+                failures.append(code)
+        if motion_blocks_delivery(render_manifest) and "MOTION_FALLBACK_BLOCKS_QUALIFIED" not in failures:
+            failures.append("MOTION_FALLBACK_BLOCKS_QUALIFIED")
+    elif motion_blocks_delivery(render_manifest):
+        failures.append("MOTION_FALLBACK_BLOCKS_QUALIFIED")
+    passed = not failures
+    result = {
+        "passed": passed,
         "platform": normalized_platform,
         "video_path": str(video_path),
         "probe": media,
         "motion_score": motion_score,
         "failed_dimensions": failures,
     }
+    if platform_requires_body_visual(normalized_platform) or any(code in BODY_VISUAL_FAIL_CODES for code in failures):
+        result["body_visual"] = body_visual
+        result["delivery_verdict"] = "pass" if passed else "fail"
+        result["qualified"] = passed
+        result["preflight_status"] = "PASS" if passed else "FAIL"
+    return result

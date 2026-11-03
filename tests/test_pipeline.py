@@ -76,7 +76,9 @@ class PipelineTests(unittest.TestCase):
         root = self.pipeline.data_dir / "artifacts" / "sidecar-render"
         (root / "backgrounds").mkdir(parents=True)
         output = root / "final.mp4"
-        output.write_bytes(b"video")
+        from tests.scene_fixture import write_color_scene_mp4
+
+        write_color_scene_mp4(output)
         for index in range(4):
             (root / "backgrounds" / f"bg_{index:02d}.png").write_bytes(b"image")
         (root / "bgm_source.json").write_text(json.dumps({
@@ -100,8 +102,26 @@ class PipelineTests(unittest.TestCase):
             "video_artifact": {"path": str(output)},
             "render_manifest": manifest,
         }
-        probe = type("Result", (), {"stdout": json.dumps({"streams": [{"codec_type": "audio"}], "format": {"duration": "45"}})})()
-        with patch("content_platform.pipeline.subprocess.run", return_value=probe):
+        import subprocess
+
+        original_run = subprocess.run
+
+        def side_effect(command, *args, **kwargs):
+            # The audio sidecar probe is the only call this test stubs. Body-visual
+            # sampling must still read the real file.
+            if "codec_type" in " ".join(str(part) for part in command):
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "returncode": 0,
+                        "stdout": json.dumps({"streams": [{"codec_type": "audio"}], "format": {"duration": "45"}}),
+                        "stderr": "",
+                    },
+                )()
+            return original_run(command, *args, **kwargs)
+
+        with patch("content_platform.pipeline.subprocess.run", side_effect=side_effect):
             result = Pipeline._rendered_video_platform_gate(packet, "kuaishou")
 
         assert result["passed"] is True

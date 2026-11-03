@@ -75,7 +75,14 @@ def main() -> int:
     bgm_source = json.loads(Path(args.bgm_source).read_text(encoding="utf-8-sig"))
     motion_evidence = json.loads(Path(args.motion_evidence).read_text(encoding="utf-8-sig")) if args.motion_evidence else _motion_probe(video)
     subtitle_evidence = json.loads(Path(args.subtitle_evidence).read_text(encoding="utf-8-sig")) if args.subtitle_evidence else {}
-    result = validate_cinema_delivery(scene_manifest, _probe_video(video), bgm_source, motion_evidence, subtitle_evidence)
+    result = validate_cinema_delivery(
+        scene_manifest,
+        _probe_video(video),
+        bgm_source,
+        motion_evidence,
+        subtitle_evidence,
+        video_path=video,
+    )
     result["video"] = str(video)
     if args.output:
         Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

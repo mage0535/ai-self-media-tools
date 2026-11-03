@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
+from .body_visual_gate import evaluate_body_visual, motion_blocks_delivery, platform_requires_body_visual
 from .visual_content_policy import packet_uses_current_policy
 from .models import GateFailure, GateResult
 from .asset_license import validate_asset_licenses
@@ -617,7 +619,48 @@ def validate_video_packet(packet: dict[str, Any]) -> dict[str, Any]:
         },
         "growth_plan": validate_growth_package(packet),
     }
+    gates.update(_body_visual_delivery_gates(packet, platform))
     return _result(gates)
+
+
+def _body_visual_delivery_gates(packet: dict[str, Any], platform: str) -> dict[str, Any]:
+    """Attach pixel and freeze checks only when this packet is a delivery candidate.
+
+    Metadata-only planning packets do not carry a final mp4. A declared
+    kf_freeze fallback, motion exemption, or failed body-visual record still
+    fails closed.
+    """
+    gates: dict[str, Any] = {}
+    if motion_blocks_delivery(packet):
+        gates["motion_fallback_blocks_qualified"] = {"passed": False, "code": "MOTION_FALLBACK_BLOCKS_QUALIFIED"}
+        gates["MOTION_FALLBACK_BLOCKS_QUALIFIED"] = {"passed": False}
+    if not platform_requires_body_visual(platform):
+        return gates
+    video = _packet_video_path(packet)
+    if not video:
+        embedded = packet.get("body_visual_gate") if isinstance(packet.get("body_visual_gate"), dict) else {}
+        for code in embedded.get("failed_codes") or []:
+            gates[str(code)] = {"passed": False}
+        return gates
+    path = Path(str(video))
+    visual = evaluate_body_visual(path, platform=platform) if path.is_file() else {
+        "passed": False,
+        "failed_codes": ["BODY_VISUAL_EVIDENCE_MISSING"],
+    }
+    gates["body_visual"] = {"passed": visual.get("passed") is True, "failed_codes": list(visual.get("failed_codes") or [])}
+    if visual.get("passed") is not True:
+        for code in visual.get("failed_codes") or ["BODY_VISUAL_EVIDENCE_MISSING"]:
+            gates[str(code)] = {"passed": False}
+    return gates
+
+
+def _packet_video_path(packet: dict[str, Any]) -> str:
+    artifact = packet.get("video_artifact") if isinstance(packet.get("video_artifact"), dict) else {}
+    for value in (packet.get("video_path"), packet.get("final_video"), artifact.get("path")):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
 
 
 def validate_wechat_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
