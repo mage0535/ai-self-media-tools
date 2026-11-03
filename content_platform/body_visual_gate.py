@@ -20,6 +20,8 @@ TEXT_OVERFLOW_FRAME = "TEXT_OVERFLOW_FRAME"
 SUBTITLE_LAYOUT_UNREADABLE = "SUBTITLE_LAYOUT_UNREADABLE"
 MOTION_FALLBACK_BLOCKS_QUALIFIED = "MOTION_FALLBACK_BLOCKS_QUALIFIED"
 BODY_VISUAL_EVIDENCE_MISSING = "BODY_VISUAL_EVIDENCE_MISSING"
+# Ink transitions per pixel of frame width that a clipped text line shows (see analyze_frame).
+TEXT_STROKE_DENSITY = 0.09
 
 BODY_VISUAL_FAIL_CODES = (
     BACKGROUND_EMPTY_OR_SOLID,
@@ -228,16 +230,22 @@ def analyze_frame(rgb: Any) -> dict[str, Any]:
         if band_height < min_height or band_height > max_height:
             continue
         band = luma[start : end + 1]
-        columns = np.where((band > 155).any(axis=0))[0]
+        # Ink is the minority tone of the band: light text on a dark card, or dark text on a light page
+        # (on a light page the bright background, not the text, would span the width).
+        ink = band > 155 if float((band > 155).mean()) < 0.5 else band < 90
+        columns = np.where(ink.any(axis=0))[0]
         if len(columns) < 8:
             continue
+        # Text strokes alternate many times along a row; an edge such as a dashboard, horizon or table rim
+        # is a few long runs (measured 11-03: rejected cards 0.13-0.20, real footage edges 0.004-0.08).
+        stroke_density = float(np.median(np.abs(np.diff(ink.astype(np.int8), axis=1)).sum(axis=1))) / width
         left = int(columns[0])
         right = int(columns[-1])
         width_fraction = (right - left + 1) / width
         left_gap = left / width
         right_gap = (width - 1 - right) / width
         full_bleed = width_fraction >= 0.90 and max(left_gap, right_gap) <= 0.045 and min(left_gap, right_gap) <= 0.02
-        if full_bleed:
+        if full_bleed and stroke_density >= TEXT_STROKE_DENSITY:
             overflow = True
         centered_chip = (
             start >= int(height * 0.84)
