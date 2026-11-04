@@ -1022,8 +1022,9 @@ def execute_batch(
 
     The caller may restart this function after an agent, browser, or model
     process exits.  Completed platform rows are retained and never recreated.
-    Publishing is deliberately not implicit: this worker can stage automatic
-    channels and prepares manual channels for handoff only.
+    Publishing is deliberately not implicit: this worker stages automatic
+    channels, prepares manual channels for handoff, and schedules a Kuaishou
+    post only for a slot whose action is ``schedule_publish``.
     """
     state_file = Path(state_path)
     state = _load_state(state_file, plan)
@@ -1094,6 +1095,15 @@ def execute_batch(
                 task["state"] = result_state
                 task["reason"] = str(result.get("last_error") or "pipeline did not produce a reviewable artifact")
                 journal.append("platform_blocked", platform, {"job_id": task["job_id"], "state": result_state, "reason": task["reason"]})
+            elif platform.casefold() == "kuaishou" and str(task.get("action") or "") == "schedule_publish":
+                # Explicit per-slot action (MED26): the owner runs Kuaishou as a scheduled auto-post.
+                from .kuaishou_schedule import schedule_kuaishou
+
+                outcome = schedule_kuaishou(task, result, now=datetime.now(timezone.utc),
+                                            out_dir=Path(getattr(pipeline, "data_dir", "data")) / "local_ops_kuaishou" / f"overnight_{task['job_id']}")
+                task["state"], task["reason"] = outcome["state"], outcome["reason"]
+                journal.append("platform_blocked" if outcome["state"] == "blocked" else "platform_scheduled", platform,
+                               {"job_id": task["job_id"], **outcome})
             elif platform.casefold() in MANUAL_HANDOFF_PLATFORMS:
                 handoff_problem = _handoff_media_problem(platform, result)
                 if handoff_problem:
@@ -1118,7 +1128,7 @@ def execute_batch(
                 task["state"] = "awaiting_review"
                 task["reason"] = "live publication requires an explicit approved workflow"
                 journal.append("platform_awaiting_review", platform, {"job_id": task["job_id"], "state": result_state})
-            if store is not None and task.get("state") in {"staged", "handoff_ready", "awaiting_review"}:
+            if store is not None and task.get("state") in {"staged", "handoff_ready", "awaiting_review", "published_pending_verification"}:
                 fingerprint = str(task.get("topic_fingerprint") or _topic_identity({"title": task.get("topic", "")})).strip()
                 if fingerprint:
                     brief = dict(task.get("brief") or {})
