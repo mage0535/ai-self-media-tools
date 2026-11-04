@@ -1271,7 +1271,7 @@ class DraftGenerator:
                 "topic_selection": {"selected_topic": topic_text, "selection_reason": "ranked trend and channel fit",
                                     **({"decision": brief["topic_decision"]} if isinstance(brief.get("topic_decision"), dict) else {})},
                 "platform_source_matrix": platform_source_matrix,
-                "quantity_plan": {"final_count": 1, "decision_reason": "one channel-specific piece for this run"},
+                "quantity_plan": self._slot_quantity(brief, content_form),
                 "content_generation_brief": {"source_inputs": ["account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection", "quantity_plan", "content_brief"], "asset_mix_plan": {"ai_generated": True, "real_material_retrieval": True, "ai_edit_real_material": True}, "humanization_plan": {"hook": True, "body": True, "voice": "casual"}},
                 "content_workflow_inputs": {"source_inputs": ["account_analysis", "content_brief", "cross_platform_trend_analysis", "quantity_plan", "same_lane_account_analysis", "topic_selection"], **{f"{k}_required": True for k in handoff}},
             })
@@ -1459,6 +1459,15 @@ class DraftGenerator:
         except Exception:
             pass
         return "problem-cause-solution"
+
+    @staticmethod
+    def _slot_quantity(brief, content_form):
+        """State the real count rule: each overnight slot yields one piece toward the channel's daily target."""
+        rules = ((brief.get("run_contract") or {}).get("channel_rules") or {}) if isinstance(brief.get("run_contract"), dict) else {}
+        target = rules.get("daily_target") if isinstance(rules, dict) else None
+        return {"final_count": 1, "channel_daily_target": target or "",
+                "decision_reason": f"one {content_form or 'piece'} per scheduled overnight slot; other formats of the "
+                                   f"channel's daily target ({target or 'not set'}) run in their own slots"}
 
     @staticmethod
     def _observed_account(brief, platform):

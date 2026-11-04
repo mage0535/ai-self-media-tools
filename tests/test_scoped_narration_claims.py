@@ -230,3 +230,12 @@ def test_rendered_background_is_real_only_for_a_licensed_stock_photo():
 
     assert _valid_real_scene_background(photo) is True
     assert _valid_real_scene_background(generated) is False
+
+
+def test_slot_quantity_states_the_channel_daily_target():
+    from content_platform.generator import DraftGenerator
+
+    plan = DraftGenerator._slot_quantity({"run_contract": {"channel_rules": {"daily_target": "1篇文章 + 2个回答"}}}, "evidence_answer")
+
+    assert plan["final_count"] == 1 and plan["channel_daily_target"] == "1篇文章 + 2个回答"
+    assert "one evidence_answer per scheduled overnight slot" in plan["decision_reason"]

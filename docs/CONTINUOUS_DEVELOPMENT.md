@@ -80,6 +80,12 @@ ops repository; this entry covers the code.
     `performance-cycle-result.json` (or the collector's reason they are missing) into `account_analysis`.
     Still template (open): the quantity decision.
   - MED30: a slot whose candidates the topic analyzer all rejects keeps `ineligible_titles` for diagnosis.
+  - MED31: douyin_pet failed `visual_recipe_reuse_failed: trusted_seven_day_registry_missing`. The real media
+    job runs with a fresh per-job `HERMES_HOME` (authority role home) that never holds the seven-day recipe
+    history; staging used the shared home and passed. `scripts/video_toolchain_runner.py` now uses the shared
+    registry (`SHARED_VISUAL_RECIPE_REGISTRY`) when `VISUAL_RECIPE_FINGERPRINT_REGISTRY` is unset; a configured
+    missing path still fails closed. Open: that registry's newest entry is 10-13 and nothing in this repo
+    appends to it, so the seven-day comparison currently has no recent entries.
   - MED29: every article image was go_gemini; the contracts ask for real-scene photos. Article images now try
     `stock` (Pexels, then Pixabay) first; a weak or repeated photo gives way to a generated scene. The stock
     query is a 2-5 word English photo query from the gateway text model (the keyword map produced
