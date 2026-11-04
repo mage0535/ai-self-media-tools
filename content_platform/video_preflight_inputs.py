@@ -272,7 +272,7 @@ def bind_video_preflight(store,job,platform,brief,plan,script,owner):
 OVERNIGHT_PREFLIGHT_STEPS=('run_content_hygiene','generate_content','validate_factual_claims','run_safety_gate','run_quality_gate')
 
 
-def bind_overnight_video_preflight(store,job,platform,brief,plan,script):
+def bind_overnight_video_preflight(store,job,platform,brief,plan,script,voice_plan_source=None):
     """Overnight video lanes (11-03 r90: douyin_pet reached film_renderer for the first time and was refused
     'video_preflight.json missing'; only the native Kuaishou source step ever wrote one). The research pack is the
     overnight benchmark matrix in the brief; cross-platform evidence counts only when labelled with its source
@@ -290,12 +290,18 @@ def bind_overnight_video_preflight(store,job,platform,brief,plan,script):
     allow=(outputs['run_content_hygiene'].get('status') in {'pass','review'} and claims.get('passed') is True
         and risk.get('level') in {'pass','review'} and quality.get('passed') is True)
     script_sha=hashlib.sha256(script.encode()).hexdigest()
+    content_brief=copy.deepcopy(brief.get('content_blueprint'))
+    if voice_plan_source:
+        # The renderer reads the narration prosody only from this pinned file (normal_film_audio.source_plan).
+        if not isinstance(content_brief,dict):raise ValueError('overnight_preflight_content_brief_required')
+        content_brief.setdefault('video_source_planning',{})['voice_plan_source']={
+            'path':str(voice_plan_source['path']),'sha256':str(voice_plan_source['sha256'])}
     payload={'version':'overnight_video_preflight_v1','job_id':job_id,'platform':platform,'production_verified':False,
         'research_pack':{'attempted_sources':int(matrix.get('sources_attempted') or 0),'successful_sources':int(matrix.get('sources_succeeded') or 0),
             'platform_native_verified':scope=='platform_native','evidence_scope':scope,'cross_platform_source':labelled if scope=='cross_platform' else '',
             'hot_viral_sample_count':len(samples),'hot_viral_samples_sha256':digest(samples),'source_matrix_sha256':digest(matrix)},
         'topic_selection':{'selected':True,'reason':str(matrix.get('platform_fit_reason') or ''),'topic':topic},
-        'content_brief':brief.get('content_blueprint'),'asset_plan':plan_contract(plan),
+        'content_brief':content_brief,'asset_plan':plan_contract(plan),
         'quality_gates':{'allow_render':allow,'native_step_receipts':receipts},
         'script_sha256':script_sha,'plan_contract_sha256':digest(plan_contract(plan))}
     root=store.path.parent/'jobs'/job_id/'video-preflight';root.mkdir(parents=True,exist_ok=True);path=root/(platform+'.json')

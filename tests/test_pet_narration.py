@@ -1,4 +1,8 @@
+import json
 import types
+from pathlib import Path
+
+from content_platform.voice_plan import build_voice_plan
 
 from content_platform.pipeline import Pipeline
 
@@ -12,7 +16,11 @@ GOOD = """你是不是也以为养两只高智商猫是双倍快乐，现实往�
 建议收藏，你家猫咪最离谱的开锁操作是什么，评论区说说？"""
 
 
-def _run(replies):
+VOICE = json.dumps({"voice_plan": [{"index": i, "style": "轻松", "semantic_direction": "讲做法", "rate": "+0%",
+                                    "pitch": "+0Hz", "pause_after_ms": 300} for i in range(8)]}, ensure_ascii=False)
+
+
+def _run(replies, tmp_path=None):
     calls = []
 
     def call(prompt, brief):
@@ -21,18 +29,35 @@ def _run(replies):
 
     events = []
     fake = types.SimpleNamespace(generator=types.SimpleNamespace(_call_hermes_text=call),
-                                 store=types.SimpleNamespace(record_event=lambda *a: events.append(a)),
-                                 PET_NARRATION_PROMPT=Pipeline.PET_NARRATION_PROMPT)
+                                 store=types.SimpleNamespace(record_event=lambda *a: events.append(a),
+                                                             path=(tmp_path or Path("/nonexistent")) / "state.db"),
+                                 PET_NARRATION_PROMPT=Pipeline.PET_NARRATION_PROMPT,
+                                 PET_VOICE_PLAN_PROMPT=Pipeline.PET_VOICE_PLAN_PROMPT)
+    fake._write_pet_voice_plan = lambda *a: Pipeline._write_pet_voice_plan(fake, *a)
     draft = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
     Pipeline._write_pet_narration(fake, "j1", draft, {"douyin_pet": {}})
     assert events and events[0][1] == "pet_narration_written"
     return draft["draft_meta"], calls
 
 
-def test_model_narration_that_passes_the_script_gate_is_frozen():
-    meta, calls = _run([GOOD])
-    assert len(calls) == 1 and meta["pet_narration_audit"]["accepted"] is True
+def test_model_narration_that_passes_the_script_gate_is_frozen(tmp_path):
+    meta, calls = _run([GOOD, "```json\n" + VOICE + "\n```"], tmp_path)
+    assert len(calls) == 2 and meta["pet_narration_audit"]["accepted"] is True
     assert meta["video_script"].count("\n\n") == 7
+    # The renderer's normal_film_audio.source_plan reads exactly this pinned file.
+    source = meta["voice_plan_source"]
+    beats = meta["video_script"].split("\n\n")
+    plan = json.loads(Path(source["path"]).read_text(encoding="utf8"))["voice_plan"]
+    assert [row["text"] for row in build_voice_plan(beats, segment_styles=plan)] == beats
+    assert meta["pet_narration_audit"]["voice_plan"]["sha256"] == source["sha256"]
+
+
+def test_invalid_voice_plan_is_retried_then_left_missing(tmp_path):
+    bad = VOICE.replace('"+0%"', '"fast"')
+    meta, calls = _run([GOOD, bad, "不是JSON"], tmp_path)
+    assert len(calls) == 3 and "voice_plan_source" not in meta
+    audit = meta["pet_narration_audit"]["voice_plan"]
+    assert audit["accepted"] is False and audit["attempts"][0]["failed"][0].startswith("voice_plan_rate_invalid")
 
 
 def test_narration_failing_the_gate_twice_leaves_the_old_path():

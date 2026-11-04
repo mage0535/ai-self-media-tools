@@ -85,3 +85,24 @@ def test_overnight_binder_writes_receipted_preflight_from_benchmark_matrix(tmp_p
     assert json.loads((out / "video_preflight.json").read_text())["quality_gates"]["allow_render"] is True
     with pytest.raises(ValueError, match="native_preflight_render_inputs_changed"):
         materialize_video_preflight(store, dict(job, platforms=["douyin_pet"]), {"video_preflight_ref": ref}, "改过的脚本", tmp_path)
+
+
+def test_overnight_binder_pins_the_voice_plan_source_for_the_renderer(tmp_path):
+    from content_platform.store import Store
+    from content_platform.workflow_runtime import WorkflowStepRunner
+    from content_platform.video_preflight_inputs import bind_overnight_video_preflight
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("同时拥有两只高智商猫的弊端", ["douyin_pet"])
+    runner = WorkflowStepRunner(store, "wf_" + job["id"], job["id"])
+    for name, output in {"run_content_hygiene": {"status": "pass"}, "generate_content": {"ok": True},
+                         "validate_factual_claims": {"passed": True}, "run_safety_gate": {"level": "pass"},
+                         "run_quality_gate": {"passed": True}}.items():
+        runner.succeeded(name, output)
+    brief = {"platform_source_matrix": {"platform": "douyin_pet", "evidence_scope": "platform_native",
+                                        "sources_attempted": 6, "sources_succeeded": 5},
+             "hot_viral_samples": [{"title": "x"}], "content_blueprint": {"selected_topic": job["topic"]}}
+    ref = bind_overnight_video_preflight(store, job, "douyin_pet", brief, {}, "第一句\n\n第二句",
+                                         {"path": "/abs/plan.json", "sha256": "a" * 64})
+    payload = json.loads(open(ref["path"], encoding="utf8").read())
+    assert payload["content_brief"]["video_source_planning"]["voice_plan_source"] == {"path": "/abs/plan.json", "sha256": "a" * 64}
+    assert "video_source_planning" not in brief["content_blueprint"]
