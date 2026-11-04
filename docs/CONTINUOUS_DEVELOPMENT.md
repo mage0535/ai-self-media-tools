@@ -86,6 +86,20 @@ ops repository; this entry covers the code.
     registry (`SHARED_VISUAL_RECIPE_REGISTRY`) when `VISUAL_RECIPE_FINGERPRINT_REGISTRY` is unset; a configured
     missing path still fails closed. Open: that registry's newest entry is 10-13 and nothing in this repo
     appends to it, so the seven-day comparison currently has no recent entries.
+  - MED31b: the BGM fingerprint registry (`scripts/kuaishou_render.py`, `scripts/fetch_bgm_archive.py`) had the
+    same per-job-home defect: reuse was never detected and the history was discarded. Without
+    `BGM_FINGERPRINT_REGISTRY` both use `/srv/hermes-runtime/data/bgm_fingerprint.json` when that dir exists.
+    Tests must set the env var to a temp path (they would otherwise write the shared file on the server).
+- Kuaishou scheduled auto-post (MED26, 11-04; owner: Kuaishou is an automatic scheduled post). An overnight slot
+  with `"action": "schedule_publish"` (Kuaishou only) runs `content_platform/kuaishou_schedule.py` after the
+  pipeline: `scripts/build_kuaishou_packet.py` on the rendered video dir (schedule = the window's CST date at
+  18:30, the most used past slot), then `scripts/kuaishou_publish_with_postcheck.py` with the ops-runner env and
+  `external/social-auto-upload`. The task is `published_pending_verification` only when the wrapper exits 0
+  (management-page postcheck passed: exact schedule time, or under review); otherwise `blocked` with the stage.
+  The packet description carries no hashtags because the wrapper uploads it without them and compares it
+  exactly. No slot uses the action yet; the first live post needs the owner told first.
+  Known stale tests: 4 in `tests/test_kuaishou_publish_guards.py` call the old one-argument
+  `_postcheck_passed` / text-based `_classify_management_postcheck`; the code is the stricter current version.
   - MED29: every article image was go_gemini; the contracts ask for real-scene photos. Article images now try
     `stock` (Pexels, then Pixabay) first; a weak or repeated photo gives way to a generated scene. The stock
     query is a 2-5 word English photo query from the gateway text model (the keyword map produced
