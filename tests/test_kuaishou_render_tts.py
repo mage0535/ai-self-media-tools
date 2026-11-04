@@ -115,3 +115,14 @@ def test_bgm_queries_try_verified_instrumental_baseline_before_narrow_style():
 
     assert queries[0] == "acoustic guitar instrumental"
     assert "muted percussion and low strings" in queries
+
+
+def test_bgm_registry_defaults_to_shared_runtime_data(monkeypatch, tmp_path):
+    import scripts.kuaishou_render as render
+
+    monkeypatch.delenv("BGM_FINGERPRINT_REGISTRY", raising=False)
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "job-home"))
+    monkeypatch.setattr(render, "SHARED_RUNTIME_DATA", tmp_path / "shared")
+    assert render._bgm_registry_path() == tmp_path / "job-home" / "data" / "bgm_fingerprint.json"
+    (tmp_path / "shared").mkdir()
+    assert render._bgm_registry_path() == tmp_path / "shared" / "bgm_fingerprint.json"

@@ -26,7 +26,10 @@ from pathlib import Path
 DEFAULT_COLLECTION = "solo-piano-7"
 META_URL = "https://archive.org/metadata/{collection}"
 DOWNLOAD_URL = "https://archive.org/download/{collection}"
-FINGERPRINT_FILE = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser() / "data/bgm_fingerprint.json"
+# Same shared registry as kuaishou_render._bgm_registry_path (MED31b): a per-job HERMES_HOME forgets used tracks.
+FINGERPRINT_FILE = (Path(os.environ["BGM_FINGERPRINT_REGISTRY"]).expanduser() if os.environ.get("BGM_FINGERPRINT_REGISTRY")
+                    else Path("/srv/hermes-runtime/data/bgm_fingerprint.json") if Path("/srv/hermes-runtime/data").is_dir()
+                    else Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser() / "data/bgm_fingerprint.json")
 MIN_BYTES = 500 * 1024
 DEFAULT_MIN_DURATION = 60.0
 LICENSE = "CC-BY-NC-ND 3.0 (archive.org {collection} collection, personal-use video background)"

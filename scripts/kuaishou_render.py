@@ -958,10 +958,17 @@ def _write_bgm_source(video_dir, candidate, style):
     Path(video_dir, "bgm_source.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+SHARED_RUNTIME_DATA = Path("/srv/hermes-runtime/data")
+
+
 def _bgm_registry_path():
     configured = os.environ.get("BGM_FINGERPRINT_REGISTRY", "").strip()
     if configured:
         return Path(configured).expanduser()
+    # A real media job's HERMES_HOME is a fresh per-job home: a registry kept there never sees earlier tracks
+    # and is discarded after the job, so reuse went undetected (MED31b). The shared runtime data dir keeps it.
+    if SHARED_RUNTIME_DATA.is_dir():
+        return SHARED_RUNTIME_DATA / "bgm_fingerprint.json"
     return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "data" / "bgm_fingerprint.json"
 
 
