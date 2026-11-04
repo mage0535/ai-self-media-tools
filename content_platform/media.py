@@ -987,10 +987,14 @@ class MediaBridge:
                         not item.get("semantic_requirement") or review.get("requirement_match") is True):
                     break
                 seen = str(review.get("observed_subject") or "")[:200]
+                # 11-03 r95: beat s07 (误食 → 兽医确诊) was redrawn three times without a vet; the reviewer's reason
+                # ("omits the required veterinary consultation") said what was missing but was never passed on.
+                why = str(review.get("reason") or "")[:240]
                 retry_prompt = (f"{item['prompt']} Show exactly this section's concrete subject: "
                                 f"{str(item.get('purpose') or '')[:200]} {str(item.get('adjacent_text') or '')[:300]}"
                                 + (f" The previous image showed: {seen}. That fits only the general topic; depict the "
-                                   "concrete situation this exact sentence describes instead." if seen else ""))
+                                   "concrete situation this exact sentence describes instead." if seen else "")
+                                + (f" The reviewer rejected it because: {why} Include what is missing." if why else ""))
                 retry_kwargs = item_kwargs
                 if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS:
                     # The same stock query returns the same photo; a weak real photo gives way to a generated scene.

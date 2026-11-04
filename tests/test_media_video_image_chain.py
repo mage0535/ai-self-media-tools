@@ -129,7 +129,8 @@ def test_rejected_semantic_beat_gets_a_second_retry_told_what_the_reviewer_saw(t
     requirements = [{"intent": {"beat_id": "s01", "claim": "第一步，全面排查开锁隐患。", "content_match_reason": "illustrate"},
                      "sha256": "1"}]
     reviews = iter([{"score": 0.65, "requirement_match": True, "observed_subject": "Two cats on an office desk"},
-                    {"score": 0.68, "requirement_match": True, "observed_subject": "A man at a desk with a cat"},
+                    {"score": 0.68, "requirement_match": False, "observed_subject": "A man at a desk with a cat",
+                     "reason": "omits the cabinet lock the beat names"},
                     {"score": 0.74, "requirement_match": True, "observed_subject": "Cat pawing a cabinet latch"}])
     recorded = {}
     with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
@@ -151,3 +152,33 @@ def test_review_timeout_reviews_the_same_pixels_again(tmp_path):
         result = MediaBridge._semantic_review(tmp_path / "a.png", {"topic": "t"}, {"section": "s1"}, {})
     assert result["score"] == 0.81
     assert review.call_count == 2
+
+
+def test_beat_retry_prompt_carries_the_reviewer_reason(tmp_path):
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j5", "title": "两只聪明猫", "body": "正文", "platforms": ["douyin_pet"]}
+    calls = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            calls.append(prompt)
+            rng = random.Random(len(calls))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(rng.randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "fake"}
+
+    requirements = [{"intent": {"beat_id": "s07", "claim": "若误食异物必须由兽医确诊。", "content_match_reason": "illustrate"},
+                     "sha256": "7"}]
+    reviews = iter([{"score": 0.65, "requirement_match": False, "observed_subject": "A cat biting plastic",
+                     "reason": "omits the required veterinary consultation"},
+                    {"score": 0.80, "requirement_match": True, "observed_subject": "A vet examining a cat"}])
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch("content_platform.video_asset_semantics.validate_requirement", side_effect=lambda r: r), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: next(reviews)), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda *a: None):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"}, semantic_requirements=requirements)
+    assert "The reviewer rejected it because: omits the required veterinary consultation" in calls[1]
