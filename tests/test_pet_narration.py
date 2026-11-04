@@ -8,8 +8,8 @@ GOOD = """你是不是也以为养两只高智商猫是双倍快乐？现实往�
 分区分开喂食，切断2只猫相互掩护盗食的可能。
 第3步，每天提供3套难度递增的漏食玩具消耗精力。
 若疑似吞食异物，必须立即送医由兽医确诊排查。
-这份物理隔绝加精力疏导的避坑清单，太离谱的拆家都能防，建议收藏。
-你家猫咪最离谱的开锁操作是什么？评论区说说，记得关注收藏。"""
+这份物理隔绝加精力疏导的避坑清单，太离谱的拆家都能防。
+建议收藏！你家猫咪最离谱的开锁操作是什么？评论区说说。"""
 
 
 def _run(replies):
@@ -19,10 +19,13 @@ def _run(replies):
         calls.append(prompt)
         return replies.pop(0)
 
+    events = []
     fake = types.SimpleNamespace(generator=types.SimpleNamespace(_call_hermes_text=call),
+                                 store=types.SimpleNamespace(record_event=lambda *a: events.append(a)),
                                  PET_NARRATION_PROMPT=Pipeline.PET_NARRATION_PROMPT)
     draft = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
-    Pipeline._write_pet_narration(fake, draft, {"douyin_pet": {}})
+    Pipeline._write_pet_narration(fake, "j1", draft, {"douyin_pet": {}})
+    assert events and events[0][1] == "pet_narration_written"
     return draft["draft_meta"], calls
 
 
