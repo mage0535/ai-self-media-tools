@@ -96,6 +96,12 @@ ops repository; this entry covers the code.
   (all fallbacks 0.38-0.68, Zhihu/XHS failed the 0.72 artifact contract). The switch is now per image and skipped
   when an article provider chain is set. A title that cannot fit the titled cover (`wechat_cover_title_overflow`)
   no longer fails the article: the cover shows the title's main clause (before `：`/`|`/`——`), OCR-verified.
+- Lane binding (MED34, 11-04, Kuaishou staging r103): `Pipeline.create` replaced the brief lane
+  `real_world_ai_implementation` with the rulebook id `real_world_ai_implementation_v1`. The Kuaishou reference
+  samples carry the brief lane, so `generate_video` blocked `target_platform_same_lane_sample_missing`, and
+  `_bind_video_asset_semantics` skipped Kuaishou. The brief lane is now kept only when it is the rulebook lane
+  without the `_v1` suffix; any other lane (e.g. Xiaohongshu's brief lane vs its
+  `cat_dog_ai_knowledge_workflow_system` rule) is still replaced. `account_lane` is always the rulebook id.
 - Kuaishou scheduled auto-post (MED26, 11-04; owner: Kuaishou is an automatic scheduled post). An overnight slot
   with `"action": "schedule_publish"` (Kuaishou only) runs `content_platform/kuaishou_schedule.py` after the
   pipeline: `scripts/build_kuaishou_packet.py` on the rendered video dir (schedule = the window's CST date at
