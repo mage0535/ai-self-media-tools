@@ -1374,6 +1374,7 @@ class Pipeline:
 
     PET_NARRATION_PROMPT = (
         "把下面的抖音宠物短视频草稿改写成恰好8段口播文案。要求：每段8-40个汉字、单独一段、段与段之间空一行；"
+        "每段是一句话，句中只用逗号，只在段末用一个句号、问号或感叹号；"
         "第1段是3秒钩子（反问或反常识）；第2-6段讲草稿里的具体做法，至少3段带阿拉伯数字（如第1步、2个、3天）；"
         "全文用一个真实情绪词（如崩溃、后悔、心疼、离谱）；第7段把做法归纳成避坑清单；"
         "第8段必须同时写出“建议收藏”和一个引导评论区留言的开放问题（不要问学会了吗）。只用草稿里的事实，不新增数据、"
@@ -1402,6 +1403,10 @@ class Pipeline:
             beats=[re.sub(r'\s+','',line) for line in str(text).splitlines() if line.strip()]
             script='\n\n'.join(beats)
             failed=[] if len(beats)==MediaBridge.VIDEO_SCRIPT_MAX_SEGMENTS and all(lo<=len(b)<=hi for b in beats) else ['beat_shape']
+            # r96: compile_video_script re-splits at 。！？, so a two-sentence beat became two beats and the 8-beat cut dropped
+            # the closing line; only a narration the compiler keeps unchanged is what the gate actually checked.
+            if not failed and MediaBridge.compile_video_script({'draft_meta':{'video_script':script}})['script']!=script:
+                failed.append('beat_resplit')
             failed+=[name for name,check in validate_script(script,'zh')['checks'].items() if not check['passed']]
             attempts.append({'failed':failed,'script_sha256':hashlib.sha256(script.encode()).hexdigest()})
             if not failed:

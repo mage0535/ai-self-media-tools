@@ -2,14 +2,14 @@ import types
 
 from content_platform.pipeline import Pipeline
 
-GOOD = """你是不是也以为养两只高智商猫是双倍快乐？现实往往是翻车现场。
+GOOD = """你是不是也以为养两只高智商猫是双倍快乐，现实往往是翻车现场？
 第1步，门窗和柜门升级双重物理童锁，选旋转或暗扣卡扣。
 第2步，零食和主粮全部收进咬不穿的金属铁盒并密封好。
 分区分开喂食，切断2只猫相互掩护盗食的可能。
 第3步，每天提供3套难度递增的漏食玩具消耗精力。
 若疑似吞食异物，必须立即送医由兽医确诊排查。
 这份物理隔绝加精力疏导的避坑清单，太离谱的拆家都能防。
-建议收藏！你家猫咪最离谱的开锁操作是什么？评论区说说。"""
+建议收藏，你家猫咪最离谱的开锁操作是什么，评论区说说？"""
 
 
 def _run(replies):
@@ -39,3 +39,11 @@ def test_narration_failing_the_gate_twice_leaves_the_old_path():
     meta, calls = _run(["一只猫\n两只猫", "只有一行文字但是没有任何结尾"])
     assert len(calls) == 2 and meta["pet_narration_audit"]["accepted"] is False
     assert "video_script" not in meta
+
+
+def test_two_sentence_beat_that_the_compiler_would_split_is_rejected():
+    split = GOOD.replace("你是不是也以为养两只高智商猫是双倍快乐，现实往往是翻车现场？",
+                         "你是不是也以为养两只高智商猫是双倍快乐？现实往往是翻车现场！")
+    meta, calls = _run([split, split])
+    assert meta["pet_narration_audit"]["accepted"] is False
+    assert meta["pet_narration_audit"]["attempts"][0]["failed"] == ["beat_resplit"]
