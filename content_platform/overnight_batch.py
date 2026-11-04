@@ -45,9 +45,11 @@ MANUAL_HANDOFF_PLATFORMS = {
 # without changing the publisher-facing platform name.
 STRATEGY_PLATFORM_ALIASES = {"twitter": "x"}
 
-# WeChat's platform gate (account/same-lane/GitHub inputs) and Kuaishou's video preflight
-# are produced only by generation-time native source collection.
-SOURCE_COLLECTED_PLATFORMS = {"wechat", "kuaishou"}
+# WeChat's platform gate (account/same-lane/GitHub inputs) is produced only by generation-time
+# native source collection. Kuaishou left this set on 11-04 (MED26): its native same-lane search
+# needs a www.kuaishou.com web login (the creator login is rejected, "No Login"), so it uses the
+# labelled cross-platform overnight benchmarks and the overnight video preflight, like douyin_pet.
+SOURCE_COLLECTED_PLATFORMS = {"wechat"}
 
 # A source's popularity is not enough to make it a channel topic.  These
 # defaults prevent a general-news item from being turned into an AI or pet
@@ -256,6 +258,7 @@ def build_due_tasks(
                 isinstance(value, dict) and value.get("scenario_contract")
                 for value in (raw, raw.get("dual_lane_work_plan"), raw.get("production_intent")))
             analysed, ineligible, pre_analysis = 0, 0, None
+            ineligible_titles = []  # Kept so a slot with no eligible scenario can be diagnosed (MED30).
             for candidate in candidates:
                 identity = _topic_identity(candidate)
                 if identity in reserved_topic_fingerprints:
@@ -288,6 +291,7 @@ def build_due_tasks(
                                 break
                         if analyses[key][0] is None:
                             ineligible += 1
+                            ineligible_titles.append(str(candidate.get("title") or "")[:120])
                             continue
                         pre_analysis = analyses[key]
                     selected = candidate
@@ -296,7 +300,7 @@ def build_due_tasks(
             if not selected and ineligible:
                 row.update({"topic": candidates[0]["title"], "state": "blocked",
                             "reason": "topic analysis returned no eligible scenario",
-                            "ineligible_candidates_analysed": ineligible})
+                            "ineligible_candidates_analysed": ineligible, "ineligible_titles": ineligible_titles})
                 tasks.append(row)
                 continue
             if not selected:

@@ -70,7 +70,9 @@ class TestZhihuGeneratorGateIntegration:
     def test_full_ops_gate_passes_for_zhihu_with_generator_output(self):
         gen = DraftGenerator({})
         draft = gen._coerce_provider_draft(json.dumps(_zhihu_draft_payload()), "t")
-        normalized = gen._normalize(draft, _zhihu_context(), "hermes-cli", "t", {"platform": "zhihu"})
+        samples = [{"title": f"s{i}", "canonical_url": f"https://www.zhihu.com/question/{i}", "body": "开头。\n## 小节\n正文"} for i in range(3)]
+        brief = {"platform": "zhihu", "viral_collection": {"tool": "native.platform_hot_adapters"}, "viral_breakdown": {"samples": samples}}
+        normalized = gen._normalize(draft, _zhihu_context(), "hermes-cli", "t", brief)
         dm = normalized["draft_meta"]
         packet = {}
         for source in (dm.get("strategy", {}), dm, normalized):
@@ -85,3 +87,10 @@ class TestZhihuGeneratorGateIntegration:
         failed = [k for k, v in gates.items() if not v.get("passed")]
         assert not failed, f"gate failures: {failed}"
         assert gates["content_workflow_inputs"]["passed"] is True
+
+    def test_same_lane_gate_fails_without_collected_samples(self):
+        gen = DraftGenerator({})
+        draft = gen._coerce_provider_draft(json.dumps(_zhihu_draft_payload()), "t")
+        dm = gen._normalize(draft, _zhihu_context(), "hermes-cli", "t", {"platform": "zhihu"})["draft_meta"]
+
+        assert _full_ops_gates({**dm.get("strategy", {}), **dm, "platform": "zhihu"}, "zhihu")["same_lane_account_benchmark"]["passed"] is False

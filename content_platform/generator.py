@@ -1160,10 +1160,24 @@ class DraftGenerator:
         content_form = str((context.get("strategy") or {}).get("content_form") or "")
         if "article" not in content_form and content_form != "evidence_answer":  # zhihu answers use the article gate
             return text
-        compact_len = len("".join(text.split()))
-        if compact_len <= 3000:
+        # Model-written editor notes ("配图位置：…") are not reader content (MED27).
+        text = re.sub(r"(?m)^[ \t>*_-]*[（(【\[]?\s*(?:配图|插图)(?:位置|建议)\s*[:：].*\n?", "", text).strip()
+
+        def size(value):
+            return len("".join(value.split()))
+
+        if size(text) <= 3000:
             return text
-        target_raw = max(1200, int(len(text) * (2850 / max(compact_len, 1))))
+        # Drop whole middle sections, keep the opening and the article's own conclusion; no template ending.
+        parts = re.split(r"(?m)^(?=## )", text)
+        if len(parts) >= 3 and size(parts[0] + parts[-1]) <= 3000:
+            kept = [parts[0]]
+            for part in parts[1:-1]:
+                if size("".join(kept) + part + parts[-1]) <= 3000:
+                    kept.append(part)
+            if len(kept) > 1:
+                return ("".join(kept) + parts[-1]).strip()
+        target_raw = max(1200, int(len(text) * (2850 / max(size(text), 1))))
         def outside_code(value):
             # Never end inside a fenced code block.
             return value[:value.rfind("```")].rstrip() if value.count("```") % 2 else value
@@ -1173,15 +1187,9 @@ class DraftGenerator:
         if boundary > 1200:
             candidate = candidate[:boundary].rstrip()
         candidate = outside_code(candidate)
-        if re.search(r"[\u4e00-\u9fff]", text):
-            conclusion = "\n\n## 落地要点\n\n保留核心思路、一个具体流程和一份复核清单；与读者决策或行动无关的内容可以删去。"
-        else:
-            conclusion = "\n\n## Practical takeaway\n\nKeep the core idea, one concrete workflow, and one review checklist. Remove anything that does not help the reader decide or act."
-        fitted = candidate + conclusion
-        while len("".join(fitted.split())) > 3000 and len(candidate) > 1200:
+        while size(candidate) > 3000 and len(candidate) > 1200:
             candidate = outside_code(candidate[: int(len(candidate) * 0.9)].rstrip())
-            fitted = candidate + conclusion
-        return fitted
+        return candidate
 
     def _attach_article_packet_evidence(self, topic, brief, body, context, draft_meta):
         strategy = draft_meta.get("strategy") or {}
@@ -1258,9 +1266,10 @@ class DraftGenerator:
             strategy_brief.update({
                 "full_ops_workflow": {"required": True, "platforms": [platform], "cross_platform_sources": sources},
                 "account_analysis": {"source": "pipeline_history", "account_lane": platform, "current_content_data": "latest available performance and queue state", "audience_profile": brief.get("audience") or "builders"},
-                "same_lane_account_analysis": {"source": "same_lane_hot_data", "samples": ["sample_a", "sample_b", "sample_c"], "borrowable_patterns": ["hook", "structure", "save value"]},
+                "same_lane_account_analysis": self._observed_same_lane(brief),
                 "cross_platform_trend_analysis": {"source": "trend_collector", "required_sources": sources, "topic_clusters": [topic_text]},
-                "topic_selection": {"selected_topic": topic_text, "selection_reason": "ranked trend and channel fit"},
+                "topic_selection": {"selected_topic": topic_text, "selection_reason": "ranked trend and channel fit",
+                                    **({"decision": brief["topic_decision"]} if isinstance(brief.get("topic_decision"), dict) else {})},
                 "platform_source_matrix": platform_source_matrix,
                 "quantity_plan": {"final_count": 1, "decision_reason": "one channel-specific piece for this run"},
                 "content_generation_brief": {"source_inputs": ["account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection", "quantity_plan", "content_brief"], "asset_mix_plan": {"ai_generated": True, "real_material_retrieval": True, "ai_edit_real_material": True}, "humanization_plan": {"hook": True, "body": True, "voice": "casual"}},
@@ -1450,6 +1459,23 @@ class DraftGenerator:
         except Exception:
             pass
         return "problem-cause-solution"
+
+    @staticmethod
+    def _observed_same_lane(brief):
+        """Same-lane samples the overnight benchmark actually collected; none means the gate fails (MED28)."""
+        breakdown = brief.get("viral_breakdown") if isinstance(brief.get("viral_breakdown"), dict) else {}
+        samples, patterns = [], []
+        for row in breakdown.get("samples") or []:
+            if not isinstance(row, dict) or not row.get("canonical_url"):
+                continue
+            samples.append({key: row.get(key) for key in ("title", "author", "canonical_url", "metrics", "published_at", "content_form")})
+            text = str(row.get("body") or row.get("copy_or_script") or "")
+            opening = re.split(r"(?<=[。！？!?])", text.strip(), maxsplit=1)[0][:80]
+            headings = [h.strip() for h in re.findall(r"(?m)^#{1,3}\s*(.+)$", text)][:5]
+            patterns.append({"sample": row["canonical_url"], "observed_opening": opening, "observed_headings": headings})
+        collection = brief.get("viral_collection") if isinstance(brief.get("viral_collection"), dict) else {}
+        return {"source": (collection.get("tool") or "viral_breakdown") if samples else "", "samples": samples,
+                "borrowable_patterns": patterns, "reference_use": "analysis_only_no_reuse"}
 
     @staticmethod
     def _platform_source_matrix(platform, sources, topic, brief=None):

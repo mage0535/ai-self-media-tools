@@ -1761,6 +1761,24 @@ class Pipeline:
             variants['wechat']={field:copy.deepcopy(scoped[field]) for field in ('title','body','draft_meta')}
         else:draft['draft_meta']=scoped['draft_meta']
 
+    @staticmethod
+    def _rendered_asset_mix(assets, draft):
+        """Declare the asset mix the render actually produced; the rulebook passes asset_mix_plan when the
+        declaration matches asset_provenance (MED28: the pre-render plan claimed stock photos for AI images)."""
+        def describe(rows):
+            return "; ".join(f"{row.get('scene_id') or 'image'}: {row.get('source_url') or ''}" for row in rows)[:600]
+        real = [row for row in assets if row.get("origin") == "real_photo"]
+        generated = [row for row in assets if row.get("origin") in {"ai_generated", "ai_edited"}]
+        cover = next((row for row in assets if row.get("scene_id") == "cover"), {})
+        original = ((draft.get("draft_meta") or {}).get("brief") or {}).get("content_mode") == "original_knowledge"
+        return {
+            "ai_generated": describe(generated),
+            "real_material_retrieval": "" if original else (
+                "licensed stock photo search ran first for every image; kept: " + (describe(real) or "none (weak matches fell back to generated scenes)")),
+            "ai_edit_real_material": ("cover title rendered over the " + str(cover.get("origin") or "") + " background") if cover.get("cover_render_evidence") else "",
+            "source": "asset_provenance",
+        }
+
     def _write_article_artifact_manifest(self, job_id, draft):
         """Bind the generated packet, cover, and section images to one readable manifest."""
         meta = draft.get("draft_meta") or {}
@@ -1771,7 +1789,15 @@ class Pipeline:
         output_dir.mkdir(parents=True, exist_ok=True)
         packet_hash = hashlib.sha256(json.dumps({"title": draft.get("title"), "body": draft.get("body")}, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         cover = meta.get("cover_design") or {}
-        mappings = meta.get("section_image_map") or []
+        # The rendered map records the real image sources; the draft_meta map is only the generation plan (MED28).
+        mappings = []
+        mapping_path = output_dir / "section_image_map.json"
+        if mapping_path.is_file():
+            try:
+                mappings = json.loads(mapping_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                mappings = []
+        mappings = mappings or meta.get("section_image_map") or []
         artifact_rows = []
         provenance_path = output_dir / "asset_provenance.json"
         provenance = {}
@@ -1790,13 +1816,11 @@ class Pipeline:
                 "asset_hash": row.get("checksum", ""),
                 "semantic_evidence": {"score": evidence.get("semantic_match_score", 0), "reason": evidence.get("match_reason", "")},
             })
-        if not mappings:
-            mapping_path = output_dir / "section_image_map.json"
-            if mapping_path.is_file():
-                try:
-                    mappings = json.loads(mapping_path.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    mappings = []
+        if provenance:
+            meta["asset_mix_plan"] = self._rendered_asset_mix(list(provenance.values()), draft)
+            brief_plan = ((meta.get("strategy_brief") or {}).get("content_generation_brief") or {})
+            if isinstance(brief_plan, dict) and "asset_mix_plan" in brief_plan:
+                brief_plan["asset_mix_plan"] = meta["asset_mix_plan"]
         cover_record = next((row for row in artifact_rows if row["kind"] == "cover"), None)
         if cover_record:
             cover = {**cover, **{key: cover_record[key] for key in ("source", "rights", "asset_hash", "semantic_evidence")}}

@@ -182,3 +182,11 @@ def test_beat_retry_prompt_carries_the_reviewer_reason(tmp_path):
             patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda *a: None):
         bridge._generate_image(job, tmp_path / "out", {"provider": "auto"}, semantic_requirements=requirements)
     assert "The reviewer rejected it because: omits the required veterinary consultation" in calls[1]
+
+
+def test_article_images_try_a_real_photo_first_except_original_knowledge():
+    chain = MediaBridge._article_image_chain({"platforms": ["zhihu"]}, {"role": "section"})
+    original = MediaBridge._article_image_chain({"platforms": ["juejin"], "brief": {"content_mode": "original_knowledge"}}, {"role": "cover"})
+
+    assert chain.split(",")[:2] == ["stock", "go_gemini"]
+    assert "stock" not in original.split(",")

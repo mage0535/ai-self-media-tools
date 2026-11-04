@@ -961,6 +961,10 @@ class MediaBridge:
                     for previous in used_visual_signatures
                 ):
                     break
+                if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS:
+                    # A repeated stock photo would come back for the same query; use a generated scene instead.
+                    item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
+                        name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
                 if attempt == 1 and extra_args[extra_args.index("--provider") + 1] == "auto":
                     provider_args = list(extra_args)
                     provider_args[provider_args.index("--provider") + 1] = "pollinations"
@@ -1036,13 +1040,15 @@ class MediaBridge:
     @staticmethod
     def _article_image_chain(job, item):
         """Provider order for titled-cover article lanes (11-03): SenseNova stamps a visible logo, so it is the
-        last resort; the Xiaohongshu main visual tries a licensed real photo first (XHS flags AI main visuals)."""
+        last resort. Every article image tries a licensed real photo first: the channel contracts ask for real-scene
+        backgrounds and all-AI images failed the 11-05 reviews (MED29); a weak photo still gives way to a generated
+        scene in the semantic retry."""
         platforms = {str(value).casefold() for value in job.get("platforms") or []}
         if item.get("semantic_requirement") or not platforms.intersection(TITLED_COVER_PLATFORMS):
             return ""
-        chain = ["go_gemini", "cloudflare", "pollinations", "sense_nova"]
-        if "xiaohongshu" in platforms and item.get("role") == "cover":
-            chain.insert(0, "stock")
+        chain = ["stock", "go_gemini", "cloudflare", "pollinations", "sense_nova"]
+        if (job.get("brief") or {}).get("content_mode") == "original_knowledge":
+            chain.remove("stock")  # Original-knowledge jobs only take newly generated assets.
         return ",".join(chain)
 
     @staticmethod

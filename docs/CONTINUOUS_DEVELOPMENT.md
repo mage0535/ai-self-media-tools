@@ -59,6 +59,23 @@ ops repository; this entry covers the code.
   on the same sections and was dropped. Pollinations' free tier allows one image per 45 s per IP; on 402
   `FREE_LIMIT` it waits the stated "Retry after Ns" once (at most 60 s). Cloudflare's free tier is 10,000
   neurons per day, reset 00:00 UTC (16:00 PST, after the overnight window): staging spends the same quota.
+- Native review findings, 11-05 CST window: Juejin, Zhihu and Xiaohongshu were all blocked by the real
+  native quality reviewer (`actual_quality_review_failed`, 20-24 failed checks each). Shared causes and fixes:
+  - MED27: `section-0N.png` files held JPEG bytes (`image_provider._match_suffix` re-encodes them as PNG);
+    model-written editor notes ("配图位置：…", "插图位置：…") stayed in the public body and
+    `_fit_article_length` appended a fixed "## 落地要点" ending. The fitter now strips those notes, drops
+    whole middle `## ` sections and keeps the article's own conclusion, with no template text.
+  - MED28: `generator._attach_article_packet_evidence` filled the strategy packet with templates
+    (`samples: ["sample_a","sample_b","sample_c"]`, a Pixabay *search page* as `source_url`,
+    `rights_cleared: True`, `semantic_match_score: 0.85` before any image existed). The reviewer rejects this.
+    `same_lane_account_analysis` now comes from the brief's collected `viral_breakdown` samples (URL, title,
+    metrics, observed opening and headings); with no samples the same-lane gate fails. The article manifest
+    reads the rendered `section_image_map.json` (real provider, license, score) before the draft plan.
+    Still template (open): account analysis, quantity decision, the pre-render background plan.
+  - MED29: every article image was go_gemini; the contracts ask for real-scene photos. Article images now try
+    `stock` (Pexels, then Pixabay) first; a weak or repeated photo gives way to a generated scene. The stock
+    query is a 2-5 word English photo query from the gateway text model (the keyword map produced
+    "editorial illustration 工业质检工业", which matched a newspaper photo). `original_knowledge` jobs skip stock.
 - Overnight video preflight (MED17, 11-03): `scripts/film_renderer.py` refuses to render without
   `video_preflight.json`. Only the native Kuaishou source step used to bind one, so the overnight
   douyin_pet lane could never render. `video_preflight_inputs.bind_overnight_video_preflight` now

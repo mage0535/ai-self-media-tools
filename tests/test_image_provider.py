@@ -656,3 +656,26 @@ def test_compacted_fallback_image_is_not_cached(tmp_path):
             patch("content_platform.image_provider._pollinations_image", side_effect=fake_pollinations):
         result = generate_image(prompt, tmp_path / "b.png", provider="pollinations")
     assert seen[-1] == "A clerk sorts mail." and result["prompt_rewrite"]["mode"] == "model_rewrite"
+
+
+def test_jpeg_bytes_under_png_name_become_real_png(tmp_path):
+    from PIL import Image
+    from content_platform.image_provider import _match_suffix
+
+    out = tmp_path / "section-01.png"
+    Image.new("RGB", (8, 8), "red").save(out, format="JPEG")
+    _match_suffix(out)
+
+    assert out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_stock_query_uses_short_english_words_and_falls_back_to_the_map():
+    import uuid
+    from unittest.mock import patch
+    from content_platform import image_provider as ip
+
+    with patch.object(ip, "_gateway_text", return_value="Industrial camera conveyor inspection"):
+        assert ip._english_stock_query("YOLO工业质检 " + uuid.uuid4().hex) == "industrial camera conveyor inspection"
+    with patch.object(ip, "_gateway_text", return_value="工业相机"):
+        prompt = "工业质检 " + uuid.uuid4().hex
+        assert ip._english_stock_query(prompt) == ip._stock_query(prompt)
