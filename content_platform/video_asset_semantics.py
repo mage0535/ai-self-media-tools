@@ -54,7 +54,8 @@ def admit_review(path,topic,requirement,review):
             or review.get('image_observed') is not True):
         # The evidence travels with the block so a run report can tell a strict gate from a bad image.
         raise ValueError(f"semantic_asset_match_rejected:beat={requirement['intent']['beat_id']}:score={score}"
-                         f":match={review.get('requirement_match')}:observed={review.get('image_observed')}")
+                         f":match={review.get('requirement_match')}:observed={review.get('image_observed')}"
+                         f":why={' '.join(str(review.get('reason') or '').split())[:200]}")
     context=review_context(topic,requirement)
     if review.get('native_context'):
         identity=review['native_context']

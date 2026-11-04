@@ -73,3 +73,21 @@ def test_two_sentence_beat_that_the_compiler_would_split_is_rejected():
     meta, calls = _run([split, split, split])
     assert meta["pet_narration_audit"]["accepted"] is False
     assert meta["pet_narration_audit"]["attempts"][0]["failed"] == ["beat_resplit"]
+
+
+def test_prompt_asks_for_one_scene_per_beat():
+    # r100: beat s04 listed three actions plus an invisible goal; its image scored 0.52.
+    assert "一段只写一个画面" in Pipeline.PET_NARRATION_PROMPT
+
+
+def test_rejected_beat_carries_the_reviewer_reason(tmp_path):
+    import pytest
+    from content_platform.video_asset_semantics import admit_review, build_requirements
+    scenes = [{"beat_id": f"s0{i + 1}", "visual_mode": "photo", "template_id": "t", "group_motion": "m"} for i in range(8)]
+    requirement = build_requirements("\n".join(f"第{i}段" for i in range(8)), scenes)[3]
+    image = tmp_path / "s04.png"
+    image.write_bytes(b"x")
+    review = {"status": "evaluated", "requirement_match": False, "score": 0.52, "image_observed": True,
+              "reason": "shows one cat at a bowl;\n no second room or closed door"}
+    with pytest.raises(ValueError, match=r"beat=s04:score=0.52:match=False:observed=True:why=shows one cat at a bowl; no second room"):
+        admit_review(image, "topic", requirement, review)
