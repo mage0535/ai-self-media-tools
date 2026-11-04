@@ -104,6 +104,9 @@ def test_rejected_semantic_beat_is_regenerated_once_with_its_claim_first(tmp_pat
     assert len(calls) == 3
     assert calls[0].startswith("Video topic: 两只猫\nScene to show: 两只猫并排睡觉") and "一只猫望风另一只开柜门" in calls[2]
     assert [image["semantic_review"]["requirement_match"] for image in recorded["images"]] == [True, True]
+    # A fragment beat is drawn with its neighbouring narration as context.
+    assert "Neighbouring narration, for what this line refers to (do not illustrate it separately): 一只猫望风另一只开柜门" in calls[0]
+    assert "refers to (do not illustrate it separately): 两只猫并排睡觉" in calls[1]
 
 
 def test_rejected_semantic_beat_gets_a_second_retry_told_what_the_reviewer_saw(tmp_path):

@@ -890,12 +890,17 @@ class MediaBridge:
             from .video_asset_semantics import validate_requirement
             prompts=[]
             framing=self._beat_framing(job,len(semantic_requirements))
+            claims=[validate_requirement(item)['intent']['claim'] for item in semantic_requirements]
             for index,requirement in enumerate(semantic_requirements):
                 requirement=validate_requirement(requirement);intent=requirement['intent']
+                # 11-03 r91: beat s06 "彻底切断物理突破的支点。" names no subject; three images scored 0.50-0.68.
+                # The neighbouring narration says what it refers to (cabinet locks the cats push open).
+                around=' / '.join(claims[max(0,index-1):index]+claims[index+1:index+2])
                 prompts.append({'role':'section','section':intent['beat_id'],'adjacent_text':intent['claim'],
                     'semantic_requirement':requirement,'purpose':intent['content_match_reason'],
                     # A beat can be a fragment ("第一步，物理隔离所有机关"); the topic keeps its subject.
                     'prompt':'Video topic: '+str(job.get('topic') or job.get('title') or '')+'\nScene to show: '+intent['claim']+'\n'
+                        +(('Neighbouring narration, for what this line refers to (do not illustrate it separately): '+around+'\n') if around else '')
                         +(('Camera framing: '+framing[index]+'\n') if index in framing else '')+
                         'Depict the concrete objects, actions and relationships for this exact illustrative requirement. '
                         'Do not depict an asserted successful outcome or substitute text labels for actual visible subject. '

@@ -2038,6 +2038,13 @@ class Pipeline:
                 plan['video_preflight_ref']=bind_video_preflight(self.store,platform_job,platform,preflight_brief,plan,
                     str(meta.get('video_script') or ''),owner)
                 meta['video_toolchain_plan']=plan;platform_job['draft_meta']=meta
+            elif preflight_brief.get('platform_source_matrix') and preflight_brief.get('hot_viral_samples'):
+                from .video_preflight_inputs import bind_overnight_video_preflight
+                meta=platform_job.get('draft_meta') or {};plan=meta.get('video_toolchain_plan') or {}
+                # The renderer checks the preflight against the compiled narration, so bind exactly that script.
+                plan['video_preflight_ref']=bind_overnight_video_preflight(self.store,platform_job,platform,preflight_brief,plan,
+                    self.media.compile_video_script(platform_job)['script'])
+                meta['video_toolchain_plan']=plan;platform_job['draft_meta']=meta
             try:
                 artifact = runner.run(
                     step,

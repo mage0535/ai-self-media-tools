@@ -67,7 +67,13 @@ def validate_video_preflight(output_dir: Path, platform: str, *, store=None) -> 
         failures.append("research_attempted_sources_below_5")
     if not original and int(research.get("successful_sources") or 0) < 3:
         failures.append("research_successful_sources_below_3")
-    if not original and research.get("platform_native_verified") is not True:
+    # Owner rule 11-02: where the platform cannot be read, a labelled same-genre cross-platform benchmark is the
+    # research evidence (overnight lanes); it is never treated as native and is never a degraded override.
+    labelled_cross_platform = (payload.get("version") == "overnight_video_preflight_v1"
+                               and research.get("evidence_scope") == "cross_platform"
+                               and bool(str(research.get("cross_platform_source") or "").strip())
+                               and int(research.get("hot_viral_sample_count") or 0) > 0)
+    if not original and research.get("platform_native_verified") is not True and not labelled_cross_platform:
         # A degraded research pack is evidence of a blocker, not permission to render.
         # Only an explicit, separately reviewed override may produce a degraded draft.
         if not (research.get("degraded_source") is True and payload.get("allow_degraded_render") is True):

@@ -269,6 +269,45 @@ def bind_video_preflight(store,job,platform,brief,plan,script,owner):
     return bound
 
 
+OVERNIGHT_PREFLIGHT_STEPS=('run_content_hygiene','generate_content','validate_factual_claims','run_safety_gate','run_quality_gate')
+
+
+def bind_overnight_video_preflight(store,job,platform,brief,plan,script):
+    """Overnight video lanes (11-03 r90: douyin_pet reached film_renderer for the first time and was refused
+    'video_preflight.json missing'; only the native Kuaishou source step ever wrote one). The research pack is the
+    overnight benchmark matrix in the brief; cross-platform evidence counts only when labelled with its source
+    platform (owner rule 11-02). Same immutability, store receipt and step receipts as bind_video_preflight."""
+    job_id=job['id'];matrix=brief.get('platform_source_matrix') or {}
+    if str(matrix.get('platform') or '')!=platform:raise ValueError('overnight_preflight_matrix_platform_mismatch')
+    scope=matrix.get('evidence_scope');labelled=str(matrix.get('candidate_source') or brief.get('cross_platform_source') or '')
+    if scope not in {'platform_native','cross_platform'} or scope=='cross_platform' and not labelled:
+        raise ValueError('overnight_preflight_evidence_scope_unlabelled')
+    samples=brief.get('hot_viral_samples') or [];topic=str(brief.get('content_blueprint',{}).get('selected_topic') or '')
+    if not samples or topic!=job['topic']:raise ValueError('overnight_preflight_topic_or_samples_not_bound')
+    receipts={};outputs={}
+    for name in OVERNIGHT_PREFLIGHT_STEPS:outputs[name],receipts[name]=_step(store,job_id,name)
+    claims=outputs['validate_factual_claims'];risk=outputs['run_safety_gate'];quality=outputs['run_quality_gate']
+    allow=(outputs['run_content_hygiene'].get('status') in {'pass','review'} and claims.get('passed') is True
+        and risk.get('level') in {'pass','review'} and quality.get('passed') is True)
+    script_sha=hashlib.sha256(script.encode()).hexdigest()
+    payload={'version':'overnight_video_preflight_v1','job_id':job_id,'platform':platform,'production_verified':False,
+        'research_pack':{'attempted_sources':int(matrix.get('sources_attempted') or 0),'successful_sources':int(matrix.get('sources_succeeded') or 0),
+            'platform_native_verified':scope=='platform_native','evidence_scope':scope,'cross_platform_source':labelled if scope=='cross_platform' else '',
+            'hot_viral_sample_count':len(samples),'hot_viral_samples_sha256':digest(samples),'source_matrix_sha256':digest(matrix)},
+        'topic_selection':{'selected':True,'reason':str(matrix.get('platform_fit_reason') or ''),'topic':topic},
+        'content_brief':brief.get('content_blueprint'),'asset_plan':plan_contract(plan),
+        'quality_gates':{'allow_render':allow,'native_step_receipts':receipts},
+        'script_sha256':script_sha,'plan_contract_sha256':digest(plan_contract(plan))}
+    root=store.path.parent/'jobs'/job_id/'video-preflight';root.mkdir(parents=True,exist_ok=True);path=root/(platform+'.json')
+    encoded=json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+    if path.exists() and path.read_bytes()!=encoded:raise ValueError('native_video_preflight_immutable_conflict')
+    if not path.exists():
+        with path.open('xb') as stream:stream.write(encoded)
+    bound={'job_id':job_id,'platform':platform,'path':str(path),'sha256':hashlib.sha256(encoded).hexdigest()}
+    store.record_event(job_id,'native_video_preflight_bound',bound)
+    return bound
+
+
 def materialize_video_preflight(store,job,plan,script,output_dir):
     from .video_preflight import validate_video_preflight
     platforms=job.get('platforms') or []
