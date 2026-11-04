@@ -65,6 +65,22 @@ ops repository; this entry covers the code.
   in staging.
 - Video beat prompts include the neighbouring narration lines (a beat can be a fragment with no
   subject, e.g. "彻底切断物理突破的支点。").
+- Pet video narration (MED19-MED21, 11-03): the douyin_pet narration used to be the first 8 slices
+  of the article draft, which has no hook, no closing and no save cue, so the renderer's
+  `video_script_gate` refused it. `Pipeline._write_pet_narration` (runs before
+  `_freeze_pet_video_beats`, only when the douyin_pet plan is required and the draft has no
+  `video_script`) asks the text model for exactly 8 one-sentence beats of 20-32 characters: beat 1
+  the hook, beats 2-6 steps with at least 3 Arabic numerals, beat 7 the checklist, beat 8 "建议收藏"
+  plus an open comment question. Every beat must name a visible scene, because every beat is
+  illustrated and its image is reviewed. Facts come from the draft only and the vet boundary is
+  kept. Up to 3 attempts; a retry carries the failure and the per-beat lengths. A candidate is
+  rejected on `beat_shape` (not 8 beats, or a beat outside 8-40 characters), `beat_resplit`
+  (`compile_video_script` does not split it back into the same 8 beats) or any `video_script_gate`
+  failure. The audit is in `meta.pet_narration_audit` and the store event `pet_narration_written`.
+- Hook heuristic (MED18): `humanize._score` also counts a question in the first two lines and the
+  "你以为…其实/结果/没想到…" turn as Chinese hook signals.
+- Beat image retries (MED20): a regeneration prompt carries the reviewer's rejection reason
+  ("The reviewer rejected it because: ... Include what is missing.").
 - Review timeouts: the vision review subprocess times out at 180 s; a timeout re-reviews the same
   pixels once instead of counting as a 0.0 rejection.
 - Rulebook `channel_rules.xiaohongshu.quality_gate_definitions` tells the native reviewer how to
