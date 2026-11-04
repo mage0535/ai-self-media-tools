@@ -979,8 +979,9 @@ def execute(args):
             creative_history={platform: recent_combinations(store, platform)
                               for platform in {str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)}},
         )
-        from .overnight_benchmarks import attach_breakdowns
+        from .overnight_benchmarks import attach_account_snapshots, attach_breakdowns
         attach_breakdowns(prepared, report.get("items", []), Path(args.output).parent / "same-lane-benchmarks")
+        attach_account_snapshots(prepared, Path(args.output).parent / "performance-cycle-result.json")
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(prepared, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")

@@ -208,3 +208,22 @@ def test_pet_lane_falls_back_to_youtube_when_bilibili_refuses_and_asks_bilibili_
     assert brief["native_source_error"] == "bilibili_pet: bilibili_api_code_-352"
     assert calls == ["bilibili_pet"]
     assert [s["content_id"] for s in brief["hot_viral_samples"]] == ["yt1", "tt1"]
+
+
+def test_account_snapshot_binds_the_tasks_own_metrics_or_reason(tmp_path):
+    import json
+    from content_platform.generator import DraftGenerator
+    from content_platform.overnight_benchmarks import attach_account_snapshots
+
+    cycle = tmp_path / "performance-cycle-result.json"
+    cycle.write_text(json.dumps({"collection": {"collected_at": "t", "platforms": {
+        "zhihu": {"status": "backend_signal", "source_url": "https://www.zhihu.com/creator", "account_metrics": {"views": 9, "extra_metrics": {}}},
+        "xiaohongshu": {"status": "login_required", "reason": "state_file missing"}}}}), encoding="utf-8")
+    prepared = {"tasks": [{"platform": "zhihu", "brief": {}}, {"platform": "xiaohongshu", "brief": {}}]}
+
+    attach_account_snapshots(prepared, cycle)
+    zhihu = DraftGenerator._observed_account(prepared["tasks"][0]["brief"], "zhihu")
+    xhs = DraftGenerator._observed_account(prepared["tasks"][1]["brief"], "xiaohongshu")
+
+    assert zhihu["current_content_data"] == "views=9" and zhihu["source"] == "https://www.zhihu.com/creator"
+    assert xhs["current_content_data"] == "unavailable: login_required state_file missing"

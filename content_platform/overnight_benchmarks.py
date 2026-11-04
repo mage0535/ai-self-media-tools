@@ -7,6 +7,7 @@ other ready rows are blocked with the reason instead of failing later.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -181,3 +182,26 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
             task["brief"].update(hot_viral_samples=samples,
                                  hot_viral_source_statuses={sample["source"]: "ready" for sample in samples})
     return prepared
+
+
+def attach_account_snapshots(prepared: dict[str, Any], cycle_path: str | Path) -> dict[str, Any]:
+    """Give each task its own account's collected metrics, or the stated reason they are unavailable (MED28b)."""
+    try:
+        cycle = json.loads(Path(cycle_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cycle = {}
+    platforms = ((cycle.get("collection") or {}).get("platforms") or {}) if isinstance(cycle, dict) else {}
+    for task in prepared.get("tasks") or []:
+        platform = str(task.get("platform") or "")
+        row = platforms.get(platform.split("_")[0]) if isinstance(platforms, dict) else None
+        if not isinstance(row, dict) or "brief" not in task:
+            continue
+        task["brief"]["account_snapshot"] = {
+            "platform": platform.split("_")[0], "status": str(row.get("status") or ""),
+            "collected_at": str((cycle.get("collection") or {}).get("collected_at") or ""),
+            "source_url": str(row.get("source_url") or ""),
+            "account_metrics": {k: v for k, v in (row.get("account_metrics") or {}).items() if k != "extra_metrics"},
+            "reason": str(row.get("reason") or "")[:200],
+        }
+    return prepared
+

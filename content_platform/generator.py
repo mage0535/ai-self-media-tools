@@ -1265,7 +1265,7 @@ class DraftGenerator:
             platform_source_matrix = self._platform_source_matrix(platform, sources, topic_text, {**context, **brief})
             strategy_brief.update({
                 "full_ops_workflow": {"required": True, "platforms": [platform], "cross_platform_sources": sources},
-                "account_analysis": {"source": "pipeline_history", "account_lane": platform, "current_content_data": "latest available performance and queue state", "audience_profile": brief.get("audience") or "builders"},
+                "account_analysis": self._observed_account(brief, platform),
                 "same_lane_account_analysis": self._observed_same_lane(brief),
                 "cross_platform_trend_analysis": {"source": "trend_collector", "required_sources": sources, "topic_clusters": [topic_text]},
                 "topic_selection": {"selected_topic": topic_text, "selection_reason": "ranked trend and channel fit",
@@ -1459,6 +1459,17 @@ class DraftGenerator:
         except Exception:
             pass
         return "problem-cause-solution"
+
+    @staticmethod
+    def _observed_account(brief, platform):
+        """The account's own collected metrics, or the collector's stated reason they are missing (MED28b)."""
+        snap = brief.get("account_snapshot") if isinstance(brief.get("account_snapshot"), dict) else {}
+        metrics = snap.get("account_metrics") or {}
+        data = (", ".join(f"{k}={v}" for k, v in metrics.items()) if metrics
+                else f"unavailable: {snap.get('status') or 'not collected'} {snap.get('reason') or ''}".strip())
+        return {"source": snap.get("source_url") or ("performance_cycle" if snap else "not_collected"),
+                "account_lane": platform, "current_content_data": data, "collected_at": snap.get("collected_at") or "",
+                "audience_profile": brief.get("audience") or "builders"}
 
     @staticmethod
     def _observed_same_lane(brief):
