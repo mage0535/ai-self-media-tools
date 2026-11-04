@@ -77,6 +77,9 @@ ops repository; this entry covers the code.
   rejected on `beat_shape` (not 8 beats, or a beat outside 8-40 characters), `beat_resplit`
   (`compile_video_script` does not split it back into the same 8 beats) or any `video_script_gate`
   failure. The audit is in `meta.pet_narration_audit` and the store event `pet_narration_written`.
+- One scene per beat (MED23, 11-04): a beat that lists several actions or an invisible goal cannot be matched by one
+  image (r100 s04 scored 0.52), so the narration prompt asks for one subject doing one visible action per beat.
+  `video_asset_semantics.admit_review` rejections now end with `:why=<reviewer reason>`; read it before changing a prompt.
 - Pet voice plan (MED22, 11-03): `scripts/film_renderer.py` voices the narration only from the file named in
   the preflight's `content_brief.video_source_planning.voice_plan_source` (path + sha256;
   `normal_film_audio.source_plan` raises `normal_voice_plan_source_changed` otherwise). After the narration is
