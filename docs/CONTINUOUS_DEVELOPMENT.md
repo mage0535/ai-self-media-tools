@@ -45,6 +45,16 @@ ops repository; this entry covers the code.
   tables as lines, closing kept, AI-assisted disclosure appended (`formatters._note_title/_note_text`).
 - Semantic review: images and video beats are checked by a vision model; video beats get up to two
   feedback-guided regenerations before the gate rejects.
+- Flux fallbacks (MED16, 11-03): Cloudflare and Pollinations run flux, which reads about 250 English
+  tokens. Fed our long Chinese section prompts it drew generic offices (all 12 article images in a
+  staging run scored 0.38-0.68, gate 0.72). `image_provider._english_scene_prompt` now has the gateway
+  text model (`IMAGE_PROMPT_REWRITE_MODEL`, default `gemini-3.8-flash-low`) rewrite the prompt into one
+  50-80 word English scene (architecture/data-flow sections become text-free isometric component
+  drawings); if that call fails, an English-first compacted prompt is used. The flux cache key carries
+  `SCENE_PROMPT_VERSION`; bump it when the rewrite instruction changes. Abstract technical sections
+  still score lower on flux than on go_gemini; the gate is unchanged.
+- Review timeouts: the vision review subprocess times out at 180 s; a timeout re-reviews the same
+  pixels once instead of counting as a 0.0 rejection.
 - Rulebook `channel_rules.xiaohongshu.quality_gate_definitions` tells the native reviewer how to
   judge each Xiaohongshu gate under the owner rules (labelled cross-platform samples, cold-start
   account data, real photo or disclosed text-free AI main visual, declared asset mix = provenance).
