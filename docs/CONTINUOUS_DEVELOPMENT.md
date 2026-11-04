@@ -77,6 +77,13 @@ ops repository; this entry covers the code.
   rejected on `beat_shape` (not 8 beats, or a beat outside 8-40 characters), `beat_resplit`
   (`compile_video_script` does not split it back into the same 8 beats) or any `video_script_gate`
   failure. The audit is in `meta.pet_narration_audit` and the store event `pet_narration_written`.
+- Pet voice plan (MED22, 11-03): `scripts/film_renderer.py` voices the narration only from the file named in
+  the preflight's `content_brief.video_source_planning.voice_plan_source` (path + sha256;
+  `normal_film_audio.source_plan` raises `normal_voice_plan_source_changed` otherwise). After the narration is
+  accepted, `Pipeline._write_pet_voice_plan` asks the text model for a per-beat style, semantic direction, rate,
+  pitch and pause (2 attempts, checked by `voice_plan.validate_voice_plan`; index and text are the accepted
+  beats). The result is written content-addressed to `data/jobs/<job>/video-preflight/pet-voice-plan-<sha16>.json`,
+  and `bind_overnight_video_preflight` copies the reference into the preflight's content brief.
 - Hook heuristic (MED18): `humanize._score` also counts a question in the first two lines and the
   "你以为…其实/结果/没想到…" turn as Chinese hook signals.
 - Beat image retries (MED20): a regeneration prompt carries the reviewer's rejection reason
