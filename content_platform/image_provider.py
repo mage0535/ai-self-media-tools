@@ -962,15 +962,27 @@ def _cloudflare_image(
     account_id = load_secret("CLOUDFLARE_ACCOUNT_ID")
     token = ((os.environ.get("CF_WORKER_KEY") or load_secret("CF_WORKER_KEY")) if explicit_worker_url else (load_secret("CLOUDFLARE_API_TOKEN") or load_secret("CF_WORKER_KEY")))
     model_name = model or os.environ.get("CLOUDFLARE_IMAGE_MODEL") or "@cf/black-forest-labs/flux-1-schnell"
-    width, height = _parse_size(size)
+    # Workers AI FLUX.1-schnell schema: prompt + steps only (forbid seed/width/height and the wrong steps field name).
+    # Magic 2026-10-31: steps required; extra fields rejected. Hard timeout 60-90s, no multi-retry hang.
+    try:
+        steps = int(os.environ.get("CLOUDFLARE_IMAGE_STEPS", "4"))
+    except ValueError:
+        steps = 4
+    steps = max(1, min(steps, 8))
+    try:
+        hard_timeout = int(os.environ.get("CLOUDFLARE_IMAGE_TIMEOUT", "75"))
+    except ValueError:
+        hard_timeout = 75
+    hard_timeout = max(30, min(hard_timeout, 90))
+    body_obj = {"prompt": prompt[:2048], "steps": steps}
     if worker_url:
+        # Custom worker proxy: still only schema-safe fields (do not forward width/height/model extras).
         url = worker_url
-        payload = json.dumps({"prompt": prompt, "width": width, "height": height, "model": model_name}).encode("utf-8")
+        payload = json.dumps(body_obj).encode("utf-8")
     elif account_id and token:
         quoted_model = urllib.parse.quote(model_name, safe="/@")
         url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{quoted_model}"
-        # 2026-08-16 修复：flux-1-schnell 不接受 seed/steps（HTTP 400），仅传 prompt
-        payload = json.dumps({"prompt": prompt[:2048]}).encode("utf-8")
+        payload = json.dumps(body_obj).encode("utf-8")
     else:
         raise ImageProviderError("Cloudflare image provider is not configured")
     headers = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"}
@@ -978,17 +990,24 @@ def _cloudflare_image(
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     try:
-        with _urlopen_retry(req, timeout=90, attempts=3) as resp:
+        # attempts=1: SSL/network hang must free media lane (capacity=1) within hard_timeout.
+        with _urlopen_retry(req, timeout=hard_timeout, attempts=1) as resp:
             content_type = resp.headers.get("Content-Type", "")
             body = resp.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:180]
         raise ImageProviderError(f"Cloudflare image call failed: HTTP {exc.code} {detail}") from exc
+    except TimeoutError as exc:
+        raise ImageProviderError(f"Cloudflare image call timed out after {hard_timeout}s") from exc
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", None)
+        label = type(reason).__name__ if reason is not None else type(exc).__name__
+        raise ImageProviderError(f"Cloudflare image call network error: {label}") from exc
     image = _extract_cloudflare_image(body, content_type)
     if len(image) < 2048:
         raise ImageProviderError("Cloudflare response was too small to be a valid image")
     output.write_bytes(image)
-    return {"provider": "cloudflare", "model": model_name, "mode": "generate"}
+    return {"provider": "cloudflare", "model": model_name, "mode": "generate", "steps": steps}
 
 
 def _extract_cloudflare_image(body: bytes, content_type: str) -> bytes:
