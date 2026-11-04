@@ -90,6 +90,12 @@ ops repository; this entry covers the code.
     same per-job-home defect: reuse was never detected and the history was discarded. Without
     `BGM_FINGERPRINT_REGISTRY` both use `/srv/hermes-runtime/data/bgm_fingerprint.json` when that dir exists.
     Tests must set the env var to a temp path (they would otherwise write the shared file on the server).
+- Provider switch leak (MED32, 11-04, staging r104 on d43): in `MediaBridge._generate_image` a repeated image
+  switched `--provider auto` to pollinations (attempt 1) / cloudflare (attempt 2) by rebinding the shared
+  `extra_args`, so every later image of the article was forced to flux and the stock/go_gemini chain was ignored
+  (all fallbacks 0.38-0.68, Zhihu/XHS failed the 0.72 artifact contract). The switch is now per image and skipped
+  when an article provider chain is set. A title that cannot fit the titled cover (`wechat_cover_title_overflow`)
+  no longer fails the article: the cover shows the title's main clause (before `：`/`|`/`——`), OCR-verified.
 - Kuaishou scheduled auto-post (MED26, 11-04; owner: Kuaishou is an automatic scheduled post). An overnight slot
   with `"action": "schedule_publish"` (Kuaishou only) runs `content_platform/kuaishou_schedule.py` after the
   pipeline: `scripts/build_kuaishou_packet.py` on the rendered video dir (schedule = the window's CST date at
