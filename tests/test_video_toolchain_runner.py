@@ -539,6 +539,20 @@ class VideoToolchainRunnerTests(unittest.TestCase):
         self.assertTrue(result["required"])
         self.assertIn("trusted_seven_day_registry_missing", result["failures"])
 
+    def test_registry_defaults_to_the_shared_registry_before_the_job_home(self):
+        import scripts.video_toolchain_runner as runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shared = Path(tmp) / "shared.json"
+            shared.write_text("{}", encoding="utf-8")
+            env = {k: v for k, v in os.environ.items() if k != "VISUAL_RECIPE_FINGERPRINT_REGISTRY"}
+            with patch.dict(os.environ, {**env, "HERMES_HOME": str(Path(tmp) / "job-home")}, clear=True), \
+                    patch.object(runner, "SHARED_VISUAL_RECIPE_REGISTRY", shared):
+                self.assertEqual(runner._visual_recipe_registry_path(), shared)
+            with patch.dict(os.environ, {**env, "HERMES_HOME": str(Path(tmp) / "job-home")}, clear=True), \
+                    patch.object(runner, "SHARED_VISUAL_RECIPE_REGISTRY", Path(tmp) / "absent.json"):
+                self.assertEqual(runner._visual_recipe_registry_path(), Path(tmp) / "job-home" / "data" / "visual_recipe_fingerprints.json")
+
     def test_runner_rejects_cross_platform_same_core_visual_recipe(self):
         root = Path(__file__).resolve().parents[1]
         script = root / "scripts" / "video_toolchain_runner.py"

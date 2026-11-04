@@ -1831,10 +1831,17 @@ def _duplication_policy() -> dict:
         return {}
 
 
+SHARED_VISUAL_RECIPE_REGISTRY = Path("/srv/hermes-runtime/data/visual_recipe_fingerprints.json")
+
+
 def _visual_recipe_registry_path() -> Path:
     configured = os.environ.get("VISUAL_RECIPE_FINGERPRINT_REGISTRY", "").strip()
     if configured:
         return Path(configured).expanduser()
+    # 11-05 window: the real media job runs with a fresh per-job HERMES_HOME that never holds the seven-day
+    # history, so douyin_pet failed trusted_seven_day_registry_missing; the shared registry is canonical (MED31).
+    if SHARED_VISUAL_RECIPE_REGISTRY.is_file():
+        return SHARED_VISUAL_RECIPE_REGISTRY
     return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "data" / "visual_recipe_fingerprints.json"
 
 
