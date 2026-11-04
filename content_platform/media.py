@@ -948,8 +948,11 @@ class MediaBridge:
             prompt = item["prompt"]
             item_chain = self._article_image_chain(job, item)
             item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": item_chain}} if item_chain else run_kwargs
+            # Per image: a provider switch for one repeated image used to rebind the shared args and pin every
+            # later image to pollinations, overriding the chain (r104: all fallbacks flux, 0.38-0.68; MED32).
+            item_args = list(extra_args)
             for attempt in range(4):
-                provider_result = provider.run(prompt, output, extra_args, **item_kwargs)
+                provider_result = provider.run(prompt, output, item_args, **item_kwargs)
                 if not isinstance(provider_result, dict):
                     raise RuntimeError("image provider returned invalid metadata")
                 if not output.is_file():
@@ -965,14 +968,12 @@ class MediaBridge:
                     # A repeated stock photo would come back for the same query; use a generated scene instead.
                     item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
                         name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
-                if attempt == 1 and extra_args[extra_args.index("--provider") + 1] == "auto":
-                    provider_args = list(extra_args)
-                    provider_args[provider_args.index("--provider") + 1] = "pollinations"
-                    extra_args = provider_args
+                if item_chain:
+                    pass  # The chain (stock dropped above) already moves to the next provider.
+                elif attempt == 1 and item_args[item_args.index("--provider") + 1] == "auto":
+                    item_args[item_args.index("--provider") + 1] = "pollinations"
                 elif attempt == 2:
-                    provider_args = list(extra_args)
-                    provider_args[provider_args.index("--provider") + 1] = "cloudflare"
-                    extra_args = provider_args
+                    item_args[item_args.index("--provider") + 1] = "cloudflare"
                 prompt = (
                     f"{item['prompt']} Distinct scene variation {idx + 1}: "
                     f"use a different camera angle, subject placement, lighting direction, and visual metaphor; "
@@ -1069,10 +1070,22 @@ class MediaBridge:
         if platform == 'xiaohongshu':  # The cover shows the same 20-character title as the note.
             from .formatters import _note_title
             title = _note_title(title); design = dict(design or {}, title_text=title)
-        result = render_wechat_cover(
-            cover['path'], Path(output_dir) / 'cover-titled.png', artifact_root=output_dir,
-            draft_title=title, cover_design=design,
-            provider_result=cover.get('provider_result'), platform=platform)
+        try:
+            result = render_wechat_cover(
+                cover['path'], Path(output_dir) / 'cover-titled.png', artifact_root=output_dir,
+                draft_title=title, cover_design=design,
+                provider_result=cover.get('provider_result'), platform=platform)
+        except ValueError as exc:
+            # r104: a long title failed the whole article at the cover (wechat_cover_title_overflow). The cover then
+            # shows the title's main clause; OCR still verifies exactly that text (MED32).
+            main = re.split(r'[：:｜|]|——', str((design or {}).get('title_text') or title), maxsplit=1)[0].strip()
+            if str(exc) != 'wechat_cover_title_overflow' or len(main) < 6 or main == title:
+                raise
+            design = dict(design or {}, title_text=main)
+            result = render_wechat_cover(
+                cover['path'], Path(output_dir) / 'cover-titled.png', artifact_root=output_dir,
+                draft_title=main, cover_design=design,
+                provider_result=cover.get('provider_result'), platform=platform)
         cover.update(path=result['path'], provider_result=result['provider_result'],
                      checksum=hashlib.sha256(Path(result['path']).read_bytes()).hexdigest())
         return result['cover_design']

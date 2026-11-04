@@ -190,3 +190,53 @@ def test_article_images_try_a_real_photo_first_except_original_knowledge():
 
     assert chain.split(",")[:2] == ["stock", "go_gemini"]
     assert "stock" not in original.split(",")
+
+
+def test_a_repeated_image_does_not_pin_later_images_to_another_provider(tmp_path):
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j4", "title": "AI 客服工单分类", "body": "正文", "platforms": ["juejin"]}
+    seen = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            seen.append((extra_args[extra_args.index("--provider") + 1], (env or {}).get("IMAGE_PROVIDER_CHAIN", "")))
+            seed = 1 if len(seen) <= 2 else len(seen)  # the second image first repeats the first one
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(random.Random(seed).randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "pexels" if len(seen) == 2 else "go_gemini"}
+
+    prompts = [{"role": "cover", "prompt": "cover"}, {"role": "section", "section": "s1", "prompt": "s1"},
+               {"role": "section", "section": "s2", "prompt": "s2"}]
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch.object(MediaBridge, "_image_prompts", return_value=prompts), \
+            patch.object(MediaBridge, "_required_image_count", return_value=3), \
+            patch.object(MediaBridge, "_semantic_review", return_value={"score": 0.9}), \
+            patch.object(MediaBridge, "_compose_wechat_cover", return_value={}), \
+            patch.object(MediaBridge, "_bound_section_image_map", return_value=[]), \
+            patch.object(MediaBridge, "_persist_asset_provenance", return_value=None):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
+
+    assert all(provider == "auto" for provider, _ in seen)
+    assert seen[2][1].split(",")[0] == "go_gemini" and seen[3][1].startswith("stock")
+
+
+def test_cover_title_overflow_falls_back_to_the_main_clause(tmp_path):
+    calls = []
+
+    def render(background, output, *, draft_title, cover_design, **kwargs):
+        calls.append(draft_title)
+        if len(draft_title) > 22:
+            raise ValueError("wechat_cover_title_overflow")
+        return {"path": str(background), "provider_result": {}, "cover_design": cover_design}
+
+    cover = tmp_path / "cover.png"
+    cover.write_bytes(b"x")
+    job = {"title": "从零搭建 LangGraph 旅行规划师：生成的行程哪些还得自己查", "platforms": ["juejin"]}
+    with patch("content_platform.wechat_cover_render.render_wechat_cover", side_effect=render):
+        design = MediaBridge._compose_wechat_cover(tmp_path, [{"role": "cover", "path": str(cover)}], job)
+
+    assert calls[-1] == "从零搭建 LangGraph 旅行规划师" and design["title_text"] == calls[-1]
