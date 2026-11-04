@@ -146,7 +146,10 @@ class Pipeline:
             if isinstance(account, str) and account.strip() and isinstance(lane, str) and lane.strip():
                 resolved.setdefault('account_id', account)
                 resolved['account_lane'] = lane
-                resolved['lane'] = lane
+                # MED34: a brief lane that is the rulebook lane without its version suffix is the same lane; keep it,
+                # since reference samples and video steps use that name. Any other lane is replaced by the rulebook's.
+                if not (isinstance(resolved.get('lane'), str) and lane == resolved['lane'] + '_v1'):
+                    resolved['lane'] = lane
                 resolved['account_context'] = {
                     'account_id': resolved['account_id'], 'account_lane': lane, 'platform': platform,
                     'publisher_account': account, 'source': 'native_runtime_publisher_selector',
