@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -58,7 +59,9 @@ def schedule_kuaishou(task: dict[str, Any], result: dict[str, Any], *, out_dir: 
     when = schedule_time(now, hhmm)
     build = run([sys.executable, str(ROOT / "scripts" / "build_kuaishou_packet.py"), "--render-dir", str(render_dir),
                  "--title", str(formatted.get("title") or result.get("title") or "")[:30],
-                 "--desc", str(formatted.get("caption") or formatted.get("description") or "")[:500],
+                 # The wrapper uploads the description without hashtags and its postcheck compares the packet's
+                 # description exactly, so the packet must not carry them either.
+                 "--desc", " ".join(re.sub(r"#[^\s#]+", "", str(formatted.get("caption") or "")).split())[:500],
                  "--tags", ",".join(str(tag).lstrip("#") for tag in (formatted.get("hashtags") or [])[:3]),
                  "--schedule", when, "--out", str(packet)],
                 cwd=str(ROOT), capture_output=True, text=True, timeout=600)

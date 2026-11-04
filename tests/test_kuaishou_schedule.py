@@ -9,7 +9,7 @@ def _result(tmp_path):
     video = tmp_path / "render" / "final.mp4"
     video.parent.mkdir()
     video.write_bytes(b"v")
-    return {"title": "猫咪为什么踩奶", "body": "正文", "platforms": ["kuaishou"], "draft_meta": {},
+    return {"title": "猫咪为什么踩奶", "body": "正文 #猫咪 说明", "platforms": ["kuaishou"], "draft_meta": {},
             "artifacts": [{"kind": "video", "path": str(video)}]}
 
 
@@ -31,6 +31,7 @@ def test_scheduled_only_after_the_wrapper_passes_and_packet_carries_the_schedule
 
     build, publish = calls
     assert build[0][build[0].index("--schedule") + 1] == "2026-11-05 18:30"
+    assert "#" not in build[0][build[0].index("--desc") + 1]
     assert publish[1]["env"]["CONTENT_PLATFORM_OPS_RUNNER"] == "1" and publish[1]["env"]["JOB_ID"] == "j1"
     assert "external/social-auto-upload" in publish[0][publish[0].index("--sau-dir") + 1]
     assert outcome["state"] == "published_pending_verification"
