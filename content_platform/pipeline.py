@@ -1373,7 +1373,7 @@ class Pipeline:
         self.store.record_event(job_id,'native_platform_narrations_validated',results)
 
     PET_NARRATION_PROMPT = (
-        "把下面的抖音宠物短视频草稿改写成恰好8段口播文案。要求：每段8-40个汉字、单独一段、段与段之间空一行；"
+        "把下面的抖音宠物短视频草稿改写成恰好8段口播文案。要求：每段20-32个字（标点也算字），单独一段，段与段之间空一行；"
         "每段是一句话，句中只用逗号，只在段末用一个句号、问号或感叹号；"
         "第1段是3秒钩子（反问或反常识）；第2-6段讲草稿里的具体做法，至少3段带阿拉伯数字（如第1步、2个、3天）；"
         "全文用一个真实情绪词（如崩溃、后悔、心疼、离谱）；第7段把做法归纳成避坑清单；"
@@ -1394,10 +1394,11 @@ class Pipeline:
         except ImportError as exc:
             meta['pet_narration_audit']={'version':'pet_narration_v1','attempts':[],'accepted':False,'error':str(exc)[:160]};return
         lo,hi=MediaBridge.VIDEO_SCRIPT_MIN_CHARS_PER_SEGMENT,MediaBridge.VIDEO_SCRIPT_MAX_CHARS_PER_SEGMENT
-        attempts=[]
-        for _ in range(2):
+        attempts=[];feedback=''
+        # r97: lines aimed at the 40-char limit landed on 41-42; a retry is told which beats were out of range.
+        for _ in range(3):
             try:
-                text=self.generator._call_hermes_text(self.PET_NARRATION_PROMPT+body[:4000],briefs['douyin_pet'])
+                text=self.generator._call_hermes_text(self.PET_NARRATION_PROMPT+feedback+body[:4000],briefs['douyin_pet'])
             except Exception as exc:
                 attempts.append({'error':type(exc).__name__});continue
             beats=[re.sub(r'\s+','',line) for line in str(text).splitlines() if line.strip()]
@@ -1408,7 +1409,9 @@ class Pipeline:
             if not failed and MediaBridge.compile_video_script({'draft_meta':{'video_script':script}})['script']!=script:
                 failed.append('beat_resplit')
             failed+=[name for name,check in validate_script(script,'zh')['checks'].items() if not check['passed']]
-            attempts.append({'failed':failed,'script_sha256':hashlib.sha256(script.encode()).hexdigest()})
+            attempts.append({'failed':failed,'beat_lengths':[len(b) for b in beats],'script_sha256':hashlib.sha256(script.encode()).hexdigest()})
+            if 'beat_shape' in failed:
+                feedback=(f'上一版有{len(beats)}段，各段字数为{[len(b) for b in beats]}，必须恰好8段且每段{lo}-{hi}字，请缩短超长的段。')
             if not failed:
                 meta['video_script']=meta['narration_script']=script
                 break

@@ -36,14 +36,15 @@ def test_model_narration_that_passes_the_script_gate_is_frozen():
 
 
 def test_narration_failing_the_gate_twice_leaves_the_old_path():
-    meta, calls = _run(["一只猫\n两只猫", "只有一行文字但是没有任何结尾"])
-    assert len(calls) == 2 and meta["pet_narration_audit"]["accepted"] is False
+    meta, calls = _run(["一只猫\n两只猫", "只有一行文字但是没有任何结尾", "还是只有一行"])
+    assert len(calls) == 3 and meta["pet_narration_audit"]["accepted"] is False
+    assert "上一版有2段" in calls[1]
     assert "video_script" not in meta
 
 
 def test_two_sentence_beat_that_the_compiler_would_split_is_rejected():
     split = GOOD.replace("你是不是也以为养两只高智商猫是双倍快乐，现实往往是翻车现场？",
                          "你是不是也以为养两只高智商猫是双倍快乐？现实往往是翻车现场！")
-    meta, calls = _run([split, split])
+    meta, calls = _run([split, split, split])
     assert meta["pet_narration_audit"]["accepted"] is False
     assert meta["pet_narration_audit"]["attempts"][0]["failed"] == ["beat_resplit"]
