@@ -511,8 +511,8 @@ def test_cloudflare_generation_writes_direct_image_response(tmp_path, monkeypatc
         assert request.full_url == "https://example.worker.dev/image"
         assert request.headers["Authorization"] == "Bearer worker-key"
         payload = json.loads(request.data.decode("utf-8"))
-        assert payload["width"] == 768
-        assert payload["height"] == 1024
+        # 10-31 hotfix: Workers AI flux-1-schnell takes prompt + steps only and rejects width/height.
+        assert set(payload) == {"prompt", "steps"}
         return Response()
 
     with patch("content_platform.image_provider.urllib.request.urlopen", side_effect=fake_urlopen):
@@ -551,3 +551,47 @@ def test_image_provider_cache_reuses_previous_success(tmp_path, monkeypatch):
     assert second["cache_hit"] is True
     assert Path(second["path"]).read_bytes() == image_bytes
     assert urlopen.call_count == 1
+
+
+def test_flux_providers_get_a_short_english_scene_prompt(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    from content_platform import image_provider
+    image_provider._SCENE_PROMPTS.clear()
+    long_prompt = "Create a section illustration using these article facts: " + "考勤异常自动提醒" * 400
+    seen = []
+
+    def fake_cloudflare(prompt, output, model="", size="1024x1024", input_image=None):
+        seen.append(prompt)
+        output.write_bytes(b"\x89PNG" + b"x" * 3000)
+        return {"provider": "cloudflare", "model": "flux", "mode": "generate"}
+
+    with patch("content_platform.image_provider._gateway_scene_prompt", return_value="An HR clerk reviews attendance alerts.") as rewrite, \
+            patch("content_platform.image_provider._cloudflare_image", side_effect=fake_cloudflare):
+        result = generate_image(long_prompt, tmp_path / "out.png", provider="cloudflare")
+
+    assert seen == ["An HR clerk reviews attendance alerts."]
+    assert rewrite.call_args.args[0] == long_prompt
+    assert result["prompt_rewrite"]["mode"] == "model_rewrite"
+
+
+def test_flux_prompt_without_rewrite_keeps_english_instructions_first(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    from content_platform import image_provider
+    image_provider._SCENE_PROMPTS.clear()
+    prompt = "Section facts: " + "销售新人" * 600 + " Professional editorial illustration, no logo or watermark."
+    seen = []
+
+    def fake_pollinations(prompt, output, model="", size="1024x1024", input_image=None):
+        seen.append(prompt)
+        output.write_bytes(b"\x89PNG" + b"x" * 3000)
+        return {"provider": "pollinations", "model": "flux", "mode": "generate"}
+
+    with patch("content_platform.image_provider._gateway_scene_prompt", side_effect=ImageProviderError("down")), \
+            patch("content_platform.image_provider._pollinations_image", side_effect=fake_pollinations):
+        result = generate_image(prompt, tmp_path / "out.png", provider="pollinations")
+
+    assert seen[0].startswith("Section facts: Professional editorial illustration, no logo or watermark.")
+    assert len(seen[0]) <= 1001
+    assert result["prompt_rewrite"]["mode"] == "compacted"

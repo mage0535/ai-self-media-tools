@@ -139,3 +139,12 @@ def test_rejected_semantic_beat_gets_a_second_retry_told_what_the_reviewer_saw(t
     assert "The previous image showed: Two cats on an office desk" in calls[1]
     assert "The previous image showed: A man at a desk with a cat" in calls[2]
     assert recorded["images"][0]["semantic_review"]["score"] == 0.74
+
+
+def test_review_timeout_reviews_the_same_pixels_again(tmp_path):
+    reviews = iter([{"status": "failed", "score": 0.0, "error": "hermes_pixel_review_timeout"},
+                    {"status": "evaluated", "score": 0.81}])
+    with patch("content_platform.asset_semantic_review.review_asset", side_effect=lambda *a, **k: next(reviews)) as review:
+        result = MediaBridge._semantic_review(tmp_path / "a.png", {"topic": "t"}, {"section": "s1"}, {})
+    assert result["score"] == 0.81
+    assert review.call_count == 2

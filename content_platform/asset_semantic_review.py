@@ -401,7 +401,7 @@ def review_asset(path, topic, section, provider_result=None, *, invoke=None, che
         if native_context is not None:env.pop('HERMES_SESSION_ID',None)
         audit['attempts'] = 1
         proc = (invoke or subprocess.run)(command, input=prompt, capture_output=True, text=True,
-                                         timeout=120, check=False, env=env)
+                                         timeout=180, check=False, env=env)
         audit['stdout'] = private_output(path.parent, '.stdout.private.jsonl', proc.stdout)
         audit['stderr'] = private_output(path.parent, '.stderr.private.log', getattr(proc,'stderr',''))
         audit['response_sha256'] = digest(proc.stdout.encode('utf-8'))

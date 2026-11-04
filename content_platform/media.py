@@ -1085,9 +1085,15 @@ class MediaBridge:
         section = str(item.get("section") or item.get("role") or "")
         purpose = str(item.get("purpose") or "topic-matched visual")
         requirement = item.get("semantic_requirement")
-        return review_asset(path, job.get("topic") or job.get("title") or "",
-                            section + ": " + purpose + "\n" + str(item.get("adjacent_text") or ""), provider_result,
-                            **({"semantic_requirement": requirement} if requirement else {}))
+        for _ in range(2):
+            review = review_asset(path, job.get("topic") or job.get("title") or "",
+                                  section + ": " + purpose + "\n" + str(item.get("adjacent_text") or ""), provider_result,
+                                  **({"semantic_requirement": requirement} if requirement else {}))
+            # 11-03 r90: two reviews hit the timeout and scored 0.0; a timeout measured nothing, so the same
+            # pixels are reviewed once more instead of being regenerated.
+            if review.get("error") != "hermes_pixel_review_timeout":
+                break
+        return review
 
     @staticmethod
     def _persist_asset_provenance(output_dir, images, prompts, provider_name, job):
