@@ -1762,6 +1762,16 @@ class Pipeline:
         else:draft['draft_meta']=scoped['draft_meta']
 
     @staticmethod
+    def _rendered_background(row):
+        real = row.get("origin") == "real_photo"
+        license_name = str(row.get("license") or "")
+        return {"asset_id": str(row.get("path") or ""), "path": str(row.get("path") or ""),
+                "section": str(row.get("scene_id") or ""), "asset_type": "photo" if real else "generated_image",
+                "real_scene": real, "rights_cleared": real and license_name in {"Pexels", "Pixabay"},
+                "license": license_name, "source": str(row.get("source_url") or ""), "source_url": str(row.get("source_url") or ""),
+                "match_reason": str(row.get("match_reason") or ""), "semantic_match_score": row.get("semantic_match_score")}
+
+    @staticmethod
     def _rendered_asset_mix(assets, draft):
         """Declare the asset mix the render actually produced; the rulebook passes asset_mix_plan when the
         declaration matches asset_provenance (MED28: the pre-render plan claimed stock photos for AI images)."""
@@ -1818,6 +1828,12 @@ class Pipeline:
             })
         if provenance:
             meta["asset_mix_plan"] = self._rendered_asset_mix(list(provenance.values()), draft)
+            # The pre-render plan claimed rights-cleared real photos for every image; gates now read what was made.
+            plan = meta.get("real_scene_background_plan")
+            if isinstance(plan, dict) and "wechat" not in {str(item).casefold() for item in platforms}:  # WeChat cards bind their own photos.
+                plan["backgrounds"] = [self._rendered_background(row) for row in provenance.values()]
+            if mappings:
+                meta["section_image_map"] = mappings
             brief_plan = ((meta.get("strategy_brief") or {}).get("content_generation_brief") or {})
             if isinstance(brief_plan, dict) and "asset_mix_plan" in brief_plan:
                 brief_plan["asset_mix_plan"] = meta["asset_mix_plan"]

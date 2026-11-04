@@ -217,3 +217,16 @@ def test_rendered_asset_mix_declares_the_actual_provenance():
     assert "cover: https://www.pexels.com/photo/1/" in mix["real_material_retrieval"]
     assert mix["ai_edit_real_material"] == "cover title rendered over the real_photo background"
     assert original["real_material_retrieval"] == ""
+
+
+def test_rendered_background_is_real_only_for_a_licensed_stock_photo():
+    from content_platform.media_quality import _valid_real_scene_background
+    from content_platform.pipeline import Pipeline
+
+    photo = Pipeline._rendered_background({"path": "/a/cover.png", "scene_id": "cover", "origin": "real_photo", "license": "Pexels",
+                                           "source_url": "https://www.pexels.com/photo/1/", "match_reason": "topic"})
+    generated = Pipeline._rendered_background({"path": "/a/s1.png", "scene_id": "s1", "origin": "ai_generated",
+                                               "license": "provider_terms_recorded", "source_url": "generated:go_gemini", "match_reason": "topic"})
+
+    assert _valid_real_scene_background(photo) is True
+    assert _valid_real_scene_background(generated) is False

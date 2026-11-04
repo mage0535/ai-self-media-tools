@@ -71,7 +71,15 @@ ops repository; this entry covers the code.
     `same_lane_account_analysis` now comes from the brief's collected `viral_breakdown` samples (URL, title,
     metrics, observed opening and headings); with no samples the same-lane gate fails. The article manifest
     reads the rendered `section_image_map.json` (real provider, license, score) before the draft plan.
-    Still template (open): account analysis, quantity decision, the pre-render background plan.
+    After render (non-WeChat article lanes) `asset_mix_plan` is declared from `asset_provenance` (the rulebook
+    passes it when the declaration matches provenance) and `real_scene_background_plan.backgrounds` is rebuilt
+    from provenance: only a Pexels/Pixabay photo counts as a rights-cleared real scene. The local
+    `real_scene_backgrounds` gate is unchanged, so an article with generated images now fails it locally;
+    the rulebook allows generated section images, and that gate/rulebook conflict is an owner decision.
+    MED28b: `overnight_benchmarks.attach_account_snapshots` binds each task's own account metrics from
+    `performance-cycle-result.json` (or the collector's reason they are missing) into `account_analysis`.
+    Still template (open): the quantity decision.
+  - MED30: a slot whose candidates the topic analyzer all rejects keeps `ineligible_titles` for diagnosis.
   - MED29: every article image was go_gemini; the contracts ask for real-scene photos. Article images now try
     `stock` (Pexels, then Pixabay) first; a weak or repeated photo gives way to a generated scene. The stock
     query is a 2-5 word English photo query from the gateway text model (the keyword map produced
