@@ -53,6 +53,18 @@ ops repository; this entry covers the code.
   drawings); if that call fails, an English-first compacted prompt is used. The flux cache key carries
   `SCENE_PROMPT_VERSION`; bump it when the rewrite instruction changes. Abstract technical sections
   still score lower on flux than on go_gemini; the gate is unchanged.
+- Overnight video preflight (MED17, 11-03): `scripts/film_renderer.py` refuses to render without
+  `video_preflight.json`. Only the native Kuaishou source step used to bind one, so the overnight
+  douyin_pet lane could never render. `video_preflight_inputs.bind_overnight_video_preflight` now
+  binds one (immutable file under `data/jobs/<job>/video-preflight/`, store event
+  `native_video_preflight_bound`, step receipts) from the brief's `platform_source_matrix` and
+  hot-viral samples. `video_preflight.validate_video_preflight` accepts *labelled* cross-platform
+  research only for `overnight_video_preflight_v1`; the 5 attempted / 3 successful source minimums
+  and `allow_render` still apply. Note: the video runner path in `config.json` is absolute (prod), so a
+  staging tree renders with prod `content_platform`; deploy renderer-side changes before judging them
+  in staging.
+- Video beat prompts include the neighbouring narration lines (a beat can be a fragment with no
+  subject, e.g. "彻底切断物理突破的支点。").
 - Review timeouts: the vision review subprocess times out at 180 s; a timeout re-reviews the same
   pixels once instead of counting as a 0.0 rejection.
 - Rulebook `channel_rules.xiaohongshu.quality_gate_definitions` tells the native reviewer how to
