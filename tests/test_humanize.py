@@ -226,3 +226,15 @@ def test_naturalize_copy_keeps_code_blocks_and_paragraphs():
 
     assert code in result["body"]
     assert "第一段说明。\n\n" in result["body"]
+
+
+def test_chinese_question_and_reversal_hook_counts_as_strong():
+    from content_platform.humanize import _score
+    body = "你以为家里养两只高智商猫是双倍快乐？\n现实很可能是它们联手把你家拆个底朝天。\n\n单只聪明猫只是爱捣蛋。"
+    assert _score(body, {"strategy": {"content_form": "short_video"}})["hook_strength"] >= 0.72
+
+
+def test_flat_chinese_opening_stays_weak():
+    from content_platform.humanize import _score
+    body = "今天介绍养猫的一些注意事项。\n猫咪需要定期驱虫。\n\n日常喂食要规律。"
+    assert _score(body, {"strategy": {"content_form": "short_video"}})["hook_strength"] < 0.60

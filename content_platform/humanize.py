@@ -129,6 +129,13 @@ def _score(body, context):
     # 6. First-person pronoun at text start
     if re.search(r'^[\s\n]*我[\s\u4e00-\u9fff]', first_200[:50]):
         cn_hook_signals += 1
+    # 7. A question in the first two lines (the English branch counts this too). 11-03 r92: "你以为家里养两只高智商猫是
+    # 双倍快乐？现实很可能是它们联手把你家拆个底朝天。" scored 0 signals.
+    if any(line.endswith(('？', '?')) for line in body_lines[:2]):
+        cn_hook_signals += 1
+    # 8. Misconception then reversal: 你以为/以为 ... 其实/现实/结果/真相/没想到
+    if re.search(r'(你以为|以为).{0,40}(其实|现实|结果|真相|没想到|反而)', first_200[:120], re.S):
+        cn_hook_signals += 1
     if cn_hook_signals >= 2:
         hook_strength = max(hook_strength, 0.72)
     elif cn_hook_signals == 1:
