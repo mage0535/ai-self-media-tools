@@ -53,6 +53,12 @@ ops repository; this entry covers the code.
   drawings); if that call fails, an English-first compacted prompt is used. The flux cache key carries
   `SCENE_PROMPT_VERSION`; bump it when the rewrite instruction changes. Abstract technical sections
   still score lower on flux than on go_gemini; the gate is unchanged.
+- Flux reliability (MED25, 11-04): the scene rewrite is retried once; a flux image made from the compacted
+  fallback prompt is never cached (a cached grey block was reused as a cover, 0.32); `SCENE_PROMPT_VERSION`
+  is `scene-v2b` (v2 instruction, cache reset). A "real-world moment, no diagrams" v3 instruction scored worse
+  on the same sections and was dropped. Pollinations' free tier allows one image per 45 s per IP; on 402
+  `FREE_LIMIT` it waits the stated "Retry after Ns" once (at most 60 s). Cloudflare's free tier is 10,000
+  neurons per day, reset 00:00 UTC (16:00 PST, after the overnight window): staging spends the same quota.
 - Overnight video preflight (MED17, 11-03): `scripts/film_renderer.py` refuses to render without
   `video_preflight.json`. Only the native Kuaishou source step used to bind one, so the overnight
   douyin_pet lane could never render. `video_preflight_inputs.bind_overnight_video_preflight` now
