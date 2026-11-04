@@ -543,7 +543,9 @@ def test_image_provider_cache_reuses_previous_success(tmp_path, monkeypatch):
         def read(self):
             return image_bytes
 
-    with patch("content_platform.image_provider.urllib.request.urlopen", return_value=Response()) as urlopen:
+    # Only flux images made from a successful scene rewrite are cached (a compacted fallback is not).
+    with patch("content_platform.image_provider.urllib.request.urlopen", return_value=Response()) as urlopen, \
+            patch("content_platform.image_provider._gateway_scene_prompt", return_value="A cached visual scene."):
         first = generate_image("cached visual", tmp_path / "one.png", provider="pollinations")
         second = generate_image("cached visual", tmp_path / "two.png", provider="pollinations")
 
@@ -588,10 +590,69 @@ def test_flux_prompt_without_rewrite_keeps_english_instructions_first(tmp_path, 
         output.write_bytes(b"\x89PNG" + b"x" * 3000)
         return {"provider": "pollinations", "model": "flux", "mode": "generate"}
 
-    with patch("content_platform.image_provider._gateway_scene_prompt", side_effect=ImageProviderError("down")), \
+    with patch("content_platform.image_provider._gateway_scene_prompt", side_effect=ImageProviderError("down")) as rewrite, \
             patch("content_platform.image_provider._pollinations_image", side_effect=fake_pollinations):
         result = generate_image(prompt, tmp_path / "out.png", provider="pollinations")
+    assert rewrite.call_count == 2  # one retry before the compacted fallback
 
     assert seen[0].startswith("Section facts: Professional editorial illustration, no logo or watermark.")
     assert len(seen[0]) <= 1001
     assert result["prompt_rewrite"]["mode"] == "compacted"
+
+
+def test_transient_rewrite_failure_is_retried(tmp_path):
+    seen = []
+
+    def fake_pollinations(prompt, output, model="", size="1024x1024", input_image=None):
+        seen.append(prompt)
+        output.write_bytes(b"\x89PNG" + b"x" * 3000)
+        return {"provider": "pollinations", "model": "flux", "mode": "generate"}
+
+    with patch("content_platform.image_provider._gateway_scene_prompt",
+               side_effect=[ImageProviderError("timeout"), "Two cats pry open a kitchen cabinet."]), \
+            patch("content_platform.image_provider._pollinations_image", side_effect=fake_pollinations):
+        result = generate_image("封面：两只猫扒柜门 " + __import__("uuid").uuid4().hex, tmp_path / "out.png", provider="pollinations")
+    assert seen == ["Two cats pry open a kitchen cabinet."]
+    assert result["prompt_rewrite"]["mode"] == "model_rewrite"
+
+
+def test_pollinations_waits_out_its_stated_free_limit_once(tmp_path):
+    import io
+    import urllib.error
+    from content_platform import image_provider as ip
+
+    class Resp(io.BytesIO):
+        headers = {"Content-Type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    limited = urllib.error.HTTPError("u", 402, "x", {}, io.BytesIO(
+        b'{"error":{"code":"FREE_LIMIT","message":"Free limit reached: 1 image every 45 seconds per IP. Retry after 19s"}}'))
+    calls = [limited, Resp(b"\x89PNG" + b"x" * 3000)]
+    with patch("content_platform.image_provider._urlopen_retry", side_effect=lambda *a, **k: (
+            (_ for _ in ()).throw(calls.pop(0)) if isinstance(calls[0], Exception) else calls.pop(0))), \
+            patch("content_platform.image_provider.time.sleep") as sleep:
+        result = ip._pollinations_image("two cats", tmp_path / "p.png")
+    assert result["provider"] == "pollinations" and sleep.call_args[0][0] == 21
+
+
+def test_compacted_fallback_image_is_not_cached(tmp_path):
+    seen = []
+
+    def fake_pollinations(prompt, output, model="", size="1024x1024", input_image=None):
+        seen.append(prompt)
+        output.write_bytes(b"\x89PNG" + b"x" * 3000)
+        return {"provider": "pollinations", "model": "flux", "mode": "generate"}
+
+    prompt = "Section facts: compacted cache case " + __import__("uuid").uuid4().hex
+    with patch("content_platform.image_provider._gateway_scene_prompt", side_effect=ImageProviderError("down")), \
+            patch("content_platform.image_provider._pollinations_image", side_effect=fake_pollinations):
+        generate_image(prompt, tmp_path / "a.png", provider="pollinations")
+    with patch("content_platform.image_provider._gateway_scene_prompt", return_value="A clerk sorts mail."), \
+            patch("content_platform.image_provider._pollinations_image", side_effect=fake_pollinations):
+        result = generate_image(prompt, tmp_path / "b.png", provider="pollinations")
+    assert seen[-1] == "A clerk sorts mail." and result["prompt_rewrite"]["mode"] == "model_rewrite"

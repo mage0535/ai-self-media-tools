@@ -108,7 +108,10 @@ def generate_image(
                 result = _short_prompt_image(name, prompt, output_path, model=model, size=size)
                 result["path"] = str(output_path)
                 result["bytes"] = output_path.stat().st_size
-                _write_cache(prompt, output_path, name, result, model=cache_model, size=size, input_image=input_image)
+                # A compacted-fallback image (rewrite unavailable) is weak and must not be served again once the
+                # rewrite works (11-04: a cached grey block, 0.32, kept coming back as the cover).
+                if (result.get("prompt_rewrite") or {}).get("mode") == "model_rewrite":
+                    _write_cache(prompt, output_path, name, result, model=cache_model, size=size, input_image=input_image)
                 if errors:
                     result["fallback_errors"] = list(errors)
                 return result
@@ -172,7 +175,9 @@ def generate_image(
 
 
 SHORT_PROMPT_PROVIDERS = ("cloudflare", "pollinations")
-SCENE_PROMPT_VERSION = "scene-v2"
+# scene-v2b (11-04): same instruction as v2; the bump drops flux images cached from compacted fallbacks. A tried
+# "real-world moment, no diagrams" v3 scored worse on the same Juejin sections (0.70/0.46 vs 0.76/0.70).
+SCENE_PROMPT_VERSION = "scene-v2b"
 _SCENE_PROMPTS: dict[str, str] = {}
 
 
@@ -190,10 +195,12 @@ def _english_scene_prompt(prompt: str) -> dict:
     prompt's own English instructions are kept ahead of a shortened copy of the article text."""
     model = os.environ.get("IMAGE_PROMPT_REWRITE_MODEL", "gemini-3.8-flash-low")
     scene = _SCENE_PROMPTS.get(prompt)
-    if scene is None:
+    # 11-04: one transient rewrite failure sent a cover to the compacted prompt (flux drew a grey block, 0.32).
+    for _ in range(2 if scene is None else 0):
         try:
             scene = _gateway_scene_prompt(prompt, model)
             _SCENE_PROMPTS[prompt] = scene
+            break
         except Exception:
             scene = None
     if scene:
@@ -1010,13 +1017,21 @@ def _pollinations_image(
     )
     url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt[:1200])}?{query}"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ai-self-media-tools/1.0.0"})
-    try:
-        with _urlopen_retry(req, timeout=90, attempts=3) as resp:
-            content_type = resp.headers.get("Content-Type", "")
-            body = resp.read()
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore")[:180]
-        raise ImageProviderError(f"Pollinations image call failed: HTTP {exc.code} {detail}") from exc
+    # 11-04: the free tier allows one image per 45 s per IP and answers 402 FREE_LIMIT "Retry after Ns" when
+    # images come faster; wait the time it states once (at most 60 s) instead of falling through the chain.
+    for attempt in range(2):
+        try:
+            with _urlopen_retry(req, timeout=90, attempts=3) as resp:
+                content_type = resp.headers.get("Content-Type", "")
+                body = resp.read()
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")[:180]
+            wait = re.search(r"Retry after (\d+)s", detail) if exc.code == 402 and "FREE_LIMIT" in detail else None
+            if attempt == 0 and wait and int(wait.group(1)) <= 60:
+                time.sleep(int(wait.group(1)) + 2)
+                continue
+            raise ImageProviderError(f"Pollinations image call failed: HTTP {exc.code} {detail}") from exc
     if not body or len(body) < 2048:
         raise ImageProviderError("Pollinations response was too small to be a valid image")
     if "image" not in content_type.lower() and not body.startswith((b"\xff\xd8", b"\x89PNG")):
