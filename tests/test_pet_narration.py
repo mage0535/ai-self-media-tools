@@ -91,3 +91,29 @@ def test_rejected_beat_carries_the_reviewer_reason(tmp_path):
               "reason": "shows one cat at a bowl;\n no second room or closed door"}
     with pytest.raises(ValueError, match=r"beat=s04:score=0.52:match=False:observed=True:why=shows one cat at a bowl; no second room"):
         admit_review(image, "topic", requirement, review)
+
+
+def test_overnight_kuaishou_video_gets_its_own_narration_and_voice_plan(tmp_path):
+    """MED40 (r108): the frozen first 8 body slices of an AI article failed the renderer's script gate (5 of 8 checks)."""
+    calls, events = [], []
+    replies = [GOOD, VOICE]
+
+    def call(prompt, brief):
+        calls.append(prompt)
+        return replies.pop(0)
+
+    fake = types.SimpleNamespace(generator=types.SimpleNamespace(_call_hermes_text=call),
+                                 store=types.SimpleNamespace(record_event=lambda *a: events.append(a), path=tmp_path / "state.db"),
+                                 PET_NARRATION_PROMPT=Pipeline.PET_NARRATION_PROMPT, VIDEO_NARRATION_PROMPT=Pipeline.VIDEO_NARRATION_PROMPT,
+                                 PET_VOICE_PLAN_PROMPT=Pipeline.PET_VOICE_PLAN_PROMPT)
+    fake._write_pet_voice_plan = lambda *a, **k: Pipeline._write_pet_voice_plan(fake, *a, **k)
+    overnight = {"platform_source_matrix": {"x": 1}, "hot_viral_samples": [{}]}
+    draft = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
+    Pipeline._write_pet_narration(fake, "j1", draft, {"kuaishou": overnight}, "kuaishou")
+    meta = draft["draft_meta"]
+    assert events[0][1] == "video_narration_written" and meta["video_narration_audit"]["accepted"] is True
+    assert "kuaishou AI 实操短视频草稿" in calls[0] and "宠物" not in calls[0] and "kuaishou AI 实操短视频" in calls[1]
+    assert meta["video_script"].count("\n\n") == 7 and "voice_plan_source" in meta
+    native = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
+    Pipeline._write_pet_narration(fake, "j2", native, {"kuaishou": {}}, "kuaishou")
+    assert "video_script" not in native["draft_meta"] and len(calls) == 2
