@@ -329,7 +329,10 @@ def test_provenance_declares_real_scene_only_for_a_licensed_stock_photo(tmp_path
     out = tmp_path / "p"; out.mkdir()
     images = []
     for index, result in enumerate([{"provider": "pexels", "mode": "search", "license": "Pexels",
-                                     "source_url": "https://www.pexels.com/photo/1/"},
+                                     "source_url": "https://www.pexels.com/photo/1/", "photo_id": "1",
+                                     "page_url": "https://www.pexels.com/photo/1/", "photographer": "p", "query": "cat",
+                                     "download_url": "https://images.pexels.com/photos/1/a.jpeg",
+                                     "license_url": "https://www.pexels.com/license/", "downloaded_at": "2026-11-05T20:00:00+00:00"},
                                     {"provider": "go_gemini", "model": "m"}]):
         path = out / f"section-{index:02d}.png"
         Image.new("RGB", (8, 8)).save(path)
@@ -338,6 +341,8 @@ def test_provenance_declares_real_scene_only_for_a_licensed_stock_photo(tmp_path
     MediaBridge._persist_asset_provenance(out, images, [], "fake", {"title": "t"})
     rows = json.loads(Path(out / "asset_provenance.json").read_text(encoding="utf-8"))["assets"]
     assert [(row["real_scene"], row["rights_cleared"]) for row in rows] == [(True, True), (False, False)]
+    # MED50: the stock photo's own record reaches the video background gate; a generated image gets none of it.
+    assert rows[0]["photo_id"] == "1" and rows[0]["downloaded_at"] and "photo_id" not in rows[1]
 
 
 def test_rejected_duplicate_retry_keeps_the_previous_image(tmp_path):

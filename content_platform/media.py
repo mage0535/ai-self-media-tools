@@ -1239,6 +1239,12 @@ class MediaBridge:
                     "role": str(image.get("role") or ""),
                 },
             }
+            if origin == "real_photo":
+                # MED50 (r119): the video background gate requires the stock photo's own record (photo id, page,
+                # download URL, photographer, license URL, query, download time).
+                for field in ("photo_id", "page_url", "download_url", "photographer", "license_url", "query", "downloaded_at"):
+                    if provider_result.get(field):
+                        record[field] = str(provider_result[field])
             if provider_result.get('cover_render_evidence'):
                 record['cover_render_evidence'] = provider_result['cover_render_evidence']
             if provider_result.get('current_image_text_render_evidence'):

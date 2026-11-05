@@ -672,6 +672,7 @@ def _pexels_image(
     if not image_url:
         raise ImageProviderError("Pexels photo had no downloadable URL")
     _download_image(image_url, output)
+    from datetime import datetime, timezone
     return {
         "provider": "pexels",
         "model": "stock-photo",
@@ -680,6 +681,12 @@ def _pexels_image(
         "source_url": photo.get("url", ""),
         "photographer": photo.get("photographer", ""),
         "license": "Pexels",
+        # MED50 (r119): the video background gate needs the full Pexels record, which the API response already has.
+        "photo_id": str(photo.get("id") or ""),
+        "page_url": photo.get("url", ""),
+        "download_url": image_url,
+        "license_url": "https://www.pexels.com/license/",
+        "downloaded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
 
