@@ -1483,6 +1483,10 @@ class Pipeline:
             if brief.get('lane')!='real_world_ai_implementation' and platform!='douyin_pet':continue
             variant=variants.get(platform) or draft;meta=variant.get('draft_meta') or {}
             plan=meta.get('video_toolchain_plan') or {}
+            if plan.get('required') and not meta.get('video_script') and platform!='douyin_pet':
+                # MED38 (r106): only the pet narration was frozen, so Kuaishou skipped this binding and every beat
+                # failed required_semantic_tag_missing. Freeze the 8 beats the renderer would compile from the body.
+                meta['video_script']=meta['narration_script']=MediaBridge.compile_video_script(variant)['script']
             if not plan.get('required') or not meta.get('video_script'):continue
             requirements=bind_requirements(self.store,job_id,brief,meta['video_script'],plan['visual_contract'],platform,owner)
             scenes=[]
