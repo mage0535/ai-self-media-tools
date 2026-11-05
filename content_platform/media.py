@@ -1021,7 +1021,12 @@ class MediaBridge:
                                 f"{str(item.get('purpose') or '')[:200]} {str(item.get('adjacent_text') or '')[:300]}"
                                 + (f" The previous image showed: {seen}. That fits only the general topic; depict the "
                                    "concrete situation this exact sentence describes instead." if seen else "")
-                                + (f" The reviewer rejected it because: {why} Include what is missing." if why else ""))
+                                + (f" The reviewer rejected it because: {why} Include what is missing." if why else "")
+                                # MED48 (r116): a Juejin data-modelling section was drawn as an isometric diagram three times
+                                # (0.68/0.70/0.68, "conceptually depicts"); the passing images showed people at the work.
+                                + ("" if item.get("semantic_requirement") else
+                                   " Show it as a realistic scene of the people, place and work this section describes, "
+                                   "not a diagram, chart or infographic."))
                 retry_kwargs = item_kwargs
                 if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS and not real_only:
                     # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
