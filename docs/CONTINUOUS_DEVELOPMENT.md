@@ -132,6 +132,12 @@ ops repository; this entry covers the code.
   0 of 12 section photos were used); covers and real-background lanes (Xiaohongshu, video) keep it. The pixel review
   subprocess timeout is 90 s (p50 26 s, p90 70 s; one retry on timeout remains). The mandatory native quality budget
   in `_execute_current_native_quality` is 900 s (was 600 s; the auto channel alone used 571 s on 11-06).
+- Claim renewal (MED46, 11-05): `normal_job_claim` returns (seconds, renewable). Only the plain fixed 900 s claim
+  (non-authority home, or a control task that is not media_run/channel_cycle, i.e. the overnight batch) is renewable;
+  `Pipeline._renew_claim_while_running` calls `Store.renew_claim` every ttl/3 s until `run` returns. `renew_claim` only
+  extends a live `generating` claim of the same owner, never a migration-held or expired one, and records
+  `job_claim_renewed`. Do not run tests on NEW during staging or a window: pixel reviews timed out in a cluster while
+  a regression ran (r114).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
