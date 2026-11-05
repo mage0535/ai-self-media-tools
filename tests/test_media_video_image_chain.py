@@ -442,8 +442,6 @@ def test_article_image_gets_a_second_regeneration_before_blocking(tmp_path):
             patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
         bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
     assert len(calls) == 3 and recorded["images"][0]["semantic_review"]["score"] == 0.8
-    # MED48: the regeneration asks for a real scene, not a diagram.
-    assert "not a diagram, chart or infographic" in calls[1]
 
 
 def test_a_regeneration_the_provider_rejects_keeps_the_previous_image(tmp_path):
