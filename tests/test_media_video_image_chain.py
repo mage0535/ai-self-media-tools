@@ -412,3 +412,33 @@ def test_beat_uses_its_preselected_photo_first(tmp_path):
     # A photo changed since it was picked is not used.
     Path(photos[1]["path"]).write_bytes(b"changed")
     assert MediaBridge._planned_beat_photos(job, [{"semantic_requirement": 1}, {"semantic_requirement": 1}]) == []
+
+
+def test_article_image_gets_a_second_regeneration_before_blocking(tmp_path):
+    # MED47 (r115): a Juejin section stayed 0.65 after one regeneration and blocked the article.
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j6", "title": "AI 排产", "body": "正文", "platforms": ["juejin"]}
+    calls = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            calls.append(prompt)
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(random.Random(len(calls)).randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "go_gemini"}
+
+    scores = iter([0.6, 0.65, 0.8])
+    recorded = {}
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch.object(MediaBridge, "_image_prompts", return_value=[{"role": "cover", "prompt": "cover"}]), \
+            patch.object(MediaBridge, "_required_image_count", return_value=1), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: {"score": next(scores)}), \
+            patch.object(MediaBridge, "_compose_wechat_cover", return_value={}), \
+            patch.object(MediaBridge, "_bound_section_image_map", return_value=[]), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
+    assert len(calls) == 3 and recorded["images"][0]["semantic_review"]["score"] == 0.8

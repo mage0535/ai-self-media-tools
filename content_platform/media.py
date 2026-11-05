@@ -1007,7 +1007,9 @@ class MediaBridge:
             # A beat bound to a semantic requirement is rejected unless the pixels match it; it gets two
             # regenerations (11-02: abstract hook/step beats drew generic topic scenes, 0.65-0.70), each told
             # what the reviewer saw. The gate itself is unchanged.
-            for _ in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else 1):
+            # MED47 (r115): a Juejin section stayed 0.65 after one regeneration; with the claim renewed (MED46) an article
+            # image gets a second one instead of blocking the piece.
+            for _ in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else 2):
                 if (review.get("score") or 0) >= SEMANTIC_RETRY_THRESHOLD and (
                         not item.get("semantic_requirement") or review.get("requirement_match") is True):
                     break
