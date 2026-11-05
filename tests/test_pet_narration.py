@@ -117,3 +117,50 @@ def test_overnight_kuaishou_video_gets_its_own_narration_and_voice_plan(tmp_path
     native = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
     Pipeline._write_pet_narration(fake, "j2", native, {"kuaishou": {}}, "kuaishou")
     assert "video_script" not in native["draft_meta"] and len(calls) == 2
+
+
+def test_photo_first_narration_is_written_from_the_picked_photos(tmp_path):
+    """MED42 (r110): stock photos matched 0-1 of 8 beats written first; beats are now written from 8 picked photos."""
+    from unittest.mock import patch
+
+    calls, events = [], []
+    replies = [GOOD, VOICE]
+
+    def call(prompt, brief):
+        calls.append(prompt)
+        return replies.pop(0)
+
+    fake = types.SimpleNamespace(generator=types.SimpleNamespace(_call_hermes_text=call),
+                                 store=types.SimpleNamespace(record_event=lambda *a: events.append(a), path=tmp_path / "state.db"),
+                                 PET_NARRATION_PROMPT=Pipeline.PET_NARRATION_PROMPT, PET_VOICE_PLAN_PROMPT=Pipeline.PET_VOICE_PLAN_PROMPT,
+                                 PHOTO_FIRST_PLATFORMS=Pipeline.PHOTO_FIRST_PLATFORMS)
+    fake._write_pet_voice_plan = lambda *a, **k: Pipeline._write_pet_voice_plan(fake, *a, **k)
+    photos = [{"path": f"p{i}.jpg", "sha256": str(i), "provider_result": {"provider": "pexels"}, "observed_subject": f"cat number {i}"}
+              for i in range(8)]
+    draft = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
+    with patch.object(Pipeline, "_select_beat_photos", return_value=photos):
+        Pipeline._write_pet_narration(fake, "j1", draft, {"douyin_pet": {}})
+    meta = draft["draft_meta"]
+    assert "第N段配第N张照片" in calls[0] and "第8张照片：cat number 7" in calls[0] and calls[0].endswith("草稿：\n草稿正文")
+    assert meta["beat_photo_plan"]["photos"] == photos and meta["pet_narration_audit"]["photo_first"] == 8
+
+
+def test_beat_photos_are_unique_licensed_and_keep_to_the_pets(tmp_path):
+    from unittest.mock import patch
+
+    store = types.SimpleNamespace(path=tmp_path / "state.db")
+    fake = types.SimpleNamespace(store=store, BEAT_PHOTO_QUERY_PROMPT=Pipeline.BEAT_PHOTO_QUERY_PROMPT,
+                                 generator=types.SimpleNamespace(_call_hermes_text=lambda p, b: "\n".join(f"{i}. query {i}" for i in range(12))))
+    content = iter([b"a", b"a", b"b", b"c", b"d", b"e", b"f", b"g", b"h", b"i", b"j", b"k"])
+    observed = iter(["two cats", "a cat", "a woman at a desk", "kitten", "dog", "puppy", "cats", "dogs", "cat", "a dog"])
+
+    def stock(prompt, output, size=""):
+        Path(output).write_bytes(next(content))
+        return {"provider": "pexels", "source_url": "https://www.pexels.com/photo/1/", "license": "Pexels"}
+
+    with patch("content_platform.image_provider._stock_image", side_effect=stock), \
+            patch("content_platform.asset_semantic_review.review_asset", side_effect=lambda *a, **k: {"observed_subject": next(observed)}):
+        photos = Pipeline._select_beat_photos(fake, "j1", {"title": "t", "body": "b"}, {}, "douyin_pet")
+    assert len(photos) == 8 and len({row["sha256"] for row in photos}) == 8
+    assert "a woman at a desk" not in [row["observed_subject"] for row in photos]
+    assert all(row["provider_result"]["source_url"].startswith("https://") for row in photos)

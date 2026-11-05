@@ -366,3 +366,42 @@ def test_rejected_duplicate_retry_keeps_the_previous_image(tmp_path):
     assert images[0]["checksum"] != images[1]["checksum"]
     import hashlib
     assert hashlib.sha256(Path(images[1]["path"]).read_bytes()).hexdigest() == images[1]["checksum"]
+
+
+def test_beat_uses_its_preselected_photo_first(tmp_path):
+    """MED42: the narration was written from these photos, so each beat's first candidate is its own photo."""
+    import hashlib
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    photos = []
+    for i in range(2):
+        path = tmp_path / f"photo-{i}.png"
+        Image.frombytes("L", (64, 64), bytes(random.Random(10 + i).randrange(256) for _ in range(64 * 64))).save(path)
+        photos.append({"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                       "provider_result": {"provider": "pexels", "source_url": "https://www.pexels.com/photo/%d/" % i, "license": "Pexels"}})
+    job = {"id": "j11", "title": "两只猫", "body": "正文", "platforms": ["douyin_pet"],
+           "draft_meta": {"beat_photo_plan": {"photos": photos}}}
+    calls = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            calls.append(prompt)
+            return {"provider": "fake"}
+
+    requirements = [{"intent": {"beat_id": f"s0{i}", "claim": claim, "content_match_reason": "illustrate"}, "sha256": str(i)}
+                    for i, claim in enumerate(["两只猫并排睡觉", "一只猫望风"], 1)]
+    recorded = {}
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch("content_platform.video_asset_semantics.validate_requirement", side_effect=lambda r: r), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: {"score": 0.9, "requirement_match": True}), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"}, semantic_requirements=requirements)
+    assert calls == []
+    assert [image["provider_result"]["source_url"] for image in recorded["images"]] == [row["provider_result"]["source_url"] for row in photos]
+    assert [image["checksum"] for image in recorded["images"]] == [row["sha256"] for row in photos]
+    # A photo changed since it was picked is not used.
+    Path(photos[1]["path"]).write_bytes(b"changed")
+    assert MediaBridge._planned_beat_photos(job, [{"semantic_requirement": 1}, {"semantic_requirement": 1}]) == []

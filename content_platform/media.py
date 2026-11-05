@@ -947,6 +947,7 @@ class MediaBridge:
         used_checksums = set()
         used_visual_signatures = []
         prior_prompt = None
+        planned = self._planned_beat_photos(job, prompts)
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
             prompt = item["prompt"]
@@ -965,7 +966,13 @@ class MediaBridge:
             real_only = bool(item_chain) and bool(REAL_BACKGROUND_PLATFORMS.intersection(
                 str(value).casefold() for value in job.get("platforms") or []))
             for attempt in range(4):
-                provider_result = provider.run(prompt, output, item_args, **item_kwargs)
+                if attempt == 0 and planned:
+                    # MED42: the narration describes this licensed photo, so it is the beat's first candidate.
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(planned[idx]["path"], output)
+                    provider_result = dict(planned[idx]["provider_result"], preselected_beat_photo=True)
+                else:
+                    provider_result = provider.run(prompt, output, item_args, **item_kwargs)
                 if not isinstance(provider_result, dict):
                     raise RuntimeError("image provider returned invalid metadata")
                 if not output.is_file():
@@ -1056,6 +1063,18 @@ class MediaBridge:
         self._persist_asset_provenance(output_dir, images, prompts, type(provider).__name__, job)
         section_map = [] if semantic_requirements else self._bound_section_image_map(output_dir, images, job)
         return {"kind": "image", "path": images[0]["path"], "checksum": images[0]["checksum"], "images": images, "section_image_map": section_map, "measured_cover_design": cover_design}
+
+    @staticmethod
+    def _planned_beat_photos(job, prompts):
+        """Photos the narration was written from (MED42), one per semantic beat, unchanged since they were picked."""
+        photos = (((job.get("draft_meta") or {}).get("beat_photo_plan") or {}).get("photos")) or []
+        if not prompts or len(photos) != len(prompts) or not all(item.get("semantic_requirement") for item in prompts):
+            return []
+        for row in photos:
+            path = Path(str(row.get("path") or ""))
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != row.get("sha256"):
+                return []
+        return photos
 
     @staticmethod
     def _article_image_chain(job, item):
