@@ -102,6 +102,9 @@ ops repository; this entry covers the code.
   `_bind_video_asset_semantics` skipped Kuaishou. The brief lane is now kept only when it is the rulebook lane
   without the `_v1` suffix; any other lane (e.g. Xiaohongshu's brief lane vs its
   `cat_dog_ai_knowledge_workflow_system` rule) is still replaced. `account_lane` is always the rulebook id.
+- `tests/test_kuaishou_publish_guards.py` (11-04): the four postcheck semantics tests were rewritten for the card-based
+  `_classify_management_postcheck(manifest, cards)` and `_postcheck_passed(report, manifest)` (evidence file required);
+  a scheduled card with the wrong time must not pass.
 - Kuaishou scheduled auto-post (MED26, 11-04; owner: Kuaishou is an automatic scheduled post). An overnight slot
   with `"action": "schedule_publish"` (Kuaishou only) runs `content_platform/kuaishou_schedule.py` after the
   pipeline: `scripts/build_kuaishou_packet.py` on the rendered video dir (schedule = the window's CST date at
