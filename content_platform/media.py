@@ -1018,7 +1018,9 @@ class MediaBridge:
                     # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
                     retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
                         name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
+                kept_bytes = output.read_bytes()
                 retry_result = provider.run(retry_prompt, output, extra_args, **retry_kwargs)
+                accepted = False
                 if isinstance(retry_result, dict) and output.is_file():
                     retry_checksum = hashlib.sha256(output.read_bytes()).hexdigest()
                     retry_signature = self._visual_signature(output)
@@ -1027,6 +1029,10 @@ class MediaBridge:
                     ):
                         provider_result, checksum, visual_signature = retry_result, retry_checksum, retry_signature
                         review = self._semantic_review(output, job, item, provider_result)
+                        accepted = True
+                if not accepted:
+                    # MED41 (r109): a rejected retry (a stock photo repeating an earlier beat) overwrote the kept image.
+                    output.write_bytes(kept_bytes)
                 if hashlib.sha256(output.read_bytes()).hexdigest() != checksum:
                     raise RuntimeError(f"image retry left an unrecorded file for scene {idx + 1}")
             used_checksums.add(checksum)

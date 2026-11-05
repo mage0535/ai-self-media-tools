@@ -331,3 +331,38 @@ def test_provenance_declares_real_scene_only_for_a_licensed_stock_photo(tmp_path
     MediaBridge._persist_asset_provenance(out, images, [], "fake", {"title": "t"})
     rows = json.loads(Path(out / "asset_provenance.json").read_text(encoding="utf-8"))["assets"]
     assert [(row["real_scene"], row["rights_cleared"]) for row in rows] == [(True, True), (False, False)]
+
+
+def test_rejected_duplicate_retry_keeps_the_previous_image(tmp_path):
+    """MED41 (r109): a stock retry repeated beat 1's photo; the rejected file overwrote the kept image and the job
+    stopped with 'image retry left an unrecorded file'."""
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j10", "title": "客服", "body": "正文", "platforms": ["kuaishou"]}
+    seeds = iter([1, 2, 1, 4])
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            rng = random.Random(next(seeds))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(rng.randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "pexels"}
+
+    requirements = [{"intent": {"beat_id": f"s0{i}", "claim": claim, "content_match_reason": "illustrate"}, "sha256": str(i)}
+                    for i, claim in enumerate(["客服坐席查看工单", "主管审批特批退款"], 1)]
+    reviews = iter([{"score": 0.9, "requirement_match": True}, {"score": 0.6, "requirement_match": False},
+                    {"score": 0.9, "requirement_match": True}])
+    recorded = {}
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch("content_platform.video_asset_semantics.validate_requirement", side_effect=lambda r: r), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: next(reviews)), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"}, semantic_requirements=requirements)
+    images = recorded["images"]
+    assert [image["semantic_review"]["requirement_match"] for image in images] == [True, True]
+    assert images[0]["checksum"] != images[1]["checksum"]
+    import hashlib
+    assert hashlib.sha256(Path(images[1]["path"]).read_bytes()).hexdigest() == images[1]["checksum"]
