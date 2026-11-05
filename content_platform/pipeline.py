@@ -2658,7 +2658,8 @@ class Pipeline:
                 continue
             self.store.record_event(job_id, "native_mandatory_quality_attempt",
                 {"platform": platform, "context_sha256": key, "quality_passed": False})
-            timeout=600
+            # MED45 (11-06 CST): a slow review model took 571 s of the 600 s, leaving 28 s for the VLM channel.
+            timeout=900
             if (self.store.get_job(job_id).get('brief')or{}).get('caption_revision_ref'):
                 from .native_stage_resume import caption_revision_stage_budget
                 timeout=caption_revision_stage_budget(self.store,job_id,timeout)

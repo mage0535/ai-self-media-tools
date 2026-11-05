@@ -186,11 +186,18 @@ def test_beat_retry_prompt_carries_the_reviewer_reason(tmp_path):
 
 
 def test_article_images_try_a_real_photo_first_except_original_knowledge():
-    chain = MediaBridge._article_image_chain({"platforms": ["zhihu"]}, {"role": "section"})
+    chain = MediaBridge._article_image_chain({"platforms": ["zhihu"]}, {"role": "cover"})
     original = MediaBridge._article_image_chain({"platforms": ["juejin"], "brief": {"content_mode": "original_knowledge"}}, {"role": "cover"})
 
     assert chain.split(",")[:2] == ["stock", "go_gemini"]
     assert "stock" not in original.split(",")
+
+
+def test_article_section_images_skip_stock_unless_backgrounds_must_be_real():
+    # MED45: Juejin/Zhihu section photos matched 0 of 12; each miss cost a search and a review.
+    assert MediaBridge._article_image_chain({"platforms": ["zhihu"]}, {"role": "section"}).split(",")[0] == "go_gemini"
+    assert MediaBridge._article_image_chain({"platforms": ["juejin"]}, {"role": "section"}).split(",")[0] == "go_gemini"
+    assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "section"}).startswith("stock,")
 
 
 def test_a_repeated_image_does_not_pin_later_images_to_another_provider(tmp_path):
@@ -199,7 +206,7 @@ def test_a_repeated_image_does_not_pin_later_images_to_another_provider(tmp_path
     from PIL import Image
 
     bridge = MediaBridge({}, tmp_path)
-    job = {"id": "j4", "title": "AI 客服工单分类", "body": "正文", "platforms": ["juejin"]}
+    job = {"id": "j4", "title": "AI 客服工单分类", "body": "正文", "platforms": ["xiaohongshu"]}
     seen = []
 
     class Provider:

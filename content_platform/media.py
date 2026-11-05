@@ -1088,6 +1088,10 @@ class MediaBridge:
         chain = ["stock", "go_gemini", "cloudflare", "pollinations", "sense_nova"]
         if (job.get("brief") or {}).get("content_mode") == "original_knowledge":
             chain.remove("stock")  # Original-knowledge jobs only take newly generated assets.
+        elif item.get("role") != "cover" and not platforms.intersection(REAL_BACKGROUND_PLATFORMS):
+            # MED45 (11-06 CST): Juejin/Zhihu section photos matched 0 of 12 and each miss cost 50-90 s, which pushed
+            # Juejin past its 900 s lease; only the cover keeps the real-photo attempt.
+            chain.remove("stock")
         return ",".join(chain)
 
     @staticmethod
