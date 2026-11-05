@@ -332,8 +332,9 @@ def validate_article_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "count": len(mapping),
             "minimum": 3,
         },
-        "real_scene_backgrounds": _real_scene_background_gate(packet, minimum=3),
-        "section_real_scene_mapping": _section_real_scene_mapping_gate(packet, mapping),
+        "real_scene_backgrounds": _article_background_gate(packet, minimum=3),
+        "section_real_scene_mapping": _section_real_scene_mapping_gate(packet, mapping,
+                                                                       backgrounds=_article_backgrounds(packet)),
         "knowledge_card_plan": {
             "passed": _valid_knowledge_card_plan(card_plan),
             "skill": str(card_plan.get("skill", "")),
@@ -1642,8 +1643,52 @@ def _real_scene_background_gate(packet: dict[str, Any], minimum: int = 3) -> dic
     }
 
 
-def _section_real_scene_mapping_gate(packet: dict[str, Any], mappings: list[Any]) -> dict[str, Any]:
-    backgrounds = _valid_real_scene_backgrounds(packet)
+def _declared_generated_illustration(item: dict[str, Any]) -> bool:
+    """An honestly declared generated article illustration: recorded source, bound section, semantic match >= 0.72."""
+    try:
+        score = float(item.get("semantic_match_score") or 0)
+    except (TypeError, ValueError):
+        score = 0.0
+    kind = str(item.get("background_kind") or item.get("kind") or item.get("asset_type") or "").casefold()
+    return (kind == "generated_image" and item.get("real_scene") is False and item.get("rights_cleared") is False
+            and bool(item.get("source_url")) and bool(item.get("section")) and score >= 0.72)
+
+
+def _article_backgrounds(packet: dict[str, Any]) -> list[dict[str, Any]]:
+    plan = packet.get("real_scene_background_plan") or packet.get("visual_background_plan") or {}
+    backgrounds = (plan.get("per_slide_backgrounds") or plan.get("backgrounds") or []) if isinstance(plan, dict) else []
+    if not isinstance(backgrounds, list):
+        return []
+    return [item for item in backgrounds if isinstance(item, dict)
+            and (_valid_real_scene_background(item) or _declared_generated_illustration(item))]
+
+
+def _article_background_gate(packet: dict[str, Any], minimum: int = 3) -> dict[str, Any]:
+    """Long-form article images (MED35). The rulebook's article review passes "封面为图库实拍或无文字写实生成图、正文图为
+    生成插图" when the declaration matches asset_provenance; its card/slide real-background hard rule stays on
+    Xiaohongshu cards and video scenes (``_real_scene_background_gate``). Each image is a rights-cleared real photo
+    or a declared generated illustration bound to a section with semantic match >= 0.72; none is a card or gradient."""
+    gate = _real_scene_background_gate(packet, minimum)
+    if gate["passed"]:
+        return gate
+    plan = packet.get("real_scene_background_plan") or packet.get("visual_background_plan") or {}
+    backgrounds = (plan.get("per_slide_backgrounds") or plan.get("backgrounds") or []) if isinstance(plan, dict) else []
+    accepted = _article_backgrounds(packet)
+    forbidden = {str(item).casefold() for item in (plan.get("forbidden_backgrounds") or [])} if isinstance(plan, dict) else set()
+    passed = bool(
+        isinstance(plan, dict) and plan.get("required")
+        and gate["source_policy"] in REAL_SCENE_BACKGROUND_SOURCE_POLICY
+        and (bool(plan.get("no_css_gradient_primary")) or "css_gradient" in forbidden)
+        and gate["primary_background_kind"] not in FORBIDDEN_PRIMARY_BACKGROUNDS
+        and isinstance(backgrounds, list) and len(accepted) >= int(minimum) and len(accepted) == len(backgrounds)
+    )
+    return {**gate, "passed": passed, "count": len(accepted),
+            "generated_illustrations": sum(1 for item in accepted if _declared_generated_illustration(item))}
+
+
+def _section_real_scene_mapping_gate(packet: dict[str, Any], mappings: list[Any],
+                                    backgrounds: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    backgrounds = _valid_real_scene_backgrounds(packet) if backgrounds is None else backgrounds
     if not isinstance(mappings, list):
         mappings = []
     valid_mapping_items = [item for item in mappings if isinstance(item, dict)]
