@@ -138,6 +138,10 @@ ops repository; this entry covers the code.
   extends a live `generating` claim of the same owner, never a migration-held or expired one, and records
   `job_claim_renewed`. Do not run tests on NEW during staging or a window: pixel reviews timed out in a cluster while
   a regression ran (r114).
+- Image retries (MED47/MED49, 11-05): a non-beat image gets 2 semantic regenerations (was 1). A draw the image
+  provider itself rejects (e.g. its flat-image check) is redrawn with a varied prompt within the 4 draws, and a
+  rejected regeneration restores the kept image instead of failing the job. MED48 (ask regenerations for a real scene
+  instead of a diagram) was tried and reverted: no score gain (r118).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
