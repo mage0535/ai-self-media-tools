@@ -115,6 +115,8 @@ ops repository; this entry covers the code.
   `stock,<video image chain>` and stay on stock in the semantic retry (`REAL_BACKGROUND_PLATFORMS`). Asset provenance
   records declare `real_scene`/`rights_cleared` from the actual source (licensed stock + https page URL only); the
   runner treats an undeclared asset as not real. A beat that only matches with a generated image is blocked, not relabelled.
+  MED41: a rejected semantic retry (duplicate of an earlier beat) writes the kept image back before the next retry,
+  so the per-image checksum integrity check holds (r109 `image retry left an unrecorded file`).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
