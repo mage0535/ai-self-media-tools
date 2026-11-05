@@ -122,6 +122,8 @@ ops repository; this entry covers the code.
   writes beat N from photo N's observed subject plus draft facts; the plan is `draft_meta.beat_photo_plan`.
   `MediaBridge._planned_beat_photos` uses each photo as its beat's first candidate after a sha check; the usual
   semantic review and stock retries follow. Reason: beats written first matched stock photos 0-1/8 (r110, probes).
+  MED43: before accepting, the writer checks each (beat, photo) pair with the media reviewer and threshold
+  (`_beat_photo_mismatches`) and rewrites failing beats with the reviewer's reason; leftovers go to the media gate.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
