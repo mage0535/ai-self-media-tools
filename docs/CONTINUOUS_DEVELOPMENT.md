@@ -126,6 +126,12 @@ ops repository; this entry covers the code.
   (`_beat_photo_mismatches`) and rewrites failing beats with the reviewer's reason; leftovers go to the media gate.
   MED44: the writer also runs `validate_claims` on the narration for run-contract briefs and rewrites unsourced
   numbers or statements (step ordinals stay), so the scoped claim gate is not hit after the text is frozen.
+- Time budgets (MED45, 11-05, after the 11-06 CST window): a normal article job holds a 900 s claim
+  (`normal_job_claim_seconds`); `continue_rendered_candidate` fails with `current_rendered_candidate_generation_lease_required`
+  if content + images run past it. Juejin/Zhihu section images therefore skip the stock attempt (`_article_image_chain`;
+  0 of 12 section photos were used); covers and real-background lanes (Xiaohongshu, video) keep it. The pixel review
+  subprocess timeout is 90 s (p50 26 s, p90 70 s; one retry on timeout remains). The mandatory native quality budget
+  in `_execute_current_native_quality` is 900 s (was 600 s; the auto channel alone used 571 s on 11-06).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
