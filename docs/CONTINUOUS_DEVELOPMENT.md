@@ -96,6 +96,14 @@ ops repository; this entry covers the code.
   (all fallbacks 0.38-0.68, Zhihu/XHS failed the 0.72 artifact contract). The switch is now per image and skipped
   when an article provider chain is set. A title that cannot fit the titled cover (`wechat_cover_title_overflow`)
   no longer fails the article: the cover shows the title's main clause (before `：`/`|`/`——`), OCR-verified.
+- Xiaohongshu image retry (MED37, 11-04): `REAL_BACKGROUND_PLATFORMS = {'xiaohongshu'}` in `content_platform/media.py`.
+  Its card backgrounds must be real photos, so the semantic retry of a weak stock photo searches stock again (new
+  query from the more specific retry prompt) instead of switching to a generated scene. Articles still fall back to
+  generated scenes; the repeated-photo loop is unchanged (Pexels returns the top result).
+- Kuaishou beat binding (MED38, 11-04, staging r106): `_bind_video_asset_semantics` only ran when `video_script`
+  was frozen, which only the pet narration did, so every Kuaishou beat failed `required_semantic_tag_missing`.
+  A required video plan without a frozen script (not douyin_pet) now freezes `MediaBridge.compile_video_script`
+  output right before binding.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
