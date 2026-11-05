@@ -94,32 +94,23 @@ class KuaishouPublishGuardTests(unittest.TestCase):
 
 
 class KuaishouPostcheckSemanticsTests(unittest.TestCase):
+    # The classifier reads management-page cards (one labelled field per line), not a page text blob.
+    MANIFEST = {"title": "Expected title", "description": "Expected description body", "schedule_time": "2026-07-29 12:30"}
+
     def test_under_review_without_title_or_schedule_is_not_passed(self):
         from scripts import kuaishou_postcheck_manifest as postcheck
 
         result = postcheck._classify_management_postcheck(
-            {
-                "title": "Expected title",
-                "description": "Expected description body",
-                "schedule_time": "2026-07-29 12:30",
-            },
-            "审核中 Expected description body",
-        )
+            self.MANIFEST, [{"text": "状态：审核中\n描述：Expected description body"}])
 
         self.assertFalse(result["passed"])
-        self.assertEqual(result["status"], "under_review")
+        self.assertEqual(result["status"], "management_postcheck_not_found")
 
     def test_under_review_with_matching_work_is_a_submitted_review_state(self):
         from scripts import kuaishou_postcheck_manifest as postcheck
 
         result = postcheck._classify_management_postcheck(
-            {
-                "title": "Expected title",
-                "description": "Expected description body",
-                "schedule_time": "2026-07-29 12:30",
-            },
-            "审核中 Expected title Expected description body",
-        )
+            self.MANIFEST, [{"text": "状态：审核中\n标题：Expected title\n描述：Expected description body", "work_id": "w1"}])
 
         self.assertTrue(result["passed"])
         self.assertEqual(result["status"], "success_under_review")
@@ -128,19 +119,28 @@ class KuaishouPostcheckSemanticsTests(unittest.TestCase):
     def test_publish_wrapper_accepts_a_passing_under_review_postcheck(self):
         from scripts import kuaishou_publish_with_postcheck as wrapper
 
-        self.assertTrue(wrapper._postcheck_passed({"passed": True, "status": "success_under_review"}))
-        self.assertFalse(wrapper._postcheck_passed({"passed": True, "status": "under_review"}))
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence = Path(tmp) / "postcheck.png"
+            evidence.write_bytes(b"png")
+            work = {"title": "Expected title", "description": "Expected description body", "state": "under_review"}
+            report = {"passed": True, "status": "success_under_review", "delivery_state": "under_review",
+                      "matched_work": work, "title_found": True, "description_found": True,
+                      "evidence_path": str(evidence)}
+            self.assertTrue(wrapper._postcheck_passed(report, self.MANIFEST))
+            self.assertFalse(wrapper._postcheck_passed(dict(report, status="under_review"), self.MANIFEST))
+            self.assertFalse(wrapper._postcheck_passed(dict(report, evidence_path=str(Path(tmp) / "missing.png")),
+                                                       self.MANIFEST))
 
     def test_scheduled_postcheck_requires_title_and_schedule_match(self):
         from scripts import kuaishou_postcheck_manifest as postcheck
 
-        result = postcheck._classify_management_postcheck(
-            {"title": "Expected title", "description": "Expected description body", "schedule_time": "2026-07-29 12:30"},
-            "Expected title Expected description body 2026-07-29 12:30",
-        )
-
+        card = "状态：定时发布\n标题：Expected title\n描述：Expected description body\n定时发布时间：{}"
+        result = postcheck._classify_management_postcheck(self.MANIFEST, [{"text": card.format("2026-07-29 12:30")}])
         self.assertTrue(result["passed"])
         self.assertEqual(result["status"], "management_postcheck_found")
+
+        wrong_time = postcheck._classify_management_postcheck(self.MANIFEST, [{"text": card.format("2026-07-29 18:30")}])
+        self.assertFalse(wrong_time["passed"])
 
 
 if __name__ == "__main__":
