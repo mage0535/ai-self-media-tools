@@ -111,6 +111,10 @@ ops repository; this entry covers the code.
   fails cta/emotion/info_density/save_value/engagement_comment). `_write_pet_narration(..., platform)` now runs for
   every platform; non-pet lanes only with an overnight brief, using `VIDEO_NARRATION_PROMPT` and the same gate and
   retries, audit `video_narration_audit`. The body-slice freeze stays only as the fallback when the writer fails.
+- Video real backgrounds (MED39, 11-04): semantic beats on `VIDEO_REAL_SCENE_PLATFORMS` (douyin_pet, kuaishou) use
+  `stock,<video image chain>` and stay on stock in the semantic retry (`REAL_BACKGROUND_PLATFORMS`). Asset provenance
+  records declare `real_scene`/`rights_cleared` from the actual source (licensed stock + https page URL only); the
+  runner treats an undeclared asset as not real. A beat that only matches with a generated image is blocked, not relabelled.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
