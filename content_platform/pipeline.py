@@ -1343,7 +1343,7 @@ class Pipeline:
         ledgers=[];results={}
         for platform,brief in briefs.items():
             variant=variants.get(platform) or draft
-            frozen=self._freeze_overnight_video_beats(platform,brief,variant)
+            frozen=Pipeline._freeze_overnight_video_beats(platform,brief,variant)
             text=str(variant.get('title') or '')+'\n'+str(variant.get('body') or '')+'\n'+_draft_script_text(variant)
             ledger=list(brief.get('claim_ledger') or [])
             claim=validate_claims(text,ledger)
@@ -1356,7 +1356,7 @@ class Pipeline:
                 cleaned_variant=copy.deepcopy(variant)
                 if frozen:  # the frozen beats come from the body, so they are rebuilt from the cleaned body
                     cleaned_variant['body']=cleaned_body;cleaned_variant['draft_meta'].pop('video_script',None)
-                    self._freeze_overnight_video_beats(platform,brief,cleaned_variant)
+                    Pipeline._freeze_overnight_video_beats(platform,brief,cleaned_variant)
                 cleaned_text=cleaned_title+'\n'+cleaned_body+'\n'+_draft_script_text(cleaned_variant)
                 cleaned_claim=validate_claims(cleaned_text,ledger)
                 if len(cleaned_body)>=80 and cleaned_claim.get('passed'):
