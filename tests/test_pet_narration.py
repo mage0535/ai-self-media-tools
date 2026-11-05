@@ -164,3 +164,50 @@ def test_beat_photos_are_unique_licensed_and_keep_to_the_pets(tmp_path):
     assert len(photos) == 8 and len({row["sha256"] for row in photos}) == 8
     assert "a woman at a desk" not in [row["observed_subject"] for row in photos]
     assert all(row["provider_result"]["source_url"].startswith("https://") for row in photos)
+
+
+def _photo_first_run(tmp_path, replies, verdicts):
+    from unittest.mock import patch
+
+    calls, reviewed = [], []
+
+    def call(prompt, brief):
+        calls.append(prompt)
+        return replies.pop(0)
+
+    def review(path, title, beat, result, semantic_requirement=None):
+        reviewed.append(beat)
+        bad = verdicts(beat)
+        return {"score": 0.4 if bad else 0.8, "requirement_match": not bad, "reason": "no person in the photo" if bad else ""}
+
+    fake = types.SimpleNamespace(generator=types.SimpleNamespace(_call_hermes_text=call),
+                                 store=types.SimpleNamespace(record_event=lambda *a: None, path=tmp_path / "state.db"),
+                                 PET_NARRATION_PROMPT=Pipeline.PET_NARRATION_PROMPT, PET_VOICE_PLAN_PROMPT=Pipeline.PET_VOICE_PLAN_PROMPT,
+                                 PHOTO_FIRST_PLATFORMS=Pipeline.PHOTO_FIRST_PLATFORMS)
+    fake._write_pet_voice_plan = lambda *a, **k: {"accepted": False}
+    photos = [{"path": f"p{i}.jpg", "sha256": str(i), "provider_result": {"provider": "pexels"}, "observed_subject": f"cat {i}"}
+              for i in range(8)]
+    draft = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
+    with patch.object(Pipeline, "_select_beat_photos", return_value=photos), \
+            patch("content_platform.asset_semantic_review.review_asset", side_effect=review):
+        Pipeline._write_pet_narration(fake, "j1", draft, {"douyin_pet": {}})
+    return draft["draft_meta"], calls, reviewed
+
+
+def test_beats_their_photos_do_not_show_are_rewritten_with_the_reviewer_reason(tmp_path):
+    """MED43 (r112): beat s04 added a person intervening that its photo did not show (0.38)."""
+    lines = GOOD.splitlines()
+    fixed = "\n".join(lines[:3] + ["第3步，每天提供3套难度递增的漏食玩具，小猫正低头拨弄。"] + lines[4:])
+    meta, calls, reviewed = _photo_first_run(tmp_path, [GOOD, fixed], lambda beat: beat == lines[3])
+    assert meta["pet_narration_audit"]["accepted"] is True and meta["video_script"] == fixed.replace("\n", "\n\n")
+    assert "第4段与第4张照片不符（no person in the photo）" in calls[1] and "上一版：" in calls[1]
+    assert meta["pet_narration_audit"]["attempts"][0]["photo_mismatches"] == [4]
+    assert len(reviewed) == 9  # unchanged beats are not reviewed again
+
+
+def test_mismatches_left_after_the_retries_keep_the_best_script_for_the_media_gate(tmp_path):
+    lines = GOOD.splitlines()
+    worse = "\n".join(["那只猫" + line[3:] if i < 2 else line for i, line in enumerate(lines)])
+    meta, calls, _ = _photo_first_run(tmp_path, [GOOD, worse, GOOD], lambda beat: beat == lines[3] or beat.startswith("那只猫"))
+    assert len(calls) == 3 and meta["video_script"] == GOOD.replace("\n", "\n\n")
+    assert meta["pet_narration_audit"]["photo_mismatches_left"] == 1 and "beat_photo_plan" in meta
