@@ -96,6 +96,12 @@ ops repository; this entry covers the code.
   (all fallbacks 0.38-0.68, Zhihu/XHS failed the 0.72 artifact contract). The switch is now per image and skipped
   when an article provider chain is set. A title that cannot fit the titled cover (`wechat_cover_title_overflow`)
   no longer fails the article: the cover shows the title's main clause (before `：`/`|`/`——`), OCR-verified.
+- Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
+  `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
+  declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
+  `section`, `semantic_match_score` >= 0.72), at least 3, no card/gradient. This follows the rulebook's article review
+  (generated section illustrations pass when declared as produced). Xiaohongshu cards and video scenes keep
+  `_real_scene_background_gate` (card/slide real-background hard rule).
 - Lane binding (MED34, 11-04, Kuaishou staging r103): `Pipeline.create` replaced the brief lane
   `real_world_ai_implementation` with the rulebook id `real_world_ai_implementation_v1`. The Kuaishou reference
   samples carry the brief lane, so `generate_video` blocked `target_platform_same_lane_sample_missing`, and
