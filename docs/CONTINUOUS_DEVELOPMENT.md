@@ -102,7 +102,7 @@ ops repository; this entry covers the code.
   generated scenes; the repeated-photo loop is unchanged (Pexels returns the top result).
 - Kuaishou beat binding (MED38, 11-04, staging r106): `_bind_video_asset_semantics` only ran when `video_script`
   was frozen, which only the pet narration did, so every Kuaishou beat failed `required_semantic_tag_missing`.
-  MED38c (r107): the freeze lives in `Pipeline._freeze_overnight_video_beats`, called inside
+  MED38c (r107): the freeze lives in the staticmethod `Pipeline._freeze_overnight_video_beats` (called on the class), inside
   `_validate_scoped_narrations` for overnight lanes (brief has `platform_source_matrix` and `hot_viral_samples`), so the
   narration receipt covers the exact script; it is rebuilt from the cleaned body when claims are sanitised.
   `bind_requirements` binds overnight lanes through that receipt (like douyin_pet); native lanes still need their
