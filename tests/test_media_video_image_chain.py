@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from content_platform.media import MediaBridge
@@ -275,3 +276,58 @@ def test_weak_stock_photo_retries_stock_only_where_backgrounds_must_be_real(tmp_
     assert _weak_stock_retry_chains(tmp_path / "x", "xiaohongshu")[1].startswith("stock,")
     # Articles accept declared generated illustrations (MED35): a weak photo gives way to a generated scene.
     assert not _weak_stock_retry_chains(tmp_path / "j", "juejin")[1].startswith("stock")
+
+
+def _beat_chains(tmp_path, platform, provider_name, content_mode=""):
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j9", "title": "两只猫", "body": "正文", "platforms": [platform], "brief": {"content_mode": content_mode}}
+    seen = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            seen.append((env or {}).get("IMAGE_PROVIDER_CHAIN", ""))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(random.Random(len(seen)).randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": provider_name}
+
+    requirements = [{"intent": {"beat_id": "s01", "claim": "两只猫并排睡觉", "content_match_reason": "illustrate"}, "sha256": "1"}]
+    reviews = iter([{"score": 0.6, "requirement_match": False}, {"score": 0.9, "requirement_match": True}])
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch("content_platform.video_asset_semantics.validate_requirement", side_effect=lambda r: r), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: next(reviews)), \
+            patch.object(MediaBridge, "_persist_asset_provenance", return_value=None):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto", "provider_chain": "go_gemini,cloudflare"},
+                               semantic_requirements=requirements)
+    return seen
+
+
+def test_video_beats_search_licensed_stock_first_and_retry_on_stock(tmp_path):
+    """MED39 (r108): rendered video scenes must be licensed real photos, but beats only ever drew generated images."""
+    for platform in ("douyin_pet", "kuaishou"):
+        chains = _beat_chains(tmp_path / platform, platform, "pexels")
+        assert chains == ["stock,go_gemini,cloudflare", "stock,go_gemini,cloudflare"]
+    # Original-knowledge jobs only take new generated assets; other lanes keep their configured chain.
+    assert _beat_chains(tmp_path / "o", "douyin_pet", "fake", "original_knowledge")[0] == "go_gemini,cloudflare"
+    assert _beat_chains(tmp_path / "w", "wechat_channels", "fake")[0] == "go_gemini,cloudflare"
+
+
+def test_provenance_declares_real_scene_only_for_a_licensed_stock_photo(tmp_path):
+    from pathlib import Path
+    from PIL import Image
+
+    out = tmp_path / "p"; out.mkdir()
+    images = []
+    for index, result in enumerate([{"provider": "pexels", "mode": "search", "license": "Pexels",
+                                     "source_url": "https://www.pexels.com/photo/1/"},
+                                    {"provider": "go_gemini", "model": "m"}]):
+        path = out / f"section-{index:02d}.png"
+        Image.new("RGB", (8, 8)).save(path)
+        images.append({"path": str(path), "role": "section", "section": f"s0{index}", "provider_result": result,
+                       "semantic_review": {"score": 0.9}})
+    MediaBridge._persist_asset_provenance(out, images, [], "fake", {"title": "t"})
+    rows = json.loads(Path(out / "asset_provenance.json").read_text(encoding="utf-8"))["assets"]
+    assert [(row["real_scene"], row["rights_cleared"]) for row in rows] == [(True, True), (False, False)]

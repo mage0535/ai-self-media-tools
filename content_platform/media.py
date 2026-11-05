@@ -24,7 +24,8 @@ TITLED_COVER_PLATFORMS = ('wechat', 'juejin', 'zhihu', 'xiaohongshu')
 STOCK_PROVIDERS = {'stock', 'pexels', 'pixabay'}
 # Card backgrounds here must be licensed real photos (rulebook visual_quality_standards; MED35 keeps the strict gate),
 # so a generated image can never pass there: the semantic retry searches stock again before generating (MED37).
-REAL_BACKGROUND_PLATFORMS = {'xiaohongshu'}
+REAL_BACKGROUND_PLATFORMS = {'xiaohongshu', 'douyin_pet', 'kuaishou'}
+VIDEO_REAL_SCENE_PLATFORMS = {'douyin_pet', 'kuaishou'}
 
 class MediaBridge:
     VIDEO_SCRIPT_MAX_SEGMENTS = 8
@@ -950,6 +951,12 @@ class MediaBridge:
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
             prompt = item["prompt"]
             item_chain = self._article_image_chain(job, item)
+            if (not item_chain and item.get("semantic_requirement") and VIDEO_REAL_SCENE_PLATFORMS.intersection(
+                    str(value).casefold() for value in job.get("platforms") or [])
+                    and (job.get("brief") or {}).get("content_mode") != "original_knowledge"):
+                # MED39 (r108): video scenes must be licensed real photos, but beats only ever drew generated images.
+                item_chain = ",".join(["stock"] + [name for name in (chain or "go_gemini,cloudflare,pollinations").split(",")
+                                                   if name.strip() and name.strip() not in STOCK_PROVIDERS])
             item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": item_chain}} if item_chain else run_kwargs
             # Per image: a provider switch for one repeated image used to rebind the shared args and pin every
             # later image to pollinations, overriding the chain (r104: all fallbacks flux, 0.38-0.68; MED32).
@@ -1171,6 +1178,10 @@ class MediaBridge:
                 "source_url": str(provider_result.get("source_url") or (f"generated:{actual_provider}" if actual_provider else "")),
                 "license": str(provider_result.get("license") or ("provider_terms_recorded" if origin != "real_photo" else "")),
                 "origin": origin,
+                # MED39: declared from the actual source; only a licensed stock photo with its page URL is a real scene.
+                "real_scene": origin == "real_photo",
+                "rights_cleared": origin == "real_photo" and bool(provider_result.get("license"))
+                and str(provider_result.get("source_url") or "").startswith("https://"),
                 "semantic_match_score": semantic_score if semantic_score is not None else 0.0,
                 "semantic_review": semantic_review,
                 "match_reason": str(provider_result.get("match_reason") or purpose),

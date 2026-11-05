@@ -1507,7 +1507,7 @@ def _materialize_visual_backgrounds(output_dir: Path, visual_assets: dict) -> li
                 "source": str(source),
                 "path": str(dest),
                 "rights_cleared": bool(item.get("rights_cleared", False)),
-                "real_scene": bool(item.get("real_scene", True)),
+                "real_scene": bool(item.get("real_scene", False)),  # MED39: undeclared is not real
                 "source_url": str(item.get("source_url") or item.get("page_url") or ""),
                 "photo_id": str(item.get("photo_id") or ""),
                 "page_url": str(item.get("page_url") or ""),
