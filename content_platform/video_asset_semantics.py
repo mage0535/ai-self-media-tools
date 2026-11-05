@@ -118,8 +118,10 @@ def bind_requirements(store,job_id,brief,script,scenes,platform,owner):
     from .video_planning_producer import read_bound_video_planning
     from .stage_input_refs import resolve_stage_payload,bind_stage_payload
     from .workflow_runtime import STEP_SUCCEEDED
-    # The pet lane has no source video planning; its 8 beats are frozen by the receipt check below.
-    if platform!='douyin_pet':
+    # The pet lane and the overnight lanes (MED38: beats frozen from the body) have no source video planning; their
+    # 8 beats are bound by the narration receipt check below. Native lanes must match their bound planning.
+    overnight=bool(brief.get('platform_source_matrix') and brief.get('hot_viral_samples'))
+    if platform!='douyin_pet' and not overnight:
         planned=read_bound_video_planning(store,job_id,brief)
         if script!=planned['video_script']:raise ValueError('semantic_script_not_frozen')
     receipt=None

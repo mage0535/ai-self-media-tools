@@ -1343,6 +1343,7 @@ class Pipeline:
         ledgers=[];results={}
         for platform,brief in briefs.items():
             variant=variants.get(platform) or draft
+            frozen=self._freeze_overnight_video_beats(platform,brief,variant)
             text=str(variant.get('title') or '')+'\n'+str(variant.get('body') or '')+'\n'+_draft_script_text(variant)
             ledger=list(brief.get('claim_ledger') or [])
             claim=validate_claims(text,ledger)
@@ -1352,10 +1353,17 @@ class Pipeline:
                 cleaned_title=(sanitize_unsupported_claims(variant.get('title') or '',claim.get('findings'))
                                or strip_numeric_claims(variant.get('title') or '') or str(variant.get('title') or ''))
                 cleaned_body=sanitize_unsupported_claims(variant.get('body') or '',claim.get('findings'))
-                cleaned_text=cleaned_title+'\n'+cleaned_body+'\n'+_draft_script_text(variant)
+                cleaned_variant=copy.deepcopy(variant)
+                if frozen:  # the frozen beats come from the body, so they are rebuilt from the cleaned body
+                    cleaned_variant['body']=cleaned_body;cleaned_variant['draft_meta'].pop('video_script',None)
+                    self._freeze_overnight_video_beats(platform,brief,cleaned_variant)
+                cleaned_text=cleaned_title+'\n'+cleaned_body+'\n'+_draft_script_text(cleaned_variant)
                 cleaned_claim=validate_claims(cleaned_text,ledger)
                 if len(cleaned_body)>=80 and cleaned_claim.get('passed'):
                     variant['title'],variant['body'],text=cleaned_title,cleaned_body,cleaned_text
+                    if frozen:
+                        for field in ('video_script','narration_script'):
+                            variant['draft_meta'][field]=cleaned_variant['draft_meta'][field]
                     variant.setdefault('draft_meta',{})['claim_sanitization']={'removed_count':len([row for row in claim.get('findings') or [] if not row.get('covered')]),
                         'original_gate':claim,'passed':True}
                     claim=cleaned_claim
@@ -1468,6 +1476,19 @@ class Pipeline:
         return {'accepted':False,'attempts':attempts}
 
     @staticmethod
+    def _freeze_overnight_video_beats(platform,brief,variant):
+        """MED38 (r106/r107): an overnight video lane other than the pet one has no narration writer and no native
+        planning, so its asset semantics were never bound (every beat required_semantic_tag_missing). Freeze the 8 beats
+        the renderer would compile from the body here, so the narration receipt covers exactly that script."""
+        meta=variant.setdefault('draft_meta',{})
+        if (platform=='douyin_pet' or meta.get('video_script') or not (meta.get('video_toolchain_plan') or {}).get('required')
+                or not (brief.get('platform_source_matrix') and brief.get('hot_viral_samples'))):
+            return bool(meta.get('overnight_beats_frozen'))
+        meta['video_script']=meta['narration_script']=MediaBridge.compile_video_script(variant)['script']
+        meta['overnight_beats_frozen']=True
+        return True
+
+    @staticmethod
     def _freeze_pet_video_beats(draft,briefs):
         """Fix the pet narration to the 8 rendered beats before the factual/safety receipt covers it."""
         if 'douyin_pet' not in briefs:return
@@ -1484,11 +1505,8 @@ class Pipeline:
             if brief.get('lane')!='real_world_ai_implementation' and platform!='douyin_pet':continue
             variant=variants.get(platform) or draft;meta=variant.get('draft_meta') or {}
             plan=meta.get('video_toolchain_plan') or {}
-            if plan.get('required') and not meta.get('video_script') and platform!='douyin_pet':
-                # MED38 (r106): only the pet narration was frozen, so Kuaishou skipped this binding and every beat
-                # failed required_semantic_tag_missing. Freeze the 8 beats the renderer would compile from the body.
-                meta['video_script']=meta['narration_script']=MediaBridge.compile_video_script(variant)['script']
-                # Its TTS needs the same hash-pinned declared prosody per beat (voice_engine: voice_plan_missing otherwise).
+            if meta.get('overnight_beats_frozen') and not meta.get('voice_plan_source'):
+                # MED38b: its TTS needs the same hash-pinned declared prosody per beat (voice_engine: voice_plan_missing).
                 meta['voice_plan_audit']=self._write_pet_voice_plan(job_id,meta,meta['video_script'].split('\n\n'),brief,
                                                                     label=platform+' AI 实操短视频')
             if not plan.get('required') or not meta.get('video_script'):continue
