@@ -124,6 +124,8 @@ ops repository; this entry covers the code.
   semantic review and stock retries follow. Reason: beats written first matched stock photos 0-1/8 (r110, probes).
   MED43: before accepting, the writer checks each (beat, photo) pair with the media reviewer and threshold
   (`_beat_photo_mismatches`) and rewrites failing beats with the reviewer's reason; leftovers go to the media gate.
+  MED44: the writer also runs `validate_claims` on the narration for run-contract briefs and rewrites unsourced
+  numbers or statements (step ordinals stay), so the scoped claim gate is not hit after the text is frozen.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
