@@ -444,3 +444,36 @@ def test_article_image_gets_a_second_regeneration_before_blocking(tmp_path):
     assert len(calls) == 3 and recorded["images"][0]["semantic_review"]["score"] == 0.8
     # MED48: the regeneration asks for a real scene, not a diagram.
     assert "not a diagram, chart or infographic" in calls[1]
+
+
+def test_a_regeneration_the_provider_rejects_keeps_the_previous_image(tmp_path):
+    # MED49 (r117): the provider's flat-image check raised during a retry and failed the whole job.
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j7", "title": "AI 排产", "body": "正文", "platforms": ["juejin"]}
+    calls = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            calls.append(prompt)
+            if len(calls) == 2:
+                Path(output).write_bytes(b"partial")
+                raise RuntimeError("标准差 13.8 < 15，画面过于单一")
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(random.Random(len(calls)).randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "go_gemini"}
+
+    scores = iter([0.6, 0.8])
+    recorded = {}
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch.object(MediaBridge, "_image_prompts", return_value=[{"role": "cover", "prompt": "cover"}]), \
+            patch.object(MediaBridge, "_required_image_count", return_value=1), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: {"score": next(scores)}), \
+            patch.object(MediaBridge, "_compose_wechat_cover", return_value={}), \
+            patch.object(MediaBridge, "_bound_section_image_map", return_value=[]), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
+    assert len(calls) == 3 and recorded["images"][0]["semantic_review"]["score"] == 0.8

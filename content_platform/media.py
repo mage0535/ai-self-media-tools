@@ -972,7 +972,15 @@ class MediaBridge:
                     shutil.copyfile(planned[idx]["path"], output)
                     provider_result = dict(planned[idx]["provider_result"], preselected_beat_photo=True)
                 else:
-                    provider_result = provider.run(prompt, output, item_args, **item_kwargs)
+                    try:
+                        provider_result = provider.run(prompt, output, item_args, **item_kwargs)
+                    except Exception:
+                        if attempt == 3:
+                            raise
+                        # MED49: a provider-rejected draw (flat image) is redrawn with a varied prompt, like a repeat.
+                        prompt = (f"{item['prompt']} Distinct scene variation {idx + 1}: use a different camera angle, "
+                                  "subject placement, lighting direction, and visual metaphor.")
+                        continue
                 if not isinstance(provider_result, dict):
                     raise RuntimeError("image provider returned invalid metadata")
                 if not output.is_file():
@@ -1033,7 +1041,12 @@ class MediaBridge:
                     retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
                         name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
                 kept_bytes = output.read_bytes()
-                retry_result = provider.run(retry_prompt, output, extra_args, **retry_kwargs)
+                try:
+                    retry_result = provider.run(retry_prompt, output, extra_args, **retry_kwargs)
+                except Exception:
+                    # MED49 (r117): a regeneration the provider's own check rejected (flat image, std 13.8 < 15) failed
+                    # the whole job; it is a rejected retry, and the kept image is restored below.
+                    retry_result = None
                 accepted = False
                 if isinstance(retry_result, dict) and output.is_file():
                     retry_checksum = hashlib.sha256(output.read_bytes()).hexdigest()
