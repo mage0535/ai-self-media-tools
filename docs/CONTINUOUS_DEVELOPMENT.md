@@ -142,6 +142,11 @@ ops repository; this entry covers the code.
   provider itself rejects (e.g. its flat-image check) is redrawn with a varied prompt within the 4 draws, and a
   rejected regeneration restores the kept image instead of failing the job. MED48 (ask regenerations for a real scene
   instead of a diagram) was tried and reverted: no score gain (r118).
+- Pexels provenance (MED50, 11-05): `_pexels_image` returns photo_id, page_url, download_url, license_url and
+  downloaded_at; real-photo provenance records keep them, and semantic video assignments copy the record, so the
+  runner's `_background_provenance_gate` sees the full stock record. Staging r120 (pet) passed every pre-render gate;
+  staging cannot run TTS (`normal_film_audio` needs an authority role home and the hermes-agent source on
+  PYTHONPATH, which only the window runner provides). Deployed as d50 (MED39-47, 49, 50) 11-05 13:22 PST.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
