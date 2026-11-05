@@ -1,3 +1,4 @@
+import json
 import tempfile
 from pathlib import Path
 
@@ -55,7 +56,19 @@ def test_kuaishou_video_beats_are_frozen_and_bound_like_the_pet_narration():
             patch("content_platform.video_asset_semantics.bind_requirements", side_effect=bind), \
             patch("content_platform.video_asset_semantics.requirement_tag", return_value="asset-requirement:x"):
         pipeline = _pipeline(Path(tmp))
-        pipeline._bind_video_asset_semantics("j", draft, {"kuaishou": {"lane": "real_world_ai_implementation"}}, "o")
+        prompts = []
+
+        def call(prompt, brief):
+            prompts.append(prompt)
+            n = len(prompt.split("\n\n")) and 8
+            return json.dumps({"voice_plan": [{"index": i, "style": "平稳", "semantic_direction": "说明步骤", "rate": "+0%",
+                                               "pitch": "+0Hz", "pause_after_ms": 300} for i in range(n)]})
+
+        with patch.object(pipeline.generator, "_call_hermes_text", side_effect=call):
+            pipeline._bind_video_asset_semantics("j", draft, {"kuaishou": {"lane": "real_world_ai_implementation"}}, "o")
+        source = draft["draft_meta"]["voice_plan_source"]
+        assert Path(source["path"]).is_file() and draft["draft_meta"]["voice_plan_audit"]["accepted"] is True
+    assert "kuaishou AI 实操短视频" in prompts[0] and "抖音宠物" not in prompts[0]
     assert seen["script"] == MediaBridge.compile_video_script({"body": body, "draft_meta": {}})["script"]
     assert draft["draft_meta"]["video_script"] == seen["script"]
     assert draft["draft_meta"]["video_toolchain_plan"]["visual_contract"][0]["required_semantic_tag"] == "asset-requirement:x"
