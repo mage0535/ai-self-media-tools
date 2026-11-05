@@ -240,3 +240,38 @@ def test_cover_title_overflow_falls_back_to_the_main_clause(tmp_path):
         design = MediaBridge._compose_wechat_cover(tmp_path, [{"role": "cover", "path": str(cover)}], job)
 
     assert calls[-1] == "从零搭建 LangGraph 旅行规划师" and design["title_text"] == calls[-1]
+
+
+def _weak_stock_retry_chains(tmp_path, platform):
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j5", "title": "猫粮换粮 AI 记录", "body": "正文", "platforms": [platform]}
+    seen = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            seen.append((env or {}).get("IMAGE_PROVIDER_CHAIN", ""))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(random.Random(len(seen)).randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "pexels"}
+
+    scores = iter([0.6, 0.9])
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch.object(MediaBridge, "_image_prompts", return_value=[{"role": "cover", "prompt": "cover"}]), \
+            patch.object(MediaBridge, "_required_image_count", return_value=1), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: {"score": next(scores)}), \
+            patch.object(MediaBridge, "_compose_wechat_cover", return_value={}), \
+            patch.object(MediaBridge, "_bound_section_image_map", return_value=[]), \
+            patch.object(MediaBridge, "_persist_asset_provenance", return_value=None):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
+    return seen
+
+
+def test_weak_stock_photo_retries_stock_only_where_backgrounds_must_be_real(tmp_path):
+    # MED37: Xiaohongshu card backgrounds must be real photos, so its semantic retry searches stock again.
+    assert _weak_stock_retry_chains(tmp_path / "x", "xiaohongshu")[1].startswith("stock,")
+    # Articles accept declared generated illustrations (MED35): a weak photo gives way to a generated scene.
+    assert not _weak_stock_retry_chains(tmp_path / "j", "juejin")[1].startswith("stock")

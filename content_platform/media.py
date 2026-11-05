@@ -22,6 +22,9 @@ SEMANTIC_BEAT_RETRIES = 2
 # Article covers whose title we render over a text-free background (wechat_cover_render).
 TITLED_COVER_PLATFORMS = ('wechat', 'juejin', 'zhihu', 'xiaohongshu')
 STOCK_PROVIDERS = {'stock', 'pexels', 'pixabay'}
+# Card backgrounds here must be licensed real photos (rulebook visual_quality_standards; MED35 keeps the strict gate),
+# so a generated image can never pass there: the semantic retry searches stock again before generating (MED37).
+REAL_BACKGROUND_PLATFORMS = {'xiaohongshu'}
 
 class MediaBridge:
     VIDEO_SCRIPT_MAX_SEGMENTS = 8
@@ -951,6 +954,9 @@ class MediaBridge:
             # Per image: a provider switch for one repeated image used to rebind the shared args and pin every
             # later image to pollinations, overriding the chain (r104: all fallbacks flux, 0.38-0.68; MED32).
             item_args = list(extra_args)
+            # Semantic retry only: its prompt names the concrete section subject, so the English stock query changes (MED37).
+            real_only = bool(item_chain) and bool(REAL_BACKGROUND_PLATFORMS.intersection(
+                str(value).casefold() for value in job.get("platforms") or []))
             for attempt in range(4):
                 provider_result = provider.run(prompt, output, item_args, **item_kwargs)
                 if not isinstance(provider_result, dict):
@@ -1001,7 +1007,7 @@ class MediaBridge:
                                    "concrete situation this exact sentence describes instead." if seen else "")
                                 + (f" The reviewer rejected it because: {why} Include what is missing." if why else ""))
                 retry_kwargs = item_kwargs
-                if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS:
+                if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS and not real_only:
                     # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
                     retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
                         name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
