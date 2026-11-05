@@ -107,6 +107,10 @@ ops repository; this entry covers the code.
   narration receipt covers the exact script; it is rebuilt from the cleaned body when claims are sanitised.
   `bind_requirements` binds overnight lanes through that receipt (like douyin_pet); native lanes still need their
   bound video planning. MED38b: the frozen beats get a model-declared voice plan (`_write_pet_voice_plan`, own label).
+  MED40 (r108): body slices are not a narration (they stop mid-article, so the renderer's `video_script_gate`
+  fails cta/emotion/info_density/save_value/engagement_comment). `_write_pet_narration(..., platform)` now runs for
+  every platform; non-pet lanes only with an overnight brief, using `VIDEO_NARRATION_PROMPT` and the same gate and
+  retries, audit `video_narration_audit`. The body-slice freeze stays only as the fallback when the writer fails.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
