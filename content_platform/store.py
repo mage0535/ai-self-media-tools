@@ -596,6 +596,24 @@ class Store:
                 return True
             return False
 
+    def renew_claim(self, job_id, owner, ttl_seconds):
+        """Extend a live generating claim held by this owner (MED46); an expired or migration-held claim is never revived."""
+        now = utc_now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=int(ttl_seconds))).isoformat(timespec="seconds")
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if self._migration_held(conn, job_id):
+                return False
+            cursor = conn.execute(
+                "UPDATE jobs SET lease_expires_at=? WHERE id=? AND state='generating' AND lease_owner=? "
+                "AND lease_expires_at<>'' AND julianday(lease_expires_at)>julianday(?)",
+                (expires, job_id, owner, now),
+            )
+            if cursor.rowcount == 1:
+                self._event(conn, job_id, "job_claim_renewed", {"owner": owner, "expires_at": expires})
+                return True
+            return False
+
     def release_claim(self, job_id, owner, new_state, event, error="", detail=None):
         if getattr(self, "_root_source_repair", None) is not None:
             from .source_repair_runtime import release_source_repair

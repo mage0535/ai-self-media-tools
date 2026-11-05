@@ -21,6 +21,26 @@ class ReliabilityTests(unittest.TestCase):
         self.assertFalse(self.store.claim(job["id"], {"created", "generating"}, "worker-b", 60, "generating"))
         self.assertEqual(self.store.get_job(job["id"])["lease_owner"], "worker-a")
 
+    def test_live_owner_renews_its_claim_but_never_revives_or_steals_one(self):
+        # MED46: a batch job's fixed 900 s claim is renewed by its live owner; an expired claim stays expired.
+        job = self.store.create_job("topic", ["wechat"])
+        self.store.claim(job["id"], {"created"}, "worker-a", 60, "generating")
+        before = self.store.get_job(job["id"])["lease_expires_at"]
+        self.assertFalse(self.store.renew_claim(job["id"], "worker-b", 900))
+        self.assertTrue(self.store.renew_claim(job["id"], "worker-a", 900))
+        self.assertGreater(self.store.get_job(job["id"])["lease_expires_at"], before)
+        self.assertIn("job_claim_renewed", [row["event"] for row in self.store.events(job["id"])])
+        dead = self.store.create_job("topic 2", ["wechat"])
+        self.store.claim(dead["id"], {"created"}, "worker-a", -1, "generating")
+        self.assertFalse(self.store.renew_claim(dead["id"], "worker-a", 900))
+
+    def test_only_the_fixed_claim_is_renewable(self):
+        from unittest.mock import patch
+        from content_platform.normal_execution_lease import normal_job_claim, normal_job_claim_seconds
+        with patch.dict("os.environ", {"HERMES_HOME": "/srv/hermes-runtime"}):
+            self.assertEqual(normal_job_claim(self.store, "j"), (900, True))
+            self.assertEqual(normal_job_claim_seconds(self.store, "j"), 900)
+
     def test_stale_claim_is_recovered(self):
         job = self.store.create_job("topic", ["wechat"])
         self.store.claim(job["id"], {"created"}, "dead-worker", -1, "generating")

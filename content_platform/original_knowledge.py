@@ -528,7 +528,7 @@ def verify_native_execution_window(store,job_id,owner,lease_expiry,task_id,sessi
     from .mandatory_quality_context import _native_task_home
     claims=[]
     for row in store.events(job_id):
-        if row['event']!='job_claimed':continue
+        if row['event'] not in ('job_claimed','job_claim_renewed'):continue  # a renewal is the same owner's live lease (MED46)
         claim=json.loads(row['detail_json'])
         if claim.get('owner')==owner and claim.get('expires_at')==lease_expiry:claims.append(row)
     if len(claims)!=1:raise ValueError('native_historical_actual_lease_missing_or_ambiguous')

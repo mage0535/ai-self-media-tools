@@ -190,11 +190,14 @@ class Pipeline:
         owner = self._worker_id()
         workflow_id = f"wf_{job_id}"
         with strict_workflow_lock(self.store, owner, workflow_id, self.lock_timeout_seconds, self.strict_serial):
-            from .normal_execution_lease import normal_job_claim_seconds
-            claim_ttl = normal_job_claim_seconds(self.store, job_id)
+            from .normal_execution_lease import normal_job_claim
+            claim_ttl, renewable = normal_job_claim(self.store, job_id)
             if not self.store.claim(job_id, {job["state"]}, owner, claim_ttl, "generating"):
                 raise RuntimeError("job is already claimed by another worker")
             runner = WorkflowStepRunner(self.store, workflow_id, job_id, notifier=self.notifier)
+            # MED46 (11-06 CST): every batch job got a fixed 900 s claim that nothing renewed; Juejin hit it at 963 s and a
+            # video job (narration + render) always needs longer. The live owner renews it like the workflow lock.
+            stop_renewal = self._renew_claim_while_running(job_id, owner, claim_ttl) if renewable else None
             try:
                 job = self.store.get_job(job_id)
                 runner.succeeded("initialize_task", {"platforms": job["platforms"], "profile": job.get("profile", "")})
@@ -236,6 +239,25 @@ class Pipeline:
                 if current.get("lease_owner") == owner:
                     self.store.release_claim(job_id, owner, "failed", "generation_failed", redact_secrets(exc))
                 raise
+            finally:
+                if stop_renewal is not None:
+                    stop_renewal.set()
+
+    def _renew_claim_while_running(self, job_id, owner, ttl):
+        """Renews the claim every ttl/3 s until the returned event is set or a renewal fails."""
+        import threading
+        stop = threading.Event()
+
+        def renew():
+            while not stop.wait(max(1, int(ttl) // 3)):
+                try:
+                    if not self.store.renew_claim(job_id, owner, ttl):
+                        return
+                except Exception:
+                    return
+
+        threading.Thread(target=renew, name=f"claim-renew-{job_id}", daemon=True).start()
+        return stop
 
     def _continue_native_generation(self, job_id, owner, workflow_id, runner, platform_contexts, force=False, prepared_stage=None):
         job = self.store.get_job(job_id)
