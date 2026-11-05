@@ -211,3 +211,25 @@ def test_mismatches_left_after_the_retries_keep_the_best_script_for_the_media_ga
     meta, calls, _ = _photo_first_run(tmp_path, [GOOD, worse, GOOD], lambda beat: beat == lines[3] or beat.startswith("那只猫"))
     assert len(calls) == 3 and meta["video_script"] == GOOD.replace("\n", "\n\n")
     assert meta["pet_narration_audit"]["photo_mismatches_left"] == 1 and "beat_photo_plan" in meta
+
+
+def test_unsourced_number_in_the_narration_is_rewritten_before_the_claim_gate(tmp_path):
+    """MED44 (r113): '24小时宠物医院' had no source and the scoped claim gate blocked the whole job."""
+    calls = []
+    bad = GOOD.replace("若疑似吞食异物，必须立即送医由兽医确诊排查。", "若疑似吞食异物，24小时内必须送医由兽医确诊排查。")
+    replies = [bad, GOOD, VOICE]
+
+    def call(prompt, brief):
+        calls.append(prompt)
+        return replies.pop(0)
+
+    fake = types.SimpleNamespace(generator=types.SimpleNamespace(_call_hermes_text=call),
+                                 store=types.SimpleNamespace(record_event=lambda *a: None, path=tmp_path / "state.db"),
+                                 PET_NARRATION_PROMPT=Pipeline.PET_NARRATION_PROMPT, PET_VOICE_PLAN_PROMPT=Pipeline.PET_VOICE_PLAN_PROMPT)
+    fake._write_pet_voice_plan = lambda *a: Pipeline._write_pet_voice_plan(fake, *a)
+    draft = {"body": "草稿正文", "draft_meta": {"video_toolchain_plan": {"required": True}}}
+    Pipeline._write_pet_narration(fake, "j1", draft, {"douyin_pet": {"run_contract": {"id": 1}, "claim_ledger": []}})
+    meta = draft["draft_meta"]
+    assert meta["pet_narration_audit"]["attempts"][0]["failed"] == ["unsupported_claims"]
+    assert "24小时内必须送医" in calls[1] and "第1步这类序号可以保留" in calls[1]
+    assert meta["video_script"] == GOOD.replace("\n", "\n\n")
