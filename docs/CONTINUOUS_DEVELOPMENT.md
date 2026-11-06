@@ -147,6 +147,14 @@ ops repository; this entry covers the code.
   runner's `_background_provenance_gate` sees the full stock record. Staging r120 (pet) passed every pre-render gate;
   staging cannot run TTS (`normal_film_audio` needs an authority role home and the hermes-agent source on
   PYTHONPATH, which only the window runner provides). Deployed as d50 (MED39-47, 49, 50) 11-05 13:22 PST.
+- Xiaohongshu stock retries (MED51, 11-05, reverted): taking the next Pexels search result on a real-background
+  retry gave no gain (r122, 0.40-0.60). Xiaohongshu AI covers (MED52, 11-05, analysed, no code change): read-only
+  probes on an abstract AI-marketing topic found no licensed photo for the cover >= 0.72 (best 0.62 of 26, including
+  queries for visible AI on screens). Photo-first cards (paragraph opens with its photo's visible scene, same facts)
+  scored 0.74-0.75 but read stiffly. The card real-background hard rule is kept; such notes block. Xiaohongshu is not
+  on the strict section-image path (`_strict_article_images`), so its card images are reviewed against body
+  paragraphs (`_legacy_image_prompts`). Planned next: Xiaohongshu topic analysis prefers scenarios a camera can show.
+  Probe scripts that call `review_asset` need `CONTENT_PLATFORM_CONFIG` and `HERMES_HOME` set as the staging runner does.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
