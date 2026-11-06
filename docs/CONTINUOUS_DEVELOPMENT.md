@@ -155,6 +155,11 @@ ops repository; this entry covers the code.
   on the strict section-image path (`_strict_article_images`), so its card images are reviewed against body
   paragraphs (`_legacy_image_prompts`). Planned next: Xiaohongshu topic analysis prefers scenarios a camera can show.
   Probe scripts that call `review_asset` need `CONTENT_PLATFORM_CONFIG` and `HERMES_HOME` set as the staging runner does.
+- Image draw selection (MED53, 11-06): `_generate_image` keeps each image's best-ranked draw (`_review_rank`:
+  requirement match, then score) instead of the last one; each retry is still told about the latest draw. Once a
+  stock photo is rejected for an image, its later retries stay off stock (real-background lanes keep stock). Non-beat
+  images get `SEMANTIC_IMAGE_RETRIES` = 4 regenerations, beats keep 2. Gate unchanged. Staging r123 (Zhihu answer):
+  cover 0.58 -> 0.68 -> 0.74, all four images >= 0.72. Deployed as d51 11-06 10:31 PST.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
