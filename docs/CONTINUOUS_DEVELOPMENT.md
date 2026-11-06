@@ -160,6 +160,9 @@ ops repository; this entry covers the code.
   stock photo is rejected for an image, its later retries stay off stock (real-background lanes keep stock). Non-beat
   images get `SEMANTIC_IMAGE_RETRIES` = 4 regenerations, beats keep 2. Gate unchanged. Staging r123 (Zhihu answer):
   cover 0.58 -> 0.68 -> 0.74, all four images >= 0.72. Deployed as d51 11-06 10:31 PST.
+- Pet narration attempts (MED54, 11-06): `_write_pet_narration` gets 5 attempts (was 3); r125 left 2 photo
+  mismatches after three and the media beat gate blocked s03. Staging r126 (same task) reached 0 mismatches and passed
+  every pre-render gate, stopping at TTS (staging-only). Deployed as d52 11-06 12:19 PST.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
