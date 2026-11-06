@@ -24,7 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # Model calls per lane for new candidates.  r57: with the strict real-world positioning 3 left two of
 # five lanes without an eligible topic; r61: 5 still left Juejin with only headline-"case" industry
 # overviews (rejected) ahead of its eligible scenario titles.  Each analysis is about a minute of prepare.
-MAX_TOPIC_ANALYSES = 8
+# MED55 (11-07 CST): 8 left Juejin with nothing while candidates 12 and 15 of 42 were eligible (probe m56); the
+# window had 135 spare minutes, so 14.
+MAX_TOPIC_ANALYSES = 14
 
 MANUAL_HANDOFF_PLATFORMS = {
     "bilibili",

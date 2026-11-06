@@ -125,3 +125,11 @@ def test_topic_analysis_prompt_carries_account_positioning_and_exclusions():
     prompt = build_prompt("zhihu", {"title": "AI 质检落地复盘"}, {})
     assert "一篇只解决一个主场景" in prompt and "Never dress such a source up as a case" in prompt
     assert "model release" in prompt and "tool or prompt list" in prompt
+
+
+def test_xiaohongshu_topic_must_be_photographable():
+    # MED52: real-photo cards found no cover photo >= 0.72 for screen-only AI topics.
+    from content_platform.overnight_topic_analysis import build_prompt
+
+    assert "PHOTO RULE" in build_prompt("xiaohongshu", {"title": "AI 搜索引用"}, {})
+    assert "PHOTO RULE" not in build_prompt("zhihu", {"title": "AI 搜索引用"}, {})

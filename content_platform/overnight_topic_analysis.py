@@ -48,6 +48,21 @@ def _positioning_rules() -> str:
     )
 
 
+REAL_PHOTO_TOPIC_PLATFORMS = {"xiaohongshu", "rednote"}
+
+
+def _real_photo_rule(platform: str) -> str:
+    """MED52 (11-05/11-07): Xiaohongshu cards and cover must be licensed real photos that match the topic (0.72).
+    Topics whose core is only screen content (AI citations, search visibility, a chatbot answer) found no photo above
+    0.62 in 26 candidates and blocked every night; such a source is not eligible for this lane."""
+    if platform not in REAL_PHOTO_TOPIC_PLATFORMS:
+        return ""
+    return ("PHOTO RULE: this post is illustrated only with licensed real photographs, cover included. The scenario's role, "
+            "place and physical action must be something a camera can show (people, workplaces, objects, hands at work). "
+            "Return {\"eligible\": false} when the source's core is only digital or abstract (AI search visibility or "
+            "citations, chatbot answers, rankings, algorithms, strategy concepts) with no physical scene to photograph.\n")
+
+
 def build_prompt(platform: str, candidate: dict[str, Any], slot: dict[str, Any]) -> str:
     language = "English" if platform in ENGLISH_PLATFORMS else "Simplified Chinese"
     source = {
@@ -63,7 +78,7 @@ def build_prompt(platform: str, candidate: dict[str, Any], slot: dict[str, Any])
         + "\nDefine one practical scenario that this source supports. Do not invent facts, numbers, results or quotes; "
         "anything the source does not show is a boundary or a step the reader verifies. Nothing here was measured by us. "
         f"Write every value as a concrete {language} phrase of at most 36 characters about this topic (not generic advice). "
-        f"DOMAINS: {json.dumps(_pillars())}.\n" + _positioning_rules()
+        f"DOMAINS: {json.dumps(_pillars())}.\n" + _positioning_rules() + _real_photo_rule(platform)
         + f"Return ONLY one JSON object of this shape:\n{SCHEMA}\n"
         'If the source cannot support a practical scenario, return {"eligible": false}.'
     )
