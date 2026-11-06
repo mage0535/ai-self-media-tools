@@ -1,3 +1,4 @@
+import hashlib
 import json
 from unittest.mock import patch
 
@@ -480,3 +481,36 @@ def test_a_regeneration_the_provider_rejects_keeps_the_previous_image(tmp_path):
             patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
         bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
     assert len(calls) == 3 and recorded["images"][0]["semantic_review"]["score"] == 0.8
+
+
+def test_article_image_keeps_its_best_draw_and_stock_stays_out_after_rejection(tmp_path):
+    # MED53 (11-07 CST window): a Zhihu cover went 0.58 (stock) -> 0.65 -> 0.52 (stock again) and kept the last draw.
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j8", "title": "会议纪要", "body": "正文", "platforms": ["zhihu"]}
+    seen = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            seen.append((env or {}).get("IMAGE_PROVIDER_CHAIN", ""))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(random.Random(len(seen)).randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "pexels" if len(seen) == 1 else "go_gemini", "draw": len(seen)}
+
+    scores = iter([0.58, 0.65, 0.52, 0.6, 0.5])
+    recorded = {}
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch.object(MediaBridge, "_image_prompts", return_value=[{"role": "cover", "prompt": "cover"}]), \
+            patch.object(MediaBridge, "_required_image_count", return_value=1), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: {"score": next(scores)}), \
+            patch.object(MediaBridge, "_compose_wechat_cover", return_value={}), \
+            patch.object(MediaBridge, "_bound_section_image_map", return_value=[]), \
+            patch.object(MediaBridge, "_persist_asset_provenance", side_effect=lambda d, images, *a: recorded.setdefault("images", images)):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto", "provider_chain": "go_gemini,cloudflare"})
+    image = recorded["images"][0]
+    assert len(seen) == 5 and seen[0].startswith("stock") and not any("stock" in chain for chain in seen[1:])
+    assert image["semantic_review"]["score"] == 0.65 and image["provider_result"]["draw"] == 2
+    assert hashlib.sha256(Path(image["path"]).read_bytes()).hexdigest() == image["checksum"]

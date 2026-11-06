@@ -17,6 +17,9 @@ from .delivery_manifest import validate_attempt_bundle
 # Article artifact contract threshold (pipeline validate_article_completion / quality_gates).
 SEMANTIC_RETRY_THRESHOLD = 0.72
 SEMANTIC_BEAT_RETRIES = 2
+# MED53 (11-07 CST window): generated article images score 0.68-0.73 per draw, so three draws often left one image
+# just under the gate; a non-beat image gets four regenerations and keeps its best-scoring draw.
+SEMANTIC_IMAGE_RETRIES = 4
 
 
 # Article covers whose title we render over a text-free background (wechat_cover_render).
@@ -1017,22 +1020,27 @@ class MediaBridge:
             # what the reviewer saw. The gate itself is unchanged.
             # MED47 (r115): a Juejin section stayed 0.65 after one regeneration; with the claim renewed (MED46) an article
             # image gets a second one instead of blocking the piece.
-            for _ in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else 2):
+            # MED53: the best draw is kept, but each retry is told about the latest draw and its reviewer reason.
+            stock_rejected, last_review, last_result = False, review, provider_result
+            for _ in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else SEMANTIC_IMAGE_RETRIES):
                 if (review.get("score") or 0) >= SEMANTIC_RETRY_THRESHOLD and (
                         not item.get("semantic_requirement") or review.get("requirement_match") is True):
                     break
-                seen = str(review.get("observed_subject") or "")[:200]
+                seen = str(last_review.get("observed_subject") or "")[:200]
                 # 11-03 r95: beat s07 (误食 → 兽医确诊) was redrawn three times without a vet; the reviewer's reason
                 # ("omits the required veterinary consultation") said what was missing but was never passed on.
-                why = str(review.get("reason") or "")[:240]
+                why = str(last_review.get("reason") or "")[:240]
                 retry_prompt = (f"{item['prompt']} Show exactly this section's concrete subject: "
                                 f"{str(item.get('purpose') or '')[:200]} {str(item.get('adjacent_text') or '')[:300]}"
                                 + (f" The previous image showed: {seen}. That fits only the general topic; depict the "
                                    "concrete situation this exact sentence describes instead." if seen else "")
                                 + (f" The reviewer rejected it because: {why} Include what is missing." if why else ""))
                 retry_kwargs = item_kwargs
-                if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS and not real_only:
+                if item_chain and not real_only and (
+                        stock_rejected or str(last_result.get("provider") or "") in STOCK_PROVIDERS):
                     # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
+                    # MED53: it stays out for this image (a later retry went back to stock and kept a 0.52 photo).
+                    stock_rejected = True
                     retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
                         name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
                 kept_bytes = output.read_bytes()
@@ -1049,9 +1057,14 @@ class MediaBridge:
                     if retry_checksum not in used_checksums and not any(
                         self._visual_distance(retry_signature, previous) <= 6 for previous in used_visual_signatures
                     ):
-                        provider_result, checksum, visual_signature = retry_result, retry_checksum, retry_signature
-                        review = self._semantic_review(output, job, item, provider_result)
-                        accepted = True
+                        retry_review = self._semantic_review(output, job, item, retry_result)
+                        last_review, last_result = retry_review, retry_result
+                        # MED53 (11-07 CST window): a cover went 0.58 -> 0.65 -> 0.52 and kept the last draw; a retry
+                        # replaces the kept image only when its review ranks at least as high.
+                        accepted = self._review_rank(retry_review, item) >= self._review_rank(review, item)
+                        if accepted:
+                            provider_result, checksum, visual_signature = retry_result, retry_checksum, retry_signature
+                            review = retry_review
                 if not accepted:
                     # MED41 (r109): a rejected retry (a stock photo repeating an earlier beat) overwrote the kept image.
                     output.write_bytes(kept_bytes)
@@ -1179,6 +1192,12 @@ class MediaBridge:
             if review.get("error") != "hermes_pixel_review_timeout":
                 break
         return review
+
+    @staticmethod
+    def _review_rank(review, item):
+        """A beat review must also match its requirement; then the higher score ranks first."""
+        matched = not item.get("semantic_requirement") or review.get("requirement_match") is True
+        return (matched, review.get("score") or 0)
 
     @staticmethod
     def _persist_asset_provenance(output_dir, images, prompts, provider_name, job):
