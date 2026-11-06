@@ -61,8 +61,8 @@ def test_invalid_voice_plan_is_retried_then_left_missing(tmp_path):
 
 
 def test_narration_failing_the_gate_twice_leaves_the_old_path():
-    meta, calls = _run(["一只猫\n两只猫", "只有一行文字但是没有任何结尾", "还是只有一行"])
-    assert len(calls) == 3 and meta["pet_narration_audit"]["accepted"] is False
+    meta, calls = _run(["一只猫\n两只猫", "只有一行文字但是没有任何结尾", "还是只有一行", "仍然一行", "最后一行"])
+    assert len(calls) == 5 and meta["pet_narration_audit"]["accepted"] is False
     assert "上一版有2段" in calls[1]
     assert "video_script" not in meta
 
@@ -208,8 +208,10 @@ def test_beats_their_photos_do_not_show_are_rewritten_with_the_reviewer_reason(t
 def test_mismatches_left_after_the_retries_keep_the_best_script_for_the_media_gate(tmp_path):
     lines = GOOD.splitlines()
     worse = "\n".join(["那只猫" + line[3:] if i < 2 else line for i, line in enumerate(lines)])
-    meta, calls, _ = _photo_first_run(tmp_path, [GOOD, worse, GOOD], lambda beat: beat == lines[3] or beat.startswith("那只猫"))
-    assert len(calls) == 3 and meta["video_script"] == GOOD.replace("\n", "\n\n")
+    meta, calls, _ = _photo_first_run(tmp_path, [GOOD, worse, GOOD, worse, worse],
+                                      lambda beat: beat == lines[3] or beat.startswith("那只猫"))
+    # MED54 (r125): five attempts; the best script is still the one kept for the media gate.
+    assert len(calls) == 5 and meta["video_script"] == GOOD.replace("\n", "\n\n")
     assert meta["pet_narration_audit"]["photo_mismatches_left"] == 1 and "beat_photo_plan" in meta
 
 
