@@ -1017,7 +1017,7 @@ class MediaBridge:
             # what the reviewer saw. The gate itself is unchanged.
             # MED47 (r115): a Juejin section stayed 0.65 after one regeneration; with the claim renewed (MED46) an article
             # image gets a second one instead of blocking the piece.
-            for _ in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else 2):
+            for retry_number in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else 2):
                 if (review.get("score") or 0) >= SEMANTIC_RETRY_THRESHOLD and (
                         not item.get("semantic_requirement") or review.get("requirement_match") is True):
                     break
@@ -1031,6 +1031,10 @@ class MediaBridge:
                                    "concrete situation this exact sentence describes instead." if seen else "")
                                 + (f" The reviewer rejected it because: {why} Include what is missing." if why else ""))
                 retry_kwargs = item_kwargs
+                if item_chain and real_only and str(provider_result.get("provider") or "") in STOCK_PROVIDERS:
+                    # MED51 (r121): Xiaohongshu stock retries got the top photo of a similar query again (0.36-0.48);
+                    # each retry takes the next search result so the reviewer sees other licensed candidates.
+                    retry_kwargs = {"env": {**item_kwargs.get("env", os.environ), "IMAGE_STOCK_RESULT_INDEX": str(retry_number + 1)}}
                 if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS and not real_only:
                     # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
                     retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
