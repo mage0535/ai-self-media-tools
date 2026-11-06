@@ -666,8 +666,7 @@ def _pexels_image(
     photos = body.get("photos") or []
     if not photos:
         raise ImageProviderError("Pexels search returned no photos")
-    # MED51 (r121): a stock retry takes the next search result instead of the same top photo of a similar query.
-    photo = photos[_stock_result_index() % len(photos)]
+    photo = photos[0]
     src = photo.get("src") or {}
     image_url = src.get("large2x") or src.get("large") or src.get("original")
     if not image_url:
@@ -725,7 +724,7 @@ def _pixabay_image(
     hits = body.get("hits") or []
     if not hits:
         raise ImageProviderError("Pixabay search returned no images")
-    hit = hits[_stock_result_index() % len(hits)]
+    hit = hits[0]
     image_url = hit.get("largeImageURL") or hit.get("webformatURL")
     if not image_url:
         raise ImageProviderError("Pixabay image had no downloadable URL")
@@ -755,13 +754,6 @@ def _download_image(url: str, output: Path) -> None:
     if "image" not in content_type.lower() and not body.startswith((b"\xff\xd8", b"\x89PNG", b"RIFF")):
         raise ImageProviderError(f"download response was not an image: {content_type}")
     output.write_bytes(body)
-
-
-def _stock_result_index() -> int:
-    try:
-        return max(0, int(os.environ.get("IMAGE_STOCK_RESULT_INDEX", "0")))
-    except ValueError:
-        return 0
 
 
 def _stock_orientation(width: int, height: int) -> str:
