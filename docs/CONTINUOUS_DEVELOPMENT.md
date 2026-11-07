@@ -163,6 +163,10 @@ ops repository; this entry covers the code.
 - Pet narration attempts (MED54, 11-06): `_write_pet_narration` gets 5 attempts (was 3); r125 left 2 photo
   mismatches after three and the media beat gate blocked s03. Staging r126 (same task) reached 0 mismatches and passed
   every pre-render gate, stopping at TTS (staging-only). Deployed as d52 11-06 12:19 PST.
+- Topic selection (MED55, 11-06): `MAX_TOPIC_ANALYSES` = 14 (was 8); on the 11-07 snapshot Juejin's first 8 of 42
+  candidates were ineligible while #12 and #15 were eligible. Xiaohongshu topic analysis adds a photo rule: the
+  scenario must be camera-showable, screen-only or abstract cores are ineligible (MED52). Staging prepare r127 picked a
+  topic for all five lanes. Deployed as d53 11-06 16:03 PST.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
