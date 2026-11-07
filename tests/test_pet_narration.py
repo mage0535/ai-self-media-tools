@@ -178,6 +178,8 @@ def _photo_first_run(tmp_path, replies, verdicts):
     def review(path, title, beat, result, semantic_requirement=None):
         reviewed.append(beat)
         bad = verdicts(beat)
+        if isinstance(bad, float):  # a score that matches but sits near the gate
+            return {"score": bad, "requirement_match": True, "reason": ""}
         return {"score": 0.4 if bad else 0.8, "requirement_match": not bad, "reason": "no person in the photo" if bad else ""}
 
     fake = types.SimpleNamespace(generator=types.SimpleNamespace(_call_hermes_text=call),
@@ -213,6 +215,31 @@ def test_mismatches_left_after_the_retries_keep_the_best_script_for_the_media_ga
     # MED54 (r125): five attempts; the best script is still the one kept for the media gate.
     assert len(calls) == 5 and meta["video_script"] == GOOD.replace("\n", "\n\n")
     assert meta["pet_narration_audit"]["photo_mismatches_left"] == 1 and "beat_photo_plan" in meta
+
+
+def test_beat_just_at_the_media_gate_is_rewritten_with_a_margin(tmp_path):
+    """MED57 (11-07 CST window): a beat accepted here at 0.72 scored 0.70 at the media gate (same photo, same reviewer)."""
+    lines = GOOD.splitlines()
+    fixed = "\n".join(lines[:3] + ["第3步，每天提供3套难度递增的漏食玩具，小猫正低头拨弄。"] + lines[4:])
+    meta, calls, _ = _photo_first_run(tmp_path, [GOOD, fixed], lambda beat: 0.73 if beat == lines[3] else False)
+    assert meta["video_script"] == fixed.replace("\n", "\n\n")
+    assert "第4段与第4张照片不符（只有0.73分" in calls[1]
+
+
+def test_best_script_ranks_beats_below_the_media_gate_first(tmp_path):
+    lines = GOOD.splitlines()
+    soft = "\n".join(["那只猫" + line[3:] if i < 2 else line for i, line in enumerate(lines)])
+    hard = "\n".join(lines[:5] + ["小猫" + lines[5][2:]] + lines[6:])
+
+    def verdict(beat):
+        if beat.startswith("那只猫"):
+            return 0.73
+        return beat == "小猫" + lines[5][2:]
+
+    meta, calls, _ = _photo_first_run(tmp_path, [hard, soft, hard, soft, hard], verdict)
+    # Two near-gate beats beat one beat below the gate: the media gate would still pass them.
+    assert len(calls) == 5 and meta["video_script"] == soft.replace("\n", "\n\n")
+    assert meta["pet_narration_audit"]["photo_mismatches_left"] == 2
 
 
 def test_unsourced_number_in_the_narration_is_rewritten_before_the_claim_gate(tmp_path):

@@ -1478,14 +1478,16 @@ class Pipeline:
                 feedback=(f'上一版这些句子含有草稿里没有出处的数字或说法：{unsupported[:4]}。第1步这类序号可以保留，其余数字和说法只能来自草稿，请改写这些段。')
             mismatches=Pipeline._beat_photo_mismatches(self,variant,beats,photos,cache) if photos and not failed else []
             attempts.append({'failed':failed,'beat_lengths':[len(b) for b in beats],'script_sha256':hashlib.sha256(script.encode()).hexdigest(),
-                **({'photo_mismatches':[index+1 for index,_ in mismatches]} if photos and not failed else {})})
+                **({'photo_mismatches':[index+1 for index,_,_ in mismatches]} if photos and not failed else {})})
             if 'beat_shape' in failed:
                 feedback=(f'上一版有{len(beats)}段，各段字数为{[len(b) for b in beats]}，必须恰好8段且每段{lo}-{hi}字，请缩短超长的段。')
             if not failed and mismatches:
                 # MED43 (r111/r112): beats added people or actions their photo does not show ("严谨看护阻断捡食" over a
                 # dog sniffing a bag, 0.38); the same reviewer checks each pair here, while the line can still change.
-                if best is None or len(mismatches)<best[2]:best=(script,beats,len(mismatches))
-                feedback=('上一版：\n'+script+'\n其中'+'；'.join(f'第{index+1}段与第{index+1}张照片不符（{why}）' for index,why in mismatches)
+                # MED57: fewest beats below the media gate first, then fewest below the narration margin.
+                rank=(sum(1 for *_,hard in mismatches if hard),len(mismatches))
+                if best is None or rank<best[2]:best=(script,beats,rank)
+                feedback=('上一版：\n'+script+'\n其中'+'；'.join(f'第{index+1}段与第{index+1}张照片不符（{why}）' for index,why,_ in mismatches)
                           +'。只重写这些段：只写照片里看得见的主体和动作，草稿里的做法要通过照片里的主体来体现，不要写照片里没有的人、物或动作；其余段保持不变。\n')
                 continue
             if not failed:
@@ -1498,17 +1500,20 @@ class Pipeline:
         if photos and meta[key]['accepted']:
             meta['beat_photo_plan']={'version':'beat_photo_plan_v1','photos':photos}
         meta[key]['photo_first']=len(photos)
-        if best and meta.get('video_script')==best[0]:meta[key]['photo_mismatches_left']=best[2]
+        if best and meta.get('video_script')==best[0]:meta[key]['photo_mismatches_left']=best[2][1]
         if meta[key]['accepted']:
             meta[key]['voice_plan']=(self._write_pet_voice_plan(job_id,meta,beats,briefs[platform]) if pet else
                 self._write_pet_voice_plan(job_id,meta,beats,briefs[platform],label=platform+' AI 实操短视频'))
         self.store.record_event(job_id,'pet_narration_written' if pet else 'video_narration_written',meta[key])
 
     PHOTO_FIRST_PLATFORMS = ('douyin_pet', 'kuaishou')
+    NARRATION_PHOTO_MARGIN = 0.03  # MED57: narration beats clear the 0.72 media gate by this margin
 
     @staticmethod
     def _beat_photo_mismatches(self,variant,beats,photos,cache):
-        """(index, reviewer reason) for each beat its photo does not show, by the media beat reviewer and threshold."""
+        """(index, reviewer reason, below the media gate) for each beat its photo does not clearly show.
+        MED57 (11-07 CST window): beat scores were 0.72 x4, 0.70, 0.75-0.78 at the media gate and the same photo re-reviewed
+        0.70-0.78; a beat accepted here at 0.72 failed there. A narration beat needs the gate plus a margin."""
         from .asset_semantic_review import review_asset
         from .media import SEMANTIC_RETRY_THRESHOLD
         from .video_asset_semantics import build_requirements
@@ -1522,8 +1527,11 @@ class Pipeline:
                                                           semantic_requirement=requirement)
             review=cache[(beat,photo['sha256'])]
             if review.get('error'):continue  # a review that measured nothing is not a mismatch; the media gate reviews again
-            if (review.get('score') or 0)<SEMANTIC_RETRY_THRESHOLD or review.get('requirement_match') is not True:
-                result.append((index,str(review.get('reason') or '')[:160]))
+            score=review.get('score') or 0
+            hard=score<SEMANTIC_RETRY_THRESHOLD or review.get('requirement_match') is not True
+            if hard or score<SEMANTIC_RETRY_THRESHOLD+Pipeline.NARRATION_PHOTO_MARGIN:
+                why=str(review.get('reason') or '')[:160] if hard else f'只有{score}分，刚到门槛，画面里主体和动作要写得更准'
+                result.append((index,why,hard))
         return result
     BEAT_PHOTO_QUERY_PROMPT = (
         "为下面这篇短视频草稿列出16个Pexels图库搜索词，每个2-5个英文单词，每个都是能用真实照片拍到的具体场景（谁、在哪、做什么），"
