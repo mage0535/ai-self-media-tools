@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 
 from content_platform.pipeline import Pipeline
@@ -117,6 +118,19 @@ def test_fit_article_length_drops_middle_sections_and_keeps_own_conclusion():
     assert len("".join(fitted.split())) <= 3000
     assert fitted.startswith("开头说明问题") and fitted.endswith("本文自己的结论。")
     assert "## 步骤0" in fitted and "落地要点" not in fitted
+
+
+def test_fit_article_length_renumbers_sections_after_dropping_one():
+    from content_platform.generator import DraftGenerator
+
+    cn = "一二三四五"
+    mids = [f"## {cn[i]}、第{i}部分\n\n" + f"第{i}部分的做法。" * (250 if i == 2 else 80) for i in range(5)]
+    body = "开头。\n\n" + "\n\n".join(mids) + "\n\n## 结语\n\n结论。"
+
+    fitted = DraftGenerator._fit_article_length(body, {"strategy": {"content_form": "long_article"}})
+
+    heads = re.findall(r"(?m)^## (.)、", fitted)
+    assert "第2部分" not in fitted and heads == list(cn[:len(heads)]) and len(heads) == 4
 
 
 def test_fit_article_length_strips_image_placement_notes():

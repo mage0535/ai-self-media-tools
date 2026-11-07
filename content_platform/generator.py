@@ -1155,6 +1155,21 @@ class DraftGenerator:
 
 
     @staticmethod
+    def _renumber_sections(text):
+        # Dropped middle sections left gaps like 一、二、四 that the native reviewer flags (r124).
+        cn = "一二三四五六七八九十"
+        heads = re.compile(r"(?m)^## (?:([一二三四五六七八九十])|(\d{1,2}))([、.．])")
+        count = iter(range(1, 11))
+
+        def number(match):
+            n = next(count, None)
+            if n is None:
+                return match.group(0)
+            return f"## {cn[n - 1] if match.group(1) else n}{match.group(3)}"
+
+        return heads.sub(number, text)
+
+    @staticmethod
     def _fit_article_length(body, context):
         text = str(body or "").strip()
         content_form = str((context.get("strategy") or {}).get("content_form") or "")
@@ -1176,7 +1191,7 @@ class DraftGenerator:
                 if size("".join(kept) + part + parts[-1]) <= 3000:
                     kept.append(part)
             if len(kept) > 1:
-                return ("".join(kept) + parts[-1]).strip()
+                return DraftGenerator._renumber_sections(("".join(kept) + parts[-1]).strip())
         target_raw = max(1200, int(len(text) * (2850 / max(size(text), 1))))
         def outside_code(value):
             # Never end inside a fenced code block.
