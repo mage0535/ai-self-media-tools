@@ -167,6 +167,9 @@ ops repository; this entry covers the code.
   candidates were ineligible while #12 and #15 were eligible. Xiaohongshu topic analysis adds a photo rule: the
   scenario must be camera-showable, screen-only or abstract cores are ineligible (MED52). Staging prepare r127 picked a
   topic for all five lanes. Deployed as d53 11-06 16:03 PST.
+- Article fitter (MED56, 11-06): after `_fit_article_length` drops a middle section it renumbers `## 一、` / `## 1.`
+  headings in order (`DraftGenerator._renumber_sections`); staging r124 had kept 一、二、四, which the one-shot native
+  quality review flags. Deployed d54.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
