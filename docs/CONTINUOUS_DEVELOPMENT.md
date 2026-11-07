@@ -170,6 +170,11 @@ ops repository; this entry covers the code.
 - Article fitter (MED56, 11-06): after `_fit_article_length` drops a middle section it renumbers `## 一、` / `## 1.`
   headings in order (`DraftGenerator._renumber_sections`); staging r124 had kept 一、二、四, which the one-shot native
   quality review flags. Deployed d54.
+- Pet narration photo margin (MED57, 11-07): the narration writer counts a beat as matching its planned photo only at
+  >= 0.75 (`Pipeline.NARRATION_PHOTO_MARGIN` = 0.03 over the 0.72 media gate, which is unchanged). The 11-07 CST window
+  accepted beats at exactly 0.72 and one scored 0.70 at the media gate. Staging r128: 4 narration attempts
+  (7 -> 2 -> 1 -> 0 near-gate beats, ~29 min), then all 8 beats 0.74-0.76 at the media gate with no retries;
+  stopped at the staging-only TTS resolver. Deployed d55.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
