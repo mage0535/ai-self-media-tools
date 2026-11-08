@@ -180,7 +180,12 @@ ops repository; this entry covers the code.
   title in two lines, no subtitle, layout premium_fintech (the cover gate only accepts evidence_interface and
   premium_fintech). The 11-08 CST pet video rendered end to end and failed only this cover. Deployed d56.
 - Schedule note (MED5): slot weekdays use Python numbering (0 = Monday) at 00:xx CST, so Juejin/Zhihu run on the
-  Tuesday-Saturday CST batches only; Sunday/Monday CST windows run Xiaohongshu and pet.
+- Schedule (MED5b, 11-07): Juejin, Zhihu article and Zhihu answer slots run every day (weekdays 0-6 in the NEW slots
+  file), matching the rulebook daily targets; before, Python weekday numbers [1..5] meant Tue-Sat CST batches only.
+- Cats and dogs (MED58, owner 11-07): only the douyin_pet account uses them. Rulebook
+  `ai_knowledge_cat_dog_role_policy.enforced` = false (decision recorded in `scope`); AI blueprints carry no mascot
+  roles. `current_twitter_visual_plan_producer` still builds cat/dog roles (Twitter is not in the overnight batch).
+  Deployed d57.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
