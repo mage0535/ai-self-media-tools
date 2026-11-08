@@ -16,6 +16,13 @@ def test_legacy_sections_use_titles_not_dict_repr():
     assert MediaBridge._article_sections(job) == ["记忆分层"]
 
 
+def test_zhihu_articles_aim_above_the_native_2000_word_rule():
+    # MED65: Zhihu drafts at 1812/1872 Han characters failed channel_rule:2000_5000_words.
+    zhihu, _ = DraftGenerator._generation_requirements({"strategy": {"content_form": "article", "primary_platforms": ["zhihu"]}})
+    juejin, _ = DraftGenerator._generation_requirements({"strategy": {"content_form": "article", "primary_platforms": ["juejin"]}})
+    assert "2300-2800" in zhihu and "1600-2600" in juejin
+
+
 def test_article_requirements_ask_for_section_headings():
     text, _ = DraftGenerator._generation_requirements({"strategy": {"content_form": "article", "primary_platforms": ["juejin"]}})
     assert "## " in text
@@ -72,3 +79,27 @@ def test_xiaohongshu_card_carousel_does_not_require_global_optional_audio():
 
     draft = {"title": "t", "body": "b", "draft_meta": {"content_form": "manual_carousel", "media_plan": ["cover", "content_images", "caption"]}}
     assert Pipeline._execution_media_kinds({"audio", "image", "cover", "caption"}, draft, {"media": {"audio": {"enabled": True}}}) == {"image", "cover"}
+
+
+def test_article_manifest_gives_the_reviewed_cover_its_provenance(tmp_path):
+    # MED63: the 11-09 CST Juejin cover scored 0.74 but reached the visual asset gate without source/rights/score.
+    import json
+    from types import SimpleNamespace
+    from content_platform.media_quality import _visual_asset_contract_gate
+    from content_platform.pipeline import Pipeline
+
+    root = tmp_path / "artifacts" / "j1"; root.mkdir(parents=True)
+    cover = root / "cover-titled.png"; cover.write_bytes(b"c")
+    (root / "asset_provenance.json").write_text(json.dumps({"assets": [{"path": str(cover), "source_url": "generated:cloudflare",
+        "license": "provider_terms_recorded", "semantic_match_score": 0.74, "match_reason": "cover"}]}), encoding="utf-8")
+    pipeline = Pipeline.__new__(Pipeline)
+    pipeline.data_dir = tmp_path
+    pipeline.store = SimpleNamespace(artifacts=lambda job_id: [{"kind": "cover", "path": str(cover), "checksum": "abc"}])
+    pipeline._register_auxiliary_artifact = lambda *a, **k: None
+    draft = {"title": "t", "body": "b", "draft_meta": {"strategy": {"primary_platforms": ["juejin"]},
+                                                     "cover_design": {"title_text": "t"}}}
+    pipeline._write_article_artifact_manifest("j1", draft)
+    design = draft["draft_meta"]["cover_design"]
+    assert design["title_text"] == "t" and design["asset_hash"] == "abc" and design["semantic_match"] is True
+    packet = {"run_contract": {"id": "x"}, "cover_design": design, "section_image_map": [dict(design, semantic_match_score=0.75)]}
+    assert _visual_asset_contract_gate(packet, "juejin")["cover"] is True

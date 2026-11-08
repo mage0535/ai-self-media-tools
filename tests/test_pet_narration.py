@@ -6,7 +6,7 @@ from content_platform.voice_plan import build_voice_plan
 
 from content_platform.pipeline import Pipeline
 
-GOOD = """你是不是也以为养两只高智商猫是双倍快乐，现实往往是翻车现场？
+GOOD = """你是不是以为养两只高智商猫是双倍快乐，其实是翻车现场？
 第1步，门窗和柜门升级双重物理童锁，选旋转或暗扣卡扣。
 第2步，零食和主粮全部收进咬不穿的金属铁盒并密封好。
 分区分开喂食，切断2只猫相互掩护盗食的可能。
@@ -68,11 +68,19 @@ def test_narration_failing_the_gate_twice_leaves_the_old_path():
 
 
 def test_two_sentence_beat_that_the_compiler_would_split_is_rejected():
-    split = GOOD.replace("你是不是也以为养两只高智商猫是双倍快乐，现实往往是翻车现场？",
-                         "你是不是也以为养两只高智商猫是双倍快乐？现实往往是翻车现场！")
+    split = GOOD.replace("你是不是以为养两只高智商猫是双倍快乐，其实是翻车现场？",
+                         "你是不是以为养两只高智商猫是双倍快乐？其实是翻车现场！")
     meta, calls = _run([split, split, split])
     assert meta["pet_narration_audit"]["accepted"] is False
     assert meta["pet_narration_audit"]["attempts"][0]["failed"] == ["beat_resplit"]
+
+
+def test_beat_too_long_for_two_four_second_shots_is_rewritten(tmp_path):
+    # MED64 (11-09 CST): 31-char beats read 7.5-7.9 s and the renderer failed short_scene_requires_more_than_two_four_second_shots.
+    long = GOOD.replace("第3步，每天提供3套难度递增的漏食玩具消耗精力。", "第3步，每天提供3套难度递增的漏食玩具，慢慢消耗猫咪多余精力。")
+    meta, calls = _run([long, GOOD, VOICE], tmp_path)
+    assert meta["pet_narration_audit"]["attempts"][0]["failed"] == ["beat_shape"]
+    assert "每段8-28字" in calls[1] and meta["pet_narration_audit"]["accepted"] is True
 
 
 def test_prompt_asks_for_one_scene_per_beat():

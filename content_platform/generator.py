@@ -900,7 +900,10 @@ class DraftGenerator:
             ), 1800
         # The article gate counts characters without whitespace and needs 1200-3000; aim inside it with margin.
         # Section images are bound to real "## " headings, so an article needs at least three of them.
-        return ("Body must be 1600-2600 Chinese characters (not counting spaces or line breaks) for Chinese articles or 900-1600 English words for English articles. "
+        # MED65 (11-09 CST): Zhihu's native rule 2000_5000_words failed both drafts at 1812/1872 Han characters and
+        # passed every Zhihu draft from 2085 up, so Zhihu aims higher while staying under the 3000 article gate.
+        size = "2300-2800" if "zhihu" in platforms else "1600-2600"
+        return (f"Body must be {size} Chinese characters (not counting spaces or line breaks) for Chinese articles or 900-1600 English words for English articles. "
                 "Organize it under 3-6 Markdown section headings that start with '## '; each heading must be unique and followed by its own paragraphs."), 5000
 
     def _normalize(self, draft, context, provider, topic="", brief=None):
