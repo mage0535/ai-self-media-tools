@@ -186,6 +186,9 @@ ops repository; this entry covers the code.
   `ai_knowledge_cat_dog_role_policy.enforced` = false (decision recorded in `scope`); AI blueprints carry no mascot
   roles. `current_twitter_visual_plan_producer` still builds cat/dog roles (Twitter is not in the overnight batch).
   Deployed d57.
+- Stock retries (MED60, 11-07): `MediaBridge._generate_image` passes `STOCK_EXCLUDE_URLS` (stock source URLs the
+  job drew) to each draw; `image_provider._first_unseen` takes the first unseen of 15 Pexels/Pixabay results and the
+  prompt cache is skipped while excluding. 11-08 CST XHS had reviewed one 0.32 photo twice. Deployed d58.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
