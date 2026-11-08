@@ -201,6 +201,12 @@ ops repository; this entry covers the code.
   results first for xiaohongshu/rednote; `cli.PET_BILIBILI_QUERIES` adds a Bilibili pet search (source
   `bilibili:pet`, evidence via the douyin_pet `bilibili` alias). Staging r133: XHS AI vision inspection topic, pet 60
   candidates. Deployed d60.
+- 11-09 CST window fixes (deployed d61): MED63 `_write_article_artifact_manifest` writes the cover's own provenance
+  (source, rights, asset hash, `semantic_match_score`, `semantic_match`) into `draft_meta.cover_design`, which
+  `_visual_asset_contract_gate` reads (Juejin cover 0.74 failed with `cover: false`). MED64 `Pipeline.NARRATION_MAX_CHARS`
+  = 28 caps narration beats (prompt 18-28): `film_renderer.short_scene_timing` allows two 4 s shots per beat incl.
+  pauses and 31-char beats read 7.5-7.9 s. MED65 Zhihu generation asks for 2300-2800 characters: the native rule
+  `2000_5000_words` failed at 1812/1872 Han characters and passed every Zhihu draft from 2085.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
