@@ -592,6 +592,17 @@ def test_ai_lane_keeps_concrete_scenarios_and_rejects_model_news_and_tool_lists(
     assert candidate_fits_lane("zhihu", {"title": "【全748集】Agent智能体开发系统教程，手把手教会你知识库落地"}) is False
 
 
+def test_xiaohongshu_analyses_camera_visible_scenarios_first():
+    # MED61b: screen-only topics are rejected by the XHS photo rule, so visible-scene results go first.
+    from content_platform.overnight_batch import ai_topic_case_first
+    from content_platform.trends import CAMERA_VISIBLE_AI_QUERIES
+
+    screen = {"title": "AI 智能排产实战案例", "query": "AI 排产 案例"}
+    visible = {"title": "AI 视觉质检产线现场", "query": CAMERA_VISIBLE_AI_QUERIES[0]}
+    assert ai_topic_case_first("xiaohongshu", [screen, visible]) == [visible, screen]
+    assert ai_topic_case_first("zhihu", [screen, visible])[0] is screen
+
+
 def test_ai_keyword_does_not_match_a_substring_inside_an_unrelated_word():
     assert candidate_matches_topic_keywords({"title": "Facebook pays rage-bait creators"}, ["ai"]) is False
     assert candidate_matches_topic_keywords({"title": "AI agents change workflows"}, ["ai"]) is True

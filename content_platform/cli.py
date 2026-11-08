@@ -34,6 +34,10 @@ from .hot_work_intelligence import (
 )
 
 
+# MED62: Bilibili searches for the douyin_pet lane (most-viewed pet videos as same-lane topic evidence).
+PET_BILIBILI_QUERIES = ("猫咪 日常 搞笑", "狗狗 日常 治愈", "猫狗 同居 日常", "萌宠 搞笑 合集", "猫咪 拆家", "狗狗 聪明 训练")
+
+
 def _load_env_defaults(path: str | Path | None = None) -> str:
     """Load private KEY=VALUE defaults without overriding the process env."""
     candidates: list[Path] = []
@@ -927,6 +931,23 @@ def execute(args):
                                                          **({"collected_at": captured} if captured else {})})
             except Exception as exc:  # Preserve failed evidence; selection remains fail-closed.
                 report.setdefault("sources", []).append({"source": "douyin_pet_targeted", "status": "failed", "count": 0, "error": str(exc)[:240]})
+            # MED62: the douyin source ignores the pet query and returns the general hot board (11-08: 12 sports and
+            # news titles, 0 pets), so the pet lane repeated one cat topic and then had none. Search Bilibili for pets.
+            try:
+                from .platform_hot_adapters import BilibiliSearchAdapter
+                from .video_sample_collector import _get_json
+
+                found = BilibiliSearchAdapter(fetch_json=lambda url: _get_json(url)[1]).collect(
+                    queries=PET_BILIBILI_QUERIES, limit=10)
+                pet_items = [{"title": row["title"], "source": "bilibili:pet", "url": row["canonical_url"],
+                              "summary": row.get("excerpt", ""), "points": (row.get("metrics") or {}).get("views", 0),
+                              "query": row.get("query", ""), "metrics": row.get("metrics") or {}} for row in found["items"]]
+                report.setdefault("items", []).extend(pet_items)
+                report.setdefault("sources", []).append({"source": "bilibili:pet", "status": "ok" if pet_items else "unavailable",
+                                                         "count": len(pet_items),
+                                                         **({"collected_at": datetime.now(timezone.utc).isoformat()} if pet_items else {})})
+            except Exception as exc:
+                report.setdefault("sources", []).append({"source": "bilibili:pet", "status": "failed", "count": 0, "error": str(exc)[:240]})
         strategy_status = growth_strategy_snapshot_status(
             store,
             [str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)],

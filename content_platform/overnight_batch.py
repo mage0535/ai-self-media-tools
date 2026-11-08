@@ -844,7 +844,13 @@ def ai_topic_case_first(platform: str, candidates: list[dict[str, Any]]) -> list
         return candidates
     from .real_world_ai_policy import overnight_topic_fit
 
-    return sorted(candidates, key=lambda c: overnight_topic_fit(str(c.get("title") or "")) != "case")
+    from .trends import CAMERA_VISIBLE_AI_QUERIES
+
+    # MED61b: real-photo lanes analyse camera-visible scenario results first, so the analysis budget is not
+    # spent on screen-only topics their photo rule rejects.
+    visible_first = str(platform).casefold() in {"xiaohongshu", "rednote"}
+    return sorted(candidates, key=lambda c: (visible_first and c.get("query") not in CAMERA_VISIBLE_AI_QUERIES,
+                                             overnight_topic_fit(str(c.get("title") or "")) != "case"))
 
 
 def candidate_matches_platform_language(platform: str, candidate: dict[str, Any]) -> bool:

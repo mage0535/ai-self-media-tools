@@ -50,6 +50,14 @@ def normalize_topic(title):
     return " ".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", str(title).casefold()))
 
 
+# MED61b: Xiaohongshu notes use only real photos, so it needs real-world AI cases whose AI work a camera can show;
+# the pillar queries mostly return screen-only work (scheduling, knowledge bases) that its photo rule rejects.
+CAMERA_VISIBLE_AI_QUERIES = (
+    "AI视觉质检 产线 实拍", "机器人分拣 仓库 现场", "无人机 AI巡检 实拍", "AI识别 果园 采摘",
+    "AI摄像头 工地 安全识别", "协作机器人 工厂 现场", "AI 农业 无人机 植保", "AI 门店 智能货架 实拍",
+)
+
+
 def rank_trends(items, profile=None, used=None, limit=10, learned=None):
     profile, used = profile or {}, {normalize_topic(item) for item in (used or set())}
     learned = learned or {}
@@ -604,6 +612,7 @@ class DirectTrendSource:
 
         day = datetime.now().date().isoformat()
         queries = list(dict.fromkeys(q for round_ in ("", "b", "c") for q in build_discovery_queries(seed=day + round_)))
+        queries += [q for q in CAMERA_VISIBLE_AI_QUERIES if q not in queries]
         found = BilibiliSearchAdapter(fetch_json=lambda url: _get_json(url)[1]).collect(queries=queries, limit=self.limit)
         items = [{"title": row["title"], "source": "bilibili:scenario", "url": row["canonical_url"],
                   "summary": row.get("excerpt", ""), "points": (row.get("metrics") or {}).get("views", 0),
