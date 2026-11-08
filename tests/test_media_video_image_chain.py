@@ -514,3 +514,44 @@ def test_article_image_keeps_its_best_draw_and_stock_stays_out_after_rejection(t
     assert len(seen) == 5 and seen[0].startswith("stock") and not any("stock" in chain for chain in seen[1:])
     assert image["semantic_review"]["score"] == 0.65 and image["provider_result"]["draw"] == 2
     assert hashlib.sha256(Path(image["path"]).read_bytes()).hexdigest() == image["checksum"]
+
+
+def test_xiaohongshu_stock_retries_skip_photos_already_drawn(tmp_path):
+    # MED60 (11-08 CST window): an XHS section reviewed the same 0.32 stock photo twice; retries must draw new photos.
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j9", "title": "视觉SOP", "body": "正文", "platforms": ["xiaohongshu"]}
+    excluded = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            excluded.append((env or {}).get("STOCK_EXCLUDE_URLS", ""))
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            Image.frombytes("L", (64, 64), bytes(random.Random(len(excluded)).randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "pexels", "source_url": f"https://www.pexels.com/photo/{len(excluded)}/"}
+
+    scores = iter([0.32, 0.5, 0.74])
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch.object(MediaBridge, "_image_prompts", return_value=[{"role": "section", "section": "s2", "prompt": "p"}]), \
+            patch.object(MediaBridge, "_required_image_count", return_value=1), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: {"score": next(scores)}), \
+            patch.object(MediaBridge, "_compose_wechat_cover", return_value={}), \
+            patch.object(MediaBridge, "_bound_section_image_map", return_value=[]), \
+            patch.object(MediaBridge, "_persist_asset_provenance"):
+        bridge._generate_image(job, tmp_path / "out", {"provider": "auto", "provider_chain": "go_gemini"})
+    assert excluded[0] == "" and len(excluded) == 3
+    assert excluded[1].split() == ["https://www.pexels.com/photo/1/"]
+    assert excluded[2].split() == ["https://www.pexels.com/photo/1/", "https://www.pexels.com/photo/2/"]
+
+
+def test_stock_search_takes_the_first_result_not_already_drawn(monkeypatch, tmp_path):
+    from content_platform import image_provider
+
+    monkeypatch.setenv("STOCK_EXCLUDE_URLS", "https://p/1 https://p/2")
+    rows = [{"url": "https://p/1"}, {"url": "https://p/2"}, {"url": "https://p/3"}]
+    assert image_provider._first_unseen(rows, "url")["url"] == "https://p/3"
+    monkeypatch.setenv("STOCK_EXCLUDE_URLS", "https://p/1 https://p/2 https://p/3")
+    assert image_provider._first_unseen(rows, "url")["url"] == "https://p/1"

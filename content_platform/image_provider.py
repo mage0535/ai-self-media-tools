@@ -98,7 +98,9 @@ def generate_image(
     for name in providers:
         # A flux image depends on the rewrite instruction too; its version keeps old renders out of the cache.
         cache_model = f"{model}|{SCENE_PROMPT_VERSION}" if name in SHORT_PROMPT_PROVIDERS and not input_image else model
-        cached = _read_cache(prompt, output_path, name, model=cache_model, size=size, input_image=input_image)
+        # MED60: a draw that must avoid earlier stock photos cannot be served from the prompt cache.
+        excluding = name in ("stock", "pexels", "pixabay") and bool(_stock_excluded())
+        cached = None if excluding else _read_cache(prompt, output_path, name, model=cache_model, size=size, input_image=input_image)
         if cached:
             _match_suffix(output_path)
             return cached
@@ -194,6 +196,18 @@ SHORT_PROMPT_PROVIDERS = ("cloudflare", "pollinations")
 SCENE_PROMPT_VERSION = "scene-v2b"
 _SCENE_PROMPTS: dict[str, str] = {}
 _STOCK_QUERIES: dict[str, str] = {}
+
+
+def _stock_excluded() -> set[str]:
+    """Source URLs of stock photos this job already drew (MED60, set by the media retry loop)."""
+    return {url for url in os.environ.get("STOCK_EXCLUDE_URLS", "").split() if url}
+
+
+def _first_unseen(rows: list, key: str):
+    # MED60 (11-08 CST window): a retry whose rewritten query matched the last one got the same top photo, so a
+    # Xiaohongshu section reviewed one 0.32 photo twice; the next-ranked unseen result is taken instead.
+    excluded = _stock_excluded()
+    return next((row for row in rows if str(row.get(key) or "") not in excluded), rows[0])
 
 
 def _short_prompt_image(name: str, prompt: str, output: Path, model: str = "", size: str = "1024x1024") -> dict:
@@ -651,7 +665,7 @@ def _pexels_image(
     orientation = _stock_orientation(width, height)
     query = _english_stock_query(prompt)
     url = "https://api.pexels.com/v1/search?" + urllib.parse.urlencode(
-        {"query": query, "per_page": "3", "orientation": orientation}
+        {"query": query, "per_page": "15", "orientation": orientation}
     )
     req = urllib.request.Request(
         url,
@@ -666,7 +680,7 @@ def _pexels_image(
     photos = body.get("photos") or []
     if not photos:
         raise ImageProviderError("Pexels search returned no photos")
-    photo = photos[0]
+    photo = _first_unseen(photos, "url")
     src = photo.get("src") or {}
     image_url = src.get("large2x") or src.get("large") or src.get("original")
     if not image_url:
@@ -709,7 +723,7 @@ def _pixabay_image(
             "key": key,
             "q": query,
             "image_type": "photo",
-            "per_page": "3",
+            "per_page": "15",
             "safesearch": "true",
             "orientation": orientation,
         }
@@ -724,7 +738,7 @@ def _pixabay_image(
     hits = body.get("hits") or []
     if not hits:
         raise ImageProviderError("Pixabay search returned no images")
-    hit = hits[0]
+    hit = _first_unseen(hits, "pageURL")
     image_url = hit.get("largeImageURL") or hit.get("webformatURL")
     if not image_url:
         raise ImageProviderError("Pixabay image had no downloadable URL")

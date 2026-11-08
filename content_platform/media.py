@@ -951,6 +951,7 @@ class MediaBridge:
         used_visual_signatures = []
         prior_prompt = None
         planned = self._planned_beat_photos(job, prompts)
+        drawn_stock = []  # MED60: source URLs of stock photos this job drew; later draws skip them
         for idx, item in enumerate(prompts):
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
             prompt = item["prompt"]
@@ -961,7 +962,8 @@ class MediaBridge:
                 # MED39 (r108): video scenes must be licensed real photos, but beats only ever drew generated images.
                 item_chain = ",".join(["stock"] + [name for name in (chain or "go_gemini,cloudflare,pollinations").split(",")
                                                    if name.strip() and name.strip() not in STOCK_PROVIDERS])
-            item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": item_chain}} if item_chain else run_kwargs
+            item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": item_chain,
+                                   "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}} if item_chain else run_kwargs
             # Per image: a provider switch for one repeated image used to rebind the shared args and pin every
             # later image to pollinations, overriding the chain (r104: all fallbacks flux, 0.38-0.68; MED32).
             item_args = list(extra_args)
@@ -986,6 +988,8 @@ class MediaBridge:
                         continue
                 if not isinstance(provider_result, dict):
                     raise RuntimeError("image provider returned invalid metadata")
+                if str(provider_result.get("provider") or "") in STOCK_PROVIDERS and provider_result.get("source_url"):
+                    drawn_stock.append(str(provider_result["source_url"]))
                 if not output.is_file():
                     raise RuntimeError("image provider produced no output file")
                 checksum = hashlib.sha256(output.read_bytes()).hexdigest()
@@ -1043,6 +1047,8 @@ class MediaBridge:
                     stock_rejected = True
                     retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
                         name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
+                if "env" in retry_kwargs:
+                    retry_kwargs = {"env": {**retry_kwargs["env"], "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}}
                 kept_bytes = output.read_bytes()
                 try:
                     retry_result = provider.run(retry_prompt, output, extra_args, **retry_kwargs)
@@ -1051,6 +1057,8 @@ class MediaBridge:
                     # the whole job; it is a rejected retry, and the kept image is restored below.
                     retry_result = None
                 accepted = False
+                if isinstance(retry_result, dict) and str(retry_result.get("provider") or "") in STOCK_PROVIDERS and retry_result.get("source_url"):
+                    drawn_stock.append(str(retry_result["source_url"]))
                 if isinstance(retry_result, dict) and output.is_file():
                     retry_checksum = hashlib.sha256(output.read_bytes()).hexdigest()
                     retry_signature = self._visual_signature(output)
