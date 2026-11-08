@@ -1420,3 +1420,16 @@ class VideoToolchainRunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_generated_cover_carries_the_works_own_text_not_a_demo():
+    """MED59 (11-08 CST window): the douyin_pet cover read '用AI做表？别直接算总数', a fixed 09-21 Kuaishou demo cover."""
+    from scripts.video_toolchain_runner import _cover_text
+
+    clip = lambda text, limit: text[:limit]
+    script = "一只灰白猫把爪子搭在沙发上，你真以为养高智商猫不会让人崩溃吗？\n\n单只狸花猫趴在洗衣机台上休息。"
+    title, subtitle, hook, layout, tag = _cover_text({"platform": "douyin_pet"}, "同时拥有两只高智商猫的弊端", script, clip)
+    assert title == "同时拥有两只高\n智商猫的弊端" and subtitle == hook == tag == ""
+    assert "做表" not in title and layout == "premium_fintech"
+    assert _cover_text({}, "Untitled video", script, clip)[0].replace("\n", "") == script[:16]
+    assert _cover_text({"template_family": "finance_reconciliation"}, "t", script, clip)[3] == "premium_fintech"

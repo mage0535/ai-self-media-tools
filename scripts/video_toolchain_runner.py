@@ -307,6 +307,22 @@ def _apply_creative_structure_to_contract(plan: dict, contract: list[dict]) -> l
     return rewritten
 
 
+def _cover_text(plan: dict, title: str, script_body: str, clip) -> tuple[str, str, str, str, str]:
+    """(title, subtitle, hook, layout, tag) for an independently generated video cover."""
+    if plan.get('content_mode')=='original_knowledge':
+        return clip(title,24), '公开自制示例｜逐项核对，人工确认', '保留依据，再核差异', 'evidence_interface', '公开自制示例'
+    if "finance_reconciliation" in str(plan.get("template_family") or "") or "finance_reconciliation" in str(plan.get("work_id") or ""):
+        return "核账不能\n直接付款", "500笔对账｜3小时→15分钟", "付款前必须人工复核", "premium_fintech", "⚠️ 财务打回实测"
+    # MED59 (11-08 CST window): every other video got the fixed 09-21 Kuaishou demo cover ("用AI做表？…实测67%算错"),
+    # so the douyin_pet cover named an AI spreadsheet test and failed title OCR; it now carries the work's own title.
+    # Probe over the window's pet background: only this two-line large-title layout without a subtitle passed the
+    # cover gate (evidence_interface: thumbnail unreadable; a subtitle: too many text blocks).
+    opening = next((line.strip() for line in str(script_body).splitlines() if line.strip()), "")
+    own = clip(title if title.strip() and title != "Untitled video" else opening, 16)
+    cut = (len(own) + 1) // 2
+    return (own[:cut] + "\n" + own[cut:]).strip(), "", "", "premium_fintech", ""
+
+
 def _run_main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     script_body = argv[0] if argv else ""
@@ -1081,22 +1097,8 @@ def _run_main(argv: list[str] | None = None) -> int:
                         cut = cut[:sp]
                     return cut.rstrip(" ，。；！？、：,.!?;")
 
-                finance_cover = "finance_reconciliation" in str(plan.get("template_family") or "") or "finance_reconciliation" in str(plan.get("work_id") or "")
-                if plan.get('content_mode')=='original_knowledge':
-                    cover_title=_clip_cover_text(title,24)
-                    cover_subtitle='公开自制示例｜逐项核对，人工确认'
-                    cover_hook='保留依据，再核差异'
-                    cover_layout='evidence_interface'
-                elif finance_cover:
-                    cover_title = "核账不能\n直接付款"
-                    cover_subtitle = "500笔对账｜3小时→15分钟"
-                    cover_hook = "付款前必须人工复核"
-                    cover_layout = "premium_fintech"
-                else:
-                    cover_title = "用AI做表？\n别直接算总数"
-                    cover_subtitle = "50行数据丢给大模型｜实测67%算错"
-                    cover_hook = "算数归公式 · 人工看两头"
-                    cover_layout = "premium_fintech"
+                cover_title, cover_subtitle, cover_hook, cover_layout, cover_tag = _cover_text(
+                    plan, title, script_body, _clip_cover_text)
                 cover = generate_cover(
                     title=cover_title,
                     subtitle=cover_subtitle,
@@ -1104,7 +1106,7 @@ def _run_main(argv: list[str] | None = None) -> int:
                     bg_image=str(bg_for_cover),
                     output_path=str(cover_path),
                     orientation=orientation,
-                    tag="公开自制示例" if plan.get("content_mode")=="original_knowledge" else "⚠️ 财务打回实测",
+                    tag=cover_tag,
                     cta="",
                     badge="",
                     layout=cover_layout,
