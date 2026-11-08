@@ -189,6 +189,12 @@ ops repository; this entry covers the code.
 - Stock retries (MED60, 11-07): `MediaBridge._generate_image` passes `STOCK_EXCLUDE_URLS` (stock source URLs the
   job drew) to each draw; `image_provider._first_unseen` takes the first unseen of 15 Pexels/Pixabay results and the
   prompt cache is skipped while excluding. 11-08 CST XHS had reviewed one 0.32 photo twice. Deployed d58.
+- XHS topic photo rule (MED61, 11-08): `overnight_topic_analysis` PHOTO RULE also rejects topics whose AI work only
+  happens on a screen (scheduling, planning, forecasting, knowledge bases, agents, reports), even in a factory or
+  warehouse. Staging r130 (AI+APS scheduling) got stock photos of 0.52-0.62 because the reviewer wants the AI work
+  visible; letting the stock query name screens/dashboards did not help (probe 0.45-0.68, not shipped). Probe m68:
+  scheduling and knowledge-base topics ineligible, vision-inspection topics eligible. Open: self-made evidence or
+  knowledge-card images for XHS AI notes, under the same real-background and 0.72 gates. Deployed d59.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
