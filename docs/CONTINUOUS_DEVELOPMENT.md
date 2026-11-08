@@ -175,6 +175,12 @@ ops repository; this entry covers the code.
   accepted beats at exactly 0.72 and one scored 0.70 at the media gate. Staging r128: 4 narration attempts
   (7 -> 2 -> 1 -> 0 near-gate beats, ~29 min), then all 8 beats 0.74-0.76 at the media gate with no retries;
   stopped at the staging-only TTS resolver. Deployed d55.
+- Video cover text (MED59, 11-07): `scripts/video_toolchain_runner.py::_cover_text`. Covers that are neither
+  original_knowledge nor finance used to get a hard-coded 09-21 demo cover ('用AI做表？…'); they now carry the job
+  title in two lines, no subtitle, layout premium_fintech (the cover gate only accepts evidence_interface and
+  premium_fintech). The 11-08 CST pet video rendered end to end and failed only this cover. Deployed d56.
+- Schedule note (MED5): slot weekdays use Python numbering (0 = Monday) at 00:xx CST, so Juejin/Zhihu run on the
+  Tuesday-Saturday CST batches only; Sunday/Monday CST windows run Xiaohongshu and pet.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
