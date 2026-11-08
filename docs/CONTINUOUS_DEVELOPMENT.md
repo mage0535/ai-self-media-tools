@@ -195,6 +195,12 @@ ops repository; this entry covers the code.
   visible; letting the stock query name screens/dashboards did not help (probe 0.45-0.68, not shipped). Probe m68:
   scheduling and knowledge-base topics ineligible, vision-inspection topics eligible. Open: self-made evidence or
   knowledge-card images for XHS AI notes, under the same real-background and 0.72 gates. Deployed d59.
+- Topic supply (MED61b/MED62, 11-08): with d59 XHS rejected all 17 analysed candidates (staging r131), and douyin_pet
+  had no candidates: `DirectTrendSource("douyin")` ignores the pet query and returns the general hot board.
+  `trends.CAMERA_VISIBLE_AI_QUERIES` are added to the Bilibili scenario search and `ai_topic_case_first` puts their
+  results first for xiaohongshu/rednote; `cli.PET_BILIBILI_QUERIES` adds a Bilibili pet search (source
+  `bilibili:pet`, evidence via the douyin_pet `bilibili` alias). Staging r133: XHS AI vision inspection topic, pet 60
+  candidates. Deployed d60.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
