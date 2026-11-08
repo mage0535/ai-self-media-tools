@@ -48,8 +48,8 @@
       "rule": "Never upload, schedule, or create a Xiaohongshu draft. Generate a validated package and send its text directly in chat plus validated images to the operator for manual publication only."
     },
     "ai_knowledge_cat_dog_role_policy": {
-      "enforced": true,
-      "scope": "all_ai_knowledge_content_including_video_article_inline_images_knowledge_cards_wechat_newspic_xiaohongshu_and_little_green_book",
+      "enforced": false,
+      "scope": "none: owner decision 2026-11-07 - cats and dogs appear only in the douyin_pet account; Xiaohongshu, Zhihu, Juejin, WeChat and every other AI knowledge lane use no cat or dog roles",
       "primary_style": "cute_playful_cat_and_dog_roles",
       "semantic_roles": [
         "curious_cat_explorer",

@@ -95,11 +95,7 @@ def build_content_blueprint(
         # Story beats order the telling; narrative_structure stays the fact skeleton mapped to the scenario.
         blueprint["creative_combination"] = dict(combination)
         blueprint["story_beats"] = story_beats(combination)
-    if ai_lane:
-        blueprint["mascot_roles"] = {
-            "cat": {"tone": "cute_playful", "narrative_function": f"explore or draft the {topic} workflow", "decorative_only": False},
-            "dog": {"tone": "alert_supportive", "narrative_function": f"verify evidence and guard the {topic} result", "decorative_only": False},
-        }
+    # MED58 (owner 11-07): cats and dogs appear only in the douyin_pet account; AI lanes get no mascot roles.
     intelligence_plan = slot.get("dual_lane_work_plan")
     if isinstance(intelligence_plan, dict) and intelligence_plan.get("version") == "dual_lane_work_plan_v1":
         permissions = intelligence_plan.get("permissions") if isinstance(intelligence_plan.get("permissions"), dict) else {}
@@ -149,17 +145,6 @@ def validate_content_blueprint(blueprint: dict[str, Any] | None) -> dict[str, An
         if not isinstance(role, dict) or not role.get("narrative_function") or role.get("decorative_only") is not False:
             failures.append("mascot_role_not_functional")
             break
-    # AI知识赛道强制猫狗角色（enforced: all_ai_knowledge_content 全平台AI赛道）
-    # scope: kuaishou/bilibili/youtube/tiktok/xiaohongshu/wechat/douyin_ai/shipinhao/juejin/zhihu 等所有AI知识形态，douyin_pet 治愈赛道豁免
-    topic_text = str(blueprint.get("topic") or "")
-    platform_norm = str(blueprint.get("platform") or "").casefold()
-    # douyin_pet 为 pet_healing 赛道，永不触发AI猫狗门禁
-    if _is_ai_lane(platform_norm, topic_text):
-        if not roles or len(roles) < 1:
-            failures.append("ai_lane_cat_dog_role_missing")
-        for cat_key in ("cat", "dog"):
-            if cat_key not in roles:
-                pass
     failures.extend(_validate_analysis_fields(blueprint))
     return {"passed": not failures, "failures": sorted(set(failures))}
 
@@ -273,7 +258,7 @@ def _analysis_fields(blueprint: dict[str, Any], slot: dict[str, Any], matrix: di
         blueprint.setdefault("cat_dog_role_plan_when_ai_knowledge_lane", roles)
     else:
         blueprint.setdefault("cat_dog_role_plan_when_ai_knowledge_lane", {
-            "applicable": False, "reason": "current non-AI lane", "platform": blueprint["platform"],
+            "applicable": False, "reason": "cats and dogs only in the douyin_pet account (owner 11-07)", "platform": blueprint["platform"],
         })
     text_forms = {"article", "long_article", "technical_article", "evidence_answer", "short_post", "social_note", "manual_carousel", "carousel", "image_text", "image_text_post"}
     if blueprint["content_form"].casefold() in text_forms:
