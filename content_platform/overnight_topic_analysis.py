@@ -60,7 +60,11 @@ def _real_photo_rule(platform: str) -> str:
     return ("PHOTO RULE: this post is illustrated only with licensed real photographs, cover included. The scenario's role, "
             "place and physical action must be something a camera can show (people, workplaces, objects, hands at work). "
             "Return {\"eligible\": false} when the source's core is only digital or abstract (AI search visibility or "
-            "citations, chatbot answers, rankings, algorithms, strategy concepts) with no physical scene to photograph.\n")
+            "citations, chatbot answers, rankings, algorithms, strategy concepts) with no physical scene to photograph. "
+            # MED61 (r130): AI+APS scheduling passed as "a factory" but its photos scored 0.52-0.62 for not showing the AI work.
+            "The AI's own work must be visible too (a vision camera over a line, a robot arm picking): return "
+            "{\"eligible\": false} when the AI work happens only on a screen (scheduling, planning, forecasting, "
+            "knowledge bases, agents, reports), even in a physical industry such as a factory or warehouse.\n")
 
 
 def build_prompt(platform: str, candidate: dict[str, Any], slot: dict[str, Any]) -> str:

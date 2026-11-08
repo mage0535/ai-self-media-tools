@@ -133,3 +133,5 @@ def test_xiaohongshu_topic_must_be_photographable():
 
     assert "PHOTO RULE" in build_prompt("xiaohongshu", {"title": "AI 搜索引用"}, {})
     assert "PHOTO RULE" not in build_prompt("zhihu", {"title": "AI 搜索引用"}, {})
+    # MED61: a physical industry is not enough when the AI work itself is only on a screen.
+    assert "even in a physical industry" in build_prompt("xiaohongshu", {"title": "AI+APS 动态排产"}, {})
