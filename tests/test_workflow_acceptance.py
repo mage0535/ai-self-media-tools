@@ -65,6 +65,22 @@ def test_acceptance_rejects_video_handoff_without_scene_or_tts_evidence(tmp_path
     assert "tts_config_missing" in result["failures"]
 
 
+def test_xiaohongshu_card_note_is_not_asked_for_a_video(tmp_path: Path):
+    from content_platform.workflow_acceptance import evaluate_job_acceptance
+
+    store = Store(tmp_path / "state.db")
+    job = store.create_job("card", ["xiaohongshu"], {"platform_source_matrix": _real_matrix("xiaohongshu")})
+    meta = {"quality_gate": {"passed": True}, "content_form": "manual_carousel"}
+    store.save_draft(job["id"], "标题", "你需要看到这个案例。" * 20, "pass", {"level": "pass"}, draft_meta=meta)
+    render = tmp_path / "render" / job["id"]
+    render.mkdir(parents=True)
+    _valid_cover(render / "cover.png")
+
+    result = evaluate_job_acceptance(store, job["id"], "xiaohongshu", artifacts_dir=render)
+
+    assert not {"video_missing", "scene_manifest_missing", "tts_config_missing"} & set(result["failures"])
+
+
 def test_acceptance_uses_registered_video_and_cover_paths(tmp_path: Path):
     from content_platform.workflow_acceptance import evaluate_job_acceptance
 

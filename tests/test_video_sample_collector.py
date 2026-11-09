@@ -158,3 +158,24 @@ def test_youtube_pet_feed_keeps_cat_and_dog_videos_only():
 
     rows = videos.youtube_candidates(run=lambda *a, **k: Proc(), pet=True)
     assert [row["id"] for row in rows] == ["d1", "c1"] * len(videos.YOUTUBE_PET_QUERIES)
+
+
+def test_a_stalled_feed_query_is_skipped_not_fatal():
+    # MED72 (11-10 CST): one YouTube search hit the 180 s limit and the whole pet feed returned nothing.
+    import subprocess
+
+    now = datetime.now(timezone.utc).timestamp()
+    payload = json.dumps({"entries": [{"id": "c1", "title": "Funny cats", "timestamp": now, "view_count": 9}]})
+    calls = []
+
+    class Proc:
+        returncode, stdout = 0, payload
+
+    def run(cmd, **kwargs):
+        calls.append(cmd[-1])
+        if len(calls) == 1:
+            raise subprocess.TimeoutExpired(cmd, 180)
+        return Proc()
+
+    rows = videos.youtube_candidates(run=run, pet=True)
+    assert len(calls) == len(videos.YOUTUBE_PET_QUERIES) and [row["id"] for row in rows] == ["c1"]

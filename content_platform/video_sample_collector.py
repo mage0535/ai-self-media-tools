@@ -141,9 +141,13 @@ def bilibili_candidates(feed: str, *, get=_get_json) -> list[dict[str, Any]]:
 
 def _yt_dlp_json(platform: str, url: str, run, *extra: str) -> str:
     # Public page reads can stall; yt-dlp re-reads them itself (network level, not a model or job retry).
-    proc = run([MEDIA_PYTHON, "-m", "yt_dlp", "--proxy", PROXIES[platform], "--js-runtimes", "node",
-                "--socket-timeout", "30", "--extractor-retries", "3", "-J", *extra, url],
-               capture_output=True, text=True, timeout=180, check=False)
+    try:
+        proc = run([MEDIA_PYTHON, "-m", "yt_dlp", "--proxy", PROXIES[platform], "--js-runtimes", "node",
+                    "--socket-timeout", "30", "--extractor-retries", "3", "-J", *extra, url],
+                   capture_output=True, text=True, timeout=180, check=False)
+    except subprocess.TimeoutExpired:
+        # MED72 (11-10 CST): a stalled YouTube search ended the whole pet feed, not just that query.
+        raise ValueError(f"{platform}_metadata_unavailable") from None
     if proc.returncode:
         raise ValueError(f"{platform}_metadata_unavailable")
     return proc.stdout

@@ -249,6 +249,11 @@ def test_cover_title_overflow_falls_back_to_the_main_clause(tmp_path):
         design = MediaBridge._compose_wechat_cover(tmp_path, [{"role": "cover", "path": str(cover)}], job)
 
     assert calls[-1] == "从零搭建 LangGraph 旅行规划师" and design["title_text"] == calls[-1]
+    # MED71 (11-10 CST): a Zhihu answer failed on a question headline with no colon.
+    job = {"title": "跨境独立站退款翻车？AI Agent 改造履约与售后客服的 3 个落地拆解", "platforms": ["zhihu"]}
+    with patch("content_platform.wechat_cover_render.render_wechat_cover", side_effect=render):
+        design = MediaBridge._compose_wechat_cover(tmp_path, [{"role": "cover", "path": str(cover)}], job)
+    assert calls[-1] == "跨境独立站退款翻车？" and design["title_text"] == calls[-1]
 
 
 def _weak_stock_retry_chains(tmp_path, platform, scores=(0.6, 0.9)):
@@ -556,3 +561,44 @@ def test_stock_search_takes_the_first_result_not_already_drawn(monkeypatch, tmp_
     assert image_provider._first_unseen(rows, "url")["url"] == "https://p/3"
     monkeypatch.setenv("STOCK_EXCLUDE_URLS", "https://p/1 https://p/2 https://p/3")
     assert image_provider._first_unseen(rows, "url")["url"] == "https://p/1"
+
+
+def _spare_section_run(tmp_path, scores):
+    import random
+    from pathlib import Path
+    from PIL import Image
+
+    bridge = MediaBridge({}, tmp_path)
+    job = {"id": "j6", "title": "企业知识库 RAG", "body": "正文", "platforms": ["juejin"]}
+    drawn = []
+
+    class Provider:
+        def run(self, prompt, output, extra_args=None, env=None):
+            drawn.append(Path(output).name)
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            rng = random.Random(len(drawn))
+            Image.frombytes("L", (64, 64), bytes(rng.randrange(256) for _ in range(64 * 64))).save(output)
+            return {"provider": "go_gemini"}
+
+    prompts = [{"role": "cover", "prompt": "cover"}] + [
+        {"role": "section", "section": f"s{n}", "prompt": f"s{n}", **({"spare": True} if n == 4 else {})} for n in range(1, 5)]
+    scores = iter(scores)
+    with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
+            patch.object(MediaBridge, "_image_prompts", return_value=prompts), \
+            patch.object(MediaBridge, "_required_image_count", return_value=4), \
+            patch.object(MediaBridge, "_semantic_review", side_effect=lambda *a: {"score": next(scores)}), \
+            patch.object(MediaBridge, "_compose_wechat_cover", return_value={}), \
+            patch.object(MediaBridge, "_bound_section_image_map", return_value=[]), \
+            patch.object(MediaBridge, "_persist_asset_provenance", return_value=None):
+        result = bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
+    return drawn, result["images"]
+
+
+def test_spare_section_replaces_a_section_image_left_under_the_gate(tmp_path):
+    # MED70 (11-10 CST): Juejin and Zhihu each blocked on one abstract section image at 0.70 after five draws.
+    drawn, images = _spare_section_run(tmp_path / "a", (0.9, 0.9, 0.7, 0.7, 0.7, 0.7, 0.7, 0.9, 0.9))
+    assert [image["section"] for image in images[1:]] == ["s1", "s3", "s4"]
+    assert not (tmp_path / "a" / "out" / "section-02.png").exists()
+    # When every section passes, the spare costs no image quota.
+    drawn, images = _spare_section_run(tmp_path / "b", (0.9, 0.9, 0.9, 0.9))
+    assert len(drawn) == 4 and [image["section"] for image in images[1:]] == ["s1", "s2", "s3"]

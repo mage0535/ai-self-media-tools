@@ -138,6 +138,23 @@ def test_pet_reference_with_one_source_stays_blocked(tmp_path, monkeypatch):
     assert result["status"] == "blocked"
 
 
+def test_pet_reference_reads_an_empty_source_once_more(tmp_path, monkeypatch):
+    # MED72 (11-10 CST): the shared TikTok/YouTube egress stalled at prepare and douyin_pet was left with Bilibili only.
+    calls = []
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "bilibili_pet", lambda items, out: [_observed_row("bilibili", "BV1")])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "youtube_pet", lambda items, out: calls.append("yt") or [])
+    monkeypatch.setitem(overnight_benchmarks.COLLECTORS, "tiktok_pet", lambda items, out: calls.append("tt") or (
+        [_observed_row("tiktok", "tt1")] if calls.count("tt") == 2 else []))
+    monkeypatch.setattr("content_platform.task_source_inputs._observed_strategy_inputs",
+                        lambda platform, public: {"viral_breakdown": {}})
+    prepared = {"tasks": [{"platform": "douyin_pet", "state": "ready_for_plan", "brief": {"lane": "pet_healing"}}]}
+
+    overnight_benchmarks.attach_breakdowns(prepared, [], tmp_path)
+
+    assert calls == ["yt", "tt", "yt", "tt"]
+    assert set(prepared["tasks"][0]["brief"]["hot_viral_source_statuses"]) == {"native.bilibili_video", "native.tiktok_video"}
+
+
 def test_kuaishou_ai_reference_samples_use_tiktok_and_youtube_scenarios(tmp_path, monkeypatch):
     from content_platform.hot_viral_intelligence import build_hot_viral_intelligence
 

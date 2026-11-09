@@ -20,7 +20,9 @@ def test_zhihu_articles_aim_above_the_native_2000_word_rule():
     # MED65: Zhihu drafts at 1812/1872 Han characters failed channel_rule:2000_5000_words.
     zhihu, _ = DraftGenerator._generation_requirements({"strategy": {"content_form": "article", "primary_platforms": ["zhihu"]}})
     juejin, _ = DraftGenerator._generation_requirements({"strategy": {"content_form": "article", "primary_platforms": ["juejin"]}})
-    assert "2300-2800" in zhihu and "1600-2600" in juejin
+    assert "2400-2900" in zhihu and "1600-2600" in juejin
+    # MED73 (11-10 CST): 1997 Han characters; the native rule counts 汉字, not English terms or code.
+    assert "at least 2200 of them Chinese 汉字" in zhihu and "汉字" not in juejin
 
 
 def test_article_requirements_ask_for_section_headings():

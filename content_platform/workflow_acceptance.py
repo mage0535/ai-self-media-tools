@@ -43,7 +43,8 @@ def evaluate_job_acceptance(store: Any, job_id: str, platform: str, *, artifacts
     if normalized in LONG_FORM_PLATFORMS:
         _check_long_form(body, failures)
         _check_unverified_first_person_claims(body, brief, failures)
-    if normalized in VIDEO_PLATFORMS:
+    # MED69 (11-10 CST): a Xiaohongshu card note (manual_carousel) has no video to check.
+    if normalized in VIDEO_PLATFORMS and (job.get("draft_meta") or {}).get("content_form") != "manual_carousel":
         _check_video_artifacts(artifacts, store.artifacts(job_id), failures)
     if (job.get("brief") or {}).get("run_contract") and normalized in COVER_PLATFORMS:
         _check_cover_quality(artifacts, store.artifacts(job_id), normalized, failures)

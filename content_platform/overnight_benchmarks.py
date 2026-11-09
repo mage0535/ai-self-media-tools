@@ -179,6 +179,16 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
                     except Exception:  # A missing reference source shows up as fewer sources, not a crash.
                         rows_by_collector[name] = []
                 samples += reference_samples(rows_by_collector[name], str(task["brief"].get("lane") or ""))
+            # MED72 (11-10 CST): TikTok and YouTube share one media egress; when it stalled both came back empty and
+            # douyin_pet had one source (needs two). Empty sources are read once more before the lane is left short.
+            if len({sample["source"] for sample in samples}) < 2:
+                for name in REFERENCE_COLLECTORS[platform]:
+                    if rows_by_collector.get(name) == [] and name not in failed:
+                        try:
+                            rows_by_collector[name] = COLLECTORS[name](items, Path(out_dir))
+                        except Exception:
+                            continue
+                        samples += reference_samples(rows_by_collector[name], str(task["brief"].get("lane") or ""))
             task["brief"].update(hot_viral_samples=samples,
                                  hot_viral_source_statuses={sample["source"]: "ready" for sample in samples})
     return prepared
