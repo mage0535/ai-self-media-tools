@@ -114,6 +114,10 @@ def build_pet_prompt(candidate: dict[str, Any]) -> str:
         + "\nDefine one pet scenario this source supports. Do not invent facts, numbers or quotes; health or safety "
         "claims the source does not show are boundaries that a vet confirms. Write every value as a concrete "
         f"Simplified Chinese phrase of at most 36 characters. DOMAINS: {json.dumps(PET_DOMAINS)}. "
+        # MED68 (11-09 CST): a compilation source became a plan for creators to cut its clips (audience 萌宠短视频内容创作者).
+        "The viewer is an ordinary cat or dog owner; the actor is a pet or its owner, never a video creator or editor. "
+        "A compilation or reposted clip is inspiration only: describe the cat or dog behaviour it shows, never a plan "
+        "to cut, edit or reuse its clips. "
         f"Return ONLY one JSON object of this shape:\n{PET_SCHEMA}\n"
         'If the source is not about cats or dogs, return {"eligible": false}.'
     )

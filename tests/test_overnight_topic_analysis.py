@@ -135,3 +135,11 @@ def test_xiaohongshu_topic_must_be_photographable():
     assert "PHOTO RULE" not in build_prompt("zhihu", {"title": "AI 搜索引用"}, {})
     # MED61: a physical industry is not enough when the AI work itself is only on a screen.
     assert "even in a physical industry" in build_prompt("xiaohongshu", {"title": "AI+APS 动态排产"}, {})
+
+
+def test_pet_topic_plans_for_owners_not_clip_editors():
+    # MED68: a compilation source became a plan for creators to cut its clips.
+    from content_platform.overnight_topic_analysis import build_pet_prompt
+
+    prompt = build_pet_prompt({"title": "憋住别笑：2025年最搞笑的猫狗视频合集"})
+    assert "never a video creator or editor" in prompt and "never a plan" in prompt
