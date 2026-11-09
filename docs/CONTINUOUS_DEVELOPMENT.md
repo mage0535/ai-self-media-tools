@@ -213,6 +213,10 @@ ops repository; this entry covers the code.
   rule (`_article_background_gate`, `_article_backgrounds`, `_declared_generated_illustration`); the 0.72 gate and the
   AI-assisted disclosure are unchanged. Recorded in rulebook `visual_quality_standards.xiaohongshu_note_images_owner_decision`.
   A rulebook change invalidates prepared tasks bound to the old `rulebook_sha256` (staging r134), so re-prepare.
+- Juejin topic pool (MED67, deployed d63): Juejin takes only Juejin-native candidates (no cross-platform evidence),
+  so `DirectTrendSource._juejin_scenario` runs five query rounds, keeps up to 5 per query and up to 60 items
+  (before 3 rounds, 3 per query, 30). Staging r135 had 9 candidates, all rejected; r136 got 27 and picked a topic.
+  The analyser verdict varies between runs (r135 rejected the topic r136 picked).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
