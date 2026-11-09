@@ -227,6 +227,20 @@ ops repository; this entry covers the code.
   also planned for creators cutting the compilation's clips; `build_pet_prompt` now states the viewer is an
   ordinary cat or dog owner, the actor a pet or its owner, and a compilation is inspiration only. Probe: 4/4
   analyses put a pet or owner as actor with no editing steps.
+- 11-10 CST window (0/5 delivered), fixes MED69-MED73 (deployed d66 11-09 12:15 PST; regression new70 same failures):
+  - MED69: `workflow_acceptance.VIDEO_PLATFORMS` still listed xiaohongshu from its video days; the first XHS card note to
+    clear every pipeline step was blocked for `video_missing`. Video checks now skip a `manual_carousel` job. A replay
+    on the stored job passed acceptance (asset gate passed).
+  - MED70: Juejin and the Zhihu article each blocked on one abstract section image at 0.70 after five draws (gate
+    0.72, unchanged). `_image_prompts` adds one spare section; `_generate_image` draws it only when an earlier section
+    stayed under the gate and then leaves out the weakest section image (file, image row and prompt together).
+  - MED71: the cover title fallback split only at `：｜|——`; a question headline (`…退款翻车？AI Agent…`) had no
+    split point and the Zhihu answer failed `wechat_cover_title_overflow`. It now also splits after `？?！!`.
+  - MED72: douyin_pet needs reference samples from two sources; TikTok and YouTube share one media egress, which
+    stalled at prepare, leaving Bilibili only. A yt-dlp timeout is now `*_metadata_unavailable` (one query skipped,
+    not the whole feed), and empty reference sources are read once more when fewer than two sources answered.
+  - MED73: the Zhihu article had 1997 Han characters (native rule passes from 2085); the instruction counted all
+    non-space characters. Zhihu now asks 2400-2900 characters with at least 2200 Chinese 汉字.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
