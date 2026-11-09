@@ -279,14 +279,12 @@ def _weak_stock_retry_chains(tmp_path, platform, scores=(0.6, 0.9)):
     return seen
 
 
-def test_weak_stock_photo_retries_stock_only_where_backgrounds_must_be_real(tmp_path):
-    # MED37: Xiaohongshu card backgrounds must be real photos, so its semantic retry searches stock again.
-    assert _weak_stock_retry_chains(tmp_path / "x", "xiaohongshu")[1].startswith("stock,")
+def test_weak_stock_photo_gives_way_to_declared_generated_scenes(tmp_path):
     # Articles accept declared generated illustrations (MED35): a weak photo gives way to a generated scene.
     assert not _weak_stock_retry_chains(tmp_path / "j", "juejin")[1].startswith("stock")
-    # MED66 (owner 11-08): after one more stock search a Xiaohongshu image may take a declared generated scene.
+    # MED66 (owner 11-08): after its stock draw misses, a Xiaohongshu image retries with declared generated scenes.
     chains = _weak_stock_retry_chains(tmp_path / "x2", "xiaohongshu", scores=(0.6, 0.6, 0.9))
-    assert chains[1].startswith("stock,") and chains[2] and "stock" not in chains[2]
+    assert chains[0].startswith("stock,") and all(chain and "stock" not in chain for chain in chains[1:])
 
 
 def _beat_chains(tmp_path, platform, provider_name, content_mode=""):

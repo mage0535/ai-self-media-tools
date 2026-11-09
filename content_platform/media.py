@@ -1026,8 +1026,9 @@ class MediaBridge:
             # image gets a second one instead of blocking the piece.
             # MED53: the best draw is kept, but each retry is told about the latest draw and its reviewer reason.
             stock_rejected, last_review, last_result = False, review, provider_result
-            # MED66 (owner 11-08): a Xiaohongshu image searches stock once more, then may take a declared realistic
+            # MED66 (owner 11-08): a Xiaohongshu image whose first (stock) draw misses may take a declared realistic
             # generated image (channel rule no_obvious_ai_generated_images_as_main_visual); the 0.72 gate is unchanged.
+            # r137: a second stock search spent a retry; no XHS stock photo has reached 0.72 (~20 draws, best 0.68).
             generated_fallback = "xiaohongshu" in {str(value).casefold() for value in job.get("platforms") or []}
             for retry_number in range(SEMANTIC_BEAT_RETRIES if item.get("semantic_requirement") else SEMANTIC_IMAGE_RETRIES):
                 if (review.get("score") or 0) >= SEMANTIC_RETRY_THRESHOLD and (
@@ -1043,7 +1044,7 @@ class MediaBridge:
                                    "concrete situation this exact sentence describes instead." if seen else "")
                                 + (f" The reviewer rejected it because: {why} Include what is missing." if why else ""))
                 retry_kwargs = item_kwargs
-                keep_stock = real_only and not (generated_fallback and retry_number >= 1)
+                keep_stock = real_only and not generated_fallback
                 if generated_fallback and not keep_stock:
                     retry_prompt += " Photorealistic real-world scene, no text, no logo, no watermark, no cartoon or poster style."
                 if item_chain and not keep_stock and (
