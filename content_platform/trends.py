@@ -632,7 +632,9 @@ class DirectTrendSource:
         from .real_world_ai_policy import build_discovery_queries, overnight_topic_fit
 
         day = datetime.now().date().isoformat()
-        queries = list(dict.fromkeys(q for round_ in ("", "b", "c") for q in build_discovery_queries(seed=day + round_)))
+        # MED67 (staging r135): Juejin takes only Juejin-native topics, and 3 per query / 30 in all left 9 candidates, all
+        # rejected, so Juejin had no topic; five rounds and 5 per query give it a real pool.
+        queries = list(dict.fromkeys(q for round_ in ("", "b", "c", "d", "e") for q in build_discovery_queries(seed=day + round_)))
         oldest = time.time() - 365 * 86400
 
         def search(query):
@@ -651,7 +653,7 @@ class DirectTrendSource:
                 model = row.get("result_model") or {}
                 info = model.get("article_info") or {}
                 article_id, title = str(info.get("article_id") or ""), str(info.get("title") or "").strip()
-                if (kept >= 3 or not article_id or not title or article_id in found
+                if (kept >= 5 or not article_id or not title or article_id in found
                         or int(info.get("ctime") or 0) < oldest or overnight_topic_fit(title) is None):
                     continue
                 kept += 1
@@ -661,7 +663,7 @@ class DirectTrendSource:
                     "query": query, "metrics": {"views": info.get("view_count"), "likes": info.get("digg_count"),
                                                 "favorites": info.get("collect_count"), "comments": info.get("comment_count")},
                 }
-        items = list(found.values())[: max(self.limit, 30)]
+        items = list(found.values())[: max(self.limit, 60)]
         if not items:
             raise RuntimeError(f"juejin scenario search returned nothing on-policy ({failed} of {len(queries)} queries failed)")
         return items

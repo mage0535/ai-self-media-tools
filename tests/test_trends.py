@@ -122,6 +122,22 @@ class TrendTests(unittest.TestCase):
         self.assertEqual([row["url"] for row in items], ["https://juejin.cn/post/1"])
         self.assertEqual(items[0]["metrics"], {"views": 300, "likes": 5, "favorites": 9, "comments": 2})
 
+    def test_juejin_scenario_search_gives_a_pool_larger_than_thirty(self):
+        # MED67 (r135): 3 per query and 30 in all left Juejin 9 candidates, all rejected.
+        import itertools, time as _time
+        ids = itertools.count(1)
+        def page(url):
+            return {"err_no": 0, "data": [{"result_model": {"article_info": {"article_id": str(next(ids)),
+                    "title": "AI 客服实战：退款工单自动分类，人工复核率降到 20%", "ctime": str(int(_time.time()) - 86400)}}}
+                    for _ in range(6)]}
+        with patch.object(DirectTrendSource, "_request_json", side_effect=page):
+            items = DirectTrendSource("juejin:scenario", {"limit": 5}).collect()
+        per_query = {}
+        for row in items:
+            per_query[row["query"]] = per_query.get(row["query"], 0) + 1
+        self.assertGreater(len(items), 30)
+        self.assertLessEqual(max(per_query.values()), 5)
+
     def test_refresh_legacy_script_timeout_is_reported_not_blocking_collection(self):
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "trend_collector.py"
