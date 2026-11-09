@@ -35,3 +35,18 @@ def test_article_rejects_weak_undeclared_or_card_backgrounds():
                 _generated(3, source_url=""), _generated(3, asset_type="design_card")):
         assert _article_background_gate(_packet([_generated(1), _generated(2), bad]))["passed"] is False
     assert _article_background_gate(_packet([_generated(1), _generated(2)]))["passed"] is False  # minimum 3
+
+
+def test_xiaohongshu_note_accepts_declared_realistic_generated_images():
+    # MED66 (owner 11-08): stock photos scored 0.35-0.62 on XHS AI notes; declared generated images >= 0.72 pass.
+    from content_platform.media_quality import validate_xiaohongshu_auto_packet
+
+    rows = [_generated(1), _generated(2), _generated(3)]
+    packet = dict(_packet(rows), source_assets=rows,
+                  section_image_map=[{"section": f"section-{i}", "image": f"section-0{i}.png", "purpose": "p"} for i in (1, 2, 3)])
+    gates = validate_xiaohongshu_auto_packet(packet)["gates"]
+    assert gates["real_scene_backgrounds"]["passed"] is True
+    assert gates["section_real_scene_mapping"]["passed"] is True and gates["authentic_source_evidence"]["passed"] is True
+    weak = [_generated(1), _generated(2), _generated(3, semantic_match_score=0.6)]
+    gates = validate_xiaohongshu_auto_packet(dict(packet, **_packet(weak), source_assets=weak))["gates"]
+    assert gates["real_scene_backgrounds"]["passed"] is False and gates["authentic_source_evidence"]["passed"] is False

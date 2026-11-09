@@ -521,7 +521,10 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
             "count": len(images),
             "minimum": 3,
         },
-        "section_real_scene_mapping": _section_real_scene_mapping_gate(packet, images),
+        # MED66 (owner 11-08): like articles (MED35), each note image is a rights-cleared real photo or a declared
+        # realistic generated image bound to its section with semantic match >= 0.72 (XHS channel definition
+        # no_obvious_ai_generated_images_as_main_visual, AI-assisted disclosure required below).
+        "section_real_scene_mapping": _section_real_scene_mapping_gate(packet, images, _article_backgrounds(packet)),
         "short_video_component": {
             "passed": carousel
             or all(video_plan.get(key) for key in ["theme", "opening_hook", "visual_alignment_plan"])
@@ -530,10 +533,11 @@ def validate_xiaohongshu_auto_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "authentic_source_evidence": {
             "passed": isinstance(source_assets, list)
             and len(source_assets) >= 3
-            and all(isinstance(item, dict) and _valid_real_scene_asset(item) for item in source_assets),
+            and all(isinstance(item, dict) and (_valid_real_scene_asset(item) or _declared_generated_illustration(item))
+                    for item in source_assets),
             "count": len(source_assets) if isinstance(source_assets, list) else 0,
         },
-        "real_scene_backgrounds": _real_scene_background_gate(packet, minimum=3),
+        "real_scene_backgrounds": _article_background_gate(packet, minimum=3),
         "ai_assisted_disclosure": {
             "passed": "AI" in disclosure or "ai" in disclosure.casefold() or "辅助" in disclosure,
         },

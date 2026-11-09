@@ -251,7 +251,7 @@ def test_cover_title_overflow_falls_back_to_the_main_clause(tmp_path):
     assert calls[-1] == "从零搭建 LangGraph 旅行规划师" and design["title_text"] == calls[-1]
 
 
-def _weak_stock_retry_chains(tmp_path, platform):
+def _weak_stock_retry_chains(tmp_path, platform, scores=(0.6, 0.9)):
     import random
     from pathlib import Path
     from PIL import Image
@@ -267,7 +267,7 @@ def _weak_stock_retry_chains(tmp_path, platform):
             Image.frombytes("L", (64, 64), bytes(random.Random(len(seen)).randrange(256) for _ in range(64 * 64))).save(output)
             return {"provider": "pexels"}
 
-    scores = iter([0.6, 0.9])
+    scores = iter(scores)
     with patch.object(bridge.registry, "choose_provider", return_value=Provider()), \
             patch.object(MediaBridge, "_image_prompts", return_value=[{"role": "cover", "prompt": "cover"}]), \
             patch.object(MediaBridge, "_required_image_count", return_value=1), \
@@ -284,6 +284,9 @@ def test_weak_stock_photo_retries_stock_only_where_backgrounds_must_be_real(tmp_
     assert _weak_stock_retry_chains(tmp_path / "x", "xiaohongshu")[1].startswith("stock,")
     # Articles accept declared generated illustrations (MED35): a weak photo gives way to a generated scene.
     assert not _weak_stock_retry_chains(tmp_path / "j", "juejin")[1].startswith("stock")
+    # MED66 (owner 11-08): after one more stock search a Xiaohongshu image may take a declared generated scene.
+    chains = _weak_stock_retry_chains(tmp_path / "x2", "xiaohongshu", scores=(0.6, 0.6, 0.9))
+    assert chains[1].startswith("stock,") and chains[2] and "stock" not in chains[2]
 
 
 def _beat_chains(tmp_path, platform, provider_name, content_mode=""):

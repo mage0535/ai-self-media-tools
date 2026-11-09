@@ -562,6 +562,7 @@
       "kuaishou_publish_runner_must_not_use_skip_preflight_for_new_or_current_work"
     ],
     "source_policy": "licensed_or_verified_real_scene_assets",
+    "xiaohongshu_note_images_owner_decision": "owner decision 2026-11-08: a Xiaohongshu note image is a licensed real photo when one reaches semantic match 0.72; otherwise a realistic, text-free generated image declared in asset_provenance, with the AI-assisted disclosure, under the same 0.72 match gate (channel rule no_obvious_ai_generated_images_as_main_visual). Video scenes keep real-scene backgrounds.",
     "minimum_evidence_fields": [
       "asset_id",
       "asset_type",
