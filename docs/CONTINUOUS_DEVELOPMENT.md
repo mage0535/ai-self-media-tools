@@ -213,6 +213,10 @@ ops repository; this entry covers the code.
   rule (`_article_background_gate`, `_article_backgrounds`, `_declared_generated_illustration`); the 0.72 gate and the
   AI-assisted disclosure are unchanged. Recorded in rulebook `visual_quality_standards.xiaohongshu_note_images_owner_decision`.
   A rulebook change invalidates prepared tasks bound to the old `rulebook_sha256` (staging r134), so re-prepare.
+  MED66b (deployed d64): after the first (stock) draw misses, all XHS retries draw generated scenes (`keep_stock`
+  is false for XHS); a second stock search wasted a retry and no XHS stock photo reached 0.72 (~20 draws, best 0.68).
+  Staging r137: 0.73/0.70/0.78/0.75 (one short); r138 after MED66b: 0.75/0.72/0.72/0.75, article completion passed,
+  stopped at native quality (`normal_active_quality_role_required`, staging has no quality role).
 - Juejin topic pool (MED67, deployed d63): Juejin takes only Juejin-native candidates (no cross-platform evidence),
   so `DirectTrendSource._juejin_scenario` runs five query rounds, keeps up to 5 per query and up to 60 items
   (before 3 rounds, 3 per query, 30). Staging r135 had 9 candidates, all rejected; r136 got 27 and picked a topic.
