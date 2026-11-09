@@ -83,6 +83,11 @@ def test_beat_too_long_for_two_four_second_shots_is_rewritten(tmp_path):
     assert "每段8-28字" in calls[1] and meta["pet_narration_audit"]["accepted"] is True
 
 
+def test_prompt_lets_funny_topics_tell_a_story_in_spoken_words():
+    # MED68 (11-09 CST): a funny cat-and-dog topic was forced into steps ("施行第1步要剔除人为恐吓").
+    assert "有起伏、有反转的小故事" in Pipeline.PET_NARRATION_PROMPT and "口语化" in Pipeline.PET_NARRATION_PROMPT
+
+
 def test_prompt_asks_for_one_scene_per_beat():
     # r100: beat s04 listed three actions plus an invisible goal; its image scored 0.52.
     assert "一段只写一个画面" in Pipeline.PET_NARRATION_PROMPT
