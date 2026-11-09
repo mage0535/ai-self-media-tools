@@ -207,6 +207,12 @@ ops repository; this entry covers the code.
   = 28 caps narration beats (prompt 18-28): `film_renderer.short_scene_timing` allows two 4 s shots per beat incl.
   pauses and 31-char beats read 7.5-7.9 s. MED65 Zhihu generation asks for 2300-2800 characters: the native rule
   `2000_5000_words` failed at 1812/1872 Han characters and passed every Zhihu draft from 2085.
+- XHS note images (MED66, owner decision 11-08, deployed d62): real photo first; when none reaches 0.72 the semantic
+  retry searches stock once more (`retry_number` 0) and then draws a realistic text-free generated image
+  (`generated_fallback` in `MediaBridge._generate_image`). `validate_xiaohongshu_auto_packet` uses the MED35 per-image
+  rule (`_article_background_gate`, `_article_backgrounds`, `_declared_generated_illustration`); the 0.72 gate and the
+  AI-assisted disclosure are unchanged. Recorded in rulebook `visual_quality_standards.xiaohongshu_note_images_owner_decision`.
+  A rulebook change invalidates prepared tasks bound to the old `rulebook_sha256` (staging r134), so re-prepare.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
