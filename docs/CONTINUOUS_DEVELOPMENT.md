@@ -221,6 +221,12 @@ ops repository; this entry covers the code.
   so `DirectTrendSource._juejin_scenario` runs five query rounds, keeps up to 5 per query and up to 60 items
   (before 3 rounds, 3 per query, 30). Staging r135 had 9 candidates, all rejected; r136 got 27 and picked a topic.
   The analyser verdict varies between runs (r135 rejected the topic r136 picked).
+- Pet narration and topics (MED68, deployed d65): the 11-09 CST pet video told a funny compilation like a dry
+  how-to. `PET_NARRATION_PROMPT` now follows the draft: funny or daily topics tell a short story with a twist, at
+  least 3 beats carry Arabic numerals, the last beat is a save-worthy checklist, in spoken words. The analyser had
+  also planned for creators cutting the compilation's clips; `build_pet_prompt` now states the viewer is an
+  ordinary cat or dog owner, the actor a pet or its owner, and a compilation is inspiration only. Probe: 4/4
+  analyses put a pet or owner as actor with no editing steps.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
