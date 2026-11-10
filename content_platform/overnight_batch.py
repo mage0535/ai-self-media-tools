@@ -504,6 +504,7 @@ def build_due_tasks(
                 "selection_mode": selection_mode,
                 "research_attempts": research_attempts,
                 "action": raw.get("action") or ("handoff" if platform in MANUAL_HANDOFF_PLATFORMS else "stage"),
+                **({"schedule_hhmm": str(raw["schedule_hhmm"])} if raw.get("schedule_hhmm") else {}),
                 "state": "ready_for_plan",
             })
             if selection_mode == "editorial_calendar":
@@ -1113,7 +1114,7 @@ def execute_batch(
                 # Explicit per-slot action (MED26): the owner runs Kuaishou as a scheduled auto-post.
                 from .kuaishou_schedule import schedule_kuaishou
 
-                outcome = schedule_kuaishou(task, result, now=datetime.now(timezone.utc),
+                outcome = schedule_kuaishou(task, result, now=datetime.now(timezone.utc), hhmm=task.get("schedule_hhmm"),
                                             out_dir=Path(getattr(pipeline, "data_dir", "data")) / "local_ops_kuaishou" / f"overnight_{task['job_id']}")
                 task["state"], task["reason"] = outcome["state"], outcome["reason"]
                 journal.append("platform_blocked" if outcome["state"] == "blocked" else "platform_scheduled", platform,

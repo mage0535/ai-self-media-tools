@@ -577,7 +577,7 @@ def _body_visual_delivery_gates(packet: dict[str, Any], platform: str) -> dict[s
         gates["MOTION_FALLBACK_BLOCKS_QUALIFIED"] = {"passed": False}
     if not platform_requires_body_visual(platform):
         return gates
-    video = _packet_video_path(packet)
+    video = _packet_video_path(packet, platform)
     if not video:
         embedded = packet.get("body_visual_gate") if isinstance(packet.get("body_visual_gate"), dict) else {}
         for code in embedded.get("failed_codes") or []:
@@ -595,9 +595,14 @@ def _body_visual_delivery_gates(packet: dict[str, Any], platform: str) -> dict[s
     return gates
 
 
-def _packet_video_path(packet: dict[str, Any]) -> str:
+def _packet_video_path(packet: dict[str, Any], platform: str = "") -> str:
     artifact = packet.get("video_artifact") if isinstance(packet.get("video_artifact"), dict) else {}
-    for value in (packet.get("video_path"), packet.get("final_video"), artifact.get("path")):
+    values = [packet.get("video_path"), packet.get("final_video"), artifact.get("path")]
+    # build_kuaishou_packet writes video_file/file; without these the wrapper preflight never sampled the mp4.
+    # Kuaishou only, so other platforms' packet gates stay as they were.
+    if str(platform or "").casefold() == "kuaishou":
+        values += [packet.get("video_file"), packet.get("file")]
+    for value in values:
         text = str(value or "").strip()
         if text:
             return text

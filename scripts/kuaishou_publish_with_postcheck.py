@@ -148,6 +148,11 @@ def main() -> int:
     if errors:
         print(json.dumps({"ok": False, "stage": "input_validation", "errors": errors}, ensure_ascii=False, indent=2))
         return 2
+    # Owner 11-10 CST: never let Kuaishou pick a body frame as the cover.
+    if not thumbnail or not Path(thumbnail).is_file():
+        errors.append(f"cover_missing:{thumbnail}")
+        print(json.dumps({"ok": False, "stage": "cover_missing", "errors": errors}, ensure_ascii=False, indent=2))
+        return 2
 
     if args.skip_preflight:
         if not _skip_preflight_authorized(manifest):
@@ -219,8 +224,7 @@ def main() -> int:
         schedule,
         "--headless",
     ]
-    if thumbnail and Path(thumbnail).is_file():
-        upload_cmd += ["--thumbnail", str(Path(thumbnail).resolve())]
+    upload_cmd += ["--thumbnail", str(Path(thumbnail).resolve())]
     upload = _run(upload_cmd, cwd=Path(args.sau_dir), env=env, timeout=args.timeout)
     (out_dir / "upload_stdout.log").write_text(upload.stdout, encoding="utf-8")
     (out_dir / "upload_stderr.log").write_text(upload.stderr, encoding="utf-8")

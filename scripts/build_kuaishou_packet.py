@@ -172,6 +172,8 @@ def build_packet(args: argparse.Namespace) -> dict:
         "schedule_time": args.schedule,
         "file": str(final),
         "video_file": str(final),
+        # Independent cover chosen by the publish gates; the wrapper refuses to upload without it.
+        **({"cover_path": str(Path(args.cover).resolve())} if getattr(args, "cover", "") else {}),
         "preflight_manifest": preflight,
         "visual_content_policy": visual_content_policy(["kuaishou"], "short_video"),
         "growth_strategy": build_growth_strategy(["kuaishou"], "knowledge_card_video"),
@@ -242,6 +244,7 @@ def main() -> int:
     parser.add_argument("--desc", required=True)
     parser.add_argument("--tags", default="")
     parser.add_argument("--schedule", default="")
+    parser.add_argument("--cover", default="", help="Independent cover image (never a body frame).")
     parser.add_argument("--script", default="")
     parser.add_argument("--strategy-source", default="")
     parser.add_argument("--strategy-result-path", default="")
@@ -249,6 +252,8 @@ def main() -> int:
     parser.add_argument("--selection-reason", default="")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
+    if args.cover and not Path(args.cover).is_file():
+        raise RuntimeError(f"cover missing: {args.cover}")
     packet = build_packet(args)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
