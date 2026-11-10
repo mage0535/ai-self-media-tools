@@ -241,6 +241,12 @@ ops repository; this entry covers the code.
     not the whole feed), and empty reference sources are read once more when fewer than two sources answered.
   - MED73: the Zhihu article had 1997 Han characters (native rule passes from 2085); the instruction counted all
     non-space characters. Zhihu now asks 2400-2900 characters with at least 2200 Chinese 汉字.
+- MED75 (11-09 PST, deployed d67; regression new71 same failures, 310 passed): `_article_image_chain` orders Juejin/Zhihu
+  as go_gemini, cloudflare, sense_nova, pollinations. Kept images since 11-04 passed the 0.72 gate 97% from go_gemini
+  (n=96), 89% from sense_nova (150, visible logo), 73% from cloudflare (63), 0% from pollinations (17); pollinations sat
+  ahead of sense_nova and ended the chain whenever the gateway was limited. The owner accepted the logo on these two
+  lanes. Xiaohongshu (no-watermark rule) and WeChat keep the old order. The official `gemini`/`openai` providers cannot
+  be reached from the production host's network region; a paid provider must be one that serves that region.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
