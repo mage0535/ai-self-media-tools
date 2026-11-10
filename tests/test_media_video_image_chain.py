@@ -602,3 +602,11 @@ def test_spare_section_replaces_a_section_image_left_under_the_gate(tmp_path):
     # When every section passes, the spare costs no image quota.
     drawn, images = _spare_section_run(tmp_path / "b", (0.9, 0.9, 0.9, 0.9))
     assert len(drawn) == 4 and [image["section"] for image in images[1:]] == ["s1", "s2", "s3"]
+
+
+def test_juejin_and_zhihu_reach_sensenova_before_pollinations():
+    # MED75: pollinations passed 0 of 17 kept images; the owner accepted SenseNova's logo on these two lanes.
+    for platform in ("juejin", "zhihu"):
+        chain = MediaBridge._article_image_chain({"platforms": [platform]}, {"role": "section"}).split(",")
+        assert chain == ["go_gemini", "cloudflare", "sense_nova", "pollinations"]
+    assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "cover"}).split(",")[-2:] == ["pollinations", "sense_nova"]

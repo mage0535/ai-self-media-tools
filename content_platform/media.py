@@ -1144,6 +1144,11 @@ class MediaBridge:
             # MED45 (11-06 CST): Juejin/Zhihu section photos matched 0 of 12 and each miss cost 50-90 s, which pushed
             # Juejin past its 900 s lease; only the cover keeps the real-photo attempt.
             chain.remove("stock")
+        if platforms.intersection({"juejin", "zhihu"}):
+            # MED75 (owner 11-09): kept images since 11-04 passed the 0.72 gate 89% from SenseNova (n=150) and 0% from
+            # pollinations (n=17), which sat ahead of it and was the last stop once the gateway was limited.
+            chain.remove("pollinations")
+            chain.append("pollinations")
         return ",".join(chain)
 
     @staticmethod
