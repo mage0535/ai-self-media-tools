@@ -1314,6 +1314,20 @@ def _try_auto_retouch(source_path: Path, prompt: str, original_result: dict) -> 
     return None
 
 def _provider_chain(provider: str, input_image: str | Path | None = None) -> list[str]:
+    """Provider order, limited by IMAGE_PROVIDER_ALLOWLIST when a run sets it (MED81: staging names its providers;
+    production never sets it)."""
+    chain = _provider_chain_unfiltered(provider, input_image)
+    allowed = os.environ.get("IMAGE_PROVIDER_ALLOWLIST")
+    if allowed is None:
+        return chain
+    names = {name.strip() for name in allowed.split(",") if name.strip()}
+    chain = [name for name in chain if name in names]
+    if not chain:
+        raise ImageProviderError("no image provider is allowed in this run (IMAGE_PROVIDER_ALLOWLIST)")
+    return chain
+
+
+def _provider_chain_unfiltered(provider: str, input_image: str | Path | None = None) -> list[str]:
     aliases = {"go": "go_gemini", "gemini_go": "go_gemini"}
     provider = aliases.get(provider, provider)
     if provider != "auto":

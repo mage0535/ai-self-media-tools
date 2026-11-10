@@ -716,3 +716,19 @@ def test_qwen_image_posts_the_prompt_and_saves_the_returned_image(tmp_path, monk
     monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "go_gemini,qwen_image")
     assert ip._provider_chain("auto") == ["go_gemini", "qwen_image"]
 
+
+def test_a_run_can_limit_image_providers_to_an_allowlist(monkeypatch):
+    # MED81: staging names the providers it may call; production leaves IMAGE_PROVIDER_ALLOWLIST unset.
+    from content_platform import image_provider as ip
+
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "go_gemini,qwen_image,sense_nova")
+    monkeypatch.delenv("IMAGE_PROVIDER_ALLOWLIST", raising=False)
+    assert ip._provider_chain("auto") == ["go_gemini", "qwen_image", "sense_nova"]
+    monkeypatch.setenv("IMAGE_PROVIDER_ALLOWLIST", "sense_nova")
+    assert ip._provider_chain("auto") == ["sense_nova"]
+    monkeypatch.setenv("IMAGE_PROVIDER_ALLOWLIST", "none")
+    with pytest.raises(ip.ImageProviderError, match="no image provider is allowed"):
+        ip._provider_chain("auto")
+    with pytest.raises(ip.ImageProviderError, match="no image provider is allowed"):
+        ip._provider_chain("cloudflare")
+
