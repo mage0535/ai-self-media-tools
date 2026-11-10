@@ -907,4 +907,5 @@ def test_no_second_attempt_when_the_window_is_nearly_over(tmp_path: Path):
     summary = execute_batch(pipeline, plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
 
     assert (summary["status"], summary["tasks"][0]["state"], pipeline.created) == ("partial", "blocked", 1)
+    assert set(summary["paid_image_calls"]) >= {"day"}  # MED78: the result always reports billed images.
 

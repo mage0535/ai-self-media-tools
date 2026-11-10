@@ -1028,6 +1028,31 @@ def _sensenova_image(
 
 
 
+def _paid_image_ledger() -> Path:
+    home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+    return home / "data" / "paid_image_calls.json"
+
+
+def paid_image_calls() -> dict:
+    """Billed images per provider for the current China-time day, the day one overnight window runs in (MED78)."""
+    day = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 8 * 3600))
+    try:
+        row = json.loads(_paid_image_ledger().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        row = {}
+    return row if isinstance(row, dict) and row.get("day") == day else {"day": day}
+
+
+def _count_paid_image(provider: str) -> None:
+    row = paid_image_calls()
+    row[provider] = int(row.get(provider) or 0) + 1
+    path = _paid_image_ledger()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(row), encoding="utf-8")
+    temporary.replace(path)
+
+
 def _qwen_image(prompt: str, output: Path, model: str = "", size: str = "1024x1024",
                 input_image: str | Path | None = None) -> dict:
     """Alibaba Model Studio Qwen-Image (MED77, owner 11-09): billed per image, reachable from the production
@@ -1038,6 +1063,10 @@ def _qwen_image(prompt: str, output: Path, model: str = "", size: str = "1024x10
     key = load_secret("DASHSCOPE_API_KEY", [home / "secrets" / "qwen_tts.env"])
     if not key:
         raise ImageProviderError("DASHSCOPE_API_KEY is not configured")
+    # MED78: a bad night (retries, second attempts) must not spend an unbounded amount; past the cap the chain moves on.
+    cap = int(os.environ.get("QWEN_IMAGE_WINDOW_CAP") or 80)
+    if int(paid_image_calls().get("qwen_image") or 0) >= cap:
+        raise ImageProviderError(f"Qwen image window cap reached ({cap})")
     model_name = model or os.environ.get("QWEN_IMAGE_MODEL") or "qwen-image-2.0"
     try:
         width, height = (int(part) for part in str(size).lower().split("x"))
@@ -1058,6 +1087,7 @@ def _qwen_image(prompt: str, output: Path, model: str = "", size: str = "1024x10
         raise ImageProviderError(f"Qwen image call failed: HTTP {exc.code} {detail}") from exc
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         raise ImageProviderError("Qwen image response did not include an image") from exc
+    _count_paid_image("qwen_image")  # Alibaba bills each generated image, whether or not the download succeeds.
     _download_image(image_url, output)
     return {"provider": "qwen_image", "model": model_name, "mode": "generate"}
 

@@ -1194,6 +1194,9 @@ def execute_batch(
         return execute_batch(pipeline, plan, state_path=state_file, journal=journal, store=store,
                              require_acceptance=require_acceptance, _retry_pass=_retry_pass)
 
+    from .image_provider import paid_image_calls
+
+    state["paid_image_calls"] = paid_image_calls()  # MED78: billed images this China-time day, per provider.
     tasks = state.get("tasks", [])
     failed = [task for task in tasks if task.get("state") == "failed"]
     unfinished = [task for task in tasks if task.get("state") not in TERMINAL_TASK_STATES]
