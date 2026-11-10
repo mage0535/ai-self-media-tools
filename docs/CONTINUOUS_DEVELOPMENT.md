@@ -258,6 +258,26 @@ ops repository; this entry covers the code.
   `_article_image_chain`. Staging note: `article_illustrator.IMAGE_GEN` runs `scripts/image_gen.py` from
   CONTENT_PLATFORM_HOME, so a staging copy does not exercise a changed `image_provider.py`; run the script from the
   staging copy to test a provider.
+- MED78 (11-09 PST, not deployed): `QWEN_IMAGE_WINDOW_CAP` (default 80) caps billed Qwen images per China-time day;
+  the ledger is `data/paid_image_calls.json` under CONTENT_PLATFORM_HOME and the batch result carries
+  `paid_image_calls`.
+- MED79 (11-10 PST, not deployed; regression new75 same failures, 312 passed): `asset_semantic_review` tries the
+  route in `vision_fallback_provider` / `vision_fallback_model` (config) when the primary vision call raises or times
+  out. Native-context reviews keep the pinned route. A failed primary is skipped for 15 minutes
+  (`PRIMARY_RETRY_AFTER_SECONDS`). `audit["fallback_from"]` records why the fallback ran. Calibration (11-10, ten
+  article images the primary scored 0.68-0.75): the chosen free fallback is stricter than the primary (pass/fail
+  agreement 5/10); a fallback that scores higher than the primary would lower the gate and is not used.
+- MED81 (11-10 PST, staging only): `IMAGE_PROVIDER_ALLOWLIST` (comma list) filters `_provider_chain`; unset in
+  production. An allowlist that leaves nothing raises `ImageProviderError` instead of calling a provider.
+- MED82 (11-10 PST, not deployed): `SUBTITLE_LAYOUT_UNREADABLE` is measured. `_decode_subtitle_frames` takes
+  full-resolution frames every 2 s (max 60); `measure_subtitle` finds the strongest white text line in the lower 40%
+  and returns glyph fill height and WCAG contrast (fill vs 1-6 px outline ring, fill vs background beyond 6 px);
+  `subtitle_readability` raises the code when, among >= 3 detected frames, a majority has glyph height < 2.0% of the
+  frame (portrait) / < 3.4% (landscape) or contrast < 4.5:1 on both measures. No detected caption = not judged.
+  The previous chip rule (bottom chip on a solid/overflow card) still applies; the d30 overflow rule is unchanged.
+  Sources: BBC Subtitle Guidelines (9:16 line height 3.9-4.5%), WCAG 2.1 SC 1.4.3. Limit: white text on a bright,
+  noisy background is not detected. On 67 stored renders only known-failing packs and one 1.56%-glyph probe render
+  changed verdict; several older renders sit at 2.03-2.08%, just above the portrait line.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
