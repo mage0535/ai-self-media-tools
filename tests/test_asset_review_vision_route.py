@@ -92,7 +92,7 @@ def test_a_failed_primary_review_is_asked_once_on_the_declared_fallback(tmp_path
     audit = _review_with(tmp_path, monkeypatch, calls, {"m1": (1, ""), "m2": (0, GOOD)},
                          vision_fallback_provider="vision-fallback", vision_fallback_model="m2")
 
-    assert calls == ["m1", "m2"] and audit["status"] == "evaluated" and audit["score"] == 0.8
+    assert calls == ["m1", "m2"] and audit["status"] == "evaluated" and audit["fallback_raw_score"] == 0.8
     assert audit["route"]["model"] == "m2" and audit["fallback_from"]["model"] == "m1"
     assert "hermes_pixel_review_exit_1" in audit["fallback_from"]["error"]
 
@@ -140,6 +140,22 @@ def test_after_a_primary_failure_the_next_review_goes_straight_to_the_fallback(t
     audit = review.review_asset(image, "topic", "section", invoke=invoke, check_native=lambda route: "native")
     assert calls == ["m1", "m2", "m2"] and audit["route"]["model"] == "m2"
     assert audit["fallback_from"]["error"] == "primary_skipped_after_recent_failure"
+
+
+def test_a_fallback_score_below_the_fallback_bar_is_capped_under_the_gate(tmp_path, monkeypatch):
+    # MED84 calibration: the fallback passed 0.75 / 0.85 where Gemini failed; its pass needs >= 0.85.
+    calls = []
+    audit = _review_with(tmp_path, monkeypatch, calls, {"m1": (1, ""), "m2": (0, GOOD)},
+                         vision_fallback_provider="vision-fallback", vision_fallback_model="m2")
+    assert audit["route"]["model"] == "m2" and audit["score"] == 0.71 and audit["fallback_raw_score"] == 0.8
+    calls.clear()
+    audit = _review_with(tmp_path, monkeypatch, calls, {"m1": (1, ""), "m2": (0, GOOD.replace("0.8", "0.9"))},
+                         vision_fallback_provider="vision-fallback", vision_fallback_model="m2")
+    assert audit["score"] == 0.9 and "fallback_raw_score" not in audit
+    calls.clear()
+    audit = _review_with(tmp_path, monkeypatch, calls, {"m1": (0, GOOD)},
+                         vision_fallback_provider="vision-fallback", vision_fallback_model="m2")
+    assert audit["route"]["model"] == "m1" and audit["score"] == 0.8 and "fallback_raw_score" not in audit
 
 
 def test_parse_response_maps_python_literals_only_in_value_positions():

@@ -355,6 +355,8 @@ def native_mode(route):
 
 
 PRIMARY_RETRY_AFTER_SECONDS = 900
+FALLBACK_MIN_PASS_SCORE = 0.85  # a fallback-route score must reach this to keep its value
+FALLBACK_CAPPED_SCORE = 0.71    # otherwise it is capped just below the 0.72 semantic gate
 _PRIMARY_DOWN_UNTIL: dict = {}
 
 
@@ -459,6 +461,11 @@ def review_asset(path, topic, section, provider_result=None, *, invoke=None, che
             audit['normal_observation']=verify_normal_asset_session(session,audit['route'],
                 session_database(audit['native_context']),prompt,response,path)
         value = validate(response,requirement=bool(semantic_requirement))
+        if audit['route']['model'] != route['hermes_model'] and value['score'] < FALLBACK_MIN_PASS_SCORE:
+            # MED84: calibrated 11-11 against Gemini (13 Gemini-failed, 16 Gemini-passed images), the fallback is mostly
+            # stricter but sometimes far more lenient; below 0.85 its pass is not trusted, so the gate is never lowered.
+            audit['fallback_raw_score'] = value['score']
+            value['score'] = min(value['score'], FALLBACK_CAPPED_SCORE)
         audit.update(value, status='evaluated')
         if native_context is not None:
             from .store import Store

@@ -278,6 +278,14 @@ ops repository; this entry covers the code.
   Sources: BBC Subtitle Guidelines (9:16 line height 3.9-4.5%), WCAG 2.1 SC 1.4.3. Limit: white text on a bright,
   noisy background is not detected. On 67 stored renders only known-failing packs and one 1.56%-glyph probe render
   changed verdict; several older renders sit at 2.03-2.08%, just above the portrait line.
+- MED78, MED79 code and MED81 deployed 11-11 CST (d69); the review fallback route is configured.
+- MED84 (11-11 CST): the fallback model writes Python literals (`"image_observed":True`). `parse_response` maps a bare
+  `True` / `False` / `None` in a JSON value position only; any other malformed output still fails. While the primary
+  is skipped and the fallback fails, the primary is asked last, so a broken fallback cannot fail reviews the primary
+  would pass. A wider calibration (13 primary-failed, 16 primary-passed images) showed the fallback is mostly
+  stricter but occasionally far more lenient (0.85 where the primary gave 0.38). A fallback score below
+  `FALLBACK_MIN_PASS_SCORE` (0.85) is therefore capped at 0.71, just under the 0.72 semantic gate; the raw value is
+  kept in `audit["fallback_raw_score"]`. The earlier note "the fallback is stricter" holds only on primary-passed images.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
