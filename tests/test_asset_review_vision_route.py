@@ -141,3 +141,37 @@ def test_after_a_primary_failure_the_next_review_goes_straight_to_the_fallback(t
     assert calls == ["m1", "m2", "m2"] and audit["route"]["model"] == "m2"
     assert audit["fallback_from"]["error"] == "primary_skipped_after_recent_failure"
 
+
+def test_parse_response_maps_python_literals_only_in_value_positions():
+    # MED84: Cloudflare mistral-small answered '"image_observed":True'.
+    value, _ = review.parse_response(_stream('{"score": 0.85, "reason": "said True, ok", "image_observed":True}'), "m1")
+    assert value == {"score": 0.85, "reason": "said True, ok", "image_observed": True}
+    value, _ = review.parse_response(_stream('{"a": [False, None], "b": 1}'), "m1")
+    assert value == {"a": [False, None], "b": 1}
+    for bad in ('{"score": 0.8, "image_observed": Yes}', '{"score": 0.8,}', 'score 0.8 True'):
+        with pytest.raises(ValueError):
+            review.parse_response(_stream(bad), "m1")
+
+
+def test_a_failing_fallback_while_the_primary_is_skipped_falls_back_to_the_primary(tmp_path, monkeypatch):
+    # MED84: primary marked down, fallback broken -> the primary is still asked instead of failing the review.
+    calls = []
+    audit = _review_with(tmp_path, monkeypatch, calls, {"m1": (0, GOOD), "m2": (1, "")},
+                         vision_fallback_provider="vision-fallback", vision_fallback_model="m2")
+    assert calls == ["m1"]
+    review._PRIMARY_DOWN_UNTIL["m1"] = 10 ** 12
+    from types import SimpleNamespace
+    from PIL import Image
+    image = tmp_path / "c.png"
+    Image.new("RGB", (64, 64), (200, 160, 90)).save(image)
+
+    def invoke(command, **kwargs):
+        model = command[command.index("--model") + 1]
+        calls.append(model)
+        return SimpleNamespace(returncode=0 if model == "m1" else 1, stdout=_stream(GOOD, model) if model == "m1" else "",
+                               stderr="")
+
+    audit = review.review_asset(image, "topic", "section", invoke=invoke, check_native=lambda route: "native")
+    assert calls == ["m1", "m2", "m1"] and audit["status"] == "evaluated" and audit["route"]["model"] == "m1"
+    assert audit["fallback_from"]["model"] == "m2"
+

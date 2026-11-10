@@ -254,7 +254,14 @@ def parse_response(output, model):
         raise ValueError('semantic_session_identity_missing')
     # Models sometimes wrap the JSON object in one markdown fence; nothing else is tolerated.
     final = re.sub(r'^\s*```(?:json)?\s*\n(.*?)\n\s*```\s*$', r'\1', finals[0], flags=re.S)
-    value = strict_json(final)
+    try:
+        value = strict_json(final)
+    except ValueError:
+        # MED84 (11-11 CST): the Cloudflare mistral-small fallback writes Python literals ("image_observed":True).
+        # Only bare True/False/None in a JSON value position are mapped; any other malformed output still fails.
+        value = strict_json(re.sub(r'([:\[,]\s*)(True|False|None)(?=\s*[,}\]])',
+                                   lambda m: m.group(1)+{'True': 'true', 'False': 'false', 'None': 'null'}[m.group(2)],
+                                   final))
     if not isinstance(value, dict):
         raise ValueError('semantic_final_json_not_object')
     return value, session
@@ -433,7 +440,8 @@ def review_asset(path, topic, section, provider_result=None, *, invoke=None, che
             # A dead primary costs a 90 s timeout per image; after one failure the fallback is asked first for a while.
             audit['fallback_from'] = {'provider': route['hermes_provider'], 'model': route['hermes_model'],
                                       'error': 'primary_skipped_after_recent_failure'}
-            routes = routes[1:]
+            # MED84: the primary stays the last resort, so a failing fallback cannot fail reviews the primary would pass.
+            routes = [routes[1], routes[0]]
         for index, current in enumerate(routes):
             audit['route'] = {'provider':current['hermes_provider'], 'model':current['hermes_model'],
                               **({'billing_provider':current['billing_provider']} if current.get('billing_provider') else {})}
