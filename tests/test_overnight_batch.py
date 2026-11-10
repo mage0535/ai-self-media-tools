@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 from content_platform.overnight_batch import (
@@ -863,3 +864,47 @@ def test_due_task_builder_blocks_when_every_analysed_topic_is_ineligible():
     assert prepared["tasks"][0]["reason"] == "topic analysis returned no eligible scenario"
     # MED55: the analysis cap is 14 (8 left Juejin empty while candidates 12 and 15 were eligible).
     assert prepared["tasks"][0]["ineligible_candidates_analysed"] == 14
+
+
+class _BlockedOncePipeline:
+    def __init__(self):
+        self.created = 0
+
+    def create(self, *_args, **_kwargs):
+        self.created += 1
+        return {"id": f"job-{self.created}"}
+
+    def run(self, job_id):
+        if job_id == "job-1":
+            return {"id": job_id, "state": "blocked", "last_error": "section image under the gate", "artifacts": []}
+        return {"id": job_id, "state": "review_required", "artifacts": []}
+
+    def stage_drafts(self, job_id):
+        return {"id": job_id, "state": "partial"}
+
+
+def test_a_blocked_lane_gets_one_new_job_while_the_window_has_time(tmp_path: Path):
+    # MED76: the 11-10 CST window ended 85 minutes early with Juejin blocked by one image at 0.70.
+    plan = build_batch_plan([{"platform": "juejin", "topic": "topic", "brief": {}, "estimate_minutes": 30}], deadline_minute=290, finalization_minutes=10)
+    pipeline = _BlockedOncePipeline()
+    journal_path = tmp_path / "events.jsonl"
+    summary = execute_batch(pipeline, plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(journal_path))
+
+    task = summary["tasks"][0]
+    assert (summary["status"], task["state"], task["job_id"], pipeline.created) == ("completed", "staged", "job-2", 2)
+    assert task["first_attempt"]["job_id"] == "job-1" and task["first_attempt"]["reason"] == "section image under the gate"
+    assert "platform_second_attempt" in [json.loads(line)["event"] for line in journal_path.read_text(encoding="utf-8").splitlines()]
+    # A resumed batch does not start a third job.
+    assert execute_batch(pipeline, plan, state_path=tmp_path / "state.json", journal=BatchEventJournal(journal_path))["tasks"][0]["job_id"] == "job-2"
+    assert pipeline.created == 2
+
+
+def test_no_second_attempt_when_the_window_is_nearly_over(tmp_path: Path):
+    plan = build_batch_plan([{"platform": "juejin", "topic": "topic", "brief": {}, "estimate_minutes": 30}], deadline_minute=290, finalization_minutes=10)
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({**plan, "run_started_unix": time.time() - 225 * 60}), encoding="utf-8")
+    pipeline = _BlockedOncePipeline()
+    summary = execute_batch(pipeline, plan, state_path=state_path, journal=BatchEventJournal(tmp_path / "events.jsonl"))
+
+    assert (summary["status"], summary["tasks"][0]["state"], pipeline.created) == ("partial", "blocked", 1)
+

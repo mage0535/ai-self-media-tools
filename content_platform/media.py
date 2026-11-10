@@ -1137,7 +1137,8 @@ class MediaBridge:
         platforms = {str(value).casefold() for value in job.get("platforms") or []}
         if item.get("semantic_requirement") or not platforms.intersection(TITLED_COVER_PLATFORMS):
             return ""
-        chain = ["stock", "go_gemini", "cloudflare", "pollinations", "sense_nova"]
+        # MED77 (owner 11-09): the paid Qwen-Image model follows the free gateway; it has no watermark.
+        chain = ["stock", "go_gemini", "qwen_image", "cloudflare", "pollinations", "sense_nova"]
         if (job.get("brief") or {}).get("content_mode") == "original_knowledge":
             chain.remove("stock")  # Original-knowledge jobs only take newly generated assets.
         elif item.get("role") != "cover" and not platforms.intersection(REAL_BACKGROUND_PLATFORMS):

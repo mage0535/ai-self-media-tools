@@ -139,6 +139,8 @@ def generate_image(
                 result = _cloudflare_image(prompt, output_path, model=model, size=size, input_image=input_image)
             elif name == "sense_nova":
                 result = _sensenova_image(prompt, output_path, model=model, size=size, input_image=input_image)
+            elif name == "qwen_image":
+                result = _qwen_image(prompt, output_path, model=model, size=size, input_image=input_image)
             elif name == "pixazo":
                 result = _pixazo_image(prompt, output_path, model=model, size=size, input_image=input_image)
             else:
@@ -1026,6 +1028,40 @@ def _sensenova_image(
 
 
 
+def _qwen_image(prompt: str, output: Path, model: str = "", size: str = "1024x1024",
+                input_image: str | Path | None = None) -> dict:
+    """Alibaba Model Studio Qwen-Image (MED77, owner 11-09): billed per image, reachable from the production
+    network without a proxy, no watermark. Uses the account key the voice lane already has."""
+    if input_image:
+        raise ImageProviderError("Qwen image provider does not support image editing here")
+    home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+    key = load_secret("DASHSCOPE_API_KEY", [home / "secrets" / "qwen_tts.env"])
+    if not key:
+        raise ImageProviderError("DASHSCOPE_API_KEY is not configured")
+    model_name = model or os.environ.get("QWEN_IMAGE_MODEL") or "qwen-image-2.0"
+    try:
+        width, height = (int(part) for part in str(size).lower().split("x"))
+    except ValueError:
+        width, height = 1024, 1024
+    payload = {"model": model_name, "input": {"messages": [{"role": "user", "content": [{"text": prompt[:3000]}]}]},
+               "parameters": {"size": f"{width}*{height}", "n": 1, "watermark": False}}
+    req = urllib.request.Request(
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"}, method="POST")
+    try:
+        with _urlopen_retry(req, timeout=120, attempts=1) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+        image_url = body["output"]["choices"][0]["message"]["content"][0]["image"]
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")[:180]
+        raise ImageProviderError(f"Qwen image call failed: HTTP {exc.code} {detail}") from exc
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ImageProviderError("Qwen image response did not include an image") from exc
+    _download_image(image_url, output)
+    return {"provider": "qwen_image", "model": model_name, "mode": "generate"}
+
+
 def _pixazo_image(
     prompt: str,
     output: Path,
@@ -1257,7 +1293,7 @@ def _provider_chain(provider: str, input_image: str | Path | None = None) -> lis
     if configured:
         requested = [aliases.get(p.strip(), p.strip()) for p in configured.split(",") if p.strip()]
         paid = {"openai", "gemini", "pixazo"}
-        known = {"stock", "pollinations", "cloudflare", "sense_nova", "pexels", "pixabay", "go_gemini", "openai-codex", *paid}
+        known = {"stock", "pollinations", "cloudflare", "sense_nova", "qwen_image", "pexels", "pixabay", "go_gemini", "openai-codex", *paid}
         chain = [name for name in requested if name in known and (allow_paid or name not in paid)]
         if chain:
             return chain

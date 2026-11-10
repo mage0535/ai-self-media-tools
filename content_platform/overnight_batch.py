@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -1010,6 +1011,10 @@ TERMINAL_TASK_STATES = {"staged", "handoff_ready", "published", "published_verif
 TRANSIENT_FAILURE_MARKERS = ("timeout", "temporar", "connection reset", "connection aborted", "rate limit", "locked", "resource busy")
 
 
+# The plan's deadline counts from the batch start; preparation and planning run before execute_batch starts its clock.
+SECOND_ATTEMPT_RESERVE_MINUTES = 30
+
+
 def _is_transient_failure(exc: Exception) -> bool:
     """Retry only bounded infrastructure failures; never retry policy or content blocks."""
     message = str(exc).casefold()
@@ -1041,6 +1046,7 @@ def execute_batch(
         return state
 
     state["status"] = "running"
+    state.setdefault("run_started_unix", time.time())
     _write_state(state_file, state)
     for task in state.get("tasks", []):
         platform = str(task.get("platform") or "")
@@ -1165,6 +1171,28 @@ def execute_batch(
             require_acceptance=require_acceptance,
             _retry_pass=True,
         )
+
+    # MED76 (11-09 PST): windows ended with 85-230 of their 290 minutes unused while a lane sat blocked by one draw
+    # (an image at 0.70, a body 88 characters short). A lane whose pipeline ran and did not deliver gets one new job
+    # while the plan's time allows; every gate applies to the new job unchanged. A scheduled post is never repeated.
+    spent = (time.time() - float(state["run_started_unix"])) / 60
+    limit = int(state.get("work_deadline_minute") or 0) - int(state.get("start_minute") or 0) - SECOND_ATTEMPT_RESERVE_MINUTES
+    again = []
+    for task in state.get("tasks", []):
+        if (task.get("state") in {"blocked", "failed"} and task.get("job_id") and not task.get("first_attempt")
+                and str(task.get("action") or "") != "schedule_publish" and not task.get("recovery_count")):
+            spent += int(task.get("estimate_minutes") or 1)
+            if spent > limit:
+                break
+            again.append(task)
+    for task in again:
+        task["first_attempt"] = {key: task.pop(key, None) for key in ("job_id", "state", "reason", "pipeline_state", "acceptance")}
+        task["state"] = "queued"
+        journal.append("platform_second_attempt", str(task.get("platform") or ""), dict(task["first_attempt"], acceptance=None))
+    if again:
+        _write_state(state_file, state)
+        return execute_batch(pipeline, plan, state_path=state_file, journal=journal, store=store,
+                             require_acceptance=require_acceptance, _retry_pass=_retry_pass)
 
     tasks = state.get("tasks", [])
     failed = [task for task in tasks if task.get("state") == "failed"]

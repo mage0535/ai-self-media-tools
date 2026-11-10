@@ -608,5 +608,5 @@ def test_juejin_and_zhihu_reach_sensenova_before_pollinations():
     # MED75: pollinations passed 0 of 17 kept images; the owner accepted SenseNova's logo on these two lanes.
     for platform in ("juejin", "zhihu"):
         chain = MediaBridge._article_image_chain({"platforms": [platform]}, {"role": "section"}).split(",")
-        assert chain == ["go_gemini", "cloudflare", "sense_nova", "pollinations"]
+        assert chain == ["go_gemini", "qwen_image", "cloudflare", "sense_nova", "pollinations"]
     assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "cover"}).split(",")[-2:] == ["pollinations", "sense_nova"]

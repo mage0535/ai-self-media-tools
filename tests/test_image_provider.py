@@ -679,3 +679,32 @@ def test_stock_query_uses_short_english_words_and_falls_back_to_the_map():
     with patch.object(ip, "_gateway_text", return_value="工业相机"):
         prompt = "工业质检 " + uuid.uuid4().hex
         assert ip._english_stock_query(prompt) == ip._stock_query(prompt)
+
+
+def test_qwen_image_posts_the_prompt_and_saves_the_returned_image(tmp_path, monkeypatch):
+    # MED77: the paid Alibaba model is a configured-chain provider that returns an image URL.
+    import io, json as _json
+    from content_platform import image_provider as ip
+
+    seen = {}
+
+    class Response(io.BytesIO):
+        headers = {"Content-Type": "application/json"}
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+
+    def fake_open(request, timeout=0, attempts=0):
+        seen["url"], seen["body"] = request.full_url, _json.loads(request.data)
+        return Response(_json.dumps({"output": {"choices": [{"message": {"content": [{"image": "https://img.example/a.png"}]}}]}}).encode())
+
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
+    monkeypatch.setattr(ip, "_urlopen_retry", fake_open)
+    monkeypatch.setattr(ip, "_download_image", lambda url, output: output.write_bytes(b"png:" + url.encode()))
+    result = ip._qwen_image("办公室里的团队", tmp_path / "a.png", size="1536x1024")
+
+    assert result == {"provider": "qwen_image", "model": "qwen-image-2.0", "mode": "generate"}
+    assert seen["body"]["parameters"] == {"size": "1536*1024", "n": 1, "watermark": False}
+    assert (tmp_path / "a.png").read_bytes().endswith(b"a.png")
+    monkeypatch.setenv("IMAGE_PROVIDER_CHAIN", "go_gemini,qwen_image")
+    assert ip._provider_chain("auto") == ["go_gemini", "qwen_image"]
+
