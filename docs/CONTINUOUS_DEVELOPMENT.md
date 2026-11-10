@@ -247,6 +247,17 @@ ops repository; this entry covers the code.
   ahead of sense_nova and ended the chain whenever the gateway was limited. The owner accepted the logo on these two
   lanes. Xiaohongshu (no-watermark rule) and WeChat keep the old order. The official `gemini`/`openai` providers cannot
   be reached from the production host's network region; a paid provider must be one that serves that region.
+- MED76 (11-09 PST, deployed d68; regression new73 same failures, 312 passed): `execute_batch` records
+  `run_started_unix` and, before the final summary, re-queues each task that has a `job_id`, is blocked or failed, has
+  no `first_attempt`, is not `schedule_publish` and was not interrupted, while elapsed minutes plus `estimate_minutes`
+  stay within `work_deadline_minute - start_minute - SECOND_ATTEMPT_RESERVE_MINUTES` (30). The first job's id, state
+  and reason move to `task["first_attempt"]`; the journal gets `platform_second_attempt`. Gates are unchanged.
+- MED77 (11-09 PST, deployed d68): image provider `qwen_image` (`_qwen_image`, Alibaba Model Studio multimodal
+  generation endpoint, `DASHSCOPE_API_KEY` from the environment or `secrets/qwen_tts.env`, model `QWEN_IMAGE_MODEL`
+  or `qwen-image-2.0`, watermark off). It is a configured-chain name only and sits after go_gemini in
+  `_article_image_chain`. Staging note: `article_illustrator.IMAGE_GEN` runs `scripts/image_gen.py` from
+  CONTENT_PLATFORM_HOME, so a staging copy does not exercise a changed `image_provider.py`; run the script from the
+  staging copy to test a provider.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
