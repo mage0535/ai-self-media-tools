@@ -303,3 +303,63 @@ def test_clipped_light_text_on_dark_card_is_overflow():
     card[380:400, 0:540:5, :] = 235         # light strokes running off both edges
     card[380:400, 1:540:5, :] = 235
     assert analyze_frame(card)["overflow"] is True
+
+
+# MED82 (Magic 11-10): subtitle readability is measured (glyph height + WCAG contrast) on full-resolution frames.
+def _scene_with_caption(glyph_px: int, *, fill: int = 255, outline: bool = True, background: int = 110, seed: int = 0):
+    """1080x1920 portrait textured scene with one bottom caption line of vertical glyph strokes."""
+    rng = np.random.default_rng(seed)
+    frame = np.clip(rng.normal(background, 25, (1920, 1080, 3)), 0, 255).astype(np.uint8)
+    frame[:, :, 1] = np.clip(frame[:, :, 1].astype(int) + 20, 0, 255)  # coloured footage, not a flat card
+    top = 1650
+    for x in range(330, 750, 14):
+        if outline:
+            frame[top - 3 : top + glyph_px + 3, x - 3 : x + 9] = 0
+        frame[top : top + glyph_px, x : x + 6] = fill
+    return frame
+
+
+def test_small_caption_on_real_footage_is_unreadable():
+    from content_platform.body_visual_gate import subtitle_readability
+
+    result = subtitle_readability([_scene_with_caption(30, seed=i) for i in range(5)])  # 1.56% of 1920, like v2
+    assert result["detected"] == 5 and result["unreadable"] is True
+    frames = [_scene_with_caption(30, seed=i) for i in range(5)]
+    assert SUBTITLE_LAYOUT_UNREADABLE in evaluate_frames(frames, "kuaishou", subtitle_frames=frames)["failed_codes"]
+
+
+def test_normal_caption_on_real_footage_is_readable():
+    from content_platform.body_visual_gate import subtitle_readability
+
+    frames = [_scene_with_caption(42, seed=i) for i in range(5)]  # 2.19%, the production douyin_pet render
+    result = subtitle_readability(frames)
+    assert result["detected"] == 5 and result["unreadable"] is False
+    verdict = evaluate_frames(frames, "kuaishou", subtitle_frames=frames)
+    assert SUBTITLE_LAYOUT_UNREADABLE not in verdict["failed_codes"]
+    assert TEXT_OVERFLOW_FRAME not in verdict["failed_codes"]
+
+
+def test_low_contrast_caption_without_outline_is_unreadable():
+    from content_platform.body_visual_gate import subtitle_readability
+
+    # Light-gray fill on a mid-tone scene, no outline: about 2:1. (White text on a bright, noisy background is not
+    # detected at all; the measurement is probe-grade, see measure_subtitle.)
+    frames = [_scene_with_caption(60, fill=230, outline=False, background=150, seed=i) for i in range(5)]
+    result = subtitle_readability(frames)
+    assert result["detected"] >= 3 and result["unreadable"] is True
+
+
+def test_no_detected_caption_is_not_judged():
+    from content_platform.body_visual_gate import subtitle_readability
+
+    rng = np.random.default_rng(1)
+    plain = [np.clip(rng.normal(110, 25, (1920, 1080, 3)), 0, 255).astype(np.uint8) for _ in range(5)]
+    assert subtitle_readability(plain)["unreadable"] is False
+    # Two small-caption frames are too few to judge a clip.
+    assert subtitle_readability([_scene_with_caption(30), _scene_with_caption(30, seed=1)])["unreadable"] is False
+
+
+def test_bright_real_footage_is_not_text_overflow():
+    rng = np.random.default_rng(2)
+    bright = np.clip(rng.normal(205, 30, (960, 540, 3)), 0, 255).astype(np.uint8)
+    assert analyze_frame(bright)["overflow"] is False

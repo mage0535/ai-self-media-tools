@@ -22,6 +22,16 @@ MOTION_FALLBACK_BLOCKS_QUALIFIED = "MOTION_FALLBACK_BLOCKS_QUALIFIED"
 BODY_VISUAL_EVIDENCE_MISSING = "BODY_VISUAL_EVIDENCE_MISSING"
 # Ink transitions per pixel of frame width that a clipped text line shows (see analyze_frame).
 TEXT_STROKE_DENSITY = 0.09
+# MED82 (Magic 11-10 14:30 CST): subtitle readability is measured, not inferred from layout.
+# Glyph height (white fill, outline excluded) / frame height; measured fill height is about 0.63 x the ASS font size.
+# Portrait 2.0% derives from BBC Subtitle Guidelines 9:16 line height 3.9%; landscape 3.4% sits below the qualified
+# 16:9 delivery (median 3.7%). Contrast is WCAG 2.1 SC 1.4.3 (4.5:1), fill vs outline ring or vs background.
+SUBTITLE_MIN_GLYPH_PORTRAIT = 0.020
+SUBTITLE_MIN_GLYPH_LANDSCAPE = 0.034
+SUBTITLE_MIN_CONTRAST = 4.5
+SUBTITLE_SAMPLE_SECONDS = 2.0
+SUBTITLE_MAX_FRAMES = 60
+SUBTITLE_MIN_DETECTED = 3
 
 BODY_VISUAL_FAIL_CODES = (
     BACKGROUND_EMPTY_OR_SOLID,
@@ -161,12 +171,13 @@ def evaluate_body_visual(video_path: Path | str, platform: str = "") -> dict[str
             frame = _decode_frame(path, timestamp)
             if frame is not None:
                 frames.append(frame)
+        subtitle_frames = _decode_subtitle_frames(path, duration)
     except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError):
         return _empty_result(platform)
-    return evaluate_frames(frames, platform=platform)
+    return evaluate_frames(frames, platform=platform, subtitle_frames=subtitle_frames)
 
 
-def evaluate_frames(frames: list[Any], platform: str = "") -> dict[str, Any]:
+def evaluate_frames(frames: list[Any], platform: str = "", subtitle_frames: list[Any] | None = None) -> dict[str, Any]:
     if not frames:
         return _empty_result(platform)
     reports = [analyze_frame(frame) for frame in frames]
@@ -176,15 +187,105 @@ def evaluate_frames(frames: list[Any], platform: str = "") -> dict[str, Any]:
         codes.append(BACKGROUND_EMPTY_OR_SOLID)
     if _majority(sum(1 for row in reports if row["overflow"]), total):
         codes.append(TEXT_OVERFLOW_FRAME)
-    if _majority(sum(1 for row in reports if row["subtitle_unreadable"]), total):
+    readability = subtitle_readability(subtitle_frames) if subtitle_frames is not None else None
+    if _majority(sum(1 for row in reports if row["subtitle_unreadable"]), total) or (readability or {}).get("unreadable"):
         codes.append(SUBTITLE_LAYOUT_UNREADABLE)
-    return {
+    result = {
         "passed": not codes,
         "failed_codes": codes,
         "platform": str(platform or "").casefold(),
         "frames_sampled": total,
         "frame_reports": reports,
         "evidence": "sampled_frames",
+    }
+    if readability is not None:
+        result["subtitle_readability"] = readability
+    return result
+
+
+def _relative_luminance(rgb: Any) -> Any:
+    c = np.asarray(rgb, dtype=np.float64) / 255.0
+    c = np.where(c <= 0.03928, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * c[..., 0] + 0.7152 * c[..., 1] + 0.0722 * c[..., 2]
+
+
+def _dilate(mask: Any, iterations: int) -> Any:
+    mask = mask.copy()
+    for _ in range(iterations):
+        grown = mask.copy()
+        grown[1:] |= mask[:-1]
+        grown[:-1] |= mask[1:]
+        grown[:, 1:] |= mask[:, :-1]
+        grown[:, :-1] |= mask[:, 1:]
+        mask = grown
+    return mask
+
+
+def measure_subtitle(rgb: Any) -> dict[str, Any] | None:
+    """Measure the strongest white text line in the lower 40% of one full-resolution frame.
+
+    Returns glyph height (fill rows only, outline excluded) and WCAG contrast of the fill against the
+    outline ring (1-6 px around the glyphs) and against the band background (beyond 6 px); None when no
+    subtitle-like line is found. Probe-grade: white text on a bright background can be missed.
+    """
+    frame = np.asarray(rgb)
+    if frame.ndim != 3 or frame.shape[2] < 3 or frame.shape[0] < 64 or frame.shape[1] < 64:
+        return None
+    image = frame[:, :, :3].astype(np.int16)
+    height, width = image.shape[:2]
+    white = (image.mean(axis=2) > 200) & ((image.max(axis=2) - image.min(axis=2)) < 45)
+    y0, x0, x1 = int(height * 0.60), int(width * 0.05), int(width * 0.95)
+    transitions = np.abs(np.diff(white[y0:, x0:x1].astype(np.int8), axis=1)).sum(axis=1)
+    best = None
+    for start, end in _row_groups(np.where(transitions >= 8)[0], gap=3):
+        rows = end - start + 1
+        if rows < height * 0.008 or rows > height * 0.08:
+            continue
+        score = int(transitions[start : end + 1].sum())
+        if best is None or score > best[2]:
+            best = (start, end, score)
+    if best is None:
+        return None
+    top, bottom = y0 + best[0], y0 + best[1]
+    columns = np.where(white[top : bottom + 1, x0:x1].any(axis=0))[0]
+    left, right = x0 + int(columns[0]), x0 + int(columns[-1])
+    box = image[top : bottom + 1, left : right + 1]
+    glyph = white[top : bottom + 1, left : right + 1]
+    near = _dilate(glyph, 6)
+    fill = float(_relative_luminance(box[glyph]).mean())
+    ring_pixels = box[near & ~_dilate(glyph, 1)]
+    background_pixels = box[~near]
+    ring = float(np.median(_relative_luminance(ring_pixels))) if len(ring_pixels) else None
+    background = float(np.median(_relative_luminance(background_pixels))) if len(background_pixels) > 20 else None
+    return {
+        "glyph_h_px": int(bottom - top + 1),
+        "glyph_h_ratio": round((bottom - top + 1) / height, 4),
+        "portrait": height > width,
+        "contrast_vs_outline_ring": round((fill + 0.05) / (ring + 0.05), 2) if ring is not None else None,
+        "contrast_vs_background": round((fill + 0.05) / (background + 0.05), 2) if background is not None else None,
+    }
+
+
+def subtitle_readability(frames: list[Any]) -> dict[str, Any]:
+    """SUBTITLE_LAYOUT_UNREADABLE when most frames with a detected subtitle line are too small or too low-contrast.
+
+    A clip with no detected subtitle (e.g. no burned captions) is not judged here.
+    """
+    rows = [row for row in (measure_subtitle(frame) for frame in frames) if row]
+    for row in rows:
+        minimum = SUBTITLE_MIN_GLYPH_PORTRAIT if row["portrait"] else SUBTITLE_MIN_GLYPH_LANDSCAPE
+        contrast = max(value for value in (row["contrast_vs_outline_ring"], row["contrast_vs_background"], 0.0)
+                       if value is not None)
+        row["too_small"] = row["glyph_h_ratio"] < minimum
+        row["low_contrast"] = contrast < SUBTITLE_MIN_CONTRAST
+    bad = sum(1 for row in rows if row["too_small"] or row["low_contrast"])
+    glyphs = sorted(row["glyph_h_ratio"] for row in rows)
+    return {
+        "frames": len(frames),
+        "detected": len(rows),
+        "unreadable_frames": bad,
+        "glyph_h_ratio_median": glyphs[len(glyphs) // 2] if glyphs else None,
+        "unreadable": len(rows) >= SUBTITLE_MIN_DETECTED and _majority(bad, len(rows)),
     }
 
 
@@ -282,14 +383,14 @@ def _majority(hits: int, total: int) -> bool:
     return total > 0 and hits * 5 >= total * 3
 
 
-def _row_groups(rows: Any) -> list[tuple[int, int]]:
+def _row_groups(rows: Any, gap: int = 2) -> list[tuple[int, int]]:
     if len(rows) == 0:
         return []
     start = previous = int(rows[0])
     groups: list[tuple[int, int]] = []
     for value in rows[1:]:
         current = int(value)
-        if current <= previous + 2:
+        if current <= previous + gap:
             previous = current
             continue
         groups.append((start, previous))
@@ -377,3 +478,39 @@ def _decode_frame(path: Path, timestamp: float | None) -> Any | None:
     height = len(raw) // (_SAMPLE_WIDTH * 3)
     frame = np.frombuffer(raw, dtype=np.uint8).reshape(height, _SAMPLE_WIDTH, 3)
     return frame.copy()
+
+
+def _probe_size(path: Path) -> tuple[int, int]:
+    command = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", str(path)]
+    process = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
+    streams = (json.loads(process.stdout or "{}").get("streams") or [{}]) if process.returncode == 0 else [{}]
+    return int(streams[0].get("width") or 0), int(streams[0].get("height") or 0)
+
+
+def _decode_subtitle_frames(path: Path, duration: float) -> list[Any]:
+    """Full-resolution frames every SUBTITLE_SAMPLE_SECONDS (at most SUBTITLE_MAX_FRAMES), for subtitle measurement."""
+    width, height = _probe_size(path)
+    if duration <= 0 or width < 64 or height < 64:
+        return []
+    if max(width, height) > 1920:  # ratios are scale-free; keep the work bounded
+        factor = 1920 / max(width, height)
+        width, height = int(width * factor) // 2 * 2, int(height * factor) // 2 * 2
+    step = max(SUBTITLE_SAMPLE_SECONDS, duration / SUBTITLE_MAX_FRAMES)
+    command = ["ffmpeg", "-v", "error", "-i", str(path), "-vf", f"fps=1/{step:.3f},scale={width}:{height}",
+               "-frames:v", str(SUBTITLE_MAX_FRAMES), "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
+    size = width * height * 3
+    frames = []
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as process:
+        try:
+            while True:
+                raw = process.stdout.read(size)
+                if len(raw) < size:
+                    break
+                frames.append(np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 3).copy())
+        finally:
+            process.stdout.close()
+            try:
+                process.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                process.kill()
+    return frames
