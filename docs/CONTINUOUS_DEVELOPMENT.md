@@ -286,6 +286,14 @@ ops repository; this entry covers the code.
   stricter but occasionally far more lenient (0.85 where the primary gave 0.38). A fallback score below
   `FALLBACK_MIN_PASS_SCORE` (0.85) is therefore capped at 0.71, just under the 0.72 semantic gate; the raw value is
   kept in `audit["fallback_raw_score"]`. The earlier note "the fallback is stricter" holds only on primary-passed images.
+- MED85 (11-12 CST): article section images (`MediaBridge._image_prompts`, strict path) carried garbled English
+  sentences, tables of made-up values and pseudo-Chinese notes. The section prompt now starts with the same no-text rule
+  as titled covers (no words, letters, numbers, labels, signs, screens/papers/tables/cards with writing). It is placed
+  first because the Qwen provider keeps only the first 3000 characters and the article facts can be 4000.
+- Review route (11-12 CST): the native quality reviewer of a window task uses the control host's global agent model at
+  dispatch time. A chat `/model` switch persisted to the global config changed the window reviewer (Codex instead of
+  the calibrated Gemini route; every review blocked). The control host now keeps chat switches session-scoped
+  (`model.persist_switch_by_default: false`); change the global model only on purpose and outside a window.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
