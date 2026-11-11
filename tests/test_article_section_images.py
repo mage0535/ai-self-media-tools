@@ -11,6 +11,15 @@ def test_juejin_contract_article_binds_images_to_real_headings():
     assert "会话记忆和长期画像分开存" in prompts[1]["prompt"]
 
 
+def test_section_prompts_forbid_text_before_the_article_facts():
+    # MED85 (11-12 CST): garbled English/pseudo-Chinese inside section images; Qwen keeps only 3000 characters.
+    long_body = "开场段落。\n\n## 记忆分层\n\n" + "会话记忆和长期画像分开存。" * 400 + "\n\n## 知识库\n\n领域知识走检索。\n"
+    job = {"title": "t", "topic": "AI Agent 记忆", "body": long_body, "platforms": ["zhihu"], "brief": {"run_contract": {"id": "x"}}}
+    for prompt in MediaBridge._image_prompts(job, 3)[1:]:
+        assert prompt["prompt"].startswith("Absolutely no text in the image")
+        assert "no screens, papers, tables or cards with writing" in prompt["prompt"][:3000]
+
+
 def test_legacy_sections_use_titles_not_dict_repr():
     job = {"body": BODY, "draft_meta": {"sections": [{"id": "section_1", "title": "记忆分层", "role": "hook"}]}}
     assert MediaBridge._article_sections(job) == ["记忆分层"]
