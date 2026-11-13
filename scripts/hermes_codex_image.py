@@ -8,6 +8,13 @@ import shutil
 import sys
 
 
+def aspect_for(size):
+    """Hermes accepts only square/landscape/portrait and coerces anything else to landscape (MED89, 11-13:
+    "1:1" requests came back 1536x1024)."""
+    width, height = map(int, size.split('x'))
+    return 'square' if width == height else 'landscape' if width > height else 'portrait'
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--prompt', required=True)
@@ -32,8 +39,7 @@ def main():
         model = args.model or 'gpt-image-2-' + tier
         if model == 'gpt-image-2':
             model += '-' + tier
-        width, height = map(int, args.size.split('x'))
-        aspect = '1:1' if width == height else '16:9' if width > height else '9:16'
+        aspect = aspect_for(args.size)
         result = module.OpenAICodexImageGenProvider().generate(
             args.prompt, aspect_ratio=aspect, model=model,
             image_url=args.input_image or None)

@@ -304,6 +304,12 @@ ops repository; this entry covers the code.
   were model/tool news, correctly rejected, because `juejin:scenario` (the real-world case search) was skipped. All 19
   trend sources share one sequential 45 s budget; a slow `bilibili:scenario` (27 s) used it up. The budget is a
   deployment setting (`trends.max_total_seconds`); give it room for every enabled source (now 120 s).
+- MED89 (11-13): GPT images (`openai-codex`, gpt-image-2 through Hermes Codex auth, `scripts/hermes_codex_image.py`)
+  join the article chain right after `go_gemini`; the video chain is a deployment setting
+  (`video.image_provider_chain`). The bridge sends Hermes aspect names (`square`/`landscape`/`portrait`); "1:1" was
+  coerced to landscape. GPT calls go through the job's US proxy (`US_PROXY`). Operational traps: any per-model
+  cooldown on the Codex pool entry blocks the image plugin (it selects without a model), and a server-revoked token
+  still shows a valid local expiry, so verify the route with a real one-image probe, not the token date.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,

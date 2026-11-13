@@ -1138,7 +1138,9 @@ class MediaBridge:
         if item.get("semantic_requirement") or not platforms.intersection(TITLED_COVER_PLATFORMS):
             return ""
         # MED77 (owner 11-09): the paid Qwen-Image model follows the free gateway; it has no watermark.
-        chain = ["stock", "go_gemini", "qwen_image", "cloudflare", "pollinations", "sense_nova"]
+        # MED89 (owner 11-13): GPT images (Codex auth, via the job's US proxy) follow the free gateway; 4 of 4 probe
+        # scenes were on-topic, text-free and logo-free, unlike SenseNova (logo) and cloudflare (69% pass).
+        chain = ["stock", "go_gemini", "openai-codex", "qwen_image", "cloudflare", "pollinations", "sense_nova"]
         if (job.get("brief") or {}).get("content_mode") == "original_knowledge":
             chain.remove("stock")  # Original-knowledge jobs only take newly generated assets.
         elif item.get("role") != "cover" and not platforms.intersection(REAL_BACKGROUND_PLATFORMS):

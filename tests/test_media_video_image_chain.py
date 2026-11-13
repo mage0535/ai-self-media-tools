@@ -608,5 +608,16 @@ def test_juejin_and_zhihu_reach_sensenova_before_pollinations():
     # MED75: pollinations passed 0 of 17 kept images; the owner accepted SenseNova's logo on these two lanes.
     for platform in ("juejin", "zhihu"):
         chain = MediaBridge._article_image_chain({"platforms": [platform]}, {"role": "section"}).split(",")
-        assert chain == ["go_gemini", "qwen_image", "cloudflare", "sense_nova", "pollinations"]
+        assert chain == ["go_gemini", "openai-codex", "qwen_image", "cloudflare", "sense_nova", "pollinations"]
     assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "cover"}).split(",")[-2:] == ["pollinations", "sense_nova"]
+
+
+def test_codex_image_bridge_sends_hermes_aspect_names():
+    # MED89: "1:1" is not a Hermes aspect name and was coerced to landscape (square requests came back 1536x1024).
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "scripts" / "hermes_codex_image.py"
+    spec = importlib.util.spec_from_file_location("hermes_codex_image_bridge", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert [module.aspect_for(size) for size in ("1024x1024", "1536x1024", "1024x1536")] == ["square", "landscape", "portrait"]
