@@ -1433,3 +1433,20 @@ def test_generated_cover_carries_the_works_own_text_not_a_demo():
     assert "做表" not in title and layout == "premium_fintech"
     assert _cover_text({}, "Untitled video", script, clip)[0].replace("\n", "") == script[:16]
     assert _cover_text({"template_family": "finance_reconciliation"}, "t", script, clip)[3] == "premium_fintech"
+
+
+def test_non_finance_cover_evidence_names_its_own_subject(tmp_path):
+    """MED87 (11-12 CST window): the douyin_pet cover evidence claimed the finance demo's subject and visuals."""
+    import json
+    from scripts.video_toolchain_runner import _cover_subject, _write_generated_cover_evidence
+
+    subject, visuals = _cover_subject({"platform": "douyin_pet"}, "猫狗第一次做人？")
+    assert subject == "猫狗第一次做人？" and visuals == []
+    finance_subject, finance_visuals = _cover_subject({"template_family": "finance_reconciliation"}, "t")
+    assert "报表" in finance_subject and "对账系统界面" in finance_visuals
+    cover = tmp_path / "cover.png"; cover.write_bytes(b"c")
+    payload = _write_generated_cover_evidence(cover_path=cover, evidence_path=tmp_path / "e.json", platform="douyin_pet",
+                                              title="猫狗第一\n次做人？", subtitle="", layout_key="premium_fintech",
+                                              semantic_subject=subject, supporting_visual_evidence=visuals)
+    text = json.dumps(payload, ensure_ascii=False)
+    assert "报表" not in text and "对账" not in text and payload["semantic_subject"] == subject

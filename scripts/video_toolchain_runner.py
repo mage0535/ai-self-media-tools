@@ -229,6 +229,7 @@ def _write_generated_cover_evidence(
     background_source: str = "unknown",
     layout_key: str = "hero_conflict",
     semantic_subject: str = "",
+    supporting_visual_evidence: list[str] | None = None,
 ) -> dict[str, object]:
     """Bind an independently rendered cover to its semantic design contract."""
     ocr_title = title.strip().splitlines()[0].strip() if layout_key == "premium_fintech" else title.strip()
@@ -242,8 +243,10 @@ def _write_generated_cover_evidence(
         "hook": title.strip(),
         "conflict_or_payoff": subtitle.strip() or title.strip(),
         "content_match_reason": "封面主标题、冲突点与本次脚本主题直接对应",
-        "semantic_subject": semantic_subject.strip() or ("AI报表核算不能直接求和；必须公式校验" if layout_key == "premium_fintech" else ""),
-        "supporting_visual_evidence": ["对账系统界面", "红色差异标记", "人工复核动作"],
+        # MED87 (11-12 CST window): every premium_fintech cover, the douyin_pet one included, claimed the finance
+        # demo's subject and reconciliation visuals. The caller now names the work's own subject.
+        "semantic_subject": semantic_subject.strip(),
+        "supporting_visual_evidence": list(supporting_visual_evidence or []),
         "focal_subjects": ["主题相关主视觉", "内容标题"],
         "safe_zone_verified": True,
         "background_provenance": {
@@ -307,11 +310,26 @@ def _apply_creative_structure_to_contract(plan: dict, contract: list[dict]) -> l
     return rewritten
 
 
+FINANCE_COVER_SUBJECT = "AI报表核算不能直接求和；必须公式校验"
+FINANCE_COVER_VISUALS = ["对账系统界面", "红色差异标记", "人工复核动作"]
+
+
+def _is_finance_plan(plan: dict) -> bool:
+    return "finance_reconciliation" in str(plan.get("template_family") or "") or "finance_reconciliation" in str(plan.get("work_id") or "")
+
+
+def _cover_subject(plan: dict, title: str) -> tuple[str, list[str]]:
+    """The cover's semantic subject: an explicit plan value, the finance demo's own, else the work's title."""
+    if _is_finance_plan(plan):
+        return str(plan.get("cover_semantic_subject") or FINANCE_COVER_SUBJECT), list(FINANCE_COVER_VISUALS)
+    return str(plan.get("cover_semantic_subject") or title or "").strip(), []
+
+
 def _cover_text(plan: dict, title: str, script_body: str, clip) -> tuple[str, str, str, str, str]:
     """(title, subtitle, hook, layout, tag) for an independently generated video cover."""
     if plan.get('content_mode')=='original_knowledge':
         return clip(title,24), '公开自制示例｜逐项核对，人工确认', '保留依据，再核差异', 'evidence_interface', '公开自制示例'
-    if "finance_reconciliation" in str(plan.get("template_family") or "") or "finance_reconciliation" in str(plan.get("work_id") or ""):
+    if _is_finance_plan(plan):
         return "核账不能\n直接付款", "500笔对账｜3小时→15分钟", "付款前必须人工复核", "premium_fintech", "⚠️ 财务打回实测"
     # MED59 (11-08 CST window): every other video got the fixed 09-21 Kuaishou demo cover ("用AI做表？…实测67%算错"),
     # so the douyin_pet cover named an AI spreadsheet test and failed title OCR; it now carries the work's own title.
@@ -1123,7 +1141,8 @@ def _run_main(argv: list[str] | None = None) -> int:
                     background_path=str(bg_for_cover),
                     background_source=bg_source,
                     layout_key=cover_layout,
-                    semantic_subject=str(plan.get("cover_semantic_subject") or ""),
+                    semantic_subject=_cover_subject(plan, title)[0],
+                    supporting_visual_evidence=_cover_subject(plan, title)[1],
                 )
                 manifest["cover"] = str(cover)
                 manifest["cover_evidence"] = str(cover_evidence_path)

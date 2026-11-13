@@ -131,6 +131,8 @@ def generate_cover(
         content_css = f"position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:center; padding:{padding};"
         overlay_css = "position:absolute; inset:0; background:linear-gradient(180deg,rgba(10,18,30,.4),rgba(10,18,30,.12) 35%,transparent 70%);"
 
+    # MED87 (11-12 CST window): the title lines sat on a 34% plate over a busy pet photo; OCR read nothing and
+    # the thumbnail title was hard to read. Re-rendered from the same background: 0.34 fails the gate, 0.78 passes.
     if layout == "premium_fintech":
         title_lines = [part.strip() for part in h1.replace("<br>", "\n").splitlines() if part.strip()]
         title_markup = "".join(f'<div class="title-line">{part}</div>' for part in title_lines)
@@ -150,7 +152,7 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 .content {{ {content_css} }}
 .tag {{ display:inline-block; align-self:flex-start; padding:16px 38px; background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.35); border-radius:50px; color:#fff; font-size:30px; font-weight:600; margin-bottom:46px; }}
 .title {{ {title_style} }}
-.title-line {{ {title_style} display:block; width:max-content; max-width:640px; white-space:nowrap; background:rgba(4,12,18,0.34); padding:4px 14px 6px 8px; border-radius:3px; }}
+.title-line {{ {title_style} display:block; width:max-content; max-width:640px; white-space:nowrap; background:rgba(4,12,18,0.78); padding:4px 14px 6px 8px; border-radius:3px; }}
 .title-line:nth-child(2) {{ color:#f4c95d; }}
 .hl {{ color:#ffd54d; }}
 .sub {{ {sub_style} }}
