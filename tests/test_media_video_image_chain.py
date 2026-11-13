@@ -621,3 +621,6 @@ def test_codex_image_bridge_sends_hermes_aspect_names():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert [module.aspect_for(size) for size in ("1024x1024", "1536x1024", "1024x1536")] == ["square", "landscape", "portrait"]
+    # The backend ignores the size field; the shape must be in the prompt.
+    assert module.shaped_prompt("cat on a sofa", "1080x1920").startswith("Tall vertical 9:16")
+    assert module.shaped_prompt("cat on a sofa", "1024x1024").endswith("cat on a sofa")

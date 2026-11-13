@@ -307,7 +307,7 @@ ops repository; this entry covers the code.
 - MED89 (11-13): GPT images (`openai-codex`, gpt-image-2 through Hermes Codex auth, `scripts/hermes_codex_image.py`)
   join the article chain right after `go_gemini`; the video chain is a deployment setting
   (`video.image_provider_chain`). The bridge sends Hermes aspect names (`square`/`landscape`/`portrait`); "1:1" was
-  coerced to landscape. GPT calls go through the job's US proxy (`US_PROXY`). Operational traps: any per-model
+  coerced to landscape, and the Codex backend ignores the size field, so the bridge also puts the shape in the prompt. GPT calls go through the job's US proxy (`US_PROXY`). Operational traps: any per-model
   cooldown on the Codex pool entry blocks the image plugin (it selects without a model), and a server-revoked token
   still shows a valid local expiry, so verify the route with a real one-image probe, not the token date.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes

@@ -8,11 +8,24 @@ import shutil
 import sys
 
 
+SHAPE_HINTS = {
+    'square': 'Square 1:1 image, centered square composition. ',
+    'landscape': 'Wide 3:2 landscape image, horizontal composition. ',
+    'portrait': 'Tall vertical 9:16 portrait image, vertical composition. ',
+}
+
+
 def aspect_for(size):
     """Hermes accepts only square/landscape/portrait and coerces anything else to landscape (MED89, 11-13:
     "1:1" requests came back 1536x1024)."""
     width, height = map(int, size.split('x'))
     return 'square' if width == height else 'landscape' if width > height else 'portrait'
+
+
+def shaped_prompt(prompt, size):
+    """The Codex image backend ignores the size field and picks the shape from the prompt (MED89: 1024x1024 and
+    1080x1920 both came back 1536x1024; with the hint they came back 1254x1254 and 941x1672)."""
+    return SHAPE_HINTS[aspect_for(size)] + prompt
 
 
 def main():
@@ -41,7 +54,7 @@ def main():
             model += '-' + tier
         aspect = aspect_for(args.size)
         result = module.OpenAICodexImageGenProvider().generate(
-            args.prompt, aspect_ratio=aspect, model=model,
+            shaped_prompt(args.prompt, args.size), aspect_ratio=aspect, model=model,
             image_url=args.input_image or None)
         source = Path(result['image']) if result.get('success') else None
         if not source or not source.is_file():
