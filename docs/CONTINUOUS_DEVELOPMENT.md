@@ -294,6 +294,16 @@ ops repository; this entry covers the code.
   dispatch time. A chat `/model` switch persisted to the global config changed the window reviewer (Codex instead of
   the calibrated Gemini route; every review blocked). The control host now keeps chat switches session-scoped
   (`model.persist_switch_by_default: false`); change the global model only on purpose and outside a window.
+- MED87 (11-12 CST): the douyin_pet video cover failed `title_ocr_recall_too_low` / `thumbnail_title_unreadable`
+  on two windows. The `premium_fintech` title lines (`scripts/gen_cover.py`) sat on a 34% plate over a busy photo:
+  OCR read nothing and the thumbnail title was hard to read. Re-rendered from the same background, the unchanged gate
+  fails at 0.34 and passes at 0.62/0.78; the plate is now 0.78. The cover evidence also claimed the finance demo's
+  subject and reconciliation visuals for every `premium_fintech` cover; `_cover_subject` now gives the finance subject
+  only to the finance template and the work's own title otherwise (same gate thresholds as before).
+- MED88 (11-12 CST): Juejin had no topic ("topic analysis returned no eligible scenario"): its two hot-list candidates
+  were model/tool news, correctly rejected, because `juejin:scenario` (the real-world case search) was skipped. All 19
+  trend sources share one sequential 45 s budget; a slow `bilibili:scenario` (27 s) used it up. The budget is a
+  deployment setting (`trends.max_total_seconds`); give it room for every enabled source (now 120 s).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
