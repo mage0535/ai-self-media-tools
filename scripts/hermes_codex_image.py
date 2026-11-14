@@ -25,6 +25,9 @@ def aspect_for(size):
 def shaped_prompt(prompt, size):
     """The Codex image backend ignores the size field and picks the shape from the prompt (MED89: 1024x1024 and
     1080x1920 both came back 1536x1024; with the hint they came back 1254x1254 and 941x1672)."""
+    # MED90: image_provider.generate_image now adds the same hint for every provider; never add it twice.
+    if prompt.startswith(tuple(SHAPE_HINTS.values())):
+        return prompt
     return SHAPE_HINTS[aspect_for(size)] + prompt
 
 

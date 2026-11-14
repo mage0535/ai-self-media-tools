@@ -95,7 +95,9 @@ def generate_image(
 
     providers = _provider_chain(provider, input_image=input_image)
     errors: list[str] = []
+    original_prompt = prompt
     for name in providers:
+        prompt = original_prompt if name in STOCK_PROVIDERS or input_image else with_shape_hint(original_prompt, size)
         # A flux image depends on the rewrite instruction too; its version keeps old renders out of the cache.
         cache_model = f"{model}|{SCENE_PROMPT_VERSION}" if name in SHORT_PROMPT_PROVIDERS and not input_image else model
         # MED60: a draw that must avoid earlier stock photos cannot be served from the prompt cache.
@@ -153,7 +155,7 @@ def generate_image(
                 # Not cached: keep why earlier providers were skipped; a silent fallback hides quota or format failures.
                 result["fallback_errors"] = list(errors)
             # auto 修图分支：stock 首图按需 AI 修图
-            if provider == "auto" and name in ("stock", "pexels", "pixabay"):
+            if provider == "auto" and name in STOCK_PROVIDERS:
                 edited = _try_auto_retouch(output_path, prompt, result)
                 if edited:
                     edited["path"] = str(output_path)
@@ -193,6 +195,20 @@ def _match_suffix(output: Path) -> None:
 
 
 SHORT_PROMPT_PROVIDERS = ("cloudflare", "pollinations")
+STOCK_PROVIDERS = ("stock", "pexels", "pixabay")
+# MED90 (owner 11-13: no fixed model; rules must suit any model): every generative provider gets the shape in words.
+# Some backends ignore the size field (Codex, MED89); for those that honour it the hint only agrees with it.
+SHAPE_HINTS = {
+    "square": "Square 1:1 image, centered square composition. ",
+    "landscape": "Wide 3:2 landscape image, horizontal composition. ",
+    "portrait": "Tall vertical 9:16 portrait image, vertical composition. ",
+}
+
+
+def with_shape_hint(prompt: str, size: str) -> str:
+    width, height = _parse_size(size)
+    hint = SHAPE_HINTS["square" if width == height else "landscape" if width > height else "portrait"]
+    return prompt if prompt.startswith(tuple(SHAPE_HINTS.values())) else hint + prompt
 # scene-v2b (11-04): same instruction as v2; the bump drops flux images cached from compacted fallbacks. A tried
 # "real-world moment, no diagrams" v3 scored worse on the same Juejin sections (0.70/0.46 vs 0.76/0.70).
 SCENE_PROMPT_VERSION = "scene-v2b"

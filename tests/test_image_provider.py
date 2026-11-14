@@ -732,3 +732,28 @@ def test_a_run_can_limit_image_providers_to_an_allowlist(monkeypatch):
     with pytest.raises(ip.ImageProviderError, match="no image provider is allowed"):
         ip._provider_chain("cloudflare")
 
+
+
+def test_every_generative_provider_gets_the_shape_in_words_and_stock_does_not(tmp_path, monkeypatch):
+    # MED90 (owner 11-13): rules must suit any model; Codex ignores size (MED89), so the shape is stated for all.
+    from content_platform import image_provider as ip
+    seen = {}
+
+    def fake(name):
+        def run(prompt, output, **kwargs):
+            seen[name] = prompt
+            Path(output).write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+            return {"provider": name}
+        return run
+
+    monkeypatch.setattr(ip, "_read_cache", lambda *a, **k: None)
+    monkeypatch.setattr(ip, "_write_cache", lambda *a, **k: None)
+    monkeypatch.setattr(ip, "_match_suffix", lambda output: None)
+    monkeypatch.setattr(ip, "_qwen_image", fake("qwen_image"))
+    monkeypatch.setattr(ip, "_pexels_image", fake("pexels"))
+    ip.generate_image("a welder at work", tmp_path / "a.png", provider="qwen_image", size="1080x1920")
+    ip.generate_image("a welder at work", tmp_path / "b.png", provider="pexels", size="1080x1920")
+    assert seen["qwen_image"] == ip.SHAPE_HINTS["portrait"] + "a welder at work"
+    assert seen["pexels"] == "a welder at work"
+    assert ip.with_shape_hint(seen["qwen_image"], "1080x1920") == seen["qwen_image"]
+    assert ip.with_shape_hint("x", "1024x1024").startswith("Square 1:1")
