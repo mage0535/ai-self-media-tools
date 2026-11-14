@@ -54,6 +54,10 @@ from .workflow_runtime import (
 from .platform_workflow_context import load_platform_workflow_context
 
 
+# MED90: shown to readers when an article's pictures include AI-generated ones (rulebook declared-generated rule).
+ARTICLE_AI_IMAGE_NOTE = "注：文中配图为 AI 生成的示意图，不代表真实现场或真实系统界面。"
+
+
 def _bounded_ai_positioning(positioning):
     """Keep model input policy-complete without copying search taxonomies."""
     if not isinstance(positioning, dict):
@@ -659,6 +663,7 @@ class Pipeline:
                 generated = self._generate_optional_media(job_id, kind, runner, ["validate_image_requirements"],draft=draft)
                 if isinstance(generated, dict) and generated.get("path"):
                     shared_media.append((kind, generated))
+        self._add_generated_image_note(job_id, draft)
         if 'wechat' in job['platforms']:
             self._render_wechat_scoped(job_id,draft,runner)
         else:self._write_article_artifact_manifest(job_id, draft)
@@ -1951,6 +1956,22 @@ class Pipeline:
             "ai_edit_real_material": ("cover title rendered over the " + str(cover.get("origin") or "") + " background") if cover.get("cover_render_evidence") else "",
             "source": "asset_provenance",
         }
+
+    def _add_generated_image_note(self, job_id, draft):
+        """MED90: an article whose pictures include AI-generated ones says so in its own text, before the manifest binds
+        the body. The rulebook allows declared generated images only with this note; 11-12 CST the reviewer failed
+        platform_policy for its absence. Stock-photo-only articles get no note."""
+        meta = draft.get("draft_meta") or {}
+        platforms = {str(item).casefold() for item in (meta.get("strategy") or {}).get("primary_platforms") or []}
+        if not platforms & {"zhihu", "juejin", "wechat"} or ARTICLE_AI_IMAGE_NOTE in str(draft.get("body") or ""):
+            return
+        path = Path(self.data_dir) / "artifacts" / str(job_id) / "asset_provenance.json"
+        try:
+            rows = json.loads(path.read_text(encoding="utf-8")).get("assets") or []
+        except (OSError, ValueError, AttributeError):
+            return
+        if any(isinstance(row, dict) and row.get("origin") in {"ai_generated", "ai_edited"} for row in rows):
+            draft["body"] = str(draft.get("body") or "").rstrip() + "\n\n" + ARTICLE_AI_IMAGE_NOTE
 
     def _write_article_artifact_manifest(self, job_id, draft):
         """Bind the generated packet, cover, and section images to one readable manifest."""
