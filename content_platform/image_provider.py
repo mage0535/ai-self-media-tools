@@ -97,7 +97,10 @@ def generate_image(
     errors: list[str] = []
     original_prompt = prompt
     for name in providers:
-        prompt = original_prompt if name in STOCK_PROVIDERS or input_image else with_shape_hint(original_prompt, size)
+        # Stock searches and the short-prompt providers (their own English rewrite; size passed as width/height) keep
+        # the prompt as written.
+        prompt = (original_prompt if name in STOCK_PROVIDERS or name in SHORT_PROMPT_PROVIDERS or input_image
+                  else with_shape_hint(original_prompt, size))
         # A flux image depends on the rewrite instruction too; its version keeps old renders out of the cache.
         cache_model = f"{model}|{SCENE_PROMPT_VERSION}" if name in SHORT_PROMPT_PROVIDERS and not input_image else model
         # MED60: a draw that must avoid earlier stock photos cannot be served from the prompt cache.
