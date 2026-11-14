@@ -123,3 +123,15 @@ def test_strategy_evidence_contract_requires_content_level_sample_metadata():
     result = validate_strategy_evidence_contract(contract)
     assert result["passed"] is False
     assert "viral_breakdown_sample_metadata_incomplete" in result["failures"]
+
+
+def test_quoted_examples_under_a_prohibition_are_not_hook_templates(tmp_path: Path):
+    # MED90: '“十款工具推荐”式清单' under 统一禁止项 became a hook template.
+    source = tmp_path / "growth_strategy.md"
+    source.write_text(
+        "# S\n\n身份锚点：「你是不是每周五都焦虑周报？」\n钩子：「不要再手写周报了，试试这个流程」\n"
+        "避免“只讲参数的模型新闻标题”\n\n## 统一禁止项\n\n- “十款工具推荐”式清单；\n\n## 其他\n\n「换个问法让客服少返工一半」\n",
+        encoding="utf-8",
+    )
+    hooks = compile_strategy(source, "zhihu")["hook_templates"]
+    assert hooks == ["你是不是每周五都焦虑周报？", "不要再手写周报了，试试这个流程", "换个问法让客服少返工一半"]

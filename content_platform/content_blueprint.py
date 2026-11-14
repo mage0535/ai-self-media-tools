@@ -262,10 +262,12 @@ def _analysis_fields(blueprint: dict[str, Any], slot: dict[str, Any], matrix: di
         })
     text_forms = {"article", "long_article", "technical_article", "evidence_answer", "short_post", "social_note", "manual_carousel", "carousel", "image_text", "image_text_post"}
     if blueprint["content_form"].casefold() in text_forms:
-        blueprint.setdefault("subtitle_and_pacing_plan_when_video", {
+        # MED90 (11-12 CST): an inherited applicable=true video plan stayed on a long article (setdefault kept it) and
+        # the reviewer flagged the conflict; a text form never has a narration timing plan.
+        blueprint["subtitle_and_pacing_plan_when_video"] = {
             "applicable": False, "reason": "current content form has no video narration",
             "content_form": blueprint["content_form"],
-        })
+        }
     # A video plan must come from its actual director/narration inputs, not guessed timings.
     elif "video" in blueprint["content_form"].casefold():
         plan = slot.get("subtitle_and_pacing_plan_when_video") or slot.get("subtitle_and_pacing_plan")

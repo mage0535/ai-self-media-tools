@@ -143,3 +143,17 @@ def test_pet_topic_plans_for_owners_not_clip_editors():
 
     prompt = build_pet_prompt({"title": "憋住别笑：2025年最搞笑的猫狗视频合集"})
     assert "never a video creator or editor" in prompt and "never a plan" in prompt
+
+
+def test_article_blueprint_never_keeps_an_inherited_video_pacing_plan():
+    # MED90 (11-12 CST zhihu): an applicable=true video plan stayed on a long article and the reviewer flagged it.
+    from content_platform.content_blueprint import build_content_blueprint
+
+    scenario = parse_scenario(_scenario())
+    plan = video_pacing_plan("douyin_ai", "AI 记忆", scenario)
+    slot = {"stage": "handoff", "content_form": "long_article", "scenario_contract": flatten_scenario(scenario),
+            "subtitle_and_pacing_plan_when_video": plan}
+    matrix = {"trend_evidence": {"samples": [{"url": "https://www.zhihu.com/question/1"}]}}
+    blueprint = build_content_blueprint("zhihu", "AI 记忆", slot, matrix)
+    assert blueprint["content_form"] == "long_article"
+    assert blueprint["subtitle_and_pacing_plan_when_video"]["applicable"] is False

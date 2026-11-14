@@ -67,8 +67,23 @@ def _extract_pillars(text: str) -> list[str]:
     return values[:8]
 
 
+NEGATIVE_MARKERS = re.compile(r"禁止|避免|不要|不做|禁用|红线|反例|avoid|forbid|don't|do not|never", re.I)
+
+
 def _extract_quoted(text: str, limit: int) -> list[str]:
-    values = re.findall(r"[「『“\"]([^」』”\"]{6,80})[」』”\"]", text)
+    # MED90 (11-13): '“十款工具推荐”式清单' under '统一禁止项' became a hook template and the reviewer flagged the
+    # conflict with the positioning; a quoted example in a prohibition heading or line is not a template.
+    values: list[str] = []
+    banned_section = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            banned_section = bool(NEGATIVE_MARKERS.search(line))
+            continue
+        quoted = r"[「『“\"]([^」』”\"]{6,80})[」』”\"]"
+        # A hook may itself say '不要…'; only a negative word outside the quotes marks a prohibition line.
+        if banned_section or NEGATIVE_MARKERS.search(re.sub(quoted, "", line)):
+            continue
+        values.extend(re.findall(quoted, line))
     return list(dict.fromkeys(item.strip() for item in values))[:limit]
 
 
