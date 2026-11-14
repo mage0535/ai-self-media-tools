@@ -1008,7 +1008,8 @@ def _age_hours(value: str | None) -> float | None:
 
 
 TERMINAL_TASK_STATES = {"staged", "handoff_ready", "published", "published_verified", "published_pending_verification", "blocked", "failed", "deferred", "review_required", "awaiting_review"}
-TRANSIENT_FAILURE_MARKERS = ("timeout", "temporar", "connection reset", "connection aborted", "rate limit", "locked", "resource busy")
+# MED91 (11-15 CST): socket timeouts read "timed out" and were treated as permanent.
+TRANSIENT_FAILURE_MARKERS = ("timeout", "timed out", "temporar", "connection reset", "connection aborted", "rate limit", "locked", "resource busy")
 
 
 # The plan's deadline counts from the batch start; preparation and planning run before execute_batch starts its clock.

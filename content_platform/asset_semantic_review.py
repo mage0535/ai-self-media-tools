@@ -218,9 +218,38 @@ def route_config():
     if role.is_file():
         expected = strict_json(role.read_text(encoding='utf-8')).get('route') or {}
         # The task role pins the text route; a declared vision route is pinned by this same trusted config.
-        if (expected.get('provider'), expected.get('model')) != text_route:
+        if (expected.get('provider'), expected.get('model')) != text_route and not signed_batch_fallback(path, role, text_route):
             raise ValueError('task_profile_route_mismatch')
     return path, raw, route
+
+
+MEDIA_BATCH_JOBS = Path('/srv/hermes-worker-media/jobs')
+
+
+def _private_root_file(path):
+    info = path.lstat()
+    return path.is_file() and not path.is_symlink() and info.st_uid == 0 and not info.st_mode & 0o077
+
+
+def signed_batch_fallback(config_path, role_path, text_route, jobs_root=None):
+    """MED91 (11-15 CST): when the dispatch probe finds the configured model silent, OLD signs an owner-reviewed
+    fallback text route (MED79) while the task role keeps OLD's configured default. The review then accepts the
+    config only if it is that same signed job's private overlay and carries exactly the signed fallback route."""
+    try:
+        job = strict_json(Path(role_path).read_text(encoding='utf-8')).get('job_id')
+        if not isinstance(job, str) or not re.fullmatch(r'[a-f0-9]{32}', job):
+            return False
+        directory = Path(jobs_root or MEDIA_BATCH_JOBS) / job
+        config_path, record_path = Path(config_path), directory / 'media-batch.json'
+        if config_path != directory / 'media-batch-config.json' or directory.is_symlink():
+            return False
+        if not (_private_root_file(config_path) and _private_root_file(record_path)):
+            return False
+        identity = strict_json(record_path.read_text(encoding='utf-8')).get('identity') or {}
+        signed = (identity.get('payload') or {}).get('text_route') or {}
+        return identity.get('job_id') == job and (signed.get('provider'), signed.get('model')) == text_route
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def parse_response(output, model):

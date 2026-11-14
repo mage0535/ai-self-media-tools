@@ -1776,6 +1776,9 @@ class Pipeline:
             limit=int(self.content_hygiene_cfg.get("candidate_limit", 200)),
             exclude_job_id=job["id"],
         )
+        # MED91 (11-15 CST): a job that never generated anything (still ``created`` with no body, e.g. its run timed
+        # out before the claim) is not channel history; it blocked its own retry as a duplicate.
+        candidates = [row for row in candidates if row.get("state") != "created" or str(row.get("body") or "").strip()]
         family = set()
         if (job.get('brief')or{}).get('caption_revision_ref'):
             from .native_stage_resume import caption_revision_ancestor
