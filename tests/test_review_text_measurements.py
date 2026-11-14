@@ -34,3 +34,25 @@ def test_review_is_told_where_the_publisher_puts_each_section_image(tmp_path):
     assert [row["image_sha256"] for row in layout["placements"]] == ["s1", "s2"]
     assert layout["all_placeable"] is False
     assert _delivery_image_layout({"publication_copy": parts["publication_copy"]}) is None
+
+
+def test_ocr_text_signal_thresholds(tmp_path, monkeypatch):
+    # MED90 calibration 11-13: clean GPT pictures gave 1-2 single Chinese tokens and <=1 short Latin token.
+    from PIL import Image
+    from content_platform import cover_quality
+    from content_platform.native_quality_runner import _ocr_text_signal
+
+    path = tmp_path / "s.png"
+    Image.new("RGB", (64, 64), "white").save(path)
+
+    def words(*items):
+        return lambda image, **kw: {"available": True, "words": [{"text": t, "confidence": c} for t, c in items]}
+
+    monkeypatch.setattr(cover_quality, "_run_ocr", words(("人", 80), ("PR:", 70)))
+    assert _ocr_text_signal(path)["text_detected"] is False
+    monkeypatch.setattr(cover_quality, "_run_ocr", words(("系统", 50)))
+    assert _ocr_text_signal(path)["text_detected"] is True
+    monkeypatch.setattr(cover_quality, "_run_ocr", words(("Candidate", 90), ("Actions:", 90)))
+    assert _ocr_text_signal(path)["text_detected"] is True
+    monkeypatch.setattr(cover_quality, "_run_ocr", lambda image, **kw: {"available": False, "words": [], "error": "tesseract_missing"})
+    assert _ocr_text_signal(path)["available"] is False
