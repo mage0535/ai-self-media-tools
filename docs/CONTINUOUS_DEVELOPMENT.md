@@ -310,6 +310,23 @@ ops repository; this entry covers the code.
   coerced to landscape, and the Codex backend ignores the size field, so the bridge also puts the shape in the prompt. GPT calls go through the job's US proxy (`US_PROXY`). Operational traps: any per-model
   cooldown on the Codex pool entry blocks the image plugin (it selects without a model), and a server-revoked token
   still shows a valid local expiry, so verify the route with a real one-image probe, not the token date.
+- MED90 (11-13/11-14): quality must not depend on which model reviews or writes; customers will use different
+  models. Rules any model applies the same way, with evidence the code supplies: table separator rows repaired in
+  `_fit_article_length`; every generative image provider gets the shape in words (`image_provider.with_shape_hint`,
+  not for stock or the flux short-prompt providers); the review preflight adds `text_measurements` (CJK count, image
+  links, table separators per text part, bound to its SHA), `delivery_image_layout` (where the publisher inserts each
+  section image) and an OCR text signal per image (evidence only); `strategy_compiler` no longer turns quoted examples
+  under a prohibition into hook templates; text forms mark the video subtitle plan not applicable; articles with
+  generated pictures carry a reader note; the rulebook records that declared generated pictures are allowed on
+  Zhihu/Juejin under the same 0.72 gate. A labelled image set (`calibration/`, private ops repo) measures each
+  reviewer's agreement instead of trusting a primary model.
+- MED91 (11-15 CST window, nothing passed): the dispatcher signed its fallback text route (MED79) because the
+  configured model did not answer, but the task role still pins the configured default, so
+  `asset_semantic_review.route_config` rejected every pixel review (`task_profile_route_mismatch`, score 0.0) and all
+  article images and same-lane video samples failed. `signed_batch_fallback` accepts a differing role route only when
+  the config is that same job's private overlay and the job's signed batch record carries exactly that route. Also:
+  socket "timed out" errors are now transient (retried), and topic hygiene ignores jobs that never generated a body
+  (a timed-out first attempt had blocked its own retry as a duplicate).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
