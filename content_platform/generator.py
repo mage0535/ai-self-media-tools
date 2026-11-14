@@ -1175,6 +1175,24 @@ class DraftGenerator:
         return heads.sub(number, text)
 
     @staticmethod
+    def _fix_table_separators(text):
+        """MED90 (11-13): a model wrote the table separator row as '| — | — |' (em dashes), which Markdown does not render
+        as a table. Rewrite the row under a table header to the standard form, whatever model wrote the article."""
+        lines = text.split("\n")
+        for index in range(1, len(lines)):
+            row, header = lines[index].strip(), lines[index - 1].strip()
+            if not (row.startswith("|") and row.endswith("|") and header.startswith("|") and header.endswith("|")):
+                continue
+            # Only the row right under the table's first row is a separator; a later '| — |' row is data ("n/a").
+            if index >= 2 and lines[index - 2].strip().startswith("|"):
+                continue
+            cells = [cell.strip() for cell in row[1:-1].split("|")]
+            if cells and all(re.fullmatch(r":?[-—–－─]+:?", cell) for cell in cells):
+                lines[index] = "| " + " | ".join(
+                    (":" if cell.startswith(":") else "") + "---" + (":" if cell.endswith(":") else "") for cell in cells) + " |"
+        return "\n".join(lines)
+
+    @staticmethod
     def _fit_article_length(body, context):
         text = str(body or "").strip()
         content_form = str((context.get("strategy") or {}).get("content_form") or "")
@@ -1182,6 +1200,7 @@ class DraftGenerator:
             return text
         # Model-written editor notes ("配图位置：…") are not reader content (MED27).
         text = re.sub(r"(?m)^[ \t>*_-]*[（(【\[]?\s*(?:配图|插图)(?:位置|建议)\s*[:：].*\n?", "", text).strip()
+        text = DraftGenerator._fix_table_separators(text)
 
         def size(value):
             return len("".join(value.split()))

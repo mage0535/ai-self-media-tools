@@ -190,3 +190,15 @@ def test_empty_bound_audio_plan_keeps_resolved_library_bgm(monkeypatch):
         DraftGenerator().generate("cats", {"run_contract": {}, "bounded_model_input": {"x": {}}, "audio_plan": resolved})
     assert seen["audio_plan"] == resolved
     assert seen["strategy"] == {"version": "v1"}
+
+
+def test_article_table_separator_written_with_dashes_is_repaired():
+    # MED90: '| — | — |' under the header does not render as a Markdown table; data rows of '—' stay data.
+    from content_platform.generator import DraftGenerator
+    body = "## 状态\n\n| 状态 | 处理 |\n| — | :—: |\n| 未知 | 人工复核 |\n| — | — |\n\n结尾。"
+    fixed = DraftGenerator._fit_article_length(body, {"strategy": {"content_form": "long_article"}})
+    lines = fixed.split("\n")
+    assert lines[3] == "| --- | :---: |"
+    assert lines[5] == "| — | — |"
+    assert DraftGenerator._fix_table_separators(fixed) == fixed
+    assert DraftGenerator._fit_article_length("| a |\n| — |", {"strategy": {"content_form": "short_video"}}) == "| a |\n| — |"
