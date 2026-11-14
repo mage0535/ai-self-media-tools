@@ -563,6 +563,7 @@
     ],
     "source_policy": "licensed_or_verified_real_scene_assets",
     "xiaohongshu_note_images_owner_decision": "owner decision 2026-11-08: a Xiaohongshu note image is a licensed real photo when one reaches semantic match 0.72; otherwise a realistic, text-free generated image declared in asset_provenance, with the AI-assisted disclosure, under the same 0.72 match gate (channel rule no_obvious_ai_generated_images_as_main_visual). Video scenes keep real-scene backgrounds.",
+    "zhihu_juejin_article_images_owner_decision": "owner decisions 2026-11-09 (paid image API approved; SenseNova logo accepted on Juejin/Zhihu images) and 2026-11-13 (use GPT images): a Zhihu or Juejin article cover or section image is a licensed real photo when one reaches semantic match 0.72; otherwise a realistic, text-free generated image declared in asset_provenance (origin ai_generated, provider, prompt hash), with the reader-facing note that the pictures are AI-generated illustrations, under the same 0.72 match gate. Such an image needs no real-scene rights clearance; it must not show invented interface text, data or results. Video scenes keep real-scene backgrounds.",
     "minimum_evidence_fields": [
       "asset_id",
       "asset_type",
