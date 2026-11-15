@@ -335,7 +335,7 @@ ops repository; this entry covers the code.
   review and the humanizer (which uses the role route; its 11-15 CST `rc=2` failures had the same cause) then run on
   one working model, and `signed_batch_fallback` (MED91) becomes a safety net. Gates are unchanged. Still open:
   switching models in the middle of a running night (native review holds one route per role home).
-- MED92(c) (11-15, built; not yet deployed or proven in a real night): switching models in the middle of a night.
+- MED92(c) (11-15, deployed 11-16 06:1x CST; not yet proven in a real night): switching models in the middle of a night.
   The rule "one control job = one role home = one model" stays (about 20 checks compare a session's model with the
   role route, and three places refuse any in-turn fallback chain), so the switch is a **signed continuation job**, not
   an in-job fallback. In this repo: `overnight_batch.execute_batch(route_probe=...)` re-runs the batch-start
@@ -346,6 +346,25 @@ ops repository; this entry covers the code.
   `OVERNIGHT_CONTINUATION=1`, which skips collection, preparation and planning and resumes `overnight-run` on the same
   `plan.json`/`state.json`. Finished lanes are never re-run; every gate applies unchanged to the resumed lanes.
   The script's hash is pinned by the worker: deploy the script and the worker's pin together.
+- MED93/MED94/MED95 (11-16 CST window: no content, model was fine). Three causes, all fixed and deployed 11-16
+  06:1x CST:
+  - MED93: the worker's tunnel to the control plane sat on a slow relay route after a 20-minute network outage and
+    one 12 s read of the control job failed a lane with a bare `timed out` (two article attempts; a carousel that had
+    passed every gate was lost in the same minute). `normal_execution_lease.normal_job_claim` and
+    `native_quality_runner.current_active_role` now ask the same read-only question up to three times; every check on
+    the answer is unchanged. The route itself is fixed in the private ops repo (tunnels return to the direct route
+    when it answers again).
+  - MED94: `video_sample_collector._describe` used only the primary vision route. The vision model was silent, so
+    19 same-lane video descriptions each waited 180 s (about an hour of the window) and the pet lane had no
+    breakdown. It now uses the declared fallback vision route (`vision_fallback_*`, MED79) when the primary fails and
+    asks a just-failed primary last for 15 minutes. A description is an observation, not a score; no gate changed.
+  - MED95: the download format `bv*[height<=480]+ba/b[height<=480]/worst` matches no stream of a vertical video
+    (360x640, 480x852) and Bilibili serves no combined file: 52 of 71 pet videos failed "Requested format is not
+    available". `VIDEO_FORMAT` now also accepts width <= 480 and falls back to the smallest video + audio.
+  - Not changed: an image the fallback reviewer scores under 0.85 is still capped at 0.71 (MED84), so one 0.75 image
+    blocked a Zhihu answer. Open: Juejin had 14 candidates and none was judged an eligible scenario.
+  - Regression on the worker: 92 failed before and after (same tests), 1624 -> 1627 passed; the two new video tests
+    and the 13 continuation tests pass.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
