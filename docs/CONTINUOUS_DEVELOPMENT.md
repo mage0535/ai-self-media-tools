@@ -348,12 +348,13 @@ ops repository; this entry covers the code.
   The script's hash is pinned by the worker: deploy the script and the worker's pin together.
 - MED93/MED94/MED95 (11-16 CST window: no content, model was fine). Three causes, all fixed and deployed 11-16
   06:1x CST:
-  - MED93: the worker's tunnel to the control plane sat on a slow relay route after a 20-minute network outage and
+  - MED93: the worker's tunnel to the control plane stalled for 20-50 s at a time (a bulk sync job shared the same
+    connection over a slow link; first misread as a slow relay route after a 20-minute network outage) and
     one 12 s read of the control job failed a lane with a bare `timed out` (two article attempts; a carousel that had
     passed every gate was lost in the same minute). `normal_execution_lease.normal_job_claim` and
     `native_quality_runner.current_active_role` now ask the same read-only question up to three times; every check on
-    the answer is unchanged. The route itself is fixed in the private ops repo (tunnels return to the direct route
-    when it answers again).
+    the answer is unchanged. The transport is fixed in the private ops repo (bulk sync has its own connection; tunnels
+    return to the direct route when it answers again): 0 control reads over 5 s in 200 s, before 104 of 240.
   - MED94: `video_sample_collector._describe` used only the primary vision route. The vision model was silent, so
     19 same-lane video descriptions each waited 180 s (about an hour of the window) and the pet lane had no
     breakdown. It now uses the declared fallback vision route (`vision_fallback_*`, MED79) when the primary fails and
