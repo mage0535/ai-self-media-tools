@@ -335,6 +335,17 @@ ops repository; this entry covers the code.
   review and the humanizer (which uses the role route; its 11-15 CST `rc=2` failures had the same cause) then run on
   one working model, and `signed_batch_fallback` (MED91) becomes a safety net. Gates are unchanged. Still open:
   switching models in the middle of a running night (native review holds one route per role home).
+- MED92(c) (11-15, built; not yet deployed or proven in a real night): switching models in the middle of a night.
+  The rule "one control job = one role home = one model" stays (about 20 checks compare a session's model with the
+  role route, and three places refuse any in-turn fallback chain), so the switch is a **signed continuation job**, not
+  an in-job fallback. In this repo: `overnight_batch.execute_batch(route_probe=...)` re-runs the batch-start
+  `scripts/smoke_provider.sh` after a lane ends blocked or failed (three tries one minute apart; only when the worker
+  sets `OVERNIGHT_ROUTE_GUARD=1`). If the model stays silent, that lane goes back to `queued` (its attempt is kept in
+  `route_dead_attempt`), the state becomes `route_dead` and `run_overnight_batch.sh` exits 75. The private control
+  plane may then sign a continuation on another answering model; the worker starts the script with
+  `OVERNIGHT_CONTINUATION=1`, which skips collection, preparation and planning and resumes `overnight-run` on the same
+  `plan.json`/`state.json`. Finished lanes are never re-run; every gate applies unchanged to the resumed lanes.
+  The script's hash is pinned by the worker: deploy the script and the worker's pin together.
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
