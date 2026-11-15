@@ -327,6 +327,14 @@ ops repository; this entry covers the code.
   the config is that same job's private overlay and the job's signed batch record carries exactly that route. Also:
   socket "timed out" errors are now transient (retried), and topic hygiene ignores jobs that never generated a body
   (a timed-out first attempt had blocked its own retry as a duplicate).
+- MED92 (11-15, owner: a stuck model must hand over to the next available one by itself): the failover lives in the
+  private control plane, not in this repo. The dispatcher now really probes every candidate text route (OAuth wire
+  modes via a one-shot call that must echo a random nonce; before, such routes were assumed alive) in a declared order,
+  and when it signs a fallback route the control plane binds that signed route to the whole batch job
+  (`route_source=accepted_origin_route`) instead of the dead configured default. Text generation, native review, pixel
+  review and the humanizer (which uses the role route; its 11-15 CST `rc=2` failures had the same cause) then run on
+  one working model, and `signed_batch_fallback` (MED91) becomes a safety net. Gates are unchanged. Still open:
+  switching models in the middle of a running night (native review holds one route per role home).
 - Article image gate (MED35, 11-04): `validate_article_packet` uses `_article_background_gate` and passes
   `_article_backgrounds` to `_section_real_scene_mapping_gate`. Per image it accepts a rights-cleared real photo or a
   declared generated illustration (`asset_type` generated_image, `real_scene`/`rights_cleared` false, `source_url`,
