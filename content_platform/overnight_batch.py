@@ -262,6 +262,7 @@ def build_due_tasks(
                 for value in (raw, raw.get("dual_lane_work_plan"), raw.get("production_intent")))
             analysed, ineligible, pre_analysis = 0, 0, None
             ineligible_titles = []  # Kept so a slot with no eligible scenario can be diagnosed (MED30).
+            ineligible_reasons = []  # MED96: the analysis model's own reason per rejected title.
             for candidate in candidates:
                 identity = _topic_identity(candidate)
                 if identity in reserved_topic_fingerprints:
@@ -295,6 +296,7 @@ def build_due_tasks(
                         if analyses[key][0] is None:
                             ineligible += 1
                             ineligible_titles.append(str(candidate.get("title") or "")[:120])
+                            ineligible_reasons.append(str(candidate.get("ineligible_reason") or "")[:160])
                             continue
                         pre_analysis = analyses[key]
                     selected = candidate
@@ -303,7 +305,8 @@ def build_due_tasks(
             if not selected and ineligible:
                 row.update({"topic": candidates[0]["title"], "state": "blocked",
                             "reason": "topic analysis returned no eligible scenario",
-                            "ineligible_candidates_analysed": ineligible, "ineligible_titles": ineligible_titles})
+                            "ineligible_candidates_analysed": ineligible, "ineligible_titles": ineligible_titles,
+                            "ineligible_reasons": ineligible_reasons})
                 tasks.append(row)
                 continue
             if not selected:

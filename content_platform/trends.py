@@ -659,6 +659,9 @@ class DirectTrendSource:
                 kept += 1
                 found[article_id] = {
                     "title": title, "source": "juejin:scenario", "url": f"https://juejin.cn/post/{article_id}",
+                    # MED96 (11-16 CST): without the article brief the topic analysis saw a bare headline and judged all
+                    # 14 Juejin candidates ineligible (no role, task or scene to read); Bilibili rows carry an excerpt.
+                    "summary": str(info.get("brief_content") or "").strip()[:1500],
                     "points": int(info.get("view_count") or 0), "author": (model.get("author_user_info") or {}).get("user_name", ""),
                     "query": query, "metrics": {"views": info.get("view_count"), "likes": info.get("digg_count"),
                                                 "favorites": info.get("collect_count"), "comments": info.get("comment_count")},

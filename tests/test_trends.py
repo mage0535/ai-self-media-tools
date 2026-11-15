@@ -113,6 +113,7 @@ class TrendTests(unittest.TestCase):
         import time as _time
         now = int(_time.time())
         rows = [{"result_model": {"article_info": {"article_id": "1", "title": "AI 客服实战：退款工单自动分类，人工复核率降到 20%", "ctime": str(now - 86400),
+                                                    "brief_content": " 客服主管每天分拣三百张退款工单 ",
                                                     "view_count": 300, "digg_count": 5, "collect_count": 9, "comment_count": 2},
                                    "author_user_info": {"user_name": "a"}}},
                 {"result_model": {"article_info": {"article_id": "2", "title": "三年前的旧文", "ctime": str(now - 900 * 86400),
@@ -121,6 +122,7 @@ class TrendTests(unittest.TestCase):
             items = DirectTrendSource("juejin:scenario", {"limit": 5}).collect()
         self.assertEqual([row["url"] for row in items], ["https://juejin.cn/post/1"])
         self.assertEqual(items[0]["metrics"], {"views": 300, "likes": 5, "favorites": 9, "comments": 2})
+        self.assertEqual(items[0]["summary"], "客服主管每天分拣三百张退款工单")  # MED96: the topic analysis reads it
 
     def test_juejin_scenario_search_gives_a_pool_larger_than_thirty(self):
         # MED67 (r135): 3 per query and 30 in all left Juejin 9 candidates, all rejected.

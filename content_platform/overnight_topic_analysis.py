@@ -84,7 +84,7 @@ def build_prompt(platform: str, candidate: dict[str, Any], slot: dict[str, Any])
         f"Write every value as a concrete {language} phrase of at most 36 characters about this topic (not generic advice). "
         f"DOMAINS: {json.dumps(_pillars())}.\n" + _positioning_rules() + _real_photo_rule(platform)
         + f"Return ONLY one JSON object of this shape:\n{SCHEMA}\n"
-        'If the source cannot support a practical scenario, return {"eligible": false}.'
+        'If the source cannot support a practical scenario, return {"eligible": false, "reason": "<one short phrase>"}.'
     )
 
 
@@ -219,4 +219,17 @@ def analyze_topic(generator_config: dict[str, Any], platform: str, candidate: di
 
         call = DraftGenerator(deepcopy(generator_config))._call_hermes_text
     reply = call(prompt, {"platform": platform, "topic": candidate.get("title")})
-    return parse_pet_scenario(reply) if pet else parse_scenario(reply)
+    scenario = parse_pet_scenario(reply) if pet else parse_scenario(reply)
+    if scenario is None:
+        # MED96: a slot with no eligible scenario could not be diagnosed; the model's own reason is kept with the row.
+        candidate["ineligible_reason"] = ineligible_reason(reply)
+    return scenario
+
+
+def ineligible_reason(text: str) -> str:
+    try:
+        raw = str(text or "")
+        data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+        return str(data.get("reason") or "")[:160] if isinstance(data, dict) else ""
+    except ValueError:
+        return ""

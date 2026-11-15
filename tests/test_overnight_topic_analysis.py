@@ -157,3 +157,15 @@ def test_article_blueprint_never_keeps_an_inherited_video_pacing_plan():
     blueprint = build_content_blueprint("zhihu", "AI 记忆", slot, matrix)
     assert blueprint["content_form"] == "long_article"
     assert blueprint["subtitle_and_pacing_plan_when_video"]["applicable"] is False
+
+
+def test_analyze_topic_keeps_the_models_reason_for_an_ineligible_source():
+    """MED96: 14 Juejin candidates were rejected in one night and nothing said why."""
+    from content_platform.overnight_topic_analysis import analyze_topic
+
+    candidate = {"title": "AI 学习计划"}
+    result = analyze_topic({}, "juejin", candidate, {}, call=lambda prompt, meta: '{"eligible": false, "reason": "no concrete task"}')
+    assert result is None and candidate["ineligible_reason"] == "no concrete task"
+    plain = {"title": "x"}
+    assert analyze_topic({}, "juejin", plain, {}, call=lambda prompt, meta: '{"eligible": false}') is None
+    assert plain["ineligible_reason"] == ""
