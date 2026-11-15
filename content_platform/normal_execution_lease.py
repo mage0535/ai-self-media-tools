@@ -90,9 +90,17 @@ def normal_job_claim(store,job_id):
     def control_job(identifier):
         if not re.fullmatch('[a-f0-9]{32}',str(identifier or '')):raise PermissionError('normal_claim_control_id_invalid')
         req=urllib.request.Request(base+'/v1/jobs/'+identifier,headers={'X-Hermes-Worker-Token':token})
-        with opener.open(req,timeout=12)as response:
-            if response.status!=200:raise PermissionError('normal_claim_control_unavailable')
-            raw=response.read(65537)
+        # MED93 (11-16 CST): one slow answer on the control tunnel (12 s) failed a whole lane three times in one night.
+        # The same read-only question is asked up to three times; every check on the answer is unchanged.
+        for attempt in range(3):
+            try:
+                with opener.open(req,timeout=12)as response:
+                    if response.status!=200:raise PermissionError('normal_claim_control_unavailable')
+                    raw=response.read(65537)
+                break
+            except (TimeoutError,ConnectionError,urllib.error.URLError) as exc:
+                if isinstance(exc,urllib.error.HTTPError) or attempt==2:raise
+                time.sleep(3)
         if not 0<len(raw)<=65536:raise PermissionError('normal_claim_control_size_invalid')
         return json.loads(raw)
     control=control_job(cid)

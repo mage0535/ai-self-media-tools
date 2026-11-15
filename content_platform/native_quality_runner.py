@@ -37,7 +37,13 @@ def current_active_role(timeout):
     token=os.environ.get('HERMES_WORKER_CONTROL_TOKEN')
     if not token:raise NativeQualityRunBlocked('normal_quality_task_control_binding_missing')
     req=urllib.request.Request(base.rstrip('/')+'/v1/jobs/'+task_id,headers={'X-Hermes-Worker-Token':token})
-    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req,timeout=10) as response:job=json.load(response)
+    for attempt in range(3):  # MED93: a slow control tunnel answer is asked again; the check below is unchanged
+        try:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req,timeout=10) as response:job=json.load(response)
+            break
+        except (TimeoutError,ConnectionError,urllib.error.URLError) as exc:
+            if isinstance(exc,urllib.error.HTTPError) or attempt==2:raise
+            time.sleep(3)
     if isinstance(job,dict) and isinstance(job.get('job'),dict):job=job['job']
     if job.get('job_id')!=task_id or job.get('status')!='running':raise NativeQualityRunBlocked('normal_quality_task_not_active')
     return home,task_id,route
