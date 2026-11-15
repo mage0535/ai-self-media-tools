@@ -301,22 +301,37 @@ def _transcribe(platform: str, clip: Path, work: Path, run) -> dict[str, Any]:
 
 
 def _describe(sheet: Path, context: dict[str, Any], run) -> dict[str, Any]:
-    from .asset_semantic_review import parse_response, route_config
+    from . import asset_semantic_review as review
 
-    _, _, route = route_config()
-    command = [route["hermes_command"], "chat", "--query-file", "-", "--oneshot", "--image", str(sheet.resolve()),
-               "--provider", route["hermes_provider"], "--model", route["hermes_model"],
-               "--toolsets", "none", "--max-turns", "1", "--ignore-rules", "--quiet", "--format", "stream-json"]
+    _, _, route = review.route_config()
     prompt = VISION_PROMPT + "UNTRUSTED_DATA:\n" + json.dumps(context, ensure_ascii=False)
-    proc = run(command, input=prompt, capture_output=True, text=True, timeout=180, check=False,
-               env=dict(os.environ, HERMES_IGNORE_RULES="1"))
-    if proc.returncode:
-        raise ValueError("video_vision_exit_" + str(proc.returncode))
-    value, _session = parse_response(proc.stdout, route["hermes_model"])
-    frames = value.get("frames")
-    if not isinstance(frames, list) or len(frames) != FRAMES or not all(isinstance(row, str) and row.strip() for row in frames):
-        raise ValueError("video_vision_frames_invalid")
-    return value
+    # MED94 (11-16 CST): the vision model was silent all night; 19 descriptions waited 180 s each on it (about an
+    # hour of the window) and the pet lane had no breakdown. The declared fallback vision route (MED79) is asked when
+    # the primary fails, and a primary that just failed is asked last for 15 minutes (same memory as the image review).
+    # A description is an observation, not a score, so no gate depends on which route wrote it.
+    routes = [route] + ([route["fallback"]] if route.get("fallback") else [])
+    if len(routes) == 2 and time.monotonic() < review._PRIMARY_DOWN_UNTIL.get(route["hermes_model"], 0):
+        routes.reverse()
+    for index, current in enumerate(routes):
+        command = [current["hermes_command"], "chat", "--query-file", "-", "--oneshot", "--image", str(sheet.resolve()),
+                   "--provider", current["hermes_provider"], "--model", current["hermes_model"],
+                   "--toolsets", "none", "--max-turns", "1", "--ignore-rules", "--quiet", "--format", "stream-json"]
+        try:
+            proc = run(command, input=prompt, capture_output=True, text=True, timeout=180, check=False,
+                       env=dict(os.environ, HERMES_IGNORE_RULES="1"))
+            if proc.returncode:
+                raise ValueError("video_vision_exit_" + str(proc.returncode))
+            value, _session = review.parse_response(proc.stdout, current["hermes_model"])
+            frames = value.get("frames")
+            if not isinstance(frames, list) or len(frames) != FRAMES or not all(isinstance(row, str) and row.strip() for row in frames):
+                raise ValueError("video_vision_frames_invalid")
+            return value
+        except (ValueError, subprocess.TimeoutExpired):
+            if index + 1 == len(routes):
+                raise
+            if current is route:
+                review._PRIMARY_DOWN_UNTIL[route["hermes_model"]] = time.monotonic() + review.PRIMARY_RETRY_AFTER_SECONDS
+    raise ValueError("video_vision_route_missing")
 
 
 def observe_video(candidate: dict[str, Any], out_dir: Path, *, run=subprocess.run) -> dict[str, Any]:

@@ -179,3 +179,49 @@ def test_a_stalled_feed_query_is_skipped_not_fatal():
 
     rows = videos.youtube_candidates(run=run, pet=True)
     assert len(calls) == len(videos.YOUTUBE_PET_QUERIES) and [row["id"] for row in rows] == ["c1"]
+
+
+def test_describe_uses_declared_fallback_when_primary_is_silent(monkeypatch, tmp_path):
+    """MED94: a silent vision primary costs one timeout; later descriptions go to the declared fallback first."""
+    import subprocess
+    from content_platform import asset_semantic_review as review
+    from content_platform import video_sample_collector as videos
+
+    route = {"hermes_command": "hermes", "hermes_provider": "primary", "hermes_model": "primary-model",
+             "fallback": {"hermes_command": "hermes", "hermes_provider": "spare", "hermes_model": "spare-model"}}
+    monkeypatch.setattr(review, "route_config", lambda: (None, b"", route))
+    monkeypatch.setattr(review, "_PRIMARY_DOWN_UNTIL", {})
+    monkeypatch.setattr(review, "parse_response", lambda out, model: ({"frames": ["a"] * videos.FRAMES}, {}))
+    asked = []
+
+    def run(command, **kwargs):
+        model = command[command.index("--model") + 1]
+        asked.append(model)
+        if model == "primary-model":
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        return subprocess.CompletedProcess(command, 0, "{}", "")
+
+    sheet = tmp_path / "sheet.jpg"
+    sheet.write_bytes(b"x")
+    assert videos._describe(sheet, {}, run)["frames"] == ["a"] * videos.FRAMES
+    assert videos._describe(sheet, {}, run)["frames"] == ["a"] * videos.FRAMES
+    assert asked == ["primary-model", "spare-model", "spare-model"]
+
+
+def test_describe_without_fallback_still_raises(monkeypatch, tmp_path):
+    import subprocess
+    import pytest
+    from content_platform import asset_semantic_review as review
+    from content_platform import video_sample_collector as videos
+
+    route = {"hermes_command": "hermes", "hermes_provider": "primary", "hermes_model": "primary-model"}
+    monkeypatch.setattr(review, "route_config", lambda: (None, b"", route))
+    monkeypatch.setattr(review, "_PRIMARY_DOWN_UNTIL", {})
+
+    def run(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    sheet = tmp_path / "sheet.jpg"
+    sheet.write_bytes(b"x")
+    with pytest.raises(subprocess.TimeoutExpired):
+        videos._describe(sheet, {}, run)
