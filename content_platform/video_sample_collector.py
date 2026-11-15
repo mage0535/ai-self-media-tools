@@ -235,13 +235,18 @@ def _metadata(candidate: dict[str, Any], work: Path, run) -> tuple[dict[str, Any
     return fields, path, _write(path, raw)
 
 
+VIDEO_FORMAT = "bv*[height<=480]+ba/bv*[width<=480]+ba/b[height<=480]/b[width<=480]/wv*+ba/worst"
+
+
 def _download(platform: str, url: str, duration: Any, work: Path, run) -> Path:
     proxy = ["--proxy", PROXIES[platform], "--js-runtimes", "node"] if PROXIES[platform] else []
     # A section cut streams through ffmpeg and is slow over the proxy (TikTok timed out in r43);
     # short videos are downloaded whole.
     cut = [] if 0 < float(duration or 0) <= CLIP_SECONDS + 30 else ["--download-sections", f"*0-{CLIP_SECONDS}"]
     command = [MEDIA_PYTHON, "-m", "yt_dlp", "-q", "--no-warnings", "--no-playlist", *proxy,
-               "-f", "bv*[height<=480]+ba/b[height<=480]/worst", *cut,
+               # MED95 (11-16 CST): a vertical video (360x640, 480x852) has no stream with height <= 480 and Bilibili
+               # serves no combined file, so 52 of 71 pet videos failed "Requested format is not available".
+               "-f", VIDEO_FORMAT, *cut,
                "--merge-output-format", "mp4", "-o", str(work / "clip.%(ext)s"), url]
     proc = run(command, capture_output=True, text=True, timeout=300, check=False)
     clips = sorted(work.glob("clip.*"))
