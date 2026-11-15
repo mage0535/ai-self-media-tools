@@ -37,7 +37,15 @@ trap 'handle_error $?' ERR
 admission_window_minutes="${OVERNIGHT_ADMISSION_WINDOW_MINUTES:-60}"
 hhmm="$(date +%H%M)"
 minutes_since_midnight=$((10#$hhmm / 100 * 60 + 10#$hhmm % 100))
-if (( minutes_since_midnight > admission_window_minutes )); then
+# MED92(c): a continuation resumes the same night's plan on another text model after the first one stopped answering.
+# The worker admits it only with a signed continuation proof; it never plans again and never restarts finished lanes.
+continuation="${OVERNIGHT_CONTINUATION:-0}"
+if [[ "$continuation" == "1" ]]; then
+  if [[ ! -f "$out/plan.json" || ! -f "$out/state.json" ]]; then
+    printf '%s\n' '{"status":"blocked","reason":"continuation_without_plan_state"}' > "$out/continuation-result.json"
+    exit 1
+  fi
+elif (( minutes_since_midnight > admission_window_minutes )); then
   printf '%s\n' '{"status":"no_run","reason":"missed overnight admission window"}' > "$out/result.json"
   notify "skipped" "missed_overnight_admission_window"
   exit 0
@@ -62,6 +70,7 @@ if ! "$root/scripts/smoke_provider.sh" "$root/config.json"; then
 fi
 notify "progress" "provider_smoke_complete"
 
+if [[ "$continuation" != "1" ]]; then
 # Run the checked-out module, not a stale globally installed console script.
 # The timer must execute exactly the Git revision that was audited and deployed.
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
@@ -124,8 +133,14 @@ run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-plan --tasks "$out/prepared.json" --output "$out/plan.json" \
   --start-minute 0 --deadline-minute 290 --finalization-minutes 10 > "$out/plan-result.json"
 notify "progress" "overnight_plan_complete"
+fi
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-run --plan "$out/plan.json" --state "$out/state.json" --events "$out/events.jsonl" > "$out/result.json"
+if grep -q '"status": *"route_dead"' "$out/state.json"; then
+  # The text model stopped answering mid-run: leave the remaining lanes queued for a signed continuation.
+  notify "action_required" "text_route_dead_midrun; waiting_for_continuation"
+  exit 75
+fi
 run_platform --config "$root/config.json" --db "$root/data/state.db" \
   overnight-sync-state --state "$out/state.json" --output "$out/acceptance_summary.json" > "$out/sync-state-result.json"
 if ! run_platform overnight-acceptance --result "$out/result.json" --state "$out/state.json" --output "$out/acceptance_report.json" > "$out/acceptance-result.json"; then

@@ -1031,6 +1031,7 @@ def execute_batch(
     store: Any | None = None,
     require_acceptance: bool = False,
     _retry_pass: bool = False,
+    route_probe: Any | None = None,
 ) -> dict[str, Any]:
     """Run one planned platform at a time and checkpoint after every result.
 
@@ -1049,12 +1050,31 @@ def execute_batch(
     state["status"] = "running"
     state.setdefault("run_started_unix", time.time())
     _write_state(state_file, state)
+
+    def _route_dead(task: dict[str, Any] | None) -> bool:
+        # MED92(c) (11-15 CST): a lane that did not deliver may mean the night's text model stopped answering. Ask the
+        # model again; when it stays silent, stop here with the remaining lanes untouched, so the scheduler can
+        # continue the same plan on the next available model instead of failing every remaining lane on a dead one.
+        if route_probe is None or task is None or task.get("state") not in {"blocked", "failed", "retry_pending"} or route_probe():
+            return False
+        task["route_dead_attempt"] = {key: task.pop(key, None) for key in ("job_id", "state", "reason", "pipeline_state", "acceptance")}
+        task["state"] = "queued"
+        state["status"] = "route_dead"
+        state["route_dead_count"] = int(state.get("route_dead_count") or 0) + 1
+        journal.append("text_route_dead", str(task.get("platform") or ""), {"reason": task["route_dead_attempt"].get("reason")})
+        _write_state(state_file, state)
+        return True
+
+    last = None
     for task in state.get("tasks", []):
         platform = str(task.get("platform") or "")
         if not platform or task.get("state") in TERMINAL_TASK_STATES:
             continue
         if task.get("state") == "blocked":
             continue
+        if _route_dead(last):
+            return state
+        last = task
 
         journal.append("platform_started", platform, {"stage": task.get("stage"), "action": task.get("action", "handoff")})
         task["state"] = "running"
@@ -1160,6 +1180,8 @@ def execute_batch(
                 journal.append("platform_failed", platform, {"reason": task["reason"]})
         finally:
             _write_state(state_file, state)
+    if _route_dead(last):
+        return state
 
     if not _retry_pass and any(task.get("state") == "retry_pending" for task in state.get("tasks", [])):
         _write_state(state_file, state)
@@ -1171,6 +1193,7 @@ def execute_batch(
             store=store,
             require_acceptance=require_acceptance,
             _retry_pass=True,
+            route_probe=route_probe,
         )
 
     # MED76 (11-09 PST): windows ended with 85-230 of their 290 minutes unused while a lane sat blocked by one draw
@@ -1193,7 +1216,7 @@ def execute_batch(
     if again:
         _write_state(state_file, state)
         return execute_batch(pipeline, plan, state_path=state_file, journal=journal, store=store,
-                             require_acceptance=require_acceptance, _retry_pass=_retry_pass)
+                             require_acceptance=require_acceptance, _retry_pass=_retry_pass, route_probe=route_probe)
 
     from .image_provider import paid_image_calls
 

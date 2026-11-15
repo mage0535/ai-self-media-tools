@@ -909,3 +909,62 @@ def test_no_second_attempt_when_the_window_is_nearly_over(tmp_path: Path):
     assert (summary["status"], summary["tasks"][0]["state"], pipeline.created) == ("partial", "blocked", 1)
     assert set(summary["paid_image_calls"]) >= {"day"}  # MED78: the result always reports billed images.
 
+
+
+def _route_guard_plan():
+    return {"status": "scheduled", "tasks": [
+        {"platform": "twitter", "topic": "A", "brief": {}, "action": "stage", "state": "queued"},
+        {"platform": "zhihu", "topic": "B", "brief": {}, "action": "stage", "state": "queued"},
+        {"platform": "juejin", "topic": "C", "brief": {}, "action": "stage", "state": "queued"}]}
+
+
+class _RouteGuardPipeline:
+    def __init__(self, failing):
+        self.failing, self.ran = set(failing), []
+
+    def create(self, topic, platforms, brief, profile="default"):
+        return {"id": f"job-{topic}-{len(self.ran)}"}
+
+    def run(self, job_id):
+        self.ran.append(job_id.split("-")[1])
+        if self.ran[-1] in self.failing:
+            return {"id": job_id, "state": "failed", "last_error": "model returned nothing", "artifacts": []}
+        return {"id": job_id, "state": "review_required", "artifacts": []}
+
+    def stage_drafts(self, job_id):
+        return {"id": job_id, "state": "drafted"}
+
+
+def test_dead_text_route_stops_the_batch_and_keeps_the_remaining_lanes_queued(tmp_path: Path):
+    # MED92(c): the second lane fails and the model stays silent -> stop; nothing else runs on the dead model.
+    pipeline = _RouteGuardPipeline({"B"})
+    state = execute_batch(pipeline, _route_guard_plan(), state_path=tmp_path / "state.json",
+                          journal=BatchEventJournal(tmp_path / "events.jsonl"), route_probe=lambda: False)
+    assert state["status"] == "route_dead" and pipeline.ran == ["A", "B"]
+    assert [task["state"] for task in state["tasks"]] == ["staged", "queued", "queued"]
+    assert state["tasks"][1]["route_dead_attempt"]["state"] == "failed" and "job_id" not in state["tasks"][1]
+    assert '"status": "route_dead"' in (tmp_path / "state.json").read_text(encoding="utf-8")
+
+    # The continuation resumes the same state on a working model: finished lanes stay, the rest runs once.
+    resumed = _RouteGuardPipeline(set())
+    state = execute_batch(resumed, _route_guard_plan(), state_path=tmp_path / "state.json",
+                          journal=BatchEventJournal(tmp_path / "events.jsonl"), route_probe=lambda: True)
+    assert resumed.ran == ["B", "C"] and state["status"] == "completed"
+    assert [task["state"] for task in state["tasks"]] == ["staged", "staged", "staged"]
+
+
+def test_failed_lane_with_answering_model_does_not_stop_the_batch(tmp_path: Path):
+    probes = []
+    pipeline = _RouteGuardPipeline({"A"})
+    state = execute_batch(pipeline, _route_guard_plan(), state_path=tmp_path / "state.json",
+                          journal=BatchEventJournal(tmp_path / "events.jsonl"),
+                          route_probe=lambda: probes.append(1) or True)
+    assert state["status"] == "failed" and probes and state["tasks"][0]["state"] == "failed"
+    assert [task["state"] for task in state["tasks"][1:]] == ["staged", "staged"]
+
+
+def test_dead_route_on_the_last_lane_is_also_left_for_the_continuation(tmp_path: Path):
+    pipeline = _RouteGuardPipeline({"C"})
+    state = execute_batch(pipeline, _route_guard_plan(), state_path=tmp_path / "state.json",
+                          journal=BatchEventJournal(tmp_path / "events.jsonl"), route_probe=lambda: False)
+    assert state["status"] == "route_dead" and state["tasks"][2]["state"] == "queued"

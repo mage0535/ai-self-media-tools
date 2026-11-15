@@ -103,6 +103,28 @@ def load_config(path, db_path):
     return config
 
 
+def _text_route_probe(config_path):
+    """MED92(c): the worker sets OVERNIGHT_ROUTE_GUARD=1; then a failed lane re-checks the night's text model with the
+    same provider smoke as the batch start. Three tries a minute apart, so a short provider blip is not a dead model."""
+    if os.environ.get("OVERNIGHT_ROUTE_GUARD") != "1":
+        return None
+    script = project_home() / "scripts" / "smoke_provider.sh"
+
+    def probe():
+        import subprocess
+        import time
+        for attempt in range(3):
+            if attempt:
+                time.sleep(60)
+            try:
+                if subprocess.run(["/bin/bash", str(script), str(config_path)], capture_output=True, timeout=150).returncode == 0:
+                    return True
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        return False
+    return probe
+
+
 def parser():
     default_root = project_home()
     p = argparse.ArgumentParser(prog="content-platform", description="Hermes AI content workflow")
@@ -1016,7 +1038,8 @@ def execute(args):
     if args.command == "overnight-run":
         from .overnight_batch import BatchEventJournal, execute_batch
         plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
-        return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events), store=store, require_acceptance=True)
+        return execute_batch(pipeline, plan, state_path=args.state, journal=BatchEventJournal(args.events), store=store, require_acceptance=True,
+                             route_probe=_text_route_probe(args.config))
     if args.command == "overnight-sync-state":
         from .overnight_batch import sync_batch_state
         state_path = Path(args.state)
