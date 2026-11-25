@@ -1301,7 +1301,48 @@ class DraftGenerator:
         if platform in {"juejin", "zhihu", "xiaohongshu", "rednote"}:
             sources = ["account_history", "same_lane_accounts", "bilibili", "wechat", "xiaohongshu", "youtube", "external_hot_platforms"]
             handoff = ["copy_plan", "script_plan", "seo_geo_plan", "topic_tags", "asset_mix_plan", "humanization_plan"]
+            if platform in {"zhihu", "juejin"}:
+                handoff.append("anti_spam_similarity_plan")
+            if platform == "zhihu":
+                handoff.append("content_form_differentiation_plan")
             platform_source_matrix = self._platform_source_matrix(platform, sources, topic_text, {**context, **brief})
+            anti_spam_plan = {
+                "topic": topic_text,
+                "platform": platform,
+                "content_form": content_form or "article",
+                "dedup_window_days": 14 if platform == "zhihu" else 7,
+                "not_duplicate_of_other_platforms": True,
+                "engineering_context_rewrite": platform == "juejin",
+                **(
+                    {
+                        "zhihu_pin_policy": {
+                            "applicable": False,
+                            "reason": "current piece is a standalone longform/answer draft, not a Zhihu pin",
+                            "review_only": True,
+                            "max_body_overlap": 0.22,
+                            "max_title_overlap": 0.55,
+                            "min_interval_hours": 48,
+                        }
+                    }
+                    if platform == "zhihu"
+                    else {}
+                ),
+            }
+            form_diff_plan = (
+                {
+                    "topic": topic_text,
+                    "planned_content_form": content_form or "article",
+                    "delivery_payload_kind": "article",
+                    "is_derivative": False,
+                    "differentiation_rule": (
+                        "evidence_answer uses direct-conclusion-first Q&A reasoning delivered as a standalone Zhihu column draft when no external question_id is bound; "
+                        "column article uses full multi-section evidence and tradeoff analysis; pin is separate short commentary (not created here)."
+                    ),
+                    "anti_reuse_boundary": "standalone original piece; never copy excerpts across Zhihu article, answer, or pin",
+                }
+                if platform == "zhihu"
+                else None
+            )
             strategy_brief.update({
                 "full_ops_workflow": {"required": True, "platforms": [platform], "cross_platform_sources": sources},
                 "account_analysis": self._observed_account(brief, platform),
@@ -1313,10 +1354,16 @@ class DraftGenerator:
                 "quantity_plan": self._slot_quantity(brief, content_form),
                 "content_generation_brief": {"source_inputs": ["account_analysis", "same_lane_account_analysis", "cross_platform_trend_analysis", "topic_selection", "quantity_plan", "content_brief"], "asset_mix_plan": {"ai_generated": True, "real_material_retrieval": True, "ai_edit_real_material": True}, "humanization_plan": {"hook": True, "body": True, "voice": "casual"}},
                 "content_workflow_inputs": {"source_inputs": ["account_analysis", "content_brief", "cross_platform_trend_analysis", "quantity_plan", "same_lane_account_analysis", "topic_selection"], **{f"{k}_required": True for k in handoff}},
+                **({"anti_spam_similarity_plan": anti_spam_plan} if platform in {"zhihu", "juejin"} else {}),
+                **({"content_form_differentiation_plan": form_diff_plan} if form_diff_plan else {}),
             })
             draft_meta["platform_source_matrix"] = platform_source_matrix
             draft_meta["asset_mix_plan"] = {"ai_generated": "copy and cards", "real_material_retrieval": "stock photo search", "ai_edit_real_material": "section-matched card/cover composition"}
             draft_meta["humanization_plan"] = {"hook": opening, "body": "vary paragraph rhythm and use concrete case language", "voice": "human editor"}
+            if platform in {"zhihu", "juejin"}:
+                draft_meta["anti_spam_similarity_plan"] = anti_spam_plan
+            if form_diff_plan:
+                draft_meta["content_form_differentiation_plan"] = form_diff_plan
         draft_meta.update({
             "preflight_manifest": build_preflight_manifest(
                 channel=platform,

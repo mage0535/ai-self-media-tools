@@ -1213,7 +1213,8 @@
         "asset_mix_plan": "通过：计划声明的素材类型与 asset_provenance 实际记录一致（例如：封面为图库实拍或无文字写实生成图、正文图为生成插图），无需每篇覆盖全部素材类型。失败：声明与实际不符（如声称图库实拍但实际全为生成图）。",
         "no_obvious_ai_generated_images_as_main_visual": "通过：主视觉（封面）为有授权的真实图库照片；或在无匹配实拍时为写实、无文字、无乱码、无水印、无明显AI畸形的生成图，且文案含AI辅助创作声明（符合小红书AI内容标注要求）。失败：主图含乱码伪文字、水印、明显畸形或卡通海报式AI图，或缺少AI声明。",
         "ai_assisted_disclosure_when_required": "通过：publication_copy 正文含AI辅助创作声明，或包内 ai_assisted_disclosure 字段存在且文案中可见。",
-        "first_image_carries_information": "通过：封面带有我方排版、可读的标题信息层（结果/问题/清单承诺），与正文承诺一致。"
+        "first_image_carries_information": "通过：封面带有我方排版、可读的标题信息层（结果/问题/清单承诺），与正文承诺一致。",
+        "operator_delivery_receipt": "投递前原生质量审核阶段判定标准（与 current_review_phase_ledger 阶段顺序一致）：原生审核发生在向操作者投递手动包之前，本轮不要求尚未发生的下游聊天收悉回执；通过条件为本地手动交付包已完整就绪且 SHA 绑定（含标题、正文、话题标签、封面与≥3张合格正文图，且 manual_review_required=true、不宣称已投递或已发布）；实际操作者收悉回执在原生审核通过后的下游交付步骤记录。"
       }
     },
     "juejin": {

@@ -73,7 +73,7 @@
 
     {"id": "character.binary_conflict_pair", "layer": "character", "rule": "两个立场对立的角色，用四字左右标签立人设（如‘较真新人’vs‘老油条’）", "goal": "comment", "forms": ["video", "carousel"], "lanes": ["*"], "sources": ["microdrama"]},
     {"id": "character.recurring_host", "layer": "character", "rule": "固定主持角色贯穿系列，口头禅与视觉标志保持一致", "goal": "follow", "forms": ["*"], "lanes": ["*"], "sources": ["knowledge_scene", "series"]},
-    {"id": "character.cat_dog_duo", "affinity": {"pet_healing": 3}, "layer": "character", "rule": "猫负责探索试错，狗负责核验守护，角色有叙事功能而非装饰", "goal": "like", "forms": ["*"], "lanes": ["*"], "sources": ["pet"]},
+    {"id": "character.cat_dog_duo", "affinity": {"pet_healing": 3}, "layer": "character", "rule": "猫负责探索试错，狗负责核验守护，角色有叙事功能而非装饰", "goal": "like", "forms": ["*"], "lanes": ["pet_healing"], "sources": ["pet"]},
     {"id": "character.female_lead", "layer": "character", "rule": "女性主角，目标清晰、有专业能力、有真实困扰", "goal": "share", "forms": ["*"], "lanes": ["*"], "constraints": ["no_gender_stereotype"], "sources": ["microdrama"]},
     {"id": "character.underdog", "layer": "character", "rule": "被低估的小人物，靠方法完成逆袭", "goal": "follow", "forms": ["*"], "lanes": ["*"], "sources": ["hooks"]},
     {"id": "character.mentor_newbie", "layer": "character", "rule": "老手带新人，新人的问题就是观众的问题", "goal": "save", "forms": ["*"], "lanes": ["*"], "sources": ["copy_style"]},

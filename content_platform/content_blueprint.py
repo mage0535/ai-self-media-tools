@@ -229,11 +229,24 @@ def _analysis_fields(blueprint: dict[str, Any], slot: dict[str, Any], matrix: di
             {"section": name, "task_content": content.get(name, ""), "topic": topic}
             for name in structure
         ])
+        default_asset_plan = (
+            [
+                {"role": "video_scenes", "source_policy": "licensed_stock_first", "purpose": f"Real-scene beats showing {scenario['inputs']} and {scenario['process']}"},
+                {"role": "cover", "source_policy": "titled_cover_over_verified_background", "purpose": f"High-contrast cover for {topic}"},
+            ]
+            if "video" in str(blueprint.get("content_form") or "").casefold()
+            else [
+                {"role": "cover", "source_policy": "stock_first_then_cloudflare_then_gpt_with_title_overlay", "purpose": f"Cover visual for {topic}"},
+                {"role": "section_01", "source_policy": "text_free_scene_illustration", "purpose": f"Illustrate inputs/problem: {scenario['inputs'][:120]}"},
+                {"role": "section_02", "source_policy": "text_free_scene_illustration", "purpose": f"Illustrate workflow/process: {scenario['process'][:120]}"},
+                {"role": "section_03", "source_policy": "text_free_scene_illustration", "purpose": f"Illustrate verification/boundary: {scenario['outcome'][:120]}"},
+            ]
+        )
         blueprint.setdefault("asset_and_evidence_plan", {
             "topic": topic, "evidence_refs": list(blueprint["evidence_refs"]),
             "show_inputs": scenario["inputs"], "show_process": scenario["process"],
             "show_verification": scenario["outcome"], "unverified_boundary": scenario["boundaries"],
-            "asset_plan": slot.get("asset_plan") or slot.get("media_plan") or [],
+            "asset_plan": slot.get("asset_plan") or slot.get("media_plan") or default_asset_plan,
             "facts_must_come_from_evidence": True,
         })
         blueprint.setdefault("adaptive_cover_direction", {
