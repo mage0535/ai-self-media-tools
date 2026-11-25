@@ -197,10 +197,11 @@ def _ocr_text_signal(path):
         'text_detected':bool(words2)or len(cjk)>=4 or len(latin)>=2,'mode':'evidence_only'}
 
 
-def _delivery_image_layout(parts):
+def _delivery_image_layout(parts, platform=''):
     """MED90: the Zhihu/Juejin publishers add the pictures when the draft is created (cover first, each section image
     right after the first occurrence of its heading), so the reviewed copy has none. 11-12 CST a strict reviewer failed
-    section_images for that and a lenient one passed without looking; code now states where each picture lands."""
+    section_images for that and a lenient one passed without looking; code now states where each picture lands.
+    MED90-b: Xiaohongshu is manual-handoff only (never creates a platform draft), so state its actual delivery rule."""
     copies=parts.get('publication_copy') or [];images=parts.get('images') or []
     if not copies or not images:return None
     root=Path(images[0]['path']).parent;map_path=root/'section_image_map.json'
@@ -218,9 +219,14 @@ def _delivery_image_layout(parts):
         heading=str(row.get('section')or'').strip();image=str(row.get('image')or row.get('path')or'')
         placements.append({'section':heading,'image_sha256':sha.get(str(Path(image).resolve())) if image else None,
             'heading_found_in_publication_copy':bool(heading)and heading in text,'placed':'after the first occurrence of the heading'})
+    manual_only = str(platform or '').casefold() in {'xiaohongshu', 'rednote'}
+    rule = ('manual handoff package only (no platform draft created): operator posts the cover first followed by ordered carousel images with publication_copy'
+            if manual_only else
+            'publisher inserts the cover first and each section image after its heading when the platform draft is created')
     return {'source':'section_image_map.json + current publication_copy, computed by code',
         'section_image_map_sha256':hashlib.sha256(map_path.read_bytes()).hexdigest(),
-        'rule':'publisher inserts the cover first and each section image after its heading when the platform draft is created',
+        'delivery_mode':'manual_handoff_package' if manual_only else 'platform_draft_insert',
+        'rule':rule,
         'placements':placements,'all_placeable':bool(placements)and all(row['heading_found_in_publication_copy']and row['image_sha256'] for row in placements)}
 
 
@@ -270,7 +276,7 @@ def prepare_batched_review_material(material,archive_ref):
         'actual_file_read_records':inventory,'rule_and_skill_sources_sha_read':True,
         'scope':{'job_id':context['job_id'],'platform':context['platform'],'revision_id':context['revision_id'],'draft_version_id':context['draft_version_id']},
         'semantic_verdict':None,'pixels_semantically_reviewed':False,'native_models_called':0}
-    layout=_delivery_image_layout(context['parts'])
+    layout=_delivery_image_layout(context['parts'], context.get('platform') or '')
     if layout:projection['delivery_image_layout']=layout
     projection['process_phase_ledger']=current_review_phase_ledger()
     projection['review_domains']={

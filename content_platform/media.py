@@ -927,13 +927,15 @@ class MediaBridge:
             if source_plan and source_plan[0].get("source") in {"pexels", "pixabay", "stock_image"}:
                 # stock keeps Pexels/Pixabay fallback semantics while preserving the plan.
                 selected_provider = "stock"
+        xhs_job = "xiaohongshu" in {str(value).casefold() for value in job.get("platforms") or []}
+        default_size = "900x1200" if xhs_job else "1024x1024"
         extra_args = [
             "--method",
             cfg.get("method", "auto"),
             "--provider",
             selected_provider,
             "--size",
-            cfg.get("size", "1024x1024"),
+            cfg.get("size", default_size),
             "--quality",
             cfg.get("quality", "low"),
         ]
@@ -996,6 +998,8 @@ class MediaBridge:
                     drawn_stock.append(str(provider_result["source_url"]))
                 if not output.is_file():
                     raise RuntimeError("image provider produced no output file")
+                if xhs_job and item.get("role") == "section":
+                    self._normalize_xhs_image(output)
                 checksum = hashlib.sha256(output.read_bytes()).hexdigest()
                 visual_signature = self._visual_signature(output)
                 if checksum not in used_checksums and not any(
@@ -1023,6 +1027,8 @@ class MediaBridge:
             # r59: one Juejin section image scored 0.68 < 0.72 and failed the article artifact contract.
             # A low semantic score gets one regeneration; the kept review is reused by the provenance record.
             review = self._semantic_review(output, job, item, provider_result)
+            # MED90-b: record each evaluated candidate (stock-first search + retries) with score and rejection reason.
+            candidate_attempts = [self._candidate_attempt_record(provider_result, review, kept=True)]
             # A beat bound to a semantic requirement is rejected unless the pixels match it; it gets two
             # regenerations (11-02: abstract hook/step beats drew generic topic scenes, 0.65-0.70), each told
             # what the reviewer saw. The gate itself is unchanged.
@@ -1071,6 +1077,8 @@ class MediaBridge:
                 if isinstance(retry_result, dict) and str(retry_result.get("provider") or "") in STOCK_PROVIDERS and retry_result.get("source_url"):
                     drawn_stock.append(str(retry_result["source_url"]))
                 if isinstance(retry_result, dict) and output.is_file():
+                    if xhs_job and item.get("role") == "section":
+                        self._normalize_xhs_image(output)
                     retry_checksum = hashlib.sha256(output.read_bytes()).hexdigest()
                     retry_signature = self._visual_signature(output)
                     if retry_checksum not in used_checksums and not any(
@@ -1082,8 +1090,11 @@ class MediaBridge:
                         # replaces the kept image only when its review ranks at least as high.
                         accepted = self._review_rank(retry_review, item) >= self._review_rank(review, item)
                         if accepted:
+                            for prev in candidate_attempts:
+                                prev["kept"] = False
                             provider_result, checksum, visual_signature = retry_result, retry_checksum, retry_signature
                             review = retry_review
+                        candidate_attempts.append(self._candidate_attempt_record(retry_result, retry_review, kept=accepted))
                 if not accepted:
                     # MED41 (r109): a rejected retry (a stock photo repeating an earlier beat) overwrote the kept image.
                     output.write_bytes(kept_bytes)
@@ -1094,6 +1105,7 @@ class MediaBridge:
             images.append(
                 {
                     "semantic_review": review,
+                    "candidate_attempts": candidate_attempts,
                     "kind": "image",
                     "role": item["role"],
                     "section": item.get("section", ""),
@@ -1229,6 +1241,64 @@ class MediaBridge:
         return review
 
     @staticmethod
+    def _candidate_attempt_record(provider_result, review, *, kept):
+        """MED90-b: verifiable per-candidate retrieval/generation record for asset_provenance."""
+        pr = provider_result if isinstance(provider_result, dict) else {}
+        rv = review if isinstance(review, dict) else {}
+        prov = str(pr.get("provider") or "")
+        mode = str(pr.get("mode") or "")
+        origin = "real_photo" if (mode == "search" or prov in {"pexels", "pixabay", "stock"}) else "ai_generated"
+        return {
+            "provider": prov,
+            "origin": origin,
+            "source_url": str(pr.get("source_url") or "")[:240],
+            "score": rv.get("score"),
+            "reason": str(rv.get("reason") or "")[:200],
+            "kept": bool(kept),
+        }
+
+    @staticmethod
+    def _normalize_xhs_image(path, max_bytes=495_000):
+        """MED90-b: enforce Xiaohongshu 3:4 portrait ratio and <= 500 KB valid PNG for section images."""
+        p = Path(path)
+        if not p.is_file():
+            return
+        try:
+            from PIL import Image, ImageOps
+            with Image.open(p) as raw:
+                raw.load()
+                img = ImageOps.exif_transpose(raw).convert("RGB")
+        except Exception:
+            return
+        w, h = img.size
+        target_ratio = 3 / 4
+        if w > 0 and h > 0 and abs((w / h) - target_ratio) > 0.02:
+            if (w / h) > target_ratio:
+                new_w = max(3, int(round(h * target_ratio)))
+                left = (w - new_w) // 2
+                img = img.crop((left, 0, left + new_w, h))
+            else:
+                new_h = max(4, int(round(w / target_ratio)))
+                top = (h - new_h) // 2
+                img = img.crop((0, top, w, top + new_h))
+        if img.width > 900 or img.height > 1200:
+            img = img.resize((900, 1200), Image.Resampling.LANCZOS)
+        tmp = p.with_name(p.name + ".xhs.tmp")
+        try:
+            img.save(tmp, format="PNG", optimize=True)
+            if tmp.stat().st_size > max_bytes:
+                for dims in ((img.width, img.height), (750, 1000), (600, 800)):
+                    cand = img if img.size == dims else img.resize(dims, Image.Resampling.LANCZOS)
+                    quant = cand.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+                    quant.save(tmp, format="PNG", optimize=True)
+                    if tmp.stat().st_size <= max_bytes:
+                        break
+            os.replace(tmp, p)
+        finally:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)
+
+    @staticmethod
     def _review_rank(review, item):
         """A beat review must also match its requirement; then the higher score ranks first."""
         matched = not item.get("semantic_requirement") or review.get("requirement_match") is True
@@ -1321,6 +1391,8 @@ class MediaBridge:
                 record['review_topic']=str(job.get('topic') or job.get('title') or '')
                 record['beat_id']=requirement['intent']['beat_id']
                 record['semantic_tags']=[admit_review(path,record['review_topic'],requirement,semantic_review)]
+            if isinstance(image.get("candidate_attempts"), list) and image["candidate_attempts"]:
+                record["candidate_attempts"] = image["candidate_attempts"]
             for key in ("photographer", "input_image_sha256", "protocol", "endpoint"):
                 if provider_result.get(key):
                     record["generation_evidence"][key] = provider_result[key]

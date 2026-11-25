@@ -1952,13 +1952,38 @@ class Pipeline:
         generated = [row for row in assets if row.get("origin") in {"ai_generated", "ai_edited"}]
         cover = next((row for row in assets if row.get("scene_id") == "cover"), {})
         original = ((draft.get("draft_meta") or {}).get("brief") or {}).get("content_mode") == "original_knowledge"
-        return {
+        # MED90-b: include verifiable per-image stock/retry candidate scores when recorded in asset_provenance.
+        attempt_notes = []
+        for row in assets:
+            attempts = row.get("candidate_attempts")
+            if isinstance(attempts, list) and attempts:
+                parts = [f"{a.get('provider') or '?'}({a.get('origin') or '?'}:score={a.get('score')},kept={bool(a.get('kept'))})" for a in attempts[:4] if isinstance(a, dict)]
+                if parts:
+                    attempt_notes.append(f"{row.get('scene_id') or 'image'}: " + " -> ".join(parts))
+        retrieval_detail = ("; candidates: " + "; ".join(attempt_notes))[:500] if attempt_notes else ""
+        cover_origin = str(cover.get("origin") or "")
+        has_cover_render = bool(cover.get("cover_render_evidence"))
+        if has_cover_render and cover_origin == "real_photo":
+            ai_edit_real = "cover title rendered over the real_photo background"
+            ai_gen_overlay = ""
+        elif has_cover_render:
+            ai_edit_real = f"not applicable (cover title rendered over {cover_origin or 'ai_generated'} background, not real_photo)"
+            ai_gen_overlay = f"cover title rendered over the {cover_origin or 'ai_generated'} background"
+        else:
+            ai_edit_real = ""
+            ai_gen_overlay = ""
+        result = {
             "ai_generated": describe(generated),
             "real_material_retrieval": "" if original else (
-                "licensed stock photo search ran first for every image; kept: " + (describe(real) or "none (weak matches fell back to generated scenes)")),
-            "ai_edit_real_material": ("cover title rendered over the " + str(cover.get("origin") or "") + " background") if cover.get("cover_render_evidence") else "",
+                "licensed stock photo search ran first for every image; kept: "
+                + (describe(real) or "none (weak matches fell back to generated scenes)")
+                + retrieval_detail),
+            "ai_edit_real_material": ai_edit_real,
             "source": "asset_provenance",
         }
+        if ai_gen_overlay:
+            result["ai_generated_with_title_overlay"] = ai_gen_overlay
+        return result
 
     def _add_generated_image_note(self, job_id, draft):
         """MED90: an article whose pictures include AI-generated ones says so in its own text, before the manifest binds
