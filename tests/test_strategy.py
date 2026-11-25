@@ -124,3 +124,24 @@ class StrategyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_douyin_pet_high_visual_without_repost_uses_original_video():
+    from content_platform.strategy_router import choose_content_strategy
+
+    res = choose_content_strategy(
+        "猫咪治愈瞬间",
+        {"platforms": ["douyin_pet"], "content_line": "healing_moments"},
+        {"dimensions": {"visual_promise": 0.9, "utility": 0.5}, "total_score": 0.8},
+        {},
+    )
+    assert "source_video" not in res["asset_plan"]
+    assert res["content_form"] == "knowledge_card_video"
+
+    repost_res = choose_content_strategy(
+        "猫咪治愈瞬间",
+        {"platforms": ["douyin_pet"], "source_video_path": "/tmp/a.mp4"},
+        {"dimensions": {"visual_promise": 0.9, "utility": 0.5}, "total_score": 0.8},
+        {},
+    )
+    assert "source_video" in repost_res["asset_plan"]

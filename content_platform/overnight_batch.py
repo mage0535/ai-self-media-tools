@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -1068,6 +1069,26 @@ def execute_batch(
         _write_state(state_file, state)
         return True
 
+    def _batch_started_unix() -> float:
+        base = float(state.get("run_started_unix") or time.time())
+        env_start = os.environ.get("OVERNIGHT_BATCH_STARTED_UNIX")
+        if env_start:
+            try:
+                base = min(base, float(env_start))
+            except ValueError:
+                pass
+        try:
+            for sibling in state_file.parent.glob("*-result.json"):
+                st = sibling.stat().st_mtime
+                if 0 < base - st <= 21600:
+                    base = min(base, st)
+        except OSError:
+            pass
+        return base
+
+    batch_started_unix = _batch_started_unix()
+    hard_wall_minutes = int(os.environ.get("OVERNIGHT_HARD_WALL_MINUTES") or 320)
+
     last = None
     for task in state.get("tasks", []):
         platform = str(task.get("platform") or "")
@@ -1077,6 +1098,9 @@ def execute_batch(
             continue
         if _route_dead(last):
             return state
+        if (time.time() - batch_started_unix) / 60 >= hard_wall_minutes:
+            journal.append("batch_wall_clock_cap_reached", platform, {"elapsed_minutes": round((time.time() - batch_started_unix) / 60, 1), "cap_minutes": hard_wall_minutes})
+            break
         last = task
 
         journal.append("platform_started", platform, {"stage": task.get("stage"), "action": task.get("action", "handoff")})
@@ -1202,15 +1226,19 @@ def execute_batch(
     # MED76 (11-09 PST): windows ended with 85-230 of their 290 minutes unused while a lane sat blocked by one draw
     # (an image at 0.70, a body 88 characters short). A lane whose pipeline ran and did not deliver gets one new job
     # while the plan's time allows; every gate applies to the new job unchanged. A scheduled post is never repeated.
-    spent = (time.time() - float(state["run_started_unix"])) / 60
+    now_ts = time.time()
+    spent = (now_ts - float(state["run_started_unix"])) / 60
+    wall_spent = (now_ts - batch_started_unix) / 60
     limit = int(state.get("work_deadline_minute") or 0) - int(state.get("start_minute") or 0) - SECOND_ATTEMPT_RESERVE_MINUTES
     again = []
     for task in state.get("tasks", []):
         if (task.get("state") in {"blocked", "failed"} and task.get("job_id") and not task.get("first_attempt")
                 and str(task.get("action") or "") != "schedule_publish" and not task.get("recovery_count")):
-            spent += int(task.get("estimate_minutes") or 1)
-            if spent > limit:
+            est = max(15, int(task.get("estimate_minutes") or 15))
+            if spent + est > limit or wall_spent + est > hard_wall_minutes:
                 break
+            spent += est
+            wall_spent += est
             again.append(task)
     for task in again:
         task["first_attempt"] = {key: task.pop(key, None) for key in ("job_id", "state", "reason", "pipeline_state", "acceptance")}

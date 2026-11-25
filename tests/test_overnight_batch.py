@@ -968,3 +968,32 @@ def test_dead_route_on_the_last_lane_is_also_left_for_the_continuation(tmp_path:
     state = execute_batch(pipeline, _route_guard_plan(), state_path=tmp_path / "state.json",
                           journal=BatchEventJournal(tmp_path / "events.jsonl"), route_probe=lambda: False)
     assert state["status"] == "route_dead" and state["tasks"][2]["state"] == "queued"
+
+
+def test_med98_wall_clock_cap_skips_second_attempt(tmp_path, monkeypatch):
+    import time
+    from content_platform.overnight_batch import execute_batch
+
+    class FakePipeline:
+        def __init__(self):
+            self.calls = 0
+        def create(self, topic, platforms, brief, profile):
+            self.calls += 1
+            return {"id": f"job-{self.calls}"}
+        def run(self, job_id):
+            return {"id": job_id, "state": "blocked", "artifacts": []}
+
+    monkeypatch.setenv("OVERNIGHT_BATCH_STARTED_UNIX", str(time.time() - 310 * 60))
+    monkeypatch.setenv("OVERNIGHT_HARD_WALL_MINUTES", "320")
+    plan = {
+        "status": "scheduled",
+        "start_minute": 0,
+        "work_deadline_minute": 290,
+        "tasks": [
+            {"platform": "zhihu", "topic": "t1", "state": "queued", "estimate_minutes": 10, "action": "stage", "stage": "article"},
+        ],
+    }
+    pipe = FakePipeline()
+    state = execute_batch(pipe, plan, state_path=tmp_path / "state.json", require_acceptance=False)
+    assert pipe.calls == 1, "Second attempt must not run when wall-clock cap would be exceeded"
+    assert state["tasks"][0].get("first_attempt") is None

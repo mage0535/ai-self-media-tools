@@ -51,7 +51,7 @@ def choose_content_strategy(topic, brief, viral_score, niche_report, viral_growt
     if wants_explainer:
         content_form = "article_explainer_video"
         asset_plan = ["article", "knowledge_cards", "content_images", "human_voiceover", "background_music", "caption"]
-    elif any(platform in SHORT_VIDEO_PLATFORMS for platform in primary_platforms) and visual >= 0.75:
+    elif wants_repost and any(platform in SHORT_VIDEO_PLATFORMS for platform in primary_platforms) and visual >= 0.75:
         content_form = "short_video"
         asset_plan = ["source_video", "cover", "caption"]
     elif any(platform in SHORT_VIDEO_PLATFORMS for platform in primary_platforms):
