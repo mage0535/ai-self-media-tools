@@ -994,6 +994,7 @@ def test_med98_wall_clock_cap_skips_second_attempt(tmp_path, monkeypatch):
         ],
     }
     pipe = FakePipeline()
-    state = execute_batch(pipe, plan, state_path=tmp_path / "state.json", require_acceptance=False)
+    state = execute_batch(pipe, plan, state_path=tmp_path / "state.json",
+                          journal=BatchEventJournal(tmp_path / "events.jsonl"), require_acceptance=False)
     assert pipe.calls == 1, "Second attempt must not run when wall-clock cap would be exceeded"
     assert state["tasks"][0].get("first_attempt") is None
