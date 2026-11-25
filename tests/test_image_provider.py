@@ -184,14 +184,14 @@ def test_auto_provider_chain_assigns_generation_and_edit_tasks(monkeypatch):
     monkeypatch.delenv("IMAGE_PROVIDER_CHAIN", raising=False)
     monkeypatch.delenv("IMAGE_PROVIDER_ALLOW_PAID", raising=False)
     monkeypatch.delenv("IMAGE_PROVIDER_QUALITY_FIRST", raising=False)
-    assert _provider_chain("auto") == ["go_gemini", "sense_nova", "cloudflare", "pollinations", "stock"]
-    assert _provider_chain("auto", input_image="/tmp/source.jpg") == ["go_gemini", "sense_nova"]
+    assert _provider_chain("auto") == ["stock", "cloudflare", "openai-codex"]
+    assert _provider_chain("auto", input_image="/tmp/source.jpg") == ["openai-codex"]
 
     monkeypatch.setenv("IMAGE_PROVIDER_QUALITY_FIRST", "1")
-    assert _provider_chain("auto") == ["go_gemini", "sense_nova", "cloudflare", "pollinations", "stock"]
+    assert _provider_chain("auto") == ["stock", "cloudflare", "openai-codex"]
     monkeypatch.setenv("IMAGE_PROVIDER_ALLOW_PAID", "1")
-    assert _provider_chain("auto") == ["openai", "go_gemini", "sense_nova", "cloudflare", "pollinations"]
-    assert _provider_chain("auto", input_image="/tmp/source.jpg") == ["openai", "go_gemini", "sense_nova", "gemini"]
+    assert _provider_chain("auto") == ["openai-codex", "openai", "cloudflare", "stock"]
+    assert _provider_chain("auto", input_image="/tmp/source.jpg") == ["openai-codex", "openai"]
     assert _provider_chain("go") == ["go_gemini"]
 
 
@@ -419,6 +419,8 @@ def test_legacy_pexels_search_wrapper_uses_unified_provider(tmp_path, monkeypatc
 def test_auto_falls_back_to_configured_free_model_when_paid_providers_unavailable(tmp_path, monkeypatch):
     monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -450,6 +452,8 @@ def test_auto_falls_back_to_configured_free_model_when_paid_providers_unavailabl
 def test_auto_does_not_try_paid_providers_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("CONTENT_PLATFORM_HOME", str(tmp_path))
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
     monkeypatch.setenv("OPENAI_API_KEY", "paid-key")
     monkeypatch.setenv("GEMINI_API_KEY", "paid-key")
     image_bytes = b"\x89PNG\r\n\x1a\n" + b"x" * 3000

@@ -966,7 +966,7 @@ class MediaBridge:
                     str(value).casefold() for value in job.get("platforms") or [])
                     and (job.get("brief") or {}).get("content_mode") != "original_knowledge"):
                 # MED39 (r108): video scenes must be licensed real photos, but beats only ever drew generated images.
-                item_chain = ",".join(["stock"] + [name for name in (chain or "go_gemini,cloudflare,pollinations").split(",")
+                item_chain = ",".join(["stock"] + [name for name in (chain or "cloudflare,openai-codex").split(",")
                                                    if name.strip() and name.strip() not in STOCK_PROVIDERS])
             item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": item_chain,
                                    "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}} if item_chain else run_kwargs
@@ -1014,9 +1014,9 @@ class MediaBridge:
                 if item_chain:
                     pass  # The chain (stock dropped above) already moves to the next provider.
                 elif attempt == 1 and item_args[item_args.index("--provider") + 1] == "auto":
-                    item_args[item_args.index("--provider") + 1] = "pollinations"
-                elif attempt == 2:
                     item_args[item_args.index("--provider") + 1] = "cloudflare"
+                elif attempt == 2:
+                    item_args[item_args.index("--provider") + 1] = "openai-codex"
                 prompt = (
                     f"{item['prompt']} Distinct scene variation {idx + 1}: "
                     f"use a different camera angle, subject placement, lighting direction, and visual metaphor; "
@@ -1035,7 +1035,7 @@ class MediaBridge:
             # MED47 (r115): a Juejin section stayed 0.65 after one regeneration; with the claim renewed (MED46) an article
             # image gets a second one instead of blocking the piece.
             # MED53: the best draw is kept, but each retry is told about the latest draw and its reviewer reason.
-            stock_rejected, last_review, last_result = False, review, provider_result
+            stock_rejected, rejected_providers, last_review, last_result = False, set(), review, provider_result
             # MED66 (owner 11-08): a Xiaohongshu image whose first (stock) draw misses may take a declared realistic
             # generated image (channel rule no_obvious_ai_generated_images_as_main_visual); the 0.72 gate is unchanged.
             # r137: a second stock search spent a retry; no XHS stock photo has reached 0.72 (~20 draws, best 0.68).
@@ -1057,13 +1057,23 @@ class MediaBridge:
                 keep_stock = real_only and not generated_fallback
                 if generated_fallback and not keep_stock:
                     retry_prompt += " Photorealistic real-world scene, no text, no logo, no watermark, no cartoon or poster style."
-                if item_chain and not keep_stock and (
-                        stock_rejected or str(last_result.get("provider") or "") in STOCK_PROVIDERS):
-                    # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
-                    # MED53: it stays out for this image (a later retry went back to stock and kept a 0.52 photo).
-                    stock_rejected = True
-                    retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
-                        name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
+                last_provider = str(last_result.get("provider") or "")
+                if item_chain:
+                    if not keep_stock and (stock_rejected or last_provider in STOCK_PROVIDERS):
+                        # The same stock query returns the same photo; a weak real photo gives way to a generated scene.
+                        # MED53: it stays out for this image (a later retry went back to stock and kept a 0.52 photo).
+                        stock_rejected = True
+                        rejected_providers.update(STOCK_PROVIDERS)
+                    if last_provider == "cloudflare":
+                        # If free Cloudflare Flux missed the 0.72 semantic gate, escalate to the next provider (GPT).
+                        rejected_providers.add("cloudflare")
+                    if rejected_providers:
+                        parts = [name.strip() for name in item_chain.split(",") if name.strip()]
+                        remaining = [name for name in parts if name not in rejected_providers]
+                        if not remaining and parts:
+                            remaining = [parts[-1]]
+                        if remaining:
+                            retry_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(remaining)}}
                 if "env" in retry_kwargs:
                     retry_kwargs = {"env": {**retry_kwargs["env"], "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}}
                 kept_bytes = output.read_bytes()
@@ -1142,28 +1152,19 @@ class MediaBridge:
 
     @staticmethod
     def _article_image_chain(job, item):
-        """Provider order for titled-cover article lanes (11-03): SenseNova stamps a visible logo, so it is the
-        last resort. Every article image tries a licensed real photo first: the channel contracts ask for real-scene
-        backgrounds and all-AI images failed the 11-05 reviews (MED29); a weak photo still gives way to a generated
-        scene in the semantic retry."""
+        """Provider order for titled-cover article lanes: licensed stock library first, then free Cloudflare Flux,
+        then subscription GPT (openai-codex). Dead/watermarked providers (go_gemini, pollinations, sense_nova) are
+        removed; a weak stock or Cloudflare draw escalates down the chain on semantic retry."""
         platforms = {str(value).casefold() for value in job.get("platforms") or []}
         if item.get("semantic_requirement") or not platforms.intersection(TITLED_COVER_PLATFORMS):
             return ""
-        # MED77 (owner 11-09): the paid Qwen-Image model follows the free gateway; it has no watermark.
-        # MED89 (owner 11-13): GPT images (Codex auth, via the job's US proxy) follow the free gateway; 4 of 4 probe
-        # scenes were on-topic, text-free and logo-free, unlike SenseNova (logo) and cloudflare (69% pass).
-        chain = ["stock", "go_gemini", "openai-codex", "qwen_image", "cloudflare", "pollinations", "sense_nova"]
+        chain = ["stock", "cloudflare", "openai-codex"]
         if (job.get("brief") or {}).get("content_mode") == "original_knowledge":
             chain.remove("stock")  # Original-knowledge jobs only take newly generated assets.
         elif item.get("role") != "cover" and not platforms.intersection(REAL_BACKGROUND_PLATFORMS):
             # MED45 (11-06 CST): Juejin/Zhihu section photos matched 0 of 12 and each miss cost 50-90 s, which pushed
             # Juejin past its 900 s lease; only the cover keeps the real-photo attempt.
             chain.remove("stock")
-        if platforms.intersection({"juejin", "zhihu"}):
-            # MED75 (owner 11-09): kept images since 11-04 passed the 0.72 gate 89% from SenseNova (n=150) and 0% from
-            # pollinations (n=17), which sat ahead of it and was the last stop once the gateway was limited.
-            chain.remove("pollinations")
-            chain.append("pollinations")
         return ",".join(chain)
 
     @staticmethod

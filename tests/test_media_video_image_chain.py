@@ -190,15 +190,16 @@ def test_article_images_try_a_real_photo_first_except_original_knowledge():
     chain = MediaBridge._article_image_chain({"platforms": ["zhihu"]}, {"role": "cover"})
     original = MediaBridge._article_image_chain({"platforms": ["juejin"], "brief": {"content_mode": "original_knowledge"}}, {"role": "cover"})
 
-    assert chain.split(",")[:2] == ["stock", "go_gemini"]
+    assert chain.split(",") == ["stock", "cloudflare", "openai-codex"]
+    assert original.split(",") == ["cloudflare", "openai-codex"]
     assert "stock" not in original.split(",")
 
 
 def test_article_section_images_skip_stock_unless_backgrounds_must_be_real():
     # MED45: Juejin/Zhihu section photos matched 0 of 12; each miss cost a search and a review.
-    assert MediaBridge._article_image_chain({"platforms": ["zhihu"]}, {"role": "section"}).split(",")[0] == "go_gemini"
-    assert MediaBridge._article_image_chain({"platforms": ["juejin"]}, {"role": "section"}).split(",")[0] == "go_gemini"
-    assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "section"}).startswith("stock,")
+    assert MediaBridge._article_image_chain({"platforms": ["zhihu"]}, {"role": "section"}).split(",") == ["cloudflare", "openai-codex"]
+    assert MediaBridge._article_image_chain({"platforms": ["juejin"]}, {"role": "section"}).split(",") == ["cloudflare", "openai-codex"]
+    assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "section"}).split(",") == ["stock", "cloudflare", "openai-codex"]
 
 
 def test_a_repeated_image_does_not_pin_later_images_to_another_provider(tmp_path):
@@ -230,7 +231,7 @@ def test_a_repeated_image_does_not_pin_later_images_to_another_provider(tmp_path
         bridge._generate_image(job, tmp_path / "out", {"provider": "auto"})
 
     assert all(provider == "auto" for provider, _ in seen)
-    assert seen[2][1].split(",")[0] == "go_gemini" and seen[3][1].startswith("stock")
+    assert seen[2][1].split(",")[0] == "cloudflare" and seen[3][1].startswith("stock")
 
 
 def test_cover_title_overflow_falls_back_to_the_main_clause(tmp_path):
@@ -604,12 +605,12 @@ def test_spare_section_replaces_a_section_image_left_under_the_gate(tmp_path):
     assert len(drawn) == 4 and [image["section"] for image in images[1:]] == ["s1", "s2", "s3"]
 
 
-def test_juejin_and_zhihu_reach_sensenova_before_pollinations():
-    # MED75: pollinations passed 0 of 17 kept images; the owner accepted SenseNova's logo on these two lanes.
+def test_article_chains_drop_invalid_providers_and_prioritize_stock_cloudflare_gpt():
+    # d80: remove dead/watermarked providers (go_gemini, pollinations, sense_nova) and prioritize stock -> cloudflare -> openai-codex.
     for platform in ("juejin", "zhihu"):
         chain = MediaBridge._article_image_chain({"platforms": [platform]}, {"role": "section"}).split(",")
-        assert chain == ["go_gemini", "openai-codex", "qwen_image", "cloudflare", "sense_nova", "pollinations"]
-    assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "cover"}).split(",")[-2:] == ["pollinations", "sense_nova"]
+        assert chain == ["cloudflare", "openai-codex"]
+    assert MediaBridge._article_image_chain({"platforms": ["xiaohongshu"]}, {"role": "cover"}).split(",") == ["stock", "cloudflare", "openai-codex"]
 
 
 def test_codex_image_bridge_sends_hermes_aspect_names():

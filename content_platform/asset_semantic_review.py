@@ -203,8 +203,9 @@ def route_config():
     # A pixel review needs a route Hermes declares as native vision; it may differ from the text route.
     if str(cfg.get('vision_provider') or '').strip() and str(cfg.get('vision_model') or '').strip():
         route.update(hermes_provider=str(cfg['vision_provider']).strip(), hermes_model=str(cfg['vision_model']).strip())
-        # Hermes records a named custom provider under its canonical billing name.
-        route['billing_provider'] = str(cfg.get('vision_billing_provider') or 'custom').strip()
+        # Hermes records a named custom provider under 'custom', while native OAuth providers like openai-codex record themselves.
+        default_billing = route['hermes_provider'] if route['hermes_provider'] == 'openai-codex' else 'custom'
+        route['billing_provider'] = str(cfg.get('vision_billing_provider') or default_billing).strip()
     if not all(route.values()):
         raise ValueError('pinned_generator_route_missing')
     # MED79 (11-10 CST): every review used one gateway account. A declared fallback vision route, from the same
