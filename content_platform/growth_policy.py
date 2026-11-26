@@ -476,11 +476,19 @@ def build_growth_strategy(
             "first_screen_promise": "show a concrete result, conflict, or benefit before generic explanation",
             "curiosity_gap": "make the viewer want the missing step, evidence, or reason",
         },
-        "retention_plan": {
-            "first_3_seconds": "lead with result, mistake, proof, or emotional moment",
-            "scene_change_interval_seconds": 3 if is_video else 0,
-            "midpoint_payoff": "deliver a useful checklist, proof point, or story turn before the midpoint",
-        },
+        "retention_plan": (
+            {
+                "first_3_seconds": "lead with result, mistake, proof, or emotional moment",
+                "scene_change_interval_seconds": 3,
+                "midpoint_payoff": "deliver a useful checklist, proof point, or story turn before the midpoint",
+            }
+            if is_video
+            else {
+                "first_screen_opening": "lead with a concrete conflict, failure case, or verifiable takeaway in the first 150 characters",
+                "section_pacing": "clear H2 headings, short paragraphs, and scannable tables/checklists",
+                "midpoint_payoff": "deliver a reusable checklist, comparison table, or actionable verification rule before the midpoint",
+            }
+        ),
         "interaction_plan": {
             "comment_prompt": "ask a specific low-friction question tied to the viewer's own situation",
             "save_reason": "make the content reusable as a checklist, reference, or decision aid",
@@ -494,15 +502,27 @@ def build_growth_strategy(
         "platform_growth_rules": list(rules.get("rules") or []),
         "post_publish_review_plan": {
             "review_points_hours": [1, 24, 72],
-            "diagnosis_dimensions": [
-                "click_through_rate",
-                "three_second_view_rate",
-                "completion_rate",
-                "save_rate",
-                "comment_rate",
-                "share_rate",
-                "follow_conversion_rate",
-            ],
+            "diagnosis_dimensions": (
+                [
+                    "click_through_rate",
+                    "three_second_view_rate",
+                    "completion_rate",
+                    "save_rate",
+                    "comment_rate",
+                    "share_rate",
+                    "follow_conversion_rate",
+                ]
+                if is_video
+                else [
+                    "click_through_rate",
+                    "read_completion_rate",
+                    "save_rate",
+                    "like_rate",
+                    "comment_rate",
+                    "share_rate",
+                    "follow_conversion_rate",
+                ]
+            ),
         },
         "quality_targets": {
             "hook_score": 0.78,

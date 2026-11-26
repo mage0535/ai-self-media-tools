@@ -1972,12 +1972,28 @@ class Pipeline:
         else:
             ai_edit_real = ""
             ai_gen_overlay = ""
-        result = {
-            "ai_generated": describe(generated),
-            "real_material_retrieval": "" if original else (
+        platforms = {
+            str(item).casefold()
+            for item in (((draft.get("draft_meta") or {}).get("strategy") or {}).get("primary_platforms") or [])
+        }
+        if original:
+            retrieval_text = ""
+        elif platforms & {"zhihu", "juejin"}:
+            retrieval_text = (
+                "cover tried licensed stock photo search first; section images use declared realistic text-free "
+                "AI illustrations (cloudflare -> openai-codex per owner decision); kept real photos: "
+                + (describe(real) or "none (cover fell back to generated scene)")
+                + retrieval_detail
+            )
+        else:
+            retrieval_text = (
                 "licensed stock photo search ran first for every image; kept: "
                 + (describe(real) or "none (weak matches fell back to generated scenes)")
-                + retrieval_detail),
+                + retrieval_detail
+            )
+        result = {
+            "ai_generated": describe(generated),
+            "real_material_retrieval": retrieval_text,
             "ai_edit_real_material": ai_edit_real,
             "source": "asset_provenance",
         }
@@ -2044,6 +2060,10 @@ class Pipeline:
             plan = meta.get("real_scene_background_plan")
             if isinstance(plan, dict) and "wechat" not in {str(item).casefold() for item in platforms}:  # WeChat cards bind their own photos.
                 plan["backgrounds"] = [self._rendered_background(row) for row in provenance.values()]
+                if plan["backgrounds"] and not any(b.get("real_scene") for b in plan["backgrounds"]):
+                    plan["primary_background_kind"] = "declared_generated_illustration"
+                elif plan["backgrounds"] and any(not b.get("real_scene") for b in plan["backgrounds"]):
+                    plan["primary_background_kind"] = "mixed_real_photo_and_declared_generated_illustration"
             if mappings:
                 meta["section_image_map"] = mappings
             brief_plan = ((meta.get("strategy_brief") or {}).get("content_generation_brief") or {})

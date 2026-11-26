@@ -905,8 +905,20 @@ class DraftGenerator:
         # MED73 (11-10 CST): a Zhihu article came back with 1997 Han characters; English terms and code filled the rest.
         size = ("2400-2900 characters, at least 2200 of them Chinese 汉字 (English terms, code and numbers do not count; "
                 "keep them short),") if "zhihu" in platforms else "1600-2600 Chinese characters"
+        extra = ""
+        if "juejin" in platforms:
+            extra += (
+                " For Juejin technical articles, include at least one concrete, minimal runnable code snippet or "
+                "configuration/schema block inside fenced Markdown (```...```) tied directly to the workflow, "
+                "verification check, or rollback mechanism discussed (never invent fake benchmark numbers)."
+            )
+        extra += (
+            " Never include internal production/cover meta-notes (such as '封面计划用…' or layout promises) "
+            "in the reader-facing body."
+        )
         return (f"Body must be {size} not counting spaces or line breaks, for Chinese articles, or 900-1600 English words for English articles. "
-                "Organize it under 3-6 Markdown section headings that start with '## '; each heading must be unique and followed by its own paragraphs."), 5000
+                "Organize it under 3-6 Markdown section headings that start with '## '; each heading must be unique and followed by its own paragraphs."
+                + extra), 5000
 
     def _normalize(self, draft, context, provider, topic="", brief=None):
         brief = brief or {}

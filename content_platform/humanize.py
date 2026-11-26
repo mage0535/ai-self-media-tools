@@ -247,7 +247,19 @@ def naturalize_copy(body, context):
         updated = updated.replace("—", ", ")
         notes.append(f"reduced {em_count} em-dashes")
     # Reference openings constrain writing style; they are never publication copy.
+    # Strip accidental production meta-sentences (e.g. "封面计划用一张…") and orphan punctuation noise.
+    meta_cleaned = re.sub(r"(?m)^\s*(?:本文)?(?:封面|配图|插图)计划用[^\n。！？!?]*[。！？!?]?\s*$", "", updated)
+    if meta_cleaned != updated:
+        updated = meta_cleaned
+        notes.append("stripped cover/image production meta-note")
+    punct_cleaned = re.sub(r"(?m)^\s*[,，、;；]+\s*$", "", updated)
+    punct_cleaned = re.sub(r"，{2,}", "，", punct_cleaned)
+    punct_cleaned = re.sub(r",\s*,+", ", ", punct_cleaned)
+    if punct_cleaned != updated:
+        updated = punct_cleaned
+        notes.append("cleaned orphan punctuation")
     updated = _sentence_break(updated)
+    updated = re.sub(r"(?m)^\s*[,，、;；]+\s*$", "", updated)
     updated = re.sub(r"\n{3,}", "\n\n", updated).strip()
     for index, block in enumerate(code_blocks):
         updated = updated.replace(f"\x00CODE{index}\x00", block, 1)

@@ -404,8 +404,17 @@ def _review_call(audit, route, path, pixels, context, semantic_requirement, nati
               'Score bands: 0.90-1.00 clearly depicts this section\'s specific objects, process or relationships; '
               '0.72-0.89 depicts this section\'s subject with minor gaps; 0.40-0.71 fits the general topic but not this section; '
               'below 0.40 generic, unrelated or unreadable. '
-              'Generic decoration or text-only claims are not semantic proof.\nUNTRUSTED_DATA:\n'+
-              json.dumps(context, ensure_ascii=False))
+              'Generic decoration or text-only claims are not semantic proof.')
+    if not semantic_requirement and not path.name.startswith('cover-titled'):
+        # MED90-d (2026-11-26): reject painted/garbled text, fake UI dashboards/labels, watermarks/logos, or cartoon
+        # posters during asset review so they regenerate before reaching final native quality review.
+        prompt += (
+            ' Visual hygiene (mandatory for untitled backgrounds and illustrations): score MUST be 0.55 or lower '
+            'if the image contains visible painted/garbled/pseudo text, fake UI labels/dashboards/charts/buttons, '
+            'watermarks/logos, or cartoon/vector-poster style when a realistic scene is expected; explicitly name '
+            'any such text/UI/watermark/style defect in reason.'
+        )
+    prompt += '\nUNTRUSTED_DATA:\n' + json.dumps(context, ensure_ascii=False)
     if semantic_requirement:
         prompt=('For this exact semantic_requirement, return requirement_match as a boolean based ONLY on attached pixels. '
             'False if required objects/actions/relationships are absent or ambiguous. No approvals, execution or quality-completion fields. '+prompt)
