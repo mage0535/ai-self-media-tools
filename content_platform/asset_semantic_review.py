@@ -424,7 +424,11 @@ def _review_call(audit, route, path, pixels, context, semantic_requirement, nati
     prompt += '\nUNTRUSTED_DATA:\n' + json.dumps(context, ensure_ascii=False)
     if semantic_requirement:
         prompt=('For this exact semantic_requirement, return requirement_match as a boolean based ONLY on attached pixels. '
-            'False if required objects/actions/relationships are absent or ambiguous. No approvals, execution or quality-completion fields. '+prompt)
+            'False if concrete photographable subjects, setting, or actions required by the beat are absent or unrelated. '
+            'When a beat mentions an intangible or conceptual nuance (such as schedule pacing, future intent, or mental state), '
+            'judge requirement_match on whether the matching physical subjects, environment, and care/workflow actions are clearly visible '
+            'rather than marking False solely because an invisible itinerary or intent cannot be photographed. '
+            'No approvals, execution or quality-completion fields. '+prompt)
         audit['query']=private_output(path.parent,'.query.private.txt',prompt)
     command = [route['hermes_command'], 'chat', '--query-file', '-', '--oneshot', '--image', str(path.resolve()),
                '--provider', route['hermes_provider'], '--model', route['hermes_model'],

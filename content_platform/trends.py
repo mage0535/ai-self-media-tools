@@ -253,8 +253,8 @@ class TrendCollector:
             "juejin:scenario": {"enabled": True, "limit": 20, "timeout": 8},
             "shipinhao": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u89c6\u9891\u53f7 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387"},
             "xiaohongshu": {"enabled": False, "limit": 20, "timeout": 8, "query": "\u5c0f\u7ea2\u4e66 \u70ed\u95e8 AI \u5de5\u5177 \u6548\u7387 site:xiaohongshu.com"},
-            "youtube": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI workflow automation productivity site:youtube.com"},
-            "tiktok": {"enabled": False, "limit": 20, "timeout": 8, "query": "AI workflow automation productivity site:tiktok.com"},
+            "youtube": {"enabled": True, "limit": 20, "timeout": 20, "query": "AI workflow automation productivity site:youtube.com"},
+            "tiktok": {"enabled": True, "limit": 20, "timeout": 20, "query": "AI workflow automation productivity site:tiktok.com"},
             # Optional local adapter. It is never treated as a publisher and is
             # disabled until an operator explicitly configures the command.
             "agent_reach": {"enabled": False, "limit": 20, "timeout": 20},

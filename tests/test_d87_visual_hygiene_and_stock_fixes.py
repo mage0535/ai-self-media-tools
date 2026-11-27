@@ -297,3 +297,9 @@ def test_d91_humanize_dividers_cli_flags_wechat_and_bold_headings():
     assert "第二步：待填验证模板" in note
     assert "· " in note and "样件编号" in note
     assert not any(ln.strip().endswith("以下是待填模板：") and i == len(note.splitlines()) - 1 for i, ln in enumerate(note.splitlines()))
+
+    # 5) English native video feeds (youtube, tiktok) enabled by default in TrendCollector for twitter/youtube/tiktok lanes
+    from content_platform.trends import TrendCollector
+    direct = TrendCollector({})._direct_sources()
+    assert direct["youtube"]["enabled"] is True
+    assert direct["tiktok"]["enabled"] is True
