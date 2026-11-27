@@ -74,37 +74,68 @@ def _note_title(title):
     return re.sub(r"[A-Za-z0-9+._-]+$", "", head).strip() or head
 
 
-def _note_blocks(body):
-    """Paragraph blocks of plain text; a Markdown table (not rendered by Xiaohongshu) becomes one line per row."""
+def _note_blocks_tagged(body):
+    """Paragraph blocks of plain text paired with a flag indicating Markdown headings."""
     blocks = []
     for block in re.split(r"\n\s*\n", str(body)):
         lines = [line.strip() for line in block.strip().splitlines() if line.strip()]
-        if lines and all(line.startswith("|") for line in lines):
+        if not lines:
+            continue
+        is_heading = len(lines) == 1 and bool(re.match(r"^#{1,6}\s+", lines[0]))
+        if all(line.startswith("|") for line in lines):
             rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in lines]
             rows = [row for row in rows if not all(re.fullmatch(r":?-{2,}:?", cell) for cell in row if cell)]
             lines = ["· " + "｜".join(_plain(cell) for cell in row if cell) for row in rows]
         text = "\n".join(_plain(line) for line in lines).strip()
         if text:
-            blocks.append(text)
+            blocks.append((text, is_heading))
     return blocks
 
 
+def _note_blocks(body):
+    """Paragraph blocks of plain text; a Markdown table (not rendered by Xiaohongshu) becomes one line per row."""
+    return [text for text, _ in _note_blocks_tagged(body)]
+
+
 def _note_text(hook, body):
-    """Whole paragraphs only, the closing paragraph always kept, plus the AI-assisted disclosure."""
-    blocks = _note_blocks(body)
+    """Whole paragraphs only, the closing paragraph always kept, plus the AI-assisted disclosure.
+
+    d87: Headings are atomically paired with their immediately following body paragraph so
+    budget trimming never leaves empty orphaned headings at the end of a note.
+    """
+    tagged = _note_blocks_tagged(body)
     plain_hook = _plain(hook)
     if plain_hook and (
-        not blocks
-        or (plain_hook not in blocks[0] and blocks[0] not in plain_hook and plain_hook[:16] not in blocks[0])
+        not tagged
+        or (plain_hook not in tagged[0][0] and tagged[0][0] not in plain_hook and plain_hook[:16] not in tagged[0][0])
     ):
-        blocks.insert(0, plain_hook)
-    closing = blocks.pop() if len(blocks) > 1 else ""
+        tagged.insert(0, (plain_hook, False))
+    closing = tagged.pop()[0] if len(tagged) > 1 else ""
     tail = [part for part in (closing, XHS_AI_DISCLOSURE) if part]
     budget = XHS_TEXT_LIMIT - sum(len(part) + 2 for part in tail)
     kept = []
-    for block in blocks:
-        if len(block) + 2 <= budget:
-            kept.append(block); budget -= len(block) + 2
+    idx = 0
+    while idx < len(tagged):
+        text, is_heading = tagged[idx]
+        if is_heading:
+            # Never emit a heading unless at least its immediately following body block also fits.
+            if idx + 1 >= len(tagged) or tagged[idx + 1][1]:
+                idx += 1
+                continue
+            body_text = tagged[idx + 1][0]
+            needed = (len(text) + 2) + (len(body_text) + 2)
+            if needed <= budget:
+                kept.append(text)
+                kept.append(body_text)
+                budget -= needed
+                idx += 2
+                continue
+            # Stop collecting further section headings once a section cannot fit with its body.
+            break
+        if len(text) + 2 <= budget:
+            kept.append(text)
+            budget -= len(text) + 2
+        idx += 1
     text = "\n\n".join(kept + tail)
     return text if len(text) <= XHS_TEXT_LIMIT else text[:XHS_TEXT_LIMIT - len(XHS_AI_DISCLOSURE) - 2].rsplit("\n", 1)[0] + "\n\n" + XHS_AI_DISCLOSURE
 

@@ -891,6 +891,55 @@ def _stock_orientation(width: int, height: int) -> str:
 def _stock_query(prompt: str) -> str:
     text = " ".join(str(prompt or "").replace("\n", " ").split())
     lower = text.casefold()
+    # Pet/animal semantics MUST take precedence over generic words like "视频" or English
+    # boilerplate substrings ("explain"/"detail" previously matched bare "ai" in topic_map).
+    pet_map = (
+        ("猫狗", "dog and cat at home"),
+        ("狗狗", "dog at home pet"),
+        ("小狗", "puppy dog at home"),
+        ("狗", "dog at home pet"),
+        ("犬", "dog pet"),
+        ("猫咪", "cute cat at home"),
+        ("小猫", "kitten cat at home"),
+        ("猫", "cat at home pet"),
+        ("养宠", "pet cat dog care"),
+        ("宠物", "pet cat dog at home"),
+        ("dogs", "dog watching living room"),
+        ("dog", "dog at home pet"),
+        ("puppy", "puppy dog at home"),
+        ("cats", "cute cat at home"),
+        ("cat", "cat at home pet"),
+        ("kitten", "kitten cat at home"),
+    )
+
+    def _match_pet(fragment: str) -> str:
+        frag_lower = str(fragment or "").casefold()
+        for marker, query in pet_map:
+            if marker.isascii():
+                if re.search(rf"\b{re.escape(marker)}\b", frag_lower):
+                    return query
+            elif marker in frag_lower:
+                return query
+        return ""
+
+    # Semantic video beat prompts use "Video topic: ... Scene to show: ...".
+    if "scene to show:" in lower:
+        scene_idx = lower.find("scene to show:")
+        scene_body = text[scene_idx + len("scene to show:"):].split("Neighbouring narration", 1)[0].split("Depict the concrete", 1)[0].strip()
+        topic_body = ""
+        if "video topic:" in lower:
+            t_idx = lower.find("video topic:")
+            topic_body = text[t_idx + len("video topic:"):scene_idx].strip()
+        pet_hit = _match_pet(scene_body) or _match_pet(topic_body)
+        if pet_hit:
+            if any(k in scene_body for k in ("电视", "屏幕", "看")) or "tv" in topic_body.casefold():
+                return "dog watching television living room" if "dog" in pet_hit else "cat watching living room"
+            if any(k in scene_body for k in ("叫", "吠", "后缩", "害怕", "紧张")):
+                return "nervous dog barking indoors" if "dog" in pet_hit else "alert cat indoors"
+            if any(k in scene_body for k in ("走开", "离开", "路")):
+                return "dog walking away living room" if "dog" in pet_hit else "cat walking away indoors"
+            return pet_hit
+
     topic_map = {
         "ai": "artificial intelligence workspace",
         "人工智能": "artificial intelligence workspace",
@@ -902,6 +951,7 @@ def _stock_query(prompt: str) -> str:
         "商业": "business meeting",
         "小红书": "lifestyle workspace",
         "猫": "cat pet",
+        "狗": "dog pet",
     }
     # Cover prompts embed "Topic context: <topic>". Prefer topic-specific
     # English keywords so two covers never collapse to the same photo.
@@ -913,9 +963,16 @@ def _stock_query(prompt: str) -> str:
         if marker_idx != -1:
             cover_topic = text[marker_idx + len("topic context:"):].split(". clear subject", 1)[0].strip()
     if cover_topic:
+        pet_hit = _match_pet(cover_topic)
+        if pet_hit:
+            return pet_hit
         # 2026-08-15 优化：先匹配主题关键词（cn_map），再退回英文词，
         # 避免 cover 查询落到模板残留词（如 "Concrete visual metaphor"）。
         cn_map = {
+            "养宠": "pet cat dog care",
+            "宠物": "pet cat dog",
+            "猫咪": "cute cat",
+            "狗狗": "cute dog",
             "记忆": "memory brain knowledge",
             "模型": "artificial intelligence model",
             "智能体": "artificial intelligence agent robot",
@@ -946,10 +1003,6 @@ def _stock_query(prompt: str) -> str:
             "测试": "software testing",
             "对比": "comparison charts",
             "选型": "choosing technology options",
-            "养宠": "pet cat dog care",
-            "宠物": "pet cat dog",
-            "猫咪": "cute cat",
-            "狗狗": "cute dog",
         }
         for marker, query in cn_map.items():
             if marker in cover_topic:
@@ -966,6 +1019,9 @@ def _stock_query(prompt: str) -> str:
             if "topic context:" in section_text.casefold():
                 section_text = section_text.split("topic context:", 1)[0].strip()
     if section_text:
+        pet_hit = _match_pet(section_text)
+        if pet_hit:
+            return pet_hit
         words = [
             part.strip(".,:;!?()[]{}\"'")
             for part in section_text.split(" ")
@@ -975,6 +1031,10 @@ def _stock_query(prompt: str) -> str:
         if ascii_words:
             return " ".join(ascii_words[:5])
         cn_map = {
+            "养宠": "pet cat dog care",
+            "宠物": "pet cat dog at home",
+            "猫咪": "cute cat at home",
+            "狗狗": "cute dog at home",
             "记忆": "memory brain knowledge",
             "失忆": "memory brain knowledge",
             "模型": "artificial intelligence model",
@@ -1020,8 +1080,14 @@ def _stock_query(prompt: str) -> str:
         for marker, query in cn_map.items():
             if marker in section_text:
                 return query
+    pet_hit = _match_pet(text)
+    if pet_hit:
+        return pet_hit
     for marker, query in topic_map.items():
-        if marker in lower:
+        if marker.isascii():
+            if re.search(rf"\b{re.escape(marker)}\b", lower):
+                return query
+        elif marker in lower:
             return query
     # 中文 section 兜底：用文本中的汉字生成差异化查询，禁止全部落到同一默认词
     zh_segment = re.findall(r"[\u4e00-\u9fff]+", text)
