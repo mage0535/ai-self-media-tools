@@ -354,6 +354,40 @@ def test_d91c_rendered_asset_mix_sections_xhs_table_and_keywords(tmp_path):
     assert len(terms) >= 5 and "可核对行程草案" in terms and "状态机拆解与天气过滤" in terms
 
 
+def test_d92_english_pillars_xhs_cta_and_source_attribution():
+    from content_platform.overnight_topic_analysis import build_prompt
+    from content_platform.real_world_ai_policy import overnight_topic_fit
+
+    # 1) Real-world English YouTube/TikTok scenario headlines pass overnight_topic_fit
+    for en_title in (
+        "Smart Industrial 2D Vision with Deep Edge AI | Gocator 2D Ep. 2",
+        "He Built An AI Software Factory From Scratch, Here's What He Learned",
+        "AI Lead Qualification: Build a BANT Workflow That Won't Lie",
+        "AI Enquiry Workflow Optimisation in Zapier for Hospitality",
+    ):
+        assert overnight_topic_fit(en_title) in {"case", "scene"}, f"rejected valid EN scenario: {en_title}"
+    # Model-news/benchmarks remain excluded
+    assert overnight_topic_fit("GPT-6.1 Terra vs Opus 5.5 Benchmark Ranking Release") is None
+
+    # 2) XHS _note_text preserves trailing CTA question even when the last section has only one paragraph
+    single_para_tail = (
+        "开场冲突说明为什么模型分数高不代表产线验收过关。\n\n"
+        "## 第一步：先定缺陷边界\n" + "把质量岗定义的不良项逐条对应到相机视野与光照条件，避免训练样本与现场脱节。" * 4 + "\n\n"
+        "## 第二步：从相机到剔除全链路\n" + "记录触发取像、算法输出到剔除机构执行的完整链路和单件追溯编号。" * 4 + "\n\n"
+        "## 第三步：现场验收记三件事\n"
+        + "同批样件由质检员做独立人工复核，漏检、过检和连续性分开登记，异常件留件隔离不放行。" * 3
+        + "你们产线验收最容易卡在漏检、过检还是剔除哪一环？"
+    )
+    note = _note_text("", single_para_tail)
+    assert len(note) <= 950
+    assert "你们产线验收最容易卡在漏检、过检还是剔除哪一环？" in note
+
+    # 3) Topic analysis prompt explicitly forbids copying unverified promotional metrics into outcome
+    prompt = build_prompt("zhihu", {"title": "【会议神器】效率翻倍", "url": "https://juejin.cn/post/123", "source": "juejin"}, {})
+    assert "效率翻倍" in prompt and "never copy unverified promotional numbers" in prompt
+
+
+
     # 5) English native video feeds (youtube, tiktok) enabled by default in TrendCollector for twitter/youtube/tiktok lanes
     from content_platform.trends import TrendCollector
     direct = TrendCollector({})._direct_sources()

@@ -49,6 +49,13 @@
       "industrial maintenance",
       "quality inspection",
       "factory automation",
+      "industrial vision",
+      "industrial 2d vision",
+      "edge ai",
+      "defect inspection",
+      "factory",
+      "warehouse",
+      "logistics",
       "mes"
     ],
     "intelligent_manufacturing": [
@@ -64,7 +71,8 @@
       "industrial robotics",
       "smart manufacturing",
       "production line",
-      "equipment operations"
+      "equipment operations",
+      "industrial"
     ],
     "office_automation": [
       "会议纪要",
@@ -85,7 +93,23 @@
       "accounts payable",
       "customer support",
       "meeting notes",
-      "document processing"
+      "document processing",
+      "lead qualification",
+      "sales",
+      "booking",
+      "enquiry",
+      "hospitality",
+      "workflow engineering",
+      "workflow optimisation",
+      "workflow optimization",
+      "software factory",
+      "zapier",
+      "n8n",
+      "dashboard",
+      "onboarding",
+      "operations",
+      "spreadsheet",
+      "reporting"
     ],
     "daily_life_application": [
       "学习计划",
@@ -105,7 +129,10 @@
       "travel planning",
       "consumer decision",
       "content creation",
-      "accessibility"
+      "accessibility",
+      "render farm",
+      "video production",
+      "personal assistant"
     ]
   },
   "ai_capability_terms": [

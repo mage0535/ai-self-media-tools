@@ -177,6 +177,14 @@ def _note_text(hook, body):
         closing = tagged.pop()[0]
     elif len(tagged) > 1 and not tagged[-1][1] and not any(is_h for _, is_h in tagged):
         closing = tagged.pop()[0]
+    elif tagged and not tagged[-1][1]:
+        # d92: When the final section has only one paragraph containing the closing CTA question,
+        # extract that trailing question sentence into `closing` so proportional trimming never drops it.
+        last_body = tagged[-1][0]
+        q_match = re.search(r"([^\n。！？!?]{6,80}[？?])\s*$", last_body)
+        if q_match and q_match.start() >= 20:
+            closing = q_match.group(1).strip()
+            tagged[-1] = (last_body[:q_match.start()].rstrip(), False)
     tail = [part for part in (closing, XHS_AI_DISCLOSURE) if part]
     budget = XHS_TEXT_LIMIT - sum(len(part) + 2 for part in tail)
 

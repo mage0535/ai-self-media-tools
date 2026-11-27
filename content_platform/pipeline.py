@@ -2023,12 +2023,28 @@ class Pipeline:
         return result
 
     def _add_generated_image_note(self, job_id, draft):
-        """MED90: an article whose pictures include AI-generated ones says so in its own text, before the manifest binds
-        the body. The rulebook allows declared generated images only with this note; 11-12 CST the reviewer failed
-        platform_policy for its absence. Stock-photo-only articles get no note."""
+        """MED90/d92: an article whose pictures include AI-generated ones says so in its own text, before the manifest
+        binds the body. Also append a concise reader-visible source-clue attribution line when an external source URL
+        was used, so long-form markdown never hides source provenance solely inside JSON metadata."""
         meta = draft.get("draft_meta") or {}
         platforms = {str(item).casefold() for item in (meta.get("strategy") or {}).get("primary_platforms") or []}
-        if not platforms & {"zhihu", "juejin", "wechat"} or ARTICLE_AI_IMAGE_NOTE in str(draft.get("body") or ""):
+        if not platforms & {"zhihu", "juejin", "wechat"}:
+            return
+        body = str(draft.get("body") or "").rstrip()
+        brief = meta.get("brief") if isinstance(meta.get("brief"), dict) else {}
+        raw_sources = [str(u).strip() for u in (brief.get("sources") or []) if str(u).strip().startswith(("http://", "https://"))]
+        if not raw_sources:
+            bp = meta.get("content_blueprint") if isinstance(meta.get("content_blueprint"), dict) else {}
+            raw_sources = [str(u).strip() for u in (bp.get("evidence_refs") or []) if str(u).strip().startswith(("http://", "https://"))]
+        if raw_sources and raw_sources[0] not in body and "参考线索与核验边界" not in body:
+            src_url = raw_sources[0]
+            body = (
+                body
+                + f"\n\n参考线索与核验边界：本文选题参考公开线索（{src_url}），"
+                + "文中流程与核验清单为独立拟议方案，未复用原帖未核实数据，落地前请结合实际环境逐项复核。"
+            )
+            draft["body"] = body
+        if ARTICLE_AI_IMAGE_NOTE in str(draft.get("body") or ""):
             return
         path = Path(self.data_dir) / "artifacts" / str(job_id) / "asset_provenance.json"
         try:
@@ -2087,10 +2103,14 @@ class Pipeline:
                     plan["primary_background_kind"] = "mixed_real_photo_and_declared_generated_illustration"
             if mappings:
                 meta["section_image_map"] = mappings
-                # d91c: Sync pre-generation article_recipe and knowledge_card_plan with the actual rendered
-                # section_image_map so workflow inputs never contradict the final text-free scene illustrations.
+                # d91c/d92: Sync pre-generation article_recipe (including first_screen_contract.title) and
+                # knowledge_card_plan with the actual drafted title and rendered section_image_map so workflow
+                # inputs never contradict the final honest title or text-free scene illustrations.
                 if isinstance(meta.get("article_recipe"), dict):
                     meta["article_recipe"]["section_image_map"] = mappings
+                    actual_title = str(draft.get("title") or "").strip()
+                    if actual_title and isinstance(meta["article_recipe"].get("first_screen_contract"), dict):
+                        meta["article_recipe"]["first_screen_contract"]["title"] = actual_title[:80]
                     rendered_sections = [
                         {"id": f"section_{idx}", "title": str(item.get("section") or ""), "role": "rendered_section_image"}
                         for idx, item in enumerate(mappings, start=1)
