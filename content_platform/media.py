@@ -1549,13 +1549,16 @@ class MediaBridge:
         body = html.unescape(re.sub(r'<[^>]+>', '', body))
         headings = list(re.finditer(r'^#{1,6}\s+(.+)$', body, re.M))
         rows = []
-        labels = [m[1].strip() for m in headings]
+        # d91: Strip inline Markdown bold/italic markers (e.g. "## **小节标题**") so section_image_map
+        # anchors match plain-text publication_copy (e.g. Xiaohongshu) 3/3 cleanly.
+        clean_heading = lambda raw: re.sub(r"\*\*|__|`|~~", "", str(raw or "")).strip()
+        labels = [clean_heading(m[1]) for m in headings]
         if len(labels) != len(set(labels)):
             raise ValueError("image_section_heading_ambiguous")
         for index, heading in enumerate(headings):
             text = body[heading.end():headings[index + 1].start() if index + 1 < len(headings) else len(body)].strip()
             if text:
-                rows.append({"section": heading[1].strip(), "adjacent_text": text,
+                rows.append({"section": clean_heading(heading[1]), "adjacent_text": text,
                              "section_text_sha256": hashlib.sha256(text.encode()).hexdigest()})
         return rows
 

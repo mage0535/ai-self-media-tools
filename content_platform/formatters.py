@@ -81,10 +81,30 @@ def _trim_at_sentence(text, limit):
     text = str(text or "").strip()
     if limit <= 0 or len(text) <= limit:
         return text[:max(0, limit)].strip()
+    # d91: If text introduces a compact table/checklist ("以下是待填模板：\n· ..."), avoid cutting right
+    # after the colon lead-in and dropping the entire template; keep as many complete lines as fit instead.
+    if "\n· " in text:
+        kept_lines = []
+        used = 0
+        for ln in text.splitlines():
+            ln_s = ln.strip()
+            if not ln_s:
+                continue
+            add = len(ln_s) + (1 if kept_lines else 0)
+            if used + add <= limit:
+                kept_lines.append(ln_s)
+                used += add
+            elif not kept_lines:
+                kept_lines.append(ln_s[:limit].strip())
+                break
+            else:
+                break
+        if len(kept_lines) >= 2 and not kept_lines[-1].endswith(("：", ":")):
+            return "\n".join(kept_lines)
     cut = max(text.rfind(mark, 0, limit + 1) for mark in "。！？!?；;")
-    if cut >= max(24, limit // 2):
+    if cut >= max(24, limit // 2) and not text[:cut + 1].rstrip().endswith(("：", ":")):
         return text[:cut + 1].strip()
-    cut = max(text.rfind(mark, 0, limit + 1) for mark in "，,、：: ")
+    cut = max(text.rfind(mark, 0, limit + 1) for mark in "，,、 ")
     if cut >= max(24, limit // 2):
         return text[:cut].strip()
     return text[:limit].strip()

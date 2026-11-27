@@ -1977,19 +1977,35 @@ class Pipeline:
             str(item).casefold()
             for item in (((draft.get("draft_meta") or {}).get("strategy") or {}).get("primary_platforms") or [])
         }
+        cf_note = ""
+        cf_state_path = Path(self.data_dir) / "cloudflare_quota_state.json"
+        if cf_state_path.is_file():
+            try:
+                cf_state = json.loads(cf_state_path.read_text(encoding="utf-8"))
+                today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                if cf_state.get("exhausted") and str(cf_state.get("utc_day") or "") == today_utc:
+                    cf_note = (
+                        f"cloudflare daily 429 quota circuit breaker active for {today_utc} "
+                        f"({str(cf_state.get('reason') or 'daily neuron quota exhausted')[:120]}); "
+                        "bypassed cloudflare and escalated directly to openai-codex"
+                    )
+            except (OSError, ValueError, TypeError):
+                cf_note = ""
         if original:
             retrieval_text = ""
-        elif platforms & {"zhihu", "juejin"}:
+        elif platforms & {"zhihu", "juejin", "wechat"}:
             retrieval_text = (
                 "cover tried licensed stock photo search first; section images use declared realistic text-free "
                 "AI illustrations (cloudflare -> openai-codex per owner decision); kept real photos: "
                 + (describe(real) or "none (cover fell back to generated scene)")
+                + (f"; {cf_note}" if cf_note else "")
                 + retrieval_detail
             )
         else:
             retrieval_text = (
                 "licensed stock photo search ran first for every image; kept: "
                 + (describe(real) or "none (weak matches fell back to generated scenes)")
+                + (f"; {cf_note}" if cf_note else "")
                 + retrieval_detail
             )
         result = {
@@ -1998,6 +2014,8 @@ class Pipeline:
             "ai_edit_real_material": ai_edit_real,
             "source": "asset_provenance",
         }
+        if cf_note:
+            result["cloudflare_fallback_reason"] = cf_note
         if ai_gen_overlay:
             result["ai_generated_with_title_overlay"] = ai_gen_overlay
         return result

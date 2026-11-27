@@ -208,20 +208,27 @@ def quality_gate(scores):
 
 def _sentence_break(text):
     # Keep existing newlines: Markdown paragraph breaks must survive.
-    return re.sub(r"([。！？.!?])[ \t]*", r"\1\n", str(text))
+    # d91: Never split on '.' inside filenames, version numbers, decimals, URLs, or CLI commands
+    # (e.g. app.py, v4.5, 0.72, 127.0.0.1); only break English sentences when '.' is followed by whitespace + uppercase/CJK.
+    text = re.sub(r"([。！？!?])[ \t]*", r"\1\n", str(text))
+    return re.sub(r"(?<![0-9A-Za-z_/.])\.[ \t]+(?=[A-Z\u4e00-\u9fff])", ".\n", text)
 
 
 CODE_FENCE_BLOCK = re.compile(r"```.*?```", re.S)
+INLINE_CODE_SPAN = re.compile(r"`[^`\n]+`")
 
 
 def naturalize_copy(body, context):
     updated = str(body or "")
     notes = []
     locked = _lock_terms(body)
-    # Fenced code is copied verbatim; copy edits below must not reflow it.
+    # Fenced code and inline code spans are copied verbatim; copy edits below must not reflow or alter flags/commands.
     code_blocks = CODE_FENCE_BLOCK.findall(updated)
     for index, block in enumerate(code_blocks):
         updated = updated.replace(block, f"\n\n\x00CODE{index}\x00\n\n", 1)
+    inline_codes = INLINE_CODE_SPAN.findall(updated)
+    for index, span in enumerate(inline_codes):
+        updated = updated.replace(span, f"\x00ICODE{index}\x00", 1)
     # Strip web-page residue that LLMs sometimes copy from source articles:
     # JS function stubs, cookie-banner wrappers, HTML tags, and asset URLs.
     before_strip = updated
@@ -246,8 +253,16 @@ def naturalize_copy(body, context):
             updated = re.sub(pattern, replacement, updated, flags=re.I).strip()
             notes.append("replaced hedging language")
             break
+    # d91: Remove standalone Markdown horizontal-rule / em-dash divider lines BEFORE inline dash normalization
+    # so '---' never turns into an orphan standalone '—' line.
+    hr_cleaned = re.sub(r"(?m)^\s*(?:[-—–─_*]{3,}|[—–─]{1,})\s*$", "", updated)
+    if hr_cleaned != updated:
+        updated = hr_cleaned
+        notes.append("stripped standalone divider lines")
     updated = re.sub(r"[ \t]{2,}", " ", updated)
-    updated = re.sub(r"(-{2,}|—{2,})(?!-)", "—", updated)
+    # Normalize inline double-em-dashes without mangling CLI flags (--flag) or Markdown table separators (|---|).
+    updated = re.sub(r"(?<![|\s-])(—{2,})(?!-)", "—", updated)
+    updated = re.sub(r"(?<=[ \u4e00-\u9fff])--(?=[ \u4e00-\u9fff])", "—", updated)
     em_count = updated.count("—")
     if em_count > 4:
         updated = updated.replace("—", ", ")
@@ -258,15 +273,17 @@ def naturalize_copy(body, context):
     if meta_cleaned != updated:
         updated = meta_cleaned
         notes.append("stripped cover/image production meta-note")
-    punct_cleaned = re.sub(r"(?m)^\s*[,，、;；]+\s*$", "", updated)
+    punct_cleaned = re.sub(r"(?m)^\s*[,，、;；—–─-]+\s*$", "", updated)
     punct_cleaned = re.sub(r"，{2,}", "，", punct_cleaned)
     punct_cleaned = re.sub(r",\s*,+", ", ", punct_cleaned)
     if punct_cleaned != updated:
         updated = punct_cleaned
         notes.append("cleaned orphan punctuation")
     updated = _sentence_break(updated)
-    updated = re.sub(r"(?m)^\s*[,，、;；]+\s*$", "", updated)
+    updated = re.sub(r"(?m)^\s*[,，、;；—–─-]+\s*$", "", updated)
     updated = re.sub(r"\n{3,}", "\n\n", updated).strip()
+    for index, span in enumerate(inline_codes):
+        updated = updated.replace(f"\x00ICODE{index}\x00", span, 1)
     for index, block in enumerate(code_blocks):
         updated = updated.replace(f"\x00CODE{index}\x00", block, 1)
     term_check = _verify_terms(locked, updated)

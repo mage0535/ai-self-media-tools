@@ -254,3 +254,46 @@ def test_d90_twitter_in_manual_handoff_and_cross_platform_evidence():
     assert MAX_TOPIC_ANALYSES >= 20
     assert "twitter" in MANUAL_HANDOFF_PLATFORMS and "x" in MANUAL_HANDOFF_PLATFORMS
     assert "twitter" in CROSS_PLATFORM_EVIDENCE and "youtube" in CROSS_PLATFORM_EVIDENCE["twitter"]
+
+
+def test_d91_humanize_dividers_cli_flags_wechat_and_bold_headings():
+    from content_platform.humanize import naturalize_copy
+    from content_platform.media import MediaBridge
+    from content_platform.overnight_batch import SOURCE_COLLECTED_PLATFORMS
+
+    # 1) humanize.py strips standalone '---' / '—' lines and preserves CLI flags & inline filenames
+    raw = (
+        "先用 `python3 app.py --model gpt-6.2-sol` 跑一次最小验证。\n\n"
+        "---\n\n"
+        "如果日志里出现 0.72 阈值告警，不要盲目跳过。\n\n"
+        "```bash\npython3 run.py --config config.json\n```"
+    )
+    out = naturalize_copy(raw, {"style": {}, "strategy": {"content_form": "long_article"}})["body"]
+    assert "`python3 app.py --model gpt-6.2-sol`" in out
+    assert "--config config.json" in out
+    assert "0.72" in out
+    for ln in out.splitlines():
+        assert ln.strip() not in {"—", "---", "———"}
+
+    # 2) WeChat no longer blocks in SOURCE_COLLECTED_PLATFORMS on NEW errcode 40164
+    assert "wechat" not in SOURCE_COLLECTED_PLATFORMS
+
+    # 3) media._article_image_sections strips Markdown bold markers so XHS anchors match 3/3
+    secs = MediaBridge._article_image_sections({"body": "## **先定必检面**\n正文内容\n\n## **验证清单**\n更多内容"})
+    assert [s["section"] for s in secs] == ["先定必检面", "验证清单"]
+
+    # 4) XHS formatter never leaves "以下是待填模板：" with zero template lines
+    body = "\n\n".join([
+        "开场冲突句，说明为什么要做同批对照。",
+        "## **第一步：样本分组**",
+        "把边界样件逐件编号并与训练样本隔离。" * 4,
+        "## **第二步：待填验证模板**",
+        "以下是待填模板：\n\n| 字段 | 填写内容 |\n|---|---|\n| 样件编号 | 现场逐件登记 |\n| 人工判定 | 质检员独立复核 |\n| 处置动作 | 异常留件隔离 |",
+        "## **第三步：人工接管**",
+        "发现漏检或中断立即停线留件，由质检班组长复核确认后方可放行。" * 3,
+        "你们产线最先想验证哪一项？",
+    ])
+    note = _note_text("", body)
+    assert "第二步：待填验证模板" in note
+    assert "· " in note and "样件编号" in note
+    assert not any(ln.strip().endswith("以下是待填模板：") and i == len(note.splitlines()) - 1 for i, ln in enumerate(note.splitlines()))

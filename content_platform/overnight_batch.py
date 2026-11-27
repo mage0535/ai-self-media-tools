@@ -53,11 +53,10 @@ MANUAL_HANDOFF_PLATFORMS = {
 # without changing the publisher-facing platform name.
 STRATEGY_PLATFORM_ALIASES = {"twitter": "x"}
 
-# WeChat's platform gate (account/same-lane/GitHub inputs) is produced only by generation-time
-# native source collection. Kuaishou left this set on 11-04 (MED26): its native same-lane search
-# needs a www.kuaishou.com web login (the creator login is rejected, "No Login"), so it uses the
-# labelled cross-platform overnight benchmarks and the overnight video preflight, like douyin_pet.
-SOURCE_COLLECTED_PLATFORMS = {"wechat"}
+# Kuaishou left this set on 11-04 (MED26), and WeChat left it in d91 (11-27): WeChat MP API is IP-whitelisted
+# to OLD (NEW gets errcode 40164) and runs manual-handoff per Owner 10-20, so WeChat uses the labelled
+# cross-platform overnight benchmarks and cold-start account_data_analysis contract just like Juejin/Zhihu/XHS.
+SOURCE_COLLECTED_PLATFORMS: set[str] = set()
 
 # A source's popularity is not enough to make it a channel topic.  These
 # defaults prevent a general-news item from being turned into an AI or pet
