@@ -386,6 +386,10 @@ def test_d92_english_pillars_xhs_cta_and_source_attribution():
     prompt = build_prompt("zhihu", {"title": "【会议神器】效率翻倍", "url": "https://juejin.cn/post/123", "source": "juejin"}, {})
     assert "效率翻倍" in prompt and "never copy unverified promotional numbers" in prompt
 
+    # 4) d92b: Video beats get 3 retries (1 critique-guided AI redraw after stock exhaustion)
+    from content_platform.media import SEMANTIC_BEAT_RETRIES
+    assert SEMANTIC_BEAT_RETRIES >= 3
+
 
 
     # 5) English native video feeds (youtube, tiktok) enabled by default in TrendCollector for twitter/youtube/tiktok lanes

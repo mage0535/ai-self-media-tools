@@ -16,7 +16,9 @@ from .delivery_manifest import validate_attempt_bundle
 
 # Article artifact contract threshold (pipeline validate_article_completion / quality_gates).
 SEMANTIC_RETRY_THRESHOLD = 0.72
-SEMANTIC_BEAT_RETRIES = 2
+# d92b: 3 retries for video beats (retry #0 keeps stock per MED39; retry #1 escalates to photorealistic
+# generation when stock misses; retry #2 gives 1 critique-guided regeneration if the first AI draw missed a detail).
+SEMANTIC_BEAT_RETRIES = 3
 # MED53 (11-07 CST window): generated article images score 0.68-0.73 per draw, so three draws often left one image
 # just under the gate; a non-beat image gets four regenerations and keeps its best-scoring draw.
 SEMANTIC_IMAGE_RETRIES = 4
@@ -1100,7 +1102,7 @@ class MediaBridge:
                 # photorealistic generation on the final retry instead of blocking on a 3rd dead stock query.
                 stock_exhausted = (
                     retry_number >= 1
-                    and str(last_result.get("provider") or "") in STOCK_PROVIDERS
+                    and (str(last_result.get("provider") or "") in STOCK_PROVIDERS or stock_rejected)
                     and (float(review.get("score") or 0) < SEMANTIC_RETRY_THRESHOLD or review.get("requirement_match") is False)
                 )
                 keep_stock = real_only and not generated_fallback and not stock_exhausted
