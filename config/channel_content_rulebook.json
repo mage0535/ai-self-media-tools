@@ -144,7 +144,17 @@
       "applies_to": [
         "juejin",
         "zhihu",
-        "xiaohongshu"
+        "xiaohongshu",
+        "wechat",
+        "kuaishou",
+        "douyin",
+        "douyin_pet",
+        "douyin_ai",
+        "shipinhao",
+        "bilibili",
+        "youtube",
+        "tiktok",
+        "twitter"
       ],
       "strict_content_gates_unchanged": [
         "factual_accuracy_and_no_fabricated_metrics_or_logs",
@@ -718,7 +728,15 @@
       "blocked_content": [
         "github_or_ai_tool_hard_promotion"
       ],
-      "postcheck": "local_review_package_ready_user_manual_publish"
+      "postcheck": "local_review_package_ready_user_manual_publish",
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：抖音萌宠（douyin_pet）为本地视频手动交付包模式；画面语义匹配、字幕、人声配音、时长与去重门禁保持严格不降级。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "behavior_visual_match": "通过：逐镜头画面均通过像素级语义匹配门禁（score ≥ 0.72 且 requirement_match=true），真实呈现猫狗行为与解说对应；禁止无关办公/风景图或静态死循环。",
+        "no_unrelated_stock_or_static_loop": "通过：图库优先检索真实宠物素材，若多次检索偏题允许回退写实无字宠物生图并记录 provenance，严禁保留偏题图库照或单图静态循环。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "online_real_instrument_bgm_required": "通过（MED4 所有者核验边界）：使用经核验的真实乐器/CC0 音频文件（含 data/bgm-library/ 本地核验曲库）且通过 BGM 指纹去重与音轨可听度门禁即可，禁止合成音或 SoundHelix。"
+      }
     },
     "kuaishou": {
       "lane": "real_world_ai_implementation_v1",
@@ -762,6 +780,15 @@
           "policy_revision": "2026-09-16-universal-ai-lane-r2"
         },
         "platform_adaptation": "short video: role-first practical demonstration and review point"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：快手按 2026-10-20 策略默认走本地视频手动交付包（启用排期模式时再核验排期回执）；字幕、人声、画面匹配与去重门禁严格不降级。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "strategy_before_generation": "通过：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan 与本地 state.db 完整去重即满足前置运营闭环；因冷启动 needs_metrics 或使用跨平台样本导致的 viral_execution_policy=blocked（含 viral_breakdown_not_executable）不得阻断手动交付包或草稿生成。",
+        "kuaishou_trend_evidence": "通过：≥3 条真实可核验、带来源标注的同赛道参考样本（允许声明式跨平台 cross_platform_source）并提炼可借鉴的结构/钩子要点即可，不要求 10 条站内同题拆解。",
+        "no_local_soundhelix_or_synthetic_bgm_without_explicit_exception": "通过（MED4 所有者核验边界）：使用经核验的真实乐器/CC0 音频文件（含 data/bgm-library/ 本地核验曲库）且通过 BGM 指纹去重与音轨可听度门禁即可，禁止合成音或 SoundHelix。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。"
       }
     },
     "shipinhao": {
@@ -886,6 +913,17 @@
           "policy_revision": "2026-09-16-universal-ai-lane-r2"
         },
         "platform_adaptation": "platform-native format and language; preserve the canonical real-world AI scenario contract"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：微信视频号为手动交付包模式；保持首 3 秒钩子、镜头切换、字幕可读性、反纯色熵值与差异化门禁严格执行。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "account_data_analysis": "通过：如实给出账号赛道、目标人群与当前后台信号状态；缺失逐作品后台数据时诚实标注冷启动（unavailable/needs_metrics/sample_count=0）并附发布后 1h/24h/72h 回收计划即通过。失败：编造历史数据或缺失赛道人群定义。",
+        "same_lane_account_benchmark": "通过：≥3 条真实可核验、带来源标注的同赛道参考样本（允许声明式跨平台 cross_platform_source）并提炼可借鉴的结构/钩子要点即可，不要求 10 条站内同题拆解。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。",
+        "online_real_instrument_bgm_required": "通过（MED4 所有者核验边界）：使用经核验的真实乐器/CC0 音频文件（含 data/bgm-library/ 本地核验曲库）且通过 BGM 指纹去重与音轨可听度门禁即可，禁止合成音或 SoundHelix。",
+        "wechat_qr_ending_card": "条件适用：当本地配置了真实公众号二维码尾卡资产时须渲染并校验；未配置外部二维码资产时以清晰的微信生态收藏/关注引导尾卡满足，不得伪造二维码。",
+        "dual_speaker_dialogue_natural_voice_pair_with_breath_pause": "条件适用：采用双人对话脚本形态时须校验双音色停顿；采用单人口播案例短视频形态时按单人自然语音配音与停顿门禁核验。"
       }
     },
     "wechat": {
@@ -1120,6 +1158,23 @@
           "policy_revision": "2026-09-16-universal-ai-lane-r2"
         },
         "platform_adaptation": "article: evidence-led workflow, implementation detail and boundary"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：公众号按 2026-10-20 策略默认走本地完整排版手动交付包（启用 OLD wechat-relay 时可存草稿箱）；1200-3000 字深度、事实严谨、≥3 张无伪字/假界面配图（≥0.72 匹配）与 14 天去重严格不降级。",
+        "account_data_analysis": "通过：如实给出账号赛道、目标人群与当前后台信号状态；缺失逐作品后台数据时诚实标注冷启动（unavailable/needs_metrics/sample_count=0）并附发布后 1h/24h/72h 回收计划即通过。失败：编造历史数据或缺失赛道人群定义。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "same_lane_account_benchmark": "通过：≥3 条真实可核验、带来源标注的同赛道参考样本（允许声明式跨平台 cross_platform_source）并提炼可借鉴的结构/钩子要点即可，不要求 10 条站内同题拆解。",
+        "cross_platform_trend_analysis": "通过：多源采集正常且具备至少 1 条带真实 URL/ID 的真实赛道场景来源即可，不要求同一选题当天在 3 个以上平台同时上榜。",
+        "full_ops_workflow": "通过：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan 与本地 state.db 完整去重即满足前置运营闭环；因冷启动 needs_metrics 或使用跨平台样本导致的 viral_execution_policy=blocked（含 viral_breakdown_not_executable）不得阻断手动交付包或草稿生成。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。",
+        "wechat_14_day_topic_dedup": "通过：基于审核包内未截断的本地 state.db 14 天历史核验无同题近义重复即可，不因缺少远端公众号后台抓取而判失败。",
+        "github_project_source_required": "条件适用：仅当选题属于开源项目/代码仓库解析类时强制要求 GitHub 仓库链接；非开源的工业/办公/生活真实 AI 落地场景稿件只要具备带真实 URL 的来源依据即通过。",
+        "wechat_image_post_cards_required": "条件适用：仅当槽位形态为公众号小绿书/贴图（image_text_post / tietu）时强制校验；当前为长文（long_article）时按不适用通过。",
+        "wechat_image_post_real_scene_backgrounds": "条件适用：仅当槽位形态为公众号贴图（image_text_post / tietu）时适用；长文模式按 real_scene_or_topic_relevant_images 核验。",
+        "wechat_image_post_layout_diversity": "条件适用：仅当槽位形态为公众号贴图（image_text_post / tietu）时适用。",
+        "wechat_image_post_readability": "条件适用：仅当槽位形态为公众号贴图（image_text_post / tietu）时适用。",
+        "wechat_image_post_newspic_batchget_postcheck": "条件适用：仅当自动入箱并执行远端草稿回查时适用；手动交付包模式按本地完整 HTML/图片交付包 SHA 绑定通过。",
+        "real_scene_or_topic_relevant_images": "通过：封面先试图库再回退写实无字 AI 生成图，正文配图允许声明式写实无字 AI 插图（origin=ai_generated，semantic ≥ 0.72，无伪字/假 UI/水印），且正文含 AI 辅助创作声明。"
       }
     },
     "xiaohongshu": {
@@ -1589,6 +1644,15 @@
           "policy_revision": "2026-09-16-universal-ai-lane-r2"
         },
         "platform_adaptation": "video: technical or operational walkthrough with evidence captions"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：B 站为真实 AI 落地实验/案例视频手动交付包模式；保持音画匹配、字幕、人声与独立渲染指纹严格执行。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "account_data_analysis": "通过：如实给出账号赛道、目标人群与当前后台信号状态；缺失逐作品后台数据时诚实标注冷启动（unavailable/needs_metrics/sample_count=0）并附发布后 1h/24h/72h 回收计划即通过。失败：编造历史数据或缺失赛道人群定义。",
+        "same_lane_account_benchmark": "通过：≥3 条真实可核验、带来源标注的同赛道参考样本（允许声明式跨平台 cross_platform_source）并提炼可借鉴的结构/钩子要点即可，不要求 10 条站内同题拆解。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。",
+        "online_real_instrument_bgm_required": "通过（MED4 所有者核验边界）：使用经核验的真实乐器/CC0 音频文件（含 data/bgm-library/ 本地核验曲库）且通过 BGM 指纹去重与音轨可听度门禁即可，禁止合成音或 SoundHelix。"
       }
     },
     "tiktok": {
@@ -1670,6 +1734,14 @@
           "policy_revision": "2026-09-16-universal-ai-lane-r2"
         },
         "platform_adaptation": "short video: English scenario hook, one reproducible flow and limitation"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：TikTok 为英文真实 AI 落地 9:16 竖屏短视频手动交付包模式（走国际代理采集，禁止 AiToEarn 自动发布）。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "cross_platform_hot_trend_analysis": "通过：多源采集正常且具备至少 1 条带真实 URL/ID 的真实赛道场景来源即可，不要求同一选题当天在 3 个以上平台同时上榜。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。",
+        "online_real_instrument_bgm_required": "通过（MED4 所有者核验边界）：使用经核验的真实乐器/CC0 音频文件（含 data/bgm-library/ 本地核验曲库）且通过 BGM 指纹去重与音轨可听度门禁即可，禁止合成音或 SoundHelix。"
       }
     },
     "youtube": {
@@ -1752,6 +1824,14 @@
           "policy_revision": "2026-09-16-universal-ai-lane-r2"
         },
         "platform_adaptation": "video: chapters, screen/process demonstration, measurement and handoff"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：YouTube 为英文真实 AI 落地案例视频/Shorts 手动交付包模式（走国际代理采集，禁止 AiToEarn 自动发布）。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "cross_platform_hot_trend_analysis": "通过：多源采集正常且具备至少 1 条带真实 URL/ID 的真实赛道场景来源即可，不要求同一选题当天在 3 个以上平台同时上榜。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。",
+        "online_real_instrument_bgm_required": "通过（MED4 所有者核验边界）：使用经核验的真实乐器/CC0 音频文件（含 data/bgm-library/ 本地核验曲库）且通过 BGM 指纹去重与音轨可听度门禁即可，禁止合成音或 SoundHelix。"
       }
     },
     "twitter": {
@@ -1762,7 +1842,7 @@
       ],
       "char_limit": 280,
       "max_images": 4,
-      "publish_policy": "x_playwright_cookie_auto_publish",
+      "publish_policy": "manual_handoff_three_piece_package_owner_d24",
       "must_use_tools": [
         "hermes_operating_strategy",
         "twitter_topic_analysis",
@@ -1776,7 +1856,7 @@
         "no_repeated_hook_or_link_dump",
         "specific_reply_prompt"
       ],
-      "postcheck": "twitter_public_url_username_status_format",
+      "postcheck": "local_review_package_ready_user_manual_publish",
       "short_form_policy": {
         "max_posts_per_run": 1,
         "min_gap_hours_between_similar_posts": 24,
@@ -1797,6 +1877,14 @@
           "policy_revision": "2026-09-16-universal-ai-lane-r2"
         },
         "platform_adaptation": "platform-native format and language; preserve the canonical real-world AI scenario contract"
+      },
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-10-27 D24 & 2026-11-27，所有者授权）：X/Twitter 为英文三件套手动交付包（禁止自动发帖，不绕过 Cloudflare 质询）；钩子、字数、反垃圾重复与真实案例边界严格执行。",
+        "account_data_analysis": "通过：如实给出账号赛道、目标人群与当前后台信号状态；缺失逐作品后台数据时诚实标注冷启动（unavailable/needs_metrics/sample_count=0）并附发布后 1h/24h/72h 回收计划即通过。失败：编造历史数据或缺失赛道人群定义。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "cross_platform_hot_trend_analysis": "通过：多源采集正常且具备至少 1 条带真实 URL/ID 的真实赛道场景来源即可，不要求同一选题当天在 3 个以上平台同时上榜。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。"
       }
     },
     "threads": {
@@ -2050,7 +2138,15 @@
         "unique_render_not_cross_platform_reuse",
         "manual_handoff_only"
       ],
-      "postcheck": "local_review_package_ready_user_manual_publish"
+      "postcheck": "local_review_package_ready_user_manual_publish",
+      "quality_gate_definitions": {
+        "_scope": "运营决定（2026-11-27，所有者授权全 11 平台冷启动审核对齐）：抖音 AI（douyin_ai）为真实 AI 落地场景竖屏短视频手动交付包模式，须与 douyin_pet 完全隔离。",
+        "strategy_before_generation": "通过：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan 与本地 state.db 完整去重即满足前置运营闭环；因冷启动 needs_metrics 或使用跨平台样本导致的 viral_execution_policy=blocked（含 viral_breakdown_not_executable）不得阻断手动交付包或草稿生成。",
+        "growth_quality_plan": "通过：具备面向本平台形态的可执行增长目标（视频按完播/互动/收藏，图文按阅读/收藏/互动）与发布后复盘计划；冷启动允许无历史基线。失败：缺失计划或编造历史表现。",
+        "manual_handoff_only": "通过：本平台按所有者策略仅生成完整本地复审与人工交付包（manual_review_required=true），不自动公开上传，不宣称已发布；投递前原生审核不要求尚未发生的下游人工收悉回执。",
+        "source_rights": "通过：带来源链接的授权图库实拍、本地经核验 CC0 配乐库（data/bgm-library/）、或声明式写实无字 AI 生成素材（origin=ai_generated，含 prompt_sha256 与 provider_terms_recorded，无伪字/假 UI/水印）满足素材版权要求。",
+        "online_real_instrument_bgm_required": "通过（MED4 所有者核验边界）：使用经核验的真实乐器/CC0 音频文件（含 data/bgm-library/ 本地核验曲库）且通过 BGM 指纹去重与音轨可听度门禁即可，禁止合成音或 SoundHelix。"
+      }
     }
   },
   "human_first_policy": {

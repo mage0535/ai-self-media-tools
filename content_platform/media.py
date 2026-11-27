@@ -30,17 +30,20 @@ STOCK_PROVIDERS = {'stock', 'pexels', 'pixabay'}
 REAL_BACKGROUND_PLATFORMS = {'xiaohongshu', 'douyin_pet', 'kuaishou'}
 VIDEO_REAL_SCENE_PLATFORMS = {'douyin_pet', 'kuaishou'}
 
-# d87: Prevent the 0.55 visual-hygiene score cap caused by painted pseudo-text, mock UI screens,
-# fake checkmarks/playback overlays, brand logos, or cartoon infographic diagrams.
+# d87/d89: Prevent the 0.55 visual-hygiene score cap caused by painted pseudo-text, mock UI screens,
+# fake checkmarks/playback overlays, open printed pages/tables, brand logos, corner star marks, or cartoon diagrams.
 _VISUAL_HYGIENE_PHOTO_RULE = (
     "Photorealistic candid real-world photograph of physical people, hands, tools, hardware, or environment only. "
     "STRICTLY NO computer/phone/tablet screens displaying UI, code, chat bubbles, dashboards, playback bars, or checkmarks; "
     "NO printed text, letters, numbers, tables, forms, checklists, or labels on paper or whiteboards; "
-    "NO floating UI panels, callout boxes, split-frame overlays, icons, brand logos, watermarks, or cartoon/vector infographic style."
+    "AVOID close-up open printed pages, spreadsheets, or lined forms (use closed folders/binders with blank colored tabs, "
+    "clean blank unruled cards, physical equipment, and natural shallow depth-of-field bokeh instead); "
+    "NO floating UI panels, callout boxes, split-frame overlays, icons, brand logos, corner 4-point star/sparkle watermarks, "
+    "or cartoon/vector infographic style."
 )
 _VISUAL_HYGIENE_DEFECT_TOKENS = (
-    "0.55", "界面", "屏幕", "伪文字", "占位", "卡通", "标志", "标识", "封顶", "限分", "滑块",
-    "logo", "watermark", "mock", "fake ui", "pseudo", "screen", "monitor", "cartoon", "vector",
+    "0.55", "界面", "屏幕", "伪文字", "拟文字", "乱码", "水印", "星形", "表头", "占位", "卡通", "标志", "标识", "封顶", "限分", "滑块",
+    "logo", "watermark", "mock", "fake ui", "pseudo", "garbled", "faux", "screen", "monitor", "cartoon", "vector",
     "infographic", "dashboard", "flowchart", "bubble", "checklist", "text", "label", "playback",
 )
 

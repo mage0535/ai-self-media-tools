@@ -58,17 +58,36 @@ LANE_COLLECTORS = {
     "douyin_pet": ("bilibili_pet", "bilibili"),
     "tiktok": ("tiktok_ai", "tiktok"),
     "youtube": ("youtube_ai", "youtube"),
+    "twitter": ("youtube_ai_scenario", "youtube"),
+    "x": ("youtube_ai_scenario", "youtube"),
 }
 # 11-03: Bilibili answered -352 (risk control; never worked around), which blocked douyin_pet outright.
-# Further same-genre sources are tried in order before a lane is blocked.
-FALLBACK_COLLECTORS = {"douyin_pet": (("youtube_pet", "youtube"), ("tiktok_pet", "tiktok")),
-                       "xiaohongshu": (("juejin", "juejin"),)}
+# Further same-genre sources are tried in order before a lane is blocked (extended across all 12 accounts in d89).
+FALLBACK_COLLECTORS = {
+    "douyin_pet": (("youtube_pet", "youtube"), ("tiktok_pet", "tiktok")),
+    "xiaohongshu": (("juejin", "juejin"),),
+    "douyin_ai": (("tiktok_ai", "tiktok"), ("youtube_ai_scenario", "youtube")),
+    "kuaishou": (("tiktok_ai", "tiktok"), ("youtube_ai_scenario", "youtube")),
+    "shipinhao": (("tiktok_ai", "tiktok"), ("youtube_ai_scenario", "youtube")),
+    "bilibili": (("youtube_ai_scenario", "youtube"), ("tiktok_ai", "tiktok")),
+    "youtube": (("tiktok_ai", "tiktok"), ("bilibili_ai", "bilibili")),
+    "tiktok": (("youtube_ai_scenario", "youtube"), ("bilibili_ai", "bilibili")),
+    "twitter": (("juejin", "juejin"),),
+    "x": (("juejin", "juejin"),),
+}
 
 
 # Owner 10-31: other platforms' pet videos are analysed for learning only; our videos are original.
-# Lanes whose video plan needs cross-platform reference works from >= 2 sources.
-# Kuaishou counts only adjacent short-video platforms; its AI references are real-world scenarios (owner 10-30).
-REFERENCE_COLLECTORS = {"douyin_pet": ("bilibili_pet", "youtube_pet", "tiktok_pet"), "kuaishou": ("tiktok_ai", "youtube_ai_scenario")}
+# Lanes whose video plan needs cross-platform reference works from >= 2 sources (all 7 video lanes in d89).
+REFERENCE_COLLECTORS = {
+    "douyin_pet": ("bilibili_pet", "youtube_pet", "tiktok_pet"),
+    "kuaishou": ("tiktok_ai", "youtube_ai_scenario"),
+    "douyin_ai": ("bilibili_ai", "tiktok_ai", "youtube_ai_scenario"),
+    "shipinhao": ("bilibili_ai", "tiktok_ai", "youtube_ai_scenario"),
+    "bilibili": ("bilibili_ai", "youtube_ai_scenario", "tiktok_ai"),
+    "youtube": ("youtube_ai_scenario", "tiktok_ai", "bilibili_ai"),
+    "tiktok": ("tiktok_ai", "youtube_ai_scenario", "bilibili_ai"),
+}
 
 
 # Collector metric names -> the names hot_viral_intelligence reads; values are copied unchanged.

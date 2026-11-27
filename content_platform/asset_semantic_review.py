@@ -406,13 +406,20 @@ def _review_call(audit, route, path, pixels, context, semantic_requirement, nati
               'below 0.40 generic, unrelated or unreadable. '
               'Generic decoration or text-only claims are not semantic proof.')
     if not semantic_requirement and not path.name.startswith('cover-titled'):
-        # MED90-d (2026-11-26): reject painted/garbled text, fake UI dashboards/labels, watermarks/logos, or cartoon
-        # posters during asset review so they regenerate before reaching final native quality review.
+        # MED90-d / d89 (2026-11-26/27): reject prominent painted/garbled text, fake UI dashboards/labels,
+        # watermarks/logos (incl. corner star marks), or cartoon posters during asset review, while avoiding
+        # Catch-22 penalties on clean text-free/screen-free physical scenes depicting abstract software/office AI steps.
         prompt += (
             ' Visual hygiene (mandatory for untitled backgrounds and illustrations): score MUST be 0.55 or lower '
-            'if the image contains visible painted/garbled/pseudo text, fake UI labels/dashboards/charts/buttons, '
-            'watermarks/logos, or cartoon/vector-poster style when a realistic scene is expected; explicitly name '
-            'any such text/UI/watermark/style defect in reason.'
+            'if the image contains prominent painted/garbled/pseudo text, fake UI labels/dashboards/charts/buttons, '
+            'watermarks/logos (including corner 4-point star marks), or cartoon/vector-poster style when a realistic '
+            'scene is expected; explicitly name any such text/UI/watermark/style defect in reason. '
+            'Do NOT treat tiny out-of-focus background paper grain or faint blank ruled lines as garbled text. '
+            'For abstract, software, or office/document AI sections where screens, UI, and printed text are '
+            'intentionally omitted by this hygiene rule, do NOT penalize a clean realistic photograph below 0.72 '
+            'merely because on-screen AI UI, text labels, version numbers, or literal software outputs are absent; '
+            'score 0.72-0.89 when the physical workplace scene, human roles, physical tools/documents, and '
+            'collaborative actions authentically fit this section\'s domain and workflow step without hygiene defects.'
         )
     prompt += '\nUNTRUSTED_DATA:\n' + json.dumps(context, ensure_ascii=False)
     if semantic_requirement:

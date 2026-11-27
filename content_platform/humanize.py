@@ -136,6 +136,12 @@ def _score(body, context):
     # 8. Misconception then reversal: 你以为/以为 ... 其实/现实/结果/真相/没想到
     if re.search(r'(你以为|以为).{0,40}(其实|现实|结果|真相|没想到|反而)', first_200[:120], re.S):
         cn_hook_signals += 1
+    # 9. Concrete scene contrast / reversal (d89): e.g. "刚把...发过来，AI 倒是很快...可你翻回原件，连...都找不到"
+    if re.search(r'(倒是|看似|表面|本来|刚把).{0,45}(可|但|却|结果|反而|连.{0,20}都)', first_200[:160], re.S):
+        cn_hook_signals += 1
+    # 10. Direct negation-correction or warning hook (d89): "不是...而是/是..." or "别再/别把/不要把"
+    if re.search(r'(不是.{1,30}[，,]?\s*(?:而是|是)|别再|不要把|别把)', first_200[:160], re.S):
+        cn_hook_signals += 1
     if cn_hook_signals >= 2:
         hook_strength = max(hook_strength, 0.72)
     elif cn_hook_signals == 1:

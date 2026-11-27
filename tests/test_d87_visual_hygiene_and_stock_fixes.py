@@ -175,3 +175,42 @@ def test_d88_xhs_topic_rule_and_visual_policy_remove_contradictions():
     assert "viral_breakdown_not_executable" in xhs_defs["full_ops_workflow"]
     assert "viral_breakdown_not_executable" in rulebook["channel_rules"]["juejin"]["quality_gate_definitions"]["full_ops_workflow"]
     assert "viral_breakdown_not_executable" in rulebook["channel_rules"]["zhihu"]["quality_gate_definitions"]["full_ops_workflow"]
+
+
+def test_d89_hook_strength_and_all_11_platforms_rulebook_and_image_rubric():
+    import json
+    from content_platform.humanize import _score
+    from content_platform.media import _VISUAL_HYGIENE_PHOTO_RULE, _VISUAL_HYGIENE_DEFECT_TOKENS
+
+    # 1) Concrete Chinese scene-conflict hook from live Juejin job 6ba68134 must pass G3 (>= 0.60)
+    real_juejin_opening = (
+        "业务刚把采购服务合同发过来，AI 倒是很快给了意见，可你翻回原件，连它批的是哪一段都找不到。\n"
+        "这样的初审，不是给法务省事，是让法务再做一遍定位。\n\n"
+        "下面是一套待试点的轻量方案。"
+    )
+    scores = _score(real_juejin_opening, {"style": {}, "strategy": {"content_form": "long_article"}})
+    assert scores["hook_strength"] >= 0.60, scores
+
+    # Generic bland opening must still stay below 0.60
+    weak_opening = "本文介绍了 AI 工具的基本用法。首先我们需要了解什么是 AI。"
+    assert _score(weak_opening, {"style": {}, "strategy": {"content_form": "long_article"}})["hook_strength"] < 0.60
+
+    # 2) Visual hygiene prompt forbids open printed pages & corner 4-point star marks
+    assert "open printed pages" in _VISUAL_HYGIENE_PHOTO_RULE
+    assert "4-point star" in _VISUAL_HYGIENE_PHOTO_RULE
+    assert "拟文字" in _VISUAL_HYGIENE_DEFECT_TOKENS and "星形" in _VISUAL_HYGIENE_DEFECT_TOKENS
+
+    # 3) All 12 operating accounts across 11 platforms have quality_gate_definitions & D24 twitter policy
+    rulebook = json.loads((Path(__file__).resolve().parents[1] / "config" / "channel_content_rulebook.json").read_text(encoding="utf-8"))
+    for plat in ("juejin", "zhihu", "xiaohongshu", "wechat", "kuaishou", "douyin", "douyin_ai", "shipinhao", "bilibili", "tiktok", "youtube", "twitter"):
+        defs = rulebook["channel_rules"][plat].get("quality_gate_definitions") or {}
+        assert len(defs) >= 5, f"{plat} missing quality_gate_definitions"
+    assert "manual_handoff" in rulebook["channel_rules"]["twitter"]["publish_policy"]
+    assert "/srv/" not in json.dumps(rulebook, ensure_ascii=False)
+
+    # 4) All 12 operating accounts have LANE_COLLECTORS and all 7 video lanes have multi-source REFERENCE_COLLECTORS
+    from content_platform.overnight_benchmarks import LANE_COLLECTORS, REFERENCE_COLLECTORS
+    for plat in ("juejin", "zhihu", "xiaohongshu", "wechat", "kuaishou", "douyin_pet", "douyin_ai", "shipinhao", "bilibili", "tiktok", "youtube", "twitter"):
+        assert plat in LANE_COLLECTORS, f"{plat} missing LANE_COLLECTORS"
+    for vplat in ("douyin_pet", "douyin_ai", "kuaishou", "shipinhao", "bilibili", "youtube", "tiktok"):
+        assert len(REFERENCE_COLLECTORS.get(vplat) or ()) >= 2, f"{vplat} needs >=2 REFERENCE_COLLECTORS"
