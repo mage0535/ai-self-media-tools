@@ -1247,6 +1247,7 @@
         "no_obvious_ai_generated_images_as_main_visual": "通过：主视觉（封面）为有授权的真实图库照片；或在无匹配实拍时为写实、无文字、无乱码、无水印、无明显AI畸形的生成图，且文案含AI辅助创作声明（符合小红书AI内容标注要求）。失败：主图含乱码伪文字、水印、明显畸形或卡通海报式AI图，或缺少AI声明。",
         "ai_assisted_disclosure_when_required": "通过：publication_copy 正文含AI辅助创作声明，或包内 ai_assisted_disclosure 字段存在且文案中可见。",
         "first_image_carries_information": "通过：封面带有我方排版、可读的标题信息层（结果/问题/清单承诺），与正文承诺一致。",
+        "knowledge_card_readability": "通过：封面带我方排版可读标题层，3 张正文图满足 3:4 竖版 ≤500KB、手机端主体清晰且与段落语义匹配（≥0.72）、无乱码伪字/假界面/拥挤小框，并与正文可执行清单配合；按写实无字配图规范，不要求 AI 生成正文图内绘制文字。",
         "operator_delivery_receipt": "投递前原生质量审核阶段判定标准（与 current_review_phase_ledger 阶段顺序一致）：原生审核发生在向操作者投递手动包之前，本轮不要求尚未发生的下游聊天收悉回执；通过条件为本地手动交付包已完整就绪且 SHA 绑定（含标题、正文、话题标签、封面与≥3张合格正文图，且 manual_review_required=true、不宣称已投递或已发布）；实际操作者收悉回执在原生审核通过后的下游交付步骤记录。",
         "cross_platform_hot_trend_analysis": "通过（2026-11-26 所有者授权 draft-first 冷启动边界）：多源采集正常且具备至少 1 条带真实 URL/ID 的同赛道 AI 落地场景来源即可，不要求同一选题当天在 3 个以上平台同时上榜。",
         "topic_quantity_decision": "通过（2026-11-26 所有者授权）：遵循夜间固定槽位排期（每日 1 条图文手动包，在配额内）且记录于 quantity_plan/batch_plan 即可，不要求远端已发布/定时库存 API。",

@@ -46,14 +46,26 @@ XHS_AI_DISCLOSURE = "本笔记由AI辅助创作，配图含AI生成内容。"
 _CLAUSE_END = "：:，,；;。！!？?、|｜"
 
 
+_HOOK_CUES = ("?", "？", "!", "！", "怎么", "如何", "清单", "避坑", "复核", "核对", "步骤", "实测", "防错", "别", "先", "坑", "步", "招")
+
+
 def _note_title(title):
-    """Xiaohongshu allows 20 characters: keep whole clauses, never cut inside a word (11-03 '低代码+Agen')."""
+    """Xiaohongshu allows 20 characters: keep whole clauses, preserve hook/promise over bare topic labels, never cut inside a word."""
     title = _plain(title)
     if len(title) <= XHS_TITLE_LIMIT:
         return title
     for mark in "：:｜|":
-        head = title.split(mark, 1)[0].strip()
-        if mark in title and 6 <= len(head) <= XHS_TITLE_LIMIT:
+        if mark not in title:
+            continue
+        head, tail = [part.strip() for part in title.split(mark, 1)]
+        head_is_bare_label = len(head) <= 11 and not any(cue in head for cue in _HOOK_CUES)
+        if head_is_bare_label and tail and any(cue in tail for cue in _HOOK_CUES):
+            if 6 <= len(tail) <= XHS_TITLE_LIMIT:
+                return tail
+            tail_cut = max(tail.rfind(m, 0, XHS_TITLE_LIMIT + 1) for m in _CLAUSE_END)
+            if tail_cut >= 6:
+                return tail[:tail_cut].strip()
+        if 6 <= len(head) <= XHS_TITLE_LIMIT:
             return head
     cut = max(title.rfind(mark, 0, XHS_TITLE_LIMIT + 1) for mark in _CLAUSE_END)
     if cut >= 6:
@@ -80,8 +92,12 @@ def _note_blocks(body):
 def _note_text(hook, body):
     """Whole paragraphs only, the closing paragraph always kept, plus the AI-assisted disclosure."""
     blocks = _note_blocks(body)
-    if hook and (not blocks or _plain(hook) not in blocks[0]):
-        blocks.insert(0, _plain(hook))
+    plain_hook = _plain(hook)
+    if plain_hook and (
+        not blocks
+        or (plain_hook not in blocks[0] and blocks[0] not in plain_hook and plain_hook[:16] not in blocks[0])
+    ):
+        blocks.insert(0, plain_hook)
     closing = blocks.pop() if len(blocks) > 1 else ""
     tail = [part for part in (closing, XHS_AI_DISCLOSURE) if part]
     budget = XHS_TEXT_LIMIT - sum(len(part) + 2 for part in tail)

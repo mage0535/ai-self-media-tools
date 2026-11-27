@@ -75,7 +75,9 @@ MIN_CJK_SIMILARITY=0.9
 
 def _folded(value):
     # Capital I and lowercase l are the same glyph in Noto Sans CJK Bold; OCR cannot tell them apart.
-    return value.replace('l','I').replace('|','I')
+    # Decorative CJK corner/lens brackets (「」『』【】) are ultra-thin edge strokes that Tesseract often
+    # misreads as 【 or drops at line-crop edges while reading 100% of letters/digits/Han characters cleanly.
+    return re.sub(r'[「」『』【】]', '', value.replace('l', 'I').replace('|', 'I'))
 
 
 def _title_matches(expected,text):

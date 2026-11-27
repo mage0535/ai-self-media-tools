@@ -962,14 +962,17 @@ class MediaBridge:
             output = output_dir / ("cover.png" if idx == 0 else f"section-{idx:02d}.png")
             prompt = item["prompt"]
             item_chain = self._article_image_chain(job, item)
-            if (not item_chain and item.get("semantic_requirement") and VIDEO_REAL_SCENE_PLATFORMS.intersection(
+            if (not item_chain and VIDEO_REAL_SCENE_PLATFORMS.intersection(
                     str(value).casefold() for value in job.get("platforms") or [])
                     and (job.get("brief") or {}).get("content_mode") != "original_knowledge"):
-                # MED39 (r108): video scenes must be licensed real photos, but beats only ever drew generated images.
-                item_chain = ",".join(["stock"] + [name for name in (chain or "cloudflare,openai-codex").split(",")
+                # MED39 (r108) + d83: video real-scene lanes (both semantic beats and initial images) use stock first,
+                # then configured fallback providers (never pinning a single dead/429 provider without fallback).
+                video_chain = chain or str((self.config.get("video") or {}).get("image_provider_chain") or "").strip()
+                item_chain = ",".join(["stock"] + [name for name in (video_chain or "cloudflare,openai-codex").split(",")
                                                    if name.strip() and name.strip() not in STOCK_PROVIDERS])
-            item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": item_chain,
-                                   "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}} if item_chain else run_kwargs
+            active_chain = item_chain or chain or "stock,cloudflare,openai-codex"
+            item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": active_chain,
+                                   "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}} if (item_chain or chain) else run_kwargs
             # Per image: a provider switch for one repeated image used to rebind the shared args and pin every
             # later image to pollinations, overriding the chain (r104: all fallbacks flux, 0.38-0.68; MED32).
             item_args = list(extra_args)
@@ -988,7 +991,21 @@ class MediaBridge:
                     except Exception:
                         if attempt == 3:
                             raise
-                        # MED49: a provider-rejected draw (flat image) is redrawn with a varied prompt, like a repeat.
+                        # MED49 + d83: if a single-provider or front-provider call failed (e.g. Cloudflare 429),
+                        # keep --provider auto and drop exhausted/stock front providers so openai-codex is tried.
+                        if "--provider" in item_args:
+                            p_idx = item_args.index("--provider") + 1
+                            if item_args[p_idx] == "cloudflare":
+                                item_args[p_idx] = "auto"
+                        parts = [name.strip() for name in active_chain.split(",") if name.strip()]
+                        non_stock = [name for name in parts if name not in STOCK_PROVIDERS]
+                        if attempt >= 1 and "openai-codex" in parts:
+                            next_parts = [name for name in non_stock if name != "cloudflare"] or ["openai-codex"]
+                        else:
+                            next_parts = non_stock or parts or ["openai-codex"]
+                        active_chain = ",".join(next_parts)
+                        item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": active_chain,
+                                               "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}}
                         prompt = (f"{item['prompt']} Distinct scene variation {idx + 1}: use a different camera angle, "
                                   "subject placement, lighting direction, and visual metaphor.")
                         continue
@@ -1007,16 +1024,22 @@ class MediaBridge:
                     for previous in used_visual_signatures
                 ):
                     break
-                if item_chain and str(provider_result.get("provider") or "") in STOCK_PROVIDERS:
-                    # A repeated stock photo would come back for the same query; use a generated scene instead.
-                    item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": ",".join(
-                        name for name in item_chain.split(",") if name not in STOCK_PROVIDERS)}}
-                if item_chain:
-                    pass  # The chain (stock dropped above) already moves to the next provider.
-                elif attempt == 1 and item_args[item_args.index("--provider") + 1] == "auto":
-                    item_args[item_args.index("--provider") + 1] = "cloudflare"
-                elif attempt == 2:
-                    item_args[item_args.index("--provider") + 1] = "openai-codex"
+                if str(provider_result.get("provider") or "") in STOCK_PROVIDERS:
+                    # A repeated stock photo would come back for the same query; move to generated fallback chain.
+                    parts = [name.strip() for name in active_chain.split(",") if name.strip() and name.strip() not in STOCK_PROVIDERS]
+                    active_chain = ",".join(parts or ["cloudflare", "openai-codex"])
+                    item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": active_chain,
+                                           "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}}
+                elif attempt == 1 and not item_chain:
+                    # d83: never pin --provider cloudflare (which disables fallback on HTTP 429); use chain with auto.
+                    parts = [name.strip() for name in active_chain.split(",") if name.strip() and name.strip() not in STOCK_PROVIDERS]
+                    active_chain = ",".join(parts or ["cloudflare", "openai-codex"])
+                    item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": active_chain,
+                                           "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}}
+                elif attempt == 2 and not item_chain:
+                    active_chain = "openai-codex"
+                    item_kwargs = {"env": {**os.environ, "IMAGE_PROVIDER_CHAIN": active_chain,
+                                           "STOCK_EXCLUDE_URLS": " ".join(drawn_stock)}}
                 prompt = (
                     f"{item['prompt']} Distinct scene variation {idx + 1}: "
                     f"use a different camera angle, subject placement, lighting direction, and visual metaphor; "

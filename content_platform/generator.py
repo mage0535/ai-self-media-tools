@@ -912,6 +912,11 @@ class DraftGenerator:
                 "configuration/schema block inside fenced Markdown (```...```) tied directly to the workflow, "
                 "verification check, or rollback mechanism discussed (never invent fake benchmark numbers)."
             )
+        if "xiaohongshu" in platforms or "rednote" in platforms:
+            extra += (
+                " For Xiaohongshu notes, keep the title within 20 Chinese characters and state a concrete pain point, "
+                "result, or checklist promise (never a bare topic label)."
+            )
         extra += (
             " Never include internal production/cover meta-notes (such as '封面计划用…' or layout promises) "
             "in the reader-facing body."
@@ -1322,7 +1327,9 @@ class DraftGenerator:
                 "topic": topic_text,
                 "platform": platform,
                 "content_form": content_form or "article",
-                "dedup_window_days": 14 if platform == "zhihu" else 7,
+                "dedup_window_days": 14,
+                "cross_channel_dedup_window_days": 7,
+                "anti_spam_lookback_days": 14,
                 "not_duplicate_of_other_platforms": True,
                 "engineering_context_rewrite": platform == "juejin",
                 **(
@@ -1582,18 +1589,26 @@ class DraftGenerator:
     def _observed_same_lane(brief):
         """Same-lane samples the overnight benchmark actually collected; none means the gate fails (MED28)."""
         breakdown = brief.get("viral_breakdown") if isinstance(brief.get("viral_breakdown"), dict) else {}
-        samples, patterns = [], []
+        samples, patterns, seen_urls = [], [], set()
         for row in breakdown.get("samples") or []:
             if not isinstance(row, dict) or not row.get("canonical_url"):
                 continue
+            url = str(row.get("canonical_url") or "").strip()
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
             samples.append({key: row.get(key) for key in ("title", "author", "canonical_url", "metrics", "published_at", "content_form")})
             text = str(row.get("body") or row.get("copy_or_script") or "")
             opening = re.split(r"(?<=[。！？!?])", text.strip(), maxsplit=1)[0][:80]
             headings = [h.strip() for h in re.findall(r"(?m)^#{1,3}\s*(.+)$", text)][:5]
-            patterns.append({"sample": row["canonical_url"], "observed_opening": opening, "observed_headings": headings})
+            patterns.append({"sample": url, "observed_opening": opening, "observed_headings": headings})
         collection = brief.get("viral_collection") if isinstance(brief.get("viral_collection"), dict) else {}
-        return {"source": (collection.get("tool") or "viral_breakdown") if samples else "", "samples": samples,
-                "borrowable_patterns": patterns, "reference_use": "analysis_only_no_reuse"}
+        cross_source = str(brief.get("cross_platform_source") or breakdown.get("cross_platform_source") or "").strip()
+        result = {"source": (collection.get("tool") or "viral_breakdown") if samples else "", "samples": samples,
+                  "borrowable_patterns": patterns, "reference_use": "analysis_only_no_reuse"}
+        if cross_source:
+            result["cross_platform_source"] = cross_source
+        return result
 
     @staticmethod
     def _platform_source_matrix(platform, sources, topic, brief=None):

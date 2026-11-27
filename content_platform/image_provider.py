@@ -288,10 +288,67 @@ def _cloudflare_text_config() -> tuple[str, str]:
     return "", ""
 
 
+def _cloudflare_quota_ledger() -> Path:
+    home = Path(os.environ.get("CONTENT_PLATFORM_HOME", str(Path.home() / ".ai-self-media-tools")))
+    return home / "data" / "cloudflare_quota_state.json"
+
+
+def _utc_day() -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime())
+
+
+def _is_cloudflare_quota_error(status_code: int, detail: str) -> bool:
+    if status_code != 429:
+        return False
+    lower = str(detail or "").casefold()
+    return (
+        "daily free allocation" in lower
+        or "10,000 neurons" in lower
+        or "neurons" in lower
+        or "quota" in lower
+        or not lower.strip()
+    )
+
+
+def _cloudflare_quota_exhausted() -> bool:
+    """Return True if Cloudflare Workers AI already hit its UTC-day free neuron cap."""
+    if os.environ.get("CLOUDFLARE_QUOTA_CIRCUIT_BREAKER", "1") == "0":
+        return False
+    try:
+        row = json.loads(_cloudflare_quota_ledger().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(row, dict) and row.get("utc_day") == _utc_day() and row.get("exhausted") is True
+
+
+def _mark_cloudflare_quota_exhausted(reason: str) -> None:
+    if os.environ.get("CLOUDFLARE_QUOTA_CIRCUIT_BREAKER", "1") == "0":
+        return
+    path = _cloudflare_quota_ledger()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(
+            json.dumps(
+                {
+                    "utc_day": _utc_day(),
+                    "exhausted": True,
+                    "recorded_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "reason": str(reason or "")[:200],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        tmp.replace(path)
+    except OSError:
+        pass
+
+
 def _gateway_text(instruction: str, model: str, max_tokens: int) -> str:
     timeout = int(os.environ.get("IMAGE_PROMPT_REWRITE_TIMEOUT", "60"))
     prefer = os.environ.get("IMAGE_PROMPT_REWRITE_PROVIDER", "cloudflare").strip().lower()
-    if prefer != "go":
+    if prefer != "go" and not _cloudflare_quota_exhausted():
         cf_base, cf_key = _cloudflare_text_config()
         if cf_base and cf_key:
             cf_model = model if str(model or "").startswith("@cf/") else "@cf/mistralai/mistral-small-3.1-24b-instruct"
@@ -303,9 +360,15 @@ def _gateway_text(instruction: str, model: str, max_tokens: int) -> str:
                          "User-Agent": "ai-self-media-tools/image-prompt-rewrite"},
                 method="POST",
             )
-            with _urlopen_retry(req, timeout=timeout, attempts=1) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            return " ".join(str(body["choices"][0]["message"]["content"] or "").replace("```", " ").split()).strip("\"' ")
+            try:
+                with _urlopen_retry(req, timeout=timeout, attempts=1) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                return " ".join(str(body["choices"][0]["message"]["content"] or "").replace("```", " ").split()).strip("\"' ")
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="ignore")[:180]
+                if _is_cloudflare_quota_error(exc.code, detail):
+                    _mark_cloudflare_quota_exhausted(f"text HTTP {exc.code}: {detail}")
+                raise ImageProviderError(f"Cloudflare text rewrite failed: HTTP {exc.code} {detail}") from exc
     base_url, configured_key_env = _go_channel_config()
     key = load_secret("GO_GEMINI_API_KEY") or load_secret(configured_key_env)
     if not base_url or not key:
@@ -1220,6 +1283,8 @@ def _cloudflare_image(
 ) -> dict:
     if input_image:
         raise ImageProviderError("Cloudflare image provider does not support image editing")
+    if _cloudflare_quota_exhausted():
+        raise ImageProviderError("Cloudflare daily free neuron quota exhausted (cached for current UTC day)")
     explicit_worker_url = os.environ.get("CF_WORKER_URL") or os.environ.get("CLOUDFLARE_IMAGE_WORKER_URL")
     worker_url = explicit_worker_url or load_secret("CF_WORKER_URL") or load_secret("CLOUDFLARE_IMAGE_WORKER_URL")
     account_id = load_secret("CLOUDFLARE_ACCOUNT_ID")
@@ -1259,6 +1324,8 @@ def _cloudflare_image(
             body = resp.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:180]
+        if _is_cloudflare_quota_error(exc.code, detail):
+            _mark_cloudflare_quota_exhausted(f"image HTTP {exc.code}: {detail}")
         raise ImageProviderError(f"Cloudflare image call failed: HTTP {exc.code} {detail}") from exc
     except TimeoutError as exc:
         raise ImageProviderError(f"Cloudflare image call timed out after {hard_timeout}s") from exc

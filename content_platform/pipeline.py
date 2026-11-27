@@ -472,6 +472,7 @@ class Pipeline:
             if len(cleaned_body) >= 80 and cleaned_gate.get("passed"):
                 draft["title"] = cleaned_title
                 draft["body"] = cleaned_body
+                self._sync_draft_opening_metadata(draft, str(job.get("topic") or ""))
                 text = cleaned_title + "\n" + cleaned_body + ('\n'+script_text if script_text else '')
                 draft["draft_meta"]["claim_sanitization"] = {
                     "removed_count": len([row for row in claim_gate.get("findings") or [] if not row.get("covered")]),
@@ -2225,11 +2226,42 @@ class Pipeline:
             item['title']=result['title'];item['body']=result['body']
             # The rewrite has no length bound; apply the generator's article fit again.
             item['body']=DraftGenerator._fit_article_length(item['body'],{'strategy':{'content_form':content_form}})
+            self._sync_draft_opening_metadata(item, applied_patterns=list((result.get('patterns_detected') or {}).keys()))
             self._validate_draft_structure(item)
             if result.get('patterns_detected'):
                 self.store.record_event(job_id,'humanized',{'patterns_found':list(result['patterns_detected']),'score':result['score'],
                     'body_chars':{'before':before_chars,'after':len(re.sub(r'\s+','',item['body']))},
                     'revalidation_required':True,'output_sha256':hashlib.sha256((item['title']+'\n'+item['body']).encode()).hexdigest()})
+
+    @staticmethod
+    def _sync_draft_opening_metadata(item, topic_fallback="", *, applied_patterns=None):
+        """MED90-e (d83): keep opening_hook, hook, humanization_plan.hook, and cover_design.hook aligned with final body."""
+        meta = item.get("draft_meta")
+        if not isinstance(meta, dict):
+            return
+        body = str(item.get("body") or "")
+        topic = str((meta.get("strategy_brief") or {}).get("topic_basis") or topic_fallback or item.get("title") or "")
+        opening = DraftGenerator._opening_hook(body, topic)
+        # First non-heading paragraph for Xiaohongshu _note_text so it never prepends a stale pre-humanize duplicate.
+        first_para = ""
+        for block in re.split(r"\n\s*\n", body.strip()):
+            lines = [ln.strip() for ln in block.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+            if lines:
+                first_para = " ".join(lines)
+                break
+        if "opening_hook" in meta:
+            meta["opening_hook"] = opening
+        if "hook" in meta and first_para:
+            meta["hook"] = first_para
+        hp = meta.get("humanization_plan")
+        if isinstance(hp, dict):
+            hp["hook"] = opening
+            hp["synced_to_final_body"] = True
+            if applied_patterns is not None:
+                hp["applied_humanizer_patterns"] = sorted(str(p) for p in applied_patterns if p)
+        cover = meta.get("cover_design")
+        if isinstance(cover, dict) and "hook" in cover:
+            cover["hook"] = opening
 
     def _media_generation_job(self,job_id,draft=None):
         """Fresh reviewed content, without publishing or mutating the leased Store row."""
