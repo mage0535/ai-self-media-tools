@@ -42,6 +42,8 @@ from content_platform.video_gpu_motion import (
     chromium_launch_args,
     encoder_summary,
     inject_kinetic_runtime,
+    platform_subtitle_spec,
+    render_broll_shot,
     video_encoder_args,
 )
 
@@ -3534,14 +3536,44 @@ def main() -> int:
         from playwright.async_api import async_playwright
 
         use_frame_pipe = os.environ.get("FILM_FRAME_PIPE", "0").strip().casefold() in {"1", "true", "on"}
+        max_concurrent_shots = max(1, min(4, int(os.environ.get("FILM_CONCURRENT_SHOTS", "2") or "2")))
+        total_plan_dur = max(1.0, sum(float(sd) for _, sd in shot_durs))
+        shot_progress_ranges: dict[str, tuple[float, float]] = {}
+        _acc = 0.0
+        for _n, _sd in shot_durs:
+            shot_progress_ranges[_n] = (_acc / total_plan_dur, (_acc + float(_sd)) / total_plan_dur)
+            _acc += float(_sd)
+        enable_progress_bar = (
+            os.environ.get("FILM_PROGRESS_BAR", "1").strip().casefold() not in {"0", "false", "off"}
+            and str(args.platform).casefold() != "douyin_pet"
+        )
 
-        def _ensure_kinetic_html(html_file: Path) -> str:
+        def _ensure_kinetic_html(html_file: Path, shot_name: str, shot_dur: float) -> str:
             if html_file.is_file():
                 raw = html_file.read_text(encoding="utf-8")
-                updated = inject_kinetic_runtime(raw)
+                p_start, p_end = shot_progress_ranges.get(shot_name, (0.0, 1.0))
+                updated = inject_kinetic_runtime(
+                    raw,
+                    progress_start=p_start,
+                    progress_end=p_end,
+                    shot_duration=shot_dur,
+                    include_progress_bar=enable_progress_bar,
+                )
                 if updated != raw:
                     html_file.write_text(updated, encoding="utf-8")
             return str(html_file)
+
+        def _resolve_broll_path(shot_name: str, seg_idx: int) -> Path | None:
+            if not shot_name.endswith("A"):
+                return None
+            if 1 <= seg_idx <= len(cards):
+                card = cards[seg_idx - 1]
+                va = card.get("visual_asset") or {}
+                cand = str(card.get("broll_video") or va.get("broll_video") or "").strip()
+                if cand and Path(cand).is_file():
+                    return Path(cand)
+            local_broll = out / "backgrounds" / f"broll_{seg_idx:02d}.mp4"
+            return local_broll if local_broll.is_file() else None
 
         async def record_bounded(name: str, html_path: str, duration: float, *, frame_driven: bool = False) -> str | None:
             try:
@@ -3609,59 +3641,72 @@ def main() -> int:
                     args=chromium_launch_args(),
                 )
                 _SHARED_BROWSER = shared_browser
-            for name, sd in shot_durs:
+            sem = asyncio.Semaphore(max_concurrent_shots)
+
+            async def _render_one_shot(name: str, sd: float) -> tuple[list[dict[str, object]], str | None]:
                 hp = out / "html" / f"{name}.html"
                 target = out / "shots" / f"{name}.mp4"
                 cached_record = cached_records_by_name.get(name)
                 if cached_record is not None:
                     print(f"{name}: 强校验缓存命中")
-                    shot_records.append({
-                        "name": name,
-                        "renderer": str(cached_record["render_mode"]),
-                        "fallback": False,
-                        "reused": True,
-                        "cache_status": "hit",
-                        "output_sha256": str(cached_record["output_sha256"]),
-                    })
-                    continue
-                hp_str = _ensure_kinetic_html(hp)
-                # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → Playwright CSS 录制。
-                # high/cinematic 模式绝不静默降级为 still-motion。
+                    return (
+                        [{
+                            "name": name,
+                            "renderer": str(cached_record["render_mode"]),
+                            "fallback": False,
+                            "reused": True,
+                            "cache_status": "hit",
+                            "output_sha256": str(cached_record["output_sha256"]),
+                        }],
+                        None,
+                    )
                 seg_i = int(name[5:7])
-                is_elem = should_frame_drive_shot(name, scene_contract, shot_types)
-                if is_elem:
-                    mp4 = await render_element(name, hp_str, sd)
-                    if not mp4:
-                        if render_policy["motion_mode"] == "safe":
-                            mp4 = await render_still(name, hp_str, sd)
-                            shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
-                        else:
-                            failed_shots.append(name)
-                        shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": True, "reused": False})
-                    else:
-                        shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False})
-                    continue
-                if render_policy["motion_mode"] == "cinematic":
-                    mp4 = False
-                    for attempt in range(2):
-                        webm = await record_bounded(name, hp_str, sd + 0.5)
-                        mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
+                broll_path = _resolve_broll_path(name, seg_i)
+                if broll_path is not None and not uses_industrial_hard_cuts(scene_contract):
+                    if await asyncio.to_thread(
+                        render_broll_shot, broll_path, target, duration=sd, width=W, height=H, fps=25
+                    ):
+                        return ([{"name": name, "renderer": "gpu-broll-video", "fallback": False, "reused": False}], None)
+                async with sem:
+                    hp_str = _ensure_kinetic_html(hp, name, sd)
+                    # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → Playwright CSS 录制。
+                    # high/cinematic 模式绝不静默降级为 still-motion。
+                    is_elem = should_frame_drive_shot(name, scene_contract, shot_types)
+                    if is_elem:
+                        mp4 = await render_element(name, hp_str, sd)
+                        if not mp4:
+                            recs: list[dict[str, object]] = []
+                            fail_name: str | None = None
+                            if render_policy["motion_mode"] == "safe":
+                                mp4 = await render_still(name, hp_str, sd)
+                                recs.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+                            else:
+                                fail_name = name
+                            recs.append({"name": name, "renderer": "playwright-frame-video", "fallback": True, "reused": False})
+                            return (recs, fail_name)
+                        return ([{"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False}], None)
+                    if render_policy["motion_mode"] == "cinematic":
+                        mp4 = False
+                        for attempt in range(2):
+                            webm = await record_bounded(name, hp_str, sd + 0.5)
+                            mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
+                            if mp4:
+                                break
+                            if attempt == 0:
+                                print(f"{name} 镜头重试第 2 次录制", file=sys.stderr)
                         if mp4:
-                            break
-                        if attempt == 0:
-                            print(f"{name} 镜头重试第 2 次录制", file=sys.stderr)
-                    if mp4:
-                        shot_records.append({"name": name, "renderer": "playwright-video", "fallback": False, "reused": False})
-                    else:
-                        failed_shots.append(name)
-                        shot_records.append({"name": name, "renderer": "playwright-video", "fallback": True, "reused": False})
-                else:
+                            return ([{"name": name, "renderer": "playwright-video", "fallback": False, "reused": False}], None)
+                        return ([{"name": name, "renderer": "playwright-video", "fallback": True, "reused": False}], name)
                     mp4 = await render_still(name, hp_str, sd)
                     if mp4:
-                        shot_records.append({"name": name, "renderer": "still-motion", "fallback": False, "reused": False})
-                    else:
-                        failed_shots.append(name)
-                        shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+                        return ([{"name": name, "renderer": "still-motion", "fallback": False, "reused": False}], None)
+                    return ([{"name": name, "renderer": "still-motion", "fallback": True, "reused": False}], name)
+
+            ordered_results = await asyncio.gather(*(_render_one_shot(name, sd) for name, sd in shot_durs))
+            for recs, fail_name in ordered_results:
+                shot_records.extend(recs)
+                if fail_name:
+                    failed_shots.append(fail_name)
         finally:
             _SHARED_BROWSER = None
             if shared_browser is not None:
@@ -3856,7 +3901,7 @@ def main() -> int:
     )
 
     # 合流：音频路线必须由计划显式控制，禁止 sfx_only 隐式下载 BGM。
-    if args.audio_route == "sfx_only":
+    def _synthesize_transition_sfx(target_path: Path, gain: float = 0.12) -> Path:
         from array import array as _array
         import math as _math
         import sys as _sys
@@ -3873,9 +3918,8 @@ def main() -> int:
                 if pos >= frame_count:
                     break
                 envelope = 1.0 - (offset / click_frames)
-                sfx[pos] += 0.12 * envelope * _math.sin(2 * _math.pi * 720 * offset / sample_rate)
-        sfx_path = out / "transition_sfx.wav"
-        with _wave.open(str(sfx_path), "wb") as wav:
+                sfx[pos] += gain * envelope * _math.sin(2 * _math.pi * 720 * offset / sample_rate)
+        with _wave.open(str(target_path), "wb") as wav:
             wav.setnchannels(2)
             wav.setsampwidth(2)
             wav.setframerate(sample_rate)
@@ -3886,6 +3930,10 @@ def main() -> int:
             if _sys.byteorder != "little":
                 pcm_frames.byteswap()
             wav.writeframes(pcm_frames.tobytes())
+        return target_path
+
+    if args.audio_route == "sfx_only":
+        sfx_path = _synthesize_transition_sfx(out / "transition_sfx.wav", gain=0.12)
         secondary_audio_path = sfx_path
         r = subprocess.run([
             "ffmpeg", "-y", "-v", "error", "-i", str(out / "visual_xfade.mp4"),
@@ -3907,17 +3955,34 @@ def main() -> int:
             from scripts.kuaishou_render import download_bgm
             bgm_path = Path(download_bgm(str(out), style=args.bgm_style))
         secondary_audio_path = bgm_path
-        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(out / "visual_xfade.mp4"),
-                            "-i", str(voice_path), "-stream_loop", "-1", "-i", str(bgm_path),
-                            "-filter_complex",
-                            "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[v];"
-                            "[2:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.18[bg];"
-                            "[v][bg]amix=inputs=2:duration=longest:normalize=0,"
-                            "aformat=sample_rates=44100:channel_layouts=stereo,"
-                            "loudnorm=I=-16:TP=-2.5:LRA=11,alimiter=limit=0.70:level=false[a]",
-                            "-map", "0:v", "-map", "[a]", "-t", f"{visual_total:.3f}",
-                            "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k", str(out / "mixed_v2.mp4")],
-                           capture_output=True, text=True, timeout=180)
+        sfx_layer_enabled = os.environ.get("FILM_BGM_SFX_LAYER", "1").strip().casefold() not in {"0", "false", "off"}
+        if sfx_layer_enabled:
+            sfx_path = _synthesize_transition_sfx(out / "transition_sfx.wav", gain=0.06)
+            r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(out / "visual_xfade.mp4"),
+                                "-i", str(voice_path), "-stream_loop", "-1", "-i", str(bgm_path),
+                                "-i", str(sfx_path),
+                                "-filter_complex",
+                                "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[v];"
+                                "[2:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.18[bg];"
+                                "[3:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.35[sfx];"
+                                "[v][bg][sfx]amix=inputs=3:duration=longest:normalize=0,"
+                                "aformat=sample_rates=44100:channel_layouts=stereo,"
+                                "loudnorm=I=-16:TP=-2.5:LRA=11,alimiter=limit=0.70:level=false[a]",
+                                "-map", "0:v", "-map", "[a]", "-t", f"{visual_total:.3f}",
+                                "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k", str(out / "mixed_v2.mp4")],
+                               capture_output=True, text=True, timeout=180)
+        else:
+            r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(out / "visual_xfade.mp4"),
+                                "-i", str(voice_path), "-stream_loop", "-1", "-i", str(bgm_path),
+                                "-filter_complex",
+                                "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[v];"
+                                "[2:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.18[bg];"
+                                "[v][bg]amix=inputs=2:duration=longest:normalize=0,"
+                                "aformat=sample_rates=44100:channel_layouts=stereo,"
+                                "loudnorm=I=-16:TP=-2.5:LRA=11,alimiter=limit=0.70:level=false[a]",
+                                "-map", "0:v", "-map", "[a]", "-t", f"{visual_total:.3f}",
+                                "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k", str(out / "mixed_v2.mp4")],
+                               capture_output=True, text=True, timeout=180)
     if r.returncode != 0:
         print(f"混音失败: {r.stderr[-200:]}", file=sys.stderr)
         return 3
@@ -3985,7 +4050,9 @@ def main() -> int:
     if subtitle_style != "drawtext" and has_word_events:
         ass_path = out / "sub" / "kinetic_subtitles.ass"
         ass_path.parent.mkdir(parents=True, exist_ok=True)
-        ass_margin_v = 70 + int(render_contract["subtitle_y_up"])
+        plat_sub = platform_subtitle_spec(args.platform, width=W, height=H)
+        # Honor whichever gives safer clearance above bottom platform UI while staying inside the 62%-93% caption band.
+        ass_margin_v = min(int(H * 0.28), max(70 + int(render_contract["subtitle_y_up"]), int(plat_sub["margin_v"])))
         ass_path.write_text(
             build_kinetic_ass_subtitles(
                 subtitle_manifest,

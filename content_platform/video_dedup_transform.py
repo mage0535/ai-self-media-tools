@@ -175,14 +175,10 @@ def execute_video_dedup_transform(
     if duration is not None and duration > 0:
         cmd.extend(["-t", f"{duration:.3f}"])
 
-    # Baseline profile for maximum player compatibility
+    # Baseline profile for maximum player compatibility (NVENC when available, else libx264)
+    from .video_gpu_motion import video_encoder_args
     cmd.extend([
-        "-c:v", "libx264",
-        "-profile:v", "baseline",
-        "-level", "3.1",
-        "-pix_fmt", "yuv420p",
-        "-preset", preset,
-        "-crf", str(crf),
+        *video_encoder_args(crf=int(crf), preset=str(preset), profile="baseline"),
         "-movflags", "+faststart",
         str(out_p),
     ])

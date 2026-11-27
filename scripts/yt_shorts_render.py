@@ -206,16 +206,16 @@ def render_video():
     concat_inputs = "".join(f"[v{i}]" for i in range(n_cards))
     filter_str += f"{concat_inputs}concat=n={n_cards}:v=1:a=0[vout]"
     
+    from content_platform.video_gpu_motion import video_encoder_args
     # All inputs: N image inputs + 1 audio input
     cmd = ["ffmpeg", "-y"] + inputs + [
         "-i", str(narration),
         "-filter_complex", filter_str,
         "-map", "[vout]",
         "-map", f"{n_cards}:a",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        *video_encoder_args(crf=23, preset="fast", profile="main"),
         "-c:a", "aac", "-b:a", "128k",
         "-shortest",
-        "-pix_fmt", "yuv420p",
         str(output)
     ]
     
@@ -232,9 +232,8 @@ def render_video():
             "ffmpeg", "-y",
             "-i", str(output),
             "-vf", f"ass={ass_file}",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            *video_encoder_args(crf=23, preset="fast", profile="main"),
             "-c:a", "copy",
-            "-pix_fmt", "yuv420p",
             str(sub_output)
         ]
         print(f"  Burning subtitles...")

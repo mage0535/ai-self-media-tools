@@ -54,6 +54,7 @@ def create_preview(candidate: Path, destination: Path) -> dict[str, object]:
     os.close(descriptor)
     temporary = Path(temporary_name)
     try:
+        from .video_gpu_motion import video_encoder_args
         process = subprocess.run(
             [
                 "ffmpeg",
@@ -66,12 +67,7 @@ def create_preview(candidate: Path, destination: Path) -> dict[str, object]:
                 "10",
                 "-vf",
                 "scale='min(540,iw)':-2",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "30",
+                *video_encoder_args(crf=30, preset="veryfast", profile="main"),
                 "-c:a",
                 "aac",
                 "-b:a",

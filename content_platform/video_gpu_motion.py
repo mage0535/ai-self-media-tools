@@ -71,6 +71,111 @@ def video_encoder_args(
     ]
 
 
+def video_bitrate_encoder_args(
+    *,
+    video_kbps: int,
+    preset: str = "veryfast",
+    mode: str | None = None,
+) -> list[str]:
+    """Return bitrate-capped FFmpeg video encoder args (e.g., B05 reference transport) using NVENC when available."""
+    kbps = max(80, int(video_kbps))
+    selected = str(mode if mode is not None else os.environ.get("FILM_HWACCEL", "auto")).strip().casefold()
+    if selected not in {"cpu", "libx264", "off", "0", "false"}:
+        if _probe_nvenc_profile("main"):
+            return [
+                "-c:v", "h264_nvenc",
+                "-preset", "p2",
+                "-rc", "vbr",
+                "-b:v", f"{kbps}k",
+                "-maxrate", f"{kbps * 2}k",
+                "-bufsize", f"{kbps * 4}k",
+                "-profile:v", "main",
+                "-pix_fmt", "yuv420p",
+            ]
+        if selected == "nvenc":
+            raise RuntimeError("FILM_HWACCEL=nvenc requested but h264_nvenc probe failed")
+    return [
+        "-c:v", "libx264",
+        "-preset", preset,
+        "-b:v", f"{kbps}k",
+        "-maxrate", f"{kbps * 2}k",
+        "-bufsize", f"{kbps * 4}k",
+    ]
+
+
+# Curated per-platform mobile/landscape subtitle safe zones absorbed from scripts/build_subtitles.py
+_PLATFORM_SUBTITLE_SPECS: dict[str, dict[str, int]] = {
+    "default": {"ref_w": 720, "ref_h": 1280, "font_size": 48, "margin_v": 200, "max_chars": 15, "max_lines": 2},
+    "kuaishou": {"ref_w": 720, "ref_h": 1280, "font_size": 48, "margin_v": 200, "max_chars": 15, "max_lines": 2},
+    "douyin": {"ref_w": 720, "ref_h": 1280, "font_size": 48, "margin_v": 200, "max_chars": 15, "max_lines": 2},
+    "douyin_ai": {"ref_w": 720, "ref_h": 1280, "font_size": 48, "margin_v": 200, "max_chars": 15, "max_lines": 2},
+    "douyin_pet": {"ref_w": 720, "ref_h": 1280, "font_size": 48, "margin_v": 200, "max_chars": 15, "max_lines": 2},
+    "shipinhao": {"ref_w": 720, "ref_h": 1280, "font_size": 46, "margin_v": 190, "max_chars": 15, "max_lines": 2},
+    "tiktok": {"ref_w": 720, "ref_h": 1280, "font_size": 42, "margin_v": 200, "max_chars": 38, "max_lines": 2},
+    "youtube": {"ref_w": 720, "ref_h": 1280, "font_size": 42, "margin_v": 200, "max_chars": 38, "max_lines": 2},
+    "shorts": {"ref_w": 720, "ref_h": 1280, "font_size": 42, "margin_v": 200, "max_chars": 38, "max_lines": 2},
+    "bilibili": {"ref_w": 1920, "ref_h": 1080, "font_size": 52, "margin_v": 92, "max_chars": 28, "max_lines": 2},
+}
+
+
+def platform_subtitle_spec(platform: str, width: int = 1080, height: int = 1920) -> dict[str, int]:
+    """Scale curated platform subtitle margins/font sizes proportionally to target video dimensions."""
+    key = str(platform or "default").strip().casefold()
+    base = _PLATFORM_SUBTITLE_SPECS.get(key, _PLATFORM_SUBTITLE_SPECS["default"])
+    scale_h = max(0.4, float(height) / float(base["ref_h"]))
+    # Landscape fallback when width > height on a vertical-default platform key
+    if width > height and base["ref_w"] < base["ref_h"]:
+        base = _PLATFORM_SUBTITLE_SPECS["bilibili"]
+        scale_h = max(0.4, float(height) / float(base["ref_h"]))
+    return {
+        "width": int(width),
+        "height": int(height),
+        "font_size": max(24, int(round(base["font_size"] * scale_h * 0.65))) if width < height else max(28, int(round(base["font_size"] * scale_h))),
+        "margin_v": max(48, int(round(base["margin_v"] * scale_h))),
+        "max_chars": int(base["max_chars"]),
+        "max_lines": int(base["max_lines"]),
+    }
+
+
+def render_broll_shot(
+    video_path: Path | str,
+    target: Path | str,
+    *,
+    duration: float,
+    width: int = 1080,
+    height: int = 1920,
+    fps: int = 25,
+) -> bool:
+    """Loop, center-crop, gently darken, and GPU-encode a real stock MP4 B-roll shot."""
+    src = Path(video_path)
+    dst = Path(target)
+    if not src.is_file() or duration <= 0:
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    vf = (
+        f"scale={int(width)}:{int(height)}:force_original_aspect_ratio=increase,"
+        f"crop={int(width)}:{int(height)},"
+        f"eq=brightness=-0.06:contrast=1.05:saturation=1.06,"
+        f"fps={int(fps)},format=yuv420p"
+    )
+    res = subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-stream_loop", "-1", "-i", str(src),
+            "-t", f"{float(duration):.3f}",
+            "-vf", vf,
+            "-an",
+            *video_encoder_args(crf=20, preset="medium", profile="baseline"),
+            str(dst),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    return res.returncode == 0 and dst.is_file() and dst.stat().st_size > 10_000
+
+
 def encoder_summary(*, profile: str = "baseline", mode: str | None = None) -> dict[str, Any]:
     args = video_encoder_args(profile=profile, mode=mode)
     codec = args[args.index("-c:v") + 1] if "-c:v" in args else "libx264"
@@ -166,6 +271,15 @@ KINETIC_MOTION_RUNTIME_JS = r"""
       el.style.opacity = opacity.toFixed(3);
       el.style.transform = 'translate3d(0,' + dy.toFixed(2) + 'px,0) scale(' + scale.toFixed(4) + ')';
     });
+    var bar = document.getElementById('hermes-global-progress-fill');
+    if (bar) {
+      var pStart = parseFloat(bar.getAttribute('data-progress-start') || '0') || 0;
+      var pEnd = parseFloat(bar.getAttribute('data-progress-end') || '1') || 1;
+      var shotDur = Math.max(0.2, parseFloat(bar.getAttribute('data-shot-duration') || '3') || 3);
+      var frac = Math.max(0, Math.min(1, t / shotDur));
+      var pct = Math.max(0, Math.min(100, (pStart + (pEnd - pStart) * frac) * 100));
+      bar.style.transform = 'scaleX(' + (pct / 100).toFixed(4) + ')';
+    }
   }
 
   window.__spring = spring;
@@ -184,14 +298,41 @@ KINETIC_MOTION_RUNTIME_JS = r"""
 """.strip()
 
 
-def inject_kinetic_runtime(html_doc: str) -> str:
-    """Inject deterministic HyperFrames/Remotion-style JS runtime before </body>."""
-    if "__hermesKineticReady" in html_doc:
-        return html_doc
+def inject_kinetic_runtime(
+    html_doc: str,
+    *,
+    progress_start: float | None = None,
+    progress_end: float | None = None,
+    shot_duration: float | None = None,
+    include_progress_bar: bool = False,
+) -> str:
+    """Inject deterministic HyperFrames/Remotion-style JS runtime (and optional GPU progress bar) before </body>."""
+    out = html_doc
+    if (
+        include_progress_bar
+        and "hermes-global-progress-fill" not in out
+        and 'data-topic-layout="true"' not in out
+        and "data-topic-layout='true'" not in out
+        and progress_start is not None
+        and progress_end is not None
+    ):
+        dur_val = max(0.2, float(shot_duration or 3.0))
+        bar_html = (
+            '<div id="hermes-global-progress" style="position:fixed;top:0;left:0;right:0;height:5px;'
+            'background:rgba(255,255,255,0.16);z-index:9999;pointer-events:none;">'
+            f'<div id="hermes-global-progress-fill" data-progress-start="{max(0.0, min(1.0, float(progress_start))):.4f}" '
+            f'data-progress-end="{max(0.0, min(1.0, float(progress_end))):.4f}" '
+            f'data-shot-duration="{dur_val:.3f}" '
+            'style="width:100%;height:100%;transform-origin:left center;transform:scaleX(0);'
+            'background:linear-gradient(90deg,#FFD54F,#34D399);"></div></div>'
+        )
+        out = out.replace("</body>", bar_html + "</body>", 1) if "</body>" in out else out + bar_html
+    if "__hermesKineticReady" in out:
+        return out
     tag = f"<script>{KINETIC_MOTION_RUNTIME_JS}</script>"
-    if "</body>" in html_doc:
-        return html_doc.replace("</body>", tag + "</body>", 1)
-    return html_doc + tag
+    if "</body>" in out:
+        return out.replace("</body>", tag + "</body>", 1)
+    return out + tag
 
 
 def _ass_time(seconds: float) -> str:

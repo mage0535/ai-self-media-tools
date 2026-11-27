@@ -426,9 +426,11 @@ def _prepare_video_transport(material,directory,deadline):
     if duration<=0:raise BiliInputsBlocked('bili_source_video_duration_unknown')
     video_kbps=int(max(80,min(800,VIDEO_TRANSPORT_TARGET_BYTES*8/1000/duration-32)))
     target=directory/'full-duration-transport.mp4'
+    from .video_gpu_motion import video_bitrate_encoder_args
+    enc_args=video_bitrate_encoder_args(video_kbps=video_kbps,preset='veryfast')
     argv=['ffmpeg','-nostdin','-v','error','-protocol_whitelist','file,pipe','-i',str(source),'-map','0:v:0','-map','0:a:0?',
           '-vf','scale=w=854:h=854:force_original_aspect_ratio=decrease:force_divisible_by=2','-r','5',
-          '-c:v','libx264','-preset','veryfast','-b:v',str(video_kbps)+'k','-maxrate',str(video_kbps*2)+'k','-bufsize',str(video_kbps*4)+'k',
+          *enc_args,
           '-c:a','aac','-b:a','32k','-ac','1','-movflags','+faststart','-map_metadata','-1','-f','mp4',str(target)]
     result=subprocess.run(argv,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=_remaining(deadline,240),check=False)
     stderr=once(directory/'video-transport.stderr.private.bin',result.stderr,raw=True)

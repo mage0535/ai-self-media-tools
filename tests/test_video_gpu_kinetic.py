@@ -79,3 +79,35 @@ def test_timed_caption_cues_preserves_word_boundaries_and_builds_kinetic_ass():
     assert "\\c&H004FD5FF\\fscx106\\fscy106" in ass_text
     dialogues = [ln for ln in ass_text.splitlines() if ln.startswith("Dialogue:")]
     assert len(dialogues) == len(cue["words"])
+
+
+def test_bitrate_encoder_and_platform_subtitle_specs_and_progress_bar(monkeypatch):
+    vgm.clear_hwaccel_cache()
+    monkeypatch.setenv("FILM_HWACCEL", "auto")
+    with patch.object(vgm, "_probe_nvenc_profile", return_value=True):
+        nv_b = vgm.video_bitrate_encoder_args(video_kbps=240)
+    assert nv_b[nv_b.index("-c:v") + 1] == "h264_nvenc"
+    assert nv_b[nv_b.index("-b:v") + 1] == "240k"
+    assert nv_b[nv_b.index("-maxrate") + 1] == "480k"
+
+    cpu_b = vgm.video_bitrate_encoder_args(video_kbps=240, mode="cpu")
+    assert cpu_b[cpu_b.index("-c:v") + 1] == "libx264"
+
+    ks = vgm.platform_subtitle_spec("kuaishou", 1080, 1920)
+    bili = vgm.platform_subtitle_spec("bilibili", 1920, 1080)
+    assert ks["margin_v"] == 300
+    assert bili["margin_v"] == 92
+    assert bili["max_chars"] == 28
+
+    html = "<!DOCTYPE html><html><body><div>hello</div></body></html>"
+    with_bar = vgm.inject_kinetic_runtime(
+        html, progress_start=0.25, progress_end=0.5, shot_duration=3.0, include_progress_bar=True
+    )
+    assert 'id="hermes-global-progress"' in with_bar
+    assert 'data-progress-start="0.2500"' in with_bar
+    # Topic layout pages must never receive the global progress overlay
+    topic_html = '<!DOCTYPE html><html><body data-topic-layout="true"><div>topic</div></body></html>'
+    without_bar = vgm.inject_kinetic_runtime(
+        topic_html, progress_start=0.25, progress_end=0.5, shot_duration=3.0, include_progress_bar=True
+    )
+    assert 'id="hermes-global-progress"' not in without_bar

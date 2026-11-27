@@ -145,6 +145,7 @@ def _segments(render_dir: Path, count: int) -> None:
             "format=rgba,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black@0,"
             "fade=in:st=0:d=0.5:alpha=1,setpts=PTS-STARTPTS"
         )
+        from content_platform.video_gpu_motion import video_encoder_args
         _run(
             [
                 "ffmpeg",
@@ -159,10 +160,7 @@ def _segments(render_dir: Path, count: int) -> None:
                 "-map", "[v]",
                 "-map", "2:a",
                 "-t", f"{duration:.3f}",
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-pix_fmt", "yuv420p",
+                *video_encoder_args(crf=23, preset="fast", profile="main"),
                 "-c:a", "aac",
                 "-b:a", "128k",
                 "-shortest",
@@ -263,6 +261,7 @@ def render(args: argparse.Namespace) -> dict:
     _run([sys.executable, str(ROOT / "scripts" / "mix_bgm_with_gate.py"), "--video", str(raw), "--bgm", str(bgm), "--output", str(mixed), "--probe", str(probe)], timeout=360)
     subtitles = _subtitles(render_dir, beats)
     final = render_dir / "final.mp4"
+    from content_platform.video_gpu_motion import video_encoder_args
     _run(
         [
             "ffmpeg",
@@ -271,14 +270,7 @@ def render(args: argparse.Namespace) -> dict:
             str(mixed),
             "-vf",
             f"subtitles={subtitles}:fontsdir=/usr/share/fonts",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "medium",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
+            *video_encoder_args(crf=23, preset="medium", profile="main"),
             "-movflags",
             "+faststart",
             "-c:a",
