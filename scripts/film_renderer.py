@@ -37,6 +37,16 @@ from content_platform.video_artifact import (
     measure_spatial_motion_evidence,
     verify_final_pixels,
 )
+from content_platform.video_gpu_motion import (
+    build_kinetic_ass_subtitles,
+    chromium_launch_args,
+    encoder_summary,
+    inject_kinetic_runtime,
+    video_encoder_args,
+)
+
+# Shared Playwright browser handle reused across all 16 shots in _render() to avoid 15 cold starts.
+_SHARED_BROWSER = None
 
 W, H = 1080, 1920
 FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
@@ -1801,11 +1811,12 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 <div class="bg"></div><div class="overlay"></div>
 <div class="idx">{idx:02d}A</div>
 <div class="content">
-  <div class="kicker">{kicker}</div>
-  <div class="title">{title}</div>
+  <div class="kicker" data-start="0.05">{kicker}</div>
+  <div class="title" data-start="0.18">{title}</div>
   {stat_html}
 </div>
 </body></html>"""
+    # Inject deterministic HyperFrames/Remotion-style spring runtime without altering static CSS fallback.
 
 
 def build_shot_b(idx: int, title: str, modules: list[str], bg_path: str,
@@ -1880,10 +1891,10 @@ body {{ width:{W}px; height:{H}px; overflow:hidden; font-family:'Noto Sans CJK S
 <div class="bg"></div><div class="overlay"></div>
 <div class="idx">{idx:02d}B</div>
 <div class="content">
-  <div class="head">{title}</div>
-  <div class="module"><div class="t">①</div><div class="m">{modules[0]}</div></div>
-  <div class="module"><div class="t">②</div><div class="m">{modules[1]}</div></div>
-  <div class="module"><div class="t">③</div><div class="m">{modules[2]}</div></div>
+  <div class="head" data-start="0.05">{title}</div>
+  <div class="module" data-start="0.18" data-stagger="0.22"><div class="t">①</div><div class="m">{modules[0]}</div></div>
+  <div class="module" data-start="0.18" data-stagger="0.22"><div class="t">②</div><div class="m">{modules[1]}</div></div>
+  <div class="module" data-start="0.18" data-stagger="0.22"><div class="t">③</div><div class="m">{modules[2]}</div></div>
 </div>
 </body></html>"""
 
@@ -2535,8 +2546,8 @@ def _repair_leading_bright_frame(video_path: Path, fps: int, expected_duration: 
         result = subprocess.run(
             ["ffmpeg", "-y", "-v", "error", "-i", str(video_path),
              "-vf", f"trim=start_frame={bright_run},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={trim_duration:.6f}",
-             "-t", f"{expected_duration:.6f}", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-             "-profile:v", "baseline", "-pix_fmt", "yuv420p", str(temporary)],
+             "-t", f"{expected_duration:.6f}", "-an",
+             *video_encoder_args(crf=20, preset="medium", profile="baseline"), str(temporary)],
             capture_output=True, text=True, timeout=120,
         )
         if result.returncode != 0 or not temporary.is_file():
@@ -2634,43 +2645,75 @@ async def _verify_topic_layout(page, name: str, out: Path) -> dict[str, object] 
 
 
 async def _record_shot_frames(name: str, html_path: str, dur: float, out: Path) -> str | None:
-    """JS 逐帧驱动渲染：renderFrame(t) 每帧推进 → 截图 → FFmpeg 合成 mp4。
-    用于卡内元素级动效（静态截图拍不到 CSS 动画，record_video 只捕入场）"""
+    """JS 逐帧驱动渲染（HyperFrames 确定性步帧 + RTX NVENC 内存管道直出，免 PNG 落盘）。"""
     from playwright.async_api import async_playwright
     fps = 25
     total = max(1, int(dur * fps))
-    frames_dir = out / "frames" / name
-    frames_dir.mkdir(parents=True, exist_ok=True)
+    mp4 = out / "shots" / f"{name}.mp4"
+    mp4.parent.mkdir(parents=True, exist_ok=True)
+    enc = video_encoder_args(crf=20, preset="medium", profile="baseline")
+    ff_proc = None
+    own_browser = None
     try:
-        async with async_playwright() as p:
-            b = await p.chromium.launch(headless=True, executable_path=_chromium_executable_path(), env=_chromium_launch_environment(), args=["--no-sandbox"])
-            pg = await b.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+        ff_proc = subprocess.Popen(
+            [
+                "ffmpeg", "-y", "-v", "error",
+                "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", str(fps), "-i", "-",
+                *enc, "-an", str(mp4),
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        if _SHARED_BROWSER is not None:
+            pg = await _SHARED_BROWSER.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+        else:
+            pw_cm = async_playwright()
+            p = await pw_cm.__aenter__()
+            own_browser = (pw_cm, await p.chromium.launch(
+                headless=True, executable_path=_chromium_executable_path(),
+                env=_chromium_launch_environment(), args=chromium_launch_args(),
+            ))
+            pg = await own_browser[1].new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+        try:
             await pg.goto(f"file://{html_path}", wait_until="load", timeout=30000)
             await _wait_for_stable_first_paint(pg)
             await _verify_topic_layout(pg, name, out)
-            await pg.evaluate("renderFrame(0)")
+            await pg.evaluate("(fps) => { if (typeof window.__seekFrame === 'function') window.__seekFrame(0, fps); else if (typeof window.renderFrame === 'function') window.renderFrame(0); }", fps)
             await _wait_for_stable_first_paint(pg)
-            warmup = frames_dir / "_warmup.png"
-            await pg.screenshot(path=str(warmup), animations="disabled")
+            await pg.screenshot(type="jpeg", quality=92, animations="disabled")
             await _wait_for_stable_first_paint(pg)
             for i in range(total):
                 t = frame_render_time(i, fps, dur)
-                await pg.evaluate(f"renderFrame({t})")
-                await pg.screenshot(path=str(frames_dir / f"f_{i:04d}.png"), animations="disabled")
-            warmup.unlink(missing_ok=True)
-            await b.close()
+                await pg.evaluate(
+                    "([idx, fps, t]) => { if (typeof window.__seekFrame === 'function') window.__seekFrame(idx + 1, fps); else if (typeof window.renderFrame === 'function') window.renderFrame(t); }",
+                    [i, fps, t],
+                )
+                frame_bytes = await pg.screenshot(type="jpeg", quality=92, animations="disabled")
+                assert ff_proc.stdin is not None
+                ff_proc.stdin.write(frame_bytes)
+        finally:
+            try:
+                await asyncio.wait_for(pg.close(), timeout=10)
+            except (asyncio.TimeoutError, Exception):
+                pass
+            if own_browser is not None:
+                pw_cm, b = own_browser
+                try:
+                    await asyncio.wait_for(b.close(), timeout=10)
+                except (asyncio.TimeoutError, Exception):
+                    pass
+                await pw_cm.__aexit__(None, None, None)
+        if ff_proc.stdin:
+            ff_proc.stdin.close()
+        _, ff_err = ff_proc.communicate(timeout=180)
+        if ff_proc.returncode != 0 or not mp4.is_file():
+            print(f"{name} ffmpeg 管道合成失败: {(ff_err or b'').decode('utf-8', 'ignore')[-200:]}", file=sys.stderr)
+            return None
     except Exception as e:
         print(f"{name} 逐帧渲染失败: {e}", file=sys.stderr)
-        return None
-    mp4 = out / "shots" / f"{name}.mp4"
-    r = subprocess.run(
-        ["ffmpeg", "-y", "-v", "quiet", "-framerate", str(fps),
-         "-i", str(frames_dir / "f_%04d.png"),
-         "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-         "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an",
-         str(mp4)], timeout=180)
-    if r.returncode != 0 or not mp4.is_file():
-        print(f"{name} ffmpeg 合成失败", file=sys.stderr)
+        if ff_proc is not None and ff_proc.poll() is None:
+            ff_proc.kill()
         return None
     expected = total / fps
     if not _repair_leading_bright_frame(
@@ -2693,10 +2736,21 @@ async def _record_shot_frames(name: str, html_path: str, dur: float, out: Path) 
 async def _record_shot(name: str, html_path: str, dur: float, out: Path, frame_driven: bool = False) -> str | None:
     from playwright.async_api import async_playwright
     browser = context = page = video = None
+    owns_browser = False
     video_path = None
     saved_video = out / "webm" / f".{name}.webm.tmp"
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, executable_path=_chromium_executable_path(), env=_chromium_launch_environment(), args=["--no-sandbox"])
+    pw_cm = None
+    try:
+        if _SHARED_BROWSER is not None:
+            browser = _SHARED_BROWSER
+        else:
+            pw_cm = async_playwright()
+            p = await pw_cm.__aenter__()
+            browser = await p.chromium.launch(
+                headless=True, executable_path=_chromium_executable_path(),
+                env=_chromium_launch_environment(), args=chromium_launch_args(),
+            )
+            owns_browser = True
         context = await browser.new_context(
             viewport={"width": W, "height": H},
             record_video_dir=str(out / "webm"),
@@ -2718,13 +2772,18 @@ async def _record_shot(name: str, html_path: str, dur: float, out: Path, frame_d
                 # screenshots for every frame.
                 await page.evaluate(
                     """async (durationMs) => {
-                        if (typeof window.renderFrame !== 'function') {
+                        if (typeof window.renderFrame !== 'function' && typeof window.__seekFrame !== 'function') {
                             throw new Error('renderFrame is unavailable');
                         }
                         await new Promise((resolve) => {
                             const started = performance.now();
                             const tick = (now) => {
-                                window.renderFrame((now - started) / 1000);
+                                const elapsed = (now - started) / 1000;
+                                if (typeof window.__seekFrame === 'function') {
+                                    window.__seekFrame(Math.round(elapsed * 25), 25);
+                                } else {
+                                    window.renderFrame(elapsed);
+                                }
                                 if (now - started >= durationMs) {
                                     resolve();
                                 } else {
@@ -2737,7 +2796,30 @@ async def _record_shot(name: str, html_path: str, dur: float, out: Path, frame_d
                     int(dur * 1000),
                 )
             else:
-                await page.wait_for_timeout(int(dur * 1000))
+                has_kinetic = await page.evaluate(
+                    "() => typeof window.__seekFrame === 'function' && document.body.dataset.topicLayout !== 'true' && document.querySelectorAll('[data-start]').length > 0"
+                )
+                if has_kinetic:
+                    await page.evaluate(
+                        """async (durationMs) => {
+                            await new Promise((resolve) => {
+                                const started = performance.now();
+                                const tick = (now) => {
+                                    const elapsed = (now - started) / 1000;
+                                    window.__seekFrame(Math.round(elapsed * 25), 25);
+                                    if (now - started >= durationMs) {
+                                        resolve();
+                                    } else {
+                                        requestAnimationFrame(tick);
+                                    }
+                                };
+                                requestAnimationFrame(tick);
+                            });
+                        }""",
+                        int(dur * 1000),
+                    )
+                else:
+                    await page.wait_for_timeout(int(dur * 1000))
         finally:
             if page:
                 try:
@@ -2759,11 +2841,14 @@ async def _record_shot(name: str, html_path: str, dur: float, out: Path, frame_d
                     await asyncio.wait_for(context.close(), timeout=15)
                 except (asyncio.TimeoutError, Exception):
                     pass
-            if browser:
+            if owns_browser and browser:
                 try:
                     await asyncio.wait_for(browser.close(), timeout=10)
                 except (asyncio.TimeoutError, Exception):
                     pass
+    finally:
+        if pw_cm is not None:
+            await pw_cm.__aexit__(None, None, None)
     if video_path:
         target = out / "webm" / f"{name}.webm"
         os.replace(video_path, target)
@@ -2781,17 +2866,28 @@ async def _render_shot_still(name: str, html_path: str, dur: float, out: Path) -
     from playwright.async_api import async_playwright
 
     browser = page = None
+    owns_browser = False
+    pw_cm = None
     still = out / "shots" / f"{name}.png"
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, executable_path=_chromium_executable_path(), env=_chromium_launch_environment(), args=["--no-sandbox"])
-            page = await browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
-            await page.goto(f"file://{html_path}", wait_until="load", timeout=30000)
+        if _SHARED_BROWSER is not None:
+            browser = _SHARED_BROWSER
+        else:
+            pw_cm = async_playwright()
+            p = await pw_cm.__aenter__()
+            browser = await p.chromium.launch(
+                headless=True, executable_path=_chromium_executable_path(),
+                env=_chromium_launch_environment(), args=chromium_launch_args(),
+            )
+            owns_browser = True
+        page = await browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+        await page.goto(f"file://{html_path}", wait_until="load", timeout=30000)
+        await _wait_for_stable_first_paint(page)
+        if await _verify_topic_layout(page, name, out):
+            await page.reload(wait_until="load", timeout=30000)
             await _wait_for_stable_first_paint(page)
-            if await _verify_topic_layout(page, name, out):
-                await page.reload(wait_until="load", timeout=30000)
-                await _wait_for_stable_first_paint(page)
-            await asyncio.wait_for(page.screenshot(path=str(still), animations="disabled"), timeout=20)
+        await page.evaluate("() => { if (typeof window.__seekFrame === 'function') window.__seekFrame(45, 25); }")
+        await asyncio.wait_for(page.screenshot(path=str(still), animations="disabled"), timeout=20)
     except Exception as exc:
         print(f"{name} still capture failed: {exc}", file=sys.stderr)
         return None
@@ -2801,11 +2897,13 @@ async def _render_shot_still(name: str, html_path: str, dur: float, out: Path) -
                 await asyncio.wait_for(page.close(), timeout=10)
             except (asyncio.TimeoutError, Exception):
                 pass
-        if browser:
+        if owns_browser and browser:
             try:
                 await asyncio.wait_for(browser.close(), timeout=10)
             except (asyncio.TimeoutError, Exception):
                 pass
+        if pw_cm is not None:
+            await pw_cm.__aexit__(None, None, None)
     if not still.is_file():
         return None
     output = out / "shots" / f"{name}.mp4"
@@ -2815,8 +2913,8 @@ async def _render_shot_still(name: str, html_path: str, dur: float, out: Path) -
     try:
         result = subprocess.run(
             ["ffmpeg", "-y", "-loop", "1", "-i", str(still), "-vf", motion,
-             "-t", f"{dur:.3f}", "-r", str(fps), "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-             "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-an", str(output)],
+             "-t", f"{dur:.3f}", "-r", str(fps),
+             *video_encoder_args(crf=20, preset="medium", profile="baseline"), "-an", str(output)],
             timeout=120,
         )
     except subprocess.TimeoutExpired:
@@ -2862,8 +2960,7 @@ def _finalize_recorded_shot(webm_path: str, target: Path, duration: float) -> bo
     try:
         result = subprocess.run(
             ["ffmpeg", "-y", "-v", "error", "-i", webm_path, "-vf", vf, "-t", f"{duration:.3f}",
-             "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "baseline",
-             "-pix_fmt", "yuv420p", "-an", str(target)],
+             *video_encoder_args(crf=20, preset="medium", profile="baseline"), "-an", str(target)],
             capture_output=True,
             text=True,
             timeout=120,
@@ -2872,10 +2969,21 @@ def _finalize_recorded_shot(webm_path: str, target: Path, duration: float) -> bo
         return False
     passed = result.returncode == 0 and target.is_file() and target.stat().st_size > 10_000
     if passed:
+        actual_dur = _duration(str(target))
+        if actual_dur < max(0.5, duration - 0.25):
+            print(
+                f"录制镜头时长不足 ({actual_dur:.2f}s < 预期 {duration:.2f}s): {target.name}",
+                file=sys.stderr,
+            )
+            try:
+                target.unlink()
+            except OSError:
+                pass
+            return False
         target.with_suffix(".warmup.json").write_text(
             json.dumps(
                 {"source": webm_path, "target": str(target), "warmup_seconds": round(warmup, 3),
-                 "target_duration_seconds": round(duration, 3)},
+                 "target_duration_seconds": round(duration, 3), "actual_duration_seconds": round(actual_dur, 3)},
                 ensure_ascii=False,
                 indent=2,
             ) + "\n",
@@ -3422,6 +3530,19 @@ def main() -> int:
     shot_records: list[dict[str, object]] = []
 
     async def _render():
+        global _SHARED_BROWSER
+        from playwright.async_api import async_playwright
+
+        use_frame_pipe = os.environ.get("FILM_FRAME_PIPE", "0").strip().casefold() in {"1", "true", "on"}
+
+        def _ensure_kinetic_html(html_file: Path) -> str:
+            if html_file.is_file():
+                raw = html_file.read_text(encoding="utf-8")
+                updated = inject_kinetic_runtime(raw)
+                if updated != raw:
+                    html_file.write_text(updated, encoding="utf-8")
+            return str(html_file)
+
         async def record_bounded(name: str, html_path: str, duration: float, *, frame_driven: bool = False) -> str | None:
             try:
                 timeout = element_render_timeout_seconds(duration) if frame_driven else max(45, duration + 25)
@@ -3447,10 +3568,25 @@ def main() -> int:
                 return None
 
         async def render_element(name: str, html_path: str, duration: float) -> str | None:
-            webm = await record_bounded(name, html_path, duration + 0.5, frame_driven=True)
+            if use_frame_pipe:
+                try:
+                    piped = await asyncio.wait_for(
+                        _record_shot_frames(name, html_path, duration, out),
+                        timeout=element_render_timeout_seconds(duration),
+                    )
+                    if piped:
+                        return piped
+                except (asyncio.TimeoutError, Exception) as exc:
+                    print(f"{name} 管道逐帧回退标准录制: {str(exc)[:140]}", file=sys.stderr)
             target = out / "shots" / f"{name}.mp4"
-            rendered = _finalize_recorded_shot(webm, target, duration) if webm else None
-            if not rendered:
+            for attempt in range(2):
+                webm = await record_bounded(name, html_path, duration + 0.5, frame_driven=True)
+                rendered = _finalize_recorded_shot(webm, target, duration) if webm else None
+                if rendered:
+                    break
+                if attempt == 0:
+                    print(f"{name} 元素镜头重试第 2 次录制", file=sys.stderr)
+            else:
                 return None
             if not _repair_leading_bright_frame(
                 target, 25, duration, out / "first_frame_evidence" / f"{name}.json"
@@ -3458,53 +3594,83 @@ def main() -> int:
                 return None
             return str(target)
 
+        need_browser = any(cached_records_by_name.get(name) is None for name, _ in shot_durs)
         failed_shots = []
-        for name, sd in shot_durs:
-            hp = out / "html" / f"{name}.html"
-            target = out / "shots" / f"{name}.mp4"
-            cached_record = cached_records_by_name.get(name)
-            if cached_record is not None:
-                print(f"{name}: 强校验缓存命中")
-                shot_records.append({
-                    "name": name,
-                    "renderer": str(cached_record["render_mode"]),
-                    "fallback": False,
-                    "reused": True,
-                    "cache_status": "hit",
-                    "output_sha256": str(cached_record["output_sha256"]),
-                })
-                continue
-            # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → Playwright CSS 录制。
-            # high/cinematic 模式绝不静默降级为 still-motion。
-            seg_i = int(name[5:7])
-            is_elem = should_frame_drive_shot(name, scene_contract, shot_types)
-            if is_elem:
-                mp4 = await render_element(name, str(hp), sd)
-                if not mp4:
-                    if render_policy["motion_mode"] == "safe":
-                        mp4 = await render_still(name, str(hp), sd)
-                        shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+        pw_cm = None
+        shared_browser = None
+        try:
+            if need_browser:
+                pw_cm = async_playwright()
+                pw = await pw_cm.__aenter__()
+                shared_browser = await pw.chromium.launch(
+                    headless=True,
+                    executable_path=_chromium_executable_path(),
+                    env=_chromium_launch_environment(),
+                    args=chromium_launch_args(),
+                )
+                _SHARED_BROWSER = shared_browser
+            for name, sd in shot_durs:
+                hp = out / "html" / f"{name}.html"
+                target = out / "shots" / f"{name}.mp4"
+                cached_record = cached_records_by_name.get(name)
+                if cached_record is not None:
+                    print(f"{name}: 强校验缓存命中")
+                    shot_records.append({
+                        "name": name,
+                        "renderer": str(cached_record["render_mode"]),
+                        "fallback": False,
+                        "reused": True,
+                        "cache_status": "hit",
+                        "output_sha256": str(cached_record["output_sha256"]),
+                    })
+                    continue
+                hp_str = _ensure_kinetic_html(hp)
+                # 动效镜头（B 且命中内容结构）→ JS 逐帧渲染；其余 → Playwright CSS 录制。
+                # high/cinematic 模式绝不静默降级为 still-motion。
+                seg_i = int(name[5:7])
+                is_elem = should_frame_drive_shot(name, scene_contract, shot_types)
+                if is_elem:
+                    mp4 = await render_element(name, hp_str, sd)
+                    if not mp4:
+                        if render_policy["motion_mode"] == "safe":
+                            mp4 = await render_still(name, hp_str, sd)
+                            shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+                        else:
+                            failed_shots.append(name)
+                        shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": True, "reused": False})
+                    else:
+                        shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False})
+                    continue
+                if render_policy["motion_mode"] == "cinematic":
+                    mp4 = False
+                    for attempt in range(2):
+                        webm = await record_bounded(name, hp_str, sd + 0.5)
+                        mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
+                        if mp4:
+                            break
+                        if attempt == 0:
+                            print(f"{name} 镜头重试第 2 次录制", file=sys.stderr)
+                    if mp4:
+                        shot_records.append({"name": name, "renderer": "playwright-video", "fallback": False, "reused": False})
                     else:
                         failed_shots.append(name)
-                    shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": True, "reused": False})
+                        shot_records.append({"name": name, "renderer": "playwright-video", "fallback": True, "reused": False})
                 else:
-                    shot_records.append({"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False})
-                continue
-            if render_policy["motion_mode"] == "cinematic":
-                webm = await record_bounded(name, str(hp), sd + 0.5)
-                mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
-                if mp4:
-                    shot_records.append({"name": name, "renderer": "playwright-video", "fallback": False, "reused": False})
-                else:
-                    failed_shots.append(name)
-                    shot_records.append({"name": name, "renderer": "playwright-video", "fallback": True, "reused": False})
-            else:
-                mp4 = await render_still(name, str(hp), sd)
-                if mp4:
-                    shot_records.append({"name": name, "renderer": "still-motion", "fallback": False, "reused": False})
-                else:
-                    failed_shots.append(name)
-                    shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+                    mp4 = await render_still(name, hp_str, sd)
+                    if mp4:
+                        shot_records.append({"name": name, "renderer": "still-motion", "fallback": False, "reused": False})
+                    else:
+                        failed_shots.append(name)
+                        shot_records.append({"name": name, "renderer": "still-motion", "fallback": True, "reused": False})
+        finally:
+            _SHARED_BROWSER = None
+            if shared_browser is not None:
+                try:
+                    await asyncio.wait_for(shared_browser.close(), timeout=15)
+                except (asyncio.TimeoutError, Exception):
+                    pass
+            if pw_cm is not None:
+                await pw_cm.__aexit__(None, None, None)
         if failed_shots:
             print(f"镜头渲染失败: {', '.join(failed_shots)}", file=sys.stderr)
             return False
@@ -3564,8 +3730,8 @@ def main() -> int:
         ) + f"concat=n={len(shot_mp4s)}:v=1:a=0[vout]"
         concat_result = subprocess.run(
             ["ffmpeg", "-y", "-v", "error", *concat_inputs, "-filter_complex", concat_chain,
-             "-map", "[vout]", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-             "-profile:v", "baseline", "-pix_fmt", "yuv420p", str(out / "visual_xfade.mp4")],
+             "-map", "[vout]", "-an",
+             *video_encoder_args(crf=20, preset="medium", profile="baseline"), str(out / "visual_xfade.mp4")],
             capture_output=True, text=True, timeout=300,
         )
         if concat_result.returncode != 0:
@@ -3602,8 +3768,8 @@ def main() -> int:
             fc = ";".join(fc_parts) + f";[{prev}]format=yuv420p[v]"
             gout = out / f"group_{gi}.mp4"
             r = subprocess.run(["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", fc,
-                                "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-                                "-profile:v", "baseline", "-pix_fmt", "yuv420p", str(gout)],
+                                "-map", "[v]", "-an",
+                                *video_encoder_args(crf=20, preset="medium", profile="baseline"), str(gout)],
                                capture_output=True, text=True, timeout=300)
             if r.returncode != 0:
                 print(f"group_{gi} xfade 失败: {r.stderr[-200:]}", file=sys.stderr)
@@ -3806,16 +3972,52 @@ def main() -> int:
         json.dumps(subtitle_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    fc2 = f"[0:v]{','.join(filters)},deflicker=mode=pm:size=3[v]"
+    final_enc = video_encoder_args(crf=21, preset="medium", profile="baseline")
+    subtitle_style = os.environ.get("FILM_SUBTITLE_STYLE", "kinetic_ass").strip().casefold()
+    has_word_events = any(
+        cue.get("words") for seg in subtitle_manifest for cue in (seg.get("cues") or [])
+    )
     final = out / "final.mp4"
     final_tmp = out / ".final.mp4.tmp.mp4"
     final_tmp.unlink(missing_ok=True)
-    r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(out / "mixed_v2.mp4"),
-                        "-filter_complex", fc2, "-map", "[v]", "-map", "0:a",
-                        "-c:v", "libx264", "-preset", "medium", "-crf", "21",
-                        "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                        "-c:a", "copy", str(final_tmp)],
-                       capture_output=True, text=True, timeout=400)
+    used_kinetic_ass = False
+    r = None
+    if subtitle_style != "drawtext" and has_word_events:
+        ass_path = out / "sub" / "kinetic_subtitles.ass"
+        ass_path.parent.mkdir(parents=True, exist_ok=True)
+        ass_margin_v = 70 + int(render_contract["subtitle_y_up"])
+        ass_path.write_text(
+            build_kinetic_ass_subtitles(
+                subtitle_manifest,
+                width=W,
+                height=H,
+                font_size=subtitle_font_size,
+                margin_v=ass_margin_v,
+            ),
+            encoding="utf-8",
+        )
+        esc_ass = str(ass_path).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+        fc_ass = f"[0:v]ass='{esc_ass}',deflicker=mode=pm:size=3[v]"
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", str(out / "mixed_v2.mp4"),
+             "-filter_complex", fc_ass, "-map", "[v]", "-map", "0:a",
+             *final_enc, "-movflags", "+faststart",
+             "-c:a", "copy", str(final_tmp)],
+            capture_output=True, text=True, timeout=400,
+        )
+        if r.returncode != 0 or not final_tmp.is_file() or final_tmp.stat().st_size <= 0:
+            print(f"词级 ASS 烧录回退 drawtext: {(r.stderr or '')[-180:]}", file=sys.stderr)
+            final_tmp.unlink(missing_ok=True)
+            r = None
+        else:
+            used_kinetic_ass = True
+    if r is None:
+        fc2 = f"[0:v]{','.join(filters)},deflicker=mode=pm:size=3[v]"
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(out / "mixed_v2.mp4"),
+                            "-filter_complex", fc2, "-map", "[v]", "-map", "0:a",
+                            *final_enc, "-movflags", "+faststart",
+                            "-c:a", "copy", str(final_tmp)],
+                           capture_output=True, text=True, timeout=400)
     if r.returncode != 0 or not final_tmp.is_file() or final_tmp.stat().st_size <= 0:
         print(f"编码失败或输出不完整: {r.stderr[-300:]}", file=sys.stderr)
         final_tmp.unlink(missing_ok=True)
@@ -3921,6 +4123,9 @@ def main() -> int:
         spatial_motion=spatial_motion,
     )
     render_quality["candidate_sha256"] = _sha256_file(final)
+    render_quality["video_encoder"] = encoder_summary(profile="baseline")
+    render_quality["chromium_gpu"] = "--use-angle=vulkan" in chromium_launch_args()
+    render_quality["subtitle_style"] = "kinetic_ass" if used_kinetic_ass else "drawtext"
     (out / "shot_render_records.json").write_text(
         json.dumps(shot_records, ensure_ascii=False, indent=2), encoding="utf-8"
     )

@@ -26,6 +26,7 @@ from scripts.build_subtitles import load_cards, write_ass_from_cards
 from scripts.pre_render_gate import validate_render_inputs
 from scripts.render_checkpoint import fingerprint_paths, mark_complete, stage_current_or_adopt
 from scripts.render_timing import record_stage_timing, write_timing_summary
+from content_platform.video_gpu_motion import video_encoder_args
 try:
     from playwright.async_api import async_playwright
 except ModuleNotFoundError:
@@ -770,8 +771,8 @@ def render_segments(video_dir, cards, width=1080, height=1920):
                 "-i",str(tts_mp3),
                 "-filter_complex", _layered_segment_filter(width, height, total_frames, i, fps=fps, shotcraft=shotcraft),
                 "-map","[v]","-map","2:a",
-                "-c:v","libx264","-t",str(dur),"-preset","ultrafast","-crf","28",
-                "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
+                *video_encoder_args(crf=24, preset="ultrafast", profile="baseline"),"-t",str(dur),
+                "-c:a","aac","-b:a","128k",
                 "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
             assert_output(str(seg_mp4), 50000, f"seg_{idx:02d}.mp4")
             mark_complete(Path(video_dir), f"segment_{idx:02d}", checkpoint_inputs, [seg_mp4])
@@ -800,8 +801,8 @@ def render_segments(video_dir, cards, width=1080, height=1920):
             f"zoompan={zexpr}:{xexpr}:{yexpr}:d={total_frames}:s={width}x{height}:fps={fps}"
         )
         subprocess.run(["ffmpeg","-y","-loop","1","-i",str(card_png),"-i",str(tts_mp3),
-            "-c:v","libx264","-t",str(dur),"-preset","ultrafast","-crf","28",
-            "-c:a","aac","-b:a","128k","-pix_fmt","yuv420p",
+            *video_encoder_args(crf=24, preset="ultrafast", profile="baseline"),"-t",str(dur),
+            "-c:a","aac","-b:a","128k",
             "-vf",vf_anim,
             "-shortest",str(seg_mp4)], capture_output=True, timeout=300)
 

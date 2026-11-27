@@ -80,8 +80,22 @@ def timed_caption_cues(text,words,*,start=0.0,max_chars_per_line=15,max_lines=2)
     for group in groups:
         copy=''.join(row['text'] for row in group)
         lines=[copy[i:i+max_chars_per_line] for i in range(0,len(copy),max_chars_per_line)]
+        words_out=[];cursor=0
+        for row in group:
+            tok=row['text']
+            if not tok:
+                continue
+            # Split across line break if a single token straddles max_chars_per_line.
+            w_st=round(start+row['start'],3);w_en=round(start+row['end'],3)
+            rem=tok
+            while rem:
+                line_idx=cursor//max_chars_per_line
+                room=max_chars_per_line-(cursor%max_chars_per_line)
+                part=rem[:room];rem=rem[room:]
+                words_out.append({'text':part,'start':w_st,'end':w_en,'line_index':line_idx})
+                cursor+=len(part)
         cues.append({'start':round(start+group[0]['start'],3),'end':round(start+group[-1]['end'],3),
-            'lines':lines,'timing_source':'actual_provider_word_events'})
+            'lines':lines,'words':words_out,'timing_source':'actual_provider_word_events'})
     if ''.join(line for cue in cues for line in cue['lines'])!=text:
         raise ValueError('actual_caption_text_incomplete')
     return cues
