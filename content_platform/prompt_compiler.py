@@ -93,9 +93,35 @@ def _platform_terms(platform: str, profile: Mapping[str, Any]) -> list[str]:
     return [platform.replace("_", " "), _text(profile.get("prompt_profile"))]
 
 
-def _topic_terms(topic: str) -> list[str]:
+def _topic_terms(topic: str, scenario: Mapping[str, Any] | None = None) -> list[str]:
     compact = re.sub(r"\s+", " ", topic).strip()
-    return [compact] if compact else []
+    if not compact:
+        return []
+    terms: list[str] = [compact]
+    # d91c: Extract concise capability, scenario, and verification phrases so keyword_tool evidence
+    # records structured multi-facet query terms rather than only the raw source title string.
+    for part in re.split(r"[：:|｜—\-/，,；;！？!?（）()\[\]【】]+", compact):
+        cleaned = part.strip()
+        if 2 <= len(cleaned) <= 28 and cleaned not in terms:
+            terms.append(cleaned)
+    if isinstance(scenario, Mapping):
+        actor = scenario.get("actor") if isinstance(scenario.get("actor"), Mapping) else {}
+        outcome = scenario.get("outcome") if isinstance(scenario.get("outcome"), Mapping) else {}
+        inputs = scenario.get("inputs") if isinstance(scenario.get("inputs"), list) else []
+        process = scenario.get("process") if isinstance(scenario.get("process"), Mapping) else {}
+        steps = process.get("steps") if isinstance(process.get("steps"), list) else []
+        scenario_phrases = [
+            _text(actor.get("role")),
+            _text(actor.get("context")),
+            _text(inputs[0].get("type")) if inputs and isinstance(inputs[0], Mapping) else "",
+            _text(steps[0].get("ai_function")) if steps and isinstance(steps[0], Mapping) else "",
+            _text(outcome.get("deliverable")),
+            _text(outcome.get("measurement_method")),
+        ]
+        for phrase in scenario_phrases:
+            if 2 <= len(phrase) <= 32 and phrase not in terms:
+                terms.append(phrase)
+    return terms[:10]
 
 
 def _valid_scenario(scenario: Any) -> bool:
@@ -246,7 +272,7 @@ def compile_prompt_bundle(spec: Mapping[str, Any]) -> dict[str, Any]:
     }
     keywords = {
         "platform": _platform_terms(normalized["platform"], profile),
-        "topic": _topic_terms(normalized["topic"]),
+        "topic": _topic_terms(normalized["topic"], scenario if is_ai_lane else None),
         "visual": _visual_terms(normalized["topic"], normalized["visual_style"]),
         "evidence": normalized["evidence"],
     }

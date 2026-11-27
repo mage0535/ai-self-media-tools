@@ -1516,8 +1516,16 @@ class DraftGenerator:
 
     @staticmethod
     def _article_sections(body, topic):
-        raw = [line.strip("# -*0123456789.、") for line in str(body or "").splitlines() if line.strip()]
-        candidates = [line for line in raw if 4 <= len(line) <= 80]
+        # d91c: Prefer real Markdown section headings (stripped of bold/code markup) so pre-render recipes
+        # and Xiaohongshu section_image_map bind to actual section anchors instead of opening sentences.
+        clean_h = lambda s: re.sub(r"\*\*|__|`|~~", "", str(s or "")).strip("# -*0123456789.、 \t")
+        md_headings = [
+            clean_h(m.group(1))
+            for m in re.finditer(r"^\s*#{1,6}\s+(.+)$", str(body or ""), re.M)
+        ]
+        md_headings = [h for h in dict.fromkeys(md_headings) if 4 <= len(h) <= 80]
+        raw = [clean_h(line) for line in str(body or "").splitlines() if line.strip()]
+        candidates = [line for line in raw if 4 <= len(line) <= 80 and line not in md_headings]
         defaults = [
             f"Why {topic} matters now",
             "A concrete operating mistake",
@@ -1525,7 +1533,7 @@ class DraftGenerator:
             "Execution checklist",
             "Risks and review points",
         ]
-        titles = (candidates + defaults)[:5]
+        titles = (md_headings + candidates + defaults)[:5]
         return [{"id": f"section_{idx}", "title": title, "role": role} for idx, (title, role) in enumerate(zip(titles, ["hook", "problem", "method", "checklist", "review"]), start=1)]
 
     @staticmethod

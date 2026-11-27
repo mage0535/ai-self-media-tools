@@ -81,26 +81,47 @@ def _trim_at_sentence(text, limit):
     text = str(text or "").strip()
     if limit <= 0 or len(text) <= limit:
         return text[:max(0, limit)].strip()
-    # d91: If text introduces a compact table/checklist ("以下是待填模板：\n· ..."), avoid cutting right
-    # after the colon lead-in and dropping the entire template; keep as many complete lines as fit instead.
-    if "\n· " in text:
-        kept_lines = []
-        used = 0
-        for ln in text.splitlines():
-            ln_s = ln.strip()
-            if not ln_s:
-                continue
-            add = len(ln_s) + (1 if kept_lines else 0)
-            if used + add <= limit:
-                kept_lines.append(ln_s)
-                used += add
-            elif not kept_lines:
-                kept_lines.append(ln_s[:limit].strip())
-                break
-            else:
-                break
-        if len(kept_lines) >= 2 and not kept_lines[-1].endswith(("：", ":")):
-            return "\n".join(kept_lines)
+    # d91/d91c: If text introduces a compact table/checklist ("以下是待填模板：\n· ..."), preserve the
+    # structured `· ` rows FIRST and compact the prose intro around them so saveable XHS checklists/tables
+    # are never chopped off while leaving a dangling "下面是验证表模板" lead-in behind.
+    if "\n· " in text or text.startswith("· "):
+        all_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        first_item = next((i for i, ln in enumerate(all_lines) if ln.startswith("· ")), -1)
+        if first_item >= 0:
+            prose_part = "\n".join(all_lines[:first_item]).strip()
+            item_lines = all_lines[first_item:]
+            kept_items = []
+            items_budget = limit if not prose_part else max(min(limit, len("\n".join(item_lines))), int(limit * 0.72))
+            used_items = 0
+            for ln in item_lines:
+                add = len(ln) + (1 if kept_items else 0)
+                if used_items + add <= items_budget:
+                    kept_items.append(ln)
+                    used_items += add
+                elif not kept_items:
+                    kept_items.append(ln[:items_budget].strip())
+                    used_items = len(kept_items[0])
+                    break
+                else:
+                    break
+            if kept_items:
+                items_str = "\n".join(kept_items)
+                if not prose_part:
+                    return items_str
+                prose_budget = limit - len(items_str) - 1
+                if prose_budget >= 18:
+                    # Keep the trailing lead-in sentence or compact intro within prose_budget.
+                    if len(prose_part) <= prose_budget:
+                        return prose_part + "\n" + items_str
+                    # Prefer the last sentence (closest lead-in to the table) if it fits cleanly.
+                    sents = [s.strip() for s in re.split(r"(?<=[。！？!?])", prose_part) if s.strip()]
+                    if sents and 8 <= len(sents[-1]) <= prose_budget:
+                        return sents[-1] + "\n" + items_str
+                    cut_p = max(prose_part.rfind(m, 0, prose_budget + 1) for m in "。！？!?；;：:")
+                    lead = prose_part[:cut_p + 1].strip() if cut_p >= 12 else prose_part[:prose_budget].strip()
+                    if lead:
+                        return lead + "\n" + items_str
+                return items_str
     cut = max(text.rfind(mark, 0, limit + 1) for mark in "。！？!?；;")
     if cut >= max(24, limit // 2) and not text[:cut + 1].rstrip().endswith(("：", ":")):
         return text[:cut + 1].strip()
@@ -214,23 +235,26 @@ def _note_text(hook, body):
                         body_budget -= len(trimmed_intro) + 2
             n_sec = len(usable_sections)
             if n_sec:
-                # Two-pass fair allocation: short sections keep full length; surplus goes to longer sections.
+                # Two-pass fair allocation: short sections keep full length; checklist/table sections
+                # ("· " rows) receive 1.5x share priority so saveable XHS templates survive intact.
                 raw_lens = [len(b) for _, b in usable_sections]
+                weights = [1.5 if ("\n· " in b or b.startswith("· ")) else 1.0 for _, b in usable_sections]
                 shares = [0] * n_sec
                 rem_b = body_budget
                 open_idx = list(range(n_sec))
                 while open_idx and rem_b > 0:
-                    even = max(1, rem_b // len(open_idx))
+                    w_sum = sum(weights[i] for i in open_idx)
                     next_open = []
                     consumed = 0
                     for i in open_idx:
-                        if raw_lens[i] - shares[i] <= even:
+                        alloc = max(1, int(rem_b * (weights[i] / w_sum)))
+                        if raw_lens[i] - shares[i] <= alloc:
                             add = raw_lens[i] - shares[i]
                             shares[i] += add
                             consumed += add
                         else:
-                            shares[i] += even
-                            consumed += even
+                            shares[i] += alloc
+                            consumed += alloc
                             next_open.append(i)
                     rem_b -= consumed
                     if consumed == 0 or len(next_open) == len(open_idx):

@@ -1944,7 +1944,7 @@ class Pipeline:
                 "match_reason": str(row.get("match_reason") or ""), "semantic_match_score": row.get("semantic_match_score")}
 
     @staticmethod
-    def _rendered_asset_mix(assets, draft):
+    def _rendered_asset_mix(assets, draft, *, data_dir=None):
         """Declare the asset mix the render actually produced; the rulebook passes asset_mix_plan when the
         declaration matches asset_provenance (MED28: the pre-render plan claimed stock photos for AI images)."""
         def describe(rows):
@@ -1978,19 +1978,21 @@ class Pipeline:
             for item in (((draft.get("draft_meta") or {}).get("strategy") or {}).get("primary_platforms") or [])
         }
         cf_note = ""
-        cf_state_path = Path(self.data_dir) / "cloudflare_quota_state.json"
-        if cf_state_path.is_file():
-            try:
-                cf_state = json.loads(cf_state_path.read_text(encoding="utf-8"))
-                today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                if cf_state.get("exhausted") and str(cf_state.get("utc_day") or "") == today_utc:
-                    cf_note = (
-                        f"cloudflare daily 429 quota circuit breaker active for {today_utc} "
-                        f"({str(cf_state.get('reason') or 'daily neuron quota exhausted')[:120]}); "
-                        "bypassed cloudflare and escalated directly to openai-codex"
-                    )
-            except (OSError, ValueError, TypeError):
-                cf_note = ""
+        if data_dir:
+            cf_state_path = Path(data_dir) / "cloudflare_quota_state.json"
+            if cf_state_path.is_file():
+                try:
+                    from datetime import datetime, timezone
+                    cf_state = json.loads(cf_state_path.read_text(encoding="utf-8"))
+                    today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    if cf_state.get("exhausted") and str(cf_state.get("utc_day") or "") == today_utc:
+                        cf_note = (
+                            f"cloudflare daily 429 quota circuit breaker active for {today_utc} "
+                            f"({str(cf_state.get('reason') or 'daily neuron quota exhausted')[:120]}); "
+                            "bypassed cloudflare and escalated directly to openai-codex"
+                        )
+                except (OSError, ValueError, TypeError):
+                    cf_note = ""
         if original:
             retrieval_text = ""
         elif platforms & {"zhihu", "juejin", "wechat"}:
@@ -2074,7 +2076,7 @@ class Pipeline:
                 "semantic_evidence": {"score": evidence.get("semantic_match_score", 0), "reason": evidence.get("match_reason", "")},
             })
         if provenance:
-            meta["asset_mix_plan"] = self._rendered_asset_mix(list(provenance.values()), draft)
+            meta["asset_mix_plan"] = self._rendered_asset_mix(list(provenance.values()), draft, data_dir=self.data_dir)
             # The pre-render plan claimed rights-cleared real photos for every image; gates now read what was made.
             plan = meta.get("real_scene_background_plan")
             if isinstance(plan, dict) and "wechat" not in {str(item).casefold() for item in platforms}:  # WeChat cards bind their own photos.
@@ -2085,6 +2087,20 @@ class Pipeline:
                     plan["primary_background_kind"] = "mixed_real_photo_and_declared_generated_illustration"
             if mappings:
                 meta["section_image_map"] = mappings
+                # d91c: Sync pre-generation article_recipe and knowledge_card_plan with the actual rendered
+                # section_image_map so workflow inputs never contradict the final text-free scene illustrations.
+                if isinstance(meta.get("article_recipe"), dict):
+                    meta["article_recipe"]["section_image_map"] = mappings
+                    rendered_sections = [
+                        {"id": f"section_{idx}", "title": str(item.get("section") or ""), "role": "rendered_section_image"}
+                        for idx, item in enumerate(mappings, start=1)
+                        if isinstance(item, dict) and str(item.get("section") or "").strip()
+                    ]
+                    if rendered_sections:
+                        meta["article_recipe"]["sections"] = rendered_sections
+                if "wechat" not in {str(item).casefold() for item in platforms} and isinstance(meta.get("knowledge_card_plan"), dict):
+                    meta["knowledge_card_plan"]["applied_to_rendered_images"] = False
+                    meta["knowledge_card_plan"]["rendered_visual_mode"] = "text_free_scene_illustrations_bound_to_section_headings"
             brief_plan = ((meta.get("strategy_brief") or {}).get("content_generation_brief") or {})
             if isinstance(brief_plan, dict) and "asset_mix_plan" in brief_plan:
                 brief_plan["asset_mix_plan"] = meta["asset_mix_plan"]

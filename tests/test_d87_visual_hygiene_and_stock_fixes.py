@@ -298,6 +298,62 @@ def test_d91_humanize_dividers_cli_flags_wechat_and_bold_headings():
     assert "· " in note and "样件编号" in note
     assert not any(ln.strip().endswith("以下是待填模板：") and i == len(note.splitlines()) - 1 for i, ln in enumerate(note.splitlines()))
 
+
+def test_d91c_rendered_asset_mix_sections_xhs_table_and_keywords(tmp_path):
+    import json
+    from datetime import datetime, timezone
+    from content_platform.generator import DraftGenerator
+    from content_platform.pipeline import Pipeline
+    from content_platform.prompt_compiler import _topic_terms
+
+    # 1) _rendered_asset_mix remains callable as staticmethod with or without data_dir and records CF breaker
+    today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    (tmp_path / "cloudflare_quota_state.json").write_text(
+        json.dumps({"exhausted": True, "utc_day": today_utc, "reason": "daily neuron quota 429"}),
+        encoding="utf-8",
+    )
+    assets = [{"scene_id": "cover", "origin": "ai_generated", "source_url": "gen"}]
+    mix_no_dir = Pipeline._rendered_asset_mix(assets, {"draft_meta": {}})
+    assert mix_no_dir["source"] == "asset_provenance" and "cloudflare_fallback_reason" not in mix_no_dir
+    mix_cf = Pipeline._rendered_asset_mix(assets, {"draft_meta": {}}, data_dir=tmp_path)
+    assert "cloudflare daily 429" in mix_cf.get("cloudflare_fallback_reason", "")
+    assert "cloudflare daily 429" in mix_cf.get("real_material_retrieval", "")
+
+    # 2) DraftGenerator._article_sections prefers Markdown headings over opening prose sentences
+    body = "开场第一句很长的话用来引出问题。\n\n## **先定检查时点**\n正文...\n\n## 别把零件在当成装得对\n正文...\n\n## 异常复核怎么闭环\n正文..."
+    secs = DraftGenerator._article_sections(body, "装配漏装怎么查")
+    assert [s["title"] for s in secs[:3]] == ["先定检查时点", "别把零件在当成装得对", "异常复核怎么闭环"]
+
+    # 3) XHS _note_text preserves verification table rows even after a long prose intro in the same section
+    long_xhs = (
+        "如果零件装完就会被遮住，你把相机放在终检，还能查出漏装吗？这是一段较长的开场说明，先讲清问题背景。\n\n"
+        "## 第一步：找到零件可见时点\n" + "沿着工艺路线核对装配顺序，确认上盖合拢之前最后还能看到目标零件的工位位置。" * 4 + "\n\n"
+        "## 第二步：单工位验证表模板\n"
+        + "先用下面这张表做小样本对照记录，每次采集单独记一条，复核时才能找到系统当时看到的那张图。下面是验证表模板：\n\n"
+        "| 核对项 | 完整件预期 | 漏装试样预期 | 复核人 |\n| --- | --- | --- | --- |\n"
+        "| 上盖前工位 | 判定完整 | 标出漏装 | 质检员 |\n"
+        "| 异常处置 | 记录归档 | 人工复核 | 班组长 |\n\n"
+        "## 第三步：别把零件在当成装得对\n" + "画面里看到零件只证明未漏装，不代表锁紧力达标，关键工艺仍按原标准复核。" * 4 + "\n\n"
+        "拿着表到工位先对 SOP，再决定要不要试。"
+    )
+    note = _note_text("装配漏装怎么查", long_xhs)
+    assert len(note) <= 950
+    assert "· 上盖前工位｜判定完整｜标出漏装｜质检员" in note
+    assert "· 异常处置｜记录归档｜人工复核｜班组长" in note
+
+    # 4) _topic_terms expands topic + scenario into structured capability/scenario/verification terms
+    terms = _topic_terms(
+        "用 LangGraph 搭一个单日旅行规划师：先排草案，再核对",
+        {
+            "actor": {"role": "研发工程师", "context": "单日行程编排"},
+            "inputs": [{"type": "用户行程约束JSON"}],
+            "process": {"steps": [{"ai_function": "状态机拆解与天气过滤"}]},
+            "outcome": {"deliverable": "可核对行程草案", "measurement_method": "人工逐项核验清单"},
+        },
+    )
+    assert len(terms) >= 5 and "可核对行程草案" in terms and "状态机拆解与天气过滤" in terms
+
+
     # 5) English native video feeds (youtube, tiktok) enabled by default in TrendCollector for twitter/youtube/tiktok lanes
     from content_platform.trends import TrendCollector
     direct = TrendCollector({})._direct_sources()

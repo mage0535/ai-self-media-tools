@@ -319,7 +319,9 @@ def prepare_generation_strategy_inputs(topic, brief, *, content_form=None):
     bundle=compile_prompt_bundle(spec)
     bundle_gate=validate_prompt_bundle(bundle)
     keywords={'tool':'content_platform.prompt_compiler','platform':platform,'lane':lane,
-        'queries':list((bundle.get('keywords') or {}).get('topic') or []),'fingerprint':bundle.get('fingerprint')}
+        'queries':list((bundle.get('keywords') or {}).get('topic') or []),
+        'keyword_groups':dict(bundle.get('keywords') or {}),
+        'fingerprint':bundle.get('fingerprint')}
     breakdown=scoped.get('viral_breakdown') or {}
     strict=bool(scoped.get('require_live_strategy_evidence') or (scoped.get('run_contract') or {}).get('enforce_strategy_evidence'))
     # Lanes without their own public collector observe a declared sibling platform (overnight_benchmarks).

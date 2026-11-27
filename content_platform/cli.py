@@ -1017,7 +1017,7 @@ def execute(args):
             ),
             trend_evidence_mode=(args.trend_evidence_mode or str(config.get("feature_flags", {}).get("real_platform_trend_evidence_mode", "shadow"))).casefold(),
             report_path=str(snapshot_path),
-            reserved_topic_fingerprints=store.used_topics(lookback_days=7),
+            reserved_topic_fingerprints=store.used_topics(lookback_days=14),
             topic_analyzer=lambda platform, candidate, slot: analyze_topic(config.get("generator", {}), platform, candidate, slot),
             creative_history={platform: recent_combinations(store, platform)
                               for platform in {str(slot.get("platform") or "").casefold() for slot in slots if isinstance(slot, dict)}},
