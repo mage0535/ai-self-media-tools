@@ -27,8 +27,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # five lanes without an eligible topic; r61: 5 still left Juejin with only headline-"case" industry
 # overviews (rejected) ahead of its eligible scenario titles.  Each analysis is about a minute of prepare.
 # MED55 (11-07 CST): 8 left Juejin with nothing while candidates 12 and 15 of 42 were eligible (probe m56); the
-# window had 135 spare minutes, so 14.
-MAX_TOPIC_ANALYSES = 14
+# window had 135 spare minutes, so 14. d90 (11-27): Zhihu article stopped at 17/18 one step before an eligible
+# scenario that Zhihu answer immediately picked; raising to 20 avoids stopping right before eligible cases.
+MAX_TOPIC_ANALYSES = 20
 
 MANUAL_HANDOFF_PLATFORMS = {
     "bilibili",
@@ -42,6 +43,9 @@ MANUAL_HANDOFF_PLATFORMS = {
     # Owner 10-20: short-lived cookies, posted by hand. WeChat MP is manual too, but its
     # articles are text, so it is handled in content_policy, not in this video/image handoff set.
     "kuaishou",
+    # Owner 10-27 (D24): X/Twitter is a manual three-piece package; no automatic posting.
+    "twitter",
+    "x",
 }
 
 # Publishing keeps the historical ``twitter`` identifier, while analytics and
@@ -908,6 +912,8 @@ CROSS_PLATFORM_EVIDENCE = {
         "wechat", "zhihu", "kuaishou", "douyin_ai", "xiaohongshu", "shipinhao", "bilibili")},
     "youtube": _REAL_AI_FEEDS,
     "tiktok": _REAL_AI_FEEDS | {"youtube"},
+    "twitter": _REAL_AI_FEEDS | {"youtube"},
+    "x": _REAL_AI_FEEDS | {"youtube"},
     "douyin_pet": {"douyin_pet_targeted", "bilibili"},
 }
 

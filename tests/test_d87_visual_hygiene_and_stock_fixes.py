@@ -242,3 +242,15 @@ def test_d90_xhs_note_preserves_all_section_headings_and_strips_dividers():
     # No standalone divider lines ('—' or '---')
     for line in note.splitlines():
         assert line.strip() not in {"—", "---", "———"}
+
+
+def test_d90_twitter_in_manual_handoff_and_cross_platform_evidence():
+    from content_platform.overnight_batch import (
+        CROSS_PLATFORM_EVIDENCE,
+        MANUAL_HANDOFF_PLATFORMS,
+        MAX_TOPIC_ANALYSES,
+    )
+
+    assert MAX_TOPIC_ANALYSES >= 20
+    assert "twitter" in MANUAL_HANDOFF_PLATFORMS and "x" in MANUAL_HANDOFF_PLATFORMS
+    assert "twitter" in CROSS_PLATFORM_EVIDENCE and "youtube" in CROSS_PLATFORM_EVIDENCE["twitter"]
