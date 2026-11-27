@@ -147,3 +147,31 @@ def test_xhs_note_text_never_emits_orphaned_empty_headings():
             # If the heading is present, its immediately following block must NOT be another heading or the closing CTA!
             assert pos + 1 < len(blocks) - 2
             assert blocks[pos + 1] not in ("落点看清了，为什么还不能判对？", "别把演示里的「快」写成工位效率", "回看结束，只交能复核的结论")
+
+
+def test_d88_xhs_topic_rule_and_visual_policy_remove_contradictions():
+    import json
+    from content_platform.overnight_topic_analysis import build_prompt
+    from content_platform.visual_content_policy import visual_content_policy
+
+    prompt = build_prompt("xiaohongshu", {"title": "机器人分拣演示"}, {})
+    assert "PHOTO RULE" in prompt
+    assert "even in a physical industry" in prompt
+    assert "only licensed real photographs" not in prompt
+    assert "仅用实拍" in prompt and "never write" in prompt
+
+    carousel_policy = visual_content_policy(["xiaohongshu"], content_form="manual_carousel")
+    xhs_override = carousel_policy["platform_overrides"]["xiaohongshu"]
+    assert "short_video" not in xhs_override["must_include"]
+    assert xhs_override["short_video_required"] is False
+
+    video_policy = visual_content_policy(["xiaohongshu"], content_form="short_video")
+    assert "short_video" in video_policy["platform_overrides"]["xiaohongshu"]["must_include"]
+
+    rulebook = json.loads((Path(__file__).resolve().parents[1] / "config" / "channel_content_rulebook.json").read_text(encoding="utf-8"))
+    xhs_defs = rulebook["channel_rules"]["xiaohongshu"]["quality_gate_definitions"]
+    assert "short_video_present_when_strategy_requires" in xhs_defs
+    assert "xiaohongshu_recovery_strategy_gate" in xhs_defs
+    assert "viral_breakdown_not_executable" in xhs_defs["full_ops_workflow"]
+    assert "viral_breakdown_not_executable" in rulebook["channel_rules"]["juejin"]["quality_gate_definitions"]["full_ops_workflow"]
+    assert "viral_breakdown_not_executable" in rulebook["channel_rules"]["zhihu"]["quality_gate_definitions"]["full_ops_workflow"]

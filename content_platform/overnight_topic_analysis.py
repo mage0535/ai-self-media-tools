@@ -52,15 +52,17 @@ REAL_PHOTO_TOPIC_PLATFORMS = {"xiaohongshu", "rednote"}
 
 
 def _real_photo_rule(platform: str) -> str:
-    """MED52 (11-05/11-07): Xiaohongshu cards and cover must be licensed real photos that match the topic (0.72).
-    Topics whose core is only screen content (AI citations, search visibility, a chatbot answer) found no photo above
-    0.62 in 26 candidates and blocked every night; such a source is not eligible for this lane."""
+    """MED52/MED61/d88: Xiaohongshu topics must depict a concrete photographable physical scene
+    (licensed real photos first; declared realistic text-free AI physical scenes fallback per 2026-11-08 owner decision).
+    Topics whose core is only screen content remain ineligible, and boundaries must not hard-require stock-only photos."""
     if platform not in REAL_PHOTO_TOPIC_PLATFORMS:
         return ""
-    return ("PHOTO RULE: this post is illustrated only with licensed real photographs, cover included. The scenario's role, "
-            "place and physical action must be something a camera can show (people, workplaces, objects, hands at work). "
+    return ("PHOTO RULE: this post needs a concrete physical scene that a camera can show (people, workplaces, objects, "
+            "hands at work) so it can be illustrated with licensed real photographs first, or declared realistic text-free "
+            "AI-generated physical scenes when no stock photo reaches the visual match threshold — never write 'only licensed "
+            "real photos' or '仅用实拍' into boundaries or requirements. "
             "Return {\"eligible\": false} when the source's core is only digital or abstract (AI search visibility or "
-            "citations, chatbot answers, rankings, algorithms, strategy concepts) with no physical scene to photograph. "
+            "citations, chatbot answers, rankings, algorithms, strategy concepts) with no physical scene to show. "
             # MED61 (r130): AI+APS scheduling passed as "a factory" but its photos scored 0.52-0.62 for not showing the AI work.
             "The AI's own work must be visible too (a vision camera over a line, a robot arm picking): return "
             "{\"eligible\": false} when the AI work happens only on a screen (scheduling, planning, forecasting, "

@@ -186,15 +186,32 @@ PLATFORM_OVERRIDES: dict[str, dict[str, Any]] = {
 }
 
 
+XIAOHONGSHU_NON_VIDEO_FORMS = {
+    "manual_carousel",
+    "image_text",
+    "image_text_note",
+    "image_text_post",
+    "carousel",
+    "knowledge_cards",
+    "note",
+}
+
+
 def visual_content_policy(platforms: list[str] | tuple[str, ...] | None = None, content_form: str = "") -> dict[str, Any]:
     """Return the consolidated policy that generation and QA must cite."""
     policy = deepcopy(BASE_POLICY)
     policy["content_form"] = content_form
+    form_key = str(content_form or "").casefold()
     selected: dict[str, Any] = {}
     for platform in platforms or []:
         key = str(platform).casefold()
         if key in PLATFORM_OVERRIDES:
-            selected[key] = deepcopy(PLATFORM_OVERRIDES[key])
+            override = deepcopy(PLATFORM_OVERRIDES[key])
+            if key == "xiaohongshu" and form_key in XIAOHONGSHU_NON_VIDEO_FORMS:
+                override["must_include"] = [item for item in override.get("must_include", []) if item != "short_video"]
+                override["short_video_required"] = False
+                override["content_form_override"] = "manual_carousel_image_text_no_short_video"
+            selected[key] = override
     policy["platform_overrides"] = selected
     return policy
 

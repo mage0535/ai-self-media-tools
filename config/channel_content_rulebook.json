@@ -161,7 +161,7 @@
         "topic_quantity_decision": "The owner-configured nightly slot schedule (1 piece per scheduled platform slot within daily quota) passes without requiring remote draft/scheduled inventory APIs.",
         "same_lane_account_benchmark": "At least 3 real, verifiable, source-labeled same-lane benchmark samples (cross-platform allowed when declared via cross_platform_source) with extracted structural/hook takeaways passes; 10 same-topic visual dissections are not required in automated overnight mode.",
         "source_rights": "Declared AI illustrations (origin=ai_generated, provider in {cloudflare, openai-codex}, prompt_sha256, license=provider_terms_recorded) and licensed stock photos (pexels/pixabay with source_url) satisfy source_rights for draft/handoff articles and notes without external legal attachments or a separate 7-day layout fingerprint DB.",
-        "full_ops_workflow_and_viral_policy": "Pre-generation blueprint, strategy_brief, platform_source_matrix, quantity_plan, asset_mix_plan, humanization_plan, and complete local state.db dedup satisfy pre-generation ops workflow; viral_execution_policy=blocked caused solely by cold-start needs_metrics (0 published observations) must not block draft-first or manual-handoff creation.",
+        "full_ops_workflow_and_viral_policy": "Pre-generation blueprint, strategy_brief, platform_source_matrix, quantity_plan, asset_mix_plan, humanization_plan, and complete local state.db dedup satisfy pre-generation ops workflow; viral_execution_policy=blocked caused by cold-start needs_metrics (0 published observations) or viral_breakdown_not_executable (no platform creator-backend hot-work breakdown when using declared cross-platform samples) must not block draft-first or manual-handoff creation.",
         "local_dedup_scope": "seven_day_all_channel_dedup, not_duplicate_of_zhihu, and not_duplicate_of_zhihu_or_wechat are judged against the complete, untruncated local state.db history in the review archive; absence of remote platform published/scheduled API scrape is not a dedup failure."
       }
     }
@@ -1251,10 +1251,12 @@
         "operator_delivery_receipt": "投递前原生质量审核阶段判定标准（与 current_review_phase_ledger 阶段顺序一致）：原生审核发生在向操作者投递手动包之前，本轮不要求尚未发生的下游聊天收悉回执；通过条件为本地手动交付包已完整就绪且 SHA 绑定（含标题、正文、话题标签、封面与≥3张合格正文图，且 manual_review_required=true、不宣称已投递或已发布）；实际操作者收悉回执在原生审核通过后的下游交付步骤记录。",
         "cross_platform_hot_trend_analysis": "通过（2026-11-26 所有者授权 draft-first 冷启动边界）：多源采集正常且具备至少 1 条带真实 URL/ID 的同赛道 AI 落地场景来源即可，不要求同一选题当天在 3 个以上平台同时上榜。",
         "topic_quantity_decision": "通过（2026-11-26 所有者授权）：遵循夜间固定槽位排期（每日 1 条图文手动包，在配额内）且记录于 quantity_plan/batch_plan 即可，不要求远端已发布/定时库存 API。",
-        "full_ops_workflow": "通过（2026-11-26 所有者授权）：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan 与本地 state.db 完整去重即满足前置运营闭环；仅因冷启动 needs_metrics 导致的 viral_execution_policy=blocked 不得阻断手动交付包生成。",
+        "full_ops_workflow": "通过（2026-11-26/27 所有者授权）：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan 与本地 state.db 完整去重即满足前置运营闭环；因冷启动 needs_metrics 或使用跨平台对标样本导致的 viral_execution_policy=blocked（含 viral_breakdown_not_executable）不得阻断手动交付包生成。",
         "content_workflow_inputs": "通过（2026-11-26 所有者授权）：strategy_brief、content_blueprint、asset_mix_plan、humanization_plan 与最终图文包在主题/结构/AI声明上保持一致即可，不要求额外的远端站内动态热词 API。",
         "source_rights": "通过（2026-11-26 所有者授权）：图库实拍带来源链接、或声明式 AI 生成图（origin=ai_generated，provider 为 cloudflare/openai-codex，含 prompt_sha256 与 provider_terms_recorded，且无伪字/假界面/水印）即满足素材版权审查，不要求额外法律附件或 7 天布局指纹库。",
-        "seven_day_all_channel_dedup": "通过（2026-11-26 所有者授权）：基于审核包内未截断的本地 state.db 7/14 天跨渠道历史核验无同题近义重复即可；不因缺少平台远端已发布抓取而判失败。"
+        "seven_day_all_channel_dedup": "通过（2026-11-26 所有者授权）：基于审核包内未截断的本地 state.db 7/14 天跨渠道历史核验无同题近义重复即可；不因缺少平台远端已发布抓取而判失败。",
+        "short_video_present_when_strategy_requires": "条件适用（所有者授权 2026-10-30 / 2026-11-27，显式覆盖通用 output_package_required）：当本条小红书槽位形态为图文轮播/知识卡手动包（manual_carousel / image_text / image_text_note / carousel）且 video_toolchain.required=false 时，不要求附带短视频，本项按形态豁免通过（passed=true）；仅当策略明确要求 short_video 或混合视频形态时才强制要求短视频实物。",
+        "xiaohongshu_recovery_strategy_gate": "投递前原生审核判定标准（所有者授权 2026-11-27）：核验手动交付包属于真实 AI 落地工作流主线、封面标题带具体结果或清单承诺、正文含可收藏执行清单与单一结尾互动提问、且 manual_review_required=true；实际人工发布后的 ≥36 小时发布间隔与 1/24/72 小时复盘在交付后执行，不得以未观测到未来人工发布时间判失败。"
       }
     },
     "juejin": {
@@ -1370,7 +1372,7 @@
         "same_lane_account_benchmark": "通过：≥3 条真实可核验、带来源标注的同赛道参考样本（允许声明式跨平台 cross_platform_source）并提炼可借鉴的结构/钩子要点即可，不要求 10 篇同题视觉拆解。",
         "cross_platform_hot_trend_analysis": "通过：多源采集正常且具备至少 1 条带真实 URL/ID 的真实 AI 工程落地场景来源即可，不要求同一选题当天在 3 个以上平台同时上榜。",
         "topic_quantity_decision": "通过：遵循所有者配置的夜间固定槽位排期（每槽 1 篇，在日配额 1-2 篇内）并记录于 quantity_plan/batch_plan 即可，不要求远端草稿/排期库存 API。",
-        "full_ops_workflow": "通过：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan、anti_spam_similarity_plan 与本地 state.db 完整去重即满足前置运营闭环；仅因冷启动 needs_metrics 导致的 viral_execution_policy=blocked 不得阻断草稿入箱。",
+        "full_ops_workflow": "通过：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan、anti_spam_similarity_plan 与本地 state.db 完整去重即满足前置运营闭环；因冷启动 needs_metrics 或使用跨平台对标样本导致的 viral_execution_policy=blocked（含 viral_breakdown_not_executable）不得阻断草稿入箱。",
         "content_workflow_inputs": "通过：核心前置计划（blueprint、strategy_brief、asset_mix_plan、humanization_plan、anti_spam_similarity_plan）与最终草稿内容、配图及 AI 声明一致即可，不要求额外的远端热词 API。",
         "asset_mix_plan": "通过：按 2026-11-25 决定，封面先试图库再回退 Cloudflare/OpenAI-Codex，正文配图直走声明式写实无字 AI 插图（cloudflare -> openai-codex）；asset_mix_plan 与 asset_provenance 实际记录一致且正文含 AI 配图声明即通过。失败：声明与实际不符、或图内出现伪文字/假 UI 界面/水印。",
         "source_rights": "通过：声明式 AI 插图（origin=ai_generated，provider 为 cloudflare/openai-codex，含 prompt_sha256 与 provider_terms_recorded）或带来源链接的授权图库实拍满足版权要求，无需额外法律附件或 7 天布局指纹库。",
@@ -1525,7 +1527,7 @@
         "same_lane_account_benchmark": "通过：≥3 条真实可核验、带来源标注的同赛道参考样本（允许声明式跨平台 cross_platform_source）并提炼可借鉴的论证/结构/钩子要点即可，不要求 10 篇同题视觉拆解。",
         "cross_platform_hot_trend_analysis": "通过：多源采集正常且具备至少 1 条带真实 URL/ID 的真实 AI 落地场景来源即可，不要求同一选题当天在知乎站内热榜及 3 个以上平台同时上榜。",
         "topic_quantity_decision": "通过：遵循所有者配置的夜间固定槽位排期（在每日 1 篇文章 + 2 个回答配额内）并记录于 quantity_plan/batch_plan 即可，不要求远端草稿/排期库存 API；当 evidence_answer 无外部 question_id 时，以独立问答结构专栏草稿形态入箱且在 content_form_differentiation_plan 写明即通过。",
-        "full_ops_workflow": "通过：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan、anti_spam_similarity_plan、content_form_differentiation_plan 与本地 state.db 完整去重即满足前置运营闭环；仅因冷启动 needs_metrics 导致的 viral_execution_policy=blocked 不得阻断草稿入箱。",
+        "full_ops_workflow": "通过：生成前具备蓝图、strategy_brief、source_matrix、quantity_plan、asset_mix_plan、humanization_plan、anti_spam_similarity_plan、content_form_differentiation_plan 与本地 state.db 完整去重即满足前置运营闭环；因冷启动 needs_metrics 或使用跨平台对标样本导致的 viral_execution_policy=blocked（含 viral_breakdown_not_executable）不得阻断草稿入箱。",
         "content_workflow_inputs": "通过：核心前置计划与最终草稿正文、配图、AI 声明及形态定位一致即可，不要求额外的远端站内热词 API。",
         "asset_mix_plan": "通过：按 2026-11-25 决定，封面先试图库再回退 Cloudflare/OpenAI-Codex，正文配图直走声明式写实无字 AI 插图（cloudflare -> openai-codex）；asset_mix_plan 与 asset_provenance 实际记录一致且正文含 AI 配图声明即通过。失败：声明与实际不符、或图内出现伪文字/假 UI 界面/水印。",
         "source_rights": "通过：声明式 AI 插图（origin=ai_generated，provider 为 cloudflare/openai-codex，含 prompt_sha256 与 provider_terms_recorded）或带来源链接的授权图库实拍满足版权要求，无需额外法律附件或 7 天布局指纹库；PNG/JPEG 原图均符合草稿入箱规范。",
