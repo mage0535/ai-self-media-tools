@@ -7,7 +7,11 @@ set -euo pipefail
 export US_PROXY="${US_PROXY:-http://127.0.0.1:2080}"
 
 root="${CONTENT_PLATFORM_HOME:?CONTENT_PLATFORM_HOME is required}"
-day="$(date +%F)"
+day="${OVERNIGHT_RUN_DATE:-$(date +%F)}"
+if [[ ! "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  printf '%s\n' '{"status":"blocked","reason":"invalid_overnight_run_date"}' > "$root/data/overnight-invalid-date.json" 2>/dev/null || true
+  exit 1
+fi
 out="$root/data/overnight/$day"
 slots="$root/secrets/overnight-slots.json"
 mkdir -p "$out"
@@ -40,11 +44,15 @@ minutes_since_midnight=$((10#$hhmm / 100 * 60 + 10#$hhmm % 100))
 # MED92(c): a continuation resumes the same night's plan on another text model after the first one stopped answering.
 # The worker admits it only with a signed continuation proof; it never plans again and never restarts finished lanes.
 continuation="${OVERNIGHT_CONTINUATION:-0}"
+manual_authorized="${OVERNIGHT_MANUAL_AUTHORIZED:-0}"
 if [[ "$continuation" == "1" ]]; then
   if [[ ! -f "$out/plan.json" || ! -f "$out/state.json" ]]; then
     printf '%s\n' '{"status":"blocked","reason":"continuation_without_plan_state"}' > "$out/continuation-result.json"
     exit 1
   fi
+elif [[ "$manual_authorized" == "1" ]]; then
+  # Sanctioned HMAC-signed owner_manual batch verified by OLD control plane and NEW media_batch.py.
+  :
 elif (( minutes_since_midnight > admission_window_minutes )); then
   printf '%s\n' '{"status":"no_run","reason":"missed overnight admission window"}' > "$out/result.json"
   notify "skipped" "missed_overnight_admission_window"
