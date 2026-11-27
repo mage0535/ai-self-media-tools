@@ -1094,15 +1094,16 @@ class MediaBridge:
                                    "concrete situation this exact sentence describes instead." if seen else "")
                                 + (f" The reviewer rejected it because: {why} Include what is missing." if why else ""))
                 retry_kwargs = item_kwargs
-                # d87: Keep stock on retry #0 for real-background video lanes (MED39), but if repeated stock
-                # searches returned completely off-topic images (< 0.45), escalate to photorealistic generation
-                # on later retries instead of blocking the lane on off-topic stock photos.
-                stock_severely_off_topic = (
+                # d87/d90: Keep stock on retry #0 for real-background video lanes (MED39), but if repeated stock
+                # searches STILL fail the 0.72 / requirement_match gate by retry #1 (e.g. generic close-up
+                # dog photo scoring 0.45 with match=False for a specific RV travel beat), escalate to
+                # photorealistic generation on the final retry instead of blocking on a 3rd dead stock query.
+                stock_exhausted = (
                     retry_number >= 1
                     and str(last_result.get("provider") or "") in STOCK_PROVIDERS
-                    and float(review.get("score") or 0) < 0.45
+                    and (float(review.get("score") or 0) < SEMANTIC_RETRY_THRESHOLD or review.get("requirement_match") is False)
                 )
-                keep_stock = real_only and not generated_fallback and not stock_severely_off_topic
+                keep_stock = real_only and not generated_fallback and not stock_exhausted
                 why_lower = why.casefold()
                 hygiene_defect = any(tok in why_lower for tok in _VISUAL_HYGIENE_DEFECT_TOKENS)
                 if not keep_stock:

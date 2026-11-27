@@ -108,8 +108,8 @@ def test_semantic_retry_injects_visual_hygiene_fix_and_escalates_off_topic_pet_s
     pet_reqs = [{"intent": {"beat_id": "s01", "claim": "狗狗看电视转头", "content_match_reason": "illustrate"}, "sha256": "1"}]
     pet_reviews = iter([
         {"score": 0.08, "requirement_match": False, "observed_subject": "empty office", "reason": "no dog"},
-        {"score": 0.12, "requirement_match": False, "observed_subject": "camera rig", "reason": "no dog"},
-        {"score": 0.88, "requirement_match": True, "observed_subject": "dog watching tv", "reason": "exact match"},
+        {"score": 0.45, "requirement_match": False, "observed_subject": "dog close-up", "reason": "no RV sightseeing context"},
+        {"score": 0.88, "requirement_match": True, "observed_subject": "dog looking out RV window", "reason": "exact match"},
     ])
     with patch.object(bridge.registry, "choose_provider", return_value=PetProvider()), \
             patch("content_platform.video_asset_semantics.validate_requirement", side_effect=lambda r: r), \
