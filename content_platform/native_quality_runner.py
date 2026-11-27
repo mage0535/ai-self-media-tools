@@ -408,6 +408,10 @@ def review_prompt(material,channel):
       'immutable_workflow_history和complete_original_review_archive保留旧attempt/旧拒稿/旧图完整证据，禁止混作本轮候选或继承结论。真实当前source_binding与每个文件SHA已正式预读，完整当前规则技能、正文、文案、版权和七日索引都在本次材料，不需再解码几MB旧流水线探查。')
     header={'context_sha256':canonical_sha(context),'channel':channel,'required_checks':names,'required_skill_sources':list(context['skills']),
         'visual_files_to_observe':images if channel in {'vlm','watch'} else [],'audio_files_to_observe':audio if channel=='watch'else[]}
+    if channel=='auto' and 'vlm' in (context.get('required_checks') or {}) and images:
+        instruction+=(' 分通道审查边界（d90）：当前为auto文本/规则/来源审核通道，本通道按设计不分配像素看图权限（visual_files_to_observe为空属正常），'
+            '紧随其后的必经vlm通道将逐张实看全部当前视觉件像素并把关无伪字/假UI/水印/纯色卡/畸形；'
+            '因此auto通道对视觉相关规则仅核验版权清单、SHA绑定、尺寸/OCR预读、AI声明与图文锚点一致性，不得仅因auto通道未看像素而判失败或阻断进入vlm通道。')
     instruction+=' 当前规则材料已经隐藏凭据示例，原字节SHA保留；禁止读取auth.json、.env、cookie或密钥，不要打印任何token。'
     encoded=compact_review_material(material)
     instruction+=' 材料采用无损共享源编码：material内仅有reference_key单键的对象指向unique_sources中同短ID的完整原文/对象；该ID不是SHA和审核结论。'+\

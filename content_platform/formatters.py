@@ -74,6 +74,22 @@ def _note_title(title):
     return re.sub(r"[A-Za-z0-9+._-]+$", "", head).strip() or head
 
 
+_STANDALONE_DIVIDER_RE = re.compile(r"^[\s\-—–─_=*•·~]+$")
+
+
+def _trim_at_sentence(text, limit):
+    text = str(text or "").strip()
+    if limit <= 0 or len(text) <= limit:
+        return text[:max(0, limit)].strip()
+    cut = max(text.rfind(mark, 0, limit + 1) for mark in "。！？!?；;")
+    if cut >= max(24, limit // 2):
+        return text[:cut + 1].strip()
+    cut = max(text.rfind(mark, 0, limit + 1) for mark in "，,、：: ")
+    if cut >= max(24, limit // 2):
+        return text[:cut].strip()
+    return text[:limit].strip()
+
+
 def _note_blocks_tagged(body):
     """Paragraph blocks of plain text paired with a flag indicating Markdown headings."""
     blocks = []
@@ -86,8 +102,11 @@ def _note_blocks_tagged(body):
             rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in lines]
             rows = [row for row in rows if not all(re.fullmatch(r":?-{2,}:?", cell) for cell in row if cell)]
             lines = ["· " + "｜".join(_plain(cell) for cell in row if cell) for row in rows]
+        lines = [line for line in lines if not _STANDALONE_DIVIDER_RE.fullmatch(line)]
+        if not lines:
+            continue
         text = "\n".join(_plain(line) for line in lines).strip()
-        if text:
+        if text and not _STANDALONE_DIVIDER_RE.fullmatch(text):
             blocks.append((text, is_heading))
     return blocks
 
@@ -98,44 +117,110 @@ def _note_blocks(body):
 
 
 def _note_text(hook, body):
-    """Whole paragraphs only, the closing paragraph always kept, plus the AI-assisted disclosure.
+    """Preserve all sections (headings + actionable checklist/handoff) cleanly within XHS_TEXT_LIMIT.
 
-    d87: Headings are atomically paired with their immediately following body paragraph so
-    budget trimming never leaves empty orphaned headings at the end of a note.
+    d87/d90: Never emit orphaned headings or standalone divider lines ('—'). When a note has multiple
+    sections, reserve every section heading verbatim (so section_image_map anchors stay 100% valid in
+    publication_copy) and allocate the remaining budget proportionally across the intro and ALL sections
+    so closing checklists and human-handoff steps are never truncated away.
     """
     tagged = _note_blocks_tagged(body)
     plain_hook = _plain(hook)
-    if plain_hook and (
+    if plain_hook and not _STANDALONE_DIVIDER_RE.fullmatch(plain_hook) and (
         not tagged
         or (plain_hook not in tagged[0][0] and tagged[0][0] not in plain_hook and plain_hook[:16] not in tagged[0][0])
     ):
         tagged.insert(0, (plain_hook, False))
-    closing = tagged.pop()[0] if len(tagged) > 1 else ""
+    closing = ""
+    if len(tagged) > 2 and not tagged[-1][1] and not tagged[-2][1]:
+        closing = tagged.pop()[0]
+    elif len(tagged) > 1 and not tagged[-1][1] and not any(is_h for _, is_h in tagged):
+        closing = tagged.pop()[0]
     tail = [part for part in (closing, XHS_AI_DISCLOSURE) if part]
     budget = XHS_TEXT_LIMIT - sum(len(part) + 2 for part in tail)
-    kept = []
-    idx = 0
-    while idx < len(tagged):
-        text, is_heading = tagged[idx]
+
+    intro_blocks = []
+    sections = []
+    cur_heading = None
+    cur_bodies = []
+    for text, is_heading in tagged:
         if is_heading:
-            # Never emit a heading unless at least its immediately following body block also fits.
-            if idx + 1 >= len(tagged) or tagged[idx + 1][1]:
-                idx += 1
-                continue
-            body_text = tagged[idx + 1][0]
-            needed = (len(text) + 2) + (len(body_text) + 2)
-            if needed <= budget:
+            if cur_heading is not None and cur_bodies:
+                sections.append((cur_heading, cur_bodies))
+            cur_heading = text
+            cur_bodies = []
+        elif cur_heading is None:
+            intro_blocks.append(text)
+        else:
+            cur_bodies.append(text)
+    if cur_heading is not None and cur_bodies:
+        sections.append((cur_heading, cur_bodies))
+
+    kept = []
+    if not sections:
+        rem = budget
+        for text in intro_blocks:
+            if len(text) + 2 <= rem:
                 kept.append(text)
-                kept.append(body_text)
-                budget -= needed
-                idx += 2
-                continue
-            # Stop collecting further section headings once a section cannot fit with its body.
-            break
-        if len(text) + 2 <= budget:
-            kept.append(text)
-            budget -= len(text) + 2
-        idx += 1
+                rem -= len(text) + 2
+    else:
+        full_intro = "\n".join(intro_blocks).strip()
+        full_sections = [(h, "\n".join(bs).strip()) for h, bs in sections]
+        total_full = (len(full_intro) + 2 if full_intro else 0) + sum(len(h) + 2 + len(b) + 2 for h, b in full_sections)
+        if total_full <= budget:
+            if full_intro:
+                kept.append(full_intro)
+            for h, b in full_sections:
+                kept.append(h)
+                kept.append(b)
+        else:
+            # Reserve all section headings first; drop tail sections only in extreme cases where headings alone overflow.
+            usable_sections = []
+            heading_cost = 0
+            for h, b in full_sections:
+                if heading_cost + len(h) + 2 + 42 <= budget:
+                    usable_sections.append((h, b))
+                    heading_cost += len(h) + 2
+            body_budget = max(0, budget - heading_cost - 2 * len(usable_sections))
+            intro_share = 0
+            if full_intro and body_budget > 80:
+                intro_share = min(len(full_intro), max(60, int(body_budget * 0.22)))
+                if body_budget - intro_share - 2 < 45 * len(usable_sections):
+                    intro_share = max(0, body_budget - 45 * len(usable_sections) - 2)
+                if intro_share >= 30:
+                    trimmed_intro = _trim_at_sentence(full_intro, intro_share)
+                    if trimmed_intro:
+                        kept.append(trimmed_intro)
+                        body_budget -= len(trimmed_intro) + 2
+            n_sec = len(usable_sections)
+            if n_sec:
+                # Two-pass fair allocation: short sections keep full length; surplus goes to longer sections.
+                raw_lens = [len(b) for _, b in usable_sections]
+                shares = [0] * n_sec
+                rem_b = body_budget
+                open_idx = list(range(n_sec))
+                while open_idx and rem_b > 0:
+                    even = max(1, rem_b // len(open_idx))
+                    next_open = []
+                    consumed = 0
+                    for i in open_idx:
+                        if raw_lens[i] - shares[i] <= even:
+                            add = raw_lens[i] - shares[i]
+                            shares[i] += add
+                            consumed += add
+                        else:
+                            shares[i] += even
+                            consumed += even
+                            next_open.append(i)
+                    rem_b -= consumed
+                    if consumed == 0 or len(next_open) == len(open_idx):
+                        break
+                    open_idx = next_open
+                for (h, b), limit in zip(usable_sections, shares):
+                    trimmed = _trim_at_sentence(b, max(30, limit))
+                    if trimmed:
+                        kept.append(h)
+                        kept.append(trimmed)
     text = "\n\n".join(kept + tail)
     return text if len(text) <= XHS_TEXT_LIMIT else text[:XHS_TEXT_LIMIT - len(XHS_AI_DISCLOSURE) - 2].rsplit("\n", 1)[0] + "\n\n" + XHS_AI_DISCLOSURE
 

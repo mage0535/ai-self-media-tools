@@ -214,3 +214,31 @@ def test_d89_hook_strength_and_all_11_platforms_rulebook_and_image_rubric():
         assert plat in LANE_COLLECTORS, f"{plat} missing LANE_COLLECTORS"
     for vplat in ("douyin_pet", "douyin_ai", "kuaishou", "shipinhao", "bilibili", "youtube", "tiktok"):
         assert len(REFERENCE_COLLECTORS.get(vplat) or ()) >= 2, f"{vplat} needs >=2 REFERENCE_COLLECTORS"
+
+
+def test_d90_xhs_note_preserves_all_section_headings_and_strips_dividers():
+    body = "\n\n".join([
+        "屏幕上的缺陷框没画错，带划痕的零件却放过去了，问题往往出在试跑验收没闭环。",
+        "## 先定必检面与边界样件",
+        "把关键划痕面和边界样件逐件编号，训练样本与验收样本按实物严格分开，防止高估模型命中率。" * 3,
+        "—",
+        "## 把取像到分流链路拉通计时",
+        "从相机触发取像、算法推理输出到剔除机构动作逐件记录耗时，把原图、件号、判定与去向一一对应。" * 3,
+        "---",
+        "## 试跑验收清单与人工接管",
+        "同批样件做独立人工判定，逐件登记漏检、过检与中断记录；异常件直接留件复核，未达现场验收线不放行。" * 3,
+        "你们产线最容易卡在取像、判定还是剔除哪一环？",
+    ])
+    note = _note_text("", body)
+    assert len(note) <= 950
+    # All 3 headings MUST appear verbatim so section_image_map heading_found_in_publication_copy is 3/3 True!
+    assert "先定必检面与边界样件" in note
+    assert "把取像到分流链路拉通计时" in note
+    assert "试跑验收清单与人工接管" in note
+    # Closing checklist/handoff content preserved
+    assert "漏检" in note or "留件复核" in note
+    # Closing CTA preserved
+    assert "你们产线最容易卡在取像、判定还是剔除哪一环？" in note
+    # No standalone divider lines ('—' or '---')
+    for line in note.splitlines():
+        assert line.strip() not in {"—", "---", "———"}
