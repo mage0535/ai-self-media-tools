@@ -191,6 +191,19 @@ def attach_breakdowns(prepared: dict[str, Any], items: list[dict[str, Any]], out
                         samples += reference_samples(rows_by_collector[name], str(task["brief"].get("lane") or ""))
             task["brief"].update(hot_viral_samples=samples,
                                  hot_viral_source_statuses={sample["source"]: "ready" for sample in samples})
+            if samples:
+                from .video_gpu_motion import compile_motion_blueprint_md
+                blueprint = compile_motion_blueprint_md(
+                    samples,
+                    lane=str(task["brief"].get("lane") or ""),
+                    target_platform=platform,
+                )
+                bp_path = Path(out_dir) / f"{platform}_motion_blueprint.md"
+                bp_path.parent.mkdir(parents=True, exist_ok=True)
+                bp_path.write_text(blueprint["markdown"], encoding="utf-8")
+                task["brief"]["motion_blueprint"] = {
+                    k: v for k, v in blueprint.items() if k != "markdown"
+                } | {"path": str(bp_path)}
     return prepared
 
 

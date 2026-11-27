@@ -38,10 +38,13 @@ from content_platform.video_artifact import (
     verify_final_pixels,
 )
 from content_platform.video_gpu_motion import (
+    audit_motion_pacing_and_anchors,
     build_kinetic_ass_subtitles,
     chromium_launch_args,
     encoder_summary,
     inject_kinetic_runtime,
+    is_transient_browser_capture_error,
+    next_retry_concurrency,
     platform_subtitle_spec,
     render_broll_shot,
     video_encoder_args,
@@ -3530,6 +3533,7 @@ def main() -> int:
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     shot_records: list[dict[str, object]] = []
+    adaptive_fallbacks: list[dict[str, object]] = []
 
     async def _render():
         global _SHARED_BROWSER
@@ -3575,19 +3579,45 @@ def main() -> int:
             local_broll = out / "backgrounds" / f"broll_{seg_idx:02d}.mp4"
             return local_broll if local_broll.is_file() else None
 
-        async def record_bounded(name: str, html_path: str, duration: float, *, frame_driven: bool = False) -> str | None:
+        serial_retry_lock = asyncio.Lock()
+        browser_relaunch_lock = asyncio.Lock()
+        pw_holder: dict[str, object] = {"pw": None}
+
+        async def _ensure_healthy_browser() -> None:
+            global _SHARED_BROWSER
+            async with browser_relaunch_lock:
+                pw = pw_holder.get("pw")
+                if pw is None:
+                    return
+                connected = False
+                try:
+                    connected = bool(_SHARED_BROWSER is not None and _SHARED_BROWSER.is_connected())
+                except Exception:
+                    connected = False
+                if not connected:
+                    _SHARED_BROWSER = await pw.chromium.launch(
+                        headless=True,
+                        executable_path=_chromium_executable_path(),
+                        env=_chromium_launch_environment(),
+                        args=chromium_launch_args(),
+                    )
+
+        async def record_bounded(name: str, html_path: str, duration: float, *, frame_driven: bool = False) -> tuple[str | None, str]:
             try:
+                await _ensure_healthy_browser()
                 timeout = element_render_timeout_seconds(duration) if frame_driven else max(45, duration + 25)
-                return await asyncio.wait_for(
+                path = await asyncio.wait_for(
                     _record_shot(name, html_path, duration, out, frame_driven=frame_driven),
                     timeout=timeout,
                 )
+                return path, ""
             except asyncio.TimeoutError:
                 print(f"{name} Playwright recording timed out", file=sys.stderr)
-                return None
+                return None, "TimeoutError"
             except Exception as exc:
-                print(f"{name} Playwright recording failed: {str(exc)[:160]}", file=sys.stderr)
-                return None
+                err = str(exc)[:200]
+                print(f"{name} Playwright recording failed: {err[:160]}", file=sys.stderr)
+                return None, err
 
         async def render_still(name: str, html_path: str, duration: float) -> str | None:
             try:
@@ -3612,12 +3642,21 @@ def main() -> int:
                     print(f"{name} 管道逐帧回退标准录制: {str(exc)[:140]}", file=sys.stderr)
             target = out / "shots" / f"{name}.mp4"
             for attempt in range(2):
-                webm = await record_bounded(name, html_path, duration + 0.5, frame_driven=True)
+                if attempt == 0:
+                    webm, err = await record_bounded(name, html_path, duration + 0.5, frame_driven=True)
+                else:
+                    # Adaptive concurrency step-down (OpenMotion capture-fix pattern): serialize retry at workers=1.
+                    next_w = next_retry_concurrency(max_concurrent_shots)
+                    adaptive_fallbacks.append({"shot": name, "from_workers": max_concurrent_shots, "to_workers": next_w, "reason": err or "finalize_retry"})
+                    async with serial_retry_lock:
+                        if is_transient_browser_capture_error(err):
+                            await _ensure_healthy_browser()
+                        webm, err = await record_bounded(name, html_path, duration + 0.5, frame_driven=True)
                 rendered = _finalize_recorded_shot(webm, target, duration) if webm else None
                 if rendered:
                     break
                 if attempt == 0:
-                    print(f"{name} 元素镜头重试第 2 次录制", file=sys.stderr)
+                    print(f"{name} 元素镜头降级单并发重试第 2 次录制", file=sys.stderr)
             else:
                 return None
             if not _repair_leading_bright_frame(
@@ -3634,6 +3673,7 @@ def main() -> int:
             if need_browser:
                 pw_cm = async_playwright()
                 pw = await pw_cm.__aenter__()
+                pw_holder["pw"] = pw
                 shared_browser = await pw.chromium.launch(
                     headless=True,
                     executable_path=_chromium_executable_path(),
@@ -3687,13 +3727,22 @@ def main() -> int:
                         return ([{"name": name, "renderer": "playwright-frame-video", "fallback": False, "reused": False}], None)
                     if render_policy["motion_mode"] == "cinematic":
                         mp4 = False
+                        err = ""
                         for attempt in range(2):
-                            webm = await record_bounded(name, hp_str, sd + 0.5)
+                            if attempt == 0:
+                                webm, err = await record_bounded(name, hp_str, sd + 0.5)
+                            else:
+                                next_w = next_retry_concurrency(max_concurrent_shots)
+                                adaptive_fallbacks.append({"shot": name, "from_workers": max_concurrent_shots, "to_workers": next_w, "reason": err or "finalize_retry"})
+                                async with serial_retry_lock:
+                                    if is_transient_browser_capture_error(err):
+                                        await _ensure_healthy_browser()
+                                    webm, err = await record_bounded(name, hp_str, sd + 0.5)
                             mp4 = _finalize_recorded_shot(webm, target, sd) if webm else False
                             if mp4:
                                 break
                             if attempt == 0:
-                                print(f"{name} 镜头重试第 2 次录制", file=sys.stderr)
+                                print(f"{name} 镜头降级单并发重试第 2 次录制", file=sys.stderr)
                         if mp4:
                             return ([{"name": name, "renderer": "playwright-video", "fallback": False, "reused": False}], None)
                         return ([{"name": name, "renderer": "playwright-video", "fallback": True, "reused": False}], name)
@@ -3708,10 +3757,11 @@ def main() -> int:
                 if fail_name:
                     failed_shots.append(fail_name)
         finally:
+            browser_to_close = _SHARED_BROWSER or shared_browser
             _SHARED_BROWSER = None
-            if shared_browser is not None:
+            if browser_to_close is not None:
                 try:
-                    await asyncio.wait_for(shared_browser.close(), timeout=15)
+                    await asyncio.wait_for(browser_to_close.close(), timeout=15)
                 except (asyncio.TimeoutError, Exception):
                     pass
             if pw_cm is not None:
@@ -4193,6 +4243,13 @@ def main() -> int:
     render_quality["video_encoder"] = encoder_summary(profile="baseline")
     render_quality["chromium_gpu"] = "--use-angle=vulkan" in chromium_launch_args()
     render_quality["subtitle_style"] = "kinetic_ass" if used_kinetic_ass else "drawtext"
+    render_quality["adaptive_concurrency_fallbacks"] = adaptive_fallbacks
+    render_quality["motion_craft_audit"] = audit_motion_pacing_and_anchors(
+        starts_global,
+        [durs_map[name] for name in shot_names],
+        alignment_records,
+        [starts_global[2 * i] for i in range(1, 8)],
+    )
     (out / "shot_render_records.json").write_text(
         json.dumps(shot_records, ensure_ascii=False, indent=2), encoding="utf-8"
     )

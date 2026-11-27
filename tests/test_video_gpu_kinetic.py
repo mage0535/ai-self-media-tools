@@ -111,3 +111,80 @@ def test_bitrate_encoder_and_platform_subtitle_specs_and_progress_bar(monkeypatc
         topic_html, progress_start=0.25, progress_end=0.5, shot_duration=3.0, include_progress_bar=True
     )
     assert 'id="hermes-global-progress"' not in without_bar
+
+
+def test_openmotion_craft_rules_and_motion_blueprint_and_adaptive_fallback(tmp_path):
+    # 1) OpenMotion director craft rules + video_planning_producer payload integration
+    from content_platform.run_contract import build_run_contract
+    from content_platform.video_planning_producer import analysis_payload
+
+    assert vgm.OPENMOTION_DIRECTOR_CRAFT_RULES["version"] == "openmotion_craft_v1"
+    rule_ids = {r["id"] for r in vgm.OPENMOTION_DIRECTOR_CRAFT_RULES["rules"]}
+    assert {"visual_event_not_slide", "cross_shot_continuity", "bounded_dead_air_and_rhythm", "perceptual_audio_visual_anchors"} <= rule_ids
+
+    contract = build_run_contract("kuaishou")
+    payload = analysis_payload(contract, "AI 复盘", [])
+    assert payload["content_blueprint"]["motion_craft_rules"]["version"] == "openmotion_craft_v1"
+
+    # 2) Motion.md observation-grounded blueprint compiler
+    samples = [
+        {
+            "content_id": "bv_demo_01",
+            "breakdown": {
+                "transition": {"observed": {"cuts_per_minute": 24, "observed": ["hard_cut", "wipeleft"]}},
+                "motion": {"observed": ["handheld_push", "snap_zoom"]},
+                "video_structure": {"observed": ["hook", "proof", "cta"]},
+                "hook": {"observed": "3秒抛出反差结论"},
+            },
+        },
+        {
+            "content_id": "yt_demo_02",
+            "breakdown": {
+                "transition": {"observed": {"cuts_per_minute": 20, "observed": ["hard_cut"]}},
+                "motion": {"observed": ["top_down_reveal"]},
+                "video_structure": {"observed": ["problem", "result"]},
+                "hook": {"observed": "先看前后对比"},
+            },
+        },
+    ]
+    bp = vgm.compile_motion_blueprint_md(samples, lane="real_world_ai_implementation", target_platform="kuaishou")
+    assert bp["version"] == "motion_blueprint_v1"
+    assert bp["source_count"] == 2
+    assert bp["avg_cuts_per_minute"] == 22.0
+    assert bp["recommended_shot_seconds"] == 2.73
+    assert "hard_cut" in bp["observed_transitions"]
+    assert "# Motion.md Blueprint (kuaishou / real_world_ai_implementation)" in bp["markdown"]
+    assert "visual_event_not_slide" in bp["markdown"]
+
+    # 3) Upgraded GSAP/OpenMotion kinetic primitives inside KINETIC_MOTION_RUNTIME_JS
+    html = "<!DOCTYPE html><html><body><div data-start='0.2' data-motion-kind='reveal-clip'>hi</div></body></html>"
+    injected = vgm.inject_kinetic_runtime(html)
+    assert "window.__ease = EASE" in injected
+    assert "reveal-clip" in injected
+    assert "scale-punch" in injected
+    assert "slide-lock" in injected
+    assert "focus-breathe" in injected
+    assert "metric-roll" in injected
+
+    # 4) Adaptive concurrency step-down & transient browser error detection + dead-air/AV anchor audit
+    assert vgm.is_transient_browser_capture_error("net::ERR_NO_BUFFER_SPACE at page.goto") is True
+    assert vgm.is_transient_browser_capture_error("Target page, context or browser has been closed") is True
+    assert vgm.is_transient_browser_capture_error("SyntaxError: unexpected token") is False
+    assert vgm.next_retry_concurrency(4) == 2
+    assert vgm.next_retry_concurrency(2) == 1
+    assert vgm.next_retry_concurrency(1) == 1
+
+    audit = vgm.audit_motion_pacing_and_anchors(
+        starts_global=[0.0, 2.0, 5.0, 7.5],
+        shot_durations=[2.0, 3.0, 2.5, 3.5],
+        alignment_records=[
+            {"segment": 1, "scene_duration": 5.0, "tts_duration": 4.2},
+            {"segment": 2, "scene_duration": 6.0, "tts_duration": 3.5},
+        ],
+        transition_times=[5.0],
+        max_idle_hold_seconds=1.6,
+    )
+    assert audit["version"] == "motion_craft_audit_v1"
+    assert audit["all_anchors_aligned"] is True
+    assert audit["pacing_contrast"]["contrast_ratio"] == 1.75
+    assert audit["dead_air_warnings"] == ["segment_02_idle_hold_2.50s"]

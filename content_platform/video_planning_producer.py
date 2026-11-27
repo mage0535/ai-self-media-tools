@@ -74,10 +74,12 @@ def complete_sources(observations):
 def analysis_payload(contract,topic,sources,combination=None):
     # The full collector evidence remains in the brief/audit; select a complete
     # source, never truncate its transcript or substitute metadata for frames.
+    from .video_gpu_motion import OPENMOTION_DIRECTOR_CRAFT_RULES
     blueprint={'purpose':'source_grounded_video_analysis','topic':topic,
         'source_observations':sources,'required_dimensions':list(BREAKDOWN_DIMENSIONS),
         'source_fields_by_dimension':DIMENSION_FIELDS,
         'quality_constraints':contract.get('channel_rules') or {},
+        'motion_craft_rules':OPENMOTION_DIRECTOR_CRAFT_RULES,
         'prohibited_outputs':sorted(EXECUTION_KEYS)}
     if isinstance(combination,dict):
         # MED12: the script tells the task's chosen story; sources stay analysis-only evidence.

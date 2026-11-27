@@ -212,10 +212,28 @@ def chromium_launch_args(*, mode: str | None = None) -> list[str]:
 #    data-start / data-duration / data-stagger attributes (zero wall-clock Date.now / setTimeout).
 # 2) Remotion Skills (remotion-best-practices): damped spring(frame, fps, {damping, stiffness, mass}),
 #    clamped interpolate(), and GPU-composited transform/opacity only (zero font-size/layout reflow).
+# 3) OpenMotion / GSAP motion craft: frame-deterministic power3Out/expoOut/backOut/anticipate
+#    curves + declarative data-motion-kind (reveal-clip, scale-punch, slide-lock, metric-roll,
+#    focus-breathe) to prevent static PPT-slide dead-air holds.
 KINETIC_MOTION_RUNTIME_JS = r"""
 (function () {
   if (window.__hermesKineticReady) return;
   window.__hermesKineticReady = true;
+
+  function clamp01(x) {
+    return x <= 0 ? 0 : x >= 1 ? 1 : x;
+  }
+
+  var EASE = {
+    linear: function (p) { return clamp01(p); },
+    power3Out: function (p) { p = clamp01(p); var inv = 1 - p; return 1 - inv * inv * inv; },
+    expoOut: function (p) { p = clamp01(p); return p >= 1 ? 1 : 1 - Math.pow(2, -10 * p); },
+    backOut: function (p) { p = clamp01(p); var c1 = 1.45, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); },
+    anticipate: function (p) {
+      p = clamp01(p);
+      return p < 0.22 ? -0.14 * Math.sin((p / 0.22) * Math.PI) : EASE.power3Out((p - 0.22) / 0.78);
+    }
+  };
 
   function spring(frame, fps, cfg) {
     fps = Math.max(1, Number(fps) || 25);
@@ -258,18 +276,52 @@ KINETIC_MOTION_RUNTIME_JS = r"""
       var startSec = parseFloat(el.getAttribute('data-start') || '0') || 0;
       var staggerSec = parseFloat(el.getAttribute('data-stagger') || '0') || 0;
       var durSec = parseFloat(el.getAttribute('data-duration') || '0') || 0;
+      var kind = (el.getAttribute('data-motion-kind') || '').trim().toLowerCase();
+      var easeName = (el.getAttribute('data-ease') || 'power3Out').trim();
+      var easeFn = EASE[easeName] || EASE.power3Out;
       var effectiveStart = startSec + idx * staggerSec;
+      var enterSec = Math.max(0, t - effectiveStart);
       var enterFrame = (t - effectiveStart) * fps;
-      var s = spring(Math.max(effectiveStart <= 0.1 ? 3 : 0, enterFrame), fps, { damping: 15, stiffness: 190, mass: 1 });
+      var enterProgress = easeFn(clamp01(enterSec / 0.42));
       var minOpacity = effectiveStart <= 0.1 ? 0.85 : 0;
       var opacity = interpolate(enterFrame, [0, 6], [minOpacity, 1], true);
       if (durSec > 0 && t > startSec + durSec) {
         opacity = interpolate(t - (startSec + durSec), [0, 0.2], [1, 0], true);
       }
-      var dy = (1 - Math.min(1, s)) * 22;
-      var scale = 0.95 + 0.05 * s;
       el.style.opacity = opacity.toFixed(3);
-      el.style.transform = 'translate3d(0,' + dy.toFixed(2) + 'px,0) scale(' + scale.toFixed(4) + ')';
+      if (kind === 'reveal-clip') {
+        var insetPct = Math.max(0, (1 - enterProgress) * 100);
+        el.style.clipPath = 'inset(0 ' + insetPct.toFixed(2) + '% 0 0)';
+        el.style.transform = 'translate3d(' + ((1 - enterProgress) * 14).toFixed(2) + 'px,0,0)';
+      } else if (kind === 'scale-punch') {
+        var punch = EASE.expoOut(clamp01(enterSec / 0.36));
+        var pScale = 1.08 - 0.08 * punch;
+        el.style.transform = 'scale(' + pScale.toFixed(4) + ')';
+      } else if (kind === 'slide-lock') {
+        var sl = EASE.anticipate(clamp01(enterSec / 0.45));
+        var dx = (1 - sl) * 34;
+        el.style.transform = 'translate3d(' + dx.toFixed(2) + 'px,0,0)';
+      } else if (kind === 'focus-breathe') {
+        var settle = EASE.power3Out(clamp01(enterSec / 0.35));
+        var breathe = 1 + 0.012 * Math.sin(Math.max(0, enterSec - 0.35) * 2.1);
+        el.style.transform = 'scale(' + ((0.97 + 0.03 * settle) * breathe).toFixed(4) + ')';
+      } else {
+        var s = spring(Math.max(effectiveStart <= 0.1 ? 3 : 0, enterFrame), fps, { damping: 15, stiffness: 190, mass: 1 });
+        var dy = (1 - Math.min(1, s)) * 22;
+        var scale = 0.95 + 0.05 * s;
+        el.style.transform = 'translate3d(0,' + dy.toFixed(2) + 'px,0) scale(' + scale.toFixed(4) + ')';
+      }
+      var countTo = el.getAttribute('data-count-to');
+      if (countTo !== null && (kind === 'metric-roll' || el.hasAttribute('data-count-to'))) {
+        var targetNum = parseFloat(countTo);
+        if (!isNaN(targetNum)) {
+          var decimals = parseInt(el.getAttribute('data-count-decimals') || '0', 10) || 0;
+          var suffix = el.getAttribute('data-count-suffix') || '';
+          var prefix = el.getAttribute('data-count-prefix') || '';
+          var roll = EASE.expoOut(clamp01(enterSec / 0.65));
+          el.textContent = prefix + (targetNum * roll).toFixed(decimals) + suffix;
+        }
+      }
     });
     var bar = document.getElementById('hermes-global-progress-fill');
     if (bar) {
@@ -282,6 +334,7 @@ KINETIC_MOTION_RUNTIME_JS = r"""
     }
   }
 
+  window.__ease = EASE;
   window.__spring = spring;
   window.__interpolate = interpolate;
   window.__seekFrame = function (frame, fps) {
@@ -296,6 +349,224 @@ KINETIC_MOTION_RUNTIME_JS = r"""
   applyDeclarativeTimeline(0, 25);
 })();
 """.strip()
+
+
+# Distilled OpenMotion director/review/sound craft principles (zero runtime dependency).
+OPENMOTION_DIRECTOR_CRAFT_RULES: dict[str, Any] = {
+    "version": "openmotion_craft_v1",
+    "rules": [
+        {
+            "id": "visual_event_not_slide",
+            "rule": "Each beat must state an observable state change the viewer experiences, never generic fade-ins slapped onto static slides.",
+        },
+        {
+            "id": "cross_shot_continuity",
+            "rule": "Preserve spatial/subject continuity across consecutive beats or use intentional hard cuts; never snap back to an identical anchor layout on every beat.",
+        },
+        {
+            "id": "bounded_dead_air_and_rhythm",
+            "rule": "Contrast fast impact beats with steady comprehension holds and keep post-action dead-air idle hold under 1.2s.",
+        },
+        {
+            "id": "perceptual_audio_visual_anchors",
+            "rule": "Bind transition SFX and music accents to real visual phase shifts (reveal, settle, cut) rather than mechanical clicks on every element.",
+        },
+        {
+            "id": "word_synced_editable_captions",
+            "rule": "Keep word-level kinetic captions anchored to real provider word timestamps without colliding with headline overlays.",
+        },
+    ],
+}
+
+
+_TRANSIENT_CAPTURE_ERROR_PATTERNS = (
+    re.compile(r"ERR_NO_BUFFER_SPACE", re.IGNORECASE),
+    re.compile(r"Target (?:page, context or browser has been )?closed", re.IGNORECASE),
+    re.compile(r"Browser has been closed", re.IGNORECASE),
+    re.compile(r"Protocol error", re.IGNORECASE),
+    re.compile(r"Execution context was destroyed", re.IGNORECASE),
+    re.compile(r"Page crashed", re.IGNORECASE),
+    re.compile(r"Connection closed", re.IGNORECASE),
+    re.compile(r"Timed out|TimeoutError", re.IGNORECASE),
+)
+
+
+def is_transient_browser_capture_error(message: str) -> bool:
+    """Detect recoverable Chromium/Playwright capture failures (OpenMotion capture-fix pattern)."""
+    text = str(message or "")
+    return any(pat.search(text) for pat in _TRANSIENT_CAPTURE_ERROR_PATTERNS)
+
+
+def next_retry_concurrency(current_workers: int) -> int:
+    """Step down browser capture concurrency on transient failure (e.g. 4->2->1, 2->1)."""
+    workers = max(1, int(current_workers or 1))
+    return max(1, workers // 2)
+
+
+def compile_motion_blueprint_md(
+    samples: list[dict[str, Any]],
+    *,
+    lane: str = "",
+    target_platform: str = "",
+) -> dict[str, Any]:
+    """Compile observed hot-work reference samples into an OpenMotion-style Motion.md blueprint.
+
+    Strictly observation-grounded: only summarizes measured cuts_per_minute, observed camera
+    motion, observed transitions, and structural beats present in the collector samples.
+    """
+    valid = [s for s in (samples or []) if isinstance(s, dict)]
+    cuts_vals: list[float] = []
+    transitions: list[str] = []
+    camera_moves: list[str] = []
+    structures: list[str] = []
+    hooks: list[str] = []
+    source_ids: list[str] = []
+
+    for row in valid:
+        cid = str(row.get("content_id") or "")
+        if cid:
+            source_ids.append(cid)
+        bd = row.get("breakdown") if isinstance(row.get("breakdown"), dict) else {}
+        tr_obs = (bd.get("transition") or {}).get("observed")
+        if isinstance(tr_obs, dict):
+            cpm = tr_obs.get("cuts_per_minute")
+            if isinstance(cpm, (int, float)) and cpm > 0:
+                cuts_vals.append(float(cpm))
+            obs = tr_obs.get("observed")
+            if isinstance(obs, list):
+                transitions.extend(str(x).strip() for x in obs if str(x).strip())
+            elif isinstance(obs, str) and obs.strip():
+                transitions.append(obs.strip())
+        mot_obs = (bd.get("motion") or {}).get("observed")
+        if isinstance(mot_obs, list):
+            camera_moves.extend(str(x).strip() for x in mot_obs if str(x).strip())
+        elif isinstance(mot_obs, str) and mot_obs.strip():
+            camera_moves.append(mot_obs.strip())
+        st_obs = (bd.get("video_structure") or {}).get("observed")
+        if isinstance(st_obs, list):
+            structures.extend(str(x).strip() for x in st_obs if str(x).strip())
+        elif isinstance(st_obs, str) and st_obs.strip():
+            structures.append(st_obs.strip())
+        hk_obs = (bd.get("hook") or {}).get("observed")
+        if isinstance(hk_obs, str) and hk_obs.strip():
+            hooks.append(hk_obs.strip()[:100])
+
+    def _dedup(items: list[str], limit: int = 8) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in items:
+            key = item.casefold()
+            if key not in seen:
+                seen.add(key)
+                out.append(item)
+            if len(out) >= limit:
+                break
+        return out
+
+    avg_cpm = round(sum(cuts_vals) / len(cuts_vals), 2) if cuts_vals else None
+    recommended_shot_s = round(max(1.5, min(5.5, 60.0 / avg_cpm)), 2) if avg_cpm and avg_cpm > 0 else None
+    uniq_transitions = _dedup(transitions)
+    uniq_moves = _dedup(camera_moves)
+    uniq_structures = _dedup(structures, limit=6)
+    uniq_hooks = _dedup(hooks, limit=4)
+
+    lines = [
+        f"# Motion.md Blueprint ({target_platform or 'short_video'} / {lane or 'general'})",
+        "",
+        "## Provenance",
+        f"- Observed reference samples: {len(valid)}",
+        f"- Source IDs: {', '.join(source_ids[:10]) if source_ids else 'none'}",
+        "- Usage policy: analysis_only_no_reuse (timing & motion grammar reference only)",
+        "",
+        "## Observed Pacing & Shot Rhythm",
+        f"- Average observed cuts/min: {avg_cpm if avg_cpm is not None else 'unobserved'}",
+        f"- Suggested shot window (s): {recommended_shot_s if recommended_shot_s is not None else 'keep default 2.4-3.6s'}",
+        "",
+        "## Observed Camera & Motion Grammar",
+        *(f"- {m}" for m in (uniq_moves or ["unobserved"])),
+        "",
+        "## Observed Transitions",
+        *(f"- {tr}" for tr in (uniq_transitions or ["unobserved"])),
+        "",
+        "## Observed Narrative Structures",
+        *(f"- {st}" for st in (uniq_structures or ["unobserved"])),
+        "",
+        "## Director Craft Guardrails (OpenMotion)",
+        *(f"- [{r['id']}] {r['rule']}" for r in OPENMOTION_DIRECTOR_CRAFT_RULES["rules"]),
+    ]
+    return {
+        "version": "motion_blueprint_v1",
+        "lane": str(lane or ""),
+        "target_platform": str(target_platform or ""),
+        "source_count": len(valid),
+        "source_ids": source_ids[:10],
+        "avg_cuts_per_minute": avg_cpm,
+        "recommended_shot_seconds": recommended_shot_s,
+        "observed_camera_moves": uniq_moves,
+        "observed_transitions": uniq_transitions,
+        "observed_structures": uniq_structures,
+        "observed_hooks": uniq_hooks,
+        "markdown": "\n".join(lines) + "\n",
+    }
+
+
+def audit_motion_pacing_and_anchors(
+    starts_global: list[float],
+    shot_durations: list[float],
+    alignment_records: list[dict[str, Any]],
+    transition_times: list[float],
+    *,
+    max_idle_hold_seconds: float = 1.6,
+) -> dict[str, Any]:
+    """Produce quantitative dead-air, pacing-contrast, and AV-anchor diagnostics (OpenMotion review.md/sound.md)."""
+    seg_dead_air: list[dict[str, Any]] = []
+    dead_air_warnings: list[str] = []
+    for rec in alignment_records or []:
+        seg_idx = int(rec.get("segment") or 0)
+        scene_dur = float(rec.get("scene_duration") or 0.0)
+        tts_dur = float(rec.get("tts_duration") or 0.0)
+        idle_hold = round(max(0.0, scene_dur - tts_dur), 3)
+        seg_dead_air.append({
+            "segment": seg_idx,
+            "scene_duration": round(scene_dur, 3),
+            "tts_duration": round(tts_dur, 3),
+            "idle_hold_seconds": idle_hold,
+        })
+        if idle_hold > max_idle_hold_seconds:
+            dead_air_warnings.append(f"segment_{seg_idx:02d}_idle_hold_{idle_hold:.2f}s")
+
+    positive_durs = [float(d) for d in (shot_durations or []) if float(d) > 0]
+    min_shot = round(min(positive_durs), 3) if positive_durs else 0.0
+    max_shot = round(max(positive_durs), 3) if positive_durs else 0.0
+    contrast_ratio = round(max_shot / min_shot, 3) if min_shot > 0 else 1.0
+
+    # Audio-visual anchors: verify each transition SFX time maps to a real global cut boundary.
+    anchor_receipts: list[dict[str, Any]] = []
+    for idx, t_sec in enumerate(transition_times or [], 1):
+        nearest = min(starts_global, key=lambda s: abs(float(s) - float(t_sec))) if starts_global else 0.0
+        delta_ms = round(abs(float(nearest) - float(t_sec)) * 1000.0, 1)
+        anchor_receipts.append({
+            "anchor_index": idx,
+            "sfx_time_s": round(float(t_sec), 3),
+            "nearest_cut_s": round(float(nearest), 3),
+            "delta_ms": delta_ms,
+            "aligned": delta_ms <= 40.0,
+        })
+
+    return {
+        "version": "motion_craft_audit_v1",
+        "max_idle_hold_seconds": round(max((r["idle_hold_seconds"] for r in seg_dead_air), default=0.0), 3),
+        "idle_hold_threshold_seconds": float(max_idle_hold_seconds),
+        "dead_air_warnings": dead_air_warnings,
+        "pacing_contrast": {
+            "min_shot_seconds": min_shot,
+            "max_shot_seconds": max_shot,
+            "contrast_ratio": contrast_ratio,
+        },
+        "audio_visual_anchors": anchor_receipts,
+        "all_anchors_aligned": all(a["aligned"] for a in anchor_receipts) if anchor_receipts else True,
+        "segments": seg_dead_air,
+    }
 
 
 def inject_kinetic_runtime(
